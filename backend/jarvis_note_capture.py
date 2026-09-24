@@ -819,9 +819,12 @@ def capture(target: str, text: str, *, title: str = "", notebook: str = "",
     with _lock:
         waiting = sum(1 for j in _jobs.values() if j["state"] == "waiting")
         if waiting >= _MAX_WAITING:
-            return 429, {"ok": False, "state": "not_filed",
-                         "error": "several notes are already waiting for approval - "
-                                  "answer those first"}
+            # "message" too: it is the field the phone shows (NoteCapture.kt
+            # describe()), and without it this refusal read "Not filed in
+            # Logseq." with no reason.
+            why = "several notes are already waiting for approval - answer those first"
+            return 429, {"ok": False, "state": "not_filed", "error": why,
+                         "message": f"Not filed: {why}."}
         job_id = "note_" + secrets.token_hex(8)
         _jobs[job_id] = {"id": job_id, "state": "waiting", "target": p.target,
                          "message": "Waiting for your approval.", "created": time.time(),
@@ -849,7 +852,9 @@ def capture_status(job_id: str) -> tuple:
     with _lock:
         job = dict(_jobs.get(str(job_id)) or {})
     if not job:
-        return 404, {"ok": False, "error": "no note with that id on this PC"}
+        return 404, {"ok": False, "error": "no note with that id on this PC",
+                     "message": "This PC has no note with that id - it may have been "
+                                "restarted since. Check the note app itself."}
     job.pop("by", None)
     job["ok"] = job["state"] in ("filed", "waiting")
     return (202 if job["state"] == "waiting" else 200), job
@@ -858,7 +863,8 @@ def capture_status(job_id: str) -> tuple:
 def handle_post(body) -> tuple:
     """POST /api/notes/capture: {"target", "text", "title"?, "notebook"?}."""
     if not isinstance(body, dict):
-        return 400, {"ok": False, "error": "need a JSON object"}
+        return 400, {"ok": False, "state": "not_filed", "error": "need a JSON object",
+                     "message": "Not filed: the request was not a JSON object."}
     return capture(str(body.get("target") or ""), body.get("text"),
                    title=body.get("title") or "", notebook=body.get("notebook") or "")
 
