@@ -135,6 +135,12 @@ the API doc calls "the one state-changing thing a phone may drive", and
 `InboxScreen` takes neither `link` nor `stale` as a parameter and renders no
 notice surface — so tapping Revert offline fails silently.
 
+*Since then (2026-09-24):* turning the wake word **on** is now held while the
+link is stale or down, on both apps, because it raises an approval card on
+the desktop. The phone: `VoiceSession.setWakeWord` checks
+`WakeRules.requestBlocker` first and sends nothing. The desktop: the same
+hold before it posts `/api/voice/wake`. Turning it off always goes through.
+
 Closing this **tightens** rule 4 rather than loosening it.
 
 ### 3.3 The app ships debuggable, and `versionCode` is 1
