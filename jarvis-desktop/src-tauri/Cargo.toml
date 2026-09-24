@@ -106,6 +106,15 @@ windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_System_Com",
   "Win32_UI_Shell_Common",
+  # Windows' own echo cancelling for "hey Jarvis" listening (aec.rs): the
+  # WASAPI capture client in the "communications" category, and the
+  # effects list that says whether acoustic echo cancellation is on.
+  # Features of a crate already here - nothing new is downloaded.
+  "Win32_Media_Audio",
+  "Win32_Media_KernelStreaming",
+  "Win32_Media_Multimedia",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
 ] }
 
 [target.'cfg(unix)'.dependencies]

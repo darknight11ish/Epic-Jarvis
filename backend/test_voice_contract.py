@@ -333,6 +333,13 @@ def t_the_utterance_reply_serves_both_clients():
                 mock.patch.object(S, "_stt_engine", return_value=object()), \
                 mock.patch.object(S, "_transcribe", return_value="Hey Jarvis."):
             cases["wake word, awake"] = S.hear(tone(220.0), source="wake_word")
+        # "Stop" while Jarvis talks: the desktop reads `stop`, the phone
+        # ignores it (a clip it sends is never one it wants stopped by).
+        with mock.patch.object(W, "spot_stop", return_value=W.Spot(True, heard=True, score=0.93)):
+            cases["wake word, stop"] = S.hear(tone(220.0), source="wake_word")
+        check("a stop clip says stop, and nothing else",
+              cases["wake word, stop"].stop and not cases["wake word, stop"].is_owner
+              and cases["wake word, stop"].text == "", cases["wake word, stop"])
         S.set_wake_enabled(False)
         cases["wake word, switched off"] = S.hear(tone(220.0), source="wake_word")
         S._reset_wake_for_tests()

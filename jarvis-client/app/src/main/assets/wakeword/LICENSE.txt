@@ -14,3 +14,10 @@ these files are the reason it has to stay that way while they are in it.
 
 The same three files are what the PC uses (voice-models\wakeword), so the
 phone and the PC give the same score for the same sound.
+
+stop_head.bin is not openWakeWord's. It is Jarvis's own small "stop" model
+(tools/train_stopword.py), trained on openWakeWord embeddings of synthetic
+voices - Piper's LibriTTS-R voice (LibriTTS-R, CC BY 4.0, Koizumi et al.,
+2023) and Kokoro v0.19 (Apache-2.0). It sits on the embedding model above,
+so treat it under the same CC BY-NC-SA 4.0 terms. The PC holds the same
+bytes in backend/jarvis_stopword.py.

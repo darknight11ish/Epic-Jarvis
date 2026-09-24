@@ -2,6 +2,7 @@ package com.jarvis.client.audio
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -66,6 +67,69 @@ class Speaker(private val context: Context) {
     @Volatile private var cancelled = false
 
     /**
+     * Play as a voice call, so the phone's echo canceller can take Jarvis's
+     * voice back out of what the microphone hears (barge-in: "stop" or "hey
+     * Jarvis" while it talks). Set by the "hey Jarvis" listener only while
+     * it listens through the echo canceller.
+     *
+     * Android's echo canceller works from what is being played on the
+     * voice-call path, so the reply is played with USAGE_VOICE_COMMUNICATION
+     * while the phone is in communication mode, and sent to the loudspeaker
+     * (communication audio otherwise goes to the earpiece). [beginVoiceCall]
+     * and [endVoiceCall] bracket a whole reply, so the phone does not switch
+     * modes between sentences. Off, everything is exactly as before.
+     */
+    @Volatile var voiceCall: Boolean = false
+        private set
+
+    @Volatile private var leaveCall: (() -> Unit)? = null
+
+    /** Before a reply is spoken: play it as a voice call (see [voiceCall]). */
+    fun beginVoiceCall() {
+        if (voiceCall) return
+        voiceCall = true
+        leaveCall = enterCall()
+    }
+
+    /** After it: everything back as it was. Safe to call twice. */
+    fun endVoiceCall() {
+        voiceCall = false
+        val undo = leaveCall
+        leaveCall = null
+        undo?.invoke()
+    }
+
+    private fun usage(): Int =
+        if (voiceCall) AudioAttributes.USAGE_VOICE_COMMUNICATION else AudioAttributes.USAGE_ASSISTANT
+
+    /** Enters communication mode on the loudspeaker; returns how to undo it, or null. */
+    private fun enterCall(): (() -> Unit)? {
+        val manager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return null
+        val before = manager.mode
+        return runCatching {
+            manager.mode = AudioManager.MODE_IN_COMMUNICATION
+            val speakerOut = manager.availableCommunicationDevices
+                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            // A headset, if one is connected, is left alone: Android picks it.
+            val headset = manager.availableCommunicationDevices.any {
+                it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            }
+            if (speakerOut != null && !headset) manager.setCommunicationDevice(speakerOut)
+            val undo: () -> Unit = {
+                runCatching { manager.clearCommunicationDevice() }
+                runCatching { manager.mode = before }
+            }
+            undo
+        }.getOrElse {
+            Log.w(TAG, "could not enter communication mode", it)
+            runCatching { manager.mode = before }
+            null
+        }
+    }
+
+    /**
      * Clears the stop flag. Call once per turn, BEFORE anything is spoken.
      *
      * This exists because [play] and [speakOnDevice] used to clear it
@@ -104,7 +168,7 @@ class Speaker(private val context: Context) {
             AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setUsage(usage())
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build(),
                 )
@@ -180,7 +244,7 @@ class Speaker(private val context: Context) {
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setUsage(usage())
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build(),
             )
@@ -282,6 +346,16 @@ class Speaker(private val context: Context) {
                 }
             })
             val params = Bundle()
+            // The same voice-call path as [play] while barge-in listens, so
+            // the echo canceller has this voice to take back out too.
+            runCatching {
+                engine.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(usage())
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build(),
+                )
+            }
             val queued = engine.speak(text, TextToSpeech.QUEUE_FLUSH, params, id)
             // A rejected utterance is not guaranteed any callback at all on
             // every OEM engine - `onError` is documented for a FAILURE

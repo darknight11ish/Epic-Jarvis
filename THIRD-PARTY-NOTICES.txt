@@ -92,6 +92,16 @@ backend/jarvis_wakebank.py - generated numbers, not audio
   voice itself is not shipped; it was downloaded from the sherpa-onnx
   releases (vits-piper-en_US-libritts_r-medium) only to make these numbers.
 
+backend/jarvis_stopword.py and jarvis-client/app/src/main/assets/wakeword/
+stop_head.bin - generated numbers, not audio (the same bytes in both)
+  A small "stop" model trained by tools/train_stopword.py on openWakeWord
+  embeddings (the model above, so CC BY-NC-SA 4.0 applies to them as its
+  output, and this model is treated under the same terms) of synthetic
+  voices only: Piper's en_US-libritts_r-medium voice (as above - Piper MIT,
+  LibriTTS-R CC BY 4.0, Koizumi et al., 2023) and Kokoro-82M v0.19
+  (https://huggingface.co/hexgrad/Kokoro-82M, Apache-2.0, via the
+  sherpa-onnx kokoro-en-v0_19 release). Neither voice is shipped by it.
+
 ONNX Runtime 1.22.0 (Microsoft), MIT - https://github.com/microsoft/onnxruntime
   The Android library runs the models on the phone
   (com.microsoft.onnxruntime:onnxruntime-android, from Maven Central); the

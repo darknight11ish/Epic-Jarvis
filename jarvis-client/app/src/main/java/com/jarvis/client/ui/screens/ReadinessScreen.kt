@@ -40,6 +40,7 @@ import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.delay
 
@@ -107,6 +108,11 @@ fun ReadinessScreen(
     wakeWordBusy: Boolean = false,
     /** What went wrong, or what the desktop said afterwards. */
     wakeWordNotice: String? = null,
+    /** "Interrupt Jarvis while it talks" on this phone (BargeIn). Null hides the switch. */
+    bargeIn: Boolean? = null,
+    /** Whether this phone has an echo canceller (the default follows it). */
+    bargeInEchoCanceller: Boolean = false,
+    onBargeIn: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
     /** The link, for the Connection card. Null hides the card. */
     connection: ConnectionInfo? = null,
@@ -190,6 +196,9 @@ fun ReadinessScreen(
                     pending = wakeWordPending,
                     phone = phoneListening,
                     onPhone = onPhoneListening,
+                    bargeIn = bargeIn,
+                    bargeInEchoCanceller = bargeInEchoCanceller,
+                    onBargeIn = onBargeIn,
                 )
             }
             items(others, key = { it.title }) { ReadinessCard(it, fixFor(it)) }
@@ -429,6 +438,9 @@ private fun WakeWordCard(
     pending: Boolean,
     phone: WakeListen,
     onPhone: ((Boolean) -> Unit)?,
+    bargeIn: Boolean? = null,
+    bargeInEchoCanceller: Boolean = false,
+    onBargeIn: ((Boolean) -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val tint = when {
@@ -522,6 +534,28 @@ private fun WakeWordCard(
                     "Android closes Jarvis. Off by default, and never turns itself on.",
                 style = MaterialTheme.typography.labelSmall,
                 color = chrome.textMid,
+            )
+        }
+
+        if (bargeIn != null && onBargeIn != null && state == WakeWord.ON) {
+            Gap(12)
+            Text(
+                "Interrupt Jarvis while it talks",
+                style = MaterialTheme.typography.labelLarge,
+                color = chrome.textHi,
+            )
+            Gap(4)
+            Text(
+                BargeIn.describe(bargeIn, bargeInEchoCanceller),
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            Gap(6)
+            Secondary(
+                text = if (bargeIn) "Stop listening while Jarvis talks" else "Listen while Jarvis talks",
+                enabled = true,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onBargeIn(!bargeIn) },
             )
         }
 

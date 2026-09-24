@@ -4984,6 +4984,90 @@ print of its own (no desktop training screen yet), and the owner's real
 
 **Test it:** `py -3 backend\test_voice_enroll.py; py -3 backend\test_voice_mic.py; py -3 backend\test_voice_contract.py`
 
+## Interrupting Jarvis: "stop", and echo cancelling
+
+**What it does.** While Jarvis is reading an answer aloud you can now cut
+in, in two ways:
+
+- **Say "stop"** (or "Jarvis, stop", "okay, stop"). Jarvis stops talking.
+  That is ALL it does: no voice check is needed, because stopping speech
+  is harmless - and so "stop" is never turned into words, never sent to the
+  chat, and can never approve anything.
+- **Say "hey Jarvis" and a new request.** Jarvis stops talking, and your
+  request goes to the PC and through every check - the "is it you" wake
+  check, your voice print, then speech-to-text - exactly like any other
+  "hey Jarvis". Approval cards still decide everything.
+
+**How "stop" is heard.** A small model of our own, on the same "sound
+fingerprint" the "hey Jarvis" spotter already makes every 80 ms (the same
+shape as openWakeWord's own models: 1,536 numbers in, 32, 32, one number
+out). Like the wake word it turns sound into a single number and knows no
+words, so it is not speech-to-text. Trained by `tools/train_stopword.py` on
+synthetic voices only (Piper's 904 LibriTTS-R voices and Kokoro); its
+numbers are `backend/jarvis_stopword.py` on the PC and
+`assets/wakeword/stop_head.bin` on the phone - the same bytes (a test
+checks).
+
+**Where it runs.**
+
+| | the phone | the desktop app |
+|---|---|---|
+| who hears "stop" | the phone itself, while Jarvis speaks | the PC (`jarvis_wakeword.spot_stop`), on clips of 2 s of speech or less |
+| echo cancelling (removing Jarvis's own voice from the microphone) | Android's: while Jarvis speaks, the reply plays as a voice call and the microphone is the voice-call one, with `AcousticEchoCanceler` on | Windows': the "communications" microphone, used only when Windows says echo cancelling is ON for it; otherwise the ordinary microphone, as before (`aec.rs`) |
+| switch | Checks -> wake word card -> "Interrupt Jarvis while it talks". Default: ON only if the phone has an echo canceller | none: the desktop always listened while Jarvis talked; it now also hears "stop" |
+
+Two guards against Jarvis stopping itself: the phone ignores "stop" while
+the sentence Jarvis is saying contains the word "stop", and the PC ignores
+it for 30 s after Jarvis itself said "stop".
+
+**Measured (all synthetic voices, none real).** Per clip, at the shipped
+threshold 0.5:
+
+| test | "stop" heard | something else taken for "stop" |
+|---|---|---|
+| 80 unseen Piper voices | 76 of 80 | 8 of 160 clips - all single sound-alike words ("sop", "top", "stomp", "stock", "stuff") |
+| 7 Kokoro voices not trained on | 37 of 42 | 9 of 161 - again only single sound-alike words ("stuff", "stomp", "top", "step") |
+| 570 ordinary sentences (22 minutes of talk, 11 Kokoro + 60 Piper voices) | - | 0 |
+| through the PC's real path (`say()` -> `spot_stop`), 11 Kokoro voices | 9 of 11 "Stop." | 0 of 77 short phrases ("Hey Jarvis.", "Yes.", "No.", "Thanks.", "Okay.", "Wait.", "Hey Jarvis, what time is it?") |
+
+So: a single word that sounds like "stop" is sometimes taken for it (one
+time in six to eight, on these voices). All that does is stop the speech.
+Some of the 570 sentences reuse training sentences (with other voices), so
+0 of 570 flatters it a little. The first version of this model fired on 47
+of those 570 sentences; the fix (it now needs the quiet AFTER the word) is
+described in the training script.
+
+**Size.** The phone app grows by about 0.2 MB (the stop model, 201,620
+bytes). No download on the PC: `jarvis_stopword.py` is copied by the
+script like any other module.
+
+**Owner steps:** run `.\scripts\apply-patches.ps1` (it copies
+`jarvis_stopword.py` and the new `jarvis_wakeword.py` and `jarvis_speech.py`),
+restart Jarvis, update the phone app and the desktop app. On the phone,
+Checks shows the new switch on the wake word card.
+
+**Not checked - said plainly:**
+
+- No real voice and no real room. Every number above is synthetic.
+- **The desktop's echo cancelling has never run on Windows.** It compiles for
+  Windows (`cargo check` / `cargo clippy` for `x86_64-pc-windows-msvc`), and
+  every failure falls back to the old microphone, but whether your machine
+  reports echo cancelling ON - and how well it works - is unknown. When it
+  is on, turning listening on says "Say 'stop' to interrupt Jarvis while it
+  talks."; when that line is missing, it is off.
+- **The phone's voice-call mode has never run on a real phone.** While
+  Jarvis speaks with interrupting on, its voice plays as a voice call
+  (louder speaker, call volume) through the phone's loudspeaker unless a
+  headset is plugged in or connected. Whether that sounds right, and how
+  much of Jarvis's voice the echo canceller really removes, depends on the
+  phone. If Jarvis keeps stopping itself, turn the switch off.
+  For this the phone app now declares one more permission,
+  `MODIFY_AUDIO_SETTINGS` (it is granted at install; there is no dialog).
+- The desktop has no "Train my voice" screen yet, so its microphone uses the
+  phone's voice print (see above); that is unchanged.
+
+**Test it:** `py -3 backend\test_stopword.py; py -3 backend\test_wakeword.py`
+
 ---
 
 ---

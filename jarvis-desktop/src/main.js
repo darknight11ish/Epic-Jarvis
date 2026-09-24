@@ -3026,8 +3026,9 @@ listen("voice-summon", () => {
 async function setAutoListening(enabled) {
   if (enabled === state.autoListening) return;
   if (enabled) {
+    let info = null;
     try {
-      await invokeStrict("start_automatic_listening");
+      info = await invokeStrict("start_automatic_listening");
     } catch (error) {
       announce(String((error && error.message) || error), "assertive");
       return;
@@ -3042,7 +3043,14 @@ async function setAutoListening(enabled) {
       dom.micLabel.textContent =
         'Listening for "hey Jarvis" - turn it off with the button next to this';
     }
-    announce('Listening for "hey Jarvis".');
+    // `echoCancelling` (voice.rs ListenInfo): the microphone goes through
+    // Windows' echo cancelling, so "stop" or "hey Jarvis" is heard over
+    // Jarvis's own voice. An older build returns nothing - the plain line.
+    announce(
+      info && info.echoCancelling
+        ? 'Listening for "hey Jarvis". Say "stop" to interrupt Jarvis while it talks.'
+        : 'Listening for "hey Jarvis".',
+    );
   } else {
     state.autoListening = false;
     dom.voiceAuto.setAttribute("aria-pressed", "false");

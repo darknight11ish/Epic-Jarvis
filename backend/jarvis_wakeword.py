@@ -79,6 +79,15 @@ writes nothing itself.
 It is used on the PC only: the phone's own spotter has no verifier, and
 every clip the phone sends is checked here, with it, before anything else.
 No verifier file means the first model decides alone, exactly as before.
+
+"STOP" (added 2026-09-24, spot_stop). A second tiny model on the same 16 x
+96 window, openWakeWord's own head shape (1,536 -> 32 -> 32 -> 1), trained
+here for one word - "stop" (and "Jarvis, stop", "okay, stop") - on
+synthetic voices (jarvis_stopword.py holds its numbers; the phone ships the
+same numbers in assets/wakeword/stop_head.bin). Like the wake word it hears
+sound and returns one number; it knows no other word. It is used only to
+silence Jarvis while it is speaking: stopping speech is harmless, so it may
+act before the voice check, and it does nothing else.
 """
 from __future__ import annotations
 
@@ -251,6 +260,7 @@ def reload() -> None:
     global _models
     with _LOCK:
         _models = _UNSET
+    _STOP_CACHE.clear()
 
 
 class Spotter:
@@ -390,6 +400,103 @@ def spot(samples, sample_rate: int = SAMPLE_RATE, mic: str = "") -> Spot:
     at = max(0.0, (gated[k] + 1) * CHUNK / SAMPLE_RATE - LEAD_IN_SECONDS)
     return Spot(True, heard=v >= ver.threshold, score=round(score, 4), at=round(at, 2),
                 threshold=thr, verified=True, verifier_score=round(v, 4))
+
+
+# --------------------------------------------------------------------------
+#   "Stop": a second head on the same sound fingerprint
+# --------------------------------------------------------------------------
+
+STOP_MAGIC = b"JSTOP1\x00\x00"
+
+
+def parse_stop_head(raw: bytes) -> dict:
+    """The stop head's numbers from its file format (shared with the phone's
+    assets/wakeword/stop_head.bin): 8-byte magic, int32 hidden size, int32
+    input size (1536), then float32 little-endian W1 b1 g1 c1 W2 b2 g2 c2 W3
+    b3 (W as [in][out]). Raises ValueError on anything else."""
+    if len(raw) < 16 or raw[:8] != STOP_MAGIC:
+        raise ValueError("not a stop-word head")
+    h = int.from_bytes(raw[8:12], "little")
+    d = int.from_bytes(raw[12:16], "little")
+    if not (1 <= h <= 512 and d == EMB_WINDOW * 96):
+        raise ValueError("stop-word head has the wrong shape")
+    shapes = [("W1", (d, h)), ("b1", (h,)), ("g1", (h,)), ("c1", (h,)),
+              ("W2", (h, h)), ("b2", (h,)), ("g2", (h,)), ("c2", (h,)),
+              ("W3", (h, 1)), ("b3", (1,))]
+    need = sum(int(np.prod(s)) for _, s in shapes) * 4
+    if len(raw) != 16 + need:
+        raise ValueError("stop-word head is the wrong length")
+    flat = np.frombuffer(raw[16:], dtype="<f4")
+    if not np.all(np.isfinite(flat)):
+        raise ValueError("stop-word head holds a non-number")
+    out, at = {}, 0
+    for name, shape in shapes:
+        n = int(np.prod(shape))
+        out[name] = flat[at:at + n].reshape(shape).astype(np.float64)
+        at += n
+    return out
+
+
+def stop_probabilities(head: dict, windows):
+    """The head's forward pass: two Linear -> LayerNorm -> ReLU, a Linear, a
+    sigmoid - the same arithmetic as the phone's StopWord.kt."""
+    x = np.asarray(windows, dtype=np.float64).reshape(len(windows), -1)
+
+    def ln(a, g, c):
+        mu = a.mean(axis=1, keepdims=True)
+        var = a.var(axis=1, keepdims=True)
+        return (a - mu) / np.sqrt(var + 1e-5) * g + c
+    r1 = np.maximum(ln(x @ head["W1"] + head["b1"], head["g1"], head["c1"]), 0)
+    r2 = np.maximum(ln(r1 @ head["W2"] + head["b2"], head["g2"], head["c2"]), 0)
+    z = np.clip((r2 @ head["W3"] + head["b3"]).reshape(-1), -60, 60)
+    return 1.0 / (1.0 + np.exp(-z))
+
+
+_STOP_CACHE: dict = {}
+
+
+def _stop_head():
+    """(head, threshold) from jarvis_stopword.py, or None."""
+    if "head" not in _STOP_CACHE:
+        try:
+            import jarvis_stopword
+            _STOP_CACHE["head"] = (parse_stop_head(jarvis_stopword.head_bytes()),
+                                   float(jarvis_stopword.THRESHOLD))
+        except Exception:
+            _STOP_CACHE["head"] = None
+    return _STOP_CACHE["head"]
+
+
+def stop_status() -> dict:
+    loaded = _stop_head() if np is not None else None
+    if loaded is None:
+        return {"available": False, "threshold": 0.0,
+                "why": "jarvis_stopword.py is missing or unreadable"}
+    return {"available": bool(status()["available"]), "threshold": loaded[1],
+            "why": "" if status()["available"] else status()["why"]}
+
+
+def spot_stop(samples, sample_rate: int = SAMPLE_RATE) -> Spot:
+    """Is the stop word in this clip? One number per 80 ms step, the best is
+    `score`. Only the caller decides what a short clip with it means."""
+    loaded = _stop_head() if np is not None else None
+    if loaded is None:
+        return Spot(False, why="the stop-word model is not installed (jarvis_stopword.py)")
+    head, thr = loaded
+    models = _load()
+    if models is None:
+        return Spot(False, threshold=thr,
+                    why=status()["why"] or "the wake-word models could not be loaded")
+    scores, windows = _clip_steps(models, samples, sample_rate)
+    if not windows:
+        return Spot(True, threshold=thr)
+    # The first scores after a start are primed on silence (WARMUP_SCORES).
+    probs = stop_probabilities(head, np.stack(windows))
+    probs[:WARMUP_SCORES] = 0.0
+    best = int(np.argmax(probs))
+    p = float(probs[best])
+    at = max(0.0, (best + 1) * CHUNK / SAMPLE_RATE - LEAD_IN_SECONDS)
+    return Spot(True, heard=p >= thr, score=round(p, 4), at=round(at, 2), threshold=thr)
 
 
 # --------------------------------------------------------------------------

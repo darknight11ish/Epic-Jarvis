@@ -115,7 +115,7 @@ SHIPPED = (
     "jarvis_token_store.py",
     "jarvis_second_card.py",
     "jarvis_wiki.py",
-    "jarvis_turn.py", "jarvis_wakebank.py",
+    "jarvis_turn.py", "jarvis_wakebank.py", "jarvis_stopword.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",

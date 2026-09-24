@@ -16,6 +16,7 @@
 //! | `quickbar` | 750×80 frameless transparent spotlight bar, always on top    |
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
+pub mod aec;
 pub mod appearance;
 pub mod attention;
 pub mod autostart;

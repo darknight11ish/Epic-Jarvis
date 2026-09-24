@@ -68,8 +68,16 @@ class WakeSpotter(private val models: WakeModels) {
     /**
      * Feeds [count] samples (16-bit values). Returns one score per whole
      * 80 ms step completed - possibly none, possibly several.
+     *
+     * [onWindow], if given, gets each step's 16 x 96 window after the
+     * warm-up - the same numbers the wake model just scored - so a second
+     * head ([StopHead]) can score them without computing them twice.
      */
-    fun feed(samples: ShortArray, count: Int = samples.size): FloatArray {
+    fun feed(
+        samples: ShortArray,
+        count: Int = samples.size,
+        onWindow: ((Array<FloatArray>) -> Unit)? = null,
+    ): FloatArray {
         val x = FloatArray(pending.size + count)
         System.arraycopy(pending, 0, x, 0, pending.size)
         for (k in 0 until count) x[pending.size + k] = samples[k].toFloat()
@@ -87,9 +95,11 @@ class WakeSpotter(private val models: WakeModels) {
             }
             feats.addLast(models.embed(mel.toTypedArray()))
             if (feats.size > EMB_WINDOW) feats.removeFirst()
-            val score = models.score(feats.toTypedArray())
+            val window = feats.toTypedArray()
+            val score = models.score(window)
             steps++
             scores[s++] = if (steps <= WARMUP_SCORES) 0f else score
+            if (steps > WARMUP_SCORES) onWindow?.invoke(window)
             off += CHUNK
         }
         pending = x.copyOfRange(whole, x.size)

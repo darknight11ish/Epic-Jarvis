@@ -106,6 +106,25 @@ class VoiceSession(
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
 
+    private val _speakingText = MutableStateFlow<String?>(null)
+
+    /**
+     * The sentence being spoken right now, or null. Read by the barge-in
+     * listener ([BargeIn.decide]): while Jarvis itself says "stop", its own
+     * voice from the speaker must not count as the owner's stop word.
+     */
+    val speakingText: StateFlow<String?> = _speakingText.asStateFlow()
+
+    /**
+     * Silences the reply being spoken - and nothing else. The turn carries
+     * on (the answer still arrives on screen); only the voice stops, for the
+     * rest of this turn. The one thing the stop word may do.
+     */
+    fun stopSpeaking() {
+        speaker.stop()
+        _speakingText.value = null
+    }
+
     private var job: Job? = null
 
     /**
@@ -582,6 +601,15 @@ class VoiceSession(
      * screen is an acceptable outcome; uploading it is not.
      */
     private suspend fun speak(turn: Turn, text: String) {
+        _speakingText.value = text
+        try {
+            speakNow(turn, text)
+        } finally {
+            _speakingText.value = null
+        }
+    }
+
+    private suspend fun speakNow(turn: Turn, text: String) {
         when (val said = api.say(text)) {
             is ApiResult.Ok -> when (val out = said.value) {
                 is SaidAloud.Audio -> speaker.play(out.wav)

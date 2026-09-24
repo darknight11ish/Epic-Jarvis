@@ -24,6 +24,13 @@
          Only ever started from the app's own Checks screen, never at boot;
          Android shows the microphone indicator for as long as it runs. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- "Interrupt Jarvis while it talks" (Speaker.beginVoiceCall): the reply
+         plays in voice-call mode so Android's echo canceller can take it back
+         out of the microphone. Switching the audio mode and the call's output
+         device needs this. A normal permission (granted at install, no
+         dialog) that allows changing the phone's audio settings; the app
+         uses it only here, and puts the mode back when Jarvis stops. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- The service returns START_STICKY, and a sticky restart happens with the app
          in the background - which is not on the FGS background-start exemption list,

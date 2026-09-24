@@ -484,6 +484,17 @@ clip within `awake_seconds` needs no phrase), `awake_seconds`. The returned
 `text` has the phrase removed. A client drops a reply with `wake_heard:
 false` silently. `backend/README.md`, "Voice that works", has the details.
 
+**"Stop" (since 2026-09-24).** Before the spotter, a `wake_word` clip with at
+most 2 s of speech (`STOP_MAX_SECONDS`) is put to the stop-word model
+(`jarvis_wakeword.spot_stop`). If it is "stop" ("stop", "Jarvis, stop"),
+the reply is `stop: true` with `owner: false`, `ok: false`, `text: ""` -
+no voice check, no speech-to-text, nothing kept - and the desktop app
+silences the reply it is speaking; nothing else happens. Ignored (a plain
+refusal) while Jarvis itself said "stop" in the last 30 s. Every reply
+carries `stop` (false otherwise). The status's `wake` block adds
+`stop_word: {available, threshold, why}`. The phone spots "stop" on its own
+(the same numbers, `assets/wakeword/stop_head.bin`) and sends nothing for it.
+
 **Since 2026-09-24 `/api/voice/enroll` also takes** a `mic` ("phone" or
 "desktop": which microphone's voice print this trains - one print per
 microphone, the old single `owner.json` read as the fallback), up to 12

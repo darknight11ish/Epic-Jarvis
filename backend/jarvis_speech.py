@@ -32,6 +32,11 @@ The whole order, since 2026-09-23 (each step can only refuse, never add):
        "hey Jarvis" in the clip?         no              -> refused, not checked, not transcribed
        (once "Train my voice" has built it, the owner's own verifier
        has the last word here - jarvis_wakeword.py, "THE OWNER'S OWN")
+       Just before it, since 2026-09-24: a SHORT clip that is the stop
+       word ("stop", "Jarvis, stop") answers `stop: true` and nothing
+       else - the desktop silences Jarvis's reply. Stopping speech is
+       harmless, so it needs no voice check; it is never transcribed, never
+       sent to the chat, and does nothing but stop the speaking.
     4. the owner check (jarvis_voice)    not the owner   -> refused, not transcribed
     5. speech-to-text
     6. wake word only: does the transcript START with "hey Jarvis"? The
@@ -741,6 +746,17 @@ def _wake_spotter_state() -> dict:
                 "why": f"could not read it ({type(exc).__name__})"}
 
 
+def _stop_state() -> dict:
+    if jarvis_wakeword is None or not hasattr(jarvis_wakeword, "stop_status"):
+        return {"available": False, "threshold": 0.0,
+                "why": "jarvis_wakeword.py is missing or older than the stop word"}
+    try:
+        return jarvis_wakeword.stop_status()
+    except Exception as exc:
+        return {"available": False, "threshold": 0.0,
+                "why": f"could not read it ({type(exc).__name__})"}
+
+
 def _prints(voice: dict) -> dict:
     """gate.prints: {phone, desktop, general}, each {trained, samples,
     threshold, created, needs_retraining}. Never raises."""
@@ -1007,6 +1023,8 @@ def status() -> dict:
             # The owner's own "hey Jarvis" check (jarvis_wakeword's
             # verifier), built on the PC when "Train my voice" is approved.
             "verifier": _verifier_state(),
+            # "Stop" while Jarvis speaks (jarvis_wakeword.spot_stop).
+            "stop_word": _stop_state(),
         },
         "audio_in": dict(AUDIO_IN),
         # "Finished, or only paused?" - see _turn_state().
@@ -1035,6 +1053,30 @@ def status() -> dict:
 # --------------------------------------------------------------------------
 
 SOURCE_WAKE_WORD = "wake_word"
+
+#: A clip longer than this (the VAD's speech span, which keeps 0.3 s either
+#: side - so about 1.4 s of words) is never a stop: "Hey Jarvis, stop the
+#: timer" is a request, and goes through every check.
+STOP_MAX_SECONDS = 2.0
+#: While Jarvis itself said "stop" this recently (its own voice may reach
+#: the microphone), the stop word is not trusted.
+STOP_ECHO_SECONDS = 30.0
+_RECENT_SAYS: list = []           # [(monotonic time, text)], newest last
+_SAYS_LOCK = threading.Lock()
+
+
+def _jarvis_said_stop() -> bool:
+    now = time.monotonic()
+    with _SAYS_LOCK:
+        return any(now - t < STOP_ECHO_SECONDS and re.search(r"\bstop", s, re.I)
+                   for t, s in _RECENT_SAYS)
+
+
+def _remember_said(text: str) -> None:
+    now = time.monotonic()
+    with _SAYS_LOCK:
+        _RECENT_SAYS.append((now, text[:500]))
+        del _RECENT_SAYS[:-20]
 
 #: hear() takes `mic` (voice-mic.patch checks for this before passing it, so
 #: a jarvis_hud.py patched against a newer jarvis_speech.py never calls an
@@ -1067,6 +1109,9 @@ class Heard:
     #: single print) or "" - see jarvis_voice.py, "ONE VOICE PRINT PER
     #: MICROPHONE". Shown, never branched on by a client.
     voice_print: str = ""
+    #: source=wake_word only: the clip was the stop word. Silence the reply
+    #: being spoken and do nothing else (no words, no owner check).
+    stop: bool = False
 
     def as_dict(self) -> dict:
         """What /api/voice/utterance sends back - assuming, as the desktop's
@@ -1139,6 +1184,21 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
             # PC takes no wake-word clips" - both clients stop listening on it.
             return Heard(False, source=source, available=False, seconds=seconds,
                          reason="the wake word is switched off on the PC")
+        # How much was said: the VAD's span, or (no VAD installed) the whole
+        # clip, which the client already cut at a pause.
+        spoken = len(samples) / float(sample_rate or 16000)
+        if spoken <= STOP_MAX_SECONDS and jarvis_wakeword is not None \
+                and hasattr(jarvis_wakeword, "spot_stop"):
+            stop = jarvis_wakeword.spot_stop(samples, sample_rate)
+            if stop.ran and stop.heard:
+                if _jarvis_said_stop():
+                    # Jarvis's own voice said "stop" a moment ago; this may be
+                    # that, heard through the speakers. Not acted on.
+                    return Heard(False, source=source, seconds=seconds,
+                                 reason="that sounded like \"stop\", but Jarvis had just "
+                                        "said it itself, so it was ignored")
+                return Heard(False, source=source, seconds=seconds, stop=True,
+                             reason="stop")
         if _take_awake():
             via_window = True
         else:
@@ -1231,6 +1291,9 @@ def say(text: str) -> Optional[bytes]:
     text = (text or "").strip()
     if not text:
         return None
+    # Remembered (in memory, for STOP_ECHO_SECONDS) only so Jarvis saying
+    # "stop" itself is not taken for the owner's stop word.
+    _remember_said(text)
     engine = _tts_engine()
     if engine is None:
         return None

@@ -40,6 +40,22 @@ class ClientSettings(context: Context) {
     /** Forgotten deliberately on a stale resume, so a replay cannot be attempted. */
     fun clearResumePoint() = prefs.edit { remove(KEY_LAST_EVENT) }
 
+    private val _bargeIn = MutableStateFlow(
+        if (prefs.contains(KEY_BARGE_IN)) prefs.getBoolean(KEY_BARGE_IN, false) else null,
+    )
+
+    /**
+     * "Interrupt Jarvis while it talks" on this phone. Null until the owner
+     * chooses: then the default applies - on only where the phone has an
+     * echo canceller (`voice.BargeIn.enabled`).
+     */
+    val bargeIn: StateFlow<Boolean?> = _bargeIn.asStateFlow()
+
+    fun setBargeIn(value: Boolean) {
+        prefs.edit { putBoolean(KEY_BARGE_IN, value) }
+        _bargeIn.value = value
+    }
+
     /**
      * The base URL. `http` rather than `https`: the desktop serves plain HTTP
      * over the tailnet, which is why the network security config exists at all.
@@ -51,5 +67,6 @@ class ClientSettings(context: Context) {
         const val PREFS = "jarvis_client"
         const val KEY_HOST = "host"
         const val KEY_LAST_EVENT = "last_event_id"
+        const val KEY_BARGE_IN = "barge_in"
     }
 }

@@ -3,6 +3,7 @@ package com.jarvis.client
 import android.Manifest
 import android.app.role.RoleManager
 import android.content.Intent
+import android.media.audiofx.AcousticEchoCanceler
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -53,6 +54,7 @@ import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
 import com.jarvis.client.service.WakeWordService
 import com.jarvis.client.net.WakeWord
+import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.WakeRules
 import com.jarvis.client.ui.NavBackHandler
 import com.jarvis.client.ui.NavScreens
@@ -960,6 +962,12 @@ class MainActivity : FragmentActivity() {
                         val wakeWord by voice.wakeWord.collectAsState()
                         val voiceAnswered by voice.answered.collectAsState()
                         val phoneListening by WakeWordService.state.collectAsState()
+                        val bargeInSaved by JarvisRuntime.settings.bargeIn.collectAsState()
+                        // Asked once: whether this phone has an echo canceller
+                        // at all. It decides the barge-in default.
+                        val echoCanceller = remember {
+                            runCatching { AcousticEchoCanceler.isAvailable() }.getOrDefault(false)
+                        }
                         var wakeBusy by remember { mutableStateOf(false) }
                         var wakeNotice by remember { mutableStateOf<String?>(null) }
                         // The desktop's switch went off (from here, the
@@ -1031,6 +1039,11 @@ class MainActivity : FragmentActivity() {
                             },
                             wakeWordPending = voiceStatus.listening.wakeWordPending,
                             phoneListening = phoneListening,
+                            bargeIn = BargeIn.enabled(bargeInSaved, echoCanceller),
+                            bargeInEchoCanceller = echoCanceller,
+                            // A switch on this phone only: it changes when the
+                            // phone listens, never what the desktop allows.
+                            onBargeIn = { on -> JarvisRuntime.settings.setBargeIn(on) },
                             onPhoneListening = { on ->
                                 if (on) {
                                     wakeNotice = startPhoneListening()

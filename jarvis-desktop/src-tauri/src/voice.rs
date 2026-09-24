@@ -76,6 +76,20 @@
 //! seconds of quiet. Without it, the fixed 900 ms hangover below is used, as
 //! before. See `pause_step` and backend/jarvis_turn.py.
 //!
+//! INTERRUPTING JARVIS: "STOP", AND WINDOWS' ECHO CANCELLING
+//! While Jarvis speaks, this listener keeps listening. Saying "hey Jarvis"
+//! already cut a reply off; saying "stop" now does too, and does nothing
+//! else. The server spots it (`jarvis_wakeword.spot_stop`: a small
+//! stop-word model on the same sound fingerprint as the wake word) in a
+//! SHORT clip and answers `stop: true` before any voice check - stopping
+//! speech is harmless, so it may act first - and this emits
+//! `VOICE_SPEECH_STARTED`, which silences the reply. Anything longer is an
+//! ordinary clip and goes through every check. To hear the owner over
+//! Jarvis's own voice, the microphone is opened through Windows' echo
+//! cancelling when the machine has it (`aec.rs`, the "communications"
+//! capture category, used only when Windows reports acoustic echo
+//! cancellation active on it); otherwise the plain capture below, as before.
+//!
 //! WHAT "STOP" ACTUALLY DOES
 //! `cpal::Stream` is not `Send` on every platform (it wraps native audio-API
 //! handles), so it cannot live in ordinary Tauri-managed state shared across
@@ -309,6 +323,8 @@ struct HeardRaw {
     awake: bool,
     #[serde(default)]
     awake_seconds: f64,
+    #[serde(default)]
+    stop: bool,
 }
 
 fn default_true() -> bool {
@@ -335,6 +351,9 @@ pub struct HeardReply {
     /// for the next clip without the phrase, for `awake_seconds`.
     pub awake: bool,
     pub awake_seconds: f64,
+    /// The clip was the stop word ("stop", "Jarvis, stop"): silence the
+    /// reply being spoken, and nothing else.
+    pub stop: bool,
 }
 
 impl From<HeardRaw> for HeardReply {
@@ -350,6 +369,7 @@ impl From<HeardRaw> for HeardReply {
             wake_heard: raw.wake_heard,
             awake: raw.awake,
             awake_seconds: raw.awake_seconds,
+            stop: raw.stop,
         }
     }
 }
@@ -906,6 +926,57 @@ fn busy_error(auto: bool, manual: bool) -> Option<String> {
     None
 }
 
+/// What `start_automatic_listening` tells the page.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListenInfo {
+    /// The microphone is open through Windows' echo cancelling, so "stop"
+    /// and "hey Jarvis" can be heard over Jarvis's own voice.
+    pub echo_cancelling: bool,
+}
+
+/// Opens the microphone through Windows' echo cancelling (aec.rs) and runs
+/// the listener on it. `None` - with nothing left running - when this
+/// machine does not report echo cancelling, or anything fails; the caller
+/// then uses the ordinary capture.
+fn start_echo_cancelled(
+    app: &AppHandle,
+    samples: &Arc<Mutex<Vec<i16>>>,
+    use_turn: bool,
+) -> Option<AutoListenHandle> {
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let (mic_stop_tx, mic_stop_rx) = mpsc::channel();
+    let mic_samples = Arc::clone(samples);
+    let mic = std::thread::spawn(move || crate::aec::run(mic_samples, ready_tx, mic_stop_rx));
+    match ready_rx.recv_timeout(STREAM_READY_TIMEOUT) {
+        Ok(Ok(opened)) => {
+            let (stop_tx, stop_rx) = mpsc::channel();
+            let app = app.clone();
+            let vad_samples = Arc::clone(samples);
+            // The microphone has its own thread (it must be drained every
+            // few milliseconds, which the listener - blocking on a POST -
+            // cannot promise); the listener runs here, and stopping it
+            // stops the microphone.
+            let join = std::thread::spawn(move || {
+                run_vad_loop(&app, &vad_samples, opened.spec, &stop_rx, use_turn);
+                let _ = mic_stop_tx.send(());
+                let _ = mic.join();
+            });
+            Some(AutoListenHandle { stop_tx, join })
+        }
+        Ok(Err(why)) => {
+            eprintln!("[voice] no echo cancelling, using the ordinary microphone: {why}");
+            let _ = mic.join();
+            None
+        }
+        Err(_) => {
+            // Still opening: dropping the stop sender ends it when it does.
+            drop(mic_stop_tx);
+            None
+        }
+    }
+}
+
 /// Starts listening for "hey Jarvis": checks with the server first (see
 /// `ensure_wake_ready` - off means an approval card, not a microphone), then
 /// opens the microphone and keeps it open, cutting and sending one utterance
@@ -915,7 +986,7 @@ pub async fn start_automatic_listening(
     app: AppHandle,
     state: State<'_, AutoListenState>,
     manual: State<'_, VoiceCaptureState>,
-) -> Result<(), String> {
+) -> Result<ListenInfo, String> {
     {
         let auto_busy = state.0.lock().map_err(poisoned)?.is_some();
         let manual_busy = manual.0.lock().map_err(poisoned)?.is_some();
@@ -935,6 +1006,12 @@ pub async fn start_automatic_listening(
     }
 
     let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
+    if let Some(handle) = start_echo_cancelled(&app, &samples, use_turn) {
+        *guard = Some(handle);
+        return Ok(ListenInfo {
+            echo_cancelling: true,
+        });
+    }
     let (ready_tx, ready_rx) = mpsc::channel();
     let (stop_tx, stop_rx) = mpsc::channel();
 
@@ -948,7 +1025,9 @@ pub async fn start_automatic_listening(
     match wait_for_ready(ready_rx, stop_tx.clone()) {
         Ok(_spec) => {
             *guard = Some(AutoListenHandle { stop_tx, join });
-            Ok(())
+            Ok(ListenInfo {
+                echo_cancelling: false,
+            })
         }
         Err(reason) => {
             let _ = join.join();
@@ -1109,6 +1188,12 @@ fn run_vad_loop(
                             // (switched off, no model): the frontend says so
                             // once and turns listening off.
                             let _ = app.emit(VOICE_HEARD, reply);
+                        }
+                        Ok(reply) if reply.stop => {
+                            // "Stop": silence the reply being spoken, and
+                            // nothing else - no voice check was needed for
+                            // that, and nothing is sent to the chat.
+                            let _ = app.emit(VOICE_SPEECH_STARTED, ());
                         }
                         Ok(reply) if reply.wake_heard => {
                             // Barge-in: "hey Jarvis" stops a reply that is
