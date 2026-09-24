@@ -24,6 +24,7 @@ memory-prefix.patch	memory-prefix/a7ed401.patch	a7ed401bdbf059e6b8a633844d657ad2
 memory-prefix.patch	memory-prefix/3040b3d.patch	3040b3dc0803600ff1ccd92e8ed6460c921d687c	2026-09-15T00:43:39+00:00	backend: recalled facts were at token 0, so every turn re-prefilled everything
 memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34+00:00	Master audit: the worst finding was a cloud lane nobody re-filtered
 memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51+00:00	Memory: stop the destructive paths, and start the event pump
+note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28+00:00	Logseq and Joplin notes that are really filed
 skill-notes.patch	skill-notes/2c4f24c.patch	2c4f24cd99c3400a83e45efb2d743e8b0c4bdd0b	2026-09-15T00:20:02+00:00	Three sentences that were not true, and an ungated insight pool
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27+00:00	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47+00:00	backend: jarvis_agent.py - the model can finally use a tool, local lane only
