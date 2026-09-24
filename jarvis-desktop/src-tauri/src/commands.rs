@@ -1385,24 +1385,36 @@ pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, Str
 ///
 /// `note_target` was invented outright — zero hits in the server. The system
 /// message the frontend already sends is the only mechanism that ever worked.
+///
+/// Chat history (JARVIS-API.md section 18): `messages` go on untouched, so
+/// each user turn's `provenance` tag reaches the PC as main.js set it, and
+/// `conversation_id` and `device` are added at the top level by
+/// [`chat_extras`] - only when well formed, so a bad one is left out rather
+/// than sent for the PC to ignore. The PC strips all three before anything
+/// reaches a model.
 #[tauri::command]
 pub async fn stream_chat(
     app: AppHandle,
     messages: Vec<serde_json::Value>,
     has_image: bool,
     auto: bool,
+    conversation_id: Option<String>,
+    device: Option<String>,
     on_event: Channel<String>,
 ) -> Result<(), String> {
     let cancel = app.state::<ChatState>().begin();
     let base = jarvis_base(&app);
     let headers = jarvis_headers(&app)?;
 
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "messages": messages,
         "has_image": has_image,
         "stream": true,
         "auto": auto,
     });
+    if let Some(body) = payload.as_object_mut() {
+        body.extend(chat_extras(conversation_id.as_deref(), device.as_deref()));
+    }
 
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
     // lands before this future is polled still wins the race.
@@ -1469,6 +1481,34 @@ pub fn error_text_from_body(body: &str) -> Option<String> {
         .or_else(|| error.get("message").and_then(|m| m.as_str()))?
         .trim();
     (!text.is_empty()).then(|| text.to_string())
+}
+
+/// The two chat-history fields `POST /api/chat` takes at the top level
+/// (JARVIS-API.md section 18), each only when it is one the PC accepts:
+/// `conversation_id` 8-64 characters of `[A-Za-z0-9_-]`, and `device` one of
+/// the two names this app's windows are (`"desktop"` for the quickbar,
+/// `"hud"` for the HUD page). Anything else is left out.
+pub(crate) fn chat_extras(
+    conversation_id: Option<&str>,
+    device: Option<&str>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut out = serde_json::Map::new();
+    if let Some(id) = conversation_id.filter(|id| valid_conversation_id(id)) {
+        out.insert("conversation_id".into(), serde_json::json!(id));
+    }
+    if let Some(d) = device.filter(|d| matches!(*d, "desktop" | "hud")) {
+        out.insert("device".into(), serde_json::json!(d));
+    }
+    out
+}
+
+/// A conversation id the PC accepts: 8-64 characters of `[A-Za-z0-9_-]`.
+/// Also what [`crate::brain::history`] checks before putting one in a URL.
+pub(crate) fn valid_conversation_id(id: &str) -> bool {
+    (8..=64).contains(&id.len())
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
 fn valid_turn_id(id: &str) -> bool {
@@ -4623,5 +4663,33 @@ mod turn_tests {
         );
         assert_eq!(error_text_from_body("<html>502</html>"), None);
         assert_eq!(error_text_from_body(r#"{"error": ""}"#), None);
+    }
+
+    /// Chat history (JARVIS-API.md section 18): a well-formed id and a known
+    /// device go on at the top level; anything else is left out, never sent.
+    #[test]
+    fn chat_history_fields_go_on_only_when_well_formed() {
+        use super::chat_extras;
+        let id = "3f2c9a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f";
+        let both = chat_extras(Some(id), Some("desktop"));
+        assert_eq!(both["conversation_id"], id);
+        assert_eq!(both["device"], "desktop");
+        assert_eq!(chat_extras(None, Some("hud"))["device"], "hud");
+        for bad in [
+            "short",
+            "has space in it",
+            "slash/es/aren't/ok",
+            &"x".repeat(65),
+        ] {
+            assert!(
+                chat_extras(Some(bad), None).is_empty(),
+                "{bad:?} was passed on"
+            );
+        }
+        // Phone is the phone's to say; nothing else is a device at all.
+        for bad in ["phone", "Desktop", "", "desktop "] {
+            assert!(chat_extras(None, Some(bad)).is_empty(), "{bad:?}");
+        }
+        assert!(chat_extras(None, None).is_empty());
     }
 }

@@ -773,11 +773,29 @@ const S = {
   state: "idle",              // idle | listening | thinking | speaking
   level: 0,                   // mic amplitude 0..1
   messages: [],
+  // Chat history on the PC (JARVIS-API.md section 18). One conversation per
+  // time this page is opened: this page has no "New conversation", and its
+  // messages live only as long as the page does.
+  conversationId: newConversationId(),
+  // Where the words in the box came from: "typed", "pasted" (a paste or a
+  // drop since the box was last empty) or "voice". Rides on each user
+  // message as `provenance` and stays with it in `messages`, so it is sent
+  // again with that turn - same rules as the quickbar (chat-history.js).
+  inputTag: "typed",
   graph: null,
   traces: [],
   activeTrace: null,
   reduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches
 };
+
+/** 8-64 characters of [A-Za-z0-9_-], what the PC accepts as an id. */
+function newConversationId(){
+  const c = window.crypto;
+  if(c && typeof c.randomUUID === "function") return c.randomUUID();
+  const b = new Uint8Array(16);
+  c.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+}
 
 const GROUPS = {
   core:     { label:"Core",      color:"#ffffff" },
@@ -1358,6 +1376,11 @@ const voice = (() => {
       let text = "";
       for(let i = e.resultIndex; i < e.results.length; i++) text += e.results[i][0].transcript;
       $("input").value = text;
+      // Claimed as voice. It is the browser's transcript, not the PC's, so
+      // the PC records it as "voice_unverified" (JARVIS-API.md section 18).
+      // Inside the app this never runs: hud_bootstrap.js removes the
+      // browser's recogniser, which uploads audio.
+      S.inputTag = "voice";
       if(e.results[e.results.length-1].isFinal){ stop(); send(); }
     };
     rec.onerror = () => stop();
@@ -1546,10 +1569,12 @@ async function send(){
   // of nothing is a wedge; a long answer, or a long wait for you, is not.
   let watchdog = setTimeout(() => ctrl.abort("timeout"), 120000);
   const stillAlive = () => { clearTimeout(watchdog); watchdog = setTimeout(() => ctrl.abort("timeout"), 120000); };
+  const provenance = S.inputTag;
   $("input").value = "";
+  S.inputTag = "typed";
   $("input").style.height = "auto";
   const userNode = addMessage("user", text);
-  S.messages.push({role:"user", content:text});
+  S.messages.push({role:"user", content:text, provenance});
 
   // Retrieval runs alongside the answer, not after it, so the trace is ready
   // by the time you think to look.
@@ -1571,6 +1596,11 @@ async function send(){
     lane: S.lane === "auto" ? null
         : (S.lane === "local" ? (S.defaultModel || "local") : S.lane),
     messages: S.messages.slice(-12),
+    // JARVIS-API.md section 18: which conversation, and that it was this
+    // page. The PC takes these and each message's provenance off before
+    // anything reaches a model.
+    conversation_id: S.conversationId,
+    device: "hud",
     stream: true,
     temperature: 0.7
     // No max_tokens: the PC uses one length for every window (1,024, the
@@ -1745,7 +1775,14 @@ $("input").addEventListener("keydown", e => {
 $("input").addEventListener("input", e => {
   e.target.style.height = "auto";
   e.target.style.height = Math.min(132, e.target.scrollHeight) + "px";
+  // A paste or a drop is tagged by its own event, which fires first. Any
+  // other edit: an emptied box starts again as typed, and an edited voice
+  // transcript is now the owner's typing. Pasted stays pasted until empty.
+  if(e.inputType === "insertFromPaste" || e.inputType === "insertFromDrop") return;
+  if(!e.target.value || S.inputTag === "voice") S.inputTag = "typed";
 });
+$("input").addEventListener("paste", () => { S.inputTag = "pasted"; });
+$("input").addEventListener("drop", () => { S.inputTag = "pasted"; });
 
 $("mic").addEventListener("click", () => voice.listening ? voice.stop() : voice.start());
 document.addEventListener("keydown", e => {

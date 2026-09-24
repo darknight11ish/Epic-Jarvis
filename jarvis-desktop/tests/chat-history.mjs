@@ -16,9 +16,15 @@ import {
   MAX_CHARS,
   KEEP_EXCHANGES,
   KEEP_CHARS,
+  CONVERSATION_ID,
+  PROVENANCE,
+  boxTagAfter,
   commitExchange,
   historyChars,
   historyMessages,
+  newConversationId,
+  sentProvenance,
+  userMessage,
 } from "../src/chat-history.js";
 
 const fails = [];
@@ -52,6 +58,77 @@ check("nothing but role and content, and only user and assistant", () => {
     assert.deepEqual(Object.keys(m).sort(), ["content", "role"]);
     assert.ok(m.role === "user" || m.role === "assistant");
   }
+});
+
+/* ── Where the words came from (JARVIS-API.md section 18) ────────────────── */
+
+check("each user turn's provenance is kept and sent again with it, turn after turn", () => {
+  let w = commitExchange([], "what does this say?", "It is a receipt.", "pasted");
+  w = commitExchange(w, "and the total?", "£12.40.", "typed");
+  w = commitExchange(w, "remind me tomorrow", "Done.", "voice");
+  const msgs = historyMessages(w);
+  assert.deepEqual(msgs.filter((m) => m.role === "user").map((m) => m.provenance),
+    ["pasted", "typed", "voice"]);
+  // An assistant turn never carries one: the tag is about the owner's words.
+  assert.ok(msgs.filter((m) => m.role === "assistant").every((m) => !("provenance" in m)));
+  // Still there after the window trims: the tag travels with its own pair.
+  let long = w;
+  for (let i = 0; i < 12; i++) long = commitExchange(long, `q${i}`, "a", i % 2 ? "clipboard" : "typed");
+  for (const ex of long) {
+    const sent = historyMessages([ex])[0];
+    assert.equal(sent.provenance, ex.provenance, `lost on ${ex.question}`);
+  }
+});
+
+check("a tag the PC does not know is sent as none - unknown, never guessed", () => {
+  const w = commitExchange([], "q", "a", "made-up");
+  assert.deepEqual(historyMessages(w)[0], { role: "user", content: "q" });
+  assert.deepEqual(userMessage("q", undefined), { role: "user", content: "q" });
+  assert.deepEqual(userMessage("q", "shared"), { role: "user", content: "q", provenance: "shared" });
+  assert.deepEqual(PROVENANCE,
+    ["typed", "voice", "shared", "clipboard", "pasted", "picture_caption"]);
+});
+
+check("the clipboard prefill is tagged clipboard, and typed only once it is edited", () => {
+  let tag = boxTagAfter("typed", "clipboard", "a snippet");
+  assert.equal(tag, "clipboard");
+  tag = boxTagAfter(tag, "edit", "a snippet, edited");
+  assert.equal(tag, "typed");
+});
+
+check("a paste or a drop tags the box pasted until it is empty again", () => {
+  let tag = boxTagAfter("typed", "paste", "hello");
+  assert.equal(tag, "pasted");
+  tag = boxTagAfter(tag, "edit", "hello and more typing");
+  assert.equal(tag, "pasted", "typing around pasted text made it the owner's own");
+  tag = boxTagAfter(tag, "edit", "");
+  assert.equal(tag, "typed", "an emptied box still carried the old tag");
+  assert.equal(boxTagAfter("clipboard", "paste", "x"), "pasted");
+  assert.equal(boxTagAfter("pasted", "clear"), "typed");
+  // An edited voice transcript is the owner's typing now.
+  assert.equal(boxTagAfter("voice", "edit", "fixed a word"), "typed");
+});
+
+check("words sent with a picture are its caption, unless pasted or from the clipboard", () => {
+  assert.equal(sentProvenance("typed", true), "picture_caption");
+  assert.equal(sentProvenance("voice", true), "picture_caption");
+  assert.equal(sentProvenance("pasted", true), "pasted");
+  assert.equal(sentProvenance("clipboard", true), "clipboard");
+  assert.equal(sentProvenance("typed", false), "typed");
+  assert.equal(sentProvenance("nonsense", false), null);
+});
+
+check("a conversation id is one the PC accepts, and a new one each time", () => {
+  const a = newConversationId();
+  const b = newConversationId();
+  assert.match(a, CONVERSATION_ID);
+  assert.notEqual(a, b);
+  // Without randomUUID (an older WebView): 32 random hex characters.
+  const fallback = newConversationId({
+    getRandomValues: (arr) => { arr.fill(171); return arr; },
+  });
+  assert.equal(fallback, "ab".repeat(16));
+  assert.match(fallback, CONVERSATION_ID);
 });
 
 check("a blank question or answer is not kept, and the window is never mutated", () => {

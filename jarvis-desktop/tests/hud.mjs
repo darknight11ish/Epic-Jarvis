@@ -235,6 +235,36 @@ await check("with Ollama up and no OpenJarvis, Send reaches /api/chat and shows 
   assert.deepEqual(problems, []);
 });
 
+// Chat history on the PC (JARVIS-API.md section 18): the HUD page sends
+// device "hud", one conversation id for the life of the page, and each user
+// turn's provenance - kept in its history and sent again.
+await check("HUD turns carry a conversation id, device hud, and where the words came from", async () => {
+  const { page, problems, chats } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await send(page, "typed here");
+  // A paste, as the page sees one: the event, then the browser's input.
+  await page.evaluate(() => {
+    const box = document.getElementById("input");
+    box.focus();
+    box.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true }));
+    box.value = "pasted here";
+    box.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste" }));
+  });
+  await page.click("#send");
+  await page.waitForTimeout(800);
+  await send(page, "typed again");
+  await page.close();
+  assert.equal(chats.length, 3);
+  assert.match(chats[0].conversation_id, /^[A-Za-z0-9_-]{8,64}$/);
+  assert.ok(chats.every((c) => c.conversation_id === chats[0].conversation_id),
+    "one page, one conversation");
+  assert.ok(chats.every((c) => c.device === "hud"));
+  const users = chats[2].messages.filter((m) => m.role === "user");
+  assert.deepEqual(users.map((m) => [m.content, m.provenance]),
+    [["typed here", "typed"], ["pasted here", "pasted"], ["typed again", "typed"]]);
+  assert.ok(chats[2].messages.filter((m) => m.role === "assistant").every((m) => !("provenance" in m)));
+  assert.deepEqual(problems, []);
+});
+
 await check("with nothing up, Send still answers - from sample replies, and says why", async () => {
   const { page, chats } = await openHud(browser, { jarvis: false, ollama: false, proxy: false });
   await page.evaluate(() => {

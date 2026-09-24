@@ -116,7 +116,14 @@ import { startVoice, setVoiceMode } from "./voice.js";
 import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
 // The renderer the answer card and the approval preview use - see markdown.js.
 import { escapeHtml, renderMarkdown } from "./markdown.js";
-import { commitExchange, historyMessages } from "./chat-history.js";
+import {
+  boxTagAfter,
+  commitExchange,
+  historyMessages,
+  newConversationId,
+  sentProvenance,
+  userMessage,
+} from "./chat-history.js";
 import { fileNote, loadTargets, notSetUp, noTargetsLine, targetName } from "./note-capture.js";
 
 const TAURI = globalThis.__TAURI__;
@@ -285,6 +292,23 @@ const state = {
    * never written to disk; cleared by "New conversation" and by Esc.
    */
   conversation: [],
+  /**
+   * The id every request of this conversation carries as `conversation_id`
+   * (JARVIS-API.md section 18), so the PC's History keeps one entry per
+   * conversation. A new one at start, on "New conversation" and on Esc -
+   * wherever `conversation` above is emptied (closeCard).
+   */
+  conversationId: newConversationId(),
+  /**
+   * Where the words now in the box came from: "typed", "clipboard" (the
+   * clipboard hotkey's prefill, until it is edited) or "pasted" (a paste or
+   * drop since the box was last empty). Moved only by `boxTagAfter`
+   * (chat-history.js), which holds every rule.
+   */
+  boxTag: "typed",
+  /** The tag the turn now streaming was sent with, kept with it into
+   *  `conversation` when it finishes, so it is sent again with that turn. */
+  turnProvenance: null,
   /** The question of the turn now streaming, exactly as sent, until it
    *  finishes. Null when nothing is in flight or the turn was abandoned. */
   turnQuestion: null,
@@ -312,6 +336,8 @@ const state = {
   pictureCleared: false,
   /** The words held back while the picture notice asks what to do. */
   pictureHeld: null,
+  /** ...and where they came from, put back on the box with them. */
+  pictureHeldTag: "typed",
   /** `null`, `"logseq"`, `"joplin"` or `"obsidian"` — set by a prompt prefix. */
   noteTarget: null,
   /** Which note apps the PC is set up for (note-capture.js `readTargets`).
@@ -368,11 +394,16 @@ const state = {
    * anything.
    */
   promptHistory: [],
+  /** The tag each prompt in `promptHistory` was sent with, by its text, so a
+   *  pasted prompt recalled with Up is sent as pasted again - not as typed. */
+  promptTags: new Map(),
   /** Index into `promptHistory` while browsing it; `null` when not browsing. */
   historyIndex: null,
   /** What was in the composer before Up was first pressed, restored on Down
    *  past the newest entry — so browsing history never eats a draft. */
   historyDraft: "",
+  /** ...and the draft's tag, restored with it. */
+  historyDraftTag: "typed",
   /** The prompt behind the answer currently in `state.buffer`, kept after the
    *  turn finishes so a later turn can label it in the scrollback strip. */
   lastPrompt: "",
@@ -583,7 +614,11 @@ function closeCard() {
   // time the window opens should not silently follow on from one that is no
   // longer on screen. Hiding on focus loss does not come here.
   state.conversation = [];
+  // A conversation forgotten here is a finished one on the PC too: the next
+  // question starts a new entry in History (JARVIS-API.md section 18).
+  state.conversationId = newConversationId();
   state.turnQuestion = null;
+  state.turnProvenance = null;
   paintedBlocks = 0;
   spokenUpTo = 0;
   stopSpeaking();
@@ -841,11 +876,14 @@ function pictureNoticeWords(check) {
   );
 }
 
-function showPictureNotice(message, check) {
+function showPictureNotice(message, check, provenance) {
   state.pictureHeld = message;
-  // The box was cleared on submit; put the words back so nothing is lost.
+  state.pictureHeldTag = provenance || "typed";
+  // The box was cleared on submit; put the words back so nothing is lost -
+  // with where they came from, so a pasted question stays pasted.
   if (!dom.prompt.value.trim()) {
     dom.prompt.value = message;
+    state.boxTag = state.pictureHeldTag;
     autoGrowPrompt();
   }
   dom.pictureNoticeText.textContent = pictureNoticeWords(check);
@@ -866,13 +904,16 @@ function hidePictureNotice() {
 
 /** Takes the held words back out of the box and sends them. */
 function sendHeldWords() {
-  const words = dom.prompt.value.trim() || state.pictureHeld || "";
+  const typed = dom.prompt.value.trim();
+  const words = typed || state.pictureHeld || "";
+  const tag = typed ? state.boxTag : state.pictureHeldTag;
   hidePictureNotice();
   if (!words) return;
-  pushPromptHistory(words);
+  pushPromptHistory(words, tag);
   dom.prompt.value = "";
+  state.boxTag = boxTagAfter(state.boxTag, "clear");
   autoGrowPrompt();
-  send(words);
+  send(words, tag);
 }
 
 dom.pictureTextOnly.addEventListener("click", () => {
@@ -2089,6 +2130,8 @@ async function streamViaFetch(payload) {
         has_image: payload.hasImage,
         stream: true,
         auto: payload.auto,
+        conversation_id: payload.conversationId,
+        device: payload.device,
       }),
       signal: controller.signal,
     });
@@ -2216,8 +2259,15 @@ async function fileFromBar(target, text) {
   }
 }
 
-/** Sends the prompt and streams the answer into the card. */
-async function send(promptText) {
+/**
+ * Sends the prompt and streams the answer into the card.
+ *
+ * `provenance` is where the words came from - "typed", "voice",
+ * "clipboard" or "pasted" (chat-history.js) - and rides on the user message
+ * (JARVIS-API.md section 18). Anything else is sent as no tag, which the PC
+ * treats as not the owner's own words.
+ */
+async function send(promptText, provenance = "typed") {
   const message = promptText.trim();
   if (!message) return;
   // A note prefix files the rest instead of asking anything - see fileFromBar.
@@ -2245,7 +2295,7 @@ async function send(promptText) {
     const { ok, check } = await pictureCanBeSeen();
     if (!ok) {
       state.inFlight = null;
-      showPictureNotice(message, check);
+      showPictureNotice(message, check, provenance);
       return;
     }
   }
@@ -2325,6 +2375,9 @@ async function send(promptText) {
   //
   // Screenshots are not kept in the conversation - only the words.
   state.turnQuestion = text;
+  // Words sent with a picture are a picture's caption; the picture itself is
+  // never kept in the conversation, only the words and this tag.
+  state.turnProvenance = sentProvenance(provenance, Boolean(state.capture));
   state.turnFramed = false;
   state.turnEnded = false;
   state.turnCutShort = false;
@@ -2340,10 +2393,15 @@ async function send(promptText) {
       ...(state.clipboard
         ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
         : []),
-      { role: "user", content },
+      userMessage(content, state.turnProvenance),
     ],
     hasImage: Boolean(state.capture),
     auto: true,
+    // JARVIS-API.md section 18. Informational for the PC's History list;
+    // stream_chat (commands.rs) passes on only a well-formed id and a
+    // device it knows.
+    conversationId: state.conversationId,
+    device: "desktop",
   };
 
   if (IS_TAURI) {
@@ -2437,7 +2495,12 @@ function finishStream(phase, statusText) {
     state.buffer.trim() &&
     !(state.turnFramed && !state.turnEnded)
   ) {
-    state.conversation = commitExchange(state.conversation, question, state.buffer);
+    state.conversation = commitExchange(
+      state.conversation,
+      question,
+      state.buffer,
+      state.turnProvenance
+    );
   }
 
   // Stopped at the length limit: kept (it is what Jarvis said), but the
@@ -2581,7 +2644,9 @@ async function stopPushToTalk() {
       return;
     }
     state.voiceTurn = true;
-    send(text);
+    // The PC's own speech route wrote these words (stop_voice_capture), so
+    // they go as "voice"; the PC checks that against what it transcribed.
+    send(text, "voice");
   } catch (error) {
     announce(String((error && error.message) || error), "assertive");
   }
@@ -2877,7 +2942,7 @@ listen("voice-heard", (event) => {
   const text = String(heard.text || "").trim();
   if (!text) return;
   state.voiceTurn = true;
-  send(text);
+  send(text, "voice");
 });
 
 /* ==========================================================================
@@ -2900,6 +2965,7 @@ async function dismiss() {
   abortStream();
   closeApproval();
   dom.prompt.value = "";
+  state.boxTag = boxTagAfter(state.boxTag, "clear");
   autoGrowPrompt();
   syncNoteChip();
   state.capture = null;
@@ -2944,24 +3010,32 @@ function submitCurrentPrompt() {
   // must go through, and it refuses anything carrying `raised`.
   const value = dom.prompt.value;
   if (!value.trim()) return;
-  pushPromptHistory(value.trim());
+  const tag = state.boxTag;
+  pushPromptHistory(value.trim(), tag);
   dom.prompt.value = "";
+  state.boxTag = boxTagAfter(tag, "clear");
   autoGrowPrompt();
-  send(value);
+  send(value, tag);
 }
 
 /* ==========================================================================
    Prompt history (Up / Down recall)
    ========================================================================== */
 
-/** Records a submitted prompt, skipping an immediate repeat. */
-function pushPromptHistory(text) {
+/** Records a submitted prompt, skipping an immediate repeat, and the tag it
+ *  was sent with (the newest wins for a prompt sent twice). */
+function pushPromptHistory(text, tag = "typed") {
   state.historyIndex = null;
   state.historyDraft = "";
-  const { promptHistory } = state;
+  state.historyDraftTag = "typed";
+  const { promptHistory, promptTags } = state;
+  promptTags.set(text, tag);
   if (promptHistory[promptHistory.length - 1] === text) return;
   promptHistory.push(text);
-  if (promptHistory.length > PROMPT_HISTORY_LIMIT) promptHistory.shift();
+  if (promptHistory.length > PROMPT_HISTORY_LIMIT) {
+    const gone = promptHistory.shift();
+    if (!promptHistory.includes(gone)) promptTags.delete(gone);
+  }
 }
 
 /**
@@ -2980,6 +3054,7 @@ function recallHistory(direction) {
   if (state.historyIndex === null) {
     if (direction > 0) return false; // nothing newer than "not browsing"
     state.historyDraft = dom.prompt.value;
+    state.historyDraftTag = state.boxTag;
     state.historyIndex = promptHistory.length - 1;
   } else {
     const next = state.historyIndex + direction;
@@ -2987,6 +3062,7 @@ function recallHistory(direction) {
     if (next >= promptHistory.length) {
       state.historyIndex = null;
       dom.prompt.value = state.historyDraft;
+      state.boxTag = state.historyDraftTag;
       autoGrowPrompt();
       placeCaretForRecall(direction);
       return true;
@@ -2995,6 +3071,8 @@ function recallHistory(direction) {
   }
 
   dom.prompt.value = promptHistory[state.historyIndex];
+  // A recalled prompt is sent with the tag it was first sent with.
+  state.boxTag = state.promptTags.get(dom.prompt.value) || "typed";
   autoGrowPrompt();
   placeCaretForRecall(direction);
   return true;
@@ -3016,14 +3094,30 @@ function placeCaretForRecall(direction) {
    Event wiring
    ========================================================================== */
 
-dom.prompt.addEventListener("input", () => {
+dom.prompt.addEventListener("input", (event) => {
   // A real keystroke, as opposed to `recallHistory` assigning `.value`
   // directly (which fires no `input` event) — so typing anything always
   // breaks out of history browsing, the same way a shell's would.
   state.historyIndex = null;
+  // Where the words came from (JARVIS-API.md section 18). A paste or a drop
+  // is tagged by its own event below, which fires first; any other edit
+  // makes a clipboard snippet the owner's own typing, and an emptied box
+  // starts again as typed.
+  const type = (event && event.inputType) || "";
+  if (type !== "insertFromPaste" && type !== "insertFromDrop") {
+    state.boxTag = boxTagAfter(state.boxTag, "edit", dom.prompt.value);
+  }
   autoGrowPrompt();
   syncNoteChip();
 });
+
+// Pasted or dropped text is not the owner's own words, whatever is typed
+// around it, until the box is empty again (chat-history.js boxTagAfter).
+for (const kind of ["paste", "drop"]) {
+  dom.prompt.addEventListener(kind, () => {
+    state.boxTag = boxTagAfter(state.boxTag, "paste");
+  });
+}
 
 dom.prompt.addEventListener("keydown", (event) => {
   // Enter sends; Shift+Enter inserts a newline.
@@ -3195,8 +3289,10 @@ listen("clipboard-inject", (event) => {
   if (!text.trim()) return;
   attachClipboard(text);
   // A short snippet is more useful in the box; a long one becomes context.
+  // In the box it is tagged "clipboard" until the owner edits it.
   if (text.length <= 200 && !dom.prompt.value.trim()) {
     dom.prompt.value = text;
+    state.boxTag = boxTagAfter(state.boxTag, "clipboard");
     autoGrowPrompt();
   }
   focusInput({ selectAll: false });
