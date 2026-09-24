@@ -220,13 +220,28 @@ class VoiceRoundsTest {
     }
 
     @Test
-    fun `send is blocked until every sentence is recorded, and on a stale link`() {
+    fun `send is blocked until every sentence is recorded, and on a stale link only for the card`() {
         val p = VoiceRounds.plan(view("strong_untrained"))
+        assertEquals(VoiceRounds.Kind.EXTENDED, p.kind)
         assertEquals("Record all 12 sentences first (5 done).", VoiceRounds.sendBlocker(p, 0, 5, 20f, null))
         val stale = "Not connected to the desktop, so this cannot be delivered."
-        assertEquals(stale, VoiceRounds.sendBlocker(p, 0, 12, 30f, stale))
+        // Rounds 1 and 2 are only held in memory on the PC: no card, so they
+        // go on a stale link, like the desktop's (only `finish` is held).
+        assertNull(VoiceRounds.sendBlocker(p, 0, 12, 30f, stale))
+        assertNull(VoiceRounds.sendBlocker(p, 1, 12, 30f, stale))
+        // Round 3 carries `finish` and raises the one card: held.
+        assertEquals(stale, VoiceRounds.sendBlocker(p, 2, 12, 30f, stale))
         assertNotNull(VoiceRounds.sendBlocker(p, 0, 12, 81f, null))
         assertNull(VoiceRounds.sendBlocker(p, 0, 12, 30f, null))
+        // A one-round plan's only round raises the card: held.
+        val one = listOf(VoiceRounds.Round(1, VoiceTraining.SENTENCES.indices.toList()))
+        for (kind in listOf(VoiceRounds.Kind.SINGLE, VoiceRounds.Kind.SINGLE_OLD, VoiceRounds.Kind.MORE)) {
+            val plan = VoiceRounds.Plan(kind, one)
+            assertTrue(kind.name, VoiceRounds.raisesCard(plan, 0))
+            assertEquals(kind.name, stale, VoiceRounds.sendBlocker(plan, 0, 12, 30f, stale))
+        }
+        assertFalse(VoiceRounds.raisesCard(p, 0))
+        assertTrue(VoiceRounds.raisesCard(p, 2))
     }
 
     @Test

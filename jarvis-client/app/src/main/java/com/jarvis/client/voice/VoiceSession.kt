@@ -581,6 +581,13 @@ class VoiceSession(
                     setNotice(turn, heard.reason.ifBlank { "The desktop cannot take \"hey Jarvis\" right now." })
                     return heard
                 }
+                // "Hey Jarvis" from the owner, and a command too short to
+                // check: the PC's own "say a little more", nothing sent.
+                WakeRules.Verdict.TOO_SHORT -> {
+                    setPhase(turn, Phase.OFF)
+                    setNotice(turn, heard.message())
+                    return heard
+                }
                 WakeRules.Verdict.ANSWER -> Unit
             }
         }

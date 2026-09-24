@@ -1471,12 +1471,18 @@ object JarvisRuntime {
      * card for all of them. An older PC's single round goes the old way
      * ([sendVoiceTraining]).
      *
-     * Held on a stale or dropped link ([actionBlocker], rule 4) - the rounds
-     * all lead to one card. Nothing here is logged or kept: the caller drops
-     * the round's clips once this says accepted.
+     * Only the round that raises the card ([VoiceRounds.raisesCard]: the
+     * last round, or an older PC's one-shot) is held on a stale or dropped
+     * link ([actionBlocker], rule 4), like the desktop. The rounds before it
+     * are only held in memory on the PC - no card, nothing changed - so they
+     * always go; on a dropped link they simply fail to arrive. Nothing here
+     * is logged or kept: the caller drops the round's clips once this says
+     * accepted.
      */
     suspend fun sendVoiceRound(plan: VoiceRounds.Plan, index: Int, clips: List<ByteArray>): VoiceRounds.Result {
-        actionBlocker()?.let { return VoiceRounds.Result(false, it) }
+        if (VoiceRounds.raisesCard(plan, index)) {
+            actionBlocker()?.let { return VoiceRounds.Result(false, it) }
+        }
         if (plan.kind == VoiceRounds.Kind.SINGLE_OLD) {
             val r = sendVoiceTraining(clips)
             if (r.accepted) _voiceSent.value = plan

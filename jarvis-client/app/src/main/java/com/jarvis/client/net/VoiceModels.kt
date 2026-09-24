@@ -451,6 +451,18 @@ data class Heard(
      * false when missing, from an older PC.
      */
     @SerialName("memory_aloud") val memoryAloud: Boolean = false,
+    /**
+     * The clip had less speech than a command needs, so the PC would not
+     * act on it (since 2026-09-24; false from an older PC). [reason] is the
+     * PC's own "say a little more" sentence, and it is shown as it is.
+     *
+     * For "hey Jarvis, <command>" the PC sends this with `ok`, `owner` and
+     * `wake_heard` all true and no text - it WAS the owner saying the phrase,
+     * only the command after it was too short to check. Read as a
+     * transcript, that empty text used to say "Nothing came back to send."
+     * instead of what went wrong. See [outcome] and `WakeRules.verdict`.
+     */
+    @SerialName("too_short") val tooShort: Boolean = false,
 ) {
     enum class Outcome {
         /** Verified, transcribed. Feed [text] to the chat. */
@@ -476,6 +488,10 @@ data class Heard(
 
     val outcome: Outcome
         get() = when {
+            // Before TRANSCRIBED: a too-short "hey Jarvis, <command>" comes
+            // back with ok and owner true and nothing to send.
+            tooShort -> Outcome.REFUSED
+
             ok && owner -> Outcome.TRANSCRIBED
 
             // owner:true with ok:false can only mean the gate recognised him
@@ -503,6 +519,11 @@ data class Heard(
         // The server's own words: "too short to identify a voice (0.09s)",
         // "silence", "need 16000Hz". All of them are safe to show and all of
         // them tell the owner something they can act on.
-        Outcome.REFUSED -> reason.ifBlank { "Didn't catch that." }
+        Outcome.REFUSED -> reason.ifBlank { if (tooShort) TOO_SHORT else "Didn't catch that." }
+    }
+
+    companion object {
+        /** Only when the PC said "too short" and gave no sentence of its own; the desktop's words. */
+        const val TOO_SHORT = "That was too short to be sure it was you. Say a little more."
     }
 }

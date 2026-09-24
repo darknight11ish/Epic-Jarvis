@@ -24,10 +24,21 @@ object WakeRules {
 
         /** The desktop cannot take wake-word clips right now (switched off, no model): stop listening. */
         STOP,
+
+        /**
+         * "Hey Jarvis" was heard from the owner, but the command after it was
+         * too short to check: show the PC's own sentence ([Heard.message]),
+         * send nothing. The desktop's quickbar does the same (main.js,
+         * "voice-heard"). A short clip WITHOUT the phrase could be anyone in
+         * the room, so that one stays [IGNORE].
+         */
+        TOO_SHORT,
     }
 
     fun verdict(h: Heard): Verdict = when {
         !h.available -> Verdict.STOP
+        h.tooShort && h.wakeHeard -> Verdict.TOO_SHORT
+        h.tooShort -> Verdict.IGNORE
         h.awake && h.owner -> Verdict.AWAKE
         h.wakeHeard && h.owner -> Verdict.ANSWER
         else -> Verdict.IGNORE

@@ -316,30 +316,44 @@ object ChatLog {
         row.turns?.let { if (it == 1) "1 message" else "$it messages" },
     ).joinToString(" · ")
 
-    fun deviceWord(device: String?): String? = when (device) {
+    /**
+     * Which app a conversation was had in. The same words as the desktop's
+     * History (one wording for both apps, fit audit 2026-09-24); a device
+     * the PC did not name - or an older PC that sends none - is "unknown",
+     * never left out.
+     */
+    fun deviceWord(device: String?): String = when (device) {
         "phone" -> "phone"
-        "desktop" -> "desktop"
-        "hud" -> "desktop (HUD page)"
-        else -> null
+        "desktop" -> "PC"
+        "hud" -> "HUD"
+        else -> "unknown"
     }
 
-    /** The quiet mark on a user turn whose words were not typed or spoken, or null. */
+    /**
+     * The quiet mark on a user turn whose words were not the owner's own
+     * typing or voice, or null for those two. Anything else - "unknown", a
+     * tag this phone does not know, or no tag at all - is "not known where
+     * from": never silence, because silence would read as "you typed it".
+     * The same words as the desktop's History.
+     */
     fun provenanceMark(provenance: String?): String? = when (provenance) {
-        null, Provenance.TYPED, Provenance.VOICE -> null
-        Provenance.SHARED -> "shared"
+        Provenance.TYPED, Provenance.VOICE -> null
+        Provenance.SHARED -> "shared from another app"
         Provenance.PASTED -> "pasted"
         "clipboard" -> "from clipboard"
-        Provenance.PICTURE_CAPTION -> "with a picture"
-        "voice_unverified" -> "voice, not checked"
-        else -> null
+        Provenance.PICTURE_CAPTION -> "sent with a picture"
+        "voice_unverified" -> "said aloud, but not confirmed by this PC"
+        else -> UNKNOWN_MARK
     }
 
+    const val UNKNOWN_MARK = "not known where from"
     const val VOICE_MARK = "voice"
     const val TAINT_MARK = "read outside text"
 
-    /** Said once above a tainted transcript. */
+    /** Said once above a tainted transcript. The same sentence as the desktop's. */
     const val TAINT_LINE =
-        "Jarvis read text from outside this chat (a tool ran) from the marked message on."
+        "In this conversation Jarvis read text that did not come from you - a web page, a file, " +
+            "an email or another tool's output - from the marked message on."
 
     /** Why the phone could not do something with History - in the PC's words when there are some. */
     fun failure(e: ApiError): String? = when (e) {

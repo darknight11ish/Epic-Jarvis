@@ -27,7 +27,9 @@ import java.util.Locale
  *   a claimed voice turn it does not recognise as "voice_unverified".
  * - [SHARED] - text another app handed over through Android's Share sheet.
  *   Sent as its own message, before the owner's typed one, never mixed in.
- * - [PICTURE_CAPTION] - the words sent alongside a picture.
+ * - [PICTURE_CAPTION] - the owner's own words (typed or voice) sent
+ *   alongside a picture. Pasted or shared words sent with a picture keep
+ *   their own tag ([ChatHistory.asking]).
  *
  * The desktop also has "clipboard" (its hotkey prefill). The phone has no
  * such path, so it never sends it.

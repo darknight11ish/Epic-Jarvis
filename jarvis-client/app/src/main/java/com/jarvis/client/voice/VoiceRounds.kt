@@ -154,6 +154,19 @@ object VoiceRounds {
     fun isLast(plan: Plan, index: Int): Boolean = index == plan.rounds.lastIndex
 
     /**
+     * Whether sending round [index] of [plan] raises the approval card: the
+     * last round of the plan (it carries `finish`), which for a one-round
+     * plan - balanced, "train more", an older PC's one-shot [Kind.SINGLE_OLD]
+     * - is its only round. Only that round is held on a stale link (rule 4:
+     * a card raised against a stream this phone cannot confirm is live).
+     * The rounds before it are only held in memory on the PC, raise no card
+     * and change nothing, so they always go - the same as the desktop, which
+     * holds only `finish` and the old one-shot body
+     * (voice_training.rs, `send_voice_training`).
+     */
+    fun raisesCard(plan: Plan, index: Int): Boolean = isLast(plan, index)
+
+    /**
      * Before sending round [index] (> 0) of [plan]: are the rounds before it
      * still held on the PC ([session], just read)? It drops them 15 minutes
      * after the last one arrived - and a round sent after that would start a
@@ -289,7 +302,12 @@ object VoiceRounds {
         return if (named.size == n) "$head: ${named.joinToString("; ")}." else "$head."
     }
 
-    /** Why "Send" cannot be pressed for a round, or null. */
+    /**
+     * Why "Send" cannot be pressed for a round, or null. [linkBlocker] (the
+     * runtime's `actionBlocker()`) holds only the round that raises the card
+     * ([raisesCard]); an earlier round of a three-round training goes on a
+     * stale link, since the PC only keeps it in memory.
+     */
     fun sendBlocker(
         plan: Plan,
         index: Int,
@@ -300,7 +318,7 @@ object VoiceRounds {
     ): String? {
         val need = plan.rounds[index].sentences.size
         return when {
-            linkBlocker != null -> linkBlocker
+            linkBlocker != null && raisesCard(plan, index) -> linkBlocker
             recorded < need -> "Record all $need sentences first ($recorded done)."
             seconds > limits.maxTotalSeconds ->
                 "The recordings are ${seconds.toInt()} seconds in all; the most is " +

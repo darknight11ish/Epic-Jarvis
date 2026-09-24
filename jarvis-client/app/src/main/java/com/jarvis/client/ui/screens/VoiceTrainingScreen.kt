@@ -75,8 +75,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * scores them against the owner's voice print, throws them away and says
  * whether they would have passed.
  *
- * @param linkBlocker why nothing can be sent right now (link down or stale),
- *   or null. The same rule every other write on the phone follows.
+ * @param linkBlocker why nothing that raises a card can be sent right now
+ *   (link down or stale), or null. The same rule every other write on the
+ *   phone follows. For training it holds only the round that raises the
+ *   card ([VoiceRounds.raisesCard]); earlier rounds are only kept in memory
+ *   on the PC and go anyway, like the desktop's.
  * @param sentPlan the training this phone last finished sending, so the
  *   PC's "round 2, clip 5" can be turned back into the sentence to redo.
  * @param record records one clip until `stop()` returns true.
