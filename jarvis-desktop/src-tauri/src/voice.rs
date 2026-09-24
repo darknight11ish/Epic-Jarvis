@@ -92,6 +92,10 @@
 //! cancelling when the machine has it (`aec.rs`, the "communications"
 //! capture category, used only when Windows reports acoustic echo
 //! cancellation active on it); otherwise the plain capture below, as before.
+//! Settings' "Interrupt Jarvis while it talks" (`src/barge-in.js`, on by
+//! default) is read by the Jarvis bar, not here: with it off, the bar
+//! ignores both events - and any question heard - while Jarvis is talking.
+//! This listener sends and emits exactly as before either way.
 //!
 //! WHAT "STOP" ACTUALLY DOES
 //! `cpal::Stream` is not `Send` on every platform (it wraps native audio-API

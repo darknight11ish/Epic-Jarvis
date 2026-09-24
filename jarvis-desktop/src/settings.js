@@ -41,6 +41,7 @@ import {
   THEME_INFO,
   THEMES,
 } from "./jarvis-link.js";
+import { BARGE_IN_KEY, describeBargeIn, loadBargeIn, saveBargeIn } from "./barge-in.js";
 import {
   checkLine as voiceCheckLine,
   isTrained as voiceIsTrained,
@@ -2189,6 +2190,35 @@ async function vcSetWake(enabled) {
 
 if (vc.wakeOff) vc.wakeOff.addEventListener("click", () => vcSetWake(false));
 if (vc.wakeOn) vc.wakeOn.addEventListener("click", () => vcSetWake(true));
+
+/* "Interrupt Jarvis while it talks" - this PC's own setting (barge-in.js),
+   read by the Jarvis bar each time the listener hears something while
+   Jarvis is talking. Not the server's, so it works whatever Jarvis answered
+   above. */
+const bargeIn = $("voice-barge-in");
+const bargeInDetail = $("voice-barge-in-detail");
+
+function paintBargeIn() {
+  if (!bargeIn) return;
+  const on = loadBargeIn();
+  bargeIn.checked = on;
+  bargeInDetail.textContent = describeBargeIn(on);
+}
+
+if (bargeIn) {
+  bargeIn.addEventListener("change", () => {
+    if (!saveBargeIn(bargeIn.checked)) {
+      announce("That could not be saved on this PC.", "assertive");
+    }
+    paintBargeIn();
+    announce(bargeInDetail.textContent);
+  });
+  // Kept right if the value is changed from another window.
+  window.addEventListener("storage", (event) => {
+    if (event.key === BARGE_IN_KEY) paintBargeIn();
+  });
+  paintBargeIn();
+}
 
 onQueue(() => {
   if (vcWaiting) loadVoice();

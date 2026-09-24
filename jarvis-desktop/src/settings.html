@@ -344,6 +344,22 @@
           <p class="sc-line" id="voice-stop-word" hidden></p>
           <p class="sc-line" id="voice-turn" hidden></p>
         </div>
+
+        <!-- A setting of this PC's, not the server's, so it works whether
+             or not Jarvis answered above (barge-in.js; the phone has its
+             own switch for its own microphone). -->
+        <h3 class="subhead">Interrupting Jarvis</h3>
+        <label class="toggle">
+          <input id="voice-barge-in" type="checkbox" />
+          <span>
+            Interrupt Jarvis while it talks
+            <span class="toggle-detail" id="voice-barge-in-detail"></span>
+          </span>
+        </label>
+        <p class="note">
+          This PC only; your phone has its own switch. It matters only while
+          this PC is listening for "hey Jarvis".
+        </p>
       </section>
 
       <!-- ── Second graphics card ─────────────────────────────────────────

@@ -113,6 +113,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode } from "./voice.js";
+import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
 // The renderer the answer card and the approval preview use - see markdown.js.
 import { escapeHtml, renderMarkdown } from "./markdown.js";
 import { commitExchange, historyMessages } from "./chat-history.js";
@@ -2731,12 +2732,25 @@ function stopSpeaking() {
   speaking = false;
 }
 
+/** Whether Jarvis is talking: a clip is being made or played, or more are
+ *  queued behind it. */
+function jarvisTalking() {
+  return speaking || speechQueue.length > 0;
+}
+
 /** "Hey Jarvis" listening's barge-in hook: Rust sends this when a clip
- *  that held the wake word comes back, so saying "hey Jarvis" cuts off a
- *  reply still being spoken (other sounds in the room do not). Push-to-talk
- *  gets the same treatment directly in `startPushToTalk`, since holding the
- *  button is itself the signal there. */
-listen("voice-speech-started", stopSpeaking);
+ *  that held the wake word, or the word "stop", comes back, so either cuts
+ *  off a reply still being spoken (other sounds in the room do not).
+ *  Push-to-talk gets the same treatment directly in `startPushToTalk`, since
+ *  holding the button is itself the signal there.
+ *
+ *  Settings -> Voice, "Interrupt Jarvis while it talks" (barge-in.js): with
+ *  it off, this is ignored while Jarvis is talking - the reply plays to the
+ *  end, or until Esc closes the bar. */
+listen("voice-speech-started", () => {
+  if (ignoreWhileTalking(loadBargeIn(), jarvisTalking())) return;
+  stopSpeaking();
+});
 
 /** The HUD's mic button (voice.rs `summon_push_to_talk`): the quickbar is
  *  already on screen by the time this arrives. Focus the mic and say how to
@@ -2811,6 +2825,11 @@ function listeningLine(info) {
   const mic = info && typeof info.microphone === "string" && info.microphone.trim()
     ? ` on ${info.microphone.trim()}`
     : "";
+  // "Interrupt Jarvis while it talks" is off in Settings: say so, rather
+  // than promise a "stop" that will be ignored.
+  if (!loadBargeIn()) {
+    return `Listening for "hey Jarvis"${mic}. While Jarvis talks, what it hears is ignored (Settings, Voice).`;
+  }
   return info && info.echoCancelling
     ? `Listening for "hey Jarvis"${mic}. Say "stop" to interrupt Jarvis while it talks.`
     : `Listening for "hey Jarvis"${mic}.`;
@@ -2846,6 +2865,9 @@ listen("voice-heard", (event) => {
     setAutoListening(false);
     return;
   }
+  // "Interrupt Jarvis while it talks" is off: nothing heard over a reply
+  // is acted on, a new question included (barge-in.js).
+  if (ignoreWhileTalking(loadBargeIn(), jarvisTalking())) return;
   if (!heard.isOwner) return; // ambient speech that is not the owner - ignored, not announced
   if (heard.awake) {
     // "Hey Jarvis." on its own: the PC is listening for the next sentence.
