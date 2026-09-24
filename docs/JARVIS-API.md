@@ -176,7 +176,8 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voice` | Fanned out verbatim | Ignored (`JarvisRuntime.kt:690`) |
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
-| `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Falls through to "unhandled" |
+| `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written (`voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
+| `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
@@ -449,9 +450,9 @@ only what Jarvis itself said it did.
 | `/api/voice/moment` | GET | - → WAV bytes | **not yet** | **not yet** | The "One moment." clip in the voice in use now (section 17, `voice-flow.patch`). 503 with `why` when there is none. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
-| `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"`, and since 2026-09-24 `"train"` / `"strictness"` / `"privacy"` / `"measure"` (§16, neither app yet) | **no** | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
+| `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"`, and since 2026-09-24 `"train"` / `"strictness"` / `"privacy"` / `"memory"` / `"measure"` (§16) | `voice_training.rs` `send_voice_training`, `set_voice_setting`, `measure_voice`, `cancel_voice_training` | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
 | `/api/voice/turn` | POST | **WAV bytes** (the last few seconds of speech) | `voice.rs` `ask_turn` | **no** (runs the model itself) | Smart Turn: `{"available", "complete", "probability", "threshold", "ms"}`. Sound in, one number out; nothing kept. `voice-turn.patch`. |
-| `/api/voice/voices` (+ `/create`, `/active`, `/delete`, `/better`) | GET / POST | see section 15 | **not yet** | **not yet** | Custom voices (2026-09-24, `voices.patch`). Built on the backend first; both apps to build against section 15. |
+| `/api/voice/voices` (+ `/create`, `/active`, `/delete`, `/better`) | GET / POST | see section 15 | `get_custom_voices`, `create_custom_voice`, `set_active_voice`, `delete_custom_voice`, `set_better_voice` (Settings -> Jarvis's voice) | `CustomVoices.kt` via `JarvisRuntime` (Checks -> Jarvis's voice, `VoicesScreen.kt`) | Custom voices (2026-09-24, `voices.patch`), section 15. |
 
 **Since 2026-09-24 `/api/voice/say` may answer in a custom voice** (section
 15) - the same WAV, the same 503 when nothing can speak. `/api/voice/status`'s
@@ -1262,8 +1263,9 @@ routes changes.
 `backend/jarvis_f5_worker.py` for the better voice). Jarvis can speak in a
 voice the owner recorded: 3 to 10 seconds of someone reading a sentence
 Jarvis shows (so the words are exact), or an uploaded clip with its words
-typed in. **Built on the backend first; neither app calls these routes
-yet** - `tools/check_parity.py` lists all five as `planned`. How it works,
+typed in. **Both apps call all five** (desktop Settings -> Jarvis's voice,
+`voice_training.rs`; phone Checks -> Jarvis's voice, `VoicesScreen.kt`) -
+`ported` in `tools/check_parity.py`. How it works,
 and the owner's install lines, are in `backend/README.md`, "Custom voices".
 
 Two engines make the voice, and the built-in Kokoro voice is always the
@@ -1291,8 +1293,10 @@ check. Checked on create, on switch, and again before the first word after
 any voice print changes.
 
 All routes: token + origin, like every other write. A client sends
-`X-Jarvis-Client: hud` as always. **Hold every POST on a stale link** (rule
-4). Show every `error` and `why` word for word: they are written for the
+`X-Jarvis-Client: hud` as always. **Hold on a stale link (rule 4) every
+POST that raises a card** - adding a voice, switching to a custom one,
+better voice ON. Deleting a voice, going back to the built-in one and
+better voice OFF only take something away and always go (both apps). Show every `error` and `why` word for word: they are written for the
 owner.
 
 | Route | Body | Answers | Notes |
@@ -1378,10 +1382,11 @@ transcribe it** (CLAUDE.md): the words come from the sentence shown or from
 the owner's typing.
 ## 16. The stricter voice check (added 2026-09-24)
 
-Backend only so far: `backend/rebuilt/jarvis_voice.py`,
-`backend/jarvis_voice_enroll.py`, `backend/jarvis_speech.py`, and the
-shipped bank `backend/jarvis_voicebank.py`. **Neither app uses any of it
-yet** - this section is what they build against. **No new route and no new
+`backend/rebuilt/jarvis_voice.py`, `backend/jarvis_voice_enroll.py`,
+`backend/jarvis_speech.py`, and the shipped bank
+`backend/jarvis_voicebank.py`. **Both apps use it**: desktop Settings ->
+Voice (`voice_training.rs`, `voice-training.js`, `voice-panel.js`), phone
+Checks -> Voice check and Train my voice. **No new route and no new
 patch**: everything below is on routes the apps already call
 (`/api/voice/status`, `/api/voice/enroll`, `/api/voice/utterance`), so
 `tools/check_parity.py` has nothing new to classify. The owner's guide and
@@ -1396,7 +1401,7 @@ mode only when `gate.training` says the PC understands it:
 |---|---|
 | `calibrate: true` | `calibrate`, `threshold` (since 2026-09-24, earlier) |
 | `rounds: true` | `train` (rounds, `add`, `finish`, `cancel`) |
-| `settings: true` | `strictness`, `privacy` |
+| `settings: true` | `strictness`, `privacy`; and `memory` when `gate.settings.memory` is present (an older PC answers `mode: "memory"` with 503) |
 | `measure: true` | `measure` |
 
 ### What changed for every app, even one that changes nothing

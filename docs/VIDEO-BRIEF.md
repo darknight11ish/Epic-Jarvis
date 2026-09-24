@@ -88,6 +88,9 @@ Strong candidates for the video are marked with a star.
   voice only, not the TV.
 - **A fingerprint / Windows Hello lock** on both apps, with a choice of how
   much needs a fingerprint.
+- **Chat history on your PC:** your conversations, including what you said
+  by voice, kept on your own PC, encrypted, with a switch to turn it off and
+  a History view in both apps.
 - **Update notices that ask:** both apps say when a new version exists; the
   desktop installs one only when you press the button.
 

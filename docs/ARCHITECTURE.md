@@ -268,6 +268,29 @@ request can mark a turn as the owner's; a marker can only remove one. The
 gate's "your no becomes a proposed rule" path calls `propose()` directly and
 is unaffected.
 
+### Chat history — a second store, kept apart from memory
+
+`chat-history.db` (`jarvis_chat_log.py`, `chat-history.patch`, 2026-09-24,
+docs/JARVIS-API.md §18) keeps what was said to Jarvis, including voice
+transcripts, **on by default** (the owner's decision). It is not memory:
+nothing in it is recalled into a chat, and it is not a source the learner
+reads from on its own. Three things about it are invariants:
+
+- **Encrypted or not kept.** Every piece of text is AES-256-GCM with a key
+  in Windows Credential Manager (`Jarvis Backend/chat history key`). No
+  key, no `cryptography` package, or a key that does not open the file:
+  nothing is recorded and the apps say why. There is no plain-text path.
+- **The PC records the live turn, with where its words came from.** Only
+  the newest user message of each request (and shared text sent just
+  before it), tagged typed / voice / shared / pasted / clipboard /
+  picture_caption, `unknown` when untagged. `voice` only when this PC's own
+  speech route made those exact words. A conversation that ran a tool is
+  marked from that turn on. This is what the later automatic-learning build
+  trusts instead of the history an app re-sends (the memory-safety audit).
+- **Turning it back on is a card; off is immediate. No delete-all.**
+  One conversation per delete, and both apps hold deleting and shortening
+  the keep period on a stale link.
+
 ---
 
 ## 6. Events — one bus
@@ -434,24 +457,14 @@ backend routes, in both directions; the rest are listed here only.
 |---|---|
 | The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
 
-**On the phone, NOT on purpose** (the desktop should get it, and nobody has
-built it): "Train my voice" (`/api/voice/enroll`). The PC's microphone has a
-voice print of its own on the backend, but with no training screen on the
-desktop it uses the phone's print (`backend/README.md`).
+**On the phone, NOT on purpose** (being built on the desktop, 2026-09-24):
+the voice check's "someone else" test and the stricter-bar card (the
+`calibrate` and `threshold` modes of `/api/voice/enroll`). Both apps call
+that route, so `tools/check_parity.py` cannot see the gap; this line is the
+record of it until the desktop has them.
 
 **On the backend, in neither app yet, NOT on purpose** (2026-09-24, both
-apps should get it): the stricter voice check's controls - very strict /
-balanced, private answers on screen / read aloud, training in rounds and
-"train more", the guided repeat test, and the reply fields that say when a
-command was too short or a private answer must stay on screen
-(`docs/JARVIS-API.md` §16). They are new modes and fields on routes that
-already exist (`/api/voice/enroll`, which only the phone calls today;
-`/api/voice/status` and `/api/voice/utterance`), so `tools/check_parity.py`
-cannot see the gap; this line is the record of it.
-
-**On the backend, in neither app yet, NOT on purpose** (2026-09-24, both
-apps should get it; two other sessions were building the voice screens as
-this landed): the voice flow (`docs/JARVIS-API.md` §17,
+apps should get it; the app side is tracked as a task): the voice flow (`docs/JARVIS-API.md` §17,
 `jarvis_voice_flow.py`, `voice-flow.patch`) - interrupting Jarvis by
 talking (`?source=barge_in` on `/api/voice/utterance`: "stop or not",
 never transcribed), the "One moment." clip (`GET /api/voice/moment`,

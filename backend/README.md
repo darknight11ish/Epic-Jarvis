@@ -5809,10 +5809,10 @@ copy - and the History screens say why.
 - It does not make chat depend on it. Without `jarvis_chat_log.py` the
   history routes answer 503 and chat works exactly as before; an error in
   the history never fails a chat turn.
-- It does not yet know which messages were really spoken: that needs the
-  speech route to call `jarvis_chat_log.note_transcript()`, which is wired
-  in separately. Until then a message the app says was spoken is kept as
-  `voice_unverified`.
+- A message an app says was spoken is kept as `voice` only when its words
+  match a transcript this PC's own speech route made in the last ten
+  minutes (`jarvis_speech.hear()` calls `note_transcript()`), and each
+  transcript vouches for one message; otherwise `voice_unverified`.
 
 **Where it goes.** Last in the order, after `learning-asks.patch`. Its
 context is `voices.patch`'s route blocks and `jarvis_gate.py` line,
@@ -5874,10 +5874,9 @@ many characters, how long it took to make, how long it lasts. The last five
 are in `/api/voice/status` (`tts.timings`), the last twenty in
 `/api/voice/voices`. The timing line below prints the same numbers.
 
-**The routes** are in `docs/JARVIS-API.md`, section 15. **Neither app has a
-screen for this yet** - the backend is built first, and the desktop and
-phone build against that section (`tools/check_parity.py` lists the five
-routes as `planned`). Until then there is no button to add a voice.
+**The routes** are in `docs/JARVIS-API.md`, section 15. **Both apps have
+the screen**: desktop Settings -> Jarvis's voice, phone Checks -> Jarvis's
+voice.
 
 ## Owner steps (one line each, in PowerShell)
 
@@ -6050,10 +6049,9 @@ it is three updated modules (`rebuilt\jarvis_voice.py`,
 `jarvis_voice_enroll.py`, `jarvis_speech.py`) and one new one
 (`jarvis_voicebank.py`), which the patch script copies in.
 
-**Neither app has the new buttons yet.** Everything below works on the PC
-now and is described for the apps in `docs/JARVIS-API.md` §16. Until the
-apps are updated, the phone's existing "Train my voice" still works (it
-becomes one round of the new training).
+**Both apps have the buttons**: desktop Settings -> Voice, phone Checks ->
+Voice check and Train my voice (`docs/JARVIS-API.md` §16). Training works
+from either microphone, each into its own voice print.
 
 ## The two holes, and what closes them
 
