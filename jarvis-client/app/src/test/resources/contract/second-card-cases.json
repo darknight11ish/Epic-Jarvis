@@ -96,7 +96,7 @@
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Off. Needs Longer conversations on first."
         },
         {
@@ -218,7 +218,7 @@
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Off. Needs Longer conversations on first."
         },
         {
@@ -325,7 +325,7 @@
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         },
         {
@@ -441,7 +441,7 @@
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
         },
         {
@@ -546,7 +546,7 @@
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         },
         {
@@ -668,7 +668,7 @@
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Off."
         },
         {

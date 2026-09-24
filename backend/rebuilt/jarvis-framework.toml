@@ -141,6 +141,12 @@ power_manage              = "auto"
 # only (127.0.0.1), on the second card. Turning a switch OFF never asks. Must
 # stay "ask": anything else and the switch refuses to turn on at all.
 second_card_enable        = "ask"
+# "Browser control" has its own line: turning it on also lets Jarvis offer its
+# browser tool, which works real web pages on the internet (each plan of
+# steps it would take there is its own approval card). Must stay "ask", the
+# same as above. A toml without this line treats it as an unknown action
+# ([autonomy] unknown_action_tier, never more than "ask").
+second_card_browser_enable = "ask"
 
 # --- The wiki builder (Brain window or phone: "Add to wiki") -------------
 # Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in

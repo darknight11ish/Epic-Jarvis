@@ -466,6 +466,43 @@ def t_big_model_holds_the_card():
         BM._reset_for_tests()
 
 
+def t_browser_control_card_is_honest():
+    # AP-9: the Browser control card said "Nothing leaves this PC", but the
+    # feature drives web pages. It now has its own action and true words.
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, long_context=True)
+        seen = []
+        gate = lambda a, d, p: seen.append((a, d, p)) or Verdict(True, "ask", "approved")
+        code, out = SC.request_change("browser_control", True, gate=gate)
+        check("Browser control's card is raised under its own action",
+              code == 200 and seen and seen[0][0] == "second_card_browser_enable", seen[:1])
+        a, d, text = seen[0]
+        check("its card does not say 'Nothing leaves this PC', and says the pages are online",
+              "Nothing leaves this PC" not in text and "reaches that website" in text
+              and d["leaves_this_pc"] is True, text)
+        check("and it is on", SC._read_switches()["features"]["browser_control"] is True)
+        row = next(r for r in SC.status()["features"] if r["id"] == "browser_control")
+        check("its 'what' says the pages are on the internet", "on the internet" in row["what"])
+        seen.clear()
+        SC.request_change("vision", True, gate=gate)
+        check("the other switches keep second_card_enable and 'Nothing leaves this PC'",
+              seen[0][0] == "second_card_enable" and "Nothing leaves this PC" in seen[0][2]
+              and seen[0][1]["leaves_this_pc"] is False)
+        SC.request_change("browser_control", False)
+        tiers = {"second_card_enable": "ask", "second_card_browser_enable": "notify"}
+        code, out = SC.request_change("browser_control", True, gate=gate,
+                                      tier_of=lambda act: tiers[act])
+        check("its own tier is the one checked: not 'ask' -> 503 naming that action",
+              code == 503 and "second_card_browser_enable is tier 'notify'" in out["error"], out)
+        # The master card, with Browser control left on, says so too.
+        seen.clear()
+        w.switches(master=False, long_context=True, browser_control=True)
+        SC.request_change("master", True, gate=gate)
+        check("the master card with Browser control left on does not say nothing leaves",
+              "Nothing leaves this PC" not in seen[0][2] and "reaches that website" in seen[0][2]
+              and seen[0][0] == "second_card_enable")
+
+
 def t_last_card():
     # AP-6: _LAST was written and never read. status()["last"] says how the
     # most recent card ended, so the apps can say what really happened.
@@ -834,6 +871,8 @@ def t_the_patch():
           and "self._woken.wait(_idle)" in after)
     check("the approval notice knows the action stays on this PC",
           '"second_card_enable": ("yes", "local",' in gate_after)
+    check("... and that Browser control's action reaches the internet (AP-9)",
+          '"second_card_browser_enable": ("yes", "outbound",' in gate_after)
     # The patched chat block still compiles as Python (the ** in the call).
     i = after.index("_turn = jarvis_agent.run_local_turn(")
     call = after[i:after.index("announce=lambda text", i)] + "announce=None)"
@@ -862,6 +901,8 @@ def t_the_toml():
     toml = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
     check("the shipped toml has second_card_enable = \"ask\"",
           re.search(r'^second_card_enable\s*=\s*"ask"', toml, re.M) is not None)
+    check("the shipped toml has second_card_browser_enable = \"ask\" (AP-9)",
+          re.search(r'^second_card_browser_enable\s*=\s*"ask"', toml, re.M) is not None)
     check("the shipped toml has a [second_card] section", "\n[second_card]\n" in toml)
     check("and no switch lives in it (the switches are in second-card.json)",
           not re.search(r"^\s*(master|long_context|vision|learning|browser_control|wiki)\s*=",

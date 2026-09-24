@@ -112,10 +112,16 @@
                          # jarvis_ui_control.py/jarvis_android_control.py's
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -315,6 +315,12 @@
+@@ -315,6 +315,18 @@
      "append_logseq_journal": ("yes", "local", "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"),
      "create_joplin_note":    ("yes", "local", "creates one new note in Joplin on this PC; no existing note is changed"),
      "append_obsidian_daily": ("yes", "local", "adds one entry to the end of today's Obsidian daily note on this PC; nothing already there is changed"),
++    # second-card.patch: "Browser control" (jarvis_second_card.BROWSER_ACTION).
++    # Turning it on starts the same second Ollama on this PC AND lets Jarvis
++    # offer its browser tool, which works real web pages on the internet -
++    # so "outbound", not "local", and the notice interrupts. Each plan of
++    # browser steps is still its own approval card.
++    "second_card_browser_enable": ("yes", "outbound", "lets Jarvis offer its browser tool, which works real web pages on the internet; each plan of steps there is its own card; turning the switch off takes the tool away"),
 +    # second-card.patch (jarvis_second_card.py). Turning on a second-card
 +    # switch starts a second copy of Ollama on THIS PC, listening on
 +    # 127.0.0.1 only, and nothing is sent anywhere; turning the switch off

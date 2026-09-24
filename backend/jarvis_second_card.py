@@ -125,6 +125,13 @@ except Exception:
 # --------------------------------------------------------------------------
 
 ACTION = "second_card_enable"
+#: "Browser control" has its own action (AP-9). Every other switch only
+#: starts a model on this PC; this one also lets Jarvis offer its browser
+#: tool, which works real web pages on the internet. Its own action gives
+#: it its own tier line in the toml and its own words on the lock-screen
+#: notice (second-card.patch's _RISK line: "outbound"), instead of
+#: borrowing second_card_enable's "nothing leaves this PC".
+BROWSER_ACTION = "second_card_browser_enable"
 HOST = "127.0.0.1"
 DEFAULT_PORT = 11435
 MAIN_OLLAMA_PORT = 11434
@@ -183,8 +190,9 @@ FEATURES = (
      "what": ("Jarvis learns from your conversations on the second card, so it "
               "never slows the main card down and does not wait long for a pause.")},
     {"id": "browser_control", "name": "Browser control", "needs": ["long_context"],
-     "what": ("Jarvis can work a web page for you, one approved step at a time, "
-              "using the second card's extra room for long pages.")},
+     "what": ("Jarvis can work a web page for you in your browser, one approved step at a "
+              "time, using the second card's extra room for long pages. The pages are on "
+              "the internet: what it types or clicks there reaches that website.")},
     {"id": "wiki", "name": "Wiki builder", "needs": [],
      "what": ("Lets the wiki builder use the second card: documents you put in "
               "your vault's Jarvis Wiki/Sources folder become linked pages, each one "
@@ -1263,6 +1271,11 @@ def _tier(action: str) -> str:
     return str(fw.action_tier(action)) if fw is not None else "unknown"
 
 
+def action_for(feature: str) -> str:
+    """The gate action a switch's ON card is raised under."""
+    return BROWSER_ACTION if feature == "browser_control" else ACTION
+
+
 def _gate(action: str, detail: dict, prompt: str):
     import jarvis_gate
     return jarvis_gate.check(action, detail, prompt=prompt)
@@ -1305,6 +1318,13 @@ def _would_work(feature: str, sw: dict) -> list:
     return [f for f in FEATURE_IDS if _feature_active(f, after, ok)]
 
 
+def _brings_browser(feature: str, sw: dict) -> bool:
+    """Does saying yes to `feature`'s card start "Browser control" working
+    (it was not before)? Then the card must not say nothing leaves."""
+    return ("browser_control" in _would_work(feature, sw)
+            and not _feature_active("browser_control", sw, {"capable": True}))
+
+
 def _names(ids: list) -> str:
     names = [f"\"{_BY_ID[i]['name']}\"" for i in ids]
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
@@ -1319,7 +1339,17 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
     card = f"the {s['name']} ({_gb(s['total_mb'])}, id {s['uuid']})"
     lane = (f"Jarvis starts a second copy of Ollama that uses only that card and "
             f"listens on {HOST}:{_port()} - this PC only, not your network or the "
-            f"internet. Nothing leaves this PC.") + _shares_with_big_model()
+            f"internet.")
+    if _brings_browser(feature, sw):
+        # AP-9: not "Nothing leaves this PC". The model stays here; the
+        # browser tool it offers works real web pages.
+        lane += (" \"Browser control\" also lets Jarvis offer to work web pages in your "
+                 "browser: those pages are on the internet, so what it types or clicks "
+                 "there reaches that website. Each thing it would do there is shown to you "
+                 "on its own card first.")
+    else:
+        lane += " Nothing leaves this PC."
+    lane += _shares_with_big_model()
     if feature == "master":
         back = _would_work("master", sw)
         if back:
@@ -1390,12 +1420,13 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
         return _finish(feature, pid, "refused", det.get("why", ""))
     text = describe_on(feature, det)
     model, ctx, gib = _feature_model(feature, det) if feature != "master" else (None, None, None)
+    web = _brings_browser(feature, _read_switches())
     detail = {"text": text, "what": f"turn on the second graphics card: {feature}",
               "feature": feature, "card": det["second"]["name"],
               "card_id": det["second"]["uuid"], "model": model, "memory_gib": gib,
-              "listens_on": f"{HOST}:{_port()}", "leaves_this_pc": False}
+              "listens_on": f"{HOST}:{_port()}", "leaves_this_pc": web}
     try:
-        v = gate(ACTION, detail, text)
+        v = gate(action_for(feature), detail, text)
     except Exception as exc:
         return _finish(feature, pid, "refused",
                        f"the approval gate failed ({type(exc).__name__})")
@@ -1496,14 +1527,15 @@ def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = No
         held = big_model_holds(det["second"]["uuid"], det["second"]["name"])
         if held:
             return 409, {"error": f"Not now: {held}."}
+    action = action_for(feature)
     try:
-        tier = tier_of(ACTION)
+        tier = tier_of(action)
     except Exception as exc:
         tier = f"unreadable ({type(exc).__name__})"
     if tier != "ask":
         # Checked BEFORE a card is raised: a card that could not end in a
         # person deciding should not be raised at all.
-        return 503, {"error": (f"{ACTION} is tier {tier!r} in jarvis-framework.toml; "
+        return 503, {"error": (f"{action} is tier {tier!r} in jarvis-framework.toml; "
                                f"turning this on needs a person to say yes, so it must "
                                f"be 'ask'")}
     pid = _uuid.uuid4().hex
