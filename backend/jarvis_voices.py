@@ -1621,12 +1621,15 @@ _BLAST: dict = {}
 def _last_words(kind: str, name: str, outcome: str, reason: str) -> str:
     reason = str(reason or "").strip().rstrip(".")
     what = {"create": f"The voice \"{name}\"", "switch": f"Speaking in \"{name}\""}[kind]
+    # Mid-sentence, only the first letter changes case - .lower() on the
+    # whole phrase used to print the voice's own name in lower case too.
+    mid = what[0].lower() + what[1:]
     if outcome == "created":
         return f"The voice \"{name}\" was added. Switch to it to hear it."
     if outcome == "switched":
         return f"Jarvis now speaks in \"{name}\"."
     if outcome == "denied":
-        return f"You said no, so nothing changed ({what.lower()} was not " \
+        return f"You said no, so nothing changed ({mid} was not " \
                f"{'added' if kind == 'create' else 'turned on'})."
     if outcome == "timed_out":
         return "Nobody answered the card in time, so nothing changed."

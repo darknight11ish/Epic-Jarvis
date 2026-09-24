@@ -6010,18 +6010,29 @@ the training fails and says to record again somewhere quieter.
 |---|---|---|---|
 | How strict | **very strict**, balanced | very strict | Stricter: at once. Looser: an approval card. |
 | Private answers by voice | **on screen only**, read aloud ("your voice is enough") | on screen only | The same. "Read aloud" is only possible while very strict; choosing balanced turns it off again. |
+| Answers that use what Jarvis remembers, by voice | **read aloud**, on screen only | read aloud (your choice, 2026-09-24) | On screen: at once. Back to aloud: an approval card. |
 
 - **Very strict** needs a longer sentence (2 seconds of speech) and asks
-  two voice-ID models, which must BOTH agree it is you: the small one you
-  have (`model.onnx`) and a stronger one (`strong.onnx`, below).
+  the stronger voice-ID model (`strong.onnx`, below) alone, at its
+  highest bar - your choice of 2026-09-24, after the measurements below
+  showed that asking both models refused you almost twice as often for
+  hardly any gain. Without `strong.onnx` it falls back to the small one
+  (`model.onnx`), and the status says so plainly.
 - **Balanced** takes shorter sentences (1.5 seconds) and asks the stronger
   model alone, at a lower bar. You repeat yourself less, and someone whose
   voice is close to yours gets in more easily. (If the stronger model is
   not installed, both settings use the small one, and the status says so.)
-- **Private answers**: email, calendar, notes and what Jarvis remembers
-  about you. With "on screen only", an answer like that is shown, not read
-  out loud, when you asked by voice. Asking by typing on your own phone or
-  PC is not affected.
+- **Private answers**: email, calendar and notes. With "on screen only", an
+  answer like that is shown, not read out loud, when you asked by voice.
+  Asking by typing on your own phone or PC is not affected.
+- **Answers that use what Jarvis remembers** are read aloud by default
+  (your choice: "looser now, with a setting to make it more strict").
+  "On screen only" keeps them on screen too. Said plainly: a remembered
+  fact can be about your health or money while the question is not, and
+  under the default such an answer is read aloud. A QUESTION about health,
+  money, email, the calendar or notes still stays on screen either way.
+  When automatic learning can tell sensitive facts apart, those will stay
+  on screen by default.
 
 Also new: training in **three rounds** (normal and close; further away or
 quieter; another time or room), all kept in memory until one card at the

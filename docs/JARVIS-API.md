@@ -1429,7 +1429,12 @@ mode only when `gate.training` says the PC understands it:
 "private_aloud": bool       may an answer that uses email, calendar, notes or memory be READ ALOUD
                             for this request? (jarvis_voice.may_speak(True, "voice"))
 "question_private": bool    the words asked about something private (the router's private-topic
-                            list plus notes and memory) - a hint, see below
+                            list plus notes; plus memory only while `memory_on_screen`) - a hint,
+                            see below
+"memory_aloud": bool        (2026-09-24) may an answer that uses what Jarvis REMEMBERS - and asks
+                            about nothing else private - be read aloud? True by default (the
+                            owner's choice); false with `memory_on_screen`. Missing (an older PC)
+                            = false.
 ```
 
 ### `/api/voice/status` - new in `gate`
@@ -1437,12 +1442,15 @@ mode only when `gate.training` says the PC understands it:
 ```
 "strictness": "very_strict" | "balanced",
 "privacy": "private_on_screen" | "voice_is_enough",
-"settings": {"strictness", "privacy", "changed": epoch,
+"memory": "memory_aloud" | "memory_on_screen",
+"settings": {"strictness", "privacy", "memory", "changed": epoch,
              "voice_is_enough_allowed": bool,        true only while very strict
              "min_command_seconds": 2.0 | 1.5,
              "choices": {"strictness": ["very_strict", "balanced"],
-                         "privacy": ["private_on_screen", "voice_is_enough"]},
-             "defaults": {"strictness": "very_strict", "privacy": "private_on_screen"}},
+                         "privacy": ["private_on_screen", "voice_is_enough"],
+                         "memory": ["memory_aloud", "memory_on_screen"]},
+             "defaults": {"strictness": "very_strict", "privacy": "private_on_screen",
+                          "memory": "memory_aloud"}},
 "models": {"small":  {"installed", "name", "label": "the small voice-ID model", "bars_measured", "path"},
            "strong": {"installed", "name", "label": "the stronger voice-ID model", "bars_measured",
                       "path", "why"},
@@ -1525,13 +1533,23 @@ as it is.
 ```
 {"mode": "strictness", "value": "very_strict" | "balanced"}
 {"mode": "privacy",    "value": "private_on_screen" | "voice_is_enough"}
+{"mode": "memory",     "value": "memory_aloud" | "memory_on_screen"}
 ```
+
+`memory` (added 2026-09-24, the owner's choice: "looser now, with a setting
+to make it more strict"): answers that use what Jarvis remembers are read
+aloud by default. `memory_on_screen` is the stricter value and applies at
+once; going back to `memory_aloud` is the looser one and raises the card.
+A settings file with no `memory` in it (every file from before) reads as
+`memory_aloud`; a damaged value, or an unreadable file, as
+`memory_on_screen`. An older PC answers `mode: "memory"` with **503**.
 
 | answer | when |
 |---|---|
 | `200 {"ok": true, "changed": true, "pending": false, "settings": {"strictness", "privacy", "voice_is_enough_allowed"}, "message": "Done - that applies now."}` | tightening (`very_strict`, `private_on_screen`): immediate, no card. It also makes a waiting card that would loosen the same setting do nothing (`last.outcome = "withdrawn"`). |
 | `200 {"ok": true, "changed": false, ...}` | it was already that |
 | `202 {"ok": true, "pending": true, "setting", "value", "message"}` | loosening: ONE card (`change_own_config`). **Nothing changes until it is approved.** `last.outcome` becomes `"setting_changed"`, `"denied"`, `"timed_out"`, `"refused"`, `"withdrawn"` or `"failed"`. |
+| `503` | this PC's voice check is too old for that setting (`memory` on a PC from before 2026-09-24) |
 | `409` | `voice_is_enough` while balanced ("private answers can only be read aloud while the voice check is very strict"), a voice card already waiting, or the tier is not `ask` |
 
 Choosing `balanced` also puts private answers back on screen
@@ -1564,19 +1582,28 @@ model's measured floor is a **400** naming the lowest allowed.
 ### What the apps must do about private answers
 
 The owner's rule: with `private_on_screen` (the default), an answer drawn
-from email, the calendar, notes or what Jarvis remembers is **not read
-aloud** unless the question was typed or tapped on the owner's own unlocked
-device. So, for a question that came by VOICE and reply `private_aloud:
-false`:
+from email, the calendar or notes is **not read aloud** unless the question
+was typed or tapped on the owner's own unlocked device. An answer that uses
+what Jarvis remembers is read aloud by default, and kept on screen too when
+the owner chooses `memory_on_screen` (the owner's choice, 2026-09-24). So,
+for a question that came by VOICE and reply `private_aloud: false`:
 
 1. Show the answer on screen as usual.
 2. Read it aloud only when nothing says it is private: `question_private`
-   is false, the chat reply's `X-Jarvis-Route` has no `gate: "private"` and
-   no `injected_facts` above 0 (both fields §4 describes; the route that
-   fills them is on the PC and was not read for this), and no tool ran
-   while it was being written. Otherwise say one fixed line instead, such
-   as "It's on your screen."
-3. Treat a reply from an older PC (no `private_aloud` field) as `false`.
+   is false, the chat reply's `X-Jarvis-Route` has no `gate: "private"`,
+   no tool ran while it was being written, and - **only when
+   `memory_aloud` is false** - no `injected_facts` above 0 (both route
+   fields §4 describes; the route that fills them is on the PC and was not
+   read for this). Otherwise say one fixed line instead, such as "It's on
+   your screen."
+3. Treat a reply from an older PC (no `private_aloud` or no `memory_aloud`
+   field) as `false`.
+
+**Said plainly about `memory_aloud`:** a remembered fact can be about
+something sensitive (health, money) while the question is not ("what
+should I have for dinner?"). Until automatic learning can tell sensitive
+facts apart (task #80), such an answer is read aloud under the default.
+The owner chose that knowingly; `memory_on_screen` is the way to stop it.
 
 **Known gap, said plainly:** the server cannot yet label a finished answer
 as private. `X-Jarvis-Route` is sent before the model starts, so it cannot

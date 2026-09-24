@@ -569,12 +569,24 @@ STRICTNESS = (VERY_STRICT, BALANCED)
 PRIVATE_ON_SCREEN = "private_on_screen"
 VOICE_IS_ENOUGH = "voice_is_enough"
 PRIVACY = (PRIVATE_ON_SCREEN, VOICE_IS_ENOUGH)
-#: The strict value of each setting is the default, and the value used for
-#: a missing, unreadable or unknown one.
-DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN}
-_CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY}
+#: Answers that use what Jarvis REMEMBERS about the owner (the recalled-facts
+#: block, `injected_facts` on the chat route), asked by voice. The owner's
+#: choice, 2026-09-24: "looser now, with a setting to make it more strict" -
+#: so these are read aloud by default, and `memory_on_screen` keeps them on
+#: the screen like email, the calendar and notes. A QUESTION about a private
+#: topic (health, money, email...) still stays on screen either way.
+MEMORY_ALOUD = "memory_aloud"
+MEMORY_ON_SCREEN = "memory_on_screen"
+MEMORY = (MEMORY_ALOUD, MEMORY_ON_SCREEN)
+#: The default of each setting. For strictness and privacy it is the strict
+#: value, also used for a missing, unreadable or unknown one. For memory the
+#: default is the owner's looser choice; an unknown VALUE (a damaged file)
+#: still falls back to the strict one - see settings().
+DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
+            "memory": MEMORY_ALOUD}
+_CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY}
 #: The LOOSER value of each: choosing it needs an approval card.
-LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH}
+LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD}
 _SETTINGS_LOCK = threading.Lock()
 
 #: The least speech a COMMAND must have, in seconds (the VAD's span, which
@@ -593,22 +605,33 @@ def settings_path() -> Path:
 
 
 def settings() -> dict:
-    """{"strictness", "privacy", "changed"}. The strict value for anything
-    missing, unreadable or unknown, and the one rule applied on every read
-    as well as every write: private answers may be read aloud only while
-    the check is very strict."""
+    """{"strictness", "privacy", "memory", "changed"}. The strict value for
+    anything missing, unreadable or unknown - except that a file with no
+    "memory" in it (every file written before 2026-09-24, and no file at
+    all) gets the owner's default for memory, MEMORY_ALOUD. The one rule
+    applied on every read as well as every write: private answers may be
+    read aloud only while the check is very strict."""
     out = {**DEFAULTS, "changed": 0.0}
+    p = settings_path()
     try:
-        raw = json.loads(settings_path().read_text(encoding="utf-8-sig"))
-    except Exception:
+        raw = json.loads(p.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
         raw = {}
-    if isinstance(raw, dict):
-        for key, choices in _CHOICES.items():
-            if raw.get(key) in choices:
-                out[key] = raw[key]
-        ch = raw.get("changed")
-        if isinstance(ch, (int, float)) and not isinstance(ch, bool) and math.isfinite(ch):
-            out["changed"] = float(ch)
+    except Exception:
+        raw = None                      # there, but unreadable: strict
+    if not isinstance(raw, dict):
+        out["memory"] = MEMORY_ON_SCREEN
+        raw = {}
+    for key, choices in _CHOICES.items():
+        if raw.get(key) in choices:
+            out[key] = raw[key]
+        elif key == "memory" and key in raw:
+            # Present but not a known value: the strict one, as for the
+            # other two. Only a file that never had it gets the default.
+            out[key] = MEMORY_ON_SCREEN
+    ch = raw.get("changed")
+    if isinstance(ch, (int, float)) and not isinstance(ch, bool) and math.isfinite(ch):
+        out["changed"] = float(ch)
     if out["strictness"] != VERY_STRICT:
         out["privacy"] = PRIVATE_ON_SCREEN
     return out
@@ -639,7 +662,8 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
         if key == "privacy" and value == VOICE_IS_ENOUGH and cur["strictness"] != VERY_STRICT:
             raise ValueError("private answers can only be read aloud while the voice "
                              "check is very strict")
-        new = {"strictness": cur["strictness"], "privacy": cur["privacy"], key: value}
+        new = {"strictness": cur["strictness"], "privacy": cur["privacy"],
+               "memory": cur["memory"], key: value}
         if new["strictness"] != VERY_STRICT:
             new["privacy"] = PRIVATE_ON_SCREEN
         new["changed"] = time.time()
@@ -1776,7 +1800,10 @@ def _reset_repeat_for_tests() -> None:
 #: what Jarvis remembers. A backstop list for when jarvis_router (which has
 #: the full one) cannot be imported.
 _PRIVATE_WORDS = ("email", "e-mail", "inbox", "calendar", "appointment", "meeting",
-                  "note", "notes", "journal", "remember", "memory", "memories")
+                  "note", "notes", "journal")
+#: Asking about what Jarvis remembers counts as private only while the owner
+#: keeps memory answers on screen (the "memory" setting).
+_MEMORY_WORDS = ("remember", "memory", "memories")
 
 
 def looks_private(text: str) -> bool:
@@ -1790,7 +1817,20 @@ def looks_private(text: str) -> bool:
     except Exception:
         pass
     words = set("".join(ch if ch.isalnum() or ch == "-" else " " for ch in t).split())
-    return any(w in words for w in _PRIVATE_WORDS)
+    if any(w in words for w in _PRIVATE_WORDS):
+        return True
+    return not memory_aloud() and any(w in words for w in _MEMORY_WORDS)
+
+
+def memory_aloud() -> bool:
+    """May an answer that uses what Jarvis remembers (and asks about nothing
+    else private) be read aloud when asked by voice? Yes by default (the
+    owner's choice); no with `memory_on_screen`. `voice_is_enough` - every
+    private answer aloud - implies yes."""
+    s = settings()
+    if s["privacy"] == VOICE_IS_ENOUGH and s["strictness"] == VERY_STRICT:
+        return True
+    return s["memory"] == MEMORY_ALOUD
 
 
 def may_speak(private: bool, origin: str = "voice") -> dict:
@@ -1922,12 +1962,15 @@ def status() -> dict:
         # ---- the stricter check (2026-09-24) -----------------------------
         "strictness": s["strictness"],
         "privacy": s["privacy"],
+        "memory": s["memory"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
+            "memory": s["memory"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],
-            "choices": {"strictness": list(STRICTNESS), "privacy": list(PRIVACY)},
+            "choices": {"strictness": list(STRICTNESS), "privacy": list(PRIVACY),
+                        "memory": list(MEMORY)},
             "defaults": dict(DEFAULTS),
         },
         "models": {

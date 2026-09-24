@@ -394,6 +394,56 @@ def t_may_speak():
               and not V.looks_private("what is the capital of France"))
 
 
+def t_memory_answers_aloud_by_default():
+    """The owner's choice, 2026-09-24: answers that use what Jarvis remembers
+    are read aloud by default; "memory_on_screen" keeps them on screen.
+    Tightening is immediate, going back to aloud raises the card."""
+    with Temp():
+        check("no settings file: memory_aloud (the owner's default)",
+              V.settings()["memory"] == "memory_aloud" and V.memory_aloud())
+        V.settings_path().write_text(json.dumps({"strictness": "very_strict",
+                                                 "privacy": "private_on_screen"}))
+        check("a file from before this setting: memory_aloud",
+              V.settings()["memory"] == "memory_aloud")
+        V.settings_path().write_text(json.dumps({"memory": "shout_it"}))
+        check("a damaged memory value: the strict one", V.settings()["memory"] == "memory_on_screen")
+        V.settings_path().write_text("{not json", encoding="utf-8")
+        check("an unreadable file: the strict one", V.settings()["memory"] == "memory_on_screen"
+              and not V.memory_aloud())
+        V.settings_path().unlink()
+        check("asking about memory is not private while memory is aloud",
+              not V.looks_private("what do you remember about my sister"))
+        check("but email, notes and health still are",
+              V.looks_private("read my notes") and V.looks_private("what's in my inbox"))
+        E._reset_for_tests()
+        code, out, gate = _setting("memory", "memory_on_screen")
+        check("memory_on_screen: immediate, no card", code == 200 and out["changed"]
+              and not gate.calls and V.settings()["memory"] == "memory_on_screen", out)
+        check("then memory questions are private again",
+              V.looks_private("what do you remember about my sister") and not V.memory_aloud())
+        V.set_setting("privacy", "voice_is_enough", approved=True)
+        check("voice_is_enough reads memory answers aloud too", V.memory_aloud())
+        V.set_setting("privacy", "private_on_screen")
+        E._reset_for_tests()
+        code, out, gate = _setting("memory", "memory_aloud", Verdict(False, outcome="denied"))
+        check("back to aloud raises ONE card; denied: stays on screen",
+              code == 202 and len(gate.calls) == 1 and V.settings()["memory"] == "memory_on_screen",
+              (code, out))
+        E._reset_for_tests()
+        code, out, gate = _setting("memory", "memory_aloud", Verdict(True))
+        check("approved: aloud again", V.settings()["memory"] == "memory_aloud", (code, out))
+        check("the card says who can hear it",
+              gate.calls and "Anyone near the speaker" in gate.calls[0][2], gate.calls)
+        try:
+            V.set_setting("memory", "memory_aloud")
+            V.set_setting("memory", "memory_on_screen")
+            V.set_setting("memory", "memory_aloud")
+            ok = False
+        except ValueError:
+            ok = True
+        check("set_setting refuses to loosen memory without approval", ok)
+
+
 # --------------------------------------- 5. two models: the stronger decides --
 
 def _two(rng=None):
@@ -917,6 +967,12 @@ def t_private_fields_on_the_reply():
             V.set_setting("privacy", "voice_is_enough", approved=True)
             h = S.hear(_clip("owner", 2.5)).as_dict()
             check("voice_is_enough: private_aloud true", h["private_aloud"] is True, h)
+            V.set_setting("privacy", "private_on_screen")
+            h = S.hear(_clip("owner", 2.5)).as_dict()
+            check("memory_aloud is on the reply, true by default", h["memory_aloud"] is True, h)
+            V.set_setting("memory", "memory_on_screen")
+            h = S.hear(_clip("owner", 2.5)).as_dict()
+            check("memory_on_screen: memory_aloud false", h["memory_aloud"] is False, h)
 
 
 # ------------------------------------------------ 12. nothing on the disk --
@@ -997,6 +1053,7 @@ def t_real_models():
 if __name__ == "__main__":
     for fn in (t_hole_one_the_basic_check_lets_nobody_in, t_hole_two_one_noisy_clip,
                t_settings_tighten_now_loosen_with_a_card, t_may_speak,
+               t_memory_answers_aloud_by_default,
                t_the_stronger_model_decides, t_cohort_maths,
                t_a_bank_of_the_wrong_width_is_not_used, t_building_a_bank_on_this_pc,
                t_the_shipped_bank,

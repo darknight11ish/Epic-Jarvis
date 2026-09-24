@@ -83,6 +83,7 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
         Each round becomes its own sub-print (jarvis_voice, "sub-prints").
     {"mode": "strictness", "value": "very_strict"|"balanced"}
     {"mode": "privacy", "value": "private_on_screen"|"voice_is_enough"}
+    {"mode": "memory", "value": "memory_aloud"|"memory_on_screen"}
         Tightening applies at once. Loosening raises ONE card
         (change_own_config), and changes nothing until it is approved.
         `voice_is_enough` is refused unless the check is very strict;
@@ -622,7 +623,7 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
     if mode == "measure":
         # The same: scores, no card.
         return measure(doc, measure_fn=measure_fn)
-    if mode in ("strictness", "privacy"):
+    if mode in ("strictness", "privacy", "memory"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
     if mode not in ("enroll", "threshold", "train"):
@@ -898,11 +899,11 @@ def state() -> dict:
 _SETTING_WORDS = {
     ("strictness", "balanced"): (
         "Make Jarvis's voice check less strict? From \"very strict\" to \"balanced\".\n\n"
-        "Balanced checks your voice with one voice-ID model instead of two, at a lower "
-        "bar, and takes shorter sentences. You will be asked to repeat yourself less "
-        "often - and someone whose voice is close to yours gets through more easily "
-        "too. Private answers (email, calendar, notes, what Jarvis remembers) will be "
-        "shown on screen only, never read aloud: that goes with balanced.\n\n"
+        "Balanced checks your voice at a lower bar, and takes shorter sentences. You "
+        "will be asked to repeat yourself less often - and someone whose voice is close "
+        "to yours gets through more easily too. Private answers (email, calendar, "
+        "notes) will be shown on screen only, never read aloud: that goes with "
+        "balanced.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes, and it stays very strict."),
     ("privacy", "voice_is_enough"): (
@@ -913,6 +914,13 @@ _SETTING_WORDS = {
         "strict; making it less strict later turns this off again.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - private answers stay on your screen."),
+    ("memory", "memory_aloud"): (
+        "Let Jarvis read answers that use what it remembers about you aloud, when you "
+        "ask by voice?\n\n"
+        "Anyone near the speaker will hear them. Questions about email, your calendar, "
+        "your notes, health or money still stay on your screen.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - those answers stay on your screen."),
 }
 
 
@@ -930,6 +938,7 @@ def settings_view() -> dict:
         return {}
     s = v.settings()
     return {"strictness": s["strictness"], "privacy": s["privacy"],
+            "memory": s.get("memory", ""),
             "voice_is_enough_allowed": s["strictness"] == v.VERY_STRICT}
 
 
@@ -946,12 +955,15 @@ def _withdraw(key: str) -> None:
 
 def stage_setting(doc: dict, key: str, *, gate: Callable, tier_of: Callable,
                   spawn: Callable) -> tuple:
-    """{"mode": "strictness"|"privacy", "value": ...}. Tightening applies at
+    """{"mode": "strictness"|"privacy"|"memory", "value": ...}. Tightening applies at
     once; loosening raises ONE card and changes nothing itself."""
     global _PENDING
     try:
         V = _voice()
     except Exception:
+        return 503, {"error": "the voice check on this PC is too old for this setting "
+                              "(run the patch script)"}
+    if key not in V._CHOICES:
         return 503, {"error": "the voice check on this PC is too old for this setting "
                               "(run the patch script)"}
     value = doc.get("value")

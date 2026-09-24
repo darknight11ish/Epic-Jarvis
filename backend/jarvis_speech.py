@@ -1231,6 +1231,12 @@ class Heard:
     #: ALOUD for this request? (jarvis_voice.may_speak, from the owner's
     #: "private answers" setting.) False: show such an answer on screen only.
     private_aloud: bool = False
+    #: May an answer that uses what Jarvis REMEMBERS (the chat route's
+    #: `injected_facts`) be read aloud, when nothing else about it is
+    #: private? jarvis_voice.memory_aloud(): yes by default (the owner's
+    #: choice, 2026-09-24), no with the "memory_on_screen" setting. An app
+    #: that finds no such field (an older PC) treats it as false.
+    memory_aloud: bool = False
     #: The words asked about something private (the router's private-topic
     #: backstop). A hint for the app, not a guarantee - see JARVIS-API.md.
     question_private: bool = False
@@ -1297,6 +1303,13 @@ def _note_short(mic: str) -> None:
                                   too_short=True)
     except Exception:
         pass
+
+
+def _memory_aloud() -> bool:
+    try:
+        return bool(jarvis_voice.memory_aloud())
+    except Exception:
+        return False
 
 
 def _private_aloud() -> bool:
@@ -1460,7 +1473,8 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                   wake_score=spot.score if spot else 0.0,
                   voice_print=str(getattr(verdict, "voice_print", "") or ""),
                   strictness=str(getattr(verdict, "strictness", "") or ""),
-                  private_aloud=_private_aloud())
+                  private_aloud=_private_aloud(),
+                  memory_aloud=_memory_aloud())
 
     if not verdict.is_owner:
         return Heard(False, reason=verdict.reason, **common)
