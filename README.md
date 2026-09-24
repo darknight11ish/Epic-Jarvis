@@ -6,25 +6,26 @@ Non-commercial, for one owner.
 
 ## Launch video
 
-[![Jarvis launch video v2: it learns, it adapts, it scales](videos/v2/jarvis-launch-v2.jpg)](videos/v2/jarvis-launch-v2.mp4)
+[![Jarvis launch video v3: it asks first](videos/v3/jarvis-launch-v3.jpg)](videos/v3/jarvis-launch-v3.mp4)
 
-**Tap the picture to watch v2** (35 seconds, sound on). It opens the video
-file, and GitHub plays it in the browser.
+**Tap the picture to watch v3** (32 seconds; it has captions, so sound is
+optional). It opens the video file, and GitHub plays it in the browser. On a
+phone held upright, watch [the 15-second cut](videos/v3/jarvis-launch-v3-vertical.mp4).
 
-What it shows: Jarvis learning you over time (it proposes facts, keeps only
-the ones you accept, and remembers what changed), learning your voice,
-waiting while you think, asking before it acts, and being cut off
-mid-sentence with "stop". Then how it scales: one graphics card today, ready
-for a second card, and next, any 8 GB card and up to two. Each claim is
-marked on screen as today, ready or next.
+What it shows:
+- Jarvis asks before it acts, on the desktop and the phone at once, and the
+  phone checks it's you before a risky yes. The example is a visible browser
+  renewing a library book, only on the one site you approved. That part is
+  built and switches on once a second graphics card is in.
+- It asks before it remembers something about you, and keeps a history of
+  what changed.
+- It stops when you say "stop".
 
-The faces in the video are the app's own face code from
-`jarvis-desktop/src/faces.html`, run frame by frame. The music was written
-for the video, in code, on the same beat as the cuts.
+Every screen is the real desktop app, with sample data.
 
-Every version is kept in [`videos/`](videos/): the first one is
-[v1](videos/v1/jarvis-launch-v1.mp4). Each folder also has the plan and the
-project needed to make that video again.
+Every version is kept in [`videos/`](videos/), with the plan and the project
+needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
+[v2](videos/v2/jarvis-launch-v2.mp4).
 
 ## How it fits together
 
