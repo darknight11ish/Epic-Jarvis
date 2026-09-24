@@ -759,8 +759,9 @@ pub async fn check_voice_with_someone_else(
     slots: Vec<String>,
     state: State<'_, SampleState>,
 ) -> Result<Value, String> {
+    // Only someone else's slots: the owner's own training or test recordings
+    // are never sent as "someone else", and never dropped from here.
     if slots.is_empty() || slots.len() > 5 || !slots.iter().all(|s| s.trim().starts_with('o')) {
-        forget(&state, &slots);
         return Err("Record their sentences first.".to_string());
     }
     let understood = match crate::voice::get_voice_status(app.clone()).await {
