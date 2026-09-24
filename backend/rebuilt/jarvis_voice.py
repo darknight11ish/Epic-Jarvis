@@ -1142,12 +1142,11 @@ def enroll(clips: list, embedder=None, path: Optional[Path] = None,
     if not usable:
         raise EnrolError("no usable audio in those clips")
 
-    # Outliers, per model, against the others of the same condition (all of
-    # them when a condition has fewer than three).
-    # Outliers are judged by the best model given - the stronger one when
-    # there is one (the small one's own scores are too noisy to single a
-    # clip out: measured, it scored 8% of the owner's own clips under its
-    # bar), at its balanced bar.
+    # Outliers: each clip against the others of the same condition (all of
+    # them when a condition has fewer than three), judged by the best model
+    # given - the stronger one when there is one (the small one's own
+    # scores are too noisy to single a clip out: measured, it scored 8% of
+    # the owner's own clips under its bar) - at that model's balanced bar.
     outliers = set()
     judge = models[-1]
     for mod in (judge,):

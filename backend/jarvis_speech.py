@@ -37,6 +37,12 @@ The whole order, since 2026-09-23 (each step can only refuse, never add):
        else - the desktop silences Jarvis's reply. Stopping speech is
        harmless, so it needs no voice check; it is never transcribed, never
        sent to the chat, and does nothing but stop the speaking.
+       3b, since 2026-09-24 (the stricter check): less speech than a
+       command needs (jarvis_voice.MIN_COMMAND_SECONDS: 2 s very strict,
+       1.5 s balanced) -> refused, not checked, not transcribed: "say a
+       little more". A short wake-word clip that is only "hey Jarvis"
+       still goes on (it opens the listening window, step 6); a short one
+       with a command in it is refused after step 5, its words dropped.
     4. the owner check (jarvis_voice)    not the owner   -> refused, not transcribed
     5. speech-to-text
     6. wake word only: does the transcript START with "hey Jarvis"? The
