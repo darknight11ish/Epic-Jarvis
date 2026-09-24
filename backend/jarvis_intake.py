@@ -761,7 +761,17 @@ def resolve_target(f: dict, replaces, store) -> Optional[dict]:
 
 def propose(extract, messages, llm, *, source: str = "conversation",
             when=None, store=None):
-    """extract.propose(), dated to the conversation, with the prompt additions."""
+    """extract.propose(), dated to the conversation, with the prompt additions.
+
+    With the second graphics card's "Learning in the background" switch on
+    and working, the model calls go there instead (jarvis_second_card.
+    learning_llm - a loopback address, 127.0.0.1:11435). Otherwise, and if
+    that module is not installed, `llm` is used exactly as before."""
+    try:
+        import jarvis_second_card
+        llm = jarvis_second_card.learning_llm(llm)
+    except Exception:
+        pass
     wrapped = prepare_llm(llm, messages, when=when, store=store)
     with conversation_at(when):
         return extract.propose(messages, llm=wrapped, source=source)

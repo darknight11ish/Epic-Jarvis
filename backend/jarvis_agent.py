@@ -27,7 +27,11 @@ See backend/README.md's own section on this. Browser automation exists now
 DISABLED - it is not in any `[tools].enabled` list this project ships, the
 same opt-in-only mechanism control_computer and control_phone already use,
 and its own module docstring says exactly why it should stay off until a
-second, larger-context lane is running. Docker-based execution, connectors
+second, larger-context lane is running. Since 2026-09-24 that is enforced
+here too: it is offered only while the second graphics card's "Browser
+control" switch is on and working (jarvis_second_card.lane_for), and the
+rounds after it runs continue on that lane - see offered_tools() and
+choose_lane(), and run_local_turn's `lane_choice`. Docker-based execution, connectors
 and general web search remain excluded with the reasons README.md gives; a
 memory_store tool that writes directly to `facts` was excluded on purpose
 because this project's memory system exists specifically so nothing reaches
@@ -1382,7 +1386,103 @@ def offered_tools(enabled_tools) -> list:
     if enabled_tools is None:
         return list(TOOLS)
     wanted = set(enabled_tools)
+    if "browser_control" in wanted and _second_card_lane("browser_control") is None:
+        # Browser control needs BOTH: its name in `[tools].enabled`, and the
+        # second card's "Browser control" switch working (jarvis_second_card).
+        # Its own module says why: page after page of history does not fit
+        # the main card's 16K. Without the second lane it is not offered.
+        wanted.discard("browser_control")
     return [n for n in TOOLS if n in wanted]
+
+
+# --------------------------------------------------------------------------
+#   The second graphics card (jarvis_second_card.py)
+#
+#   Every hook here is a no-op unless the owner has switched the matching
+#   second-card feature on AND it is working: jarvis_second_card.lane_for()
+#   returns None otherwise, and None means "exactly what happened before".
+#   The lane is loopback (127.0.0.1:11435) - it is a second copy of Ollama
+#   on this PC, so a turn sent there is still a local turn (rule 1): the
+#   same tools, through the same gate.
+# --------------------------------------------------------------------------
+
+def _second_card_lane(feature: str):
+    try:
+        import jarvis_second_card
+    except Exception:
+        return None
+    try:
+        return jarvis_second_card.lane_for(feature)
+    except Exception:
+        return None
+
+
+class LaneChoice:
+    """A turn moved to the second card: where, which model, how much context,
+    and which feature moved it ("long_context" or "vision")."""
+
+    def __init__(self, url: str, model: str, context_length: int, feature: str, why: str):
+        self.url, self.model, self.context_length = url, model, int(context_length)
+        self.feature, self.why = feature, why
+
+    def __repr__(self) -> str:
+        return f"LaneChoice({self.feature!r}, {self.model!r}, {self.url!r})"
+
+
+def _image_part(part) -> bool:
+    return isinstance(part, dict) and (part.get("type") in ("image_url", "image", "input_image")
+                                       or "image_url" in part)
+
+
+def newest_turn_has_image(messages: list) -> bool:
+    """Does the newest user message carry a picture? The same shape the apps
+    send a screenshot in: `content` as a list with an image part."""
+    for m in reversed(list(messages or [])):
+        if isinstance(m, dict) and m.get("role") == "user":
+            c = m.get("content")
+            return isinstance(c, list) and any(_image_part(p) for p in c)
+    return False
+
+
+def choose_lane(messages: list, model: str, *, ollama_url: str,
+                request: Optional[dict] = None, enabled_tools: Optional[set] = None,
+                context_length: Optional[int] = None,
+                lane_for: Optional[Callable[[str], object]] = None) -> Optional[LaneChoice]:
+    """Whether this local turn goes to the second card. None: the main card,
+    exactly as before. Never raises.
+
+    - A picture in the newest message goes to the "vision" lane when it is
+      working. Otherwise nothing changes: the main model gets it as today
+      (and the desktop warns first - vision.rs).
+    - A conversation the main model would have to TRIM (fit_messages would
+      drop earlier turns) goes to the "long_context" lane, whole.
+    The switches are asked first, so with them off nothing else is done -
+    not even asking Ollama for the main model's context length."""
+    try:
+        lf = lane_for or _second_card_lane
+        if newest_turn_has_image(messages):
+            lane = lf("vision")
+            if lane is None:
+                return None
+            return LaneChoice(lane.url, lane.model, lane.num_ctx, "vision",
+                              "the message carries a picture, and the second card's "
+                              "picture model can see it")
+        lane = lf("long_context")
+        if lane is None:
+            return None
+        req = request or {}
+        mt = req.get("max_tokens")
+        max_tokens = (int(mt) if isinstance(mt, int) and not isinstance(mt, bool) and mt > 0
+                      else DEFAULT_MAX_TOKENS)
+        schemas = [TOOLS[n].schema() for n in offered_tools(enabled_tools)]
+        n_ctx = context_length or _context_length(ollama_url, model)
+        budget = max(512, n_ctx - max_tokens - _TEMPLATE_TOKENS - estimate_tokens(schemas))
+        if estimate_tokens(list(messages or [])) <= budget:
+            return None
+        return LaneChoice(lane.url, lane.model, lane.num_ctx, "long_context",
+                          "the conversation is longer than the main card has room for")
+    except Exception:
+        return None
 
 
 class _Round:
@@ -1502,7 +1602,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                    abort: Optional[Callable[[object], None]] = None,
                    context_length: Optional[int] = None,
                    keepalive_seconds: float = KEEPALIVE_SECONDS,
-                   status_delay: float = STATUS_DELAY_SECONDS) -> dict:
+                   status_delay: float = STATUS_DELAY_SECONDS,
+                   lane_choice="auto") -> dict:
     """One local chat turn, start to finish: asks the model, runs any tool it
     asks for through the gate, and writes the answer to `stream_out` as it is
     written - in Ollama's own format (see "What goes down the wire" above).
@@ -1546,6 +1647,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
     `on_step(step)` is told each step as it happens - see _step_event.
     Omitted, it is `_publish_step`: the event bus, for Brain -> Live.
+
+    `lane_choice` - the second graphics card (jarvis_second_card.py). The
+    default "auto" asks choose_lane(); None keeps the turn on the main card;
+    a LaneChoice (what jarvis_hud.py passes since second-card.patch, so the
+    route header can say so) sends it there. A picture turn on the second
+    card is offered no tools: the picture model may not take them, and a
+    refused request would lose the answer. A turn that uses browser_control
+    continues on the second card's long-context lane after that call, when
+    it is working - the pages are what the main card has no room for.
     """
     recorder = record_chain if record_chain is not None else _record_chain
     steps: list = []
@@ -1553,7 +1663,22 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     streamer = open_stream or (lambda url, payload: _open_stream(url, payload))
     closer = abort or (lambda up: getattr(up, "close", lambda: None)())
     convo = list(messages)
-    names = offered_tools(enabled_tools)
+    if lane_choice == "auto":
+        lane_choice = choose_lane(messages, model, ollama_url=ollama_url, request=request,
+                                  enabled_tools=enabled_tools, context_length=context_length)
+    # Where each request goes. Only ever changed to a jarvis_second_card lane,
+    # which is loopback by construction.
+    cur = {"url": ollama_url, "model": model, "ctx": context_length, "feature": None}
+    if isinstance(lane_choice, LaneChoice):
+        cur = {"url": lane_choice.url, "model": lane_choice.model,
+               "ctx": lane_choice.context_length, "feature": lane_choice.feature}
+        if announce is not None:
+            try:
+                announce(f"answering on the second graphics card ({lane_choice.model}): "
+                         f"{lane_choice.why}")
+            except Exception:
+                pass
+    names = [] if cur["feature"] == "vision" else offered_tools(enabled_tools)
     tool_schemas = [TOOLS[n].schema() for n in names]
     sink = on_step if on_step is not None else _publish_step
     req = request or {}
@@ -1565,7 +1690,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     opts["max_tokens"] = (int(max_tokens) if isinstance(max_tokens, int)
                           and not isinstance(max_tokens, bool) and max_tokens > 0
                           else DEFAULT_MAX_TOKENS)
-    url = f"{ollama_url}/v1/chat/completions"
+
+    def chat_url() -> str:
+        return f"{cur['url']}/v1/chat/completions"
 
     out = _Out(stream_out, sse=bool(stream))
     stop_beat = threading.Event()
@@ -1594,18 +1721,18 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         said["gap"] = False
         said["any"] = True
         answer.append(text)
-        if out.sse and not out.send(_sse(_chunk(cid, created, model, {"content": text}))):
+        if out.sse and not out.send(_sse(_chunk(cid, created, cur["model"], {"content": text}))):
             raise ClientGone()
 
     def budget() -> int:
-        n_ctx = context_length or _context_length(ollama_url, model)
+        n_ctx = cur["ctx"] or _context_length(cur["url"], cur["model"])
         return max(512, n_ctx - opts["max_tokens"] - _TEMPLATE_TOKENS
                    - estimate_tokens(tool_schemas))
 
     def one_round(offer_tools: bool) -> _Round:
         global _reasoning_field_refused
         rnd = _Round()
-        body = {"model": model, "messages": fit_messages(convo, budget()),
+        body = {"model": cur["model"], "messages": fit_messages(convo, budget()),
                 "stream": True, **opts}
         if not _reasoning_field_refused:
             body.update(REASONING_OFF)
@@ -1628,13 +1755,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
         if post is not None:
             whole = dict(body, stream=False)
-            resp = post(url, whole)
+            resp = post(chat_url(), whole)
             _read_chunk(resp, rnd, on_text)
             rnd.ended = True
         else:
             for attempt in (1, 2):
                 try:
-                    upstream = streamer(url, body)
+                    upstream = streamer(chat_url(), body)
                     break
                 except urllib.error.HTTPError as exc:
                     raw = ""
@@ -1650,9 +1777,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                         _reasoning_field_refused = True
                         body.pop("reasoning_effort", None)
                         continue
-                    raise UpstreamError(plain_error(exc, model, said=raw)) from exc
+                    raise UpstreamError(plain_error(exc, cur["model"], said=raw)) from exc
                 except (urllib.error.URLError, OSError) as exc:
-                    raise UpstreamError(plain_error(exc, model)) from exc
+                    raise UpstreamError(plain_error(exc, cur["model"])) from exc
             try:
                 with upstream:
                     _read_stream(upstream, rnd, on_text, out)
@@ -1663,7 +1790,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     pass
                 raise
             except (socket.timeout, TimeoutError) as exc:
-                raise UpstreamError(plain_error(exc, model)) from exc
+                raise UpstreamError(plain_error(exc, cur["model"])) from exc
             except (http.client.HTTPException, OSError) as exc:
                 # Ollama stopped half way through (it crashed, or was
                 # restarted). Not a bug here, and not the app leaving - that
@@ -1711,6 +1838,22 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 if out.gone:
                     raise ClientGone()
                 _one_call(call, names, convo, steps, checker, announce, out, say_step)
+            if (cur["feature"] is None and "browser_control" in names
+                    and any((c.get("function") or {}).get("name") == "browser_control"
+                            for c in calls)):
+                # browser_control is only offered while its second-card lane
+                # works (offered_tools), and the rounds that read its pages
+                # run there: the main card's 16K is what it has no room for.
+                bl = _second_card_lane("browser_control")
+                if bl is not None:
+                    cur.update(url=bl.url, model=bl.model, ctx=bl.num_ctx,
+                               feature="browser_control")
+                    if announce is not None:
+                        try:
+                            announce(f"continuing on the second graphics card ({bl.model}), "
+                                     f"which has room for long web pages")
+                        except Exception:
+                            pass
         finish = (last.finish if last else None) or ("stop" if last and last.ended else None)
         if finish == "tool_calls":
             # The last round asked for a tool anyway, after tools were taken
@@ -1718,12 +1861,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             finish = "stop"
         if out.sse:
             if last is not None and (last.ended or last.finish):
-                out.send(_sse(_chunk(cid, created, model, {}, finish or "stop")))
+                out.send(_sse(_chunk(cid, created, cur["model"], {}, finish or "stop")))
                 out.send(_sse("[DONE]"))
         else:
             out.send(json.dumps({
                 "id": cid, "object": "chat.completion", "created": created,
-                "model": model, "system_fingerprint": "fp_ollama",
+                "model": cur["model"], "system_fingerprint": "fp_ollama",
                 "choices": [{"index": 0,
                              "message": {"role": "assistant", "content": "".join(answer)},
                              "finish_reason": finish}],

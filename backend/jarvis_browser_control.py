@@ -115,6 +115,14 @@ Add `"browser_control"` to `[tools].enabled` only once that lane is actually
 running AND has been measured with this tool's real page reads - not when
 the card is merely installed, and not "to see if it fits".
 
+Since 2026-09-24 the tool is offered only when BOTH are true: its name in
+`[tools].enabled`, and the second graphics card's "Browser control" switch
+on and working (jarvis_second_card.lane_for("browser_control"), which needs
+"Longer conversations" on too). The model rounds after it runs continue on
+that second-card lane (jarvis_agent.run_local_turn). Nothing in this module
+changed: every check above still applies, and every step still needs its
+own approval.
+
 WHAT ACTUALLY HAPPENS, AND WHAT DOES NOT LEAVE THIS MACHINE
 Unlike `jarvis_ui_control.py`, where only some steps reach the network,
 every step here already involves a browser that is, by definition, talking
