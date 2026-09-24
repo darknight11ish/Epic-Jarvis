@@ -1477,6 +1477,8 @@ class MainActivity : FragmentActivity() {
                                 onFileNote = { target, text ->
                                     JarvisRuntime.fileNote(target, text) is ApiResult.Ok
                                 },
+                                // Only the note apps the desktop says are set up.
+                                onLoadNoteTargets = { JarvisRuntime.noteTargets() },
                                 onQuickNoteOpenChange = { open -> quickNoteOpen.value = open },
                             )
                         },

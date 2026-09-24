@@ -108,6 +108,7 @@ import com.jarvis.client.face.Face
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.data.FaceSize
 import com.jarvis.client.net.Attention
+import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.ui.approval.ApprovalCard
@@ -390,12 +391,20 @@ data class HomeActions(
      */
     val onNewConversation: () -> Unit = {},
     /**
-     * File the owner's own words in Logseq ("logseq") or Joplin ("joplin")
-     * through the desktop - [com.jarvis.client.JarvisRuntime.fileNote].
-     * True once the desktop accepted it (filed, or waiting for approval);
-     * false leaves the typed text where it is.
+     * File the owner's own words in Logseq ("logseq"), Joplin ("joplin") or
+     * Obsidian ("obsidian") through the desktop -
+     * [com.jarvis.client.JarvisRuntime.fileNote]. True once the desktop
+     * accepted it (filed, or waiting for approval); false leaves the typed
+     * text where it is.
      */
     val onFileNote: suspend (target: String, text: String) -> Boolean = { _, _ -> false },
+    /**
+     * Which note apps the desktop is set up for -
+     * [com.jarvis.client.JarvisRuntime.noteTargets]. Asked when the plate
+     * opens; only those get a button.
+     */
+    val onLoadNoteTargets: suspend () -> NoteCapture.Targets =
+        { NoteCapture.Targets.Unknown("not checked yet") },
     /** Open or close the quick-note field. */
     val onQuickNoteOpenChange: (Boolean) -> Unit = {},
 )
@@ -1541,13 +1550,16 @@ private fun TaskControlsPlate(paused: Boolean, actions: HomeActions) {
 }
 
 /**
- * A note filed on the desktop, in today's Logseq journal or as a new Joplin
- * note - the desktop's `POST /api/notes/capture` (`backend/note-capture.patch`).
+ * A note filed on the desktop, in today's Logseq journal, as a new Joplin
+ * note, or in today's Obsidian daily note - the desktop's
+ * `POST /api/notes/capture` (`backend/note-capture.patch`).
  *
- * Closed, it is one small button. Open, a field and two destinations. What
- * happens next is reported in the shared notice, in the desktop's own words
- * ("Filed in Logseq, …", "Waiting for your approval…", or why not) - this
- * plate never says "filed" itself. The typed text is kept if sending fails.
+ * Closed, it is one small button. Open, a field and one button for each note
+ * app the desktop says is set up (asked each time it opens). None set up, or
+ * the desktop cannot say: no button, and one line saying which. What happens
+ * next is reported in the shared notice, in the desktop's own words ("Filed
+ * in Logseq, …", "Waiting for your approval…", or why not) - this plate
+ * never says "filed" itself. The typed text is kept if sending fails.
  */
 @Composable
 private fun QuickNotePlate(open: Boolean, actions: HomeActions) {
@@ -1555,6 +1567,14 @@ private fun QuickNotePlate(open: Boolean, actions: HomeActions) {
     val scope = rememberCoroutineScope()
     var noteText by rememberSaveable { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
+    // null while the desktop is being asked.
+    var targets by remember { mutableStateOf<NoteCapture.Targets?>(null) }
+    LaunchedEffect(open) {
+        if (open) {
+            targets = null
+            targets = actions.onLoadNoteTargets()
+        }
+    }
 
     if (!open) {
         Quiet("Quick note…", color = chrome.textMid, onClick = { actions.onQuickNoteOpenChange(true) })
@@ -1577,25 +1597,42 @@ private fun QuickNotePlate(open: Boolean, actions: HomeActions) {
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            fun send(target: String) {
-                if (sending || noteText.isBlank()) return
-                val note = noteText
-                sending = true
-                scope.launch {
-                    val accepted = actions.onFileNote(target, note)
-                    sending = false
-                    if (accepted) {
-                        noteText = ""
-                        actions.onQuickNoteOpenChange(false)
-                    }
+        val ready = (targets as? NoteCapture.Targets.Known)?.names.orEmpty()
+        if (ready.isEmpty()) {
+            Text(
+                targets?.let { NoteCapture.noTargetsLine(it) }
+                    ?: "Checking which note apps are set up on your PC…",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+        fun send(target: String) {
+            if (sending || noteText.isBlank()) return
+            val note = noteText
+            sending = true
+            scope.launch {
+                val accepted = actions.onFileNote(target, note)
+                sending = false
+                if (accepted) {
+                    noteText = ""
+                    actions.onQuickNoteOpenChange(false)
                 }
             }
-            Quiet("To Logseq", enabled = !sending && noteText.isNotBlank(), onClick = { send("logseq") })
-            Quiet("To Joplin", enabled = !sending && noteText.isNotBlank(), onClick = { send("joplin") })
-            Quiet("Close", color = chrome.textMid, enabled = !sending,
-                onClick = { actions.onQuickNoteOpenChange(false) })
         }
+        // Up to three destinations, so Close has a row of its own: four
+        // buttons do not fit across a phone.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (target in ready) {
+                Quiet(
+                    "To ${NoteCapture.name(target)}",
+                    enabled = !sending && noteText.isNotBlank(),
+                    onClick = { send(target) },
+                )
+            }
+        }
+        Quiet("Close", color = chrome.textMid, enabled = !sending,
+            onClick = { actions.onQuickNoteOpenChange(false) })
     }
 }
 

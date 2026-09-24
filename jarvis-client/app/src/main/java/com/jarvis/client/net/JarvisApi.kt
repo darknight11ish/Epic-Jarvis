@@ -387,7 +387,7 @@ class JarvisApi(
     // ------------------------------------------------------------ notes ----
 
     /**
-     * Files the owner's own words in Logseq or Joplin - [NoteCapture]. The
+     * Files the owner's own words in Logseq, Joplin or Obsidian - [NoteCapture]. The
      * answer is the desktop's job record, 200 when finished and 202 while an
      * approval card waits. A refusal the desktop explained (no Logseq
      * folder, no Joplin token, "you said no") also comes back as a job, with
@@ -402,6 +402,13 @@ class JarvisApi(
 
     /** How a note filed with [captureNote] ended. Never carries its text. */
     suspend fun noteStatus(id: String): ApiResult<JsonObject> = probe(NoteCapture.statusPath(id))
+
+    /**
+     * Which note apps the desktop is set up for: the same path with no id,
+     * answering `{"ok": true, "targets": [...]}` - names only. Read it with
+     * [NoteCapture.targets].
+     */
+    suspend fun noteTargets(): ApiResult<JsonObject> = probe(NoteCapture.PATH)
 
     private suspend fun postForJob(path: String, json: String): ApiResult<JsonObject> =
         withContext(Dispatchers.IO) {

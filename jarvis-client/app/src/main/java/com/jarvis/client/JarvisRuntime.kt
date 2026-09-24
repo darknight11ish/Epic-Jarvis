@@ -1777,7 +1777,7 @@ object JarvisRuntime {
         runTaskAction { api.injectTaskNote(note) }
 
     /**
-     * Files a note in Logseq or Joplin through the desktop - the owner's own
+     * Files a note in Logseq, Joplin or Obsidian through the desktop - the owner's own
      * words, no model - and reports how it ended in the shared notice, in the
      * desktop's own words (see [com.jarvis.client.net.NoteCapture]).
      *
@@ -1828,6 +1828,18 @@ object JarvisRuntime {
         }
         return ApiResult.Ok(Unit)
     }
+
+    /**
+     * Which note apps the desktop is set up for, asked fresh each time the
+     * quick-note plate opens. A failure is [NoteCapture.Targets.Unknown] with
+     * the reason, so the plate shows no button rather than all of them.
+     */
+    suspend fun noteTargets(): com.jarvis.client.net.NoteCapture.Targets =
+        when (val r = api.noteTargets()) {
+            is ApiResult.Ok -> com.jarvis.client.net.NoteCapture.targets(r.value)
+            is ApiResult.Failed ->
+                com.jarvis.client.net.NoteCapture.targetsFailure(r.error, describe(r.error))
+        }
 
     private suspend fun runTaskAction(call: suspend () -> ApiResult<Unit>): ApiResult<Unit> {
         val result = call()
