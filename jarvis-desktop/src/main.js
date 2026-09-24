@@ -114,6 +114,7 @@ import {
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode } from "./voice.js";
 import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
+import { mayReadAloud, privacyFromHeard, PRIVATE_LINE, TOOL_WORDS } from "./private-speech.js";
 // The renderer the answer card and the approval preview use - see markdown.js.
 import { escapeHtml, renderMarkdown } from "./markdown.js";
 import { commitExchange, historyMessages } from "./chat-history.js";
@@ -299,6 +300,14 @@ const state = {
   /** This turn's Local/Cloud badge came from the server's X-Jarvis-Route
    *  header, so nothing in the stream may overwrite it with a guess. */
   routeFromHeader: false,
+  /** The private-answer rule (private-speech.js), for a voice turn: what the
+   *  utterance reply said (`privateAloud`, `questionPrivate`), the route
+   *  line (`gate`, `injected_facts`), whether a tool ran while the answer
+   *  was written, and whether "It's on your screen." was said already. */
+  voicePrivacy: null,
+  turnRoute: null,
+  toolRan: false,
+  privateLineSaid: false,
   /** Cancels whichever transport is streaming; null when idle. */
   abort: null,
   startedAt: 0,
@@ -709,6 +718,9 @@ function routeFromHeader(route) {
 }
 
 function applyHeaderRoute(route) {
+  // Kept whole for the private-answer rule (gate, injected_facts) - the
+  // route line carries nothing else (commands.rs route_line_from_header).
+  state.turnRoute = route && typeof route === "object" ? route : null;
   const next = routeFromHeader(route);
   if (!next) return;
   state.routeFromHeader = true;
@@ -1962,6 +1974,15 @@ const WAIT_STATUS = {
 };
 
 function showWaitStatus(word) {
+  // A tool ran (or waited on its card) while this answer was written: the
+  // rest of a voice answer is not read aloud unless the owner allowed it.
+  if (TOOL_WORDS.includes(word) && !state.toolRan) {
+    state.toolRan = true;
+    if (!speakableNow()) {
+      speechQueue = [];
+      if (state.voiceTurn) sayPrivateLineOnce();
+    }
+  }
   const text = WAIT_STATUS[word];
   if (!text || state.phase !== "streaming" || dom.card.hidden) return;
   if (dom.cardStatusText.textContent === text) return;
@@ -2278,6 +2299,10 @@ async function send(promptText) {
   // above, so a push-to-talk barge-in whose send() was refused because the
   // old answer is still streaming leaves that old answer muted.
   speechMuted = false;
+  // Nothing is known yet about whether this answer is private.
+  state.turnRoute = null;
+  state.toolRan = false;
+  state.privateLineSaid = false;
   // A new answer starts from no blocks, or the first paragraph of the second
   // reply never gets its entrance.
   paintedBlocks = 0;
@@ -2568,6 +2593,13 @@ async function stopPushToTalk() {
       announce(heard.reason || "Speech recognition is not available here.", "assertive");
       return;
     }
+    if (heard.tooShort) {
+      // Refused before the voice check (docs/JARVIS-API.md section 16): the
+      // PC's own sentence says how much more to say. Not "that did not
+      // sound like you" - it was never checked.
+      announce(heard.reason || "That was too short to be sure it was you. Say a little more.", "assertive");
+      return;
+    }
     if (!heard.isOwner) {
       // Deliberately vague rather than naming a score/threshold: the point
       // is that a voice which is not the owner's never becomes text, not to
@@ -2581,6 +2613,7 @@ async function stopPushToTalk() {
       return;
     }
     state.voiceTurn = true;
+    state.voicePrivacy = privacyFromHeard(heard);
     send(text);
   } catch (error) {
     announce(String((error && error.message) || error), "assertive");
@@ -2663,7 +2696,29 @@ function enqueueSpeech(text) {
   if (speechMuted) return;
   const clean = stripMarkdownForSpeech(text);
   if (!clean) return;
+  if (!speakableNow()) {
+    sayPrivateLineOnce();
+    return;
+  }
   speechQueue.push(clean);
+  drainSpeechQueue();
+}
+
+/** The owner's private-answer rule for this voice turn (private-speech.js):
+ *  may what it says be read aloud? */
+function speakableNow() {
+  return mayReadAloud({
+    ...(state.voicePrivacy || {}),
+    route: state.turnRoute,
+    toolRan: state.toolRan,
+  });
+}
+
+/** Instead of a private answer, one fixed line - once per answer. */
+function sayPrivateLineOnce() {
+  if (state.privateLineSaid || speechMuted) return;
+  state.privateLineSaid = true;
+  speechQueue.push(PRIVATE_LINE);
   drainSpeechQueue();
 }
 
@@ -2676,8 +2731,15 @@ async function drainSpeechQueue() {
     speechQueue = [];
     return;
   }
-  const next = speechQueue.shift();
+  let next = speechQueue.shift();
   if (next === undefined) return;
+  // Checked again as it is spoken: a tool may have run since it was queued.
+  if (next !== PRIVATE_LINE && !speakableNow()) {
+    speechQueue = [];
+    if (state.privateLineSaid) return;
+    state.privateLineSaid = true;
+    next = PRIVATE_LINE;
+  }
   speaking = true;
   const generation = speechGeneration;
   try {
@@ -2868,6 +2930,13 @@ listen("voice-heard", (event) => {
   // "Interrupt Jarvis while it talks" is off: nothing heard over a reply
   // is acted on, a new question included (barge-in.js).
   if (ignoreWhileTalking(loadBargeIn(), jarvisTalking())) return;
+  // "Hey Jarvis" was heard from the owner, but the command after it was
+  // too short to check: said, with the PC's own words. A short clip WITHOUT
+  // the phrase could be anyone in the room, so it stays silent.
+  if (heard.tooShort && heard.wakeHeard) {
+    announce(heard.reason || "That was too short to be sure it was you. Say a little more.");
+    return;
+  }
   if (!heard.isOwner) return; // ambient speech that is not the owner - ignored, not announced
   if (heard.awake) {
     // "Hey Jarvis." on its own: the PC is listening for the next sentence.
@@ -2877,6 +2946,7 @@ listen("voice-heard", (event) => {
   const text = String(heard.text || "").trim();
   if (!text) return;
   state.voiceTurn = true;
+  state.voicePrivacy = privacyFromHeard(heard);
   send(text);
 });
 
