@@ -64,6 +64,7 @@
             "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
             "why": ""
           },
+          "very_strict_model": "",
           "very_strict_uses": 0
         },
         "needs_retraining": true,
@@ -200,6 +201,7 @@
           "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
           "why": ""
         },
+        "very_strict_model": "",
         "very_strict_uses": 0
       },
       "needs_retraining": true,
@@ -391,6 +393,7 @@
             "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
             "why": ""
           },
+          "very_strict_model": "",
           "very_strict_uses": 0
         },
         "needs_retraining": false,
@@ -522,6 +525,7 @@
           "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
           "why": ""
         },
+        "very_strict_model": "",
         "very_strict_uses": 0
       },
       "needs_retraining": false,
@@ -708,6 +712,7 @@
             "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
             "why": ""
           },
+          "very_strict_model": "",
           "very_strict_uses": 0
         },
         "needs_retraining": false,
@@ -844,6 +849,7 @@
           "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
           "why": ""
         },
+        "very_strict_model": "",
         "very_strict_uses": 0
       },
       "needs_retraining": false,
@@ -1035,6 +1041,7 @@
             "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
             "why": ""
           },
+          "very_strict_model": "",
           "very_strict_uses": 0
         },
         "needs_retraining": false,
@@ -1171,6 +1178,7 @@
           "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
           "why": ""
         },
+        "very_strict_model": "",
         "very_strict_uses": 0
       },
       "needs_retraining": false,
@@ -1362,10 +1370,11 @@
             "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
             "why": ""
           },
+          "very_strict_model": "small",
           "very_strict_uses": 1
         },
         "needs_retraining": false,
-        "note": "only the small voice-ID model is installed, so very strict is using one model instead of two - and measured here, it alone does not reliably keep other people out. Install the stronger one (looked for ~/.openjarvis/voice-models/speaker/strong.onnx). the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "note": "only the small voice-ID model is installed, so very strict is using it instead of the stronger one, and will turn you away far more often - and measured here, it alone does not reliably keep other people out. Install the stronger one (looked for ~/.openjarvis/voice-models/speaker/strong.onnx). the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
@@ -1503,10 +1512,11 @@
           "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
           "why": ""
         },
+        "very_strict_model": "small",
         "very_strict_uses": 1
       },
       "needs_retraining": false,
-      "note": "only the small voice-ID model is installed, so very strict is using one model instead of two - and measured here, it alone does not reliably keep other people out. Install the stronger one (looked for ~/.openjarvis/voice-models/speaker/strong.onnx). the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+      "note": "only the small voice-ID model is installed, so very strict is using it instead of the stronger one, and will turn you away far more often - and measured here, it alone does not reliably keep other people out. Install the stronger one (looked for ~/.openjarvis/voice-models/speaker/strong.onnx). the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
@@ -1699,6 +1709,7 @@
             "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
             "why": ""
           },
+          "very_strict_model": "",
           "very_strict_uses": 0
         },
         "needs_retraining": false,
@@ -1846,6 +1857,7 @@
           "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
           "why": ""
         },
+        "very_strict_model": "",
         "very_strict_uses": 0
       },
       "needs_retraining": false,
@@ -2037,6 +2049,7 @@
             "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
             "why": ""
           },
+          "very_strict_model": "",
           "very_strict_uses": 0
         },
         "needs_retraining": false,
@@ -2173,6 +2186,7 @@
           "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
           "why": ""
         },
+        "very_strict_model": "",
         "very_strict_uses": 0
       },
       "needs_retraining": false,
@@ -2364,6 +2378,7 @@
             "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
             "why": ""
           },
+          "very_strict_model": "",
           "very_strict_uses": 0
         },
         "needs_retraining": false,
@@ -2500,6 +2515,7 @@
           "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
           "why": ""
         },
+        "very_strict_model": "",
         "very_strict_uses": 0
       },
       "needs_retraining": false,

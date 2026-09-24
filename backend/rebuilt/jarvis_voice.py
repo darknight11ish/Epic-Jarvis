@@ -1424,19 +1424,28 @@ def _vectors(audio, emb, strong, sample_rate) -> dict:
 
 
 def plan(strictness: str, emb, strong, prof: Optional[VoiceProfile] = None) -> list:
-    """[(model, role)] - which models a clip is put to, and as what:
+    """[(model, role)] - which model a clip is put to, and at which bar:
 
-        very strict, stronger model installed   the small one AND the strong
-                                                one, both "paired"
-        very strict, no stronger model          the small one alone
-        balanced, stronger model (in the print) the strong one alone
-        balanced, otherwise                     the small one alone
+        stronger model installed (and in the print)  the strong one alone,
+                                                     at the strictness's bar
+        otherwise                                    the small one alone
+
+    THE OWNER'S DECISION, 2026-09-24: very strict uses the stronger model
+    ALONE, at its very-strict bar - not both models together. Measured here
+    (backend/README.md, "The stricter voice check"), the stronger model alone
+    at 0.50 turned the owner away 5.8% of the time against 10.5% for the
+    pair, and let in about the same strangers (0.49% against 0.40%). The
+    "paired" bars stay in MODEL_BARS for the record; nothing asks for them.
+
+    A print trained before the stronger model was installed has no
+    sub-print for it: very strict still asks the stronger model, which then
+    refuses with "train your voice again" - it never quietly falls back to
+    the weaker small model. Balanced does fall back, as it always did.
 
     The last one listed is the one that "decides" (the "someone else"
     check measures it)."""
     if strictness == VERY_STRICT:
-        return [(emb, "paired"), (strong, "paired")] if strong is not None \
-            else [(emb, VERY_STRICT)]
+        return [(strong, VERY_STRICT)] if strong is not None else [(emb, VERY_STRICT)]
     if strong is not None and (prof is None or prof.subprints(strong.name)):
         return [(strong, BALANCED)]
     return [(emb, BALANCED)]
@@ -1803,8 +1812,8 @@ def status() -> dict:
         notes.append(n)
     elif strong is None:
         n = ("only the small voice-ID model is installed, so " +
-             ("very strict is using one model instead of two" if very else
-              "balanced is using it alone") +
+             ("very strict is using it instead of the stronger one, and will turn you "
+              "away far more often" if very else "balanced is using it alone") +
              " - and measured here, it alone does not reliably keep other people out. "
              f"Install the stronger one (looked for {strong_model_path()})")
         if _strong_model_error:
@@ -1871,7 +1880,11 @@ def status() -> dict:
                        "why": _strong_model_error},
             # How many models very strict asks right now, and which one
             # balanced asks ("strong", "small", or "" with none installed).
-            "very_strict_uses": (2 if strong is not None else 1) if speaker_model else 0,
+            # Since 2026-09-24 very strict asks ONE model (the stronger one
+            # alone when it is installed); very_strict_model says which.
+            "very_strict_uses": 1 if speaker_model else 0,
+            "very_strict_model": ("" if not speaker_model else
+                                  "strong" if strong is not None else "small"),
             "balanced_uses": ("" if not speaker_model else
                               "strong" if strong is not None and (
                                   prof is None or prof.subprints(strong_name)) else "small"),

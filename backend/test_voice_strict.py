@@ -24,9 +24,11 @@ What it proves:
      loosening card.
   4. may_speak(): private answers are not read aloud for a voice request
      unless the owner chose voice_is_enough.
-  5. Very strict = BOTH models must pass; balanced = the small one alone;
-     the strong model not installed = one model, and status says so; a
-     print made before the strong model = "train again".
+  5. Very strict = the stronger model ALONE when it is installed (the
+     owner's decision, 2026-09-24, from the measurements); balanced = the
+     stronger model too, else the small one; the strong model not installed
+     = the small one, and status says so; a print made before the strong
+     model = "train again" at very strict.
   6. Comparison voices (AS-norm): the maths against a hand computation, a
      "hub" voice that clears the raw bar but is refused, the bank's
      round trip, and that the bank can only ever refuse more, never less.
@@ -392,7 +394,7 @@ def t_may_speak():
               and not V.looks_private("what is the capital of France"))
 
 
-# ------------------------------------------------------ 5. two models: AND --
+# --------------------------------------- 5. two models: the stronger decides --
 
 def _two(rng=None):
     small = Table("sherpa-onnx:357a834f702b", {
@@ -404,19 +406,22 @@ def _two(rng=None):
     return small, strong
 
 
-def t_two_models_must_both_pass():
+def t_the_stronger_model_decides():
     with Temp():
         small, strong = _two()
         prof = V.enroll(["e1", "e2", "e3"], embedder=small, strong=strong)
         check("one print holds both models' sub-prints",
               prof.subprints(small.name) and prof.subprints(strong.name), prof.models.keys())
         v = V.verify("ok", small, strong=strong)
-        check("both pass: the owner", v.is_owner and len(v.checks) == 2, v)
+        check("very strict asks ONE model, the stronger one: the owner passes",
+              v.is_owner and len(v.checks) == 1
+              and v.checks[0]["model"] == "the stronger voice-ID model", v)
         v = V.verify("strong_says_no", small, strong=strong)
-        check("the small one passes, the strong one does not: REFUSED (very strict)",
+        check("the small one would pass, the strong one does not: REFUSED (very strict)",
               not v.is_owner and "stronger" in v.reason, v)
         v = V.verify("small_says_no", small, strong=strong)
-        check("the strong one passes, the small one does not: refused", not v.is_owner, v)
+        check("the small one would refuse, the strong one passes: accepted - the small one "
+              "is not asked at very strict any more", v.is_owner and len(v.checks) == 1, v)
         V.set_setting("strictness", "balanced", approved=True)
         v = V.verify("small_says_no", small, strong=strong)
         check("balanced asks the STRONGER model alone (measured: the small one alone lets "
@@ -440,7 +445,8 @@ def t_two_models_must_both_pass():
             st = V.status()
         check("...and status says so, in words",
               st["models"]["very_strict_uses"] == 1 and st["models"]["strong"]["installed"] is False
-              and "one model instead of two" in st["note"], (st["models"], st["note"]))
+              and st["models"]["very_strict_model"] == "small"
+              and "instead of the stronger one" in st["note"], (st["models"], st["note"]))
 
         only_small = V.enroll(["e1", "e2", "e3"], embedder=small,
                               path=V.PROFILE_PATH.with_name("owner-desktop.json"), mic="desktop")
@@ -782,7 +788,7 @@ def t_measure_and_someone_else():
         got = V.measure(["ok", "strong_says_no", "small_says_no", "ok"], small, strong=strong,
                         seconds=[3.0, 3.0, 3.0, 1.6])
         check("the guided test: each sentence judged at both settings",
-              got["ok"] and got["very_strict"]["passed"] == 1
+              got["ok"] and got["very_strict"]["passed"] == 2
               and got["balanced"]["passed"] == 3, got)
         check("...with the shortest sentence each allows",
               got["very_strict"]["too_short"] == 1 and got["balanced"]["too_short"] == 0, got)
@@ -811,7 +817,7 @@ def t_measure_and_someone_else():
         sc = V.score_clips(["strong_says_no", "small_says_no"], small, strong=strong)
         check("the 'someone else' check scores the deciding (stronger) model, and says "
               "what really passed", sc["ok"] and sc["model"] == "strong"
-              and sc["passed"] == [False, False] and sc["scores"] == [0.0, 1.0]
+              and sc["passed"] == [False, True] and sc["scores"] == [0.0, 1.0]
               and sc["floor"] == V.floor_for(strong.name, "balanced"), sc)
         V.set_threshold(0.6, model=strong.name)
         p = V.find_profile("")[0]
@@ -979,17 +985,19 @@ def t_real_models():
         V.enroll(clips, embedder=small, strong=strong, sample_rate=16000,
                  conditions=["close"] * 6)
         v = V.verify(clips[0], small, sample_rate=16000)
-        check("a very strict check asks both real models", len(v.checks) == 2, v.checks)
+        check("a very strict check asks the stronger real model alone",
+              len(v.checks) == 1 and v.checks[0]["model"] == "the stronger voice-ID model",
+              v.checks)
         st = V.status()
-        check("status names both, and very strict uses two",
-              st["models"]["very_strict_uses"] == 2 and st["models"]["strong"]["installed"],
-              st["models"])
+        check("status names both, and very strict uses the stronger one",
+              st["models"]["very_strict_uses"] == 1 and st["models"]["very_strict_model"] == "strong"
+              and st["models"]["strong"]["installed"], st["models"])
 
 
 if __name__ == "__main__":
     for fn in (t_hole_one_the_basic_check_lets_nobody_in, t_hole_two_one_noisy_clip,
                t_settings_tighten_now_loosen_with_a_card, t_may_speak,
-               t_two_models_must_both_pass, t_cohort_maths,
+               t_the_stronger_model_decides, t_cohort_maths,
                t_a_bank_of_the_wrong_width_is_not_used, t_building_a_bank_on_this_pc,
                t_the_shipped_bank,
                t_training_in_rounds, t_rounds_make_subprints_and_add_adds,

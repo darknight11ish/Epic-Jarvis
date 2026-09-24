@@ -6031,8 +6031,8 @@ inside your `.openjarvis` folder, and the line checks it is the right file:
 $ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path $base 'voice-models\speaker'; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_large.onnx' -OutFile (Join-Path $d 'strong.onnx'); if ((Get-FileHash (Join-Path $d 'strong.onnx') -Algorithm SHA256).Hash -eq 'D51ABCF31717EF28162F26ACB9D44DD4127C3D44C9B8624F699F3425DACA8E77') { Write-Host "OK - the stronger voice-ID model is at $d\strong.onnx" -ForegroundColor Green } else { Write-Host "That is not the expected file. Delete $d\strong.onnx and run this line again." -ForegroundColor Red }
 ```
 
-**3. Check the PC sees both models.** Look for `models` with
-`'very_strict_uses': 2`, and read the `note` line:
+**3. Check the PC uses the stronger model.** Look for `models` with
+`'very_strict_model': 'strong'`, and read the `note` line:
 
 ```powershell
 cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_voice.py
@@ -6097,9 +6097,17 @@ counter.
 |---|---|---|
 | before this change (small model, one print, bar 0.35) | 16.0% | **52.4%** |
 | balanced (stronger model alone) | 0.4% | 3.0% |
-| very strict (both models) | 10.5% | 0.40% |
+| very strict, both models together (not used) | 10.5% | 0.40% |
+| very strict, stronger model alone (**what Jarvis uses**) | 5.8% | 0.49% |
 | very strict, stronger model not installed | 34.3% | 16.9% |
 | balanced, stronger model not installed | 24.1% | 26.9% |
+
+**The owner's decision, 2026-09-24:** very strict uses the stronger model on
+its own, at its very-strict bar (0.50). Together the two models turned the
+real speaker away almost twice as often (10.5% against 5.8%) and let in
+about the same strangers (0.40% against 0.49%). A voice print trained before
+the stronger model was installed is refused at very strict with "train your
+voice again" - it does not fall back to the small model.
 
 By length, very strict refused "you" 59% of the time at 2 words (~1.1 s),
 32% at 3 words (~1.6 s) and 10.5% at 4 words (~2.1 s); balanced 10.6%, 2.4%
@@ -6118,9 +6126,9 @@ either side included).
 2. **Asking the small model as well (very strict) costs more than it
    buys.** The stronger model alone at a higher bar (0.50) refused you
    5.8% and let in 0.49% - better on the first count than very strict's
-   10.5% / 0.40%. Very strict still asks both, as you decided; the small
-   one is held to a gentle bar (0.30) when paired so it costs as little as
-   possible.
+   10.5% / 0.40%. **You then chose (2026-09-24): very strict uses the
+   stronger model alone.** The small one is used only when the stronger
+   one is not installed.
 3. **The comparison with other voices made almost no difference with the
    stronger model** at these bars (its own bar already refuses those
    clips). With the small model alone it halved the other people let in
@@ -6142,8 +6150,8 @@ $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Deskt
 
 `test_voice_strict.py` proves both holes are closed, the settings and
 their cards (a looser setting changes nothing until approved; deny and
-timeout change nothing; balanced turns "read aloud" off), both models
-having to agree, the comparison maths against a hand calculation, rounds
+timeout change nothing; balanced turns "read aloud" off), the stronger
+model deciding alone at very strict, the comparison maths against a hand calculation, rounds
 with one card and every clip dropped on deny, timeout, cancel and expiry,
 sub-prints and "train more", the repeat counter, the guided test, the
 shortest command and "hey Jarvis" as the wake path, and that no recording

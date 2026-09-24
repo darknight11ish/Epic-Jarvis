@@ -1439,7 +1439,8 @@ mode only when `gate.training` says the PC understands it:
 "models": {"small":  {"installed", "name", "label": "the small voice-ID model", "bars_measured", "path"},
            "strong": {"installed", "name", "label": "the stronger voice-ID model", "bars_measured",
                       "path", "why"},
-           "very_strict_uses": 0 | 1 | 2,           how many models very strict asks right now
+           "very_strict_uses": 0 | 1,               how many models very strict asks (one since 2026-09-24)
+           "very_strict_model": "strong" | "small" | "",  which one: the stronger one whenever installed
            "balanced_uses": "strong" | "small" | ""},
 "cohort": {"small":  null | {"speakers": 300, "source": "...", "where": "shipped with Jarvis" |
                             "built on this PC", "matches": bool},
