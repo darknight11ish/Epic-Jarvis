@@ -90,7 +90,8 @@ jobs:
     # this repository - backend/run_suites.py SKIPS those by name, with the
     # files each is waiting for, and fails on anything else. The voice suites
     # (test_speech, test_voice_contract, test_wakeword) need the three voice
-    # packages from backend/requirements.txt; nothing else from it is needed,
+    # packages from backend/requirements.txt, and test_chat_log needs
+    # `cryptography` (chat history is encrypted); nothing else from it is needed,
     # and the memory ones (fastembed, sqlite-vec) are left out on purpose -
     # the suites use a hash embedder and must pass without them.
     runs-on: ubuntu-latest
@@ -105,7 +106,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install --disable-pip-version-check numpy sherpa-onnx onnxruntime
+      - run: python -m pip install --disable-pip-version-check numpy sherpa-onnx onnxruntime cryptography
       - name: Backend suites (the ones that need no file from the owner's PC)
         run: python backend/run_suites.py
       # Desktop and phone call the same backend; a route one calls and the
