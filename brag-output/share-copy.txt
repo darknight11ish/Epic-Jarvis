@@ -1,0 +1,2 @@
+Jarvis.
+Your own voice assistant, running on your own PC — never sends your private life to anyone else's cloud, and asks before it acts. Every time.
