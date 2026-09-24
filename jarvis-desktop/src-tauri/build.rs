@@ -95,6 +95,11 @@ fn main() {
             // approval card. Settings window only.
             "get_second_card",
             "set_second_card",
+            // Settings' "Big model (slow)" (backend/big-model.patch): read
+            // what was found and the three switches, and turn ONE switch on
+            // or off. ON only raises an approval card. Settings window only.
+            "get_big_model",
+            "set_big_model",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",
@@ -134,6 +139,12 @@ fn main() {
             "wiki_ingest",
             "wiki_ingest_status",
             "wiki_open_folder",
+            // Deep questions (backend/big-model.patch): read the recent ones
+            // and their answers, and ask one. No card per question - the
+            // switch was approved - and asking is held on a stale link.
+            // Brain window only.
+            "get_deep",
+            "ask_deep",
             // Quickbar
             "hide_quickbar",
             "resize_quickbar",

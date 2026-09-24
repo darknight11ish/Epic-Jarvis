@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ask-deep"
+description = "Enables the ask_deep command without any pre-configured scope."
+commands.allow = ["ask_deep"]
+
+[[permission]]
+identifier = "deny-ask-deep"
+description = "Denies the ask_deep command without any pre-configured scope."
+commands.deny = ["ask_deep"]

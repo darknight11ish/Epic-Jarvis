@@ -2843,6 +2843,488 @@ mod wiki_tests {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The big model, slow - backend/big-model.patch, backend/jarvis_big_model.py,
+// docs/BIG-MODEL.md, JARVIS-API.md section 14
+// ---------------------------------------------------------------------------
+
+/// What was found and the three switches: `GET` and `POST`.
+pub(crate) const BIG_MODEL_PATH: &str = "/api/big-model";
+/// The deep questions and their answers, newest first.
+pub(crate) const DEEP_PATH: &str = "/api/deep";
+/// Queue one deep question.
+pub(crate) const DEEP_ASK_PATH: &str = "/api/deep/ask";
+
+/// The longest question the backend takes, in characters (Unicode code
+/// points, as Python's `len` counts them): `jarvis_big_model.MAX_QUESTION_CHARS`,
+/// which `GET /api/deep` reports as `limits.question_chars`. A test holds the
+/// two together against the real fixture.
+pub(crate) const DEEP_QUESTION_CHARS: usize = 4000;
+
+/// The only switch names `POST /api/big-model` knows, in its own words:
+/// the main switch, then one per background job.
+pub(crate) const BIG_MODEL_SWITCHES: [&str; 3] = ["master", "wiki", "deep_questions"];
+
+/// What a backend without `jarvis_big_model.py` (or without the patch at all)
+/// is told to do about it. The page shows this sentence; it never sees a
+/// status code or a body.
+pub(crate) const BIG_MODEL_UPDATE: &str = "This PC's Jarvis does not have the big model part yet. \
+     Update the backend by running apply-patches.ps1, then open this again.";
+
+/// [`get_big_model`]'s reading of the server's answer, on its own so it can
+/// be tested against `tests/fixtures/big-model-cases.json` (the real
+/// `status()` output).
+///
+/// * 200 with `detected` and `switches` - `status()` itself, passed on as is.
+/// * 404, or 503 `{"available": false}` - `{"available": false, "why":
+///   "<update the backend>"}`, so the page says what to do rather than error.
+/// * anything else - the backend's own sentence, or a plain line.
+///
+/// The "module missing", refusal and unreachable readings are the second
+/// card's ([`second_card_missing`], [`second_card_refusal`],
+/// [`second_card_unreachable`]): the same backend shapes, the same words.
+pub(crate) fn big_model_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| {
+                v.get("detected").is_some_and(|d| d.is_object())
+                    && v.get("switches").is_some_and(|s| s.is_array())
+            })
+            .ok_or_else(|| {
+                "Jarvis answered, but not in a way this app can read. \
+                 Update the backend by running apply-patches.ps1."
+                    .to_string()
+            });
+    }
+    if second_card_missing(status, body) {
+        return Ok(serde_json::json!({ "available": false, "why": BIG_MODEL_UPDATE }));
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// [`set_big_model`]'s reading of the server's answer. 200 is the backend's
+/// `{"ok", "enabled", "pending", "message"}` as is: `pending: true` means an
+/// approval card is up and NOTHING is on yet. Every refusal (409 a card
+/// already waits, 400 the main switch is off, 503 not possible here) is the
+/// backend's own sentence.
+pub(crate) fn big_model_change_answer(
+    status: u16,
+    body: &str,
+) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| "Jarvis answered, but not in a way this app can read.".to_string());
+    }
+    if second_card_missing(status, body) {
+        return Err(BIG_MODEL_UPDATE.to_string());
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// One of [`BIG_MODEL_SWITCHES`], exactly, or a refusal. Nothing else is
+/// ever sent.
+pub(crate) fn big_model_switch(name: &str) -> Result<&'static str, String> {
+    BIG_MODEL_SWITCHES
+        .iter()
+        .find(|s| **s == name)
+        .copied()
+        .ok_or_else(|| "That is not one of the big model's switches.".to_string())
+}
+
+/// [`get_deep`]'s reading of the server's answer: `deep_status()` (an object
+/// with `available` and a `jobs` list) passed on as is; an older backend is
+/// `{"available": false, "why": "<update the backend>"}`, with no `jobs`.
+pub(crate) fn deep_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| {
+                v.get("available").is_some_and(|a| a.is_boolean())
+                    && v.get("jobs").is_some_and(|j| j.is_array())
+            })
+            .ok_or_else(|| {
+                "Jarvis answered, but not in a way this app can read. \
+                 Update the backend by running apply-patches.ps1."
+                    .to_string()
+            });
+    }
+    if second_card_missing(status, body) {
+        return Ok(serde_json::json!({ "available": false, "why": BIG_MODEL_UPDATE }));
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// [`ask_deep`]'s reading of the server's answer. The 202 job, and every
+/// refusal the backend explained (`{"ok": false, "state": "refused",
+/// "error"}` - empty, too long, three already waiting, not available), are
+/// answers for the page to show as they are, like the wiki's. An older
+/// backend is the update sentence; anything else a plain line.
+pub(crate) fn deep_ask_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    let parsed = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .filter(|v| v.is_object());
+    if let Some(v) = parsed.as_ref() {
+        let refused = v.get("state").and_then(|s| s.as_str()) == Some("refused");
+        if (200..300).contains(&status) || refused {
+            return Ok(v.clone());
+        }
+    }
+    if second_card_missing(status, body) {
+        return Err(BIG_MODEL_UPDATE.to_string());
+    }
+    if (200..300).contains(&status) {
+        return Err("Jarvis answered, but not in a way this app can read.".to_string());
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// The question as the backend will count it: trimmed, Windows line ends
+/// made plain (`ask` does both), then at most [`DEEP_QUESTION_CHARS`]
+/// characters. Refused here, with a sentence, rather than sent to be refused.
+pub(crate) fn deep_question(text: &str) -> Result<String, String> {
+    let q = text.trim().replace("\r\n", "\n");
+    if q.is_empty() {
+        return Err("Type a question first.".to_string());
+    }
+    let n = q.chars().count();
+    if n > DEEP_QUESTION_CHARS {
+        return Err(format!(
+            "The question is {} characters long; at most {} can be asked. Shorten it and \
+             ask again.",
+            thousands(n),
+            thousands(DEEP_QUESTION_CHARS)
+        ));
+    }
+    Ok(q)
+}
+
+/// `4000` as `4,000`, the way the backend writes its own limit.
+fn thousands(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// What the big model could do on this PC, and which of its switches are on:
+/// `GET /api/big-model` (`jarvis_big_model.status()`). Starts nothing.
+///
+/// Settings window only (permissions/surfaces.toml, `settings-surface`). The
+/// answer names folders, drives, memory and disk; it never carries the key
+/// colibri is started with (only where it is kept) and never a token. The
+/// token goes out in `X-Jarvis-Token` through [`jarvis_headers`], with
+/// `X-Jarvis-Client: hud`, the same as every other call to Jarvis, and is
+/// never logged or put in an error.
+#[tauri::command]
+pub async fn get_big_model(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}{BIG_MODEL_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    big_model_answer(status, &body)
+}
+
+/// One big-model switch on or off: `POST /api/big-model` with
+/// `{"switch", "enabled"}`, built here from the two typed arguments.
+///
+/// This approves nothing. ON only raises one approval card on the PC and the
+/// phone (action `big_model_enable`, tier `ask`), and the answer says
+/// `pending: true` until the owner decides it there. ON is held while the
+/// event stream is stale - rule 4, the same one-direction hold as
+/// [`resume_task`] and waking from a power mode: that card should be
+/// answered by someone looking at a live queue. OFF always goes through,
+/// because it only stops things. Settings window only, like
+/// [`get_big_model`].
+#[tauri::command]
+pub async fn set_big_model(
+    app: AppHandle,
+    switch: String,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    let switch = big_model_switch(&switch)?;
+    if enabled && app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be turned on until \
+             it does. Turning things off still works."
+                .to_string(),
+        );
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{BIG_MODEL_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "switch": switch, "enabled": enabled }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    big_model_change_answer(status, &body)
+}
+
+/// The deep questions and their answers, newest first: `GET /api/deep`
+/// (`jarvis_big_model.deep_status()`). Reads only; starts nothing.
+///
+/// The Brain window only (`brain-deep`). The answers are the owner's own
+/// questions and answers, kept on the PC; the page renders them as text.
+#[tauri::command]
+pub async fn get_deep(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}{DEEP_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    deep_answer(status, &body)
+}
+
+/// "Ask slowly": `POST /api/deep/ask` with `{"question"}`, built here from
+/// the typed text after [`deep_question`] has trimmed and capped it.
+///
+/// There is no approval card per question (JARVIS-API.md section 14): the
+/// switch was approved, and a question acts on nothing - no tools, no memory
+/// writes, no web - and nothing leaves the PC. It is still held while the
+/// event stream is stale, as that section asks (rule 4). The answer is the
+/// queued job (`state: "queued"`) or the backend's explained refusal.
+#[tauri::command]
+pub async fn ask_deep(app: AppHandle, question: String) -> Result<serde_json::Value, String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be asked until it does."
+                .to_string(),
+        );
+    }
+    let question = deep_question(&question)?;
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{DEEP_ASK_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "question": question }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    deep_ask_answer(status, &body)
+}
+
+#[cfg(test)]
+mod big_model_tests {
+    use super::{
+        big_model_answer, big_model_change_answer, big_model_switch, deep_answer, deep_ask_answer,
+        deep_question, thousands, BIG_MODEL_SWITCHES, BIG_MODEL_UPDATE, DEEP_QUESTION_CHARS,
+    };
+
+    /// The backend's real answers, one per case, made by
+    /// `tools/gen_big_model_cases.py` from `jarvis_big_model` itself - never
+    /// hand-written here.
+    const CASES: &str = include_str!("../../tests/fixtures/big-model-cases.json");
+
+    fn cases() -> serde_json::Value {
+        serde_json::from_str(CASES).expect("big-model-cases.json is JSON")
+    }
+
+    fn named(prefix: &str) -> Vec<(String, serde_json::Value)> {
+        cases()["cases"]
+            .as_object()
+            .expect("cases")
+            .iter()
+            .filter(|(k, _)| k.starts_with(prefix))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn every_real_status_is_passed_on_unchanged() {
+        let all = named("status_");
+        assert!(all.len() >= 10, "fewer status cases than the fixture had");
+        for (name, status) in all {
+            let got = big_model_answer(200, &status.to_string())
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(got, status, "{name}");
+        }
+    }
+
+    #[test]
+    fn every_real_deep_status_is_passed_on_unchanged() {
+        let all = named("deep_");
+        assert!(all.len() >= 6, "fewer deep cases than the fixture had");
+        for (name, status) in all {
+            let got =
+                deep_answer(200, &status.to_string()).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(got, status, "{name}");
+        }
+        // status() is not deep_status(), and the other way round.
+        let off = cases()["cases"]["status_ready_off"].to_string();
+        assert!(deep_answer(200, &off).is_err());
+        let deep = cases()["cases"]["deep_done"].to_string();
+        assert!(big_model_answer(200, &deep).is_err());
+    }
+
+    #[test]
+    fn the_question_cap_is_the_backends() {
+        for (name, status) in named("deep_") {
+            assert_eq!(
+                status["limits"]["question_chars"].as_u64(),
+                Some(DEEP_QUESTION_CHARS as u64),
+                "{name}"
+            );
+        }
+        // The backend's own sentence for one too many names the same number.
+        let over = cases()["cases"]["ask_too_long_400"]["body"]["error"]
+            .as_str()
+            .expect("error")
+            .to_string();
+        assert!(over.contains(&thousands(DEEP_QUESTION_CHARS)), "{over}");
+        assert!(over.contains(&thousands(DEEP_QUESTION_CHARS + 1)), "{over}");
+    }
+
+    #[test]
+    fn a_question_is_trimmed_and_capped_before_it_is_sent() {
+        assert_eq!(
+            deep_question("  Why is the sky blue?\r\n").as_deref(),
+            Ok("Why is the sky blue?")
+        );
+        assert_eq!(deep_question("a\r\nb").as_deref(), Ok("a\nb"));
+        assert!(deep_question("").is_err());
+        assert!(deep_question(" \n\t ").is_err());
+        let most = "é".repeat(DEEP_QUESTION_CHARS);
+        assert_eq!(deep_question(&most).as_deref(), Ok(most.as_str()));
+        let over = format!("{most}x");
+        let said = deep_question(&over).unwrap_err();
+        assert!(said.contains("4,001") && said.contains("4,000"), "{said}");
+        // Counted in characters, as Python's len() counts them, not bytes.
+        assert!(most.len() > DEEP_QUESTION_CHARS);
+        assert_eq!(thousands(0), "0");
+        assert_eq!(thousands(999), "999");
+        assert_eq!(thousands(1000), "1,000");
+        assert_eq!(thousands(1234567), "1,234,567");
+    }
+
+    #[test]
+    fn only_the_three_switch_names_are_sent() {
+        assert_eq!(BIG_MODEL_SWITCHES, ["master", "wiki", "deep_questions"]);
+        for (name, status) in named("status_") {
+            for sw in status["switches"].as_array().expect("switches") {
+                let id = sw["id"].as_str().expect("id");
+                assert_eq!(big_model_switch(id), Ok(id), "{name}");
+            }
+        }
+        assert_eq!(big_model_switch("master"), Ok("master"));
+        for bad in [
+            "",
+            "Master",
+            "vision",
+            "deep_questions ",
+            "master; x",
+            "../x",
+        ] {
+            assert!(big_model_switch(bad).is_err(), "{bad:?} was accepted");
+        }
+    }
+
+    #[test]
+    fn the_switch_answers_are_read() {
+        let c = cases();
+        let pending = &c["cases"]["post_master_on_pending"];
+        let got = big_model_change_answer(
+            pending["status"].as_u64().unwrap() as u16,
+            &pending["body"].to_string(),
+        )
+        .unwrap();
+        assert_eq!(got["pending"], true);
+        assert_eq!(
+            got["enabled"], false,
+            "ON is not on until the card is approved"
+        );
+        let off = &c["cases"]["post_master_off"];
+        let got = big_model_change_answer(200, &off["body"].to_string()).unwrap();
+        assert_eq!(got["pending"], false);
+        assert_eq!(got["message"], "The big model is off.");
+        let again = &c["cases"]["post_master_on_again_409"];
+        let said = big_model_change_answer(409, &again["body"].to_string()).unwrap_err();
+        assert_eq!(
+            said,
+            "A card to turn on the big model is already waiting - approve or deny that one"
+        );
+    }
+
+    #[test]
+    fn an_ask_and_its_refusals_are_answers_the_page_shows() {
+        let c = cases();
+        let ok = &c["cases"]["ask_accepted"];
+        assert_eq!(ok["status"], 202);
+        let got = deep_ask_answer(202, &ok["body"].to_string()).unwrap();
+        assert_eq!(got["state"], "queued");
+        for name in ["ask_empty_400", "ask_refused_off", "ask_too_long_400"] {
+            let case = &c["cases"][name];
+            let code = case["status"].as_u64().unwrap() as u16;
+            let got = deep_ask_answer(code, &case["body"].to_string())
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(got["state"], "refused", "{name}");
+            assert_eq!(got["error"], case["body"]["error"], "{name}");
+        }
+    }
+
+    #[test]
+    fn an_older_backend_is_told_to_update_not_shown_an_error() {
+        let missing = r#"{"available": false, "error": "ModuleNotFoundError: No module named 'jarvis_big_model'"}"#;
+        for (code, body) in [(404, ""), (404, "<html>Not Found</html>"), (503, missing)] {
+            for got in [big_model_answer(code, body), deep_answer(code, body)] {
+                let got = got.expect("not an error");
+                assert_eq!(got["available"], false, "{code}");
+                assert_eq!(got["why"], BIG_MODEL_UPDATE);
+                assert!(!got.to_string().contains("ModuleNotFoundError"));
+            }
+            assert_eq!(
+                big_model_change_answer(code, body).unwrap_err(),
+                BIG_MODEL_UPDATE
+            );
+            assert_eq!(deep_ask_answer(code, body).unwrap_err(), BIG_MODEL_UPDATE);
+        }
+        assert!(BIG_MODEL_UPDATE.contains("apply-patches.ps1"));
+        // A real 503 refusal is the backend's sentence, not "update".
+        let off = &cases()["cases"]["ask_refused_off"]["body"];
+        assert_eq!(
+            deep_ask_answer(503, &off.to_string()).unwrap()["error"],
+            "The big-model switch is off."
+        );
+        let no = r#"{"error": "The big model cannot be turned on: Python 3 was not found."}"#;
+        let said = big_model_change_answer(503, no).unwrap_err();
+        assert!(said.starts_with("The big model cannot be turned on"));
+    }
+
+    #[test]
+    fn nothing_unreadable_is_passed_on_as_is() {
+        for code in [200, 202] {
+            assert!(big_model_answer(code, r#"{"ok": true}"#).is_err());
+            assert!(deep_answer(code, r#"{"ok": true}"#).is_err());
+            assert!(deep_ask_answer(code, "not json").is_err());
+            assert!(big_model_change_answer(code, "[1]").is_err());
+        }
+        let odd = big_model_answer(500, "<html>boom</html>").unwrap_err();
+        assert!(!odd.contains("<html>") && odd.contains("500"), "{odd}");
+        let odd = deep_ask_answer(500, "<html>boom</html>").unwrap_err();
+        assert!(!odd.contains("<html>") && odd.contains("500"), "{odd}");
+    }
+}
+
 #[cfg(test)]
 mod capture_tests {
     use super::{server_sentence, validate_bind_address, validate_external_url};

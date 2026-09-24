@@ -241,6 +241,15 @@ permissions = [
   # sends more than one switch.
   "allow-get-second-card",
   "allow-set-second-card",
+  # "Big model (slow)": what was found (colibri, Python, memory, the models
+  # and their drives) and one switch at a time. Turning a switch ON lets
+  # Jarvis start colibri on this PC for background jobs once its approval
+  # card is approved, so it sits with the other settings-only powers. It
+  # approves nothing itself - ON only raises the card, and is held while the
+  # event stream is stale - and there is no form that sends more than one
+  # switch.
+  "allow-get-big-model",
+  "allow-set-big-model",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",
@@ -343,6 +352,21 @@ permissions = [
   "allow-wiki-ingest",
   "allow-wiki-ingest-status",
   "allow-wiki-open-folder",
+]
+
+# Deep questions (backend/big-model.patch): the big model answers one
+# question in the background, with no tools, no internet and no memory of
+# other conversations. Reading the list is a read. Asking raises no card - the
+# owner approved the "Deep questions" switch in Settings with one - because a
+# question acts on nothing and nothing leaves the PC; it is still held while
+# the event stream is stale (rule 4). Nothing here can turn the big model on:
+# that is `get_big_model` / `set_big_model`, in settings-surface.
+[[set]]
+identifier = "brain-deep"
+description = "Read the deep questions and their answers, and ask one (no card per question; the switch was approved in Settings). Cannot turn the big model on or off."
+permissions = [
+  "allow-get-deep",
+  "allow-ask-deep",
 ]
 
 # ---------------------------------------------------------------------------

@@ -644,6 +644,15 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             crate::appearance::refresh_from_server(app).await;
         }
 
+        // A deep question finished (backend/big-model.patch): `{"id",
+        // "state": "done"|"failed"}` and nothing else - never the question or
+        // the answer. Nothing here reads anything for it: the only window
+        // that shows deep questions is the Brain, and it holds the one
+        // command that can (`get_deep`, brain-deep). It is fanned out below
+        // like everything else, and brain.js reads `GET /api/deep` on it
+        // (ARCHITECTURE.md section 6: the handler ships with the event).
+        "deep" => {}
+
         // finding | persona | model | voice — nothing here consumes them, and
         // nothing here should: they are fanned out below like everything else,
         // and the surface that renders one owns what it means.
