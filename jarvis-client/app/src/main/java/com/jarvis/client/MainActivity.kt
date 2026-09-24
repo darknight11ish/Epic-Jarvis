@@ -114,6 +114,13 @@ class MainActivity : FragmentActivity() {
     private val sharedText = mutableStateOf<String?>(null)
 
     /**
+     * A photo handed to this app by another app's share sheet, waiting to be
+     * attached to the next question - under the Photo button's own rule
+     * ([ChatPicture.sharedRefusal]). Consumed once, like [sharedText].
+     */
+    private val sharedPicture = mutableStateOf<Uri?>(null)
+
+    /**
      * Set when the [com.jarvis.client.widget.QuickLinkWidget]'s Mic action
      * opened the app. Consumed the same way [focusApproval] is: a
      * `LaunchedEffect` reads it once and clears it, so a later
@@ -203,6 +210,15 @@ class MainActivity : FragmentActivity() {
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri == null) return@registerForActivityResult
+        attachPicture(uri)
+    }
+
+    /**
+     * Reads one photo - picked, or shared from another app - and makes it
+     * small enough for the PC ([PictureEncoder]). The same path for both, so
+     * the same size limits hold for both.
+     */
+    private fun attachPicture(uri: Uri) {
         pictureBusy.value = true
         lifecycleScope.launch {
             when (val out = PictureEncoder.encode(this@MainActivity, uri)) {
@@ -286,9 +302,20 @@ class MainActivity : FragmentActivity() {
      * needs the `onNewIntent` half too.
      */
     private fun readShareIntent(intent: Intent?) {
-        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
-        if (!text.isNullOrEmpty()) sharedText.value = text
+        if (intent?.action != Intent.ACTION_SEND) return
+        if (intent.type == "text/plain") {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+            if (!text.isNullOrEmpty()) sharedText.value = text
+            return
+        }
+        // One photo. Its words, if the other app sent some, go into the
+        // draft; the photo is attached only if the Photo button would be
+        // offered (see the LaunchedEffect on sharedPicture in App()).
+        if (!ChatPicture.isSharedImage(intent.type)) return
+        val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) ?: return
+        intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { sharedText.value = it }
+        sharedPicture.value = uri
     }
 
     /**
@@ -390,6 +417,19 @@ class MainActivity : FragmentActivity() {
             draft = if (draft.isBlank()) text else "$draft\n\n$text"
             sharedText.value = null
             nav.resetTo(Screen.HOME)
+        }
+
+        // A photo shared from another app: attached under the Photo button's
+        // own rule, asked fresh - only while the PC says Pictures works - or
+        // refused in words, never dropped silently. Nothing is sent here; the
+        // owner still types the question and taps Send, which checks again.
+        LaunchedEffect(sharedPicture.value) {
+            val uri = sharedPicture.value ?: return@LaunchedEffect
+            sharedPicture.value = null
+            nav.resetTo(Screen.HOME)
+            JarvisRuntime.refreshSecondCard()
+            val refusal = ChatPicture.sharedRefusal(JarvisRuntime.secondCard.value)
+            if (refusal != null) JarvisRuntime.setNotice(refusal) else attachPicture(uri)
         }
 
         var memoryDecideBusyId by remember { mutableStateOf<Long?>(null) }

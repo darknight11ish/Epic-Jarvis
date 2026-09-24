@@ -1287,8 +1287,7 @@ object JarvisRuntime {
         refreshSecondCard()
         val read = _secondCard.value
         if (SecondCard.visionAvailable(read)) return null
-        val why = (read as? SecondCard.Read.Loaded)?.status?.feature(SecondCard.VISION)?.why
-            ?: SecondCard.readLine(read)
+        val why = com.jarvis.client.net.ChatPicture.notWorkingWhy(read)
         return "The picture was not sent: Pictures on the second graphics card is not " +
             "working right now" + (why?.let { " ($it)" } ?: "") + "."
     }
