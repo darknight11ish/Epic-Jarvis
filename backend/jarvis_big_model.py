@@ -124,6 +124,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
+#: What a program Jarvis starts may inherit (bug audit 3, CONN-2).
+import jarvis_child_env
+
 try:
     import jarvis_framework as fw
 except Exception:
@@ -898,10 +901,16 @@ def engine_command(model: dict, *, colibri: dict, python: Optional[list], port: 
 def engine_env(key: str, *, cuda_uuid: Optional[str] = None,
                base: Optional[dict] = None) -> dict:
     """The environment for `coli serve`. The key goes in COLI_API_KEY and
-    nowhere else. No card unless `cuda_uuid` (the SECOND card's id)."""
+    nowhere else. No card unless `cuda_uuid` (the SECOND card's id).
+
+    Built from an allowlist (jarvis_child_env.py, bug audit 3 CONN-2): what
+    Windows needs to start a program, plus the CUDA_* settings the owner's
+    CUDA install may need to be found. Nothing else of Jarvis's environment -
+    not the pairing token, not any other *_TOKEN, *_KEY, *_PASSWORD or
+    *_SECRET - reaches colibri."""
     if not key:
         raise ValueError("no key")
-    env = dict(os.environ if base is None else base)
+    env = jarvis_child_env.inherited(base, prefixes=("CUDA_",))
     for k in _ENV_DROP:
         env.pop(k, None)
     env["COLI_API_KEY"] = key

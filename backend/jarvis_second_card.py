@@ -113,6 +113,9 @@ from typing import Callable, Optional
 #: (bug audit 3, CONN-1): see jarvis_local_http.py.
 import jarvis_local_http
 
+#: What a program Jarvis starts may inherit (bug audit 3, CONN-2).
+import jarvis_child_env
+
 try:
     import jarvis_framework as fw
 except Exception:
@@ -559,7 +562,13 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
              base: Optional[dict] = None, flash: str = "auto",
              keep_alive: str = "30m") -> dict:
     """The environment for the second `ollama serve`. Raises ValueError for
-    a host that is not 127.0.0.1 (rule 2) or an id that is not a card id."""
+    a host that is not 127.0.0.1 (rule 2) or an id that is not a card id.
+
+    Built from an allowlist (jarvis_child_env.py, bug audit 3 CONN-2): what
+    Windows needs to start a program, plus OLLAMA_MODELS if the owner set it
+    (so the second Ollama finds the models already downloaded). Nothing else
+    of Jarvis's environment - not the pairing token, not any other *_TOKEN,
+    *_KEY, *_PASSWORD or *_SECRET - reaches the second Ollama."""
     if host != HOST:
         raise ValueError(f"the second Ollama only ever listens on {HOST}, not {host!r}")
     if not re.fullmatch(r"GPU-[0-9A-Fa-f-]{8,64}", str(uuid or "")):
@@ -567,8 +576,10 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
     port = int(port)
     if not (1024 <= port <= 65535) or port == MAIN_OLLAMA_PORT:
         raise ValueError(f"port {port} cannot be used for the second Ollama")
-    env = dict(os.environ if base is None else base)
+    env = jarvis_child_env.inherited(base, names=("OLLAMA_MODELS",))
     # Inherited settings that would widen or reshape it are removed first.
+    # (The allowlist above already leaves them out; kept, so a name added to
+    # it later cannot quietly bring one back.)
     for k in ("OLLAMA_HOST", "OLLAMA_ORIGINS", "OLLAMA_SCHED_SPREAD",
               "OLLAMA_FLASH_ATTENTION", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES",
               "GPU_DEVICE_ORDINAL", "GGML_VK_VISIBLE_DEVICES"):
