@@ -325,6 +325,16 @@ object JarvisRuntime {
     val secondCard: StateFlow<SecondCard.Read> = _secondCard.asStateFlow()
 
     /**
+     * Which note apps the desktop said are set up, as last asked
+     * ([noteTargets]) - or null before the first answer. Chat reads it to
+     * say, under the box, where a `#log` / `#obs` / `#joplin` line will be
+     * filed ([com.jarvis.client.net.NoteCapture.chip]). The send asks again.
+     */
+    private val _noteTargets = MutableStateFlow<com.jarvis.client.net.NoteCapture.Targets?>(null)
+    val noteTargetsKnown: StateFlow<com.jarvis.client.net.NoteCapture.Targets?> =
+        _noteTargets.asStateFlow()
+
+    /**
      * `/api/big-model`: what the PC found for the big model (slow), and its
      * switches ([BigModel]). Read on the Mind screen, after every switch,
      * after a `deep` event (a finished question changes the measured speed)
@@ -971,6 +981,8 @@ object JarvisRuntime {
         refreshAttention()
         // One small read, so chat knows whether a picture can be offered.
         refreshSecondCard()
+        // And one more, so chat can say where a `#log` line will be filed.
+        noteTargets()
     }
 
     suspend fun refreshStatus() {
@@ -2121,11 +2133,38 @@ object JarvisRuntime {
      * quick-note plate opens. A failure is [NoteCapture.Targets.Unknown] with
      * the reason, so the plate shows no button rather than all of them.
      */
-    suspend fun noteTargets(): com.jarvis.client.net.NoteCapture.Targets =
-        when (val r = api.noteTargets()) {
+    suspend fun noteTargets(): com.jarvis.client.net.NoteCapture.Targets {
+        val t = when (val r = api.noteTargets()) {
             is ApiResult.Ok -> com.jarvis.client.net.NoteCapture.targets(r.value)
             is ApiResult.Failed ->
                 com.jarvis.client.net.NoteCapture.targetsFailure(r.error, describe(r.error))
+        }
+        _noteTargets.value = t
+        return t
+    }
+
+    /**
+     * A chat line that starts with `#log`, `#obs`, `#joplin` (and the rest of
+     * [com.jarvis.client.net.NoteCapture.PREFIXES]) files the rest as a note
+     * instead of asking Jarvis - the desktop's quickbar does the same.
+     *
+     * Asks the desktop which note apps are set up first, then follows the
+     * desktop's own decision ([com.jarvis.client.net.NoteCapture.chatNote]):
+     * an app the PC says is not set up, or an empty note, is refused here
+     * with nothing sent. Otherwise [fileNote] sends it, and reports how it
+     * ended in the desktop's words.
+     *
+     * @return true once the note was accepted (filed, or waiting for its
+     *   card), so the caller can clear the chat box; false keeps the words.
+     */
+    suspend fun fileChatNote(p: com.jarvis.client.net.NoteCapture.Prefixed): Boolean =
+        when (val plan = com.jarvis.client.net.NoteCapture.chatNote(p, noteTargets())) {
+            is com.jarvis.client.net.NoteCapture.ChatNote.NotFiled -> {
+                _notice.value = plan.why
+                false
+            }
+            is com.jarvis.client.net.NoteCapture.ChatNote.File ->
+                fileNote(plan.target, plan.text) is ApiResult.Ok
         }
 
     // ------------------------------------------------------------- wiki ----

@@ -43,6 +43,7 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
@@ -509,6 +510,7 @@ class MainActivity : FragmentActivity() {
         // request out, and what that request came back with - held like the
         // wake word's busy/notice pair, for the same reason.
         val secondCard by JarvisRuntime.secondCard.collectAsState()
+        val noteTargets by JarvisRuntime.noteTargetsKnown.collectAsState()
         var secondCardBusy by remember { mutableStateOf<String?>(null) }
         var secondCardNotice by remember { mutableStateOf<String?>(null) }
         // Held here rather than in JarvisRuntime: a one-shot read the Brain
@@ -1463,6 +1465,7 @@ class MainActivity : FragmentActivity() {
                             pictureOffered = SecondCard.visionAvailable(secondCard),
                             pictureLine = picture.value?.let { ChatPicture.attachedLine(it) },
                             pictureBusy = pictureBusy.value,
+                            noteTargets = noteTargets,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1486,7 +1489,20 @@ class MainActivity : FragmentActivity() {
                                 onSend = {
                                     val text = draft
                                     val pic = picture.value
-                                    if (pic == null) {
+                                    // `#log`, `#obs`, `#joplin` ... at the start
+                                    // files the rest as a note instead of asking
+                                    // Jarvis, as on the desktop. An attached
+                                    // picture stays for the next question. The
+                                    // words stay in the box unless the desktop
+                                    // took the note.
+                                    val note = NoteCapture.prefixed(text)
+                                    if (note != null) {
+                                        scope.launch {
+                                            if (JarvisRuntime.fileChatNote(note) && draft == text) {
+                                                draft = ""
+                                            }
+                                        }
+                                    } else if (pic == null) {
                                         draft = ""
                                         scope.launch { chat.send(text) }
                                     } else {

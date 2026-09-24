@@ -355,6 +355,12 @@ data class HomeState(
     val pictureLine: String? = null,
     /** True while a picked photo is being made small enough to send. */
     val pictureBusy: Boolean = false,
+    /**
+     * Which note apps the desktop said are set up, as last asked, or null
+     * before it answered. For the line under the chat box while a `#log` /
+     * `#obs` / `#joplin` line is typed ([NoteCapture.chip]).
+     */
+    val noteTargets: NoteCapture.Targets? = null,
 )
 
 @Immutable
@@ -1650,6 +1656,24 @@ private fun QuickNotePlate(open: Boolean, actions: HomeActions) {
                 )
             }
         }
+        // The chat box takes the same notes: a prefix per app that is set
+        // up, as the desktop's help list shows them.
+        val primer = NoteCapture.primer(targets)
+        if (primer.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Or start a message to Jarvis with:",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+            for ((prefix, what) in primer) {
+                Text(
+                    "$prefix  $what",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo,
+                )
+            }
+        }
         Quiet("Close", color = chrome.textMid, enabled = !sending,
             onClick = { actions.onQuickNoteOpenChange(false) })
     }
@@ -1962,6 +1986,9 @@ private fun Composer(
     } else if (state.pictureLine != null) {
         VoiceStrip(state.pictureLine, tone = chrome.textMid, onDismiss = actions.onRemovePicture)
     }
+    // A `#log` / `#obs` / `#joplin` line is filed, not asked - said while it
+    // is typed, as the desktop's chip beside its prompt does.
+    NoteCapture.chip(text, state.noteTargets)?.let { VoiceStrip(it, tone = chrome.textMid) }
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
