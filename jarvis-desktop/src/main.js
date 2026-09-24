@@ -2272,6 +2272,11 @@ async function send(promptText) {
   state.turnMark = "none";
   paintAnswerMark();
   spokenUpTo = 0;
+  // "Stop" silences one turn, not every turn after it: a new question is
+  // allowed to be answered out loud again. Cleared only past the guard
+  // above, so a push-to-talk barge-in whose send() was refused because the
+  // old answer is still streaming leaves that old answer muted.
+  speechMuted = false;
   // A new answer starts from no blocks, or the first paragraph of the second
   // reply never gets its entrance.
   paintedBlocks = 0;
@@ -2487,7 +2492,7 @@ function finishStream(phase, statusText) {
   // leaves behind.
   const wasVoiceTurn = state.voiceTurn;
   state.voiceTurn = false;
-  if (wasVoiceTurn && phase !== "error") {
+  if (wasVoiceTurn && phase !== "error" && !speechMuted) {
     const remainder = state.buffer.slice(spokenUpTo).trim();
     if (remainder) enqueueSpeech(remainder);
   }
@@ -2605,6 +2610,19 @@ let spokenUpTo = 0;
 let speechQueue = [];
 let speaking = false;
 let currentAudio = null;
+/** Set by "stop" (`stopSpeaking`) for the rest of the turn it landed in, and
+ *  cleared only by the next `send()`. Without it, "stop" silenced only the
+ *  sentence playing at that moment: the stream was still open, so the next
+ *  complete sentence - and the tail in `finishStream` - queued itself again
+ *  a moment later and Jarvis carried on talking. */
+let speechMuted = false;
+/** Bumped by every `stopSpeaking`. A `speak_reply` that was already on its
+ *  way to the backend when "stop" landed comes back with an older number,
+ *  and its clip is dropped instead of played. */
+let speechGeneration = 0;
+/** Settles the "wait for this clip to end" promise of whatever is playing,
+ *  so a clip cut off by "stop" does not leave that wait pending forever. */
+let finishCurrentClip = null;
 
 /** A rough pass at making streamed markdown speakable. Not a renderer - just
  *  enough that "**bold**" is not read aloud as "asterisk asterisk bold
@@ -2630,7 +2648,7 @@ function stripMarkdownForSpeech(text) {
  *  against "Dr." or "3.14" - a real sentence splitter is more machinery
  *  than a queue that is, worst case, a little choppier warrants. */
 function checkForSpeakableSentence() {
-  if (!state.voiceTurn) return;
+  if (!state.voiceTurn || speechMuted) return;
   for (;;) {
     const unspoken = state.buffer.slice(spokenUpTo);
     const match = unspoken.match(/^([\s\S]*?[.!?])\s+/);
@@ -2641,6 +2659,7 @@ function checkForSpeakableSentence() {
 }
 
 function enqueueSpeech(text) {
+  if (speechMuted) return;
   const clean = stripMarkdownForSpeech(text);
   if (!clean) return;
   speechQueue.push(clean);
@@ -2652,37 +2671,62 @@ function enqueueSpeech(text) {
  *  error banner over a perfectly good answer already on screen. */
 async function drainSpeechQueue() {
   if (speaking) return;
+  if (speechMuted) {
+    speechQueue = [];
+    return;
+  }
   const next = speechQueue.shift();
   if (next === undefined) return;
   speaking = true;
+  const generation = speechGeneration;
   try {
     const dataUri = await invokeStrict("speak_reply", { text: next });
-    currentAudio = new Audio(dataUri);
-    await currentAudio.play();
+    // "Stop" may have landed while the backend was making this clip. If it
+    // did, the clip is dropped here - playing it now would be exactly the
+    // sentence the owner just asked Jarvis to stop saying.
+    if (generation !== speechGeneration || speechMuted) return;
+    const audio = new Audio(dataUri);
+    currentAudio = audio;
+    await audio.play();
     await new Promise((resolve) => {
-      if (!currentAudio) return resolve();
-      currentAudio.onended = resolve;
-      currentAudio.onerror = resolve;
+      if (currentAudio !== audio) return resolve();
+      finishCurrentClip = resolve;
+      audio.onended = resolve;
+      audio.onerror = resolve;
     });
   } catch (error) {
     console.info("[quickbar] spoken reply unavailable:", error);
   } finally {
-    currentAudio = null;
-    speaking = false;
-    drainSpeechQueue();
+    // A drain that "stop" overtook leaves the bookkeeping alone: stopSpeaking
+    // already reset it, and a newer drain may own it by now.
+    if (generation === speechGeneration) {
+      currentAudio = null;
+      finishCurrentClip = null;
+      speaking = false;
+      drainSpeechQueue();
+    }
   }
 }
 
-/** Barge-in: discards anything still queued and stops whatever is playing
- *  right now, immediately - called the moment the owner starts talking
- *  again, on either listening mode. */
+/** Barge-in: discards anything still queued, stops whatever is playing right
+ *  now, drops a clip still being made, and keeps the rest of this reply
+ *  quiet even though it is still streaming in - called the moment the owner
+ *  starts talking again, on either listening mode, and when the card
+ *  closes. The next `send()` lets Jarvis speak again. */
 function stopSpeaking() {
+  speechMuted = true;
+  speechGeneration += 1;
   speechQueue = [];
   if (currentAudio) {
     currentAudio.onended = null;
     currentAudio.onerror = null;
     currentAudio.pause();
     currentAudio = null;
+  }
+  if (finishCurrentClip) {
+    const finish = finishCurrentClip;
+    finishCurrentClip = null;
+    finish();
   }
   speaking = false;
 }

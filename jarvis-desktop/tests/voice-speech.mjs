@@ -137,6 +137,101 @@ await check("barge-in via automatic listening's voice-speech-started stops a que
     `voice-speech-started did not clear the queue: ${JSON.stringify(spoken)}`);
 });
 
+// T1 (audit 3): "stop" used to silence only the sentence playing at that
+// moment. The tests above queue every sentence BEFORE the barge-in, so they
+// passed while the real case - the answer still streaming when the owner
+// says "stop" - kept talking: the next sentence, and the tail, queued
+// themselves again a moment later. These keep the stream open across the
+// stop with a run of empty chunks (each one a real event-loop tick).
+const filler = (n) => Array.from({ length: n }, () => delta(""));
+const recordPlays = (page) => page.evaluate(() => {
+  window.__played = 0;
+  const play = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function (...args) {
+    window.__played += 1;
+    return play.apply(this, args);
+  };
+});
+
+await check("\"stop\" while the answer is still streaming silences the REST of it, tail included", async () => {
+  const page = await quickbar({
+    heard: K.HEARD_OWNER,
+    chatReplies: [[delta("One. "), ...filler(300), delta("Two. "), delta("Three, the tail")]],
+    speakDelayMs: 20,
+  });
+  await page.locator("#voice-auto").click();
+  await page.waitForTimeout(100);
+  await page.evaluate((heard) => window.__emit("voice-heard", heard), K.HEARD_OWNER);
+  await page.waitForTimeout(80);
+  const before = await speakCalls(page);
+  const streaming = await page.evaluate(() => !document.querySelector("#stop").hidden);
+  await page.evaluate(() => window.__emit("voice-speech-started", null));
+  await page.waitForTimeout(2000);
+  const spoken = await speakCalls(page);
+  await page.close();
+  assert.deepEqual(before, ["One."], `the scenario did not start speaking: ${JSON.stringify(before)}`);
+  assert.ok(streaming, "the stream had already ended before the stop - this proves nothing");
+  assert.deepEqual(spoken, ["One."], `sentences after "stop" were still spoken: ${JSON.stringify(spoken)}`);
+});
+
+await check("a clip still being made when \"stop\" lands is dropped, not played", async () => {
+  const page = await quickbar({
+    heard: K.HEARD_OWNER,
+    chatReplies: [[delta("One. ")]],
+    speakDelayMs: 250, // "One." is still at the backend when the stop arrives
+  });
+  await recordPlays(page);
+  await page.locator("#voice-auto").click();
+  await page.waitForTimeout(100);
+  await page.evaluate((heard) => window.__emit("voice-heard", heard), K.HEARD_OWNER);
+  await page.waitForTimeout(60);
+  const asked = await speakCalls(page);
+  await page.evaluate(() => window.__emit("voice-speech-started", null));
+  await page.waitForTimeout(600);
+  const played = await page.evaluate(() => window.__played);
+  await page.close();
+  assert.deepEqual(asked, ["One."], "speak_reply was not in flight when the stop landed");
+  assert.equal(played, 0, "the clip that came back after \"stop\" was played anyway");
+});
+
+await check("push-to-talk barge-in mutes the old answer even while it is still streaming", async () => {
+  const page = await quickbar({
+    heard: K.HEARD_OWNER,
+    chatReplies: [[delta("One. "), ...filler(300), delta("Two. "), delta("Three, the tail")]],
+    speakDelayMs: 20,
+  });
+  await holdAndRelease(page);
+  await page.waitForTimeout(60);
+  await page.hover("#mic");
+  await page.mouse.down(); // barge in: hold the mic again
+  await page.waitForTimeout(80);
+  await page.mouse.up(); // the new question is refused while the old answer streams
+  await page.waitForTimeout(2000);
+  const spoken = await speakCalls(page);
+  await page.close();
+  assert.ok(!spoken.includes("Two.") && !spoken.includes("Three, the tail"),
+    `the old answer kept talking after the barge-in: ${JSON.stringify(spoken)}`);
+});
+
+await check("CONTROL: after a \"stop\", the NEXT voice question is answered out loud again", async () => {
+  const page = await quickbar({
+    heard: K.HEARD_OWNER,
+    chatReplies: [[delta("One. "), delta("Two. ")], [delta("Next answer. ")]],
+    speakDelayMs: 20,
+  });
+  await page.locator("#voice-auto").click();
+  await page.waitForTimeout(100);
+  await page.evaluate((heard) => window.__emit("voice-heard", heard), K.HEARD_OWNER);
+  await page.waitForTimeout(10);
+  await page.evaluate(() => window.__emit("voice-speech-started", null));
+  await page.waitForTimeout(500);
+  await page.evaluate((heard) => window.__emit("voice-heard", heard), K.HEARD_OWNER);
+  await page.waitForTimeout(500);
+  const spoken = await speakCalls(page);
+  await page.close();
+  assert.ok(spoken.includes("Next answer."), `the next turn stayed muted: ${JSON.stringify(spoken)}`);
+});
+
 await check("CONTROL: no page error from any of the above", async () => {
   const page = await quickbar({ heard: K.HEARD_OWNER, chatReplies: [[delta("Fine. ")]] });
   await holdAndRelease(page);
