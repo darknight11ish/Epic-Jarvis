@@ -168,7 +168,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `hello` | Reads link state, re-fetches on `stale` (`stream.rs:452`) | Nothing — arrives as `Signal.Open` instead (`JarvisRuntime.kt:700`) |
 | `approval` | Re-fetches `/api/pending` once for all three surfaces (`stream.rs:518`) | Re-fetches pending (`JarvisRuntime.kt:668`) |
 | `attention` | Applies the payload directly (`stream.rs:511`) | Re-fetches `/api/attention` (`JarvisRuntime.kt:669`) |
-| `activity` | Updates activity + detail (`stream.rs:520`) | Reads `activity_detail` off the event, re-fetches status (`JarvisRuntime.kt:670-679`) |
+| `activity` | Updates activity + detail. The sentence is read from `value.detail` (the rebuilt bus's `set_activity` shape), then a top-level `detail`, then `activity_detail` (`stream.rs`, `activity_detail()`) | Reads the sentence off the event the same way - `value.detail` first, then `detail`, then `activity_detail` (`net/ActivityEvent.kt`) - and re-fetches status (`JarvisRuntime.onEvent`). Before 2026-09-24 it read only `activity_detail`, which no backend sends |
 | `power` | Updates power mode (`stream.rs:529`) | Re-fetches status (`JarvisRuntime.kt:682`) |
 | `persona` | Fanned out verbatim | Re-fetches status (`JarvisRuntime.kt:682`) |
 | `finding` | Fanned out verbatim | Ignored — the digest covers these (`JarvisRuntime.kt:683`) |
@@ -178,6 +178,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
 | `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Falls through to "unhandled" |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
+| `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
 bell (`stream.rs:506-511`).
@@ -441,11 +442,33 @@ only what Jarvis itself said it did.
 | `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"` | **no** | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
 | `/api/voice/turn` | POST | **WAV bytes** (the last few seconds of speech) | `voice.rs` `ask_turn` | **no** (runs the model itself) | Smart Turn: `{"available", "complete", "probability", "threshold", "ms"}`. Sound in, one number out; nothing kept. `voice-turn.patch`. |
 
-**The audio format is fixed and the server will not convert.** 16 kHz,
-16-bit, mono PCM in a WAV container, resampled on the client. The phone's
-comment at `JarvisApi.kt:556-562` gives the reason: these are bytes arriving
-from the network *before* the gate, and a resampler is the last thing that
-code should be carrying.
+**The audio format: 16-bit PCM in a WAV container. The two apps send
+different rates, and the server copes with both** (checked against the code
+on 2026-09-24):
+
+- **The phone** sends 16 kHz mono. It records at 16 kHz when the phone
+  allows it, and otherwise records at a rate the phone does allow and
+  resamples on the phone before sending (`audio/Recorder.kt`,
+  `Wav.resample`).
+- **The desktop** sends whatever the microphone gives it: the default input
+  device's own sample rate and channel count, 16-bit (`voice.rs`,
+  `open_input_stream`, which builds the WAV header from
+  `default_input_config()`). A 48 kHz stereo headset arrives as 48 kHz
+  stereo. **Pending:** the desktop is being changed to downmix to mono and
+  resample to 16 kHz before sending, so both apps send the same thing.
+- **The server** reads any 16-bit PCM WAV (`jarvis_speech._read_wav`;
+  anything else - 8-bit, 24-bit, float - is refused as unreadable), averages
+  the channels down to mono, and resamples where a model needs 16 kHz
+  (`jarvis_wakeword.to_16k` for the speech check; the speech-to-text and
+  voice-print models are told the real rate and resample themselves).
+
+Two places still say the old rule ("fixed at 16 kHz mono, and the server
+will not convert"): the phone's comment on `JarvisApi.utterance`, and
+`AUDIO_IN` in `jarvis_speech.py`, which `/api/voice/status` reports. The
+reason they gave still stands as a goal - these are bytes arriving from the
+network *before* the gate, so the less that code has to do, the better -
+which is why the desktop is being changed to match the phone rather than the
+other way round.
 
 **503 from `/api/voice/say` means "there is no speech engine here", not
 "failed."** Speaking text the client already holds reveals nothing and skips
