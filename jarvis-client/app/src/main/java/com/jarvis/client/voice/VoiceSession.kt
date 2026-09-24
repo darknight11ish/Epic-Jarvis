@@ -138,8 +138,16 @@ class VoiceSession(
      * Silences the reply being spoken - and nothing else. The turn carries
      * on (the answer still arrives on screen); only the voice stops, for the
      * rest of this turn. The one thing the stop word may do.
+     *
+     * "For the rest of this turn" is held by the turn's own
+     * [Turn.silenced], not only by the speaker's stop flag. Before, the
+     * later sentences still went to the PC's say route one by one (the PC
+     * made audio nobody would hear), and when the PC had no voice the
+     * phone's own voice refused them - which was then reported as "No
+     * offline voice on this phone", a false notice.
      */
     fun stopSpeaking() {
+        current?.silenced = true
         speaker.stop()
         _speakingText.value = null
     }
@@ -186,6 +194,9 @@ class VoiceSession(
      */
     private class Turn {
         @Volatile var releaseRequested = false
+
+        /** "Stop" was said: nothing more of this turn's reply is spoken. See [stopSpeaking]. */
+        @Volatile var silenced = false
     }
 
     private var current: Turn? = null
@@ -625,6 +636,9 @@ class VoiceSession(
      * screen is an acceptable outcome; uploading it is not.
      */
     private suspend fun speak(turn: Turn, text: String) {
+        // Stopped this turn: not spoken, not even asked of the PC. The reply
+        // is still on screen; only the voice was told to stop.
+        if (turn.silenced) return
         _speakingText.value = text
         recentSpeech.started(text)
         try {
@@ -636,7 +650,10 @@ class VoiceSession(
     }
 
     private suspend fun speakNow(turn: Turn, text: String) {
-        when (val said = api.say(text)) {
+        val said = api.say(text)
+        // "Stop" may have landed while the PC was making the audio.
+        if (turn.silenced) return
+        when (said) {
             is ApiResult.Ok -> when (val out = said.value) {
                 is SaidAloud.Audio -> speaker.play(out.wav)
                 is SaidAloud.NoEngine -> {
@@ -651,13 +668,10 @@ class VoiceSession(
                     val spoke = runCatching { speaker.speakOnDevice(text) }
                         .onFailure { Log.w(TAG, "on-device synthesis failed", it) }
                         .getOrDefault(false)
-                    if (!spoke) {
-                        setNotice(
-                            turn,
-                            "No offline voice on this phone, so it was not spoken aloud. " +
-                                "The reply is on screen.",
-                        )
-                    }
+                    // `speakOnDevice` also returns false when it was stopped;
+                    // only a real failure is reported as one.
+                    SpokenNotice.afterOnDevice(spoke, stoppedThisTurn = turn.silenced)
+                        ?.let { setNotice(turn, it) }
                 }
             }
             // Deliberately no fallback. `client_fallback_ok` is the only thing

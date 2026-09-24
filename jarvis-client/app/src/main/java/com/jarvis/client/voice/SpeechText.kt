@@ -70,3 +70,23 @@ internal object SpeechText {
         .replace(HEADING, "")
         .trim()
 }
+
+/**
+ * What the phone says about a sentence it did not speak - pure, so the rule
+ * is tested (`SpeechTextTest`).
+ */
+internal object SpokenNotice {
+
+    const val NO_OFFLINE_VOICE =
+        "No offline voice on this phone, so it was not spoken aloud. The reply is on screen."
+
+    /**
+     * After this phone's own voice was tried for one sentence. Null when it
+     * spoke - and null when the owner said "stop" this turn: a stopped voice
+     * returns "not spoken" too, and that used to be reported as this phone
+     * having no offline voice, which is false and sends the owner looking for
+     * a problem that does not exist.
+     */
+    fun afterOnDevice(spoke: Boolean, stoppedThisTurn: Boolean): String? =
+        if (spoke || stoppedThisTurn) null else NO_OFFLINE_VOICE
+}

@@ -120,4 +120,15 @@ class SpeechTextTest {
     fun `plain text with no markdown is unchanged`() {
         assertEquals("Nothing special here.", clean("Nothing special here."))
     }
+
+    /** T6: after "stop", a sentence not spoken is not blamed on a missing voice. */
+    @Test
+    fun `no offline voice is said only when the phone's voice really failed`() {
+        assertEquals(
+            com.jarvis.client.voice.SpokenNotice.NO_OFFLINE_VOICE,
+            com.jarvis.client.voice.SpokenNotice.afterOnDevice(spoke = false, stoppedThisTurn = false),
+        )
+        assertEquals(null, com.jarvis.client.voice.SpokenNotice.afterOnDevice(spoke = false, stoppedThisTurn = true))
+        assertEquals(null, com.jarvis.client.voice.SpokenNotice.afterOnDevice(spoke = true, stoppedThisTurn = false))
+    }
 }
