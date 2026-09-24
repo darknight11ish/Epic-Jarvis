@@ -139,7 +139,8 @@ export function approvalsNote(where) {
 
 export function privateDetail() {
   return "The Brain's memory lists - what Jarvis knows about you, and facts " +
-    "waiting for you - stay hidden until you press Show and pass Windows Hello. " +
+    "waiting for you - and your chat history stay hidden until you press Show " +
+    "and pass Windows Hello. " +
     "The Galaxy picture and answers in the Jarvis bar are not hidden.";
 }
 
@@ -161,8 +162,8 @@ export function savedLine(prev, next) {
   }
   if (a.privateAnswers !== b.privateAnswers) {
     return b.privateAnswers
-      ? "The Brain's memory lists are hidden until you press Show."
-      : "The Brain's memory lists are shown without asking.";
+      ? "The Brain's memory lists and chat history are hidden until you press Show."
+      : "The Brain's memory lists and chat history are shown without asking.";
   }
   return "Nothing changed.";
 }

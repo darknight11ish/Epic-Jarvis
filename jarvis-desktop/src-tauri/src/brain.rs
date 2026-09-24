@@ -35,6 +35,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::commands;
 
+pub mod history;
 mod routes;
 use routes::{first_line, route_for};
 

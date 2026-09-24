@@ -397,7 +397,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -1010,6 +1010,74 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               ? { available: true, facts: [{ id: 7, text: "Works in Europe/London.", valid_to: null }] }
               : { available: true, known_at: args.when,
                   facts: [{ id: 4, text: "Standing desk arrives in March.", valid_to: null }] };
+          // Chat history (brain/history.rs, JARVIS-API.md section 18). The
+          // mock answers the way the four Rust commands do: a page of
+          // conversations newest first (`before` exclusive), the list
+          // emptied while private answers are hidden, ON as a 202 card when
+          // `waits`, and every write recorded in `window.__history`.
+          case "brain_history_list": {
+            const h = window.__history;
+            h.reads.push({ before: args.before, limit: args.limit });
+            if (h.listFails) throw new Error(h.listFails);
+            if (h.missing) {
+              return { available: false, why: "This PC's Jarvis does not keep chat history yet. " +
+                "Update the backend by running apply-patches.ps1, then open this again." };
+            }
+            const all = [...h.conversations].sort((a, b) => b.updated - a.updated);
+            const older = args.before == null ? all : all.filter((c) => c.updated < args.before);
+            const page = older.slice(0, args.limit || 30);
+            const out = JSON.parse(JSON.stringify({ ...h.status, conversations: page }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              out.hidden = true;
+              out.hidden_count = out.conversations.length;
+              out.conversations = [];
+            }
+            return out;
+          }
+          case "brain_history_open": {
+            const h = window.__history;
+            h.opened.push(args.id);
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              throw new Error("Your chat history is hidden. Press Show on the Brain's History tab " +
+                "and confirm it is you with Windows Hello first.");
+            }
+            const t = h.transcripts[args.id];
+            if (!t) {
+              throw new Error("That conversation is no longer kept on this PC. It was deleted, " +
+                "or it was older than the keep setting.");
+            }
+            return JSON.parse(JSON.stringify(t));
+          }
+          case "brain_history_delete": {
+            const h = window.__history;
+            h.deleted.push(args.id);
+            const had = h.conversations.some((c) => c.id === args.id);
+            h.conversations = h.conversations.filter((c) => c.id !== args.id);
+            return had ? { ok: true } : { ok: true, gone: true };
+          }
+          case "brain_history_settings": {
+            const h = window.__history;
+            h.settings.push({ enabled: args.enabled, keepDays: args.keepDays });
+            if (h.settingsFails) throw new Error(h.settingsFails);
+            if (args.enabled === true) {
+              if (h.waits) {
+                h.status.waiting = true;
+                return { ok: true, waiting: true, enabled: false,
+                         message: "Waiting for your approval. Chat history turns on only if you approve the card, on your PC or phone." };
+              }
+              Object.assign(h.status, { enabled: true, recording: true, why_not: "", waiting: false });
+              return { ok: true, enabled: true };
+            }
+            if (args.enabled === false) {
+              Object.assign(h.status, { enabled: false, recording: false, waiting: false,
+                                        why_not: "Chat history is off." });
+              return { ok: true, enabled: false };
+            }
+            h.status.keep_days = args.keepDays;
+            return { ok: true, keep_days: args.keepDays, deleted: h.deletedByKeep || 0 };
+          }
           default: return null;
         }
       },
@@ -1109,6 +1177,16 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                     ...(caps || {}) };
   window.__vision = vision || { model: "qwen3:8b", vision: false,
     reason: "Ollama lists what qwen3:8b can do, and pictures are not on the list." };
+  // Unset, history as the owner has it by default: on, recording, kept
+  // until deleted, and nothing kept yet.
+  window.__history = JSON.parse(JSON.stringify({
+    missing: false, waits: false, listFails: null, settingsFails: null, deletedByKeep: 0,
+    conversations: [], transcripts: {},
+    ...(history || {}),
+    status: { enabled: true, recording: true, why_not: "", waiting: false, keep_days: 0,
+              encrypted: true, ...((history && history.status) || {}) },
+  }));
+  Object.assign(window.__history, { reads: [], opened: [], deleted: [], settings: [] });
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;

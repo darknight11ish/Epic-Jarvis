@@ -1299,3 +1299,140 @@ body {
   border: var(--stroke-hair) solid var(--border-strong);
   text-align: left;
 }
+
+/* ---- History (chat history on the PC; history-view.js) ------------------ */
+
+.history-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.history-switch input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.history-switch input:disabled + .history-switch-label {
+  color: var(--text-muted);
+}
+
+.history-switch-detail {
+  margin: 4px 0 10px 24px;
+}
+
+/* "Waiting for your approval" - the learning switch's own line. */
+.history-waiting {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+/* Why nothing new is being kept: said plainly, in the warning colour's
+   border and the text's own colour, so it reads in greyscale too. */
+.history-why-not {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--warn);
+  background: var(--warn-faint);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.history-keep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.history-marks {
+  display: flex;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+/* A mark is a word first: "voice", "read outside text". */
+.history-mark {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  padding: 0 6px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  color: var(--text-muted);
+}
+
+.history-mark-taint {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.history-more {
+  padding-top: 8px;
+}
+
+/* One conversation, read-only, under its row. The text is the owner's and
+   the model's words, set as text (history-view.js), wrapped as written. */
+.history-transcript {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+}
+
+.history-taint-note {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.history-turns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-turn-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+
+.history-who {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.history-turn[data-role="assistant"] .history-who {
+  color: var(--accent);
+}
+
+.history-when,
+.history-from {
+  color: var(--text-faint);
+}
+
+.history-from {
+  font-style: italic;
+}
+
+.history-text {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
