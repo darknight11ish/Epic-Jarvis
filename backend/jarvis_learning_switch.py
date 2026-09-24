@@ -39,9 +39,11 @@ ACTION = "learning_enable"
 CARD_TEXT = "\n".join([
     "Turn on learning.",
     "",
-    "Jarvis will read what you say to it, in the background on this PC, and "
-    "suggest facts to remember about you. Nothing is remembered until you "
-    "accept each suggestion in the Memory review.",
+    "Jarvis will read what you type or say to it, in the background on this "
+    "PC, and learn facts about you. With \"Learn automatically\" on, facts "
+    "from your own words are saved without asking - each one is listed with "
+    "a Forget - and everything else, including sensitive topics, waits for "
+    "your yes in the Memory review.",
     "",
     "Nothing leaves this PC. You can turn learning off at any time from either "
     "app, and that is instant.",
