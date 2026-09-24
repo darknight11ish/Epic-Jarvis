@@ -1,2 +1,2 @@
 Jarvis.
-Your own voice assistant, running on your own PC — never sends your private life to anyone else's cloud, and asks before it acts. Every time.
+A voice assistant that lives on my own PC, never sends my private life to anyone else's cloud, and asks before it acts. Every time. Your assistant. Your PC. Your rules.

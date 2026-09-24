@@ -1,178 +1,151 @@
-# Brag Plan: Jarvis
+# Brag Plan: Jarvis (v2 — "cut to the beat")
+
+## Why a second version
+The first render was judged "lame" by the owner: too static and plain, too slow
+(few cuts, long holds), and the cinematic tone read as flat. It also drew a
+lookalike face instead of the real one. This version fixes each of those:
+
+| Problem in v1 | Fix in v2 |
+|---|---|
+| Static / plain | Real registry-style effects: RGB-split hits, glitch cuts, scramble-decode type, film grain, HUD telemetry, anamorphic flare, camera push-ins |
+| Too slow | 30+ cuts in 25s, every cut on a beat of a 120 BPM grid; montage at 0.5s per shot |
+| Tone off | Freeform "sci-fi trailer, cut to the beat" instead of the slow cinematic preset |
+| Fake face | The actual reactor faces, lifted verbatim from `jarvis-desktop/src/faces.html` (Arc, Orbit, Geodesic, Rime, Fullerene, Spiral, Orbital) and driven frame-by-frame |
+| Happy stock music | Original synthesized dark trailer score, built on the same timing table as the picture |
 
 ## What is this app?
-A private, local-first personal assistant — a Windows desktop app and an Android
-phone app — that runs its AI model on the owner's own PC and graphics card, and
-asks before it does anything with outside effects.
+Jarvis is a private voice assistant that lives on your own PC, with a living
+reactor face on the desktop and the phone, that asks before it acts.
 
 ## The angle
-Play it straight, like a product film for something serious: a dark reactor
-face glowing on a black screen, a wake word, and a system that always asks
-before it acts. The claim ("nothing leaves the room") is the whole hook — no
-jokes needed, just confident, precise delivery. Every visual comes from the
-real product: the actual reactor-face states and colours from
-`jarvis-visual-spec.json`, the real approval-card countdown copy
-("Expires in Xm Ys"), and the real closing line the owner chose.
+A sci-fi reactor that is real. The face on screen is the shipped renderer,
+not an illustration. Every claim is a feature that exists today. The drama
+comes from the reactor changing state on the beat, and from the one moment the
+music stops dead when you say "stop".
 
 ## Hook (first 2-3 seconds)
-Near-black frame. A single glowing face — cold cyan, idle — sits alone in the
-dark. Text slams in: **"Hey Jarvis."** A beat. Then: **"Nothing leaves the
-room."**
+Black. A point of light. The Arc reactor ignites and spins up (0-2s). On the
+first downbeat (2.0s) it snaps to listening-ember as **"Hey Jarvis."** slams
+in with an RGB split. Then **"Nothing leaves the room."**
 
 ## Key moments (the middle)
-Three highlights, chosen because they are the most visual features in the
-brief and the ones with real, screenshot-able UI already in the repo:
-
-- **Voice** — the wake word, the face shifting into its warm "listening"
-  state, and the line "Speech is understood on the PC, not the cloud."
-- **Animated faces** — the reactor face changing state/colour (idle →
-  listening → thinking → speaking), gesturing at the "several styles and
-  colour themes" the desktop and phone share.
-- **Approval cards** — a card sliding in with a live countdown ("Expires in
-  45s"), swiped to a decision, landing the "asks first, every time" claim.
+- The face is alive: a 0.5s-per-shot montage of real faces (Geodesic, Rime,
+  Fullerene, Spiral), then the Arc hero changing state on the beat:
+  **IT LISTENS.** (ember) → **IT THINKS.** (the violet sweep from the owner's
+  screenshot) → **IT SPEAKS.** (ice).
+- Interrupt it: Jarvis is reading a note aloud, the owner says **"STOP."**, and
+  the music, the text and the face all cut on the same frame.
+- It asks first: "Lock the front door." A phone rises with the real approval
+  card (title, "Swipe right to approve, left to deny", "Expires in 0m 47s"
+  counting down) and the face in its amber "waiting on you" state with the
+  real waiting-clock ring. A swipe approves it.
+- Your GPU, not their cloud: desktop and phone joined by a private mesh line;
+  the path to a cloud breaks.
 
 ## Outro / punchline
-Phone and desktop side by side, faces in sync, then: **"Your assistant. Your
-PC. Your rules."**
+The violet Arc fills the frame with an anamorphic streak. On three beats:
+**YOUR ASSISTANT. / YOUR PC. / YOUR RULES.** Then JARVIS.
 
 ## User flow worth showing
-1. **Entry** — the owner says "Hey Jarvis"; the reactor face wakes from idle
-   (cool cyan) into its listening state (warm amber), reacting to voice the
-   way `--state-listening` / `--state-thinking` / `--state-speaking` are
-   defined in `jarvis-desktop/src/theme.css`.
-2. **Key action** — Jarvis proposes something with an outside effect. An
-   approval card appears with a live countdown, matching the real copy in
-   `ApprovalCard.kt`'s `ExpiryCountdown` ("Expires in Xm Ys").
-3. **Result** — the card is swiped to a decision (approve), the card's gone,
-   the face settles back — nothing happened until that swipe.
+Wake word → spoken request ("Lock the front door.") → approval card on the
+phone → swipe to approve → face returns to idle.
 
 ## Tone
-- Preset: cinematic
-- Creative direction: dark, precise, a little cinematic — the reactor face
-  as hero image, calm confidence rather than hype
-- Interpretation: wide, deliberate shots; big type that lands and holds;
-  dramatic reveals rather than rapid cuts; 4-5 scenes, each given room to
-  breathe before the next begins.
+- Preset: cinematic (typography, seriousness, big claims stated plainly)
+- Creative direction: "sci-fi trailer, cut to the beat"
+- Interpretation: cinematic type and restraint in copy, but chaotic-preset
+  pacing — hard cuts on beats, 0.5-1s shots, and every line slams in fast and
+  then holds long enough to read.
 
 ## Format: landscape — 1920x1080
-## Duration: 20s target (range 18-21s)
+## Duration: 25s
 
 ## Visual identity (from the project)
-- Background: `--bg-window: rgba(8, 9, 12, 0.86)` over near-black —
-  effectively `#08090c`, per `jarvis-desktop/src/theme.css`
-- Accent: `--accent: #38f0ff` (cyan), with real face-state colours layered in:
-  `--state-idle: #2ea8cc`, `--state-listening: #ff9b52`,
-  `--state-thinking: #ae7bff`, `--state-speaking: #6fe3ff`,
-  `--state-approval: #ffb648`
-- Text: `--text: #f2f5f8`, muted `--text-muted: #a8b2c1`
-- Display font: "Chakra Petch" (real bundled font, `jarvis-desktop/src/fonts/`)
-- Body font: "Segoe UI Variable Display" / system-ui fallback
-- Strongest visual element: the reactor face itself — a glowing, animated
-  disc that changes colour and geometry with state, real to the product (20
-  named designs — Arc, Orbit, Geodesic, Spectrum, Tokamak, Swarm, Coreplate,
-  Workbench, Membrane, Nucleus, Comb, Iris, Shoal, Accretion, Cascade, Rime,
-  Orbital, Fullerene, Spiral, Kirkwood — in `jarvis-desktop/src/faces-spec.js`)
+- Background: `#04070c` (the kit's single background) / `#05070b` void
+- Accent: state colours from `jarvis-visual-spec.json` — idle ice-3 `#2ea8cc`,
+  listening ember-4 `#ff9b52`, thinking sweep (hue 217-275, azure→violet),
+  approval amber-4 `#ffb648`, speaking ice-4 `#6fe3ff`
+- Text: `#dbe7f2` ink, `#8fa3b8` dim
+- Display font: Chakra Petch 700 (bundled with the desktop app)
+- Body / HUD font: IBM Plex Mono 400/500 (bundled)
+- Strongest visual element: the Arc reactor face, thinking state
 
 ## Share copy (draft)
-Built my own Jarvis: a voice assistant that lives on my PC, answers to "Hey
-Jarvis," and never sends my private life to anyone else's cloud. It asks
-before it acts — every time.
+Jarvis: a voice assistant that lives on my own PC, never sends my private life
+to anyone's cloud, and asks before it acts. Every time.
 
 ## Audio direction
-- Role: cinematic support — a low, steady bed with restrained swells under
-  the two or three biggest visual beats
-- Music: `happy-beats-business-moves-vol-12-by-ende-dot-app.mp3` (steady and
-  clean, tempo ~110 BPM, the tones.md-recommended pick for `cinematic`)
-- Music treatment: start near-silent under the hook, hold low (~0.3) through
-  the middle, a small perceived lift into the approval-card beat, gentle
-  fade on the outro line. Never above 0.4.
-- Music cue guidance: preset read from
-  `happy-beats-business-moves-vol-12-by-ende-dot-app.music-cues.md`. Target
-  strong cues near 8.74s (Voice scene entrance) and 17.47s/18.56s (approval
-  swipe / outro line landing) — within ±0.15s, and only if it doesn't cost
-  readability. Beat grid available for any smaller staggered reveals.
-- Audio-reactive treatment: subtle — let the reactor face's glow breathe
-  gently with RMS/bass under the middle scenes; no waveform or equalizer
-  visuals.
-- SFX posture: sparse, 2-3 cues total, cinematic weight
-  (`impact/impactBell_heavy_*`, `impact/impactSoft_medium_*`) — one on the
-  face's first wake, one on the approval-card swipe, one on the final line.
-- Audio-coupled moments: the wake-word text landing, the face state
-  crossfade into listening, the approval card's swipe-to-decide gesture.
-- Restraint rule: no dense SFX stacking, no aggressive stingers — this is
-  "calm confidence," not a hype reel.
+- Role: dense rhythmic layer (trailer score)
+- Music: original synthesized score, 120 BPM, A minor. No bundled track fits:
+  all five are upbeat "business" tracks, and the larger catalog needs an
+  account login.
+- Music treatment: drone + riser into a braam on 2.0s; groove from 5.5s;
+  hard silence at 11.5s ("STOP"); rebuild; braams on 21.0 / 22.0 / 23.0;
+  sub tail to 25s.
+- Music cue guidance: cues are defined by construction (the score is written
+  to the storyboard grid). Strong cues: 2.0, 11.5, 21.0.
+- Audio-reactive treatment: subtle — the score's low-band envelope drives the
+  reactor's glow and core bloom (per-frame data exported with the score).
+- SFX posture: moderate, motion-matched: glitch ticks on montage cuts, key
+  ticks while the reply streams, card slide when the phone arrives, swipe
+  whoosh, confirmation chime on approve.
+- Restraint rule: no waveform or equaliser graphics; no strobing (every cut
+  stays within the kit's own flash limit of 3 transitions/s).
 
-## Storyboard
+## Storyboard (times in seconds; one beat = 0.5s)
 
-### Scene 1 — Hook — 3.5s
-Near-black frame (`#08090c`). A single reactor face (Arc/Coreplate-style
-disc), idle state, cool cyan (`--state-idle #2ea8cc`), sits centered and
-barely breathing. "Hey Jarvis." slams in bold Chakra Petch, holds ~1.3s, then
-"Nothing leaves the room." settles below it, holds ~1.4s.
-Sequential/interaction: none
-Audio intent: quiet, tense anticipation — almost silent until the line lands
-Audio-coupled idea: a single soft impact/bell cue under "Nothing leaves the
-room" landing
-Music: near-silent bed fading up from 0
-Transition mood: dramatic wipe → Scene 2
+### Scene 1 — Ignite — 0.0-2.0
+Black → a point of light → the Arc face (idle, ice) spins up from nothing.
+HUD brackets draw in; mono telemetry: `JARVIS // LOCAL` and a running timecode.
+Sequential/interaction: rings resolve outward. Audio: drone + riser.
+Transition: hard cut with RGB split → 2.
 
-### Scene 2 — Reveal: private by design — 4s
-The face's glow reframes to suggest a graphics card silhouette in the
-background (dark, precise, no literal hardware photo — an abstracted glow
-shape). Text arrives: "Runs on your own graphics card." then "Email, files,
-credentials, memory — never leave this PC."
-Sequential/interaction: two lines arrive in sequence, second after first
-settles
-Audio intent: steady, grounding — the bed becomes audible and even
-Audio-coupled idea: none, let the reveal carry
-Music: bed rises to ~0.3
-Transition mood: crossfade with scale (0.95→1.0) → Scene 3
+### Scene 2 — "Hey Jarvis." — 2.0-3.5
+Face snaps to listening (ember), spokes surge, camera punches in.
+Text: **"Hey Jarvis."** (2 words, 1.5s hold). Audio: braam + impact (beat-locked 2.0).
 
-### Scene 3 — Voice — 4.5s
-The reactor face shifts from idle cyan to listening amber
-(`--state-listening #ff9b52`), a visible state crossfade (per the product's
-real ~300ms colour crossfade). Text: "Hey Jarvis." appears again, smaller,
-as if spoken, then "Speech is understood on the PC. Not the cloud." A beat
-where the face shifts to a violet "thinking" tint (`--state-thinking
-#ae7bff`) suggesting it's working.
-Sequential/interaction: face state crossfades idle → listening → thinking,
-matched to the two lines of text
-Audio intent: alert, attentive — the moment the product "hears" you
-Audio-coupled idea: a soft interface tone on the state crossfade into
-listening
-Music: hold at ~0.3, nudge toward the 8.74s strong cue for the face's
-listening-state entrance
-Transition mood: clean dramatic wipe → Scene 4
+### Scene 3 — Nothing leaves the room — 3.5-5.5
+Face small at centre inside a drawn boundary ring ("the room"). Tags EMAIL /
+FILES / MEMORY / KEYS drift out, hit the boundary and bounce back.
+Text: **NOTHING LEAVES THE ROOM.** (4 words, 2.0s). Audio: pulse, glitch tick.
 
-### Scene 4 — Approval cards — 5.5s
-Split composition: phone and desktop side by side, dark background. A card
-slides in from the bottom on the phone side with a live countdown label
-("Expires in 0m 45s", matching the real `ExpiryCountdown` copy) and the face
-tints amber (`--state-approval #ffb648`) on the desktop side in sync. A
-simulated right-swipe carries the card off-screen to a green approve edge.
-Text: "It asks first. Every time." then "One card. One decision. Nothing is
-ever auto-approved."
-Sequential/interaction: yes — countdown ticks down briefly, then the swipe
-gesture resolves the card; the two devices react together
-Audio intent: the tension of a decision, then the small relief of it being
-made
-Audio-coupled idea: card-slide sound as it enters; a distinct swipe/impact
-sound on the resolve
-Music: aim the swipe-resolve near the 17.47s/18.56s strong-cue pair (±0.15s)
-Transition mood: dramatic wipe → Scene 5
+### Scene 4 — A face that's alive — 5.5-7.5
+Four hard cuts, one per beat: Geodesic, Rime, Fullerene, Spiral (real faces,
+varied states). Text held across all four: **A FACE THAT'S ALIVE.** Mono label
+per shot with the face's real name. Audio: groove starts; glitch tick per cut.
 
-### Scene 5 — Outro — 3s
-Phone and desktop rest side by side, faces settled back to idle cyan, in
-sync. Final line lands large, centered: **"Your assistant. Your PC. Your
-rules."** Long hold on the line before cut to black.
-Sequential/interaction: none
-Audio intent: a quiet landing — confidence, not triumph
-Audio-coupled idea: one restrained final impact/bell cue under the line
-Music: gentle fade down through the hold, out by the cut to black
-Transition mood: soft hold → cut to black
+### Scene 5 — States — 7.5-10.5
+Arc hero, state changes on the beat: **IT LISTENS.** (7.5) → **IT THINKS.**
+(8.5, violet sweep) → **IT SPEAKS.** (9.5). 1s each. Audio: accents per change.
 
-**Music mood for this video:** cinematic, steady, restrained
-**Audio summary:** A near-silent open that rises into a steady, even bed
-through the middle, with two gentle lifts timed to the voice and approval
-beats, fading to near-silence under the closing line — three sparse,
-cinematic-weight SFX cues carry the rest.
+### Scene 6 — Interrupt — 10.5-13.0
+Speaking. Reply streams in mono: "Today's note: pick up the new filters,
+then call —". At 11.5 **STOP.** slams; music cuts to silence; reply freezes and
+dims; face drops to idle. 12.0: **Interrupt it mid-sentence.** Small HUD line:
+`SPEECH UNDERSTOOD ON YOUR PC`. Audio: key ticks, then silence (beat-locked 11.5).
+
+### Scene 7 — It asks first — 13.0-18.0
+13.0: spoken request `"Lock the front door."` 14.0: phone rises with the
+approval card; face on the phone in approval state (amber + waiting clock);
+countdown ticks "Expires in 0m 47s → 44s". Text **IT ASKS FIRST.** 15.5: swipe
+right; card leaves; ✓ Approved; face → idle. 16.0: **ONE CARD. ONE DECISION.**
++ mono `NEVER AUTO-APPROVED`. Audio: card slide, swipe, chime.
+
+### Scene 8 — Your GPU, not their cloud — 18.0-21.0
+Desktop window (Arc widget) and phone, joined by a glowing private-mesh line
+with packets; a dashed path up to a cloud glitches and breaks. Text:
+**YOUR GPU. NOT THEIR CLOUD.** then **EMAIL. FILES. MEMORY. STAY LOCAL.**
+Mono: `PRIVATE MESH · NEVER THE PUBLIC INTERNET`. Audio: impact 18.0, riser.
+
+### Scene 9 — Your rules — 21.0-25.0
+Violet Arc fills frame, push-in, anamorphic streak. **YOUR ASSISTANT.** (21.0)
+**YOUR PC.** (22.0) **YOUR RULES.** (23.0), stacked and held; JARVIS (24.0);
+fade to black. Audio: three braams, sub tail.
+
+## Hard rules check (from the owner's brief)
+- No speeds, benchmark, or accuracy numbers. (The only numbers on screen are
+  the approval countdown, which is product UI, and the HUD timecode.)
+- No competitor names. No Play Store. Nothing from "waiting for hardware" or
+  "planned" is shown.
+- No personal details: sample request "Lock the front door." and sample note
+  are obviously generic; no device names, usernames, addresses or tokens.
