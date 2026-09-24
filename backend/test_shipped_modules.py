@@ -77,6 +77,7 @@ THIRD_PARTY = {
 NOT_SHIPPED = {
     "_where.py": "test plumbing",
     "_skeleton.py": "a template for new suites",
+    "_stack.py": "test plumbing: the whole patch stack's stand-in for an owner's file",
     "_config_diff.py": "run by apply-patches.ps1 from this repository",
     "run_suites.py": "CI's test runner",
     "selftest.py": "run from this repository against the backend",
