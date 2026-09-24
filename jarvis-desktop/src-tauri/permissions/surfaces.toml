@@ -250,6 +250,11 @@ permissions = [
   # switch.
   "allow-get-big-model",
   "allow-set-big-model",
+  # "Voice": what the PC says about listening to the owner - whether each
+  # microphone's voice print is trained, which voice check is installed, the
+  # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:
+  # it records nothing and changes nothing. Training stays on the phone.
+  "allow-get-voice-status",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",

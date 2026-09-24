@@ -32,6 +32,7 @@ import {
   followTheme,
   followZoom,
   linkWords,
+  onEvent,
   onLink,
   onQueue,
   reconnect,
@@ -40,6 +41,18 @@ import {
   THEME_INFO,
   THEMES,
 } from "./jarvis-link.js";
+import {
+  checkLine as voiceCheckLine,
+  isTrained as voiceIsTrained,
+  lastTrainingLine,
+  printLines as voicePrintLines,
+  stopWordLine,
+  summaryLine as voiceSummaryLine,
+  talkLine as voiceTalkLine,
+  turnLine as voiceTurnLine,
+  verifierLine as voiceVerifierLine,
+  wakeInfo,
+} from "./voice-settings.js";
 import {
   FRAME_RATES,
   loadFaceTuning,
@@ -2011,5 +2024,127 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) loadBigModel();
 });
 loadBigModel();
+
+/* ==========================================================================
+   Voice
+   --------------------------------------------------------------------------
+   What the PC says about listening to the owner: `get_voice_status` (GET
+   /api/voice/status, jarvis_speech.status() - its real shape is
+   tests/fixtures/voice-status-cases.json). The same facts the phone shows on
+   Platform checks under "Your voice" and the wake word, in the phone's words
+   where it has them (voice-settings.js). Training a voice is on the phone for
+   now; the section says so and offers no button for it.
+
+   Re-read when the window comes back into view, when the approval queue
+   changes while a voice card waits (there is no event for the decision), and
+   on the `voice` doorbell.
+   ========================================================================== */
+
+const vc = {
+  card: $("voice"),
+  state: $("voice-state"),
+  body: $("voice-body"),
+  summary: $("voice-summary"),
+  prints: $("voice-prints"),
+  check: $("voice-check"),
+  last: $("voice-last"),
+  talk: $("voice-talk"),
+  wake: $("voice-wake"),
+  verifier: $("voice-verifier"),
+  stopWord: $("voice-stop-word"),
+  turn: $("voice-turn"),
+};
+
+const VC_UPDATE =
+  "This PC's Jarvis does not report its voice settings yet. Update the backend by running apply-patches.ps1, then open this again.";
+
+let vcReadSeq = 0;
+/** A voice card (the wake word's, or a training) was waiting at the last read. */
+let vcWaiting = false;
+
+/** A `{text, tone}` line, or hidden when there is nothing to say. */
+function vcLine(node, line) {
+  if (!node) return;
+  const text = line && typeof line === "object" ? line.text : line;
+  node.hidden = !text;
+  node.textContent = text || "";
+  const tone = line && typeof line === "object" ? line.tone : "";
+  if (tone) node.dataset.tone = tone;
+  else delete node.dataset.tone;
+}
+
+function vcShowProblem(words) {
+  vc.body.hidden = true;
+  vc.state.hidden = false;
+  vc.state.dataset.tone = "bad";
+  vc.state.textContent = words;
+  vcWaiting = false;
+}
+
+function vcPrintItem(line) {
+  const item = scNode("li", "sc-gpu");
+  item.dataset.mic = line.id;
+  if (line.tone) item.dataset.tone = line.tone;
+  item.append(scNode("span", "sc-gpu-name", line.name));
+  item.append(scNode("span", "sc-gpu-role", line.text.charAt(0).toUpperCase() + line.text.slice(1)));
+  return item;
+}
+
+function vcPaint(status) {
+  vc.state.hidden = true;
+  delete vc.state.dataset.tone;
+  vc.body.hidden = false;
+
+  vcLine(vc.summary, { text: voiceSummaryLine(status, APPROVE_WHERE),
+                       tone: voiceIsTrained(status) ? "ok" : "warn" });
+  vc.prints.replaceChildren(...voicePrintLines(status).map(vcPrintItem));
+  vcLine(vc.check, voiceCheckLine(status));
+  vcLine(vc.last, lastTrainingLine(((status.gate || {}).training || {}).last));
+  vcLine(vc.talk, voiceTalkLine(status));
+
+  const wake = wakeInfo(status, APPROVE_WHERE);
+  vc.card.dataset.wake = wake.state;
+  vcLine(vc.wake, { text: wake.text, tone: wake.state === "waiting" ? "warn" : "" });
+  vcLine(vc.verifier, voiceVerifierLine(status));
+  vcLine(vc.stopWord, stopWordLine(status));
+  vcLine(vc.turn, voiceTurnLine(status));
+
+  const gate = status.gate || {};
+  vcWaiting = wake.state === "waiting" || (gate.training || {}).pending === true;
+}
+
+async function loadVoice() {
+  if (!IS_TAURI || !vc.card) return;
+  const seq = ++vcReadSeq;
+  let answer;
+  try {
+    answer = await invoke("get_voice_status");
+  } catch (error) {
+    if (seq !== vcReadSeq) return;
+    vcShowProblem(`Jarvis could not be asked about voice. ${scProblemWords(error)}`);
+    return;
+  }
+  if (seq !== vcReadSeq) return;
+  if (answer && answer.available === false) {
+    vcShowProblem(typeof answer.why === "string" && answer.why ? answer.why : VC_UPDATE);
+    return;
+  }
+  if (!answer || typeof answer !== "object" || !answer.gate || !answer.listening) {
+    vcShowProblem(`Jarvis's answer about voice could not be read. ${VC_UPDATE}`);
+    return;
+  }
+  vcPaint(answer);
+}
+
+onQueue(() => {
+  if (vcWaiting) loadVoice();
+});
+onEvent((frame) => {
+  if (frame && frame.kind === "voice") loadVoice();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadVoice();
+});
+loadVoice();
 
 loadUpdate();

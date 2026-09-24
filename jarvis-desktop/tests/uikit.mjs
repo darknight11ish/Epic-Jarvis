@@ -63,6 +63,16 @@ export const BIG_MODEL = JSON.parse(fsSync.readFileSync(path.join(
   "utf8")).cases;
 
 /**
+ * The backend's real `GET /api/voice/status` answers - jarvis_speech.status(),
+ * one per named case (`VOICE.cases`) - and its real `POST /api/voice/wake`
+ * answers (`VOICE.answers`), written by tools/gen_voice_status_cases.py.
+ * Never hand-made: pick a case by name, e.g. `VOICE.cases.phone_trained`.
+ */
+export const VOICE = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "fixtures", "voice-status-cases.json"),
+  "utf8"));
+
+/**
  * Where the browser is.
  *
  * Playwright's own resolution is wrong in the container these were written in
@@ -375,7 +385,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -729,6 +739,19 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const label = args.feature === "master" ? "The second graphics card" : `"${row ? row.name : args.feature}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
           }
+          // voice.rs get_voice_status. `status` is a real status() from
+          // VOICE; the Rust passes it on as is. `unavailable` is its answer
+          // for a 404 or a server too old for the nested shape; `getFails`
+          // is the sentence it rejects with.
+          case "get_voice_status": {
+            const vs = window.__voice;
+            vs.reads += 1;
+            if (vs.getFails) throw new Error(vs.getFails);
+            if (vs.unavailable) {
+              return { available: false, why: "This PC's Jarvis does not report its voice settings yet. Update the backend by running apply-patches.ps1, then open this again." };
+            }
+            return JSON.parse(JSON.stringify(vs.status));
+          }
           // commands.rs get_big_model / set_big_model. `status` is a real
           // status() from BIG_MODEL; the Rust passes a 200 on as is.
           // `unavailable` is its answer for a 404, or the 503 `{"available":
@@ -915,6 +938,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                     unavailable: false, ...(deep || {}) };
   window.__deep.status = JSON.parse(JSON.stringify(window.__deep.status || null));
   window.__deep.askAnswers = JSON.parse(JSON.stringify(window.__deep.askAnswers));
+  // Unset, the voice as most owners have it: trained on the phone, "hey
+  // Jarvis" off (the real `phone_trained`).
+  window.__voice = { reads: 0, changes: [], getFails: null, setFails: null,
+                     unavailable: false, ...(voice || {}) };
+  window.__voice.status = JSON.parse(JSON.stringify(window.__voice.status || null));
   window.__vision = vision || { model: "qwen3:8b", vision: false,
     reason: "Ollama lists what qwen3:8b can do, and pictures are not on the list." };
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
@@ -961,6 +989,7 @@ export async function open(browser, base, file, data, viewport) {
                 onAnswer: BIG_MODEL.post_master_on_pending.body, ...(data && data.bigModel) },
     deep: { status: BIG_MODEL.deep_off, askAnswers: [BIG_MODEL.ask_accepted.body],
             ...(data && data.deep) },
+    voice: { status: VOICE.cases.phone_trained, ...(data && data.voice) },
   });
   await page.goto(`${base}/${file}`);
   await page.waitForTimeout(500);

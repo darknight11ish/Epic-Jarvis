@@ -737,6 +737,7 @@ pub fn run() {
             voice::stop_automatic_listening,
             voice::speak_reply,
             voice::summon_push_to_talk,
+            voice::get_voice_status,
             vision::local_model_vision,
         ]);
 

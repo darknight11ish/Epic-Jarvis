@@ -2400,6 +2400,18 @@ fn second_card_refusal(code: u16, body: &str) -> String {
     }
 }
 
+/// [`second_card_refusal`] under a name other routes can use: the backend's
+/// own `error` sentence, first letter raised, or a plain line with the code.
+/// Settings' Voice section and "This backend supports" use it.
+pub(crate) fn backend_refusal(code: u16, body: &str) -> String {
+    second_card_refusal(code, body)
+}
+
+/// [`second_card_unreachable`] under a name other routes can use.
+pub(crate) fn backend_unreachable(err: &reqwest::Error, base: &str) -> String {
+    second_card_unreachable(err, base)
+}
+
 /// Whether a 404/503 means "this backend has no second-card module": a 404
 /// (no such route - an older backend), or the route's own 503
 /// `{"available": false}` when `jarvis_second_card.py` is missing. A POST 503

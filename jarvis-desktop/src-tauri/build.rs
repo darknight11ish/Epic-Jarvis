@@ -100,6 +100,11 @@ fn main() {
             // or off. ON only raises an approval card. Settings window only.
             "get_big_model",
             "set_big_model",
+            // Settings' "Voice": what the PC's voice settings are (GET
+            // /api/voice/status) - whether each microphone's voice print is
+            // trained, the wake word, the stop word, Smart Turn. Read only.
+            // Settings window only.
+            "get_voice_status",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

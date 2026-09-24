@@ -712,3 +712,14 @@ select:focus-visible {
   border-left: 3px solid var(--warn);
   color: var(--text);
 }
+
+/* --------------------------------------------------------------------------
+   Voice. The second graphics card's pieces again: `.sc-gpu` entries for each
+   microphone's voice print, `.sc-line` words. A print that needs training
+   gets the warning edge.
+   -------------------------------------------------------------------------- */
+
+#voice-state[data-tone="bad"] { color: var(--bad-text); }
+
+#voice .sc-gpu[data-tone="warn"] { border-left: 3px solid var(--warn); }
+#voice .sc-gpu[data-tone="ok"] .sc-gpu-role { color: var(--ok-text); }

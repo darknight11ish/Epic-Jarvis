@@ -302,6 +302,40 @@
         </div>
       </section>
 
+      <!-- ── Voice ─────────────────────────────────────────────────────────
+           Read from GET /api/voice/status (settings.js, voice part; the
+           words are in voice-settings.js). The same facts the phone shows
+           on Platform checks, under "Your voice" and the wake word. Training
+           a voice is on the phone for now, and this says so. -->
+      <section class="card" id="voice">
+        <h2>Voice</h2>
+        <p class="note">
+          What Jarvis on this PC says about listening to you: whether it
+          knows your voice, and what it can hear.
+        </p>
+        <p class="note" id="voice-train-where">
+          To teach Jarvis your voice, use your phone for now: open Platform
+          checks and tap Train my voice on the Your voice card.
+        </p>
+
+        <p class="state" id="voice-state" role="status">Asking Jarvis about voice…</p>
+
+        <div id="voice-body" hidden>
+          <h3 class="subhead">Your voice</h3>
+          <p class="sc-line" id="voice-summary"></p>
+          <ul class="sc-cards" id="voice-prints"></ul>
+          <p class="sc-line" id="voice-check"></p>
+          <p class="sc-line" id="voice-last" hidden></p>
+          <p class="sc-line" id="voice-talk"></p>
+
+          <h3 class="subhead">"Hey Jarvis"</h3>
+          <p class="sc-line" id="voice-wake"></p>
+          <p class="sc-line" id="voice-verifier" hidden></p>
+          <p class="sc-line" id="voice-stop-word" hidden></p>
+          <p class="sc-line" id="voice-turn" hidden></p>
+        </div>
+      </section>
+
       <!-- ── Second graphics card ─────────────────────────────────────────
            Read from GET /api/second-card (settings.js, second-card part).
            Every switch is OFF until the owner turns it on, and can only be

@@ -159,7 +159,7 @@ CLASSIFICATION = {
     "/api/version": ("ported", ""),
     "/api/visual-spec": ("deliberate", "The phone bundles its own copy of the spec and checks it in a unit test (SpecDriftTest); JARVIS-API.md: the phone never fetches it."),
     "/api/voice/say": ("ported", ""),
-    "/api/voice/status": ("ported", ""),
+    "/api/voice/status": ("ported", "What the PC's voice can do. Desktop: \"hey Jarvis\" listening reads it (voice.rs), and Settings, Voice shows it read-only (get_voice_status). Phone: Platform checks, Your voice and the wake-word card."),
     "/api/voice/turn": ("deliberate", "Smart Turn, 'finished or only paused?'. The phone runs the same model "
                         "itself (assets/turn/, voice/SmartTurn.kt), so its audio never leaves it to ask; "
                         "the desktop asks its own PC over loopback."),
