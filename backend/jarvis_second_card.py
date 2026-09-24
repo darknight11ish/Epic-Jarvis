@@ -57,6 +57,7 @@ this starts `ollama serve` with:
     OLLAMA_CONTEXT_LENGTH=<num_ctx>  the only way to set context for the
                                      /v1 chat endpoint (no field for it)
     OLLAMA_KEEP_ALIVE=30m            (configurable)
+    OLLAMA_VULKAN=0                  no Vulkan route (see below)
 
 and NOT OLLAMA_FLASH_ATTENTION, unless `[second_card] flash_attention` says
 "on". I checked Ollama's source (llm/llama_server.go,
@@ -64,6 +65,16 @@ LlamaServerFlashAttention, main branch, 2026-09-24): unset means llama.cpp's
 "auto", which falls back per model; set to 1 it passes `--flash-attn on`,
 which removes that fallback. MODEL-TOPOLOGY.md already says not to set it, for
 that reason.
+
+WHY OLLAMA_VULKAN=0 (bug audit 3; the owner's decision 3 in
+docs/HARDWARE-PROFILES.md section 5). Ollama reaches cards through a second
+route, Vulkan, which is ON by default (ollama envconfig/config.go:234,
+EnableVulkan, default true) and ignores CUDA_VISIBLE_DEVICES. Removing
+GGML_VK_VISIBLE_DEVICES, which this module used to do alone, does not turn
+that route off, so the second Ollama could still see the main card through
+it. OLLAMA_VULKAN=0 does. The second card is always an NVIDIA card (it is
+found through nvidia-smi), so CUDA is the route it uses. The owner's
+`pin_command` sets the same thing for the everyday Ollama.
 
 WHY THE CARD'S ID, NOT ITS NUMBER. CUDA numbers cards "fastest first" by
 default (CUDA_DEVICE_ORDER=FASTEST_FIRST) while nvidia-smi numbers them in
@@ -108,6 +119,13 @@ import uuid as _uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
+
+#: Every request here goes straight to the address, never through a proxy
+#: (bug audit 3, CONN-1): see jarvis_local_http.py.
+import jarvis_local_http
+
+#: What a program Jarvis starts may inherit (bug audit 3, CONN-2).
+import jarvis_child_env
 
 try:
     import jarvis_framework as fw
@@ -257,7 +275,8 @@ def _http_json(url: str, payload: Optional[dict] = None, timeout: float = 2.0):
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST" if data else "GET",
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    # Never through a proxy: jarvis_local_http.py (bug audit 3, CONN-1).
+    with jarvis_local_http.urlopen(req, timeout) as r:
         return json.loads(r.read().decode("utf-8") or "{}")
 
 
@@ -554,7 +573,13 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
              base: Optional[dict] = None, flash: str = "auto",
              keep_alive: str = "30m") -> dict:
     """The environment for the second `ollama serve`. Raises ValueError for
-    a host that is not 127.0.0.1 (rule 2) or an id that is not a card id."""
+    a host that is not 127.0.0.1 (rule 2) or an id that is not a card id.
+
+    Built from an allowlist (jarvis_child_env.py, bug audit 3 CONN-2): what
+    Windows needs to start a program, plus OLLAMA_MODELS if the owner set it
+    (so the second Ollama finds the models already downloaded). Nothing else
+    of Jarvis's environment - not the pairing token, not any other *_TOKEN,
+    *_KEY, *_PASSWORD or *_SECRET - reaches the second Ollama."""
     if host != HOST:
         raise ValueError(f"the second Ollama only ever listens on {HOST}, not {host!r}")
     if not re.fullmatch(r"GPU-[0-9A-Fa-f-]{8,64}", str(uuid or "")):
@@ -562,8 +587,10 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
     port = int(port)
     if not (1024 <= port <= 65535) or port == MAIN_OLLAMA_PORT:
         raise ValueError(f"port {port} cannot be used for the second Ollama")
-    env = dict(os.environ if base is None else base)
+    env = jarvis_child_env.inherited(base, names=("OLLAMA_MODELS",))
     # Inherited settings that would widen or reshape it are removed first.
+    # (The allowlist above already leaves them out; kept, so a name added to
+    # it later cannot quietly bring one back.)
     for k in ("OLLAMA_HOST", "OLLAMA_ORIGINS", "OLLAMA_SCHED_SPREAD",
               "OLLAMA_FLASH_ATTENTION", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES",
               "GPU_DEVICE_ORDINAL", "GGML_VK_VISIBLE_DEVICES"):
@@ -577,6 +604,9 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
         "OLLAMA_NUM_PARALLEL": "1",
         "OLLAMA_CONTEXT_LENGTH": str(int(num_ctx)),
         "OLLAMA_KEEP_ALIVE": keep_alive,
+        # Vulkan is on by default and ignores CUDA_VISIBLE_DEVICES: off, so
+        # this Ollama sees the second card only (see the module docstring).
+        "OLLAMA_VULKAN": "0",
     })
     if flash == "on":
         env["OLLAMA_FLASH_ATTENTION"] = "1"
@@ -993,11 +1023,18 @@ _UUID_RE = re.compile(r"GPU-[0-9A-Fa-f-]{8,64}")
 
 def pin_command(primary_uuid: Optional[str]) -> Optional[str]:
     """One PowerShell line (5.1-safe) that pins the owner's everyday Ollama
-    to the main card. None without a real card id."""
+    to the main card. None without a real card id.
+
+    Two settings: CUDA_VISIBLE_DEVICES (only the main card, by its id) and
+    OLLAMA_VULKAN=0, because Ollama's Vulkan route is on by default and does
+    not read CUDA_VISIBLE_DEVICES - without it the everyday Ollama could still
+    reach the second card (docs/HARDWARE-PROFILES.md, decision 3)."""
     if not primary_uuid or not _UUID_RE.fullmatch(primary_uuid):
         return None
     return ("[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', "
-            f"'{primary_uuid}', 'User'); Write-Host 'Done. Now quit Ollama (right-click "
+            f"'{primary_uuid}', 'User'); "
+            "[Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); "
+            "Write-Host 'Done. Now quit Ollama (right-click "
             "its icon by the clock, then Quit Ollama) and start it again from the Start "
             "menu. Nothing was written to any file.'")
 

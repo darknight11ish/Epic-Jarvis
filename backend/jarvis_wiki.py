@@ -112,6 +112,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+#: Every request here goes straight to the address, never through a proxy
+#: (bug audit 3, CONN-1): see jarvis_local_http.py.
+import jarvis_local_http
+
 ACTION = "wiki_update"
 FEATURE = "wiki"
 
@@ -608,7 +612,8 @@ def _post_json(url: str, body: dict, timeout: float = MODEL_TIMEOUT) -> dict:
         raise ValueError("the wiki model is only ever asked on this PC (127.0.0.1)")
     req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), method="POST",
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    # Never through a proxy: jarvis_local_http.py (bug audit 3, CONN-1).
+    with jarvis_local_http.urlopen(req, timeout) as r:
         return json.loads(r.read().decode("utf-8") or "{}")
 
 

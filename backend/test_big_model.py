@@ -91,6 +91,38 @@ World = G.World
 
 # ------------------------------------------------------------ detection --
 
+
+#: A parent environment with the owner's secrets in it, beside what a program
+#: really needs (bug audit 3, CONN-2). Windows spellings as Python on Windows
+#: stores them (upper-case) and as written (mixed case) - both must work.
+_CHILD_BASE = {
+    "HUD_TOKEN": "pair-1", "JARVIS_TOKEN": "pair-2", "JARVIS_JOPLIN_TOKEN": "jt",
+    "JARVIS_OBSIDIAN_API_KEY": "ok", "GITHUB_TOKEN": "gh", "OPENAI_API_KEY": "sk",
+    "SMTP_PASSWORD": "pw", "CLIENT_SECRET": "cs", "OLLAMA_API_KEY": "ol",
+    "CUDA_SNEAKY_TOKEN": "ct", "AWS_SECRET_ACCESS_KEY": "aws", "RANDOM_SETTING": "x",
+    "SYSTEMROOT": "C:\\Windows", "WINDIR": "C:\\Windows", "PATH": "/bin", "PATHEXT": ".EXE",
+    "TEMP": "t", "TMP": "t", "USERPROFILE": "u", "LOCALAPPDATA": "l", "APPDATA": "a",
+    "HOMEDRIVE": "C:", "HOMEPATH": "\\u", "COMPUTERNAME": "pc", "USERNAME": "me",
+    "PROCESSOR_ARCHITECTURE": "AMD64", "NUMBER_OF_PROCESSORS": "8", "OS": "Windows_NT",
+    "PROGRAMFILES": "p", "ProgramFiles(x86)": "p86", "ProgramData": "pd",
+    "SystemDrive": "C:", "COMSPEC": "cmd", "HOME": "/h", "LANG": "C", "LC_ALL": "C",
+    "OLLAMA_MODELS": "D:\\models", "CUDA_PATH": "C:\\cuda",
+}
+_CHILD_SECRETS = ("HUD_TOKEN", "JARVIS_TOKEN", "JARVIS_JOPLIN_TOKEN", "JARVIS_OBSIDIAN_API_KEY",
+                  "GITHUB_TOKEN", "OPENAI_API_KEY", "SMTP_PASSWORD", "CLIENT_SECRET",
+                  "OLLAMA_API_KEY", "CUDA_SNEAKY_TOKEN", "AWS_SECRET_ACCESS_KEY")
+_CHILD_ESSENTIALS = ("SYSTEMROOT", "WINDIR", "PATH", "PATHEXT", "TEMP", "TMP", "USERPROFILE",
+                     "LOCALAPPDATA", "APPDATA", "HOMEDRIVE", "HOMEPATH", "COMPUTERNAME",
+                     "USERNAME", "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS", "OS",
+                     "PROGRAMFILES", "ProgramFiles(x86)", "ProgramData", "SystemDrive",
+                     "COMSPEC", "HOME", "LANG", "LC_ALL")
+
+
+def _leaked(env):
+    """Names in `env` that are one of _CHILD_BASE's secrets, or carry one's value."""
+    vals = {_CHILD_BASE[s] for s in _CHILD_SECRETS}
+    return sorted(k for k in env if k in _CHILD_SECRETS or env[k] in vals)
+
 def t_detection():
     with World(colibri=False):
         d = BM.detect()
@@ -385,6 +417,19 @@ def t_the_engine():
           "COLI_ALLOWED_HOSTS" not in env and "COLI_ALLOW_INSECURE_BIND" not in env
           and env["COLI_API_KEY"] == KEY and env["CUDA_VISIBLE_DEVICES"] == "-1"
           and env["PATH"] == "/bin")
+    # CONN-2: built from an allowlist, so no secret of Jarvis's goes to colibri.
+    for uuid in (None, G.U_2060):
+        env = BM.engine_env(KEY, cuda_uuid=uuid, base=_CHILD_BASE)
+        how = "card" if uuid else "no card"
+        check(f"engine_env ({how}): no token, key, password or secret of Jarvis's "
+              f"reaches colibri", not _leaked(env), repr(_leaked(env)))
+        check(f"engine_env ({how}): what Windows needs to start a program is kept, "
+              f"and CUDA_PATH",
+              all(env.get(k) == _CHILD_BASE[k] for k in _CHILD_ESSENTIALS + ("CUDA_PATH",)),
+              repr(sorted(set(_CHILD_ESSENTIALS) - set(env))))
+        check(f"engine_env ({how}): an unrelated setting is not inherited, and "
+              f"colibri's own key is still set",
+              "RANDOM_SETTING" not in env and env["COLI_API_KEY"] == KEY)
     for bad in ("0", "1", "GPU-x; rm"):
         try:
             BM.engine_env(KEY, cuda_uuid=bad, base={})

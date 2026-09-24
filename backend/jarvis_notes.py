@@ -63,7 +63,12 @@ fetch function, read fresh from the environment, the same way
 
 CREDENTIALS - NEVER STORED HERE, NEVER LOGGED, NEVER ON A CARD
 `JARVIS_JOPLIN_TOKEN` / `JARVIS_OBSIDIAN_API_KEY` are read fresh from the
-environment on every call. This module never writes them to disk.
+environment on every call. This module never writes them to disk. For Joplin,
+when `JARVIS_JOPLIN_TOKEN` is not set, the variable jarvis-framework.toml's
+`[notes.joplin] token_env` names (default `JOPLIN_TOKEN`) is used, and the
+address is this PC on `[notes.joplin] port` unless `JARVIS_JOPLIN_URL` says
+otherwise - `joplin_token()` / `joplin_base()`, shared with
+jarvis_note_capture.py so the search and the capture always agree.
 
 TESTING WITHOUT A REAL JOPLIN OR OBSIDIAN INSTANCE
 `run()` takes an injectable `fetch`, exactly the shape `jarvis_calendar.py`'s
@@ -116,6 +121,10 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Callable, Optional
 
+#: Every request here goes straight to the address, never through a proxy
+#: (bug audit 3, CONN-1): see jarvis_local_http.py.
+import jarvis_local_http
+
 BACKEND_ENV = "JARVIS_NOTES_BACKEND"       # "vault" | "joplin" | "obsidian", optional
 JOPLIN_URL_ENV = "JARVIS_JOPLIN_URL"
 JOPLIN_TOKEN_ENV = "JARVIS_JOPLIN_TOKEN"
@@ -123,7 +132,7 @@ OBSIDIAN_URL_ENV = "JARVIS_OBSIDIAN_URL"
 OBSIDIAN_KEY_ENV = "JARVIS_OBSIDIAN_API_KEY"
 OBSIDIAN_VAULT_ENV = "JARVIS_OBSIDIAN_VAULT"
 
-_DEFAULT_JOPLIN_URL = "http://127.0.0.1:41184"
+_DEFAULT_JOPLIN_PORT = 41184                # Joplin's own default; [notes.joplin] port
 _DEFAULT_OBSIDIAN_URL = "https://127.0.0.1:27124"
 
 _MAX_RESULTS = 20
@@ -162,6 +171,39 @@ def obsidian_vault() -> Optional[Path]:
     return None
 
 
+def joplin_token() -> str:
+    """The Joplin token, read fresh every time, and only by what sends it.
+
+    `JARVIS_JOPLIN_TOKEN` if set; otherwise the variable that
+    jarvis-framework.toml's `[notes.joplin] token_env` names (default
+    `JOPLIN_TOKEN`, which is what the shipped settings file says). Shared with
+    jarvis_note_capture.py (bug audit 3, K11): the capture honoured the toml
+    and this search did not, so an owner who set only `JOPLIN_TOKEN` could
+    file notes in Joplin but never search them."""
+    tok = os.environ.get(JOPLIN_TOKEN_ENV, "").strip()
+    if tok:
+        return tok
+    name = str(_notes_cfg("joplin", "token_env", "JOPLIN_TOKEN") or "JOPLIN_TOKEN").strip()
+    return os.environ.get(name, "").strip() if name else ""
+
+
+def joplin_base() -> str:
+    """Joplin's address: `JARVIS_JOPLIN_URL` if set, otherwise this PC on the
+    toml's `[notes.joplin] port` (default 41184, Joplin's own). Shared with
+    jarvis_note_capture.py for the same reason as `joplin_token()`: the
+    search used to ignore the toml's port."""
+    env = os.environ.get(JOPLIN_URL_ENV, "").strip()
+    if env:
+        return env.rstrip("/")
+    try:
+        port = int(_notes_cfg("joplin", "port", _DEFAULT_JOPLIN_PORT) or _DEFAULT_JOPLIN_PORT)
+    except (TypeError, ValueError):
+        port = _DEFAULT_JOPLIN_PORT
+    if not 1 <= port <= 65535:
+        port = _DEFAULT_JOPLIN_PORT
+    return f"http://127.0.0.1:{port}"
+
+
 def vault_problem(vault: Optional[Path]) -> str:
     """Why `vault` is not a usable Obsidian vault, in plain words, or "".
 
@@ -185,7 +227,7 @@ def _resolve_backend() -> Optional[str]:
         return explicit
     if not vault_problem(obsidian_vault()):
         return "vault"
-    if os.environ.get(JOPLIN_TOKEN_ENV, "").strip():
+    if joplin_token():
         return "joplin"
     if os.environ.get(OBSIDIAN_KEY_ENV, "").strip():
         return "obsidian"
@@ -196,7 +238,7 @@ def authenticated() -> bool:
     """Whether a token/key is configured for the resolved backend."""
     backend = _resolve_backend()
     if backend == "joplin":
-        return bool(os.environ.get(JOPLIN_TOKEN_ENV, "").strip())
+        return bool(joplin_token())
     if backend == "obsidian":
         return bool(os.environ.get(OBSIDIAN_KEY_ENV, "").strip())
     return False
@@ -235,8 +277,9 @@ def plan(query: str, limit: int = 10) -> Plan:
         return Plan(
             backend=None, query=query, limit=limit, if_refused=if_refused,
             reason_empty=(
-                f"no Obsidian vault folder is set, and neither {JOPLIN_TOKEN_ENV} nor "
-                f"{OBSIDIAN_KEY_ENV} is set - there is no notes app configured to search"))
+                f"no Obsidian vault folder is set, and neither {JOPLIN_TOKEN_ENV} (or "
+                f"the variable [notes.joplin] token_env names) nor {OBSIDIAN_KEY_ENV} "
+                f"is set - there is no notes app configured to search"))
 
     if backend == "vault":
         vault = obsidian_vault()
@@ -248,7 +291,7 @@ def plan(query: str, limit: int = 10) -> Plan:
                     folder=os.path.realpath(str(vault)))
 
     if backend == "joplin":
-        base = os.environ.get(JOPLIN_URL_ENV, "").strip() or _DEFAULT_JOPLIN_URL
+        base = joplin_base()
         url = (f"{base.rstrip('/')}/search?query="
                + urllib.parse.quote(query, safe="")
                + f"&limit={limit}&fields=id,title,body")
@@ -357,8 +400,8 @@ def _scrub_secrets(message: str) -> str:
     passes through here, in every spelling the secret can take in a URL.
     """
     s = str(message)
-    for env in (JOPLIN_TOKEN_ENV, OBSIDIAN_KEY_ENV):
-        secret = os.environ.get(env, "")
+    for secret in (os.environ.get(JOPLIN_TOKEN_ENV, ""), joplin_token(),
+                   os.environ.get(OBSIDIAN_KEY_ENV, "")):
         if not secret.strip():
             continue
         for form in {secret, secret.strip(), urllib.parse.quote(secret, safe=""),
@@ -376,15 +419,15 @@ def _default_fetch(p: Plan):
     headers = {"Accept": "application/json"}
     url = p.url
     if p.backend == "joplin":
-        token = os.environ.get(JOPLIN_TOKEN_ENV, "")
+        token = joplin_token()
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}token={urllib.parse.quote(token, safe='')}"
     else:
         key = os.environ.get(OBSIDIAN_KEY_ENV, "")
         headers["Authorization"] = f"Bearer {key}"
     req = urllib.request.Request(url, headers=headers)
-    opener = urllib.request.build_opener(_RefuseRedirect)
-    with opener.open(req, timeout=20.0) as r:
+    # No proxy (jarvis_local_http), and still no redirect (_RefuseRedirect).
+    with jarvis_local_http.urlopen(req, 20.0, _RefuseRedirect) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 

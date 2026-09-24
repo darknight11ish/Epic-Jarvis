@@ -131,6 +131,10 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Callable, Optional
 
+#: Every request here goes straight to the address, never through a proxy
+#: (bug audit 3, CONN-1): see jarvis_local_http.py.
+import jarvis_local_http
+
 LOGSEQ_GRAPH_ENV = "JARVIS_LOGSEQ_GRAPH"
 JOPLIN_URL_ENV = "JARVIS_JOPLIN_URL"       # the same names jarvis_notes.py reads
 JOPLIN_TOKEN_ENV = "JARVIS_JOPLIN_TOKEN"
@@ -202,23 +206,24 @@ def _vault():
 
 
 def _joplin_token() -> str:
-    """Read fresh, every time, and only by the functions that send it."""
-    tok = os.environ.get(JOPLIN_TOKEN_ENV, "").strip()
-    if tok:
-        return tok
-    name = str(_cfg("joplin", "token_env", "JOPLIN_TOKEN") or "JOPLIN_TOKEN")
-    return os.environ.get(name, "").strip()
+    """Read fresh, every time, and only by the functions that send it.
+    jarvis_notes.joplin_token(), so the search and the capture can never
+    disagree about which token (bug audit 3, K11). "" without jarvis_notes,
+    which reads as "Joplin is not set up"."""
+    try:
+        import jarvis_notes
+    except Exception:
+        return ""
+    return jarvis_notes.joplin_token()
 
 
 def _joplin_base() -> str:
-    env = os.environ.get(JOPLIN_URL_ENV, "").strip()
-    if env:
-        return env.rstrip("/")
+    """jarvis_notes.joplin_base(), for the same reason as _joplin_token()."""
     try:
-        port = int(_cfg("joplin", "port", 41184) or 41184)
-    except (TypeError, ValueError):
-        port = 41184
-    return f"http://127.0.0.1:{port}"
+        import jarvis_notes
+    except Exception:
+        return "http://127.0.0.1:41184"
+    return jarvis_notes.joplin_base()
 
 
 def _is_loopback(url: str) -> bool:
@@ -558,8 +563,8 @@ def _joplin_call(method: str, base: str, path: str, query: dict, body=None,
     req = urllib.request.Request(url, data=data, method=method,
                                  headers={"Content-Type": "application/json",
                                           "Accept": "application/json"})
-    opener = urllib.request.build_opener(_RefuseRedirect)
-    with opener.open(req, timeout=timeout) as r:
+    # No proxy (jarvis_local_http), and still no redirect (_RefuseRedirect).
+    with jarvis_local_http.urlopen(req, timeout, _RefuseRedirect) as r:
         return json.loads(r.read().decode("utf-8", "replace") or "null")
 
 

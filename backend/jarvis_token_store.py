@@ -47,6 +47,17 @@ FOR THE OWNER, in the backend folder:
     py -3 jarvis_token_store.py where    say where it is kept (never the token)
     py -3 jarvis_token_store.py forget   delete it; the next start makes a new
                                          one, and every device must pair again
+
+TWO OTHER PLACES A TOKEN CAN COME FROM, WHICH THESE COMMANDS CANNOT CHANGE
+(bug audit 3, CONN-3). They used to say "no saved token" while the backend
+was running on one of these, and `forget` did not unpair anything:
+  - HUD_TOKEN in the environment. It wins (step 2 above). All three commands
+    now say so when it is set in the window they run in.
+  - A token typed into the desktop app's Settings. When the desktop app
+    starts the backend, it hands that token over as HUD_TOKEN, so the backend
+    uses it. It is kept by the desktop, under DESKTOP_TARGET, not here, so
+    `forget` cannot remove it: clear it in the desktop app's Settings first.
+    All three commands say this, and say when such a token is saved.
 """
 
 from __future__ import annotations
@@ -62,6 +73,12 @@ from typing import Callable, Optional
 # BACKEND_TARGET in jarvis-desktop/src-tauri/src/token_store.rs, which reads
 # it; test_token_store.py checks the two are the same text.
 TARGET = "Jarvis Backend/pairing token"
+
+# Where the desktop app keeps a token typed into ITS Settings - TARGET in
+# jarvis-desktop/src-tauri/src/token_store.rs; test_token_store.py checks the
+# two are the same text. Only ever checked for being there, by the owner's
+# commands below; never printed, never used as the backend's token.
+DESKTOP_TARGET = "Jarvis Desktop/pairing token"
 
 # Credential Manager's own limit for a generic credential's secret
 # (CRED_MAX_CREDENTIAL_BLOB_SIZE).
@@ -212,15 +229,40 @@ class Resolved:
         return out
 
 
+#: Byte-order marks: the few bytes some editors put at the very start of a
+#: text file to say how it is encoded. Windows PowerShell 5.1 writes UTF-16
+#: with one by default (`Out-File`, `>`), and UTF-8 with one when asked for
+#: `-Encoding UTF8`; Notepad can save either.
+_BOMS = ((b"\xef\xbb\xbf", "utf-8"), (b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be"))
+
+
 def _read_file(path: Path):
-    """(token or None, problem or None)."""
+    """(token or None, problem or None). Never raises.
+
+    Read as bytes, then decoded by what the file says it is (bug audit 3,
+    CONN-5): a UTF-8 byte-order mark is dropped rather than becoming the
+    first character of the token, UTF-16 (either byte order) is decoded as
+    UTF-16, and anything else must be UTF-8. A file that is none of those is
+    a `problem` sentence - it used to be a UnicodeDecodeError that stopped
+    the backend from starting at all. Surrounding spaces and line breaks are
+    dropped either way."""
     try:
         if not path.is_file():
             return None, None
-        text = path.read_text(encoding="utf-8").strip()
-        return (text or None), None
+        raw = path.read_bytes()
     except OSError as e:
         return None, f"the old token file could not be read ({type(e).__name__})"
+    codec = "utf-8"
+    for bom, name in _BOMS:
+        if raw.startswith(bom):
+            raw, codec = raw[len(bom):], name
+            break
+    try:
+        text = raw.decode(codec).strip()
+    except UnicodeDecodeError:
+        return None, (f"the old token file {path} is not UTF-8 or UTF-16 text, so it was "
+                      f"ignored and left where it is")
+    return (text or None), None
 
 
 def _remove(path: Path):
@@ -318,32 +360,84 @@ def resolve(token_file, *, store=None, environ=None,
 
 # ---------------------------------------------------------------- the owner
 
-def _main(argv) -> int:
+def _desktop_has_token(desktop_store) -> Optional[bool]:
+    """Whether the desktop app has a token of its own saved (typed into its
+    Settings). None when that cannot be told. Never returns the token."""
+    if desktop_store is None:
+        try:
+            desktop_store = WindowsStore(DESKTOP_TARGET)
+        except Exception:
+            return None
+    try:
+        got = desktop_store.read()
+    except Exception:
+        return None
+    return bool(got and str(got).strip())
+
+
+def _other_sources(environ, desktop_store, *, always_desktop: bool = True) -> list:
+    """Plain sentences about the tokens these commands cannot see or change.
+    Never contains a token. With `always_desktop` False, the desktop sentence
+    is said only when the desktop really has a token saved - `show` passes
+    that, so a script that captures its output (docs/BIG-MODEL.md does) is
+    not handed a warning on every run."""
+    out = []
+    if environ.get("HUD_TOKEN", "").strip():
+        out.append("HUD_TOKEN is set in this window's environment. A backend started from "
+                   "here uses THAT token, not the one in Credential Manager, and 'forget' "
+                   "does not change it. To remove it for good, run "
+                   "[Environment]::SetEnvironmentVariable('HUD_TOKEN', $null, 'User') "
+                   "and open a new window.")
+    has = _desktop_has_token(desktop_store)
+    if not has and not always_desktop:
+        return out
+    lead = ("The desktop app has a token of its own saved (typed into its Settings). "
+            if has else "")
+    out.append(lead + "When the desktop app starts Jarvis, it passes a token typed into its "
+               "Settings to the backend, which then uses that one instead. 'forget' cannot "
+               "remove it: clear it in the desktop app's Settings first.")
+    return out
+
+
+def _main(argv, *, store=None, desktop_store=None, environ=None) -> int:
     cmd = argv[1] if len(argv) > 1 else ""
     if cmd not in ("show", "where", "forget"):
         print(__doc__.split("FOR THE OWNER", 1)[1].split('"""', 1)[0].strip("\n: "))
         return 2
-    store = default_store()
+    env = os.environ if environ is None else environ
+    if store is None:
+        store = default_store()
     if isinstance(store, StoreError):
         print(f"Cannot reach Credential Manager: {store}")
         return 1
+    # `show` prints the token alone on standard output, so it can be piped
+    # (`| clip`); everything else it says goes to standard error.
+    note_to = sys.stderr if cmd == "show" else sys.stdout
+    quiet = cmd == "show"
     try:
         if cmd == "forget":
             had = store.delete()
             print('Deleted. The next start makes a new token; pair every device again.'
                   if had else "There was no saved token.")
+            for n in _other_sources(env, desktop_store):
+                print(n)
             return 0
         tok = store.read()
     except StoreError as e:
         print(f"Credential Manager refused: {e}")
         return 1
     if tok is None:
-        print("There is no saved token yet. Start Jarvis once and it makes one.")
+        print("There is no saved token in Credential Manager yet. Start Jarvis once and it "
+              "makes one.", file=note_to)
+        for n in _other_sources(env, desktop_store):
+            print(n, file=note_to)
         return 1
     if cmd == "where":
         print(f'Windows Credential Manager > Windows Credentials > "{TARGET}"')
     else:
         print(tok)
+    for n in _other_sources(env, desktop_store, always_desktop=not quiet):
+        print(n, file=note_to)
     return 0
 
 

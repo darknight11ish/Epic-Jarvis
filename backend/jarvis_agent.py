@@ -80,6 +80,10 @@ import urllib.error
 import urllib.request
 from typing import Callable, Optional
 
+#: Every request here goes straight to the address, never through a proxy
+#: (bug audit 3, CONN-1): see jarvis_local_http.py.
+import jarvis_local_http
+
 
 # --------------------------------------------------------------------------
 #   Tools - each one's ACTION NAME matches an entry jarvis_gate.py already
@@ -806,7 +810,7 @@ def _post(url: str, payload: dict, timeout: float = 300.0) -> dict:
     req = urllib.request.Request(
         url, data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with jarvis_local_http.urlopen(req, timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
@@ -814,7 +818,7 @@ def _open_stream(url: str, payload: dict, timeout: float = 300.0):
     req = urllib.request.Request(
         url, data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"}, method="POST")
-    return urllib.request.urlopen(req, timeout=timeout)
+    return jarvis_local_http.urlopen(req, timeout)
 
 
 def _get_json(url: str, payload: Optional[dict] = None, timeout: float = 4.0) -> dict:
@@ -824,7 +828,7 @@ def _get_json(url: str, payload: Optional[dict] = None, timeout: float = 4.0) ->
     req = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"},
         method="POST" if data is not None else "GET")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with jarvis_local_http.urlopen(req, timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 

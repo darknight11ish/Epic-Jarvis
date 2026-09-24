@@ -87,7 +87,7 @@ class Verdict:
 
 def clear_env():
     for k in (N.OBSIDIAN_VAULT_ENV, N.BACKEND_ENV, N.JOPLIN_TOKEN_ENV, N.OBSIDIAN_KEY_ENV,
-              NC.LOGSEQ_GRAPH_ENV, NC.JOPLIN_URL_ENV, "JOPLIN_TOKEN"):
+              NC.LOGSEQ_GRAPH_ENV, NC.JOPLIN_URL_ENV, "JOPLIN_TOKEN", "MY_JOPLIN"):
         os.environ.pop(k, None)
     CONFIG.clear()
 
@@ -497,6 +497,88 @@ def _graph():
     (g / "journals").mkdir(parents=True)
     return g
 
+
+
+class _Joplin:
+    """A stand-in for Joplin's Web Clipper service on 127.0.0.1: records the
+    token each request carried, answers an empty list."""
+
+    def __enter__(self):
+        import threading
+        import urllib.parse
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        seen = self.seen = []
+
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                seen.append((self.path.split("?")[0], (q.get("token") or [""])[0]))
+                body = b'{"items": [], "has_more": false}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        self.httpd = HTTPServer(("127.0.0.1", 0), H)
+        self.port = self.httpd.server_address[1]
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        return self
+
+    def __exit__(self, *a):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        return False
+
+
+def t_search_and_capture_agree_on_joplins_token_and_address():
+    # Bug audit 3, K11. The capture read the toml's [notes.joplin] token_env
+    # (default JOPLIN_TOKEN, as the shipped settings file says) and port; the
+    # search read only JARVIS_JOPLIN_TOKEN and always used 41184. So an owner
+    # who followed the settings file could file notes in Joplin and never
+    # search them. Both now use jarvis_notes.joplin_token() / joplin_base().
+    for label, cfg, var in (
+            ("the settings file's own default (JOPLIN_TOKEN)",
+             {"token_env": "JOPLIN_TOKEN"}, "JOPLIN_TOKEN"),
+            ("no token_env in the settings file at all", {}, "JOPLIN_TOKEN"),
+            ("a token_env name of the owner's choosing", {"token_env": "MY_JOPLIN"}, "MY_JOPLIN")):
+        clear_env()
+        os.environ.pop("MY_JOPLIN", None)
+        with _Joplin() as j:
+            CONFIG["notes"] = {"joplin": dict(cfg, port=j.port)}
+            os.environ[var] = TOKEN
+            p = N.plan("groceries")
+            check(f"{label}: the search picks Joplin, authenticated",
+                  p.backend == "joplin" and p.authenticated, repr(p))
+            check(f"{label}: the search uses the settings file's port",
+                  p.url.startswith(f"http://127.0.0.1:{j.port}/search?"), p.url)
+            check(f"{label}: the capture is set up for Joplin, at the same address",
+                  "joplin" in NC.available_targets()
+                  and NC._joplin_base() == f"http://127.0.0.1:{j.port}")
+            N._default_fetch(p)
+            NC._joplin_call("GET", NC._joplin_base(), "/folders", {})
+            check(f"{label}: both sent the same token to the same Joplin",
+                  j.seen == [("/search", TOKEN), ("/folders", TOKEN)], repr(j.seen))
+            check(f"{label}: the search's error scrubbing hides that token too",
+                  TOKEN not in N._scrub_secrets(f"boom ?token={TOKEN}"))
+        os.environ.pop(var, None)
+    clear_env()
+    os.environ[N.JOPLIN_TOKEN_ENV] = "the-jarvis-one"
+    os.environ["JOPLIN_TOKEN"] = TOKEN
+    check("JARVIS_JOPLIN_TOKEN still wins over the settings file's, for both",
+          N.joplin_token() == "the-jarvis-one" and NC._joplin_token() == "the-jarvis-one")
+    os.environ[N.JOPLIN_URL_ENV] = "http://127.0.0.1:5555/"
+    CONFIG["notes"] = {"joplin": {"port": 6666}}
+    check("JARVIS_JOPLIN_URL still wins over the settings file's port, for both",
+          N.joplin_base() == NC._joplin_base() == "http://127.0.0.1:5555")
+    os.environ.pop(N.JOPLIN_URL_ENV)
+    CONFIG["notes"] = {"joplin": {"port": "not a port"}}
+    check("a port that is not a number falls back to Joplin's own 41184",
+          N.joplin_base() == "http://127.0.0.1:41184")
+    clear_env()
 
 def scenarios() -> dict:
     """GET /api/notes/capture (no id), from the real functions, per setup."""

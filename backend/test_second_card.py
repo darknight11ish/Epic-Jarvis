@@ -69,6 +69,38 @@ class Verdict:
 
 # ------------------------------------------------------------ parsing --
 
+
+#: A parent environment with the owner's secrets in it, beside what a program
+#: really needs (bug audit 3, CONN-2). Windows spellings as Python on Windows
+#: stores them (upper-case) and as written (mixed case) - both must work.
+_CHILD_BASE = {
+    "HUD_TOKEN": "pair-1", "JARVIS_TOKEN": "pair-2", "JARVIS_JOPLIN_TOKEN": "jt",
+    "JARVIS_OBSIDIAN_API_KEY": "ok", "GITHUB_TOKEN": "gh", "OPENAI_API_KEY": "sk",
+    "SMTP_PASSWORD": "pw", "CLIENT_SECRET": "cs", "OLLAMA_API_KEY": "ol",
+    "CUDA_SNEAKY_TOKEN": "ct", "AWS_SECRET_ACCESS_KEY": "aws", "RANDOM_SETTING": "x",
+    "SYSTEMROOT": "C:\\Windows", "WINDIR": "C:\\Windows", "PATH": "/bin", "PATHEXT": ".EXE",
+    "TEMP": "t", "TMP": "t", "USERPROFILE": "u", "LOCALAPPDATA": "l", "APPDATA": "a",
+    "HOMEDRIVE": "C:", "HOMEPATH": "\\u", "COMPUTERNAME": "pc", "USERNAME": "me",
+    "PROCESSOR_ARCHITECTURE": "AMD64", "NUMBER_OF_PROCESSORS": "8", "OS": "Windows_NT",
+    "PROGRAMFILES": "p", "ProgramFiles(x86)": "p86", "ProgramData": "pd",
+    "SystemDrive": "C:", "COMSPEC": "cmd", "HOME": "/h", "LANG": "C", "LC_ALL": "C",
+    "OLLAMA_MODELS": "D:\\models", "CUDA_PATH": "C:\\cuda",
+}
+_CHILD_SECRETS = ("HUD_TOKEN", "JARVIS_TOKEN", "JARVIS_JOPLIN_TOKEN", "JARVIS_OBSIDIAN_API_KEY",
+                  "GITHUB_TOKEN", "OPENAI_API_KEY", "SMTP_PASSWORD", "CLIENT_SECRET",
+                  "OLLAMA_API_KEY", "CUDA_SNEAKY_TOKEN", "AWS_SECRET_ACCESS_KEY")
+_CHILD_ESSENTIALS = ("SYSTEMROOT", "WINDIR", "PATH", "PATHEXT", "TEMP", "TMP", "USERPROFILE",
+                     "LOCALAPPDATA", "APPDATA", "HOMEDRIVE", "HOMEPATH", "COMPUTERNAME",
+                     "USERNAME", "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS", "OS",
+                     "PROGRAMFILES", "ProgramFiles(x86)", "ProgramData", "SystemDrive",
+                     "COMSPEC", "HOME", "LANG", "LC_ALL")
+
+
+def _leaked(env):
+    """Names in `env` that are one of _CHILD_BASE's secrets, or carry one's value."""
+    vals = {_CHILD_BASE[s] for s in _CHILD_SECRETS}
+    return sorted(k for k in env if k in _CHILD_SECRETS or env[k] in vals)
+
 def t_parsing():
     one = CP.parse_smi(G.SMI["one_card"])
     check("one card: parsed", len(one) == 1 and one[0].name == "NVIDIA GeForce RTX 2080 SUPER"
@@ -299,6 +331,22 @@ def t_the_second_ollama():
           env["OLLAMA_HOST"] == "127.0.0.1:11435" and "OLLAMA_ORIGINS" not in env
           and "OLLAMA_SCHED_SPREAD" not in env and "OLLAMA_FLASH_ATTENTION" not in env
           and env["PATH"] == "/bin")
+    # CONN-2: built from an allowlist, so no secret of Jarvis's goes to Ollama.
+    env = SC.lane_env(G.U_2060, port=11435, num_ctx=1, base=_CHILD_BASE)
+    check("lane_env: no token, key, password or secret of Jarvis's reaches the second Ollama",
+          not _leaked(env), repr(_leaked(env)))
+    check("lane_env: what Windows needs to start a program is kept, and OLLAMA_MODELS",
+          all(env.get(k) == _CHILD_BASE[k] for k in _CHILD_ESSENTIALS + ("OLLAMA_MODELS",)),
+          repr(sorted(set(_CHILD_ESSENTIALS) - set(env))))
+    check("lane_env: an unrelated setting is not inherited",
+          "RANDOM_SETTING" not in env and "CUDA_PATH" not in env)
+    # Vulkan is on in Ollama by default and ignores CUDA_VISIBLE_DEVICES, so
+    # removing GGML_VK_VISIBLE_DEVICES alone left the other card reachable.
+    check("lane_env switches Ollama's Vulkan route off (OLLAMA_VULKAN=0)",
+          env.get("OLLAMA_VULKAN") == "0" and "GGML_VK_VISIBLE_DEVICES" not in env, env)
+    check("...even when the owner's own environment turns it on",
+          SC.lane_env(G.U_2060, port=11435, num_ctx=1,
+                      base={"OLLAMA_VULKAN": "1"}).get("OLLAMA_VULKAN") == "0")
     check("flash attention 'on' in the toml is honoured",
           SC.lane_env(G.U_2060, port=11435, num_ctx=1, base={}, flash="on")["OLLAMA_FLASH_ATTENTION"] == "1")
     with G.World(G.SMI["2080s_2060"], foreign_on_port=True) as w:
@@ -401,6 +449,9 @@ def t_status_shape_and_no_secrets():
     check("pin_command is ONE line, 5.1-safe (no ?? and no newline)",
           "\n" not in st["pin_command"] and "??" not in st["pin_command"]
           and G.U_2080S in st["pin_command"] and "'User'" in st["pin_command"])
+    check("pin_command also switches the everyday Ollama's Vulkan route off",
+          "[Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User');"
+          in st["pin_command"], st["pin_command"])
     check("a card id that is not one gets no command", SC.pin_command("GPU-1'; Remove-Item x") is None)
 
 
