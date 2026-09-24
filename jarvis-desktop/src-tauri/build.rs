@@ -120,6 +120,28 @@ fn main() {
             // (and this PC stops listening); ON only raises an approval card,
             // and is held while the event stream is stale. Settings only.
             "set_wake_word",
+            // Settings' "Voice", the parts that record and change things
+            // (voice_training.rs): record a sentence through this PC's
+            // microphone and hold it in memory; train in rounds (finishing
+            // raises ONE card); the strictness and private-answer settings
+            // (loosening raises a card); the guided test; custom voices
+            // (adding one and switching to one each raise a card; going back
+            // to the built-in voice and deleting are immediate) and the
+            // better voice (ON a card, OFF at once). Settings window only.
+            "start_voice_sample",
+            "voice_sample_level",
+            "stop_voice_sample",
+            "cancel_voice_sample",
+            "discard_voice_samples",
+            "send_voice_training",
+            "cancel_voice_training",
+            "measure_voice",
+            "set_voice_setting",
+            "get_custom_voices",
+            "create_custom_voice",
+            "set_active_voice",
+            "delete_custom_voice",
+            "set_better_voice",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

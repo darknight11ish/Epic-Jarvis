@@ -37,6 +37,7 @@ pub mod tray;
 pub mod update;
 pub mod vision;
 pub mod voice;
+pub mod voice_training;
 pub mod windows;
 #[cfg(windows)]
 pub mod winrt_toast;
@@ -638,6 +639,8 @@ pub fn run() {
         .manage(system_theme::AppliedTheme::default())
         .manage(voice::VoiceCaptureState::default())
         .manage(voice::AutoListenState::default())
+        // Settings' voice recordings, held in memory until sent (voice_training.rs).
+        .manage(voice_training::SampleState::default())
         // Windows Hello: when the owner was last here, and whether the
         // Brain's private lists are shown (lock.rs).
         .manage(lock::LockState::default())
@@ -756,6 +759,22 @@ pub fn run() {
             voice::summon_push_to_talk,
             voice::get_voice_status,
             voice::set_wake_word,
+            // Settings -> Voice: training on this PC, the voice-check settings,
+            // the guided test and custom voices (voice_training.rs).
+            voice_training::start_voice_sample,
+            voice_training::voice_sample_level,
+            voice_training::stop_voice_sample,
+            voice_training::cancel_voice_sample,
+            voice_training::discard_voice_samples,
+            voice_training::send_voice_training,
+            voice_training::cancel_voice_training,
+            voice_training::measure_voice,
+            voice_training::set_voice_setting,
+            voice_training::get_custom_voices,
+            voice_training::create_custom_voice,
+            voice_training::set_active_voice,
+            voice_training::delete_custom_voice,
+            voice_training::set_better_voice,
             vision::local_model_vision,
             // Windows Hello (lock.rs): Settings reads and changes the four
             // Security settings; the Brain's Show button.

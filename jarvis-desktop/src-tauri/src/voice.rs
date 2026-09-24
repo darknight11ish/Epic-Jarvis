@@ -262,7 +262,7 @@ fn open_input_stream(
 /// returns when told to stop, at which point this function returns and the
 /// stream - a local in this function's own scope, never moved into `body` -
 /// drops, releasing the microphone.
-fn spawn_capture_thread(
+pub(crate) fn spawn_capture_thread(
     samples: Arc<Mutex<Vec<i16>>>,
     ready_tx: mpsc::Sender<Result<hound::WavSpec, String>>,
     stop_rx: mpsc::Receiver<()>,
@@ -282,7 +282,7 @@ fn spawn_capture_thread(
     })
 }
 
-fn wait_for_ready(
+pub(crate) fn wait_for_ready(
     ready_rx: mpsc::Receiver<Result<hound::WavSpec, String>>,
     stop_tx_on_timeout: mpsc::Sender<()>,
 ) -> Result<hound::WavSpec, String> {
@@ -298,7 +298,7 @@ fn wait_for_ready(
     }
 }
 
-fn poisoned<T>(_: T) -> String {
+pub(crate) fn poisoned<T>(_: T) -> String {
     "voice capture state was poisoned by an earlier panic".to_string()
 }
 
@@ -332,6 +332,17 @@ struct HeardRaw {
     awake_seconds: f64,
     #[serde(default)]
     stop: bool,
+    /// Since the stricter voice check (docs/JARVIS-API.md section 16): the
+    /// clip was too short to be sure it was the owner, and `reason` says so.
+    #[serde(default)]
+    too_short: bool,
+    /// May an answer drawn from email, the calendar, notes or memory be READ
+    /// ALOUD for this request? Missing (an older PC) is read as `false`.
+    #[serde(default)]
+    private_aloud: bool,
+    /// The words asked about something private - a hint.
+    #[serde(default)]
+    question_private: bool,
 }
 
 fn default_true() -> bool {
@@ -361,6 +372,14 @@ pub struct HeardReply {
     /// The clip was the stop word ("stop", "Jarvis, stop"): silence the
     /// reply being spoken, and nothing else.
     pub stop: bool,
+    /// Too short to check; `reason` says how much more to say. Not "that
+    /// did not sound like you".
+    pub too_short: bool,
+    /// The server says a private answer may be read aloud for this
+    /// request; `false` when it did not say (private-speech.js).
+    pub private_aloud: bool,
+    /// The question itself was about something private.
+    pub question_private: bool,
 }
 
 impl HeardReply {
@@ -379,6 +398,9 @@ impl HeardReply {
             awake: false,
             awake_seconds: 0.0,
             stop: false,
+            too_short: false,
+            private_aloud: false,
+            question_private: false,
         }
     }
 }
@@ -397,6 +419,9 @@ impl From<HeardRaw> for HeardReply {
             awake: raw.awake,
             awake_seconds: raw.awake_seconds,
             stop: raw.stop,
+            too_short: raw.too_short,
+            private_aloud: raw.private_aloud,
+            question_private: raw.question_private,
         }
     }
 }
@@ -423,6 +448,19 @@ pub(crate) fn to_server_format(
     spec: hound::WavSpec,
     samples: &[i16],
 ) -> (hound::WavSpec, Vec<i16>) {
+    to_format(spec, samples, SERVER_RATE)
+}
+
+/// `samples` (interleaved, at `spec`) as one channel at `rate`: the
+/// conversion [`to_server_format`] makes, at any rate. Settings' voice
+/// training sends 16 kHz like every other clip; a recording for a custom
+/// voice is kept at 24 kHz, the rate the server stores voices at
+/// (`jarvis_voices.SAMPLE_RATE`), so it loses nothing above 8 kHz.
+pub(crate) fn to_format(
+    spec: hound::WavSpec,
+    samples: &[i16],
+    rate: u32,
+) -> (hound::WavSpec, Vec<i16>) {
     let channels = usize::from(spec.channels.max(1));
     let mono: Vec<i32> = samples
         .chunks_exact(channels)
@@ -430,11 +468,11 @@ pub(crate) fn to_server_format(
         .collect();
     let out_spec = hound::WavSpec {
         channels: 1,
-        sample_rate: SERVER_RATE,
+        sample_rate: rate,
         bits_per_sample: 16,
         sample_format: hound::SampleFormat::Int,
     };
-    (out_spec, resample(&mono, spec.sample_rate, SERVER_RATE))
+    (out_spec, resample(&mono, spec.sample_rate, rate))
 }
 
 /// One channel of samples from rate `from` to rate `to`.
@@ -476,13 +514,13 @@ fn server_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> 
 }
 
 /// How long `samples` (interleaved, at `spec`) lasts.
-fn clip_length(spec: hound::WavSpec, samples: &[i16]) -> Duration {
+pub(crate) fn clip_length(spec: hound::WavSpec, samples: &[i16]) -> Duration {
     let per_second = u64::from(spec.sample_rate.max(1)) * u64::from(spec.channels.max(1));
     Duration::from_millis(samples.len() as u64 * 1000 / per_second)
 }
 
 /// `samples` (interleaved, as captured) as the bytes of one 16-bit WAV file.
-fn encode_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> {
+pub(crate) fn encode_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> {
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut writer = hound::WavWriter::new(&mut cursor, spec)
@@ -563,6 +601,18 @@ async fn post_utterance(
 #[derive(Default)]
 pub struct VoiceCaptureState(Mutex<Option<ActiveCapture>>);
 
+impl VoiceCaptureState {
+    /// A push-to-talk recording holds the microphone right now. Read by
+    /// Settings' voice recordings (`voice_training.rs`), which must not
+    /// open a second capture on the same device.
+    pub(crate) fn busy(&self) -> bool {
+        self.0
+            .lock()
+            .map(|g| g.is_some())
+            .unwrap_or_else(|p| p.into_inner().is_some())
+    }
+}
+
 struct ActiveCapture {
     stop_tx: mpsc::Sender<()>,
     samples: Arc<Mutex<Vec<i16>>>,
@@ -593,7 +643,14 @@ pub fn summon_push_to_talk(app: AppHandle) -> Result<(), String> {
 pub fn start_voice_capture(
     state: State<VoiceCaptureState>,
     auto: State<AutoListenState>,
+    training: State<crate::voice_training::SampleState>,
 ) -> Result<(), String> {
+    // Asked before this state's lock is taken. Settings' recorder
+    // (voice_training.rs) likewise asks `busy` before taking its own: neither
+    // holds its lock while asking the other, so the two cannot deadlock.
+    if training.recording() {
+        return Err(crate::voice_training::MIC_IN_SETTINGS.to_string());
+    }
     let mut guard = state.0.lock().map_err(poisoned)?;
     if guard.is_some() {
         return Err("already recording".to_string());
@@ -1071,7 +1128,7 @@ enum VadPhase {
     },
 }
 
-fn rms(samples: &[i16]) -> f32 {
+pub(crate) fn rms(samples: &[i16]) -> f32 {
     if samples.is_empty() {
         return 0.0;
     }
@@ -1252,6 +1309,7 @@ pub async fn start_automatic_listening(
     app: AppHandle,
     state: State<'_, AutoListenState>,
     manual: State<'_, VoiceCaptureState>,
+    training: State<'_, crate::voice_training::SampleState>,
 ) -> Result<ListenInfo, String> {
     {
         let auto_busy = state.0.lock().map_err(poisoned)?.is_some();
@@ -1259,12 +1317,20 @@ pub async fn start_automatic_listening(
         if let Some(e) = busy_error(auto_busy, manual_busy) {
             return Err(e);
         }
+        if training.recording() {
+            return Err(crate::voice_training::MIC_IN_SETTINGS.to_string());
+        }
     }
 
     let use_turn = ensure_wake_ready(&app).await?;
 
     // Checked again: the server round trip above is an await, and the
-    // other mode may have taken the microphone meanwhile.
+    // other mode may have taken the microphone meanwhile. Settings' recorder
+    // is asked before this lock is taken, and it stops this listener before
+    // taking its own: neither holds its lock while asking the other.
+    if training.recording() {
+        return Err(crate::voice_training::MIC_IN_SETTINGS.to_string());
+    }
     let mut guard = state.0.lock().map_err(poisoned)?;
     let manual_busy = manual.0.lock().map_err(poisoned)?.is_some();
     if let Some(e) = busy_error(guard.is_some(), manual_busy) {

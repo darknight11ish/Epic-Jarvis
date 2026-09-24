@@ -1455,6 +1455,13 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
             );
         }
     }
+    // How many remembered facts went into the question - a count, never
+    // which ones. With `gate: "private"` it is how the quickbar knows not to
+    // read a voice question's answer aloud (docs/JARVIS-API.md section 16,
+    // "What the apps must do about private answers"; private-speech.js).
+    if let Some(n) = route.get("injected_facts").and_then(|v| v.as_u64()) {
+        out.insert("injected_facts".to_string(), serde_json::json!(n));
+    }
     (!out.is_empty()).then(|| serde_json::Value::Object(out).to_string())
 }
 
@@ -4561,6 +4568,28 @@ mod turn_tests {
                 case["name"]
             );
         }
+    }
+
+    /// The private-answer rule needs the gate and the count of remembered
+    /// facts: both pass on, from the real headers, and a count that is not a
+    /// whole number does not.
+    #[test]
+    fn the_route_line_carries_the_gate_and_the_count_of_facts() {
+        let doc = cases();
+        for case in doc["route_headers"].as_array().expect("route_headers") {
+            let header = case["header"].as_str().unwrap();
+            let real: serde_json::Value = serde_json::from_str(header).unwrap();
+            let line = super::route_line_from_header(header).expect("a route line");
+            let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(got["gate"], real["gate"], "{}", case["name"]);
+            assert_eq!(
+                got["injected_facts"], real["injected_facts"],
+                "{}",
+                case["name"]
+            );
+        }
+        let odd = super::route_line_from_header(r#"{"lane": "x", "injected_facts": "2"}"#).unwrap();
+        assert!(!odd.contains("injected_facts"), "{odd}");
     }
 
     /// A turn the second graphics card answered. `chat-stream-cases.json` has

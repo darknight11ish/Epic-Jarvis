@@ -264,6 +264,30 @@ permissions = [
   # server raises ONE approval card (change_own_config), and ON is held
   # while the event stream is stale.
   "allow-set-wake-word",
+  # Voice training on this PC, the voice-check settings, the guided test and
+  # custom voices (voice_training.rs). Recording opens the microphone, so it
+  # sits here with the other settings-only powers and nowhere else; the
+  # recordings are held in the app's memory, never in the page, never on
+  # disk, and sent only to this Jarvis. Everything that widens who Jarvis
+  # obeys, what it reads aloud or how it speaks only raises ONE approval
+  # card (and is held while the event stream is stale): finishing a
+  # training, loosening a setting, adding a voice, switching to one, the
+  # better voice ON. Tightening, cancelling, going back to the built-in
+  # voice, deleting a voice and the better voice OFF are immediate.
+  "allow-start-voice-sample",
+  "allow-voice-sample-level",
+  "allow-stop-voice-sample",
+  "allow-cancel-voice-sample",
+  "allow-discard-voice-samples",
+  "allow-send-voice-training",
+  "allow-cancel-voice-training",
+  "allow-measure-voice",
+  "allow-set-voice-setting",
+  "allow-get-custom-voices",
+  "allow-create-custom-voice",
+  "allow-set-active-voice",
+  "allow-delete-custom-voice",
+  "allow-set-better-voice",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",
