@@ -128,9 +128,19 @@ CLASSIFICATION = {
     "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
     "/api/memory/export": ("deliberate", "A copy of everything Jarvis knows does not belong on a phone that can be lost."),
     "/api/memory/facts": ("ported", ""),
-    "/api/memory/forget": ("deliberate", "Deep memory editing; it stays on the desktop's Memory tab."),
+    # Was `deliberate` (deep memory editing, desktop only). The owner's
+    # 2026-09-24 amendment lists every automatically saved fact in BOTH apps
+    # with a one-tap Forget (docs/JARVIS-API.md section 19), so the phone
+    # calls it for that list; `todo` until the phone's side merges.
+    "/api/memory/forget": ("todo", "Forget ONE fact. Desktop: the Memory tab's facts list and its \"Saved automatically\" list (brain_memory_forget, after a confirm, held on a stale link). Phone: the \"Saved automatically\" list only (section 19), after the same confirm, held on a stale link. Rewording stays desktop-only (/api/memory/edit)."),
     "/api/memory/keep_both": ("ported", ""),
-    "/api/memory/learning": ("ported", "The learning on/off switch on Mind (MemoryCountsSection). Turning learning ON raises an approval card on the PC (learning-asks.patch, 2026-09-24): the phone says \"waiting\" while a learning_enable card is in the queue, and holds ON on a stale link; OFF is immediate."),
+    # Automatic learning (docs/JARVIS-API.md section 19, 2026-09-24): built
+    # on the backend and both apps at once. `todo` until the phone's side
+    # merges; then `ported`.
+    "/api/memory/auto": ("todo", "\"Saved automatically\": facts saved without a card, newest first, with Load older, and the two switches' states. Desktop: the Brain's Memory tab (brain_memory_auto_list), hidden with the other memory lists by Windows Hello, re-read on the `memory_saved` event. Phone: Mind, What Jarvis remembers."),
+    "/api/memory/learning/auto": ("todo", "\"Learn automatically\": ON is one approval card (learning_auto_enable), OFF is immediate. Desktop: Memory tab, next to the learning switch (brain_memory_learning_auto). Both apps hold ON on a stale link; OFF never."),
+    "/api/memory/learning/sensitive": ("todo", "\"Also remember sensitive topics automatically\": ON is one approval card (learning_sensitive_enable), OFF is immediate. Desktop: Memory tab (brain_memory_learning_sensitive). Both apps hold ON on a stale link; OFF never."),
+    "/api/memory/learning": ("ported", "The learning on/off switch on Mind (MemoryCountsSection). Turning learning ON raises an approval card on the PC (learning-asks.patch, 2026-09-24): the phone says \"waiting\" while a learning_enable card is in the queue, and holds ON on a stale link; OFF is immediate. Since section 19 (2026-09-24) its GET is the switches' state too (learning, the two automatic-learning switches, whether a card waits); the desktop reads it (brain_memory_learning_status)."),
     "/api/memory/pending": ("ported", "The review queue."),
     "/api/memory/sleep_time": ("ported", ""),
     "/api/memory/status": ("ported", "Memory counts and whether search-by-meaning is on, read-only, in the desktop Memory pane's words. Phone: Mind, What Jarvis remembers (MemoryCountsPlate.kt, net/MemoryCounts.kt)."),

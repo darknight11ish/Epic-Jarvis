@@ -372,7 +372,7 @@ permissions = ["allow-brain-remove-skill", "allow-brain-model"]
 # every other item here.
 [[set]]
 identifier = "brain-memory"
-description = "Keep or discard a proposed fact, reword one, stop one being recalled, export the store, read what Jarvis believed at a past moment, and turn the background learner on or off. One fact per decision; there is no bulk form."
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, and list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off. One fact per decision; there is no bulk form."
 permissions = [
   "allow-brain-memory-decide",
   "allow-brain-memory-forget",
@@ -383,6 +383,17 @@ permissions = [
   "allow-brain-memory-sleep-time",
   # "Both are true": one proposal, one decision, like decide above.
   "allow-brain-memory-keep-both",
+  # Automatic learning (JARVIS-API.md section 19; brain/auto_learn.rs): the
+  # switches' state (GET /api/memory/learning, a read); the "Saved
+  # automatically" list - a read, held back like the other memory lists
+  # while "Windows Hello for memory lists and chat history" hides them; and
+  # its two switches, ONE setting per call. ON only raises an approval card
+  # (tier `ask`) and is held while the event stream is stale; OFF is
+  # immediate. Forgetting one of them is brain_memory_forget above.
+  "allow-brain-memory-learning-status",
+  "allow-brain-memory-auto-list",
+  "allow-brain-memory-learning-auto",
+  "allow-brain-memory-learning-sensitive",
 ]
 
 # Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).

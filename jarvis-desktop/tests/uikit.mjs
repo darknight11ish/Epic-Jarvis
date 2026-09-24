@@ -397,7 +397,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -1009,6 +1009,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (cmd === "brain_memory_sleep_time") {
               return { ok: true, enabled: args.enabled ?? true, remind: args.remind ?? true };
             }
+            if (cmd === "brain_memory_forget") {
+              // A forgotten fact is no longer current, so it leaves the
+              // "Saved automatically" list the PC sends.
+              window.__auto.facts = window.__auto.facts.filter((f) => f.id !== args.id);
+            }
             return { ok: true };
           case "brain_memory_export":
             // brain.rs saves the export to a file the owner picks in the
@@ -1031,6 +1036,56 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           // conversations newest first (`before` exclusive), the list
           // emptied while private answers are hidden, ON as a 202 card when
           // `waits`, and every write recorded in `window.__history`.
+          // Automatic learning (brain/auto_learn.rs, JARVIS-API.md section
+          // 19). The switches' state is GET /api/memory/learning (Rust says
+          // `{available: false}` for a PC without it). The list answers the
+          // way the Rust command does: a page of facts newest first
+          // (`before` exclusive), with the two switches, emptied while
+          // private answers are hidden; each switch's ON is a 202 card when
+          // `waits` names it; every call recorded in `window.__auto`.
+          case "brain_memory_learning_status": {
+            const a = window.__auto;
+            a.statusReads += 1;
+            if (a.statusFails) throw new Error(a.statusFails);
+            if (a.statusMissing) return { available: false };
+            return JSON.parse(JSON.stringify({ auto_last: null, sensitive_last: null, ...a.status }));
+          }
+          case "brain_memory_auto_list": {
+            const a = window.__auto;
+            a.reads.push({ before: args.before, limit: args.limit });
+            if (a.listFails) throw new Error(a.listFails);
+            if (a.missing) {
+              return { available: false, why: "This PC's Jarvis does not learn automatically yet. " +
+                "Update the backend by running apply-patches.ps1, then open this again." };
+            }
+            const all = [...a.facts].sort((x, y) => y.saved_at - x.saved_at);
+            const older = args.before == null ? all : all.filter((f) => f.saved_at < args.before);
+            const out = JSON.parse(JSON.stringify({ auto: a.status.auto, auto_sensitive: a.status.auto_sensitive,
+                                                    facts: older.slice(0, args.limit || 30) }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              out.hidden = true;
+              out.hidden_count = out.facts.length;
+              out.facts = [];
+            }
+            return out;
+          }
+          case "brain_memory_learning_auto":
+          case "brain_memory_learning_sensitive": {
+            const a = window.__auto;
+            const which = cmd === "brain_memory_learning_auto" ? "auto" : "sensitive";
+            const field = which === "auto" ? "auto" : "auto_sensitive";
+            a.switches.push({ which, enabled: args.enabled });
+            if (a.switchFails) throw new Error(a.switchFails);
+            if (args.enabled === true && a.waits.includes(which)) {
+              a.status[`${which}_waiting`] = true;
+              return { ok: true, waiting: true, [field]: false,
+                       message: "Waiting for your approval. It turns on only if you approve the card, on your PC or phone." };
+            }
+            a.status[field] = args.enabled === true;
+            a.status[`${which}_waiting`] = false;
+            return { ok: true, [field]: args.enabled === true };
+          }
           case "brain_history_list": {
             const h = window.__history;
             h.reads.push({ before: args.before, limit: args.limit });
@@ -1203,6 +1258,18 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               encrypted: true, ...((history && history.status) || {}) },
   }));
   Object.assign(window.__history, { reads: [], opened: [], deleted: [], settings: [] });
+  // Unset, automatic learning as the owner has it by default: learning on,
+  // learning automatically on, sensitive topics off, nothing waiting, and
+  // nothing saved yet. `missing` is a PC without the list, `statusMissing`
+  // one without GET /api/memory/learning.
+  window.__auto = JSON.parse(JSON.stringify({
+    missing: false, statusMissing: false, waits: [], listFails: null, statusFails: null,
+    switchFails: null, facts: [],
+    ...(auto || {}),
+    status: { enabled: true, auto: true, auto_sensitive: false, auto_waiting: false,
+              sensitive_waiting: false, ...((auto && auto.status) || {}) },
+  }));
+  Object.assign(window.__auto, { reads: [], statusReads: 0, switches: [] });
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;

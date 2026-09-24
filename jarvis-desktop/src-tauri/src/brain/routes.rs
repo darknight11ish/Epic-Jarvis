@@ -101,6 +101,8 @@ mod tests {
             "/api/memory/forget",
             "/api/memory/edit",
             "/api/memory/learning",
+            "/api/memory/learning/auto",
+            "/api/memory/learning/sensitive",
         ];
         for (section, path) in READ_ROUTES {
             assert!(

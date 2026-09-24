@@ -1378,6 +1378,25 @@ body {
   padding-top: 8px;
 }
 
+/* ---- Automatic learning (auto-learn.js): the History switch's look ----- */
+
+#memory-auto {
+  margin-top: 12px;
+}
+
+#memory-auto:empty {
+  margin-top: 0;
+}
+
+/* "Jarvis remembered 2 things": a quiet line, never a pop-up. */
+#memory-saved-line:not(:empty) {
+  margin-bottom: 8px;
+}
+
+#memory-auto-list:focus {
+  outline: none;
+}
+
 /* One conversation, read-only, under its row. The text is the owner's and
    the model's words, set as text (history-view.js), wrapped as written. */
 .history-transcript {

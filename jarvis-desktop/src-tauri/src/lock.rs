@@ -22,8 +22,9 @@
 //! * **Windows Hello for memory lists and chat history** - off by default. On: the Brain's
 //!   memory lists come back from [`crate::brain::brain_read`] with the
 //!   entries taken out ([`redact_private`]) until Show passes Windows Hello,
-//!   and so does its chat history list (`brain/history.rs`, which also will
-//!   not open a conversation until then).
+//!   and so do its chat history list (`brain/history.rs`, which also will
+//!   not open a conversation until then) and its "Saved automatically" list
+//!   (`brain/auto_learn.rs`).
 //!
 //! The rules themselves - which approvals are risky, what counts as
 //! loosening, what Windows' answers mean - are in `lock/rules.rs`, with no

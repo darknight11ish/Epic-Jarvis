@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-memory-learning-status"
+description = "Enables the brain_memory_learning_status command without any pre-configured scope."
+commands.allow = ["brain_memory_learning_status"]
+
+[[permission]]
+identifier = "deny-brain-memory-learning-status"
+description = "Denies the brain_memory_learning_status command without any pre-configured scope."
+commands.deny = ["brain_memory_learning_status"]
