@@ -803,7 +803,8 @@ def zipvoice_state() -> tuple:
         return False, ("the sherpa-onnx package is not installed in the Python that runs "
                        "Jarvis (py -3 -m pip install sherpa-onnx)")
     if not hasattr(sherpa_onnx, "OfflineTtsZipvoiceModelConfig"):
-        return False, ("this sherpa-onnx is too old for ZipVoice (1.12 or newer is needed): "
+        return False, ("this sherpa-onnx has no ZipVoice (1.13.8 has it; that is the version "
+                       "this was tested with): "
                        "py -3 -m pip install --upgrade sherpa-onnx")
     f = zipvoice_files()
     missing = [k for k in ("tokens", "encoder", "decoder", "vocoder") if not Path(f[k]).is_file()]
@@ -1555,7 +1556,10 @@ def status() -> dict:
     voices = list_voices()
     engine, fallback = _predict(st, voices)
     k_ok, k_why = _kokoro_state()
-    z_ok, z_why = zipvoice_state()
+    if _ZIP["built"]:
+        z_ok, z_why = _ZIP["engine"] is not None, _ZIP["why"]
+    else:
+        z_ok, z_why = zipvoice_state()
     active_name = BUILTIN_NAME
     for r in voices:
         if r["id"] == st["active"]:
@@ -2178,11 +2182,16 @@ def _time_cli(sentences: list) -> int:
 
 
 if __name__ == "__main__":
+    # The module by its own name: jarvis_speech.say() imports
+    # `jarvis_voices`, and this file run as a script is a different copy
+    # (`__main__`) whose better-voice process say() would never see.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import jarvis_voices as _this
     if "--time" in sys.argv:
         rest = [a for a in sys.argv[1:] if a != "--time"]
         first = rest[0] if rest else "Of course. I have added the dentist to Tuesday at ten."
-        raise SystemExit(_time_cli([
+        raise SystemExit(_this._time_cli([
             first, first,
             "The weather tomorrow looks mild, with light rain in the afternoon, so you may "
             "want a coat when you head out."]))
-    print(json.dumps(status(), indent=2))
+    print(json.dumps(_this.status(), indent=2))
