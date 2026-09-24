@@ -732,6 +732,15 @@ body {
   gap: 6px;
 }
 
+/* In place of the capture row when the PC is set up for no note app, or
+   could not be asked - it says which, rather than offering all three. */
+.note-targets-line {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
 /* Now a <button> rather than a <div>, so the Logseq/Joplin switch is reachable
    from the keyboard. Buttons do not inherit the page font, hence the resets. */
 .capture-target {

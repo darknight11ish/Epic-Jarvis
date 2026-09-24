@@ -283,19 +283,30 @@
             </li>
             <li>
               <span class="primer-keys" data-hotkey="quick_note"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span>
-              <span>Summon the bar ready to file a Logseq journal note</span>
+              <span>Summon the bar ready to file a note (Logseq, or the first note app that is set up)</span>
             </li>
             <li>
               <span class="primer-keys" data-hotkey="toggle_widget"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></span>
               <span>Show or hide the desktop widget</span>
             </li>
-            <li>
+            <!-- Only the note apps the PC says are set up are shown (main.js
+                 syncNotePrimer). Until it answers, none are - and the last
+                 row says why. -->
+            <li data-note-target="logseq" hidden>
               <span class="primer-keys"><code>#log</code></span>
               <span>File what you type in today's Logseq journal</span>
             </li>
-            <li>
+            <li data-note-target="joplin" hidden>
               <span class="primer-keys"><code>#joplin</code></span>
               <span>File what you type as a new Joplin note</span>
+            </li>
+            <li data-note-target="obsidian" hidden>
+              <span class="primer-keys"><code>#obs</code></span>
+              <span>File what you type in today's Obsidian daily note</span>
+            </li>
+            <li id="note-targets-line">
+              <span class="primer-keys"><code>#</code></span>
+              <span>Checking which note apps are set up on your PC…</span>
             </li>
             <li>
               <span class="primer-keys"><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd></span>

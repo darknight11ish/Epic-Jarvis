@@ -120,6 +120,8 @@ fn main() {
             "capture_note",
             // How a filed note ended: waiting for approval, filed, or not.
             "capture_note_status",
+            // Which note apps this PC is set up for - names only.
+            "note_targets",
             // Quickbar
             "hide_quickbar",
             "resize_quickbar",

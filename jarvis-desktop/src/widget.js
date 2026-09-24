@@ -35,7 +35,7 @@ import {
   surfaceState,
   start as startLink,
 } from "./jarvis-link.js";
-import { fileNote } from "./note-capture.js";
+import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./note-capture.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -95,6 +95,7 @@ const dom = {
   btnPin: $("btn-pin"),
   btnLog: $("btn-quick-log"),
   btnJoplin: $("btn-quick-joplin"),
+  btnObs: $("btn-quick-obs"),
 
   meterVram: $("meter-vram"),
   meterCpu: $("meter-cpu"),
@@ -131,6 +132,8 @@ const dom = {
   btnTaskNoteSend: $("btn-task-note-send"),
 
   captureTarget: $("capture-target"),
+  captureRow: $("capture-row"),
+  noteTargetsLine: $("note-targets-line"),
   captureInput: $("capture-input"),
   btnCaptureSend: $("btn-capture-send"),
   flash: $("widget-flash"),
@@ -145,8 +148,12 @@ const state = {
   alwaysOnTop: true,
   /** Id of the gate awaiting a decision, or null. */
   approval: null,
-  /** `"logseq"` or `"joplin"` — which store the capture field files to. */
+  /** `"logseq"`, `"joplin"` or `"obsidian"` — which store the capture field
+   *  files to. Only ever one the PC says is set up. */
   captureTarget: "logseq",
+  /** Which note apps the PC is set up for (note-capture.js `readTargets`).
+   *  Unknown until the PC answers - and unknown shows none, never all. */
+  noteTargets: { known: false, why: "not checked yet" },
   /** A note is being filed. Separate from `deciding`: they are unrelated, and
    *  one shared flag meant each silently disabled the other. */
   busy: false,
@@ -691,11 +698,44 @@ async function decide(approved, optionId = null) {
 function setCaptureTarget(target) {
   state.captureTarget = target;
   dom.captureTarget.dataset.target = target;
-  dom.captureTarget.textContent = target === "joplin" ? "#jop" : "#log";
-  dom.captureTarget.title =
-    target === "joplin"
-      ? "Filing to the Joplin vault — click to switch"
-      : "Filing to the Logseq journal — click to switch";
+  dom.captureTarget.textContent = (TARGETS[target] || TARGETS.logseq).prefix;
+  const where = {
+    logseq: "the Logseq journal",
+    joplin: "the Joplin vault",
+    obsidian: "today's Obsidian daily note",
+  }[target] || targetName(target);
+  const more = readyTargets().length > 1;
+  dom.captureTarget.title = `Filing to ${where}${more ? " — click to switch" : ""}`;
+  dom.captureTarget.setAttribute("aria-label",
+    `Capture target: ${where}.${more ? " Activate to switch to the next note app." : ""}`);
+}
+
+/** The note apps the PC said are set up - empty while that is not known. */
+function readyTargets() {
+  return state.noteTargets.known ? state.noteTargets.targets : [];
+}
+
+/**
+ * Shows a button and a capture target only for a note app the PC is set up
+ * for. None set up, or the PC could not be asked: no capture field, and one
+ * line saying which.
+ */
+function syncNoteTargets() {
+  const ready = readyTargets();
+  dom.btnLog.hidden = !ready.includes("logseq");
+  dom.btnJoplin.hidden = !ready.includes("joplin");
+  dom.btnObs.hidden = !ready.includes("obsidian");
+  dom.captureRow.hidden = ready.length === 0;
+  dom.noteTargetsLine.hidden = ready.length > 0;
+  if (!ready.length) dom.noteTargetsLine.textContent = noTargetsLine(state.noteTargets);
+  if (ready.length) {
+    setCaptureTarget(ready.includes(state.captureTarget) ? state.captureTarget : ready[0]);
+  }
+}
+
+async function refreshNoteTargets() {
+  state.noteTargets = await loadTargets(invokeStrict);
+  syncNoteTargets();
 }
 
 let flashTimer = null;
@@ -915,6 +955,7 @@ dom.btnPin.addEventListener("click", () => setPinned(!state.alwaysOnTop));
 
 dom.btnLog.addEventListener("click", () => invoke("prefill_quickbar", { target: "logseq" }));
 dom.btnJoplin.addEventListener("click", () => invoke("prefill_quickbar", { target: "joplin" }));
+dom.btnObs.addEventListener("click", () => invoke("prefill_quickbar", { target: "obsidian" }));
 
 dom.btnApprYes.addEventListener("click", () => decide(true));
 dom.btnApprNo.addEventListener("click", () => decide(false));
@@ -937,9 +978,12 @@ dom.taskNoteInput.addEventListener("keydown", (event) => {
   }
 });
 
-dom.captureTarget.addEventListener("click", () =>
-  setCaptureTarget(state.captureTarget === "logseq" ? "joplin" : "logseq")
-);
+dom.captureTarget.addEventListener("click", () => {
+  // The next note app that is set up, round and round.
+  const ready = readyTargets();
+  if (ready.length < 2) return;
+  setCaptureTarget(ready[(ready.indexOf(state.captureTarget) + 1) % ready.length]);
+});
 dom.btnCaptureSend.addEventListener("click", sendCapture);
 dom.offlineRetry.addEventListener("click", async () => {
   dom.offlineText.textContent = "Reconnecting…";
@@ -1015,6 +1059,10 @@ listen("approval-resolved", (event) => {
 
 (async () => {
   setCaptureTarget("logseq");
+  syncNoteTargets();
+  refreshNoteTargets();
+  // Asked again each time the widget is focused, so an app set up since shows.
+  window.addEventListener("focus", () => refreshNoteTargets());
   syncTaskControls();
 
   // Restore the mode the user left the widget in.

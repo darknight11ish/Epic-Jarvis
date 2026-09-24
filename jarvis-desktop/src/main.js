@@ -55,8 +55,15 @@ const NOTE_PREFIXES = {
   "#logseq": { target: "logseq", label: "Logseq Journal" },
   "#journal": { target: "logseq", label: "Logseq Journal" },
   "#joplin": { target: "joplin", label: "Joplin Vault" },
+  "#jop": { target: "joplin", label: "Joplin Vault" },
   "#vault": { target: "joplin", label: "Joplin Vault" },
+  "#obs": { target: "obsidian", label: "Obsidian Daily Note" },
+  "#obsidian": { target: "obsidian", label: "Obsidian Daily Note" },
+  "#daily": { target: "obsidian", label: "Obsidian Daily Note" },
 };
+
+/** What Alt+Shift+N (and the widget's buttons) type in for each target. */
+const ARM_PREFIX = { logseq: "#log ", joplin: "#joplin ", obsidian: "#obs " };
 
 /*
  * There used to be a NOTE_INSTRUCTIONS table here: a system turn asking the
@@ -105,7 +112,7 @@ import {
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode } from "./voice.js";
 import { commitExchange, historyMessages } from "./chat-history.js";
-import { fileNote } from "./note-capture.js";
+import { fileNote, loadTargets, notSetUp, noTargetsLine, targetName } from "./note-capture.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -300,8 +307,11 @@ const state = {
   pictureCleared: false,
   /** The words held back while the picture notice asks what to do. */
   pictureHeld: null,
-  /** `null`, `"logseq"` or `"joplin"` — set by a prompt prefix. */
+  /** `null`, `"logseq"`, `"joplin"` or `"obsidian"` — set by a prompt prefix. */
   noteTarget: null,
+  /** Which note apps the PC is set up for (note-capture.js `readTargets`).
+   *  Unknown until the PC answers - and unknown shows none, never all. */
+  noteTargets: { known: false, why: "not checked yet" },
   /** The approval gate awaiting a decision, if any. */
   approval: null,
   /** True while a decision is in flight, so a double tap cannot send twice. */
@@ -1188,6 +1198,16 @@ function parseNotePrefix(text) {
   return { ...spec, body: text.slice(match[0].length) };
 }
 
+/** True only when the PC said this target is set up. */
+function targetReady(target) {
+  return state.noteTargets.known && state.noteTargets.targets.includes(target);
+}
+
+/** True when the PC said, for certain, that this target is NOT set up. */
+function targetMissing(target) {
+  return state.noteTargets.known && !state.noteTargets.targets.includes(target);
+}
+
 /** Mirrors the prefix in the chip beside the reactor as the user types. */
 function syncNoteChip() {
   const { target, label } = parseNotePrefix(dom.prompt.value);
@@ -1195,9 +1215,33 @@ function syncNoteChip() {
   dom.noteChip.hidden = !target;
   if (target) {
     dom.noteChip.dataset.target = target;
-    dom.noteChipLabel.textContent = label;
+    const missing = targetMissing(target);
+    dom.noteChip.dataset.unset = String(missing);
+    dom.noteChipLabel.textContent = missing ? `${label} — not set up` : label;
   }
   syncWindowHeight();
+}
+
+/**
+ * The help list shows a prefix only for a note app the PC is set up for,
+ * and one line saying why when it shows none.
+ */
+function syncNotePrimer() {
+  for (const row of document.querySelectorAll("[data-note-target]")) {
+    row.hidden = !targetReady(row.dataset.noteTarget);
+  }
+  const line = document.getElementById("note-targets-line");
+  if (!line) return;
+  const none = !state.noteTargets.known || state.noteTargets.targets.length === 0;
+  line.hidden = !none;
+  if (none) line.lastElementChild.textContent = noTargetsLine(state.noteTargets);
+}
+
+/** Asks the PC which note apps are set up, then repaints what depends on it. */
+async function refreshNoteTargets() {
+  state.noteTargets = await loadTargets(invokeStrict);
+  syncNotePrimer();
+  syncNoteChip();
 }
 
 /* ==========================================================================
@@ -2408,7 +2452,8 @@ async function streamViaFetch(payload) {
 }
 
 /**
- * Files a `#log` / `#joplin` note (and Alt+Shift+N, which arms `#log`).
+ * Files a `#log` / `#joplin` / `#obs` note (and Alt+Shift+N, which arms the
+ * first note app the PC is set up for).
  *
  * No chat turn and no model: the owner's own words go to the backend, which
  * writes them through the approval gate. The card shows the backend's answer
@@ -2416,7 +2461,7 @@ async function streamViaFetch(payload) {
  * was not filed - and never claims more than that answer says.
  */
 async function fileFromBar(target, text) {
-  const place = target === "joplin" ? "Joplin" : "Logseq";
+  const place = targetName(target);
   if (state.approval) closeApproval();
   state.turnId = null;
   paintAnswerMark();
@@ -2424,6 +2469,16 @@ async function fileFromBar(target, text) {
   openCard(`Filing in ${place}…`);
   state.buffer = "";
   paint({ immediate: true });
+  // The PC said this app is not set up: say so, and send nothing. (When the
+  // PC could not be asked, the note is sent, and the PC's own answer - it
+  // refuses an app that is not set up, saying why - is what is shown.)
+  if (targetMissing(target)) {
+    dom.cardStatusText.textContent = "Not filed";
+    state.buffer = notSetUp(target);
+    paint({ immediate: true });
+    announce(state.buffer);
+    return;
+  }
   if (!text) {
     dom.cardStatusText.textContent = "Nothing filed";
     state.buffer = `Nothing to file — type the note after the prefix.`;
@@ -3358,8 +3413,12 @@ listen("screen-captured", (event) => {
 });
 
 listen("quick-note-summon", (event) => {
-  const target = String(event.payload || "logseq");
-  const prefix = target === "joplin" ? "#joplin " : "#log ";
+  const asked = String(event.payload || "logseq");
+  // Alt+Shift+N always asks for Logseq; if the PC is not set up for that,
+  // arm the first note app it is set up for instead.
+  const ready = state.noteTargets.known ? state.noteTargets.targets : [];
+  const target = ready.includes(asked) || !ready.length ? asked : ready[0];
+  const prefix = ARM_PREFIX[target] || ARM_PREFIX.logseq;
   // Keep whatever the user had already typed; just arm the destination.
   const existing = dom.prompt.value.trim();
   const { target: current, body } = parseNotePrefix(dom.prompt.value);
@@ -3404,6 +3463,10 @@ listen("pin-changed", (event) => {
 
 applyRoute(DEFAULT_ROUTE);
 syncNoteChip();
+syncNotePrimer();
+refreshNoteTargets();
+// Asked again each time the bar comes up, so a vault set up since shows.
+window.addEventListener("focus", () => refreshNoteTargets());
 autoGrowPrompt();
 syncWindowHeight();
 refreshHealth();

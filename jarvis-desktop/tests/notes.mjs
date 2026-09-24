@@ -12,8 +12,11 @@
  * the two windows that use it, in a real browser.
  */
 import assert from "node:assert/strict";
-import { describeJob, fileNote } from "../src/note-capture.js";
+import { describeJob, fileNote, notSetUp, noTargetsLine, readTargets } from "../src/note-capture.js";
 import * as K from "./uikit.mjs";
+
+/* The backend's real answers (backend/test_obsidian_notes.py --write). */
+const T = K.NOTE_TARGETS;
 
 const fails = [];
 const check = async (name, fn) => {
@@ -65,11 +68,144 @@ await check("it gives up saying nothing is filed, not that it was", async () => 
   assert.match(last.text, /Nothing is filed until you answer/);
 });
 
+/* ── Which note apps are set up: the backend's real answers ─────────────── */
+
+await check("the PC's list is read as it is sent, for every setup", async () => {
+  assert.deepEqual(readTargets(T.all.body), { known: true, targets: ["logseq", "joplin", "obsidian"] });
+  assert.deepEqual(readTargets(T.none.body), { known: true, targets: [] });
+  assert.deepEqual(readTargets(T.logseq_only.body), { known: true, targets: ["logseq"] });
+  assert.deepEqual(readTargets(T.obsidian_only.body), { known: true, targets: ["obsidian"] });
+});
+
+await check("an older backend's answer is 'unknown', never 'all' and never 'none'", async () => {
+  const r = readTargets(T.older_backend.body);
+  assert.equal(r.known, false);
+  assert.match(noTargetsLine(r), /Couldn't check which note apps are set up/);
+  assert.match(noTargetsLine(readTargets(T.none.body)), /No note app is set up/);
+});
+
+await check("a prefix for an app that is not set up says so, in plain words", async () => {
+  assert.match(notSetUp("obsidian"), /^Obsidian isn't set up on your PC, so nothing was filed\./);
+  assert.match(notSetUp("obsidian"), /vault_directory/);
+});
+
+await check("#obs files to Obsidian, and the words come from the PC", async () => {
+  const calls = [];
+  const invoke = async (cmd, args) => {
+    calls.push([cmd, args]);
+    return { id: "n", state: "filed", message: "Filed in Obsidian, 2026-09-24.md." };
+  };
+  const last = await fileNote(invoke, "obsidian", "hi", () => {}, { pollMs: 1 });
+  assert.deepEqual(calls[0], ["capture_note", { target: "obsidian", text: "hi" }]);
+  assert.equal(last.text, "Filed in Obsidian, 2026-09-24.md.");
+});
+
 /* ── The windows ─────────────────────────────────────────────────────────── */
 
 const { base, close } = await K.serve();
 const browser = await K.launch();
 const widget = (data) => K.open(browser, base, "widget.html", data, { width: 320, height: 520 });
+const shown = (page, sel) => page.locator(sel).evaluate((el) => !el.hidden);
+
+await check("widget: only the note apps that are set up get a button", async () => {
+  const page = await widget({ noteTargets: T.obsidian_only });
+  const buttons = { log: await shown(page, "#btn-quick-log"),
+    jop: await shown(page, "#btn-quick-joplin"), obs: await shown(page, "#btn-quick-obs") };
+  const target = await page.locator("#capture-target").innerText();
+  await page.fill("#capture-input", "tea with Sam");
+  await page.press("#capture-input", "Enter");
+  await page.waitForTimeout(250);
+  const calls = await page.evaluate(() => window.__noteCalls);
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(buttons, { log: false, jop: false, obs: true });
+  assert.equal(target, "#obs");
+  assert.deepEqual(calls, [{ cmd: "capture_note", target: "obsidian", text: "tea with Sam" }]);
+  assert.deepEqual(errors, [], JSON.stringify(errors));
+});
+
+await check("widget: the capture target cycles through the set-up apps only", async () => {
+  const page = await widget({ noteTargets: T.all });
+  const seen = [await page.locator("#capture-target").innerText()];
+  for (let i = 0; i < 3; i += 1) {
+    await page.click("#capture-target");
+    seen.push(await page.locator("#capture-target").innerText());
+  }
+  await page.close();
+  assert.deepEqual(seen, ["#log", "#jop", "#obs", "#log"]);
+});
+
+await check("widget: nothing set up - no field, and a line that says so", async () => {
+  const page = await widget({ noteTargets: T.none });
+  const row = await shown(page, "#capture-row");
+  const line = await page.locator("#note-targets-line").innerText();
+  const any = await Promise.all(["#btn-quick-log", "#btn-quick-joplin", "#btn-quick-obs"]
+    .map((s) => shown(page, s)));
+  await page.close();
+  assert.equal(row, false);
+  assert.deepEqual(any, [false, false, false]);
+  assert.match(line, /No note app is set up/);
+});
+
+await check("widget: the PC cannot say - none shown, and why", async () => {
+  const page = await widget({ noteTargets: T.older_backend });
+  const row = await shown(page, "#capture-row");
+  const line = await page.locator("#note-targets-line").innerText();
+  await page.close();
+  assert.equal(row, false, "an unknown list showed the capture field anyway");
+  assert.match(line, /Couldn't check which note apps are set up on your PC: .*apply-patches/);
+});
+
+await check("quickbar: the help shows only the prefixes that are set up", async () => {
+  const page = await K.open(browser, base, "index.html", { noteTargets: T.logseq_only });
+  const rows = await page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll("[data-note-target]")].map((r) => [r.dataset.noteTarget, !r.hidden])));
+  const line = await shown(page, "#note-targets-line");
+  await page.close();
+  assert.deepEqual(rows, { logseq: true, joplin: false, obsidian: false });
+  assert.equal(line, false);
+});
+
+await check("quickbar: #obs by hand, not set up - says so, and sends nothing", async () => {
+  const page = await K.open(browser, base, "index.html", { noteTargets: T.logseq_only });
+  await page.fill("#prompt", "#obs call Mum");
+  const chip = await page.locator("#note-chip-label").innerText();
+  await page.press("#prompt", "Enter");
+  await page.waitForTimeout(300);
+  const calls = await page.evaluate(() => window.__noteCalls);
+  const answer = await page.locator("#answer").innerText();
+  const status = await page.locator("#card-status-text").textContent();
+  await page.close();
+  assert.match(chip, /not set up/);
+  assert.deepEqual(calls, [], "a note was sent to an app that is not set up");
+  assert.match(answer, /Obsidian isn't set up on your PC, so nothing was filed/);
+  assert.equal(status, "Not filed");
+});
+
+await check("quickbar: #obs files to Obsidian when it is set up", async () => {
+  const page = await K.open(browser, base, "index.html", { noteTargets: T.all,
+    noteJobs: [{ id: "o", state: "filed", message: "Filed in Obsidian, 2026-09-24.md." }] });
+  const help = await shown(page, '[data-note-target="obsidian"]');
+  await page.fill("#prompt", "#obs call Mum");
+  await page.press("#prompt", "Enter");
+  await page.waitForTimeout(300);
+  const calls = await page.evaluate(() => window.__noteCalls);
+  const answer = await page.locator("#answer").innerText();
+  await page.close();
+  assert.equal(help, true);
+  assert.deepEqual(calls, [{ cmd: "capture_note", target: "obsidian", text: "call Mum" }]);
+  assert.match(answer, /Filed in Obsidian/);
+});
+
+await check("quickbar: the PC cannot say - no prefix in the help, the reason instead", async () => {
+  const page = await K.open(browser, base, "index.html", { noteTargets: { error: "could not reach the Jarvis server" } });
+  const rows = await page.evaluate(() =>
+    [...document.querySelectorAll("[data-note-target]")].filter((r) => !r.hidden).length);
+  const line = await page.locator("#note-targets-line").innerText();
+  await page.close();
+  assert.equal(rows, 0);
+  assert.match(line, /Couldn't check which note apps are set up on your PC: could not reach/);
+});
 
 await check("widget: a filed note says where, in the PC's words", async () => {
   const page = await widget({});

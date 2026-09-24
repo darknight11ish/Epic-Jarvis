@@ -704,6 +704,7 @@ pub fn run() {
             commands::prefill_quickbar,
             commands::capture_note,
             commands::capture_note_status,
+            commands::note_targets,
             commands::check_server_health,
             commands::hide_quickbar,
             commands::resize_quickbar,

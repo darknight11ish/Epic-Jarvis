@@ -34,6 +34,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
+ * The backend's real answers to "which note apps are set up?", written by
+ * backend/test_obsidian_notes.py --write from jarvis_note_capture itself.
+ * A window gets `NOTE_TARGETS.all` unless a test says otherwise.
+ */
+export const NOTE_TARGETS = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "..", "..", "jarvis-client", "app", "src",
+  "test", "resources", "contract", "note-targets.json"), "utf8"));
+
+/**
  * Where the browser is.
  *
  * Playwright's own resolution is wrong in the container these were written in
@@ -346,7 +355,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -491,6 +500,20 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__marks.push({ turnId: args.turnId, mark: args.mark });
             if (window.__markRoute === false) return { available: false, status: 404 };
             return { ok: true, turn_id: args.turnId, mark: args.mark };
+          // Which note apps the PC is set up for: one of the backend's real
+          // answers (NOTE_TARGETS). A 2xx hands back its body, as
+          // commands.rs note_targets_answer does; anything else is the
+          // command failing with `error`, or with the Rust side's sentence.
+          case "note_targets": {
+            window.__noteTargetCalls = (window.__noteTargetCalls || 0) + 1;
+            const t = window.__noteTargets || {};
+            if (t.error) throw new Error(t.error);
+            if (t.status >= 200 && t.status < 300 && t.body && Array.isArray(t.body.targets)) {
+              return t.body;
+            }
+            throw new Error("this PC's Jarvis does not say which note apps are set up yet - " +
+              "copy the new backend files in (run apply-patches.ps1)");
+          }
           case "capture_note":
           case "capture_note_status": {
             window.__noteCalls.push({ cmd, ...args });
@@ -739,6 +762,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
       message: "Filed in Logseq, journals/2026_09_23.md." },
   ]));
   window.__noteCalls = [];
+  window.__noteTargets = JSON.parse(JSON.stringify(noteTargets || {}));
   window.__appearanceFails = appearanceFails || null;
   window.__decides = [];
   window.__amends = [];
@@ -795,6 +819,7 @@ export async function open(browser, base, file, data, viewport) {
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
     taskActionFails: null, taskNoteFails: null, noteJobs: null,
+    noteTargets: NOTE_TARGETS.all,
     heard: null, captureFails: null, speakFails: null, autoListenFails: null, speakDelayMs: 0,
     memoryRefuses: null, learningFloor: false, apiSettings: null, tokenSaveRefuses: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,

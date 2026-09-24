@@ -2074,16 +2074,70 @@ pub fn get_widget_prefs(app: AppHandle) -> windows::WidgetPrefs {
 /// "arm a note", shared with the `Alt+Shift+N` hotkey.
 #[tauri::command]
 pub fn prefill_quickbar(app: AppHandle, target: String) -> Result<(), String> {
-    let target = match target.trim().to_ascii_lowercase().as_str() {
-        "joplin" | "vault" => "joplin",
-        _ => "logseq",
-    };
+    let target = note_target(&target)?;
     windows::show_quickbar(&app)?;
     crate::emit_quickbar(&app, crate::events::QUICK_NOTE_SUMMON, target);
     Ok(())
 }
 
-/// Files a note in Logseq or Joplin - the owner's own words, no model.
+/// The backend's name for a note target. An unknown one is refused rather
+/// than filed somewhere the owner did not pick (it used to become Logseq).
+pub(crate) fn note_target(target: &str) -> Result<&'static str, String> {
+    match target.trim().to_ascii_lowercase().as_str() {
+        "logseq" | "log" | "journal" => Ok("logseq"),
+        "joplin" | "jop" | "vault" => Ok("joplin"),
+        "obsidian" | "obs" | "daily" => Ok("obsidian"),
+        other => Err(format!(
+            "\"{other}\" is not a note app Jarvis knows - Logseq, Joplin or Obsidian"
+        )),
+    }
+}
+
+/// Which note apps this PC is set up for: `GET /api/notes/capture` with no
+/// id (`backend/note-capture.patch`, `jarvis_note_capture.available_targets`).
+/// The answer is `{"ok": true, "targets": ["logseq", ...]}` - names only,
+/// never a path or a token. The windows show only those; `note-capture.js`
+/// reads it, and says why when it cannot.
+#[tauri::command]
+pub async fn note_targets(app: AppHandle) -> Result<serde_json::Value, String> {
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{}/api/notes/capture", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("unable to reach `/api/notes/capture`: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    note_targets_answer(status, &body)
+}
+
+/// [`note_targets`]'s reading of the server's answer, on its own so it can be
+/// tested against what the backend really sends.
+pub(crate) fn note_targets_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
+    if (200..300).contains(&status) {
+        if let Some(v) = parsed.filter(|v| v.get("targets").is_some_and(|t| t.is_array())) {
+            return Ok(v);
+        }
+    }
+    if status == 404 || (200..300).contains(&status) {
+        // A backend from before this: a bare GET was "no note with that id".
+        return Err(
+            "this PC's Jarvis does not say which note apps are set up yet - \
+                    copy the new backend files in (run apply-patches.ps1)"
+                .to_string(),
+        );
+    }
+    Err(server_sentence(status, "/api/notes/capture", body))
+}
+
+/// Files a note in Logseq, Joplin or Obsidian - the owner's own words, no model.
 ///
 /// Posts to `/api/notes/capture` (`backend/note-capture.patch`). The backend
 /// writes through `jarvis_gate` under the owner's own action names
@@ -2106,10 +2160,7 @@ pub async fn capture_note(
     if text.is_empty() {
         return Err("nothing to capture".to_string());
     }
-    let target = match target.trim().to_ascii_lowercase().as_str() {
-        "joplin" | "vault" => "joplin",
-        _ => "logseq",
-    };
+    let target = note_target(&target)?;
     let payload = serde_json::json!({ "target": target, "text": text });
     let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
         .post(format!("{}/api/notes/capture", jarvis_base(&app)))
@@ -2174,6 +2225,56 @@ async fn note_answer(response: reqwest::Response, path: &str) -> Result<serde_js
         }
     }
     Err(server_sentence(status.as_u16(), path, &body))
+}
+
+#[cfg(test)]
+mod note_target_tests {
+    use super::{note_target, note_targets_answer};
+
+    /// The backend's real answers, written by `backend/test_obsidian_notes.py
+    /// --write` from `jarvis_note_capture` itself.
+    const FIXTURE: &str =
+        include_str!("../../../jarvis-client/app/src/test/resources/contract/note-targets.json");
+
+    fn case(name: &str) -> (u16, String) {
+        let all: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture parses");
+        let c = &all[name];
+        (
+            c["status"].as_u64().expect("status") as u16,
+            c["body"].to_string(),
+        )
+    }
+
+    #[test]
+    fn the_real_answers_are_read() {
+        let (status, body) = case("all");
+        let v = note_targets_answer(status, &body).expect("a list");
+        assert_eq!(
+            v["targets"],
+            serde_json::json!(["logseq", "joplin", "obsidian"])
+        );
+        let (status, body) = case("none");
+        assert_eq!(
+            note_targets_answer(status, &body).expect("a list")["targets"],
+            serde_json::json!([])
+        );
+    }
+
+    /// An older backend is said to be older - not read as "nothing set up".
+    #[test]
+    fn an_older_backend_says_so() {
+        let (status, body) = case("older_backend");
+        let err = note_targets_answer(status, &body).expect_err("not a list");
+        assert!(err.contains("apply-patches"), "{err}");
+    }
+
+    #[test]
+    fn targets_map_and_an_unknown_one_is_refused() {
+        assert_eq!(note_target("OBS"), Ok("obsidian"));
+        assert_eq!(note_target("vault"), Ok("joplin"));
+        assert_eq!(note_target(" log "), Ok("logseq"));
+        assert!(note_target("evernote").is_err());
+    }
 }
 
 #[cfg(test)]

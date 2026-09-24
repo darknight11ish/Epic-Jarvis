@@ -1128,10 +1128,11 @@ html[data-state="error"] .pulse {
 /* --------------------------------------------------------------------------
    Note-target chip
    --------------------------------------------------------------------------
-   Sits beside the reactor while a `#log` / `#joplin` prefix is active. Two
-   colours so the destination is legible at a glance without reading: cyan is
-   the dev/agent journal, violet the personal vault — the same violet the route
-   badge uses for cloud, because both mean "this is leaving the local lane".
+   Sits beside the reactor while a `#log` / `#joplin` / `#obs` prefix is
+   active. Two colours so the destination is legible at a glance without
+   reading: cyan is the dev/agent journal (Logseq), violet the personal stores
+   (Joplin, Obsidian). A note never leaves this PC whichever it is. Amber, and
+   "not set up", when the PC said that app is not set up.
    -------------------------------------------------------------------------- */
 
 .note-chip {
@@ -1171,15 +1172,28 @@ html[data-state="error"] .pulse {
   box-shadow: 0 0 8px var(--accent);
 }
 
-.note-chip[data-target="joplin"] {
+.note-chip[data-target="joplin"],
+.note-chip[data-target="obsidian"] {
   border-color: var(--cloud-dim);
   background: rgb(var(--info-rgb) / 0.13);
   color: var(--info);
 }
 
-.note-chip[data-target="joplin"] .note-chip-dot {
+.note-chip[data-target="joplin"] .note-chip-dot,
+.note-chip[data-target="obsidian"] .note-chip-dot {
   background: var(--cloud);
   box-shadow: 0 0 8px var(--cloud);
+}
+
+.note-chip[data-unset="true"] {
+  border-color: var(--warn);
+  background: var(--warn-faint);
+  color: var(--warn);
+}
+
+.note-chip[data-unset="true"] .note-chip-dot {
+  background: var(--warn);
+  box-shadow: none;
 }
 
 /* --------------------------------------------------------------------------

@@ -160,11 +160,13 @@ permissions = [
   # The right/wrong mark on the answer on screen - one answer, one mark.
   # Changes no memory by itself; see commands.rs mark_answer.
   "allow-mark-answer",
-  # `#log` / `#joplin` / Alt+Shift+N: the quickbar files the owner's own
+  # `#log` / `#joplin` / `#obs` / Alt+Shift+N: the quickbar files the owner's own
   # words straight to /api/notes/capture instead of asking a model to, and
   # reports how it ended. The write itself still goes through the gate.
   "allow-capture-note",
   "allow-capture-note-status",
+  # Which of those note apps this PC is set up for: names only.
+  "allow-note-targets",
 ]
 
 # ---------------------------------------------------------------------------
@@ -187,6 +189,8 @@ permissions = [
   "allow-capture-note",
   # How that note ended - the server's answer, never the model's account.
   "allow-capture-note-status",
+  # Which of those note apps this PC is set up for: names only.
+  "allow-note-targets",
 ]
 
 # ---------------------------------------------------------------------------

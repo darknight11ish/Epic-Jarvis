@@ -49,11 +49,16 @@
         <div class="route-pill mono" id="route-pill" title="Active model route">LOCAL</div>
 
         <div class="quick-actions">
-          <button class="icon-btn" id="btn-quick-log" title="Capture to the Logseq journal — press N for the field">
+          <!-- Shown only for the note apps the PC says are set up
+               (widget.js syncNoteTargets). -->
+          <button class="icon-btn" id="btn-quick-log" title="Capture to the Logseq journal — press N for the field" hidden>
             #log
           </button>
-          <button class="icon-btn" id="btn-quick-joplin" title="Capture to the Joplin vault">
+          <button class="icon-btn" id="btn-quick-joplin" title="Capture to the Joplin vault" hidden>
             #jop
+          </button>
+          <button class="icon-btn" id="btn-quick-obs" title="Capture to today's Obsidian daily note" hidden>
+            #obs
           </button>
           <button
             class="icon-btn pin-btn"
@@ -274,13 +279,14 @@
         </section>
 
         <!-- One-shot capture -->
-        <section class="capture-row">
+        <p class="note-targets-line" id="note-targets-line" role="status">Checking which note apps are set up on your PC…</p>
+        <section class="capture-row" id="capture-row" hidden>
           <button
             type="button"
             class="capture-target mono"
             id="capture-target"
             data-target="logseq"
-            aria-label="Capture target: Logseq journal. Activate to switch to the Joplin vault."
+            aria-label="Capture target: Logseq journal. Activate to switch to the next note app."
           >#log</button>
           <input
             id="capture-input"
