@@ -136,6 +136,60 @@ await check("Show the token for my phone reveals it read-only, and Hide takes it
   assert.ok(hidden);
 });
 
+// CONN-6 (audit 3): a Copy button put the token on the Windows clipboard,
+// where Clipboard History (and cloud clipboard, on the owner's other
+// devices) keeps it. The phone needs it typed, so there is no Copy for it.
+await check("the shown token has no Copy button, is not selected, and nothing writes it to the clipboard", async () => {
+  const page = await open();
+  await page.evaluate(() => {
+    window.__clipboardWrites = [];
+    const record = (how, text) => window.__clipboardWrites.push({ how, text: String(text) });
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText = async (text) => record("writeText", text);
+      navigator.clipboard.write = async () => record("write", "(items)");
+    }
+    const exec = document.execCommand.bind(document);
+    document.execCommand = (cmd, ...rest) => {
+      if (/^(copy|cut)$/i.test(cmd)) record(cmd, String(window.getSelection()));
+      return exec(cmd, ...rest);
+    };
+    document.addEventListener("copy", () => record("copy-event", String(window.getSelection())), true);
+  });
+  await page.locator("#reveal-token").click();
+  await page.waitForTimeout(250);
+  const shown = await page.locator("#pairing-shown").evaluate((el) => ({
+    buttons: [...el.querySelectorAll("button")].map((b) => b.textContent.trim()),
+  }));
+  const selected = await page.locator("#pairing-token").evaluate((el) => el.selectionEnd - el.selectionStart);
+  // Every button in the pairing block, pressed: none of them may copy it.
+  for (const name of shown.buttons) {
+    if (name !== "Hide") await page.locator("#pairing-shown button", { hasText: name }).click();
+  }
+  const note = await page.locator("#pairing .note").innerText();
+  const writes = await page.evaluate(() => window.__clipboardWrites);
+  await page.close();
+  assert.deepEqual(shown.buttons, ["Hide"], `the pairing block has ${JSON.stringify(shown.buttons)}`);
+  assert.equal(selected, 0, "the token is shown selected, one Ctrl+C from the clipboard");
+  assert.ok(!writes.some((w) => w.text.includes("backend-made-token")),
+    `the token was written to the clipboard: ${JSON.stringify(writes)}`);
+  assert.match(note, /no Copy button on purpose/);
+  assert.match(note, /clipboard history/);
+});
+
+await check("CONTROL: the only clipboard write left in Settings is the second card's pin command, which is not secret", async () => {
+  const js = read("src/settings.js");
+  const writes = [...js.matchAll(/clipboard\.writeText\(([^)]*)\)/g)].map((m) => m[1].trim());
+  assert.deepEqual(writes, ["sc.pinCommand.value"]);
+  // The one execCommand("copy") fallback is inside the pin command's handler.
+  const pinHandler = js.slice(js.indexOf('sc.pinCopy.addEventListener("click"'));
+  const pinBody = pinHandler.slice(0, pinHandler.indexOf("\n  });\n"));
+  const execs = (js.match(/execCommand\(\s*["']copy/g) || []).length;
+  assert.equal(execs, (pinBody.match(/execCommand\(\s*["']copy/g) || []).length,
+    "a clipboard copy outside the pin command's Copy");
+  assert.doesNotMatch(read("src/settings.html"), /id="copy-token"/);
+  assert.match(read("src/settings.html"), /id="sc-pin-copy"/, "the pin command lost its Copy");
+});
+
 await check("with no token anywhere, Show says why instead of showing a blank", async () => {
   const page = await open({ apiSettings: { backendFileToken: null } });
   await page.locator("#reveal-token").click();

@@ -62,7 +62,6 @@ const dom = {
   revealToken: $("reveal-token"),
   pairingShown: $("pairing-shown"),
   pairingToken: $("pairing-token"),
-  copyToken: $("copy-token"),
   hideToken: $("hide-token"),
   connectionStatus: $("connection-status"),
   linkState: $("link-state"),
@@ -230,8 +229,9 @@ dom.revealToken.addEventListener("click", () =>
     dom.pairingToken.value = token;
     dom.pairingShown.hidden = false;
     dom.revealToken.hidden = true;
+    // Focused so a screen reader reads it, and NOT selected: a selected
+    // token is one Ctrl+C away from Windows' clipboard history.
     dom.pairingToken.focus();
-    dom.pairingToken.select();
     clearTimeout(hideTimer);
     hideTimer = setTimeout(hidePairingToken, 60_000);
     return "Shown below. Type it into the phone.";
@@ -240,17 +240,11 @@ dom.revealToken.addEventListener("click", () =>
 
 dom.hideToken.addEventListener("click", hidePairingToken);
 
-dom.copyToken.addEventListener("click", async () => {
-  dom.pairingToken.select();
-  let copied = false;
-  try {
-    await navigator.clipboard.writeText(dom.pairingToken.value);
-    copied = true;
-  } catch {
-    try { copied = document.execCommand("copy"); } catch { copied = false; }
-  }
-  report(dom.connectionStatus, copied ? "Copied." : "Select it and press Ctrl+C.", copied ? "ok" : null);
-});
+// No Copy button for the token (CONN-6). Anything copied on Windows is kept
+// in Clipboard History, and with cloud clipboard on it is sent to the
+// owner's other devices - a secret that outlives this window by days. The
+// phone needs it typed in anyway. The second card's Copy (`pin_command`) is
+// not a secret and keeps its button.
 
 dom.reconnect.addEventListener("click", () => {
   reconnect();
