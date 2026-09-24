@@ -340,6 +340,13 @@ def t_the_second_ollama():
           repr(sorted(set(_CHILD_ESSENTIALS) - set(env))))
     check("lane_env: an unrelated setting is not inherited",
           "RANDOM_SETTING" not in env and "CUDA_PATH" not in env)
+    # Vulkan is on in Ollama by default and ignores CUDA_VISIBLE_DEVICES, so
+    # removing GGML_VK_VISIBLE_DEVICES alone left the other card reachable.
+    check("lane_env switches Ollama's Vulkan route off (OLLAMA_VULKAN=0)",
+          env.get("OLLAMA_VULKAN") == "0" and "GGML_VK_VISIBLE_DEVICES" not in env, env)
+    check("...even when the owner's own environment turns it on",
+          SC.lane_env(G.U_2060, port=11435, num_ctx=1,
+                      base={"OLLAMA_VULKAN": "1"}).get("OLLAMA_VULKAN") == "0")
     check("flash attention 'on' in the toml is honoured",
           SC.lane_env(G.U_2060, port=11435, num_ctx=1, base={}, flash="on")["OLLAMA_FLASH_ATTENTION"] == "1")
     with G.World(G.SMI["2080s_2060"], foreign_on_port=True) as w:
@@ -442,6 +449,9 @@ def t_status_shape_and_no_secrets():
     check("pin_command is ONE line, 5.1-safe (no ?? and no newline)",
           "\n" not in st["pin_command"] and "??" not in st["pin_command"]
           and G.U_2080S in st["pin_command"] and "'User'" in st["pin_command"])
+    check("pin_command also switches the everyday Ollama's Vulkan route off",
+          "[Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User');"
+          in st["pin_command"], st["pin_command"])
     check("a card id that is not one gets no command", SC.pin_command("GPU-1'; Remove-Item x") is None)
 
 
