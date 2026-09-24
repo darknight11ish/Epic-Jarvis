@@ -6144,8 +6144,18 @@ eight covered: 6 of 18.
 wording they have not seen - each round fixes what it is shown and new
 wording slips past. Closing the gap is the local model's job (the second
 layer). How much it closes has not been measured, because no model runs
-here; run the command above on the PC with `--with-model` and this set.
-This set is kept out of the rules on purpose, so it stays a fair test.
+here. To measure it on the PC, from the repository folder (it prints to
+the window and writes no file):
+
+```
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\jarvis_sensitive.py --measure backend\sensitive_cases\heldout2.jsonl --with-model
+```
+
+The set is `backend/sensitive_cases/heldout2.jsonl` (981 lines: the
+measured copy had two more, a made-up Slack token and a made-up Stripe key,
+which GitHub's secret scanner refuses to accept even as test data). **Never tune the
+rules on it** - no rule may be added because of a line in it - or it stops
+being a fair test. When it has been used up, write a new one.
 
 On the development file, round 2 changed nothing that mattered: still 100%
 of 777 lines in the eight languages, 0 of 259 harmless flagged, and the
