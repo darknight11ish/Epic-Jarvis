@@ -280,12 +280,16 @@ saved without a card only when a fixed list of checks passes - source
 by this PC as typed or very-strictly-verified voice in an untainted
 conversation (the live-turn registry `jarvis_chat_log.record_turn()` writes
 on every request, history on or off), no sign of pasted or hidden text, every
-word of the fact in those turns, never a correction, nothing sensitive
-unless the owner allowed it, and a local model by address AND name. Anything
-else is the same card as before, with the reason on it. Saved facts are
-`source = "auto"` and listed in both apps with Forget; the `memory_saved`
-event carries ids only. Turning either switch ON is an approval card; OFF is
-immediate.
+word of the fact in those turns - and no "not", "used to", "if", relation
+word or he/she/they of theirs left out of the fact - never a correction,
+nothing sensitive unless the owner allowed it, and a local model by address
+AND name. Anything else is the same card as before, with the reason on it.
+Saved facts are `source = "auto"` and listed in both apps with Forget; the
+`memory_saved` event carries ids only. Turning either switch ON is an
+approval card; OFF is immediate. An answer that uses a sensitive saved fact
+is kept on screen, not read aloud, unless the owner turned on the voice
+setting `sensitive_memory` (X-Jarvis-Route's `injected_sensitive`,
+JARVIS-API §16).
 
 ### Chat history — a second store, kept apart from memory
 
