@@ -973,6 +973,16 @@ def t_private_fields_on_the_reply():
             V.set_setting("memory", "memory_on_screen")
             h = S.hear(_clip("owner", 2.5)).as_dict()
             check("memory_on_screen: memory_aloud false", h["memory_aloud"] is False, h)
+            # Chat history is told which words THIS PC heard from the owner's
+            # voice, so the chat turn carrying them is recorded as "voice".
+            import jarvis_chat_log
+            noted = []
+            with mock.patch.object(jarvis_chat_log, "note_transcript",
+                                   lambda words, **kw: noted.append((words, kw))):
+                S.hear(_clip("owner", 2.5))
+            check("a transcript is noted for chat history, with the check's facts",
+                  len(noted) == 1 and noted[0][0] == "read me my last email"
+                  and noted[0][1]["strictness"] == "very_strict", noted)
 
 
 # ------------------------------------------------ 12. nothing on the disk --

@@ -2002,8 +2002,15 @@ chats, including voice, on this PC, encrypted. Nothing leaves this PC."
 - **A cloud answer is not in the history.** Only the question is. A cloud
   answer never passes through the PC's answering loop, where the answer is
   collected.
-- **Voice is `voice_unverified` until the speech route is wired in.**
-  `jarvis_chat_log.note_transcript()` is what the PC's speech route calls
-  with each transcript it makes; that call is added separately.
+- **Voice is checked against what THIS PC heard.** `jarvis_speech.hear()`
+  calls `jarvis_chat_log.note_transcript()` with every transcript it makes
+  from a voice that passed the check (a hash, kept 10 minutes), so a turn
+  sent with `provenance: "voice"` and those exact words is recorded as
+  `voice`; any other claimed voice turn as `voice_unverified`.
+- **Shared text does not go to a cloud model, on purpose.** The phone sends
+  shared text as its own message before the typed one; a cloud turn
+  (`cloud-one-turn.patch`) carries only the newest message, so the shared
+  one is left out. That is kept: shared text is very often an email or a
+  document, which rule 1 keeps on this PC. The local model sees it.
 - **Checked only against a stand-in of the owner's `jarvis_hud.py`** built
   from the whole patch stack, not against the real file.

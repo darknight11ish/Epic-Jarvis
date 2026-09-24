@@ -1308,6 +1308,23 @@ def _note_short(mic: str) -> None:
         pass
 
 
+def _note_for_history(words: str, verdict, embedder) -> None:
+    """Tell the chat history (jarvis_chat_log) that THIS PC's speech route
+    produced these words from a voice that passed the check, so the chat
+    turn that carries them is recorded as "voice" rather than
+    "voice_unverified". A hash is kept, never the words (see
+    jarvis_chat_log.note_transcript). Never raises: history must never be
+    the reason a spoken turn fails."""
+    try:
+        import jarvis_chat_log
+        jarvis_chat_log.note_transcript(
+            words, strictness=str(getattr(verdict, "strictness", "") or ""),
+            model=str(getattr(embedder, "name", "") or ""),
+            mode=str(getattr(verdict, "mode", "") or ""))
+    except Exception:
+        pass
+
+
 def _memory_aloud() -> bool:
     try:
         return bool(jarvis_voice.memory_aloud())
@@ -1505,6 +1522,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         if words:
             _flow("note_heard", t_in, steps, source=source, mic=mic,
                   waited_ms=waited_ms, cold=cold)
+            _note_for_history(words, verdict, embedder)
 
     if not wake or via_window:
         timed(text)
