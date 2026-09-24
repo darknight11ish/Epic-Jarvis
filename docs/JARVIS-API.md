@@ -280,7 +280,7 @@ phone's and the desktop's tests decode.
 
 | Endpoint | Method | Body | Desktop | Android | Notes |
 |---|---|---|---|---|---|
-| `/api/chat` | POST | `{"messages": [...], "has_image", "stream", "auto"}` | `commands.rs:942` `stream_chat` (body built in `main.js` `send()`), quick capture in `commands.rs` | `JarvisApi.kt:719` `chatCall` (body built by `net/ChatHistory.kt`) | See below. |
+| `/api/chat` | POST | `{"messages": [...], "has_image", "stream", "auto"}` | `commands.rs` `stream_chat` / `pump_chat` (body built in `main.js` `send()`) | `JarvisApi.kt` `chatCall` (body built by `net/ChatHistory.kt`), read by `ChatSession` | See below. |
 
 **Both clients now send the same shape, with the conversation so far.**
 (Updated 2026-09-23. Earlier versions of this page said the phone sent
@@ -318,6 +318,14 @@ Same numbers on both clients: `net/ChatHistory.kt` and
 `jarvis-desktop/src/chat-history.js`, held together by
 `jarvis-desktop/tests/chat-history.mjs`.
 
+**These caps are an upper bound, not the fit.** The model actually loaded may
+have far less than 16,384 (4,096 unless `jarvis-primary` is loaded - a model
+switched to from the phone, say), and tool results were in nobody's budget.
+Since `chat-stream.patch`, the PC asks Ollama what the loaded model has
+(`/api/ps`, then `/api/show`) and drops the oldest earlier turns to fit,
+leaving room for the answer - never the recalled facts or the new question
+(`jarvis_agent.fit_messages`). Only the PC can know that number.
+
 **Only finished answers are kept.** Not an error, not one the owner stopped,
 not an empty one, and not an SSE answer that ended without `[DONE]` or a
 `finish_reason` (cut off) - the same line `jarvis_hud.html` draws.
@@ -340,26 +348,52 @@ its section in `backend/README.md`.
 that" or "approved" is text in a transcript; approvals are decided by id on
 `/api/approve` and nowhere else.
 
-**Framing.** Android treats the reply as a chunked HTTP body, "**not** SSE,
-whatever the shape suggests" (`JarvisApi.kt:653-659`). The desktop handles
-both, because `docs/API-DISAGREEMENTS.md` §4 found the route copies the
-upstream `Content-Type` verbatim, so an SSE-framed upstream produces
-`data:`-framed chunks here too. The phone would mis-read that.
+**Framing.** `stream: true` (what all three apps send) gets Ollama's own
+OpenAI-compatible stream, `Content-Type: text/event-stream`: `data: {chunk}`
+lines, the words in `choices[0].delta.content`, a chunk with a
+`finish_reason` (`"stop"`, or `"length"` when the answer hit its length limit
+and was cut short), then `data: [DONE]`. `stream: false` gets one JSON body,
+`choices[0].message.content`, `Content-Type: application/json`. A failure
+after the answer has started is one more line: `data: {"error": {"message":
+"<a plain sentence>"}}` (or `{"error": "<sentence>"}` in a JSON body). All
+three readers handle all of it - the phone's `ChatChunkParser`, the
+quickbar's `consumeLine`, the HUD page's reader - and are tested against
+bodies made by running the backend (`backend/test_chat_stream_contract.py`
+writes `chat-stream-cases.json`; `ChatStreamContractTest.kt`,
+`jarvis-desktop/tests/chat-stream.mjs` and `hud.mjs` read it).
 
-**Cancelling.** Android cancels the OkHttp `Call` (`JarvisApi.kt:660-667`);
-the desktop drops the request future (`commands.rs:823-826`). Either way the
-server sees the client go immediately.
+Before `chat-stream.patch`, a turn with tools on was sent as
+`application/json` with an SSE body, which the HUD page cannot read ("Unexpected
+token 'd'"). An older note here said the phone mis-reads SSE; it has not since
+`ChatChunkParser` existed.
+
+**Lines that are not the answer.** Two SSE comment lines (they start with
+`:`, and every SSE reader skips them): `: keepalive`, after 10 seconds with
+nothing else to send, and `: jarvis-status approval` (or `working`) while an
+approval card for a tool waits. The apps show "Waiting for your approval…"
+for the second.
+
+**Cancelling.** Android cancels the OkHttp `Call` (`ChatSession.cancel`); the
+desktop drops the request future (`commands.rs` `cancel_chat`). While words
+are streaming the PC sees the app go at its next write and stops Ollama. While
+it is waiting (an approval card, a tool running) it notices at the next
+keepalive, within about 20 seconds, and then does **not** run a tool that is
+approved after that - nobody is there to read the answer - and says so on the
+event bus. Before `chat-stream.patch` it did not notice at all during a
+wait, and an approved tool ran for nobody.
 
 **Timeouts.** Android gives chat a 120-second *read* timeout, not a call
 timeout — the clock restarts on every byte, so a four-minute reply is fine but
-two minutes of silence is a wedge (`JarvisApi.kt:192-215`).
+two minutes of silence is a wedge (`JarvisApi.kt`, the comment on `client`).
+The keepalive above is what keeps a three-minute approval wait inside that.
+The HUD page uses the same kind of 120-second silence limit.
 
 **`turn_id` in `X-Jarvis-Route`** (`feedback.patch`). The chat response's
 `X-Jarvis-Route` header (JSON) now carries `turn_id`, a 32-character hex id
 for this answer. Show a right/wrong mark on the answer only when it is there,
 and post it to `/api/feedback/mark` (§6). Missing means an older backend or
 that recording failed - show no mark buttons. **Android reads it** in
-`ChatSession.send` (`ChatSession.kt:204`, parsed by
+`ChatSession.send` (parsed by
 `Feedback.turnIdFromRouteHeader` in `net/Learning.kt`): the header must be a
 JSON object and the id exactly 32 lowercase hex characters, the same rule the
 backend's `jarvis_feedback._TURN` applies, or the phone shows no buttons. The
@@ -370,8 +404,17 @@ nothing is sent while the event stream is stale (the same `actionBlocker` as
 the other writes); a `404` (unknown answer) or `503` (module missing) swaps
 the buttons for one quiet line. The phone does not read
 `/api/feedback/counts` - a per-fact list of counts needs the fact list beside
-it, which is the desktop Brain's job. The desktop's chat code was not checked
-here.
+it, which is the desktop Brain's job. The quickbar gets the id from
+`pump_chat` as its own line (`TURN_LINE_PREFIX`); the HUD page's mark
+(`hud_bootstrap.js`) appears only once the answer has finished.
+
+**`where` in `X-Jarvis-Route`** (`chat-stream.patch`): `"local"` or
+`"cloud"` - where the answer was made - with `lane` set to the lane that
+really answered. The apps' Local/Cloud badge reads it (an older backend
+without it is read by `gate`: only `"escalate"` picks a cloud lane). The
+quickbar used to guess from each chunk's `model` name and the HUD page tested
+`gate == "privacy"`, a gate the router never returns - so every answer there
+was painted as cloud.
 
 **No tool receipt.** A 200 from `/api/chat` means "a chat completed", not
 "the thing you asked for happened". There is no `tool_calls` field on the

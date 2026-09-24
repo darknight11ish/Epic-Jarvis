@@ -7,12 +7,15 @@
 # their ~1.1 GiB.
 #
 # WHY THIS FILE EXISTS AT ALL
-# jarvis_hud._build_payload sends model, messages, stream, temperature and
-# max_tokens, and nothing else. No num_ctx, no options. It posts to
-# JARVIS_URL/v1/chat/completions, an OpenAI-compatible endpoint, and the
-# OpenAI compat surface has no field for num_ctx - so there is no request the
-# HUD could send that would set it. The context length therefore has to be set
-# on the MODEL, which is this file, or in the environment.
+# A local chat turn posts to OLLAMA_URL/v1/chat/completions, Ollama's
+# OpenAI-compatible endpoint (ollama-direct.patch; since chat-stream.patch,
+# through jarvis_agent.run_local_turn). It sends model, messages, stream,
+# temperature, max_tokens, reasoning_effort and, with tools on, tools. No
+# num_ctx, no options: the OpenAI compat surface has no field for num_ctx - so
+# there is no request that could set it. The context length therefore has to
+# be set on the MODEL, which is this file, or in the environment.
+# (jarvis_agent does ask Ollama what the loaded model has, and trims the
+# history to fit - that avoids silent cutting; it cannot make room.)
 #
 # Left alone, Ollama picks. server/sched.go:
 #
@@ -104,13 +107,20 @@ PARAMETER num_ctx 16384
 # happened except that everything got slow.
 PARAMETER num_batch 512
 
-# The HUD's max_tokens default is 2048, which is a GENERATION budget being
-# spent out of the same window the conversation and the recalled facts need.
-# jarvis_persona's own max_response_tokens is 900.
+# A GENERATION budget, spent out of the same window the conversation and the
+# recalled facts need. jarvis_agent sends max_tokens 1024 when an app asks for
+# nothing - this same number - so every window gets the same length of answer
+# (the HUD page used to ask for 2048). jarvis_persona's own
+# max_response_tokens is 900.
 PARAMETER num_predict 1024
 
 # ---- sampling ------------------------------------------------------------
-# Qwen's documented NON-THINKING values. Thinking is off here deliberately:
+# Qwen's documented NON-THINKING values. Thinking is meant to be off. Nothing
+# in this file switches it off, and Ollama switches it ON by default for a
+# model that can think - so it is switched off on every request instead:
+# jarvis_agent sends reasoning_effort "none" (Ollama's supported switch on this
+# endpoint) and cuts any <think> block out of the answer as well
+# (chat-stream.patch). Until that patch is applied, thinking is ON. Why off:
 # a <think> block ahead of the content makes barge-in impossible in the voice
 # loop - time to first USEFUL token is what matters, not time to first token -
 # and jarvis_extract's schema-constrained calls spend the whole generation

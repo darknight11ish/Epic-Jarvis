@@ -14,13 +14,23 @@ why a long conversation gets strange.
 
 ## The thing that is wrong right now
 
-**The deployed context is 4096 tokens, and nothing in the codebase chose it.**
+**The deployed context is 4096 tokens unless `jarvis-primary` (the Modelfile
+in `backend/`) is the model loaded, and nothing in the request chooses it.**
 
-`jarvis_hud._build_payload` sends `model`, `messages`, `stream`, `temperature`
-and `max_tokens`. Grep the file for `num_ctx` and there is no hit. It posts to
-`JARVIS_URL/v1/chat/completions`, an OpenAI-compatible endpoint, and the
-OpenAI compat surface has no field for context length — so there is no request
-the HUD could send that would set it even if someone wanted to.
+A local chat turn posts to Ollama's own `OLLAMA_URL/v1/chat/completions`
+(`ollama-direct.patch`; since `chat-stream.patch`, through
+`jarvis_agent.run_local_turn`). That sends `model`, `messages`, `stream`,
+`temperature`, `max_tokens` (1,024 unless the app asks otherwise),
+`reasoning_effort: "none"` and, with tools on, `tools`. Grep for `num_ctx` and
+there is no hit: the OpenAI-compatible surface has no field for context
+length, so no request could set it even if someone wanted to.
+
+What the request side *can* do, and now does: ask Ollama what the loaded
+model really has (`/api/ps`, then the Modelfile via `/api/show`, else 4,096)
+and drop the oldest earlier turns to fit, leaving room for the answer. So a
+model switched to from the phone, or a missing `jarvis-primary`, no longer
+means Ollama silently cutting the start of the conversation. It does not make
+the window any bigger - only the Modelfile or the environment does that.
 
 So Ollama picks. `server/sched.go`:
 
@@ -40,9 +50,10 @@ the ladder drops to 4096, and 4096 is the bottom rung.
 Two consequences, both currently live:
 
 - **A 6,000-token prompt does not fit.** It is roughly 1.5× the window.
-- **`max_tokens: 2048` eats half of what is left.** Ollama's compat layer maps
-  `max_tokens` to `num_predict`, so at `num_ctx 4096` the usable prompt before
-  llama.cpp starts shifting context mid-generation is about 2048 tokens.
+- **The answer's allowance comes out of the same window.** Ollama's compat
+  layer maps `max_tokens` to `num_predict`. The HUD window used to ask for
+  2,048 - half of a 4,096 window. Every window now gets 1,024 (the
+  Modelfile's `num_predict`), set by the PC.
 
 Everything anyone has planned on this machine about context has been theory.
 

@@ -20,7 +20,8 @@
  * the answer card itself is cleared.
  *
  * How much. The model has 16,384 tokens in all (jarvis-primary.Modelfile).
- * Set aside: 2,048 for the answer, 250 for the Modelfile's SYSTEM prompt and
+ * Set aside: 2,048 for the answer (generous - every window now gets 1,024,
+ * the Modelfile's num_predict), 250 for the Modelfile's SYSTEM prompt and
  * the chat template, 400 for the recalled-facts block, 2,600 for the tool
  * list (13 tools, 7,851 characters of JSON in backend/jarvis_agent.py), and
  * 3,000 for the new question with anything pasted in. That leaves about
@@ -34,6 +35,12 @@
  * read only up to the first difference), which costs about 3 seconds at 6,000
  * tokens on this card. Dropping several at once means the start then stays
  * put for several turns. A message is never cut in half.
+ *
+ * These are an UPPER bound. The model really loaded may have far less room
+ * (4,096 tokens unless jarvis-primary is the one loaded), so the PC asks
+ * Ollama what it has and trims the oldest turns to fit before sending
+ * (backend/jarvis_agent.py fit_messages, chat-stream.patch). Only the PC can
+ * know that number.
  *
  * Mirrors ChatHistory.kt number for number. Change one, change both.
  */

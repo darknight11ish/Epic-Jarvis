@@ -39,8 +39,8 @@ import kotlinx.serialization.json.put
  * HOW MUCH. The model on the desktop has 16,384 tokens of room in total
  * (`backend/jarvis-primary.Modelfile`, `num_ctx 16384`). Set aside first:
  *
- *     2,048  the answer itself (the HUD's `max_tokens`; the Modelfile's own
- *            limit is 1,024, so this is the larger of the two)
+ *     2,048  the answer itself - generous: every window now gets 1,024
+ *            (the Modelfile's `num_predict`; the HUD page used to ask 2,048)
  *       250  the Modelfile's SYSTEM prompt and the chat template
  *       400  the recalled-facts block (~100 at the default 5 facts, ~320 at
  *            16 - docs/MODEL-TOPOLOGY.md)
@@ -64,6 +64,12 @@ import kotlinx.serialization.json.put
  * [KEEP_EXCHANGES] pairs and [KEEP_CHARS] characters, and it then only grows
  * at the end again for several turns. A message is never cut in the middle:
  * a pair is kept whole or dropped whole.
+ *
+ * These are an UPPER bound. The model really loaded may have far less room
+ * (4,096 tokens unless jarvis-primary is the one loaded - a model switched to
+ * from this phone, say), so the desktop asks Ollama what it has and trims the
+ * oldest turns to fit before sending (`backend/jarvis_agent.py`
+ * `fit_messages`, `chat-stream.patch`). Only the desktop can know that number.
  *
  * The same numbers, and the same rule, are in the desktop quickbar's
  * `jarvis-desktop/src/chat-history.js`. Change one, change both.
