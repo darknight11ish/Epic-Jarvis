@@ -68,14 +68,14 @@
 @@ -328,6 +328,13 @@
      # action would be read as "unknown", and the notice would say it might
      # leave the machine.
-     "wiki_update": ("yes", "local", "writes pages in the Jarvis Wiki folder of your vault on this PC; the earlier copy of any page it changes is kept in .versions"),
+     "wiki_update": ("yes", "local", "writes pages in the Jarvis Wiki folder of your vault on this PC; the earlier copy of any page it changes is kept in .versions, and index.md and log.md are added to, with no copy kept"),
 +    # big-model.patch (jarvis_big_model.py). Turning on a big-model switch
 +    # lets Jarvis start colibri on THIS PC, only when a background job
-+    # needs it, listening on 127.0.0.1 only, and nothing is sent anywhere;
-+    # turning the switch off stops it. Without this line the action would
-+    # be read as "unknown", and the notice would say it might leave the
-+    # machine.
-+    "big_model_enable": ("yes", "local", "lets Jarvis start colibri on this PC for background jobs, reachable from this PC only (127.0.0.1); turning the switch off stops it"),
++    # needs it, listening on 127.0.0.1 only, and nothing is sent anywhere.
++    # It stops once no job switch that uses it is on. Without this line
++    # the action would be read as "unknown", and the notice would say it
++    # might leave the machine.
++    "big_model_enable": ("yes", "local", "lets Jarvis start colibri on this PC for background jobs, reachable from this PC only (127.0.0.1); it keeps running while any big-model job switch is on, and stops when the last one, or the main switch, is turned off"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",

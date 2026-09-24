@@ -117,11 +117,11 @@
      "create_joplin_note":    ("yes", "local", "creates one new note in Joplin on this PC; no existing note is changed"),
      "append_obsidian_daily": ("yes", "local", "adds one entry to the end of today's Obsidian daily note on this PC; nothing already there is changed"),
 +    # second-card.patch (jarvis_second_card.py). Turning on a second-card
-+    # switch starts a second copy of Ollama on THIS PC, listening on
-+    # 127.0.0.1 only, and nothing is sent anywhere; turning the switch off
-+    # stops it again. Without this line the action would be read as
++    # switch starts a second copy of Ollama on THIS PC, on 127.0.0.1 only,
++    # sending nothing anywhere. It runs while ANY switch using it is on, and
++    # stops when the last is off. Without this line the action would be read as
 +    # "unknown", and the notice would say it might leave the machine.
-+    "second_card_enable": ("yes", "local", "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); turning the switch off stops it"),
++    "second_card_enable": ("yes", "local", "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); it keeps running while any second-card switch that uses it is on, and stops when the last one is turned off"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",

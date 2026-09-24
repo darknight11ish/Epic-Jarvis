@@ -66,16 +66,16 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
 @@ -321,6 +321,13 @@
-     # stops it again. Without this line the action would be read as
+     # stops when the last is off. Without this line the action would be read as
      # "unknown", and the notice would say it might leave the machine.
-     "second_card_enable": ("yes", "local", "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); turning the switch off stops it"),
-+    # wiki.patch (jarvis_wiki.py). Adding a document to the wiki writes
-+    # pages in <vault>/Jarvis Wiki/ on this PC, using the model on the
-+    # second card (127.0.0.1). Reversible: the earlier copy of every page
-+    # it changes is kept in Jarvis Wiki/.versions/. Without this line the
+     "second_card_enable": ("yes", "local", "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); it keeps running while any second-card switch that uses it is on, and stops when the last one is turned off"),
++    # wiki.patch (jarvis_wiki.py). Adding a document writes pages in
++    # <vault>/Jarvis Wiki/ on this PC with a model on this PC (127.0.0.1).
++    # A changed page's earlier copy is kept in Jarvis Wiki/.versions/;
++    # index.md and log.md are appended to, with no copy. Without this line the
 +    # action would be read as "unknown", and the notice would say it might
 +    # leave the machine.
-+    "wiki_update": ("yes", "local", "writes pages in the Jarvis Wiki folder of your vault on this PC; the earlier copy of any page it changes is kept in .versions"),
++    "wiki_update": ("yes", "local", "writes pages in the Jarvis Wiki folder of your vault on this PC; the earlier copy of any page it changes is kept in .versions, and index.md and log.md are added to, with no copy kept"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",
