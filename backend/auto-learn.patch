@@ -21,7 +21,7 @@
          """
          if not messages:
              return
-@@ -590,7 +595,19 @@
+@@ -590,7 +595,28 @@
              # in the owner's own words - no model, no waiting for quiet. Still
              # a card to keep or discard. See jarvis_intake.remember_from_turn.
              try:
@@ -34,15 +34,24 @@
 +            # words were typed or said to this PC, one line, colon, nothing
 +            # sensitive (jarvis_auto_learn.after_remember). Else it stays
 +            # the card it already is, with the reason on it.
++            # It may ask the local model (jarvis_sensitive, up to 8 s), and
++            # this runs on the request thread, so it gets its own thread.
 +            try:
 +                import jarvis_auto_learn
-+                jarvis_auto_learn.after_remember(
-+                    _remembered, messages, conversation_id=conversation_id,
-+                    learning_on=learning_enabled())
++
++                def _remember_check(r=_remembered, m=list(messages),
++                                    c=conversation_id, on=learning_enabled()):
++                    try:
++                        jarvis_auto_learn.after_remember(
++                            r, m, conversation_id=c, learning_on=on)
++                    except Exception:
++                        pass
++                threading.Thread(target=_remember_check, daemon=True,
++                                 name="jarvis-remember-check").start()
              except Exception:
                  pass
          # Everything below is passive learning, which the switch controls.
-@@ -612,6 +629,8 @@
+@@ -612,6 +638,8 @@
              # When it was said, so "yesterday" is anchored to the day of the
              # conversation, not the moment the learner finally ran.
              self._pending_at = time.time()
@@ -51,7 +60,7 @@
          self._woken.set()
  
      def start(self) -> None:
-@@ -655,6 +674,7 @@
+@@ -655,6 +683,7 @@
          with self._lock:
              convo, self._pending = self._pending, None
              said_at = getattr(self, "_pending_at", None)
@@ -59,7 +68,7 @@
          if not convo:
              return False
          seen = json.dumps(convo, sort_keys=True)[-8000:]
-@@ -675,6 +695,21 @@
+@@ -675,6 +704,21 @@
                    file=sys.stderr)
              return False
          model = _extract_model()
@@ -81,7 +90,7 @@
          unreachable = []
  
          def _ask(prompt: str):
-@@ -720,7 +755,23 @@
+@@ -720,7 +764,23 @@
              return True
          self._last = seen
          if out:
@@ -106,7 +115,7 @@
          return True
  
  
-@@ -2071,6 +2122,31 @@
+@@ -2071,6 +2131,31 @@
              try:
                  code, out = jarvis_chat_log.handle_get(
                      path, self.path.split("?", 1)[1] if "?" in self.path else "")
@@ -138,7 +147,7 @@
              except Exception as exc:
                  return self._send(500, {"error": type(exc).__name__})
              return self._send(code, out)
-@@ -2532,6 +2608,35 @@
+@@ -2532,6 +2617,35 @@
                  return self._send(500, {"error": type(exc).__name__})
              return self._send(code, out)
  
@@ -174,7 +183,7 @@
          if route in ("/api/memory/forget", "/api/memory/edit",
                       "/api/memory/learning", "/api/memory/sleep_time",
                       "/api/memory/keep_both"):
-@@ -2694,13 +2799,34 @@
+@@ -2694,13 +2808,34 @@
                  injected = len(chosen_facts)
                  injected_ids = [f"mem:{f['id']}" if "id" in f else f"fact:{facts.index(f)}"
                                  for f in chosen_facts if f in facts]
@@ -211,7 +220,7 @@
                  }
                  # Late, not first. This block used to be prepended, and the
                  # facts it holds are chosen per question, so token 0 of the
-@@ -3000,7 +3126,24 @@
+@@ -3000,7 +3135,24 @@
                  route_header["turn_id"] = jarvis_feedback.record_turn(
                      route_header.get("injected_ids") or [])
              except Exception:
@@ -236,7 +245,7 @@
              if use_tools:
                  # No `upstream` exists in this branch - jarvis_agent makes
                  # its own request(s) to Ollama entirely on its own, so there
-@@ -3170,11 +3313,12 @@
+@@ -3170,11 +3322,12 @@
              # origin="owner" because this is a request from a paired client:
              # a person typed or said it. Backend-started turns must never come
              # through here with "owner" - see jarvis_intake.jarvis_turn().
@@ -254,7 +263,7 @@
              # chat-history.patch: this PC's own record of the turn, in
              # jarvis_chat_log.py - from `body` as it arrived: the NEWEST user
              # message with where its words came from, and the answer only
-@@ -3190,6 +3334,12 @@
+@@ -3190,6 +3343,12 @@
                  jarvis_chat_log.record_turn(
                      body, lane=str(route_header.get("lane") or lane),
                      turn=_history["turn"], at=_history["at"])
@@ -267,7 +276,7 @@
              except Exception:
                  pass
  
-@@ -3398,6 +3548,16 @@
+@@ -3398,6 +3557,16 @@
      "available": False,
      "error": "chat history is not installed on this PC, so no chats are kept",
      "reason": "copy backend\\jarvis_chat_log.py into the backend folder "

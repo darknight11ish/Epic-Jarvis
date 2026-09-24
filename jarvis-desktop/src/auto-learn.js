@@ -301,8 +301,8 @@ export function refreshRows(shown, page, pageSize, moreBefore) {
 
 /**
  * The reason line on a card that stayed a card (section 2): the PC's own
- * plain words - "from pasted text", "sensitive: health", "not in your own
- * words" - under `auto_reason` on its `/api/memory/pending` row. Nothing
+ * plain words - "from pasted text", "about health, a sensitive topic", "not
+ * in your own words" - under `auto_reason` on its `/api/memory/pending` row. Nothing
  * when the PC sent none (absent or "").
  */
 export function cardReason(p) {

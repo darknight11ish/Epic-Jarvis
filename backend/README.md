@@ -5863,10 +5863,12 @@ these hold:
 - every word and number of the fact is in what you said;
 - it does not replace a fact you already have;
 - nothing sensitive (health, money, passwords and account details, other
-  people's private details) unless you allowed that.
+  people's private details) unless you allowed that - see "The
+  sensitive-topic check" below.
 
 Anything else stays an ordinary card, and the card says which check stopped
-it ("from pasted text", "sensitive: health", "not in your own words", ...).
+it ("from pasted text", "about health, a sensitive topic", "not in your own
+words", ...).
 
 **What it changes.**
 
@@ -5945,6 +5947,151 @@ backend folder:
 ```powershell
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_auto_learn.py
 ```
+
+## The sensitive-topic check - `jarvis_sensitive.py`
+
+**What it is for.** Automatic learning saves facts about you without asking,
+except sensitive ones: health, money, passwords and account details, and
+private details about other people. Those wait for your yes unless you turn
+on "Also remember sensitive topics automatically". This file decides what
+counts as sensitive. It is a new module, shipped whole (it sits beside
+`jarvis_auto_learn.py`; `apply-patches.ps1` copies it in).
+
+**Why it was rebuilt.** The first version was one list of words. The red
+team (the people-trying-to-break-it audit) found it saved "I have lupus",
+"The alarm is 4471", "My Netflix is hunter2", "My brother Tom lost his job",
+"Estoy embarazada" and "Ich habe Krebs" without a card. A word list only
+catches the words someone thought of.
+
+**How it works: three layers.** Any layer saying "sensitive" makes the fact
+a card.
+
+1. **Patterns** - no model, no network, instant.
+   - Word lists for each topic, in **English, Spanish, French, German,
+     Italian, Portuguese, Dutch and Polish**, matched with accents removed
+     ("embarazada", "Schwangerschaft", "w ciąży"). Every other language
+     only has its word for "password" here; anything else in it is left to
+     layer 2.
+   - The **shapes** of secrets and numbers: a 3-8 digit code next to a
+     lock word ("alarm", "safe", "unlocks with", "code", "PIN", in eight
+     languages); "<service> is <token>" where the token mixes letters and
+     digits ("My Netflix is hunter2"); card numbers, API keys (reusing
+     `jarvis_router.looks_like_a_secret`), IBANs and sort codes; money
+     amounts ("£40,000", "80k", "four grand"); ID numbers (UK national
+     insurance, US social security, NHS, Spanish DNI, Brazilian CPF,
+     Italian codice fiscale, PESEL, long digit runs); dates of birth with a
+     year; phone numbers and email addresses; street addresses, postcodes
+     and routines that say when a home is empty.
+   - The **other-person rule**: any fact about someone other than you -
+     a relation word ("sister", "my boss", "mi hermano", "meine Frau"),
+     one of about 840 common first names, a title ("Mr Patel"), or
+     "he"/"she". **Decided, and broad on purpose:** "My sister likes jazz"
+     and "My sister's name is Anna" are flagged too - harmless, but still
+     facts about someone who never agreed to be remembered, and your rule
+     is "when unsure: flagged". Not flagged: a famous name as a taste ("I'm
+     a fan of Terry Pratchett"), pets and things ("My dog is called Max"),
+     and your own name ("My name is Tom").
+   - A list of harmless phrases that contain a flagged word, blanked out
+     first: "bank holiday", "Doctor Who", "sick of the rain", "password
+     manager", "child process", "5k run".
+2. **The local model.** When the patterns find nothing, it asks the SAME
+   local model the learner uses (the second card's learning lane when that
+   is working, otherwise the main Ollama) one short question and wants a
+   one-line JSON answer. The fact is put between two random marker lines and
+   the model is told it is data, not instructions. **It fails closed:** an
+   "unsure", an answer that is not the JSON asked for, no answer within
+   8 seconds, Ollama not running, no model known, or a model that is not on
+   this PC or is a cloud model - all make the fact a card. It never goes
+   through a proxy (`jarvis_local_http.py`).
+3. **Your switch.** With "Also remember sensitive topics automatically" on,
+   none of this runs, exactly as before.
+
+**What the card says.** One reason per topic, after "Not saved
+automatically:":
+
+| Topic | The card says |
+|---|---|
+| passwords and account details | about passwords or account details, a sensitive topic |
+| health | about health, a sensitive topic |
+| money | about money, a sensitive topic |
+| ID numbers, birth dates, contact details | about ID numbers, birth dates or contact details, a sensitive topic |
+| religion / politics / sexuality / ethnicity / immigration / the law | about religion, a sensitive topic (or politics or union membership, sexuality or sex life, ethnicity, immigration status, arrests, courts or a criminal record) |
+| addresses and routines | about where someone can be found, a sensitive topic |
+| another person | about another person, a sensitive topic |
+
+"About someone else's health" (and so on) when another person is in the
+same sentence. When only the model flagged it: "the local model was not
+sure it is free of sensitive topics", or why it could not answer ("took too
+long", "did not answer", "is a cloud model").
+
+**The numbers, said plainly.** Measured with the patterns alone (no model
+runs in the development container), on `backend/sensitive_cases/dev.jsonl`:
+1,135 lines written for this - 783 sensitive, 259 plainly harmless, 93
+harmless but tricky ("my bank holiday plans", "I'm sick of rain").
+
+- **Before any tuning, the first batch** (957 lines, written before the
+  patterns): 99.0% of the sensitive lines caught in the eight languages,
+  0.6% of the harmless ones flagged.
+- **Before any tuning, a second batch written later to test it honestly**
+  (178 lines, more everyday wording): only **78.9%** caught - **55% of the
+  health lines** ("feeling low for months", "my knees are shot",
+  "diverticulitis"), 90% money, 75% addresses; 1.0% of harmless lines
+  flagged. That is the most honest number here: fresh wording gets past
+  the word lists about one time in five. The lists were then widened (for
+  example every "-itis" and "-ectomy" word, "can't sleep", "feeling low").
+- **After tuning, all 1,135 lines:** 100% caught in the eight languages
+  (777 of 777) - every category and every language at 100%; 0% of plainly
+  harmless lines flagged (0 of 259); 6.5% of the tricky ones (6 of 93:
+  "The Raspberry Pi cost £35", "I read The Secret History", a "PIN-entry
+  screen" and three like it - accepted, because a card costs you one tap).
+  The six lines in Swedish, Turkish, Russian and Japanese are not caught by
+  the patterns at all; they are in the file to show that, and are counted
+  apart.
+
+The after-tuning numbers only prove every line in the file is handled: the
+same person wrote the lines and the patterns. A separate held-out set,
+written by someone else, is the fair test.
+
+**What it cannot catch.** A language other than the eight (except its word
+for "password"), slang and euphemisms ("I'm on the wagon", "I got the snip", "pain in
+my stomach after eating"), spelling mistakes, a name not on the list ("Xiomara is
+pregnant" is caught by "pregnant", but "Xiomara likes jazz" is not), and a
+secret that looks like a plain word ("my Netflix is sunflower"). For all of
+those only the local model stands between the fact and being saved - and
+the model can be wrong too. **How good the model layer is has not been
+measured**: no model runs in the container. The command below measures it
+on your PC.
+
+**Speed.** The pattern layer takes about half a millisecond per fact (measured here). The
+model question is asked only when the patterns find nothing, once per fact,
+at most 8 seconds (usually much less with the model already loaded - not
+measured here). For a background learning pass that is fine. For
+"Remember: ...", it runs right after Jarvis has answered, on the same
+connection's thread, so the answer is already on screen - but that has not
+been checked against your apps: if the PC holds the connection open until
+it finishes, an app could show the answer as still arriving for up to 8
+seconds.
+
+**What it changes elsewhere.** `jarvis_auto_learn.py`: `sensitivity()` (the
+patterns alone, cheap enough for every recalled fact) and
+`check_sensitive()` now call this module; the old word list is gone. If this
+file is missing, every fact is a card.
+
+**Test.** From the repository folder:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_sensitive.py
+```
+
+**Measure it with your real model.** From the repository folder. It asks
+the model Jarvis learns with (add `--model NAME` to pick another), prints
+the numbers for each topic and language, then every miss and every harmless
+line it flagged. It prints to this window only and writes no file:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\jarvis_sensitive.py --measure backend\sensitive_cases\dev.jsonl --with-model --show
+```
+
 ---
 
 # Custom voices: `voices.patch`, `jarvis_voices.py` and the better voice
