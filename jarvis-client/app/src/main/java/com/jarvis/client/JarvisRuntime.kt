@@ -932,11 +932,13 @@ object JarvisRuntime {
             }
             "power", "persona" -> refreshStatus()
             "finding" -> Unit // the digest covers these; nothing to show live
-            // A model download publishes progress here. The phone cannot start,
-            // cancel or retry one, so rendering a bar for it would invite a tap
-            // on a control that has to be somewhere else. The LIST is re-read,
-            // though: a switch or a rollback made on the desktop should change
-            // which model the phone's own picker marks as active.
+            // A model download publishes progress here. The phone CAN start
+            // one - Install, by typed name, raises a card (the owner's
+            // 2026-09-20 amendment; see installModel) - but it cannot cancel
+            // or retry one, so no progress bar is drawn: it would invite a tap
+            // on a control that has to be on the desktop. The LIST is re-read,
+            // though: an install finishing, or a switch or rollback made on
+            // the desktop, should change what the phone's own picker shows.
             "model" -> refreshModels()
             "voice" -> Unit
             // Announced as Signal.Open, and EventStream then falls through and
