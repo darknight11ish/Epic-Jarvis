@@ -104,6 +104,18 @@ class World:
         self.dir = Path(tempfile.mkdtemp(prefix="jarvis-second-card-"))
         self._saved = {}
 
+    def _env(self, name):
+        """The Windows user settings. A dict names each one; a plain string is
+        CUDA_VISIBLE_DEVICES, with OLLAMA_VULKAN=0 beside it - what today's
+        one-line pin command sets."""
+        if isinstance(self.user_env, dict):
+            return self.user_env.get(name)
+        if name == "CUDA_VISIBLE_DEVICES":
+            return self.user_env
+        if name == "OLLAMA_VULKAN":
+            return "0" if self.user_env else None
+        return None
+
     def run_smi(self, args):
         q = args[0]
         if q == f"--query-gpu={CP.FIELDS_FULL}":
@@ -155,7 +167,7 @@ class World:
             (SC, "_kill_tree"): self.kill_tree,
             (SC, "_spawn"): (lambda fn: fn()) if self.spawn_now else (lambda fn: None),
             (SC, "_sleep"): lambda s: None,
-            (SC, "_user_env"): lambda name: self.user_env,
+            (SC, "_user_env"): self._env,
             (SC, "_ON_WINDOWS"): self.windows,
             (SC, "_smi_apps"): lambda: self.apps,
             (SC, "_audit"): lambda event, detail: None,

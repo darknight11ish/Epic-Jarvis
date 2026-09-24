@@ -154,8 +154,10 @@ MAX_INDEX_LINE = 160
 BYTES_PER_TOKEN = 3
 PROMPT_OVERHEAD = 1200          # the instructions and the JSON schema
 ANALYSIS_TOKENS = 1024          # room kept for the analysis in step 2
-#: When no lane is running, "too big" is judged against the smaller of the
-#: two lanes jarvis_second_card can start (16,384 tokens on a 12 GB card).
+#: When no lane is running, "too big" is judged against this. It is kept at
+#: 16,384 on purpose, below what the second card's lane now gets (32,768 on
+#: a 12 GB card since 2026-09-24): with no lane to ask, it is safer to call a
+#: borderline document "too big" than to promise a fit the card may not give.
 FALLBACK_NUM_CTX = 16384
 
 MODEL_TIMEOUT = 600.0

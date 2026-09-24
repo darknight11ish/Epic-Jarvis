@@ -734,6 +734,19 @@ def t_main_ollama_pin():
     with G.World(G.SMI["2080s_2060"], windows=True, user_env=G.U_2080S):
         st = SC.status()
     check("pinned to the main card in the user settings: true", st["main_ollama_pinned"] is True)
+    with G.World(G.SMI["2080s_2060"], windows=True,
+                 user_env={"CUDA_VISIBLE_DEVICES": G.U_2080S}):
+        st = SC.status()
+    check("pinned by the OLDER one-setting command (Vulkan still on): false, and says why",
+          st["main_ollama_pinned"] is False and "Vulkan" in st["pin_note"], st["pin_note"])
+    with G.World(G.SMI["2080s_2060"], windows=True,
+                 user_env={"CUDA_VISIBLE_DEVICES": G.U_2080S, "OLLAMA_VULKAN": "1"}):
+        st = SC.status()
+    check("Vulkan switched ON by hand: false", st["main_ollama_pinned"] is False)
+    with G.World(G.SMI["2080s_2060"], windows=True,
+                 user_env={"CUDA_VISIBLE_DEVICES": G.U_2080S, "OLLAMA_VULKAN": "0"}):
+        st = SC.status()
+    check("both settings: true", st["main_ollama_pinned"] is True, st["pin_note"])
     with G.World(G.SMI["2080s_2060"], windows=True, user_env=G.U_2060):
         st = SC.status()
     check("pinned to the wrong card: false", st["main_ollama_pinned"] is False)

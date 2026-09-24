@@ -1337,6 +1337,17 @@ def _main_pin(det: dict) -> tuple:
     val = _user_env("CUDA_VISIBLE_DEVICES")
     if val is not None:
         if val.strip().lower() == prim_uuid and prim_uuid:
+            vulkan = (_user_env("OLLAMA_VULKAN") or "").strip()
+            if vulkan != "0":
+                # CUDA_VISIBLE_DEVICES hides the second card from Ollama's
+                # CUDA route only. Its Vulkan route (on by default, see
+                # lane_env) can still put a model there - which is why the
+                # command below now sets OLLAMA_VULKAN=0 as well. An owner who
+                # ran the older one-setting command must not be told "pinned".
+                return False, (f"Ollama's CUDA route is pinned to the {prim.get('name')}, "
+                               f"but its Vulkan route is still on and can still use the "
+                               f"second card. Run the command below (it now switches "
+                               f"Vulkan off too), then restart Ollama.")
             return True, (f"Ollama is set to use only the {prim.get('name')} "
                           f"(CUDA_VISIBLE_DEVICES in your user settings). If you set it "
                           f"just now, quit Ollama and start it again.")
