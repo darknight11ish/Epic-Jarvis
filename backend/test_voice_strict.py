@@ -444,6 +444,29 @@ def t_memory_answers_aloud_by_default():
         check("set_setting refuses to loosen memory without approval", ok)
 
 
+def t_nothing_private_aloud_without_a_real_check():
+    """Broad mode lets every voice in without checking it. "Voice check is
+    enough" and "read memories aloud" must then read nothing private aloud:
+    a stranger or the TV would hear the owner's email (voice audit,
+    2026-09-24 - reproduced before the fix)."""
+    with Temp():
+        small = Table("sherpa-onnx:357a834f702b", {"loud": OWNER})
+        V.enroll(["a", "b", "c"], embedder=Table(small.name, {"a": OWNER, "b": OWNER,
+                                                               "c": OWNER}))
+        V.set_setting("privacy", "voice_is_enough", approved=True)
+        cfg = lambda k, d=None: "broad" if k == "mode" else d  # noqa: E731
+        with mock.patch.object(V, "EcapaEmbedder", lambda: small), \
+                mock.patch.object(V, "strong_embedder", lambda *a: None), \
+                mock.patch.object(S, "_speech_span", return_value="skip"), \
+                mock.patch.object(S, "_stt_engine", return_value=object()), \
+                mock.patch.object(S, "_transcribe", return_value="read me my last email"), \
+                mock.patch.object(V, "_cfg", cfg), mock.patch.object(S, "_cfg", cfg):
+            h = S.hear(_clip("stranger", 2.5)).as_dict()
+        check("broad mode: a stranger is let in, but nothing private is read aloud",
+              h["ok"] and h["mode"] == "broad" and h["private_aloud"] is False
+              and h["memory_aloud"] is False, h)
+
+
 # --------------------------------------- 5. two models: the stronger decides --
 
 def _two(rng=None):
@@ -1063,7 +1086,7 @@ def t_real_models():
 if __name__ == "__main__":
     for fn in (t_hole_one_the_basic_check_lets_nobody_in, t_hole_two_one_noisy_clip,
                t_settings_tighten_now_loosen_with_a_card, t_may_speak,
-               t_memory_answers_aloud_by_default,
+               t_memory_answers_aloud_by_default, t_nothing_private_aloud_without_a_real_check,
                t_the_stronger_model_decides, t_cohort_maths,
                t_a_bank_of_the_wrong_width_is_not_used, t_building_a_bank_on_this_pc,
                t_the_shipped_bank,

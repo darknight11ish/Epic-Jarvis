@@ -1325,6 +1325,17 @@ def _note_for_history(words: str, verdict, embedder) -> None:
         pass
 
 
+def _really_checked(verdict, *, very: bool = False) -> bool:
+    """Did the owner's voice pass a real check - not broad mode, which lets
+    every voice in - and, with `very`, at the very strict setting?"""
+    if str(getattr(verdict, "mode", "") or "") == "broad":
+        return False
+    strictness = str(getattr(verdict, "strictness", "") or "")
+    if very:
+        return strictness == "very_strict"
+    return bool(strictness)
+
+
 def _memory_aloud() -> bool:
     try:
         return bool(jarvis_voice.memory_aloud())
@@ -1493,8 +1504,14 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                   wake_score=spot.score if spot else 0.0,
                   voice_print=str(getattr(verdict, "voice_print", "") or ""),
                   strictness=str(getattr(verdict, "strictness", "") or ""),
-                  private_aloud=_private_aloud(),
-                  memory_aloud=_memory_aloud())
+                  # Only after a REAL check of the owner's voice: in broad
+                  # mode verify() lets every voice in, and "voice check is
+                  # enough" (the card the owner approved) says "whenever your
+                  # voice passes the very strict check". Nothing private is
+                  # read aloud to a voice nobody checked (voice audit,
+                  # 2026-09-24).
+                  private_aloud=_private_aloud() and _really_checked(verdict, very=True),
+                  memory_aloud=_memory_aloud() and _really_checked(verdict))
 
     if not verdict.is_owner:
         return Heard(False, reason=verdict.reason, **common)
