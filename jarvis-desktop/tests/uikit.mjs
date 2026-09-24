@@ -385,7 +385,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -839,10 +839,42 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_theme": return args.theme;
           case "brain_read": {
             const out = {};
+            const sec = window.__security;
             for (const name of args.sections) {
-              out[name] = (brain && brain[name]) || { available: false, error: "not stubbed" };
+              let body = (brain && brain[name]) || { available: false, error: "not stubbed" };
+              // lock.rs redact_private: while private answers are hidden the
+              // two memory lists come back EMPTY, with how many there were.
+              const key = { memory_facts: "facts", memory_pending: "pending" }[name];
+              if (key && sec.hidden && !sec.revealed && body.available !== false) {
+                const count = Array.isArray(body[key]) ? body[key].length : 0;
+                body = { ...body, [key]: [], hidden: true, hidden_count: count };
+              }
+              out[name] = body;
             }
             return out;
+          }
+          // lock.rs. `settings` is what is stored, `hello` this PC's Windows
+          // Hello; `setFails` / `revealFails` are the sentences Rust rejects
+          // with (Windows Hello said no, or is not set up).
+          case "get_security_settings": {
+            const sec = window.__security;
+            sec.reads += 1;
+            if (sec.getFails) throw new Error(sec.getFails);
+            return { settings: { ...sec.settings }, hello: sec.hello };
+          }
+          case "set_security_settings": {
+            const sec = window.__security;
+            sec.changes.push(JSON.parse(JSON.stringify(args.settings)));
+            if (sec.setFails) throw new Error(sec.setFails);
+            sec.settings = { ...args.settings };
+            return { ...sec.settings };
+          }
+          case "reveal_private_answers": {
+            const sec = window.__security;
+            sec.reveals += 1;
+            if (sec.revealFails) throw new Error(sec.revealFails);
+            sec.revealed = true;
+            return true;
           }
           case "brain_watch_add":
           case "brain_watch_remove":
@@ -982,6 +1014,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__voice.status = JSON.parse(JSON.stringify(window.__voice.status || null));
   // Unset, what commands.rs makes of backend/rebuilt/jarvis_events.hello()
   // run with none of the owner's own modules (its Rust test pins the same).
+  // Unset, lock.rs's defaults on a PC with Windows Hello set up, and the
+  // Brain's memory lists shown.
+  window.__security = { reads: 0, changes: [], reveals: 0, getFails: null, setFails: null,
+                        revealFails: null, hidden: false, revealed: false, hello: "ready",
+                        settings: { appLock: false, relockAfterSecs: 60, approvals: "risky",
+                                    privateAnswers: false },
+                        ...(security || {}) };
   window.__caps = { reads: 0, fails: null,
                     answer: { server: "jarvis-hud", api: 1, on: ["memory", "power", "voice"],
                               off: ["appearance", "approvals", "connectors", "models", "persona", "skills"] },
