@@ -54,11 +54,14 @@ THE CHECKS (each a small function below, returning a reason in words or "")
               own turns (L5).
   Correction  a proposal that would replace a stored fact is always a card
               (L6).
-  Sensitive   a word-list check (sensitivity()) on the fact and on the turns
-              it came from: unless "Also remember sensitive topics
-              automatically" is on, a hit is a card (L7). When unsure: a hit.
+  Sensitive   jarvis_sensitive.py on the fact and on the turns it came from:
+              word lists in eight languages, number and token shapes, the
+              other-person rule, then the learner's own local model. Unless
+              "Also remember sensitive topics automatically" is on, a hit is a
+              card (L7). When unsure - or when the model does not answer: a hit.
 
-NOTHING LEAVES THIS PC. There is no network code here. The event it raises,
+NOTHING LEAVES THIS PC. There is no network code here; the sensitive-topic
+check asks the learner's own model, on this PC only. The event it raises,
 `memory_saved`, carries fact ids only - never the words (L10).
 """
 from __future__ import annotations
@@ -727,144 +730,38 @@ def source_turns(fact: str, turns: list) -> list:
 
 # ---- sensitivity (GUARDS L7) ---------------------------------------------
 #
-# Words and shapes, no model. Deliberately broad: a false hit costs one card
-# the owner answers; a miss saves a sensitive fact without asking. Every one
-# of the 42 phrasings in the memory audit's attack_sensitive.py is caught
-# (test_auto_learn.py runs them all).
-
-_OTHER_LANG_PASSWORD = (
-    r"mot\s+de\s+passe|passwort|kennwort|contrase[nñ]a|\bclave\b|\bsenha\b|wachtwoord"
-    r"|has[lł]o|\bheslo\b|jelsz[oó]|l[oö]senord|adgangskode|passord|salasana"
-    r"|\bparola\b|\b[sş]ifre\b|парол|пароль|κωδικ|パスワード|暗証|密码|密碼|비밀번호"
-    r"|\u0643\u0644\u0645\u0629\s*(?:\u0627\u0644)?\u0633\u0631|\u05e1\u05d9\u05e1\u05de")   # Arabic "kalimat al-sirr", Hebrew "sisma"
-
-_SENSITIVE = [
-    ("passwords and account details", re.compile("|".join([
-        r"\bpass\s*(?:word|wd|wrd|code|phrase)s?\b", r"\bpassw\w*", r"\bpas+wo?r?d\b",
-        r"\bp[a@4][s$5]{1,2}\w*", r"\bpwd?\b", r"\bpins?\b", r"\bpin\s*(?:number|code)\b",
-        r"\b(?:door|alarm|gate|safe|garage|lock|entry|access|security|wi-?fi|verification"
-        r"|recovery|backup|unlock|sort|zip)\s*codes?\b",
-        r"\bcodes?\b[^.\n]{0,24}\d{3,}", r"\d{3,}[^.\n]{0,24}\bcodes?\b",
-        r"\blog-?ins?\b", r"\busernames?\b", r"\bcredentials?\b", r"\blogin\b",
-        r"\b2fa\b", r"\bmfa\b", r"\btwo[- ]factor\b", r"\botp\b", r"\bauthenticator\b",
-        r"\bone[- ]time\s+(?:code|password|pin)\b",
-        r"\bsecurity\s+(?:question|answer)s?\b", r"\bmaiden\s+name\b",
-        r"\bcards?\b[^.\n]{0,30}\b(?:ends?|ending|expir\w*|numbers?|cvv|cvc)\b",
-        r"\bexpir\w*\b[^.\n]{0,12}\d{1,2}\s*/\s*\d{2,4}", r"\bcvv\b|\bcvc\b",
-        r"\b(?:\d{4}[ -]?){3}\d{1,4}\b",
-        r"\b(?:ni|national\s+insurance|nhs|social\s+security|ssn|sin|tax|passport"
-        r"|driver'?s\s+licen[cs]e|licen[cs]e|account|routing|sort|member(?:ship)?|policy"
-        r"|customer|reference|iban|bank)\s*(?:number|no\.?|#|details?)\b",
-        r"\b[a-z]{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?[a-d]\b",
-        r"\biban\b", r"\bswift\b", r"\bbic\b", r"\bsort\s+code\b",
-        r"\bapi[ _-]?keys?\b", r"\btokens?\b", r"\bprivate\s+key\b",
-        r"\b(?:seed|recovery)\s+phrase\b", _OTHER_LANG_PASSWORD,
-    ]), re.I)),
-    ("health", re.compile("|".join([
-        r"\bdiagnos\w*", r"\bdiabet\w*", r"\binsulin\b", r"\bglucose\b",
-        r"\bblood\s+(?:sugar|pressure|test|tests|work|type|count)\b",
-        r"\b\d+(?:\.\d+)?\s?(?:mg|mcg|µg|ug|ml|iu)\b", r"\bdos(?:e|es|age|ing)\b",
-        r"\b(?:sertraline|prozac|fluoxetine|zoloft|lexapro|escitalopram|citalopram"
-        r"|xanax|valium|diazepam|adderall|ritalin|methylphenidate|lithium|metformin"
-        r"|ozempic|wegovy|semaglutide|ibuprofen|paracetamol|codeine|morphine|oxycodone"
-        r"|methadone|tramadol|warfarin|statins?|antidepressants?|antibiotics?"
-        r"|antipsychotics?|steroids?|inhaler|epipen|chemo\w*|radiotherapy|dialysis"
-        r"|hrt|prep)\b",
-        r"\b\w+(?:pril|sartan|olol|statin|prazole|oxetine|azepam|zolam|cillin|mycin"
-        r"|cycline|floxacin|triptan)\b",
-        r"\bmedica\w*", r"\bmeds\b", r"\bmedicine\w*", r"\bpills?\b", r"\bprescri\w*",
-        r"\bhiv\b", r"\baids\b", r"\bcancer\w*", r"\btumou?rs?\b", r"\basthma\w*",
-        r"\bepilep\w*", r"\bseizures?\b", r"\bdepress(?:ion|ed|ive)\b", r"\banxi\w*",
-        r"\bpanic\s+attacks?\b", r"\bbipolar\b", r"\bschizo\w*", r"\badhd\b", r"\badd\b",
-        r"\bautis\w*", r"\bocd\b", r"\bptsd\b", r"\beating\s+disorders?\b",
-        r"\banorexi\w*", r"\bbulimi\w*", r"\btherap\w*", r"\bpsychiatr\w*",
-        r"\bpsycholog\w*", r"\bcounsell?\w*", r"\bmental\s+health\b", r"\bpregnan\w*",
-        r"\bmiscarr\w*", r"\babortion\w*", r"\bivf\b", r"\bfertil\w*", r"\binfertil\w*",
-        r"\bstds?\b", r"\bstis?\b", r"\bherpes\b", r"\bhepatitis\b", r"\bsurger\w*",
-        r"\bsurgeon\w*", r"\bhospital\w*", r"\bclinic\w*", r"\bdoctors?\b", r"\bgp\b",
-        r"\bnurse\w*", r"\bsymptoms?\b", r"\billness\w*", r"\bdiseases?\b",
-        r"\bdisorders?\b", r"\bsyndromes?\b", r"\ballerg\w*", r"\binjur\w*",
-        r"\bdisab\w*", r"\brehab\w*", r"\baddict\w*", r"\balcoholi\w*", r"\bsober\w*",
-        r"\boverdos\w*", r"\bsuicid\w*", r"\bself[- ]harm\w*", r"\bheart\s+attack\b",
-        r"\bstrokes?\b", r"\bmigraines?\b", r"\barthritis\b", r"\bdementia\b",
-        r"\balzheimer\w*", r"\bparkinson\w*", r"\bcovid\w*", r"\bsick\w*",
-        r"\bhealth\w*", r"\bmedical\w*", r"\bvaccin\w*", r"\bperiods?\b",
-        r"\bmenopaus\w*", r"\bweight\s+loss\b",
-    ]), re.I)),
-    ("money", re.compile("|".join([
-        r"\bsalar\w*", r"\bearn(?:s|ed|ing|ings)?\b", r"\bincome\w*", r"\bwages?\b",
-        r"\bpaychecks?\b", r"\bpay\s*slips?\b", r"\bbonus\w*", r"\bowe[sd]?\b",
-        r"\bowing\b", r"\bdebts?\b", r"\bloans?\b", r"\bmortgage\w*", r"\brent\b",
-        r"\boverdra\w*", r"\bbankrupt\w*", r"\bcredit\s+(?:score|card|rating|report)s?\b",
-        r"\bsavings?\b", r"\binvest\w*", r"\bstocks?\b", r"\bshares\b", r"\bcrypto\w*",
-        r"\bbitcoin\w*", r"\bpension\w*", r"\b401\s?k\b", r"\bisas?\b", r"\btax\w*",
-        r"\bnet\s+worth\b", r"\bbudget\w*", r"\bbills?\b", r"\bfinanc\w*", r"\bbank\w*",
-        r"\bbroke\b", r"\bbehind\s+on\b", r"\bin\s+the\s+red\b", r"\bgrand\b",
-        r"\b\d+(?:[.,]\d+)?\s?(?:k|m|bn|grand|quid|bucks|dollars?|pounds?|euros?|usd"
-        r"|gbp|eur)\b",
-        r"[£$€¥₹]\s?\d", r"\d\s?[£$€¥₹]", r"\bper\s+(?:year|annum|month|hour|week)\b",
-        r"\b(?:make|makes|made|paid|pays|earn|earns)\b[^.\n]{0,30}\ba\s+(?:year|month|week)\b",
-        r"\bmoney\b", r"\bcash\b", r"\bpaid\b", r"\bprice\w*\b", r"\bcosts?\b",
-    ]), re.I)),
-    ("private details about someone else", re.compile("|".join([
-        r"\baffairs?\b", r"\bcheat(?:ing|ed|s)?\b", r"\barrest\w*", r"\bjail\w*",
-        r"\bprison\w*", r"\bconvict\w*", r"\bcriminal\w*", r"\bpolice\b",
-        r"\bcourt\s+case\b", r"\bdivorc\w*", r"\bsepara\w*", r"\bbr(?:eak|oke)(?:ing)?\s+up\b",
-        r"\bha(?:s|ve)n'?t\s+told\b", r"\bha(?:s|ve)\s+not\s+told\b", r"\btold\s+no\s*one\b",
-        r"\bnot\s+told\s+anyone\b", r"\bdon'?t\s+tell\b", r"\bdo\s+not\s+tell\b",
-        r"\bsecrets?\b", r"\bconfidential\w*", r"\bbetween\s+us\b", r"\bprivate\w*",
-        r"\bgay\b", r"\blesbian\b", r"\bbisexual\b", r"\btrans(?:gender)?\b",
-        r"\bcom(?:e|ing)\s+out\b", r"\bcame\s+out\b", r"\breligio\w*",
-        r"\bimmigra\w*", r"\bvisa\b", r"\bundocumented\b", r"\bdeport\w*",
-        r"\baddress\w*", r"\bphone\s+numbers?\b", r"\bmobile\s+numbers?\b",
-        r"\b\d+\s+[a-z]+(?:\s+[a-z]+)?\s+(?:street|st|lane|ln|road|rd|avenue|ave|drive|dr"
-        r"|close|court|ct|way|place|pl|crescent|terrace|square|boulevard|blvd)\b",
-        r"(?<![\d-])(?!\d{4}-\d{2}-\d{2}\b)\+?\d[\d\s().-]{7,}\d",
-        r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+",
-        r"\bfired\b", r"\blaid\s+off\b", r"\bsacked\b", r"\bdied\b", r"\bdeath\b",
-        r"\bfuneral\b", r"\babus\w*", r"\bviolen\w*", r"\bassault\w*",
-    ]), re.I)),
-]
-
-#: Someone else is being talked about: a family or other relation, or a
-#: capitalised name that is not the first word.
-_OTHER_PERSON = re.compile(
-    r"\b(?:sister|brother|mum|mom|mother|dad|father|parent|son|daughter|kid|child"
-    r"|children|wife|husband|partner|girlfriend|boyfriend|fianc\w*|friend|neighbou?r"
-    r"|boss|colleague|coworker|co-worker|manager|cousin|aunt|uncle|niece|nephew"
-    r"|grand\w+|in-law|flatmate|roommate|ex)s?\b", re.I)
-_NAME = re.compile(r"\b[A-Z][a-z]+'s\b")          # "Dana's", "Mario's"
-
+# The check itself is jarvis_sensitive.py (shipped whole, backend/README.md
+# "The sensitive-topic check"): word lists in eight languages, the shapes of
+# codes, card and ID numbers, money and addresses, the other-person rule, and
+# a question to the learner's own local model. A pattern hit, a "yes" or an
+# "unsure" from the model, or no usable answer from it: a card. If that
+# module is missing or fails, every fact is a card (fail closed).
 
 def sensitivity(text: str) -> str:
-    """"" or the topic found, in words: "health", "money", "passwords and
-    account details", "private details about someone else" - with "someone
-    else's" in front of health or money said about another person."""
+    """"" or the topic in plain words ("health", "religion", "someone else's
+    money"). The patterns only - no model - so it is cheap enough to run on
+    every recalled fact. jarvis_sensitive.topic(); when that module cannot
+    be loaded, any non-empty text counts as sensitive."""
     if not isinstance(text, str) or not text.strip():
         return ""
-    for topic, rx in _SENSITIVE:
-        if rx.search(text):
-            if topic in ("health", "money") and (
-                    _OTHER_PERSON.search(text) or _NAME.search(text)):
-                return f"someone else's {topic}"
-            return topic
     try:
-        import jarvis_router
-        if jarvis_router.looks_like_a_secret(text):
-            return "passwords and account details"
+        import jarvis_sensitive
+        return jarvis_sensitive.topic(text)
     except Exception:
-        pass
-    return ""
+        return "a topic that could not be checked (jarvis_sensitive.py is missing)"
 
 
 def check_sensitive(fact: str, turns: list, allowed: bool) -> str:
+    """"" when the fact may be saved without a card, else the card's reason:
+    "about health, a sensitive topic". `allowed` is the owner's "Also
+    remember sensitive topics automatically": on, nothing is checked."""
     if allowed:
         return ""
-    for t in [fact] + list(turns):
-        topic = sensitivity(t)
-        if topic:
-            return "sensitive: " + topic
-    return ""
+    try:
+        import jarvis_sensitive
+    except Exception:
+        return "the check for sensitive topics is not installed (jarvis_sensitive.py)"
+    return jarvis_sensitive.card_reason(fact, turns)
 
 
 # --------------------------------------------------------------------------

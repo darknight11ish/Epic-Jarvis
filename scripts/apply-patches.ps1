@@ -367,6 +367,7 @@ $SHIPPED = @(
     'jarvis_voice_flow.py'       # voice-flow.patch: interrupting by talking, the delay in numbers, the "One moment." clip; jarvis_speech.py calls it
     'jarvis_chat_log.py'         # chat-history.patch: chat history kept on this PC, encrypted
     'jarvis_auto_learn.py'       # auto-learn.patch: facts from the owner's own words saved without a card
+    'jarvis_sensitive.py'        # the sensitive-topic check jarvis_auto_learn.py asks: word lists, shapes, the local model
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

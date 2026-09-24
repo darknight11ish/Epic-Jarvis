@@ -62,11 +62,21 @@ except ImportError:
 if str(REPO / "backend" / "rebuilt") not in sys.path:
     sys.path.append(str(REPO / "backend" / "rebuilt"))
 
-require_shipped("jarvis_auto_learn.py", "jarvis_intake.py", "jarvis_chat_log.py")
+require_shipped("jarvis_auto_learn.py", "jarvis_intake.py", "jarvis_chat_log.py",
+                "jarvis_sensitive.py")
 import jarvis_intake as I  # noqa: E402
 import jarvis_chat_log as H  # noqa: E402
 import jarvis_auto_learn as A  # noqa: E402
+import jarvis_sensitive as SENS  # noqa: E402
 import _stack  # noqa: E402
+
+# No local model runs here. The sensitive-topic check's second layer asks
+# the learner's model; this stand-in answers "not sensitive" to everything,
+# so the cases below exercise the pattern layer and the rest of the checks.
+# The model layer's own answers and its fail-closed paths (unsure, bad JSON,
+# timeout, unreachable, cloud) are tested in test_sensitive.py, and one
+# "unsure" end to end in t_sensitive_model_layer below.
+SENS.ASK_MODEL = lambda prompt: '{"sensitive": false, "category": "none"}'
 
 PASSED, FAILED = [], []
 KEY = bytes(range(32))
@@ -720,6 +730,11 @@ def t_one_bad_turn_makes_the_whole_pass_cards():
 def t_grounding():
     w = World()
     try:
+        # The sister/brother cases are about another person, which the
+        # sensitive-topic check now flags on its own (jarvis_sensitive.py,
+        # the other-person rule) before grounding is looked at. Sensitive
+        # topics are allowed here so this test sees grounding alone.
+        A.set_sensitive(True)
         w.say("I started the new job at Acme yesterday and I love my team")
         w.say("my sister's name is Ana")
         cases = [
@@ -767,16 +782,60 @@ def t_sensitive_topics_wait_unless_allowed():
     try:
         w.say("I take insulin every morning")
         res = w.learn(["The owner takes insulin every morning"])
-        check("health: a card, 'sensitive: health'", carded(res, "sensitive: health"), res)
+        check("health: a card, 'about health, a sensitive topic'",
+              carded(res, "about health, a sensitive topic"), res)
+        check("... and no double colon in the card's reason",
+              all("::" not in r and "sensitive:" not in r for r in res["cards"].values()), res)
         w.say("I'm learning Kotlin, my salary is 80k")
         res = w.learn(["The owner is learning Kotlin"])
         check("a plain fact from a turn that also says something sensitive: a card",
-              carded(res, "sensitive: money"), res)
+              carded(res, "about money, a sensitive topic"), res)
+        w.say("my sister's name is Ana")
+        res = w.learn(["The owner's sister is named Ana"])
+        check("a fact about another person: a card (the other-person rule)",
+              carded(res, "about another person, a sensitive topic"), res)
         A.set_sensitive(True)
         res = w.learn(["The owner takes insulin every morning"])
         check("with 'Also remember sensitive topics' on: saved", saved(res), res)
     finally:
         w.done()
+
+
+def t_sensitive_model_layer():
+    """The local model's "unsure", or no usable answer from it, makes an
+    otherwise clean fact a card (jarvis_sensitive.py layer 2, fail closed);
+    with sensitive topics allowed it is not asked at all."""
+    keep = SENS.ASK_MODEL
+    asked = []
+    try:
+        for name, answer, words in (
+                ("unsure", '{"sensitive": "unsure", "category": "none"}', "not sure"),
+                ("a yes", '{"sensitive": true, "category": "health"}', "about health"),
+                ("not JSON", "It's fine to save.", "could not be read"),
+                ("no answer (unreachable)", None, "did not answer")):
+            SENS.ASK_MODEL = lambda prompt, a=answer: (asked.append(prompt), a)[1]
+            w = World()
+            try:
+                w.say("I prefer tabs over spaces")
+                res = w.learn(["The owner prefers tabs over spaces"])
+                check(f"the model's {name}: a harmless fact stays a card", carded(res, words), res)
+            finally:
+                w.done()
+        SENS.ASK_MODEL = lambda prompt: (asked.append(prompt), '{"sensitive": false}')[1]
+        w = World()
+        try:
+            w.say("I prefer tabs over spaces")
+            res = w.learn(["The owner prefers tabs over spaces"])
+            check("the model's clean no: saved", saved(res), res)
+            asked.clear()
+            A.set_sensitive(True)
+            res = w.learn([{"text": "The owner prefers tabs over spaces, always"}],
+                          turns=["I prefer tabs over spaces, always"])
+            check("sensitive topics allowed: the model is not asked", not asked, asked)
+        finally:
+            w.done()
+    finally:
+        SENS.ASK_MODEL = keep
 
 
 def _sensitive_cases() -> dict:
