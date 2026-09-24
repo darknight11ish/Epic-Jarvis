@@ -60,30 +60,49 @@ def order() -> list:
     return out
 
 
+_AT = re.compile(r"^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@")
+
+
 def hunks(patch_text: str, target: str) -> list:
-    """[(hunk text with its @@ line, pre-image lines)] for `target` in a patch."""
+    """[(hunk text with its @@ line, pre-image lines)] for `target` in a patch.
+
+    A hunk ends when the line counts in its @@ header are used up, the way
+    git reads it. It used to end only at the next header, so the empty line
+    at the very end of a patch file was read as one more (blank) context
+    line - and the last hunk of rebuilt-patches/memory-safety.patch, which
+    ends the file, then asked for a blank line the file does not have, and
+    no stand-in of jarvis_extract.py could be built (auto-learn.patch,
+    2026-09-24)."""
     out, cur, on = [], None, False
+    left = [0, 0]                      # old lines, new lines still to come
     for line in patch_text.replace("\r\n", "\n").split("\n"):
-        if line.startswith("+++ "):
+        if cur is not None and left[0] <= 0 and left[1] <= 0 and not line.startswith("\\"):
+            cur = None
+        if line.startswith("+++ ") and cur is None:
             on = line.split()[1] == "b/" + target
-            cur = None
             continue
-        if line.startswith(("--- ", "diff ", "index ")):
-            cur = None
+        if line.startswith(("--- ", "diff ", "index ")) and cur is None:
             continue
         if not on:
             continue
-        if line.startswith("@@"):
+        m = _AT.match(line)
+        if m and cur is None:
             cur = [[line], []]
+            left = [int(m.group(1) or 1), int(m.group(2) or 1)]
             out.append(cur)
         elif cur is not None and line[:1] in (" ", "-", "+", "\\"):
             cur[0].append(line)
             if line[:1] in (" ", "-"):
                 cur[1].append(line[1:])
+                left[0] -= 1
+            if line[:1] in (" ", "+"):
+                left[1] -= 1
         elif cur is not None and line == "":
             # A blank context line some editors strip to nothing.
             cur[0].append(" ")
             cur[1].append("")
+            left[0] -= 1
+            left[1] -= 1
     return [("\n".join(h) + "\n", pre) for h, pre in out]
 
 

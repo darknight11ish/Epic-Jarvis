@@ -1319,10 +1319,28 @@ def _note_for_history(words: str, verdict, embedder) -> None:
         import jarvis_chat_log
         jarvis_chat_log.note_transcript(
             words, strictness=str(getattr(verdict, "strictness", "") or ""),
-            model=str(getattr(embedder, "name", "") or ""),
+            model=_deciding_model(verdict, embedder),
             mode=str(getattr(verdict, "mode", "") or ""))
     except Exception:
         pass
+
+
+def _deciding_model(verdict, embedder) -> str:
+    """Which speaker model decided the check, in words: the model of the
+    verdict's last check (jarvis_voice.plan lists the deciding one last) -
+    "the stronger voice-ID model" when that was it. `embedder` is only the
+    SMALL model hear() built, so its name said "small" even when the
+    stronger one decided, and automatic learning (which trusts voice only
+    when the stronger model decided, very strict, mode owner - GUARDS L8)
+    could not tell. Falls back to the embedder's name."""
+    try:
+        checks = list(getattr(verdict, "checks", None) or [])
+        last = checks[-1] if checks else None
+        if isinstance(last, dict) and last.get("model"):
+            return str(last["model"])
+    except Exception:
+        pass
+    return str(getattr(embedder, "name", "") or "")
 
 
 def _really_checked(verdict, *, very: bool = False) -> bool:

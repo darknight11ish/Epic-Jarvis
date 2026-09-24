@@ -376,8 +376,9 @@ def t_the_call_site():
           "MEMORY and not jarvis_side_memory" in src)
     # memory-intake.patch: offer() learns nothing unless the CALLER says the
     # turn came from the owner, so this one call site has to say it.
+    # auto-learn.patch adds the conversation id after it, on the next line.
     check("and it says the turn came from the owner",
-          'LEARNER.offer(body.get("messages") or [], origin="owner")' in src,
+          'LEARNER.offer(body.get("messages") or [], origin="owner"' in src,
           "without origin=\"owner\" the learner reads nothing at all")
     tree = ast.parse(src)
     started = any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)

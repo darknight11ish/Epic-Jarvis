@@ -31,7 +31,8 @@ FAILED, PASSED = [], []
 PATCH = "gate-outcome.patch"
 #: The actions the audit named, each checked below against its module.
 LISTED = ("second_card_enable", "second_card_browser_enable", "big_model_enable",
-          "learning_enable", "history_enable", "wiki_update", "change_own_config",
+          "learning_enable", "history_enable", "learning_auto_enable",
+          "learning_sensitive_enable", "wiki_update", "change_own_config",
           "custom_voice", "better_voice_enable",
           "power_manage", "append_obsidian_daily", "download_model", "switch_model")
 

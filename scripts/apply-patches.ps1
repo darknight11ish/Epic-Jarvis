@@ -288,6 +288,23 @@ $PATCHES = @(
     # Needs jarvis_chat_log.py copied in; without it the history routes
     # answer 503 and chat works as before, keeping nothing.
     'chat-history.patch'
+    # Automatic learning (the owner's decision, 2026-09-24): a fact from the
+    # owner's own words - typed, or said to this PC and checked very
+    # strictly - is saved without a card when every check in
+    # jarvis_auto_learn.py passes; everything else stays a card, with the
+    # reason on it. Adds GET /api/memory/learning and /api/memory/auto and
+    # POST /api/memory/learning/auto and /sensitive, jarvis_extract's
+    # accept_auto() (the facts keep their proposal's source), the learner's
+    # refusal of an Ollama cloud model, quote marks round the recalled facts,
+    # and the approval notice's words for learning_auto_enable and
+    # learning_sensitive_enable in jarvis_gate.py. Its context is
+    # chat-history's lines (the learner call it moves after the history
+    # record, both route blocks, _NO_CHAT_LOG and the gate line),
+    # memory-intake's learner and propose(), memory-safety's _accept() and
+    # memory-noise's recalled-facts block - last, like every new patch.
+    # Needs jarvis_auto_learn.py copied in; without it every fact waits for
+    # the owner's yes, as before, and the new routes answer 503.
+    'auto-learn.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -349,6 +366,7 @@ $SHIPPED = @(
     'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
     'jarvis_voice_flow.py'       # voice-flow.patch: interrupting by talking, the delay in numbers, the "One moment." clip; jarvis_speech.py calls it
     'jarvis_chat_log.py'         # chat-history.patch: chat history kept on this PC, encrypted
+    'jarvis_auto_learn.py'       # auto-learn.patch: facts from the owner's own words saved without a card
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

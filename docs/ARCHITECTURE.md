@@ -219,7 +219,9 @@ facts_vec   sqlite-vec, meaning
 proposals   the review queue. Extraction writes here. NOTHING reaches `facts`
             without decide(id, accept) or decide_keep_both(id) — one integer
             id, one decision. keep_both keeps the new fact AND leaves the old
-            one current; it retires nothing.
+            one current; it retires nothing. The one other door is
+            accept_auto(id) (automatic learning, below): one id at a time,
+            claimed like decide(), never a correction.
 ```
 
 **Three tables are welded to one local rowid.** `facts` is
@@ -268,6 +270,23 @@ request can mark a turn as the owner's; a marker can only remove one. The
 gate's "your no becomes a proposed rule" path calls `propose()` directly and
 is unaffected.
 
+### Automatic learning — the owner's own words only
+
+The owner decided on 2026-09-24 that Jarvis learns automatically by default
+(`jarvis_auto_learn.py`, `auto-learn.patch`, docs/JARVIS-API.md §19). It is
+not an approve-all: the learner still proposes every fact, and a proposal is
+saved without a card only when a fixed list of checks passes - source
+`conversation` or a colon "Remember:", every turn the learner read seen LIVE
+by this PC as typed or very-strictly-verified voice in an untainted
+conversation (the live-turn registry `jarvis_chat_log.record_turn()` writes
+on every request, history on or off), no sign of pasted or hidden text, every
+word of the fact in those turns, never a correction, nothing sensitive
+unless the owner allowed it, and a local model by address AND name. Anything
+else is the same card as before, with the reason on it. Saved facts are
+`source = "auto"` and listed in both apps with Forget; the `memory_saved`
+event carries ids only. Turning either switch ON is an approval card; OFF is
+immediate.
+
 ### Chat history — a second store, kept apart from memory
 
 `chat-history.db` (`jarvis_chat_log.py`, `chat-history.patch`, 2026-09-24,
@@ -285,8 +304,10 @@ reads from on its own. Three things about it are invariants:
   before it), tagged typed / voice / shared / pasted / clipboard /
   picture_caption, `unknown` when untagged. `voice` only when this PC's own
   speech route made those exact words. A conversation that ran a tool is
-  marked from that turn on. This is what the later automatic-learning build
-  trusts instead of the history an app re-sends (the memory-safety audit).
+  marked from that turn on. Automatic learning trusts this - through an
+  in-memory registry of the same facts (hashes, never words) that is kept
+  even while history is off - instead of the history an app re-sends (the
+  memory-safety audit).
 - **Turning it back on is a card; off is immediate. No delete-all.**
   One conversation per delete, and both apps hold deleting and shortening
   the keep period on a stale link.
@@ -298,13 +319,17 @@ reads from on its own. Three things about it are invariants:
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
 changes from it and from nowhere else. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
-`deep`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
+`deep`, `memory_saved`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
 and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.
 `deep` is a deep question finishing, `{"id", "state"}` only -
 `jarvis_big_model.py`; added 2026-09-24. Both apps handle it: the desktop's
 Brain reads `GET /api/deep` again (`brain.js`, Deep questions), and the
-phone's `JarvisRuntime.onEvent` re-reads `/api/deep` and `/api/big-model`.)
+phone's `JarvisRuntime.onEvent` re-reads `/api/deep` and `/api/big-model`.
+`memory_saved` is automatic learning saving facts, `{"ids": [...]}` only -
+`jarvis_auto_learn.py`; added 2026-09-24 on the backend, and both apps'
+handlers (re-read `GET /api/memory/auto`, a quiet line) are planned, not
+built - JARVIS-API §19.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. This bus reaches a phone that surfaces notifications with the
@@ -438,7 +463,7 @@ backend routes, in both directions; the rest are listed here only.
 | what | why |
 |---|---|
 | The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
-| Rewording or forgetting a stored fact (`/api/memory/edit`, `/api/memory/forget`) | Deep memory editing. It stays on the desktop's Brain → Memory tab. |
+| Rewording a stored fact (`/api/memory/edit`), and forgetting one that was not saved automatically | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone is to call it for facts in the "Saved automatically" list (JARVIS-API §19; planned). |
 | Exporting all memory (`/api/memory/export`) | A copy of everything Jarvis knows does not belong on a phone that can be lost. |
 | Shutting the backend down (`/api/shutdown`) | The phone would then have nothing to reach and no way to undo it. |
 | Deep config editing (`/api/config`) | Out of scope on the phone (`CLAUDE.md`). The desktop does not use it either today: it is only in the Brain window's read allow-list, and no window asks for it. |
@@ -488,8 +513,8 @@ That asymmetry is worth stating once: **this repo is version-controlled and the
 thing it patches is not.** A patch here can always be recovered. The file it
 edits cannot.
 
-Forty-nine patches (counted in `scripts/apply-patches.ps1`'s list on
-2026-09-24, after `voice-flow.patch` and `chat-history.patch`), applied in that list's order. The order matters: many patches
+Fifty patches (counted in `scripts/apply-patches.ps1`'s list on
+2026-09-24, after `chat-history.patch` and `auto-learn.patch`), applied in that list's order. The order matters: many patches
 edit lines an earlier one wrote, and the list's comments say which. Above
 all, `memory-safety` must land first: without it the first accepted proposal
 retires a roughly-matching unrelated fact, permanently, and `retire()` has

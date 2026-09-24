@@ -1023,6 +1023,15 @@ def annotate(rows: list) -> list:
         r["keep_both_ok"] = (bool(r.get("replaces_id"))
                              and r.get("source") != RETIRE_CARD_SOURCE)
         r["verbatim"] = r.get("source") == "remember"
+    # Automatic learning (jarvis_auto_learn.py): why a card stayed a card
+    # (`auto_reason`), and "in your own words" only for a "Remember:" whose
+    # words were typed or said to this PC. Without that module the fields
+    # above are all a card gets, as before.
+    try:
+        import jarvis_auto_learn
+        jarvis_auto_learn.annotate(rows)
+    except Exception:
+        pass
     return rows
 
 

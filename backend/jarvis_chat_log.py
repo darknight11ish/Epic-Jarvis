@@ -13,8 +13,13 @@ It is also the PC's OWN record of each turn, written as the turn arrives,
 with where its words came from (`provenance`): typed, voice, shared from
 another app, the clipboard, pasted, or words sent with a picture. The apps
 re-send the whole conversation with every question, and a re-sent turn is
-the app's say-so, not the PC's. A later learning build is meant to trust
-this record instead.
+the app's say-so, not the PC's. Automatic learning (jarvis_auto_learn.py,
+docs/JARVIS-API.md section 19) trusts this PC's record instead - through
+the LIVE-TURN REGISTRY (_note_live, live_turn), which record_turn() writes
+on every request WHETHER OR NOT history is on: in memory only, the newest
+LIVE_MAX turns, a hash of each live message (never the words) with its
+provenance, the voice check's facts, the conversation id, the app, and
+whether a tool read outside text in that turn.
 
 WHAT IS KEPT, per /api/chat request
   - The NEWEST user message only - the live one, never the re-sent history
@@ -80,6 +85,7 @@ import sqlite3
 import threading
 import time
 import uuid as _uuid
+from collections import OrderedDict
 from contextlib import closing
 from pathlib import Path
 from typing import Callable, Optional
@@ -109,6 +115,7 @@ PROVENANCES = ("typed", "voice", "shared", "clipboard", "pasted", "picture_capti
 DEVICES = ("desktop", "hud", "phone")
 KEEP_DAYS = (0, 30, 90, 365)
 VOICE_WINDOW = 600          # a transcript counts as voice for 10 minutes
+LIVE_MAX = 200              # the live-turn registry holds this many turns
 TITLE_CHARS = 80
 LIST_DEFAULT, LIST_MAX = 30, 100
 _CID = re.compile(r"[A-Za-z0-9_-]{8,64}")   # used with fullmatch: no trailing newline
@@ -278,6 +285,11 @@ class ChatLog:
         self._last_vacuum = 0.0
         self._vacuum_due = False
         self._heard: dict = {}        # sha256 of a transcript -> (at, facts)
+        # The live-turn registry (see _note_live): in memory only, hashes
+        # and tags, never the words.
+        self._live: "OrderedDict" = OrderedDict()   # (cid, sha256) -> entry
+        self._taint: "OrderedDict" = OrderedDict()  # cid -> seq it was tainted from
+        self._live_seq = 0
 
     # -- settings ---------------------------------------------------------
     def settings(self) -> dict:
@@ -479,6 +491,65 @@ class ChatLog:
             return None
         return got[1]
 
+    # -- the live-turn registry -------------------------------------------
+    def _note_live(self, cid: str, rows, device: str, read_outside: bool,
+                   now: float) -> None:
+        """Remember, for automatic learning, that THIS PC saw these user
+        messages arrive live, with where their words came from.
+
+        Written on every /api/chat request whether or not history is on,
+        because automatic learning must work either way and must never trust
+        a turn only because an app re-sent it (docs/JARVIS-API.md section
+        19). In memory only, and never the words: a hash of each message,
+        its provenance, the voice check's facts for a verified voice turn,
+        the conversation id, the app, and whether a tool read outside text
+        in that turn. The newest LIVE_MAX turns; a restart forgets them all,
+        and a turn this PC does not remember is never learned from
+        automatically (it becomes a card instead)."""
+        with self._lock:
+            first = None
+            for text, prov, voice_check in rows:
+                self._live_seq += 1
+                first = self._live_seq if first is None else first
+                key = (cid, _hash(text))
+                self._live.pop(key, None)
+                self._live[key] = {"conversation_id": cid, "message_hash": key[1],
+                                   "provenance": prov, "voice_check": voice_check,
+                                   "read_outside": bool(read_outside), "device": device,
+                                   "at": now, "seq": self._live_seq}
+            if read_outside and first is not None and cid not in self._taint:
+                # From this turn on, the whole conversation is tainted.
+                self._taint[cid] = first
+            while len(self._live) > LIVE_MAX:
+                self._live.popitem(last=False)
+            while len(self._taint) > LIVE_MAX:
+                self._taint.popitem(last=False)
+
+    def live_turn(self, conversation_id, text) -> Optional[dict]:
+        """The registry's entry for this message in this conversation, or
+        None if this PC did not see it arrive live (or has forgotten it).
+        `tainted` is true when the conversation read outside text at or
+        before this turn."""
+        if not (isinstance(conversation_id, str) and _CID.fullmatch(conversation_id)):
+            return None
+        if not isinstance(text, str) or not _norm(text):
+            return None
+        with self._lock:
+            got = self._live.get((conversation_id, _hash(text)))
+            if got is None:
+                return None
+            out = dict(got)
+            if isinstance(out.get("voice_check"), dict):
+                out["voice_check"] = dict(out["voice_check"])
+            since = self._taint.get(conversation_id)
+            out["tainted"] = since is not None and since <= out["seq"]
+            return out
+
+    def conversation_tainted(self, conversation_id) -> bool:
+        """Has any live turn of this conversation read outside text?"""
+        with self._lock:
+            return conversation_id in self._taint
+
     # -- recording ----------------------------------------------------------
     def record_turn(self, body, *, lane: str = "", turn: Optional[dict] = None,
                     at: Optional[float] = None) -> dict:
@@ -493,9 +564,6 @@ class ChatLog:
         live = _live_user_messages(body.get("messages"))
         if not live:
             return {"recorded": False, "why": "no user message"}
-        aead, why = self._recording()
-        if aead is None:
-            return {"recorded": False, "why": why}
         now = self._clock()
         at = float(at) if isinstance(at, (int, float)) and not isinstance(at, bool) else now
         device = body.get("device") if body.get("device") in DEVICES else "unknown"
@@ -509,6 +577,25 @@ class ChatLog:
         answer = turn.get("answer") if turn else None
         answer_kept = bool(turn and turn.get("finish_reason") and not turn.get("client_gone")
                            and isinstance(answer, str) and answer.strip())
+        rows = self._live_rows(live)
+        # The live-turn registry is written for EVERY request, before the
+        # switch is read: automatic learning trusts only turns this PC saw
+        # arrive, whether or not history is kept (jarvis_auto_learn.py).
+        self._note_live(cid, rows, device, read_outside, now)
+        aead, why = self._recording()
+        if aead is None:
+            return {"recorded": False, "why": why}
+        rows = [(text, prov, None if vc is None else json.dumps(vc, sort_keys=True))
+                for text, prov, vc in rows]
+        if not rows:
+            return {"recorded": False, "why": "no words in the user message"}
+        return self._write_turn(aead, cid, rows, device, lane, read_outside, answer_kept,
+                                answer, at, now)
+
+    def _live_rows(self, live) -> list:
+        """[(words, provenance, voice check facts or None)] for the live
+        message(s). A claimed "voice" turn uses up its transcript here, once:
+        see _heard_facts."""
         rows = []
         for m in live:
             text, picture = _text_of(m.get("content"))
@@ -525,12 +612,14 @@ class ChatLog:
                 if facts is None:
                     prov = "voice_unverified"
                 else:
-                    voice_check = json.dumps(facts, sort_keys=True)
+                    voice_check = dict(facts)
             if not text.strip() and not picture:
                 continue
             rows.append((text, prov, voice_check))
-        if not rows:
-            return {"recorded": False, "why": "no words in the user message"}
+        return rows
+
+    def _write_turn(self, aead, cid, rows, device, lane, read_outside, answer_kept,
+                    answer, at, now) -> dict:
         lane = str(lane or "")[:200]
         with self._lock, closing(self._connect()) as c:
             with c:
@@ -731,6 +820,16 @@ def record_turn(body, *, lane: str = "", turn: Optional[dict] = None,
 def note_transcript(text: str, *, strictness, model, mode) -> None:
     """Called by the PC's speech route with each transcript it produced."""
     _log().note_transcript(text, strictness=strictness, model=model, mode=mode)
+
+
+def live_turn(conversation_id, text) -> Optional[dict]:
+    """For jarvis_auto_learn: did this PC see this message arrive live, in
+    this conversation, and with what provenance? None if not."""
+    return _log().live_turn(conversation_id, text)
+
+
+def conversation_tainted(conversation_id) -> bool:
+    return _log().conversation_tainted(conversation_id)
 
 
 def status() -> dict:

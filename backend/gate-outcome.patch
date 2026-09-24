@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -530,6 +530,87 @@
+@@ -530,6 +530,89 @@
  #   The decision
  # --------------------------------------------------------------------------
  
@@ -37,6 +37,8 @@
 +    "big_model_enable",       # jarvis_big_model.py: the same
 +    "learning_enable",        # jarvis_learning_switch.py: the same (learning-asks.patch)
 +    "history_enable",         # jarvis_chat_log.py: the same (chat-history.patch)
++    "learning_auto_enable",   # jarvis_auto_learn.py: the same (auto-learn.patch)
++    "learning_sensitive_enable",  # jarvis_auto_learn.py: the same
 +    "custom_voice",           # jarvis_voices.py: the same (add a voice, switch to one)
 +    "better_voice_enable",    # jarvis_voices.py: the same (the better voice)
 +    "change_own_config",      # jarvis_voice_enroll.py, jarvis_speech.py: the same
@@ -88,7 +90,7 @@
  @dataclass
  class Verdict:
      allowed: bool
-@@ -537,6 +618,30 @@
+@@ -537,6 +620,30 @@
      action: str
      reason: str
      request_id: Optional[str] = None
@@ -119,7 +121,7 @@
  
      def as_dict(self) -> dict:
          return asdict(self)
-@@ -656,7 +761,8 @@
+@@ -656,7 +763,8 @@
          # Cannot read the policy -> cannot claim the action is permitted.
          _audit("gate.policy_unreadable", {"action": action, "error": str(exc)})
          return Verdict(False, "unknown", action,
@@ -129,7 +131,7 @@
  
      # The one rule above the tier table: nothing gets to edit the tier table.
      hit = _touches_protected(prompt, detail)
-@@ -664,7 +770,7 @@
+@@ -664,7 +772,7 @@
          _audit("gate.refused_protected", {"action": action, "file": hit})
          return Verdict(False, "never", action,
                         f"this touches {hit}, which no tool may modify; "
@@ -138,7 +140,7 @@
  
      # Outside text that tried to rush the reader raises the effective tier of
      # whatever comes next. One direction only: this can turn auto into ask, it
-@@ -679,7 +785,8 @@
+@@ -679,7 +787,8 @@
          _audit("gate.refused", {"action": action, "tier": tier, "detail": detail})
          return Verdict(False, tier, action,
                         "this action is set to 'never' in jarvis-framework.toml; "
@@ -148,7 +150,7 @@
  
      # Any joplin action at all - including a read on the "auto" tier - pins
      # the conversation local. Done before the tier branches so it happens even
-@@ -689,7 +796,7 @@
+@@ -689,7 +798,7 @@
  
      if tier == "auto":
          _audit("gate.auto", {"action": action, "detail": detail})
@@ -157,7 +159,7 @@
  
      if tier == "notify":
          _audit("gate.notify", {"action": action, "detail": detail})
-@@ -703,7 +810,8 @@
+@@ -703,7 +812,8 @@
          # knows or guesses the string reads every message. On this tier there
          # is no human in the loop at all, so nothing else was going to catch it.
          _push(f"Jarvis did: {action}", _safe_detail(detail, 400))
@@ -167,7 +169,7 @@
  
      # ---- "ask", and anything unrecognised, waits for a human ----
      try:
-@@ -719,7 +827,8 @@
+@@ -719,7 +829,8 @@
      except Exception as exc:
          _audit("gate.queue_unavailable", {"action": action, "error": str(exc)})
          return Verdict(False, tier, action,
@@ -177,7 +179,7 @@
  
      _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
      # An unclassified action is safe (it became "ask") but opaque: you cannot
-@@ -772,11 +881,14 @@
+@@ -772,11 +883,14 @@
              if row["state"] == "approved":
                  _audit("gate.approved", {"id": rid, "action": action,
                                           "by": row["decided_by"]})
@@ -194,7 +196,7 @@
      finally:
          if watch is not None:
              try:
-@@ -799,16 +911,24 @@
+@@ -799,16 +913,24 @@
                  if row and row["state"] == "approved":
                      _audit("gate.approved", {"id": rid, "action": action,
                                               "by": row["decided_by"], "late": True})
@@ -222,7 +224,7 @@
  
  
  def confirm(prompt: str) -> bool:
-@@ -860,6 +980,15 @@
+@@ -860,6 +982,15 @@
      v = check(action, detail, prompt=f"tool {name} {detail['args']}")
      if v.allowed:
          return None

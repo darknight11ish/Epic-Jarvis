@@ -5,8 +5,8 @@
 > is the detail.
 
 
-Forty-nine patches against the Jarvis backend (counted 2026-09-24, after
-`voice-flow.patch` and `chat-history.patch`), each with an executable test
+Fifty patches against the Jarvis backend (counted 2026-09-24, after
+`chat-history.patch` and `auto-learn.patch`), each with an executable test
 (counted from the `$PATCHES` list in `scripts/apply-patches.ps1`, which
 refuses to run if a `.patch` file here is missing from it). The paragraphs
 below were written as the list grew, so the counts in them are the count at
@@ -107,6 +107,7 @@ on a throwaway copy instead.
 | `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. |
 | `voice-flow.patch` | `jarvis_hud.py` | **Interrupting Jarvis by talking, the delay in numbers, and "One moment."** `?source=barge_in` on `/api/voice/utterance` answers only "stop or not" (the owner's voice or the word "stop"; never the TV, never Jarvis's own voice) and is never transcribed; `&waited_ms=` is passed on for the delay's numbers; adds `GET /api/voice/moment` (the "One moment." clip in the voice in use now). Last in the list, after `voice-mic.patch` and `voices.patch` (textual). Needs `jarvis_voice_flow.py` - see "The voice flow", at the very end. |
 | `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them, and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
+| `auto-learn.patch` | `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py` | **Jarvis learns automatically, from your own words only** (the owner's decision, 2026-09-24). A proposal is saved without a card only when every check in `jarvis_auto_learn.py` passes; the rest stay cards, each saying why. Adds `GET /api/memory/learning`, `GET /api/memory/auto`, `POST /api/memory/learning/auto` and `/sensitive` (each ON is one approval card), `jarvis_extract.accept_auto()`, facts that keep their proposal's source, the learner's refusal of an Ollama cloud model, and quote marks round recalled facts. Last in the list, after `chat-history.patch`. Needs `jarvis_auto_learn.py` - see its own section, after chat-history. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -5830,6 +5831,86 @@ backend folder:
 
 ```powershell
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_chat_log.py
+```
+
+## auto-learn.patch - Jarvis learns automatically, from your own words only
+
+**What it is for.** The owner decided on 2026-09-24 that Jarvis learns
+automatically by default: facts about you and your projects, from what you
+type or say to Jarvis - never from web pages, emails, documents, notes or
+tool output - are saved without a card each, and every one is listed in
+both apps with Forget. Sensitive topics still wait for your yes unless you
+turn on "Also remember sensitive topics automatically" (off by default).
+The full contract is `docs/JARVIS-API.md` section 19.
+
+**How it works, in plain words.** The learner still suggests facts into the
+review queue, exactly as before. Straight after each learning pass (and each
+"Remember: ..."), a new shipped module, `jarvis_auto_learn.py`, checks what
+was just suggested. It saves a suggestion without a card only when ALL of
+these hold:
+
+- "Learn automatically" and background learning are both on;
+- the learning model runs on this PC (its address is this PC, and its name
+  is not an Ollama "-cloud" model - the learner now refuses those outright);
+- every message the learner read was seen arriving by this PC, typed or said
+  aloud (the strictest voice check only), in a conversation where no tool
+  read outside text. The PC keeps a short in-memory list of the messages it
+  saw arrive - a fingerprint of the words, never the words - even while chat
+  history is off (`jarvis_chat_log.py`);
+- none of those messages looks pasted (a link, hidden characters, an
+  encoded block, email headers, more than 600 characters, or words that read
+  like instructions to Jarvis);
+- every word and number of the fact is in what you said;
+- it does not replace a fact you already have;
+- nothing sensitive (health, money, passwords and account details, other
+  people's private details) unless you allowed that.
+
+Anything else stays an ordinary card, and the card says which check stopped
+it ("from pasted text", "sensitive: health", "not in your own words", ...).
+
+**What it changes.**
+
+- `jarvis_hud.py`: the learner passes each pass's suggestions (and each
+  "Remember:") to `jarvis_auto_learn.py`, with the conversation id the app
+  sent; it refuses a cloud model; the chat route now records the turn (and
+  its live-turn fingerprint) BEFORE handing it to the learner; four routes -
+  `GET /api/memory/learning`, `GET /api/memory/auto`, `POST
+  /api/memory/learning/auto` and `/sensitive`; and the recalled-facts block
+  quotes the facts between `---FACTS---` lines and says they are never
+  instructions.
+- `jarvis_extract.py`: `accept_auto()` saves one suggestion through the same
+  `_accept()` a card you keep goes through, with source `"auto"`; and every
+  accepted fact now keeps its suggestion's source instead of "extracted".
+- `jarvis_gate.py`: the approval notice's words for the two new cards.
+- Also changed, whole files: `jarvis_chat_log.py` (the live-turn list),
+  `jarvis_intake.py` (each review card gets `auto_reason`),
+  `jarvis_speech.py` (it now tells the history which voice model decided).
+- The settings file gets `learning_auto_enable = "ask"` and
+  `learning_sensitive_enable = "ask"`; `gate-outcome.patch` lists both, so a
+  "no" never becomes a proposed memory.
+
+**The event.** `memory_saved`, `{"ids": [...]}` - fact ids only, never the
+words.
+
+**Not checked, said plainly.** The patch was applied only to stand-ins of
+the three files built from the whole patch stack, never to your real files;
+`accept_auto()` and `_accept()` were run lifted from that stand-in against a
+real memory store. Nothing here has run on your PC. **Neither app shows the
+new switches or the "Saved automatically" list yet** - until they do,
+automatically saved facts show up in the desktop's Memory tab with source
+`auto`, where Forget already works.
+
+**Where it goes.** Last in the order, after `chat-history.patch`. Its context
+is chat-history's lines (the learner call it moves, both route blocks,
+`_NO_CHAT_LOG` and the gate line), memory-intake's learner, memory-safety's
+`_accept()`, memory-intake's end of `jarvis_extract.py` and memory-noise's
+recalled-facts block.
+
+**Test.** From the repository folder, with `JARVIS_BACKEND` set to your
+backend folder:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_auto_learn.py
 ```
 ---
 

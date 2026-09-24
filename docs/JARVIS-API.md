@@ -179,6 +179,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written (`voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
+| `memory_saved` | **Planned** (backend built 2026-09-24, `auto-learn.patch`; §19). Automatic learning saved facts without a card. The data is flat: `{"ids": [<fact id>, ...]}` - fact ids only, never the words. Re-read `GET /api/memory/auto` and show one quiet line ("Jarvis remembered 2 things") that opens the list; never a pop-up, never the fact's text in a notification | The same: re-read `/api/memory/auto`, the same quiet line |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
@@ -674,6 +675,8 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
 | `/api/history?limit=&before=` | GET | `brain/history.rs` `brain_history_list` (Brain, History) | `JarvisApi.history` (Mind, Chat history) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. Token + origin. The switch's state (`enabled`, `recording`, `why_not`, `waiting`, `keep_days`, `encrypted`) and `conversations`, newest first: `[{id, title, started, updated, turns, device, has_voice, tainted}]`. `limit` 1-100 (default 30); `before=<updated>` pages to older ones. `503 {"available": false, "error", "reason"}` if `jarvis_chat_log.py` is missing. |
+| `/api/memory/learning` | GET | not yet (planned, §19) | not yet (planned, §19) | `auto-learn.patch`, `jarvis_auto_learn.py`, 2026-09-24 - **§19**. Token + origin. The learning switches in one read: `{"enabled", "auto", "auto_sensitive", "auto_waiting", "sensitive_waiting", "auto_last", "sensitive_last", ...}` (`enabled` is background learning's own switch). Before this, only the POST existed. `503 {"available": false, "error", "reason"}` if `jarvis_auto_learn.py` is missing. |
+| `/api/memory/auto?limit=&before=` | GET | not yet (planned, §19) | not yet (planned, §19) | `auto-learn.patch` - **§19**. "Saved automatically": `{"facts": [{id, text, saved_at, provenance, device}], "auto", "auto_sensitive"}`, current facts only, newest first; `limit` 1-100 (default 30); `before=<saved_at>` pages to older ones (floored to whole seconds; a page never splits a second). |
 | `/api/history/conversation?id=` | GET | `brain_history_open` | `JarvisApi.historyConversation` | `chat-history.patch` - **§18**. One kept conversation, read-only: `{id, title, tainted, turns: [{role, text, at, provenance, read_outside, answer_kept} or {role: "assistant", text, at}]}`. `404` if there is no such conversation, `400` for a malformed id, `503` if it cannot be opened (the reason in words). |
 
 **`/api/models` gains `speed`** (`speed-record.patch`), next to `offload`:
@@ -720,7 +723,8 @@ adds four:
 | `flags` | list of `{"code", "why"}` | Not empty: a warning on the card, each `why` as a line ("It tells Jarvis to send, forward or share something to an address, link or number."). Codes: `override`, `sends_elsewhere`, `standing_order`, `less_oversight`, `addressed_to_ai`, `markup`, `encoded`. A warning only - the card still has keep and discard. |
 | `flags_checked` | bool | `false` means the check could not run (the backend lacks `jarvis_intake.py`), which is not the same as "clean". |
 | `keep_both_ok` | bool | True only on a correction card (one that would retire `replaces_text` by adding a new fact). **False on a "retire this?" card** (`source == "feedback_retire"`), even though that card also has `replaces_id`. Only when true, show a third button, "Both are true", which posts `{"id": row.id}` to `/api/memory/keep_both`. |
-| `verbatim` | bool | True when `source` is `"remember"`: the owner's own words from a "Remember:" message. Label it that way. |
+| `verbatim` | bool | True when `source` is `"remember"`: the owner's own words from a "Remember:" message. Label it that way. Since `auto-learn.patch` (§19) it is **false** on a "Remember:" card whose words this PC saw arrive as shared, pasted, clipboard, picture words or untagged, or could not match to a live turn at all - those are not known to be the owner's own words. |
+| `auto_reason` | string | `auto-learn.patch` (§19). Why automatic learning left this proposal as a card, in plain words: `"from pasted text"`, `"sensitive: health"`, `"not in your own words"`, ... Show it as one quiet line on the card. `""` (or absent, on an older backend) when automatic learning was off or never looked at this card. |
 
 **How the phone draws these** (`MemoryCards.from` in `net/Learning.kt`, pinned
 by `LearningTest`; drawn by `BrainScreen.kt`'s `MemoryProposalRow`): each `why`
@@ -801,9 +805,11 @@ neither app says it would.
 | `/api/memory/decide` | POST | `{"id": <int>, "accept": bool}` | `brain.rs:283` | `JarvisApi.kt:417` | One id, one decision. **No list form anywhere** — a "keep all" would be an approve-all with another name. |
 | `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | `brain.rs` `brain_memory_keep_both` | `JarvisApi.kt:439` (`keepBothMemory`) | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
 | `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | `commands.rs:1017` (quickbar), `hud_bootstrap.js` (HUD page) | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
-| `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | **no** | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. |
+| `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | not yet - **planned** for the "Saved automatically" list (§19) | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. Since the owner's decision of 2026-09-24 (automatic learning, §19) the phone calls it too, for automatically saved facts - one fact per request, held on a stale link, like the desktop. Rewording (`/api/memory/edit`) stays desktop-only. |
 | `/api/memory/edit` | POST | object | `brain.rs` `brain_memory_edit` | **no** | Refused while the stream is stale. |
 | `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | `JarvisApi.setLearning` (Mind, "What Jarvis remembers") | **ON asks first** (`learning-asks.patch`, `jarvis_learning_switch.py`, 2026-09-24): **202** `{"ok": true, "waiting": true, "enabled": false, "message"}` while one approval card under the action `learning_enable` waits; it turns on (and starts the learner) only when that card is approved. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, and it withdraws a waiting ON. Both apps hold ON (not OFF) while the stream is stale, and say "waiting" until the card leaves the queue. A "Remember:" message makes a card even while learning is off. |
+| `/api/memory/learning/auto` | POST | `{"enabled": bool}` | not yet (planned, §19) | not yet (planned, §19) | `auto-learn.patch` - **§19**. "Learn automatically" (on by default). The shape of `/api/memory/learning`: **OFF** 200 at once, never a card, withdraws a waiting ON; **ON** 202 `{"waiting": true, ...}` and ONE approval card, action `learning_auto_enable`; on only when it is approved. Already on: 200, no card. A second ON while one waits: 202, no second card. Tier other than `ask`: **503**. Bad body: `400`. Every reply carries the `GET /api/memory/learning` fields (not `enabled`). |
+| `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | not yet (planned, §19) | not yet (planned, §19) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted. Anything else: `400`. Every reply carries the `/api/history` status fields. |
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. |
 | `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}` | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.kt:447` | The overnight tidy is **not built**: `enabled` only records the wish, and nothing runs. "Not now" sends nothing at all — the card tracks "already offered today" itself. |
@@ -1812,8 +1818,10 @@ PC.
 
 It is also the PC's own record of each turn, written as the turn arrives,
 with **where its words came from**. The apps re-send the whole conversation
-with every question (§4), so a re-sent turn is only the app's say-so; the
-later automatic-learning work is meant to trust this record instead.
+with every question (§4), so a re-sent turn is only the app's say-so;
+automatic learning (§19) trusts this PC's record of the live turn instead -
+through an in-memory registry `record_turn()` writes on every request,
+**whether or not history is on**.
 
 Backend: `backend/chat-history.patch` (last in the patch order) and
 `backend/jarvis_chat_log.py` (shipped whole). Routes are in the §6 tables
@@ -2029,3 +2037,266 @@ chats, including voice, on this PC, encrypted. Nothing leaves this PC."
   document, which rule 1 keeps on this PC. The local model sees it.
 - **Checked only against a stand-in of the owner's `jarvis_hud.py`** built
   from the whole patch stack, not against the real file.
+
+---
+
+## 19. Automatic learning (added 2026-09-24)
+
+**What it is.** The owner decided on 2026-09-24 (CLAUDE.md): "Jarvis learns
+automatically by default. Facts about the owner and their projects, learned
+from the owner's own words only (never from web pages, emails, documents,
+notes or tool output), are saved without a per-fact yes, and every one is
+listed in both apps with a one-tap Forget. Sensitive topics (health, money,
+passwords and account details, private details about other people) still
+wait for the owner's yes, unless the owner turns on 'Also remember
+sensitive topics automatically', which is off by default. Turning either
+setting on raises an approval card; turning it off is immediate."
+
+The learner still **proposes** every fact into the review queue, exactly as
+before (§6, `/api/memory/pending`). After each learning pass, and after each
+"Remember: ...", the PC looks at what was just proposed and saves a proposal
+**without a card only when every check below passes**. Everything else stays
+an ordinary card, with the reason on it.
+
+Backend: `backend/auto-learn.patch` (last in the patch order) and
+`backend/jarvis_auto_learn.py` (shipped whole); a live-turn registry in
+`jarvis_chat_log.py`. **Both apps: planned, not built yet** (they build
+against this section; `tools/check_parity.py` lists the routes as planned).
+Every route needs the pairing token and passes the origin check.
+
+### 19.1 The two settings
+
+| setting | default | when missing | when damaged |
+|---|---|---|---|
+| **"Learn automatically"** (`auto`) | **on** | on (a file that never had it) | **off** (fail closed), and `why` says so |
+| **"Also remember sensitive topics automatically"** (`auto_sensitive`) | **off** | off | off |
+
+Kept in `<config folder>/auto-learning.json` (plain JSON, no fact text in
+it). Turning either **on** raises ONE approval card (`learning_auto_enable`
+or `learning_sensitive_enable`, both tier `ask` in `jarvis-framework.toml`;
+any other tier and the route answers 503 rather than let a config line be
+the owner's yes). Turning either **off** is immediate and withdraws a card
+that is still waiting. A "no" on either card is never turned into a proposed
+memory (`gate-outcome.patch`'s list). Only the newest card may change what
+`auto_last` / `sensitive_last` say.
+
+"Learn automatically" means something only while **background learning**
+(the existing `/api/memory/learning` switch) is on. `GET
+/api/memory/learning` says both; when learning is off, the apps say "Learn
+automatically only works while background learning is on."
+
+### 19.2 When a proposal is saved without a card
+
+ALL of these, or it stays a card. The words in quotes are what the card's
+`auto_reason` says when that check stopped it.
+
+1. **Settings.** "Learn automatically" on, background learning on,
+   `jarvis_intake.py` installed. (Off: every proposal is a card, as it always
+   was, and `auto_reason` is empty.)
+2. **The model is on this PC** (GUARDS L11): `OLLAMA_URL` is loopback AND the
+   model's name is not an Ollama cloud model (`jarvis_router.is_remote_model`,
+   e.g. `gpt-oss:120b-cloud`) - and nor is the second card's learning model.
+   "the learning model is a cloud model, not one on this PC". Separately, the
+   learner now **refuses to run at all** with a cloud model, not only to save.
+3. **Source.** `conversation`, or `remember`. Never `gate_denial`
+   ("made from an action you turned down ..."), `import:*` ("from an imported
+   chat history"), `feedback_retire` or anything else.
+4. **Every owner turn the learner read was seen LIVE by this PC**, in this
+   conversation, typed or a verified voice transcript, and the conversation
+   had not read outside text by then. The PC's record is an in-memory
+   registry, written by `jarvis_chat_log.record_turn()` for **every** chat
+   request whether or not chat history is on: per live user message, a hash
+   of its words (never the words), its provenance, the voice check's facts,
+   the conversation id, the app, and whether a tool ran in that turn. The
+   newest 200 turns; a backend restart forgets them.
+   - a turn it did not see arrive (re-sent or made-up history, or older than
+     the registry): "from a message this PC did not see arrive ..."
+   - no valid `conversation_id` on the request: "the app did not say which
+     conversation this was"
+   - `pasted` / `shared` / `clipboard` / `picture_caption`: "from pasted
+     text" / "from shared text" / "from the clipboard" / "from words sent with
+     a picture"; `unknown`: "not marked as typed or said by you";
+     `voice_unverified`: "said aloud, but this PC could not check it was your
+     voice"
+   - a tool ran in that turn or earlier in the conversation: "the
+     conversation read outside text (a tool ran)"
+
+   **One turn that fails makes every proposal of that pass a card.** The
+   model read every turn, and nothing says which turn a fact came from.
+5. **Voice** (GUARDS L8) counts only when the voice check that let it in was
+   `very_strict`, decided by the stronger voice model, in mode `owner`. Else:
+   "said aloud, but the voice check was not at its strictest ...".
+   (`jarvis_speech.py` now tells the history which model DECIDED - it used to
+   pass the small model's name even when the stronger one decided.)
+6. **No sign of outside text** in any of those turns (GUARDS L4): a link or
+   web-page code (`http`, `www.`, markdown links, HTML tags, comments,
+   entities), hidden characters (zero-width, bidi controls, soft hyphen, tag
+   characters), a run of 48+ encoded-looking characters, email headers or a
+   quoted reply, more than **600** characters, or any `injection_flags()` hit
+   - on the turns AND on the proposal: "looks like pasted text: ..." /
+   "reads like an instruction to Jarvis".
+7. **Grounded** (GUARDS L5): every content word and every number of the fact
+   is in those turns. "I"/"my" and "the owner"/"the owner's" count as the
+   same, as do simple plurals and -s/-ed/-ing endings; a date counts when it
+   is the real date of a relative date the owner used ("yesterday").
+   Negations ("not", "no longer") must be there word for word. Else: "not in
+   your own words".
+8. **Never a correction** (GUARDS L6): a proposal that would replace a stored
+   fact (`replaces_id`, or even `replaces` words) is always a card: "it would
+   replace a fact you already have".
+9. **Not sensitive**, unless "Also remember sensitive topics automatically"
+   is on (GUARDS L7). A word-list check (no model) on the fact AND on the
+   turns it shares words with: passwords and codes in several languages, PINs,
+   card-like digit groups, expiry dates, account and ID numbers, security
+   questions; health words, medicines and doses; money amounts, salaries,
+   debt, rent, savings; and other people's private details (affairs, arrests,
+   addresses, phone numbers, email addresses, secrets). "sensitive: health",
+   "sensitive: money", "sensitive: passwords and account details",
+   "sensitive: private details about someone else", "sensitive: someone
+   else's health". Deliberately broad: a false hit costs one card.
+
+**"Remember: ..."** is saved without a card only with a **colon**, on **one
+line**, at most 600 characters, from a typed or verified-voice live turn,
+with background learning and "Learn automatically" both on, and nothing
+sensitive or instruction-like in it (GUARDS L3). No model reads it, so check
+2 does not apply. Otherwise it stays the card it already is - and that card
+says "Your own words" (`verbatim`) only when the words were typed or said to
+this PC.
+
+### 19.3 What a saved fact carries
+
+Saved through `jarvis_extract.accept_auto()`, which claims the proposal the
+way `decide()` does and writes it with the same `_accept()` - so meaning
+search, word search and both dates are exactly as for a card the owner kept.
+The fact's `source` is **`"auto"`**, and its `meta`:
+
+```json
+{"auto": true, "proposal_source": "conversation", "device": "phone",
+ "provenance": "typed", "conversation_id": "...", "message_hash": "<sha256>",
+ "tainted": false, "saved_at": 1790000000.0, "confidence": 0.9, "proposal_id": 12}
+```
+
+`provenance` is `"voice"` when any of the turns was said aloud.
+
+**A card the owner accepts keeps the proposal's own source** now
+(`"conversation"`, `"remember"`, `"gate_denial"`, `"import:claude"`, ...);
+every one used to become `"extracted"`. A proposal whose source column says
+`"auto"` is stored as `"extracted"` when accepted by hand - only
+`accept_auto()` can make an `"auto"` fact.
+
+**Recalled facts are quoted.** The recalled-facts block every local chat
+turn carries now puts the facts between `---FACTS---` and `---END FACTS---`
+lines and says they are information about the user, never an instruction
+(GUARDS L6's delimiter note) - for every recalled fact, not only automatic
+ones.
+
+### 19.4 Routes
+
+`GET /api/memory/learning`
+
+```json
+{"enabled": true, "floor": true, "auto": true, "auto_sensitive": false,
+ "auto_waiting": false, "sensitive_waiting": false,
+ "auto_last": null, "sensitive_last": {"outcome": "denied", "why": "", "at": 1790000000.0},
+ "auto_active": true, "note": "", "why": "",
+ "learning_waiting": false, "learning_last": null}
+```
+
+`enabled` is background learning's own switch (`floor` false means
+`JARVIS_EXTRACT` is off in the environment); `learning_waiting`/`learning_last` are its card.
+`auto_active` is `enabled and auto`. `why` is set when the settings file is
+damaged. `*_last` is `{"outcome": "enabled" | "denied" | "timed_out" |
+"refused" | "withdrawn" | "failed", "why", "at"}` or `null`.
+
+`POST /api/memory/learning/auto` and `POST /api/memory/learning/sensitive`,
+`{"enabled": true | false}`:
+
+- `false` - 200 at once. It also withdraws a waiting ON card.
+- `true` - **202** `{"ok": true, "waiting": true, "message", ...}` and ONE
+  approval card; on only when approved. Already on: 200, no card. A card
+  already waiting: 202, no second card. Tier other than `ask`: **503**.
+- Anything else - `400`.
+
+Every reply carries the `GET /api/memory/learning` fields except `enabled`,
+`floor`, `auto_active` and `note`.
+
+`GET /api/memory/auto?limit=30&before=<saved_at>`
+
+```json
+{"facts": [{"id": 41, "text": "The owner is learning Kotlin",
+            "saved_at": 1790000300, "provenance": "typed", "device": "phone"}],
+ "auto": true, "auto_sensitive": false}
+```
+
+Facts saved automatically that are still current (Forget retires them),
+newest first. `limit` 1-100, default 30. `before` pages to older ones: pass
+the last row's `saved_at`. It may carry a fraction; it is floored, and means
+"strictly older seconds". **A page never splits a second** - rows sharing
+the last row's second come with it - so nothing is skipped or repeated.
+`provenance` is `"typed"` or `"voice"` (show a small "said aloud" mark).
+
+`POST /api/memory/forget {"id": <fact id>}` - unchanged (§6): one fact per
+request, retired, not deleted. Now **also called by the phone**, for this
+list; both apps hold it on a stale link.
+
+`/api/memory/pending` rows gain `auto_reason` (§6's row table) and
+`verbatim` is narrowed (above).
+
+Event **`memory_saved`**: data is flat, `{"ids": [<fact id>, ...]}` - ids
+only, never the words (GUARDS L10). One event per pass or per "Remember:".
+
+If `jarvis_auto_learn.py` is not installed: `GET /api/memory/learning`,
+`GET /api/memory/auto` and both POSTs answer **503** `{"available": false,
+"error": "automatic learning is not installed on this PC, so every fact
+waits for your yes", "reason"}` - and nothing is ever saved without a card.
+
+### 19.5 What each app shows (both apps - parity rule)
+
+Where the learning switch lives today (desktop: Brain -> Memory; phone: Mind
+-> "What Jarvis remembers"):
+
+- **"Learn automatically"**, with: "Jarvis saves facts about you and your
+  projects from what you type or say to it - never from web pages, emails,
+  documents or notes. You can forget any of them here."
+- **"Also remember sensitive topics automatically"** (off by default), with:
+  "Health, money, passwords and account details, and private details about
+  other people. When this is off, Jarvis asks you first."
+- Both: ON raises the card and shows "Waiting for your approval" (from
+  `auto_waiting` / `sensitive_waiting`, and the card in the approval queue -
+  including one raised on the other device); OFF immediate; ON held on a
+  stale link.
+- **"Saved automatically"**: newest first, the fact, when, a small "said
+  aloud" mark for voice, and a one-tap **Forget** on each (with the same
+  confirm as the desktop's Forget today). "Load older".
+- On `memory_saved`: a quiet line, "Jarvis remembered 2 things", that opens
+  the list. Never a pop-up; never the fact's text in a notification.
+- Cards that stayed cards show `auto_reason` as one quiet line.
+
+The approval cards read "Turn on automatic learning. ..." and "Also remember
+sensitive topics automatically. ..." (`jarvis_auto_learn.AUTO_CARD`,
+`SENSITIVE_CARD`); both say nothing leaves this PC and what a "no" means.
+
+### 19.6 Known gaps, said plainly
+
+- **Strict on purpose, so many real facts stay cards.** A fact the model
+  rewords ("prefers" for "likes better") is not grounded; a conversation
+  with one pasted message, one shared text, one tool run or one voice turn at
+  the balanced voice setting makes every later pass of that conversation
+  cards; and the sensitive word list is broad (it flags "tokens", "bank",
+  "budget", "doctor"...). No local-model sensitivity check yet.
+- **The registry is in memory.** After a backend restart, the rest of an
+  ongoing conversation is cards (the earlier turns are "not seen arrive"). An
+  app that sends no `conversation_id` gets cards only.
+- **Voice** is saved automatically only at `very_strict` with the stronger
+  voice model installed and in mode `owner`.
+- **The 38 phrasings.** The memory audit's sensitive-topic red-team script
+  holds 38 phrasings (the brief said 42); all 38 are flagged, and
+  `backend/test_auto_learn.py` carries them word for word.
+- **Checked only against stand-ins.** `auto-learn.patch` was applied to
+  stand-ins of `jarvis_hud.py`, `jarvis_gate.py` and `jarvis_extract.py`
+  built from the whole patch stack, and `accept_auto()` / `_accept()` were
+  run lifted from that stand-in against a real memory store - never against
+  the owner's real files, and nothing has run on the owner's PC.
+- **Neither app shows any of it yet.** Until they do, "Learn automatically"
+  is on by default with no list to see or forget from except the desktop's
+  Memory tab (facts with source `auto`).

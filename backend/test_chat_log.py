@@ -868,7 +868,7 @@ def t_the_patch():
         try:
             env = {"_activity": lambda *a: None, "MEMORY": True, "jarvis_side_memory": False,
                    "LEARNER": types.SimpleNamespace(
-                       offer=lambda m, origin="unknown": offered.append((m, origin))),
+                       offer=lambda m, origin="unknown", **kw: offered.append((m, origin))),
                    "body": body, "route_header": {"lane": "qwen3:8b"}, "lane": "qwen3:8b",
                    "_history": {"turn": {"answer": "hello"}, "at": 5.0}}
             try:
@@ -890,8 +890,11 @@ def t_the_patch():
         check("the record gets the request as it arrived, the lane, the turn and its start",
               recorded == [(body, {"lane": "qwen3:8b", "turn": {"answer": "hello"}, "at": 5.0})],
               recorded)
-    check("record_turn comes after the learner, in its own try",
-          "\n".join(frag).index("LEARNER.offer(") < "\n".join(frag).index("record_turn("))
+    # auto-learn.patch (later in the order) moves the learner AFTER the
+    # record: record_turn also writes the live-turn registry that automatic
+    # learning checks each turn against. Each is still in its own try.
+    check("record_turn and the learner are each in their own try, the record first",
+          "\n".join(frag).index("record_turn(") < "\n".join(frag).index("LEARNER.offer("))
 
     # The routes.
     get_i = hud.find('if path in ("/api/history", "/api/history/conversation"):')
@@ -925,12 +928,13 @@ def t_the_patch_applies_forwards_and_backwards():
     if not git:
         return check("SKIP - git is not installed", True)
     import _stack
-    before = _stack.order()[:-1]
+    order = _stack.order()
+    before = order[:order.index("chat-history.patch")]
+    upto = order[:order.index("chat-history.patch") + 1]
     d = Path(tempfile.mkdtemp(prefix="jarvis-history-patch-"))
     try:
         for target in ("jarvis_hud.py", "jarvis_gate.py"):
             text, log = _stack.stand_in(target, before)
-            full, _ = _stack.stand_in(target)
             check(f"{target}: the stack before chat-history.patch builds", text is not None)
             if text is None:
                 return
@@ -942,7 +946,7 @@ def t_the_patch_applies_forwards_and_backwards():
                                text=True)
             check(f"git apply {' '.join(extra) or '(forwards)'} chat-history.patch",
                   r.returncode == 0, r.stderr.strip())
-        full, _ = _stack.stand_in("jarvis_gate.py")
+        full, _ = _stack.stand_in("jarvis_gate.py", upto)
         check("forwards gives the stack's own text",
               (d / "jarvis_gate.py").read_text(encoding="utf-8") == full)
     finally:
