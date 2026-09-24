@@ -779,6 +779,26 @@ def t_deep_question_speed_and_cut_reasoning():
               j["state"] == "failed" and "before it wrote any answer" in j["why"], j)
 
 
+def t_a_new_question_tries_again():
+    # K8: after a failed start, deep_available() says "A new question tries
+    # again", but for RETRY_SECONDS a new question failed at once with the
+    # old reason and nothing was started.
+    with World(port_taken=True) as w:
+        w.switches(master=True, deep_questions=True)
+        BM.ask("first?")
+        j = BM.deep_status()["jobs"][0]
+        check("a start that fails: the question fails with the reason",
+              j["state"] == "failed" and "already using" in j["why"] and not w.started, j)
+        avail, why = BM.deep_available()
+        check("status then promises a new question tries again",
+              avail and "A new question tries again" in why, why)
+        w.port_taken = False                 # the owner closed the other program
+        BM.ask("second?")                    # at once: no minute has passed
+        j = BM.deep_status()["jobs"][0]
+        check("a new question really does try again at once, and is answered",
+              len(w.started) == 1 and j["state"] == "done", j)
+
+
 def t_deep_questions():
     srv = HTTPServer(("127.0.0.1", 0), _Colibri)
     port = srv.server_address[1]

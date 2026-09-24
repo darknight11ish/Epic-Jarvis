@@ -1058,6 +1058,14 @@ class _Engine:
             self.holder = None          # lapsed: its job stopped asking
             return None
 
+    def retry_now(self) -> None:
+        """Lets the next ensure() try a failed start again at once, instead
+        of after RETRY_SECONDS. For a person asking again (a new deep
+        question), not for a loop."""
+        with self.lock:
+            if self.state == "failed":
+                self.failed_at = -1e9
+
     def hold(self, job: str) -> None:
         with self.lock:
             self.holder, self.held_at = job, _mono()
@@ -2000,6 +2008,11 @@ def ask(question, *, spawn: Optional[Callable] = None) -> tuple:
     avail, why = deep_available()
     if not avail:
         return 503, {"ok": False, "state": "refused", "error": why}
+    if job_state("deep_questions")[0] == "failed":
+        # deep_available() promises "A new question tries again": without
+        # this, the engine's one-minute retry wait failed the new question
+        # at once with the old reason (K8).
+        _ENGINE.retry_now()
     with _DEEP_LOCK:
         waiting = [j for j in _DEEP.values() if j["state"] in ("queued", "loading", "thinking")]
         if len(waiting) >= MAX_QUEUED:
