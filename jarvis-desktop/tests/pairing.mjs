@@ -136,6 +136,60 @@ await check("Show the token for my phone reveals it read-only, and Hide takes it
   assert.ok(hidden);
 });
 
+// CONN-6 (audit 3): a Copy button put the token on the Windows clipboard,
+// where Clipboard History (and cloud clipboard, on the owner's other
+// devices) keeps it. The phone needs it typed, so there is no Copy for it.
+await check("the shown token has no Copy button, is not selected, and nothing writes it to the clipboard", async () => {
+  const page = await open();
+  await page.evaluate(() => {
+    window.__clipboardWrites = [];
+    const record = (how, text) => window.__clipboardWrites.push({ how, text: String(text) });
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText = async (text) => record("writeText", text);
+      navigator.clipboard.write = async () => record("write", "(items)");
+    }
+    const exec = document.execCommand.bind(document);
+    document.execCommand = (cmd, ...rest) => {
+      if (/^(copy|cut)$/i.test(cmd)) record(cmd, String(window.getSelection()));
+      return exec(cmd, ...rest);
+    };
+    document.addEventListener("copy", () => record("copy-event", String(window.getSelection())), true);
+  });
+  await page.locator("#reveal-token").click();
+  await page.waitForTimeout(250);
+  const shown = await page.locator("#pairing-shown").evaluate((el) => ({
+    buttons: [...el.querySelectorAll("button")].map((b) => b.textContent.trim()),
+  }));
+  const selected = await page.locator("#pairing-token").evaluate((el) => el.selectionEnd - el.selectionStart);
+  // Every button in the pairing block, pressed: none of them may copy it.
+  for (const name of shown.buttons) {
+    if (name !== "Hide") await page.locator("#pairing-shown button", { hasText: name }).click();
+  }
+  const note = await page.locator("#pairing .note").innerText();
+  const writes = await page.evaluate(() => window.__clipboardWrites);
+  await page.close();
+  assert.deepEqual(shown.buttons, ["Hide"], `the pairing block has ${JSON.stringify(shown.buttons)}`);
+  assert.equal(selected, 0, "the token is shown selected, one Ctrl+C from the clipboard");
+  assert.ok(!writes.some((w) => w.text.includes("backend-made-token")),
+    `the token was written to the clipboard: ${JSON.stringify(writes)}`);
+  assert.match(note, /no Copy button on purpose/);
+  assert.match(note, /clipboard history/);
+});
+
+await check("CONTROL: the only clipboard write left in Settings is the second card's pin command, which is not secret", async () => {
+  const js = read("src/settings.js");
+  const writes = [...js.matchAll(/clipboard\.writeText\(([^)]*)\)/g)].map((m) => m[1].trim());
+  assert.deepEqual(writes, ["sc.pinCommand.value"]);
+  // The one execCommand("copy") fallback is inside the pin command's handler.
+  const pinHandler = js.slice(js.indexOf('sc.pinCopy.addEventListener("click"'));
+  const pinBody = pinHandler.slice(0, pinHandler.indexOf("\n  });\n"));
+  const execs = (js.match(/execCommand\(\s*["']copy/g) || []).length;
+  assert.equal(execs, (pinBody.match(/execCommand\(\s*["']copy/g) || []).length,
+    "a clipboard copy outside the pin command's Copy");
+  assert.doesNotMatch(read("src/settings.html"), /id="copy-token"/);
+  assert.match(read("src/settings.html"), /id="sc-pin-copy"/, "the pin command lost its Copy");
+});
+
 await check("with no token anywhere, Show says why instead of showing a blank", async () => {
   const page = await open({ apiSettings: { backendFileToken: null } });
   await page.locator("#reveal-token").click();
@@ -160,24 +214,53 @@ await check("CONTROL: an empty token is 'not set' in Rust, at every step", async
     "the Rust test for the lockout is gone");
 });
 
+// CONN-3 (audit 3): the backend's own token was read Credential Manager
+// first (the backend reads its old file first), and a backend this app
+// started was handed that read-back token as HUD_TOKEN, pinning it.
+await check("CONTROL: the backend's own token is read in the backend's order, and never passed back as HUD_TOKEN", async () => {
+  const rust = read("src-tauri/src/commands.rs");
+  const own = rust.slice(rust.indexOf("fn backend_token(app: &AppHandle)"));
+  const body = own.slice(0, own.indexOf("\n}\n"));
+  assert.match(body, /pick_backend_token\(token_from_config_dir\(app\), \|\| \{/,
+    "backend_token no longer reads the old file first");
+  assert.match(rust, /fn the_backends_old_file_beats_its_credential_manager_copy/, "the Rust order test is gone");
+  const sidecar = read("src-tauri/src/sidecar.rs");
+  const start = sidecar.slice(sidecar.indexOf("fn start(app: &AppHandle"));
+  const startBody = start.slice(0, start.indexOf("\n}\n"));
+  assert.doesNotMatch(startBody, /jarvis_token_for\(/, "the sidecar passes whatever token was picked");
+  assert.match(startBody, /if commands::passes_as_hud_token\(source\) \{\s*command\.env\("HUD_TOKEN", token\);/);
+  const passes = rust.slice(rust.indexOf("pub(crate) fn passes_as_hud_token("));
+  const passBody = passes.slice(0, passes.indexOf("\n}\n"));
+  assert.match(passBody, /TokenSource::BackendCredentialManager \| TokenSource::BackendFile => false/);
+});
+
 await check("CONTROL: Clear never stores an empty token", async () => {
   const rust = read("src-tauri/src/commands.rs");
   const set = rust.slice(rust.indexOf("pub fn set_api_settings"));
   const body = set.slice(0, set.indexOf("\n}\n"));
-  assert.match(body, /if token\.is_empty\(\) \{[\s\S]*?store\.delete\("token"\)/,
+  // Setting or clearing, the plain key goes; "" clears Credential Manager.
+  assert.match(body, /if token\.is_some\(\) \{\s*store\.delete\("token"\);/,
     "clearing does not delete the key");
+  assert.match(body, /Some\(""\) => match token_store::delete\(\)/);
   // CLAUDE.md rule 3: no plain-text copy, not even as a fallback.
   assert.doesNotMatch(body, /store\.set\("token"/, "the token is written to the settings file");
-  assert.match(body, /Err\(e\) => \{\s*return Err\(/, "a refused token does not stop the save");
-  // The token is dealt with before anything else is put in the store, so a
-  // refused token cannot leave a half-saved change behind.
-  assert.ok(body.indexOf("token_store::write(&token)") < body.indexOf('store.set("base"'),
-    "the base is put in the store before the token is tried");
+  // CONN-7 (audit 3): the file first, THEN Credential Manager, and a refusal
+  // rolls the file back - so a refused token leaves nothing half-saved, and
+  // a failed save cannot leave an old plain copy on disk behind a new
+  // Credential Manager token for the next start's migration to restore.
+  assert.match(body, /save_file_then_token\(\s*\|\| store\.save\(\)/, "the file is not saved first");
+  const order = rust.slice(rust.indexOf("pub(crate) fn save_file_then_token("));
+  const orderBody = order.slice(0, order.indexOf("\n}\n"));
+  assert.ok(orderBody.indexOf("save_file()") < orderBody.indexOf("credential_manager()"),
+    "Credential Manager is written before the settings file");
+  assert.match(orderBody, /if let Err\(e\) = credential_manager\(\) \{\s*roll_back_file\(\);/,
+    "a refused token does not roll the file back");
+  assert.match(rust, /fn a_failed_file_save_never_lets_the_old_token_come_back/, "the Rust test is gone");
 });
 
 await check("CONTROL: the typed token goes to Windows Credential Manager", async () => {
   const rust = read("src-tauri/src/commands.rs");
-  assert.match(rust, /token_store::write\(&token\)/);
+  assert.match(rust, /token_store::write\(token\)/);
   const store = read("src-tauri/src/token_store.rs");
   assert.match(store, /CredWriteW/);
   assert.match(store, /CredReadW/);

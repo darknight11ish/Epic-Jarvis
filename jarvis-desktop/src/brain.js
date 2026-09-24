@@ -23,6 +23,7 @@
 
 import {
   announce,
+  APPROVE_WHERE,
   currentLink,
   followTheme,
   followZoom,
@@ -31,8 +32,10 @@ import {
   reconnect,
   THEMES,
   surfaceState,
+  currentQueue,
   onEvent,
   onLink,
+  onQueue,
   start as startLink,
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
@@ -164,6 +167,9 @@ const state = {
   readAt: {},
   /** A model switch or install sent and waiting on its approval card. */
   modelAsk: null,
+  /** What became of the last model request whose card left the queue
+   *  without a `model` event: shown in its place until the next ask. */
+  modelAskEnded: null,
   graph: null,
   trace: [],
 };
@@ -649,7 +655,7 @@ function renderModels() {
       if (ref && !isCurrent) {
         actions.push(
           button("Use", () => modelAction("switch", ref), {
-            title: "Ask to switch to this model. You approve it in the Jarvis bar.",
+            title: `Ask to switch to this model. You approve it ${APPROVE_WHERE}.`,
             live: true,
           })
         );
@@ -707,19 +713,25 @@ function renderModels() {
   }
 
   // A switch or install that raised a card and is waiting on it. Said here
-  // until the next `model` event, because the toast is gone in seconds and
-  // "switched" was never true - the server only raised an approval card
-  // (JARVIS-API: tier `ask`, "success means a card was raised").
+  // until the next `model` event or until its card leaves the queue,
+  // because the toast is gone in seconds and "switched" was never true - the
+  // server only raised an approval card (JARVIS-API: tier `ask`, "success
+  // means a card was raised").
   if (state.modelAsk) {
     dom.models.append(
       el(
         "p",
         "banner model-ask",
         state.modelAsk.action === "install"
-          ? `Waiting for your approval: installing ${state.modelAsk.ref}. The card is in the Jarvis bar and on the widget — nothing downloads until you approve it there.`
-          : `Waiting for your approval: switching to ${state.modelAsk.ref}. The card is in the Jarvis bar and on the widget — nothing changes until you approve it there.`
+          ? `Waiting for your approval: installing ${state.modelAsk.ref}. Approve it ${APPROVE_WHERE} — nothing downloads until you do.`
+          : `Waiting for your approval: switching to ${state.modelAsk.ref}. Approve it ${APPROVE_WHERE} — nothing changes until you do.`
       )
     );
+  } else if (state.modelAskEnded) {
+    // Its card left the queue without the model changing: what happened,
+    // in the words the phone uses, instead of a line that silently vanished
+    // (or, before this, one that kept claiming a card was waiting).
+    dom.models.append(el("p", "banner model-ask-ended", state.modelAskEnded));
   }
 
   dom.models.append(installForm());
@@ -739,8 +751,8 @@ function installForm() {
       "p",
       "model-speed",
       "Install a model this computer does not have yet. Type its name the way you " +
-        "would give it to Ollama, for example llama3.1:8b. This only asks: a card " +
-        "appears in the Jarvis bar, and nothing downloads until you approve it there."
+        "would give it to Ollama, for example llama3.1:8b. This only asks: nothing " +
+        `downloads until you approve its card ${APPROVE_WHERE}.`
     )
   );
   const line = el("div", "row-actions");
@@ -761,7 +773,7 @@ function installForm() {
       }
       await modelAction("install", ref);
     },
-    { title: "Ask to install this model. You approve it in the Jarvis bar.", live: true }
+    { title: `Ask to install this model. You approve it ${APPROVE_WHERE}.`, live: true }
   );
   go.id = "model-install";
   input.addEventListener("keydown", (event) => {
@@ -809,20 +821,101 @@ function modelSpeed(speed, current) {
   return out;
 }
 
+/**
+ * How long a model request whose card has left the queue waits for the
+ * `model` event an approval brings, before saying it was not approved. An
+ * approval on the phone reaches this window only as the card disappearing,
+ * a moment before the `model` event - so "gone" alone is not "denied".
+ */
+const MODEL_ASK_GRACE_MS = 3000;
+
+/** The card raised by the ask, found by difference like the phone's
+ *  `noteModelRequest`: the one waiting now that was not waiting before.
+ *  Anything other than exactly one new card is `null` - the line then lasts
+ *  until the next `model` event, as it always did. */
+async function findNewCard(waitingBefore) {
+  try {
+    const payload = await invoke("get_pending_approvals");
+    const items = Array.isArray(payload && payload.items) ? payload.items : [];
+    const fresh = items
+      .map((row) => (row && row.id !== undefined && row.id !== null ? String(row.id) : ""))
+      .filter((id) => id && !waitingBefore.has(id));
+    return fresh.length === 1 ? fresh[0] : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/** The model line's words once its card is no longer waiting. */
+function modelAskEndedWords(ask, outcome) {
+  const what = ask.action === "install" ? `installing ${ask.ref}` : `switching to ${ask.ref}`;
+  if (outcome === "denied") {
+    return `You denied ${what}. Nothing changed.`;
+  }
+  return `The request for ${what} is no longer waiting: it was denied or ran out of time. Nothing changed.`;
+}
+
+/** Its card left the queue: settle the "Waiting for your approval" line. */
+function modelCardGone(ask) {
+  if (state.modelAsk !== ask || ask.gone) return;
+  ask.gone = true;
+  if (ask.decided === "denied") {
+    state.modelAsk = null;
+    state.modelAskEnded = modelAskEndedWords(ask, "denied");
+    if (state.view === "faculties") renderModels();
+    return;
+  }
+  // Approved here, or decided elsewhere, or expired: an approval brings a
+  // `model` event, which clears the line on its own. Only when none comes
+  // is it said that the request was not approved.
+  setTimeout(() => {
+    if (state.modelAsk !== ask) return;
+    state.modelAsk = null;
+    if (ask.decided !== "approved") state.modelAskEnded = modelAskEndedWords(ask, "gone");
+    if (state.view === "faculties") renderModels();
+  }, MODEL_ASK_GRACE_MS);
+}
+
+onQueue((queue) => {
+  const ask = state.modelAsk;
+  if (!ask || !ask.cardId) return;
+  const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
+  if (!items.some((item) => item && item.id === ask.cardId)) modelCardGone(ask);
+});
+
+// Decided on THIS PC (the Jarvis bar or the widget): Rust says which way
+// the moment it is accepted, so "denied" can be said as a fact rather than
+// as "denied or ran out of time".
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  TAURI.event.listen("approval-resolved", (event) => {
+    const resolved = (event && event.payload) || {};
+    const ask = state.modelAsk;
+    if (!ask || !ask.cardId || String(resolved.id) !== ask.cardId) return;
+    ask.decided = resolved.approved ? "approved" : "denied";
+    modelCardGone(ask);
+  });
+}
+
 async function modelAction(action, reference) {
+  const waitingBefore = new Set(
+    (currentQueue().items || []).map((item) => item && item.id).filter(Boolean)
+  );
   try {
     const out = await invoke("brain_model", { action, reference: reference || null });
     // Switch and install are tier `ask`: success means an approval card was
     // raised, not that anything changed. This used to toast "Model
     // switched." Rollback is tier `auto` and really has happened.
+    state.modelAskEnded = null;
     if (action === "rollback") {
       toast("Rolled back.", "ok");
     } else {
-      state.modelAsk = { action, ref: String(reference || "") };
+      const ask = { action, ref: String(reference || ""), cardId: null };
+      state.modelAsk = ask;
+      ask.cardId = await findNewCard(waitingBefore);
       toast(
         action === "install"
-          ? "Waiting for your approval. The card is in the Jarvis bar — nothing downloads until you approve it there."
-          : "Waiting for your approval. The card is in the Jarvis bar — nothing changes until you approve it there.",
+          ? `Waiting for your approval. Approve it ${APPROVE_WHERE} — nothing downloads until you do.`
+          : `Waiting for your approval. Approve it ${APPROVE_WHERE} — nothing changes until you do.`,
         "ok"
       );
     }
@@ -1636,10 +1729,12 @@ function renderWikiPlate() {
 async function addWiki(source) {
   wiki.job = { source, said: { text: "Asking the PC…", tone: null, final: false } };
   paintWiki();
+  // With the link to the PC down, polls are skipped rather than failed: the
+  // job carries on there, and following it resumes when the link does.
   const last = await addToWiki(invoke, source, (said) => {
     wiki.job = { source, said };
     paintWiki();
-  });
+  }, { linkDown: () => !currentLink().connected });
   announce(`${source}: ${last.text}`, last.tone === "bad" ? "assertive" : "polite");
   await loadWiki();
 }
@@ -3353,8 +3448,9 @@ onEvent((frame) => {
   const kind = String((frame && frame.kind) || "");
   // The next `model` event is the card being answered (or the download
   // moving), so the "waiting for your approval" line has done its job.
-  if (kind === "model" && state.modelAsk) {
+  if (kind === "model" && (state.modelAsk || state.modelAskEnded)) {
     state.modelAsk = null;
+    state.modelAskEnded = null;
     if (state.view === "faculties") renderModels();
   }
   // A deep question finished (`{id, state}` only - a doorbell): read the

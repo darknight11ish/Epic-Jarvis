@@ -482,6 +482,56 @@ await check("solo view can cycle through every state slowly, and stop", async ()
   assert.equal(afterOff, atOff, "the state kept advancing after cycling was turned off");
 });
 
+/**
+ * The Widget's live face, read once it has DRAWN at the tier it is set to.
+ *
+ * Two things on a busy machine made the sharpness check below measure load
+ * instead of sharpness. The tier: "Auto adjust" (on by default) steps down
+ * when frames are slow, so it is pinned off here, which leaves the tier as
+ * configured. And the first frame: the pixel size the shader draws at
+ * (GPUPX) is only worked out when a frame is drawn, and the check used to
+ * read it as soon as the tier was set - so when the machine was too busy to
+ * paint yet, it read the starting value (512) and failed with
+ * "512 !== 240". It now waits until three more frames have run after the
+ * tier is High. `lateFramesMs` holds the page's frames back that long after
+ * load, the way a loaded machine does, to prove the wait.
+ */
+async function widgetFace({ lateFramesMs = 0 } = {}) {
+  const tuning = await import(new URL("../src/face-tuning.js", import.meta.url).href);
+  assert.equal(tuning.FACE_TUNING_DEFAULT.quality, "high", "the face no longer defaults to High");
+  const page = await K.open(browser, base, "faces.html?mode=display&face=nucleus", {},
+                            { width: 120, height: 120 });
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value),
+    [tuning.FACE_TUNING_KEY, JSON.stringify({ ...tuning.FACE_TUNING_DEFAULT, autoAdjust: false })]);
+  await page.addInitScript((late) => {
+    const raf = window.requestAnimationFrame.bind(window);
+    const t0 = performance.now();
+    window.__frames = 0;
+    window.requestAnimationFrame = (cb) => {
+      const run = (t) => { window.__frames += 1; cb(t); };
+      const wait = late - (performance.now() - t0);
+      return wait > 0 ? setTimeout(() => raf(run), wait) : raf(run);
+    };
+  }, lateFramesMs);
+  await page.reload();
+  await page.waitForFunction(
+    () => document.documentElement.getAttribute("data-face-quality") === "high"
+          && document.getElementById("display-canvas"),
+    null, { timeout: 30000 }).catch(() => { /* the asserts below say what is wrong */ });
+  const settled = await page.evaluate(() => window.__frames);
+  await page.waitForFunction((n) => window.__frames >= n + 3, settled, { timeout: 30000 })
+    .catch(() => { /* the asserts below say what is wrong */ });
+  const got = await page.evaluate(() => ({
+    canvases: document.querySelectorAll("canvas").length,
+    grid: Boolean(document.getElementById("grid")),
+    css: Math.round(document.getElementById("display-canvas").getBoundingClientRect().width),
+    dpr: window.devicePixelRatio, tier: QNAME, gpu: Q.gpu, gpupx: GPUPX, detail: QUALITY,
+    frames: window.__frames,
+  }));
+  await page.close();
+  return got;
+}
+
 await check("the Widget's face draws at full sharpness, like the kit's solo view", async () => {
   // Display mode (the Widget's live face) runs its own frame loop and never
   // calls budget(), so it used to stay on the "medium" tier the editor only
@@ -498,24 +548,8 @@ await check("the Widget's face draws at full sharpness, like the kit's solo view
   // page that was right. So: the default is asserted to be High, and the
   // page is then loaded with that same default except Auto adjust off,
   // which pins the governor and leaves the tier exactly as configured.
-  const tuning = await import(new URL("../src/face-tuning.js", import.meta.url).href);
-  assert.equal(tuning.FACE_TUNING_DEFAULT.quality, "high", "the face no longer defaults to High");
-  const page = await K.open(browser, base, "faces.html?mode=display&face=nucleus", {},
-                            { width: 120, height: 120 });
-  await page.evaluate(([key, value]) => localStorage.setItem(key, value),
-    [tuning.FACE_TUNING_KEY, JSON.stringify({ ...tuning.FACE_TUNING_DEFAULT, autoAdjust: false })]);
-  await page.reload();
-  await page.waitForFunction(
-    () => document.documentElement.getAttribute("data-face-quality") === "high"
-          && document.getElementById("display-canvas"),
-    null, { timeout: 30000 }).catch(() => { /* the asserts below say what is wrong */ });
-  const got = await page.evaluate(() => ({
-    canvases: document.querySelectorAll("canvas").length,
-    grid: Boolean(document.getElementById("grid")),
-    css: Math.round(document.getElementById("display-canvas").getBoundingClientRect().width),
-    dpr: window.devicePixelRatio, tier: QNAME, gpu: Q.gpu, gpupx: GPUPX, detail: QUALITY,
-  }));
-  await page.close();
+  // It is then read only after frames have run at that tier (widgetFace).
+  const got = await widgetFace();
   assert.equal(got.canvases, 1, "display mode should draw exactly one face");
   assert.equal(got.grid, false, "display mode built the editor's grid");
   assert.equal(got.tier, "high");
@@ -523,6 +557,16 @@ await check("the Widget's face draws at full sharpness, like the kit's solo view
   assert.equal(got.gpupx, Math.round(got.css * Math.min(got.dpr, 3)),
     `shader renders ${got.gpupx}px into a ${got.css}px box at ${got.dpr}x`);
   assert.ok(got.detail >= 1.9, `geometry detail ${got.detail}, the solo view uses 1.9`);
+});
+
+await check("CONTROL: the sharpness check still holds when the first frames come late, as on a busy machine", async () => {
+  // Frames held back 2 s after load: the old check read the starting pixel
+  // size (512) here and failed with "512 !== 240".
+  const got = await widgetFace({ lateFramesMs: 2000 });
+  assert.equal(got.tier, "high");
+  assert.ok(got.frames >= 3, `only ${got.frames} frames ran`);
+  assert.equal(got.gpupx, Math.round(got.css * Math.min(got.dpr, 3)),
+    `shader renders ${got.gpupx}px into a ${got.css}px box at ${got.dpr}x`);
 });
 
 await check("the Widget's face slows to 10 redraws a second under reduced motion", async () => {

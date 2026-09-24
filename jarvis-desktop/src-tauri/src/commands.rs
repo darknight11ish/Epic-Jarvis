@@ -199,9 +199,10 @@ impl TokenSource {
 /// exists when an older version left it there and Credential Manager refused
 /// the move ([`migrate_plain_token`]) - so it is what was typed last.
 ///
-/// The backend's own token comes last: from Credential Manager, or else from
-/// its old plain-text file, which a backend without token-store.patch still
-/// writes. Both are only read here.
+/// The backend's own token comes last: from its old plain-text file, which a
+/// backend without token-store.patch still writes, or else from Credential
+/// Manager - the backend's own order ([`pick_backend_token`]). Both are only
+/// read here.
 pub(crate) fn pick_token(
     settings_file: Option<String>,
     credential_manager: Option<String>,
@@ -291,15 +292,49 @@ pub fn migrate_plain_token(app: &AppHandle) {
 /// did not know where to find it would be locked out of its own backend by a
 /// secret generated on its behalf.
 ///
-/// Credential Manager first (`backend/jarvis_token_store.py` keeps it there).
-/// A failure to read it falls through rather than stops, to the old
-/// plain-text file - which only a backend WITHOUT token-store.patch still
-/// has, and which the patched backend deletes once it has moved it.
+/// The OLD plain-text file first, then Credential Manager - the order
+/// `backend/jarvis_token_store.resolve` uses. The file only exists when a
+/// backend without token-store.patch wrote it (the patched backend moves it
+/// into Credential Manager and deletes it at its next start), so when both
+/// exist the file is the newer token: an older backend is running and
+/// wrote it after the move. Reading Credential Manager first sent that
+/// backend a token it no longer used, and every request was refused.
 fn backend_token(app: &AppHandle) -> Option<(String, TokenSource)> {
-    if let Ok(Some(t)) = crate::token_store::read_backend() {
-        return Some((t, TokenSource::BackendCredentialManager));
+    pick_backend_token(token_from_config_dir(app), || {
+        crate::token_store::read_backend().ok().flatten()
+    })
+}
+
+/// [`backend_token`]'s order, pure so it is tested without an app: the old
+/// file, else Credential Manager (read only when the file has nothing - a
+/// failure there falls through to "no token", never stops). Empty is "not
+/// set" at both steps.
+pub(crate) fn pick_backend_token(
+    file: Option<String>,
+    credential_manager: impl FnOnce() -> Option<String>,
+) -> Option<(String, TokenSource)> {
+    let clean = |t: Option<String>| t.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    clean(file)
+        .map(|t| (t, TokenSource::BackendFile))
+        .or_else(|| clean(credential_manager()).map(|t| (t, TokenSource::BackendCredentialManager)))
+}
+
+/// Whether a token from `source` is handed to a backend this app starts, as
+/// `HUD_TOKEN`.
+///
+/// Only a token set DELIBERATELY: typed into Settings (Credential Manager,
+/// or an older version's settings-file copy) or given in the environment.
+/// Never the backend's own token read back: `HUD_TOKEN` overrides the
+/// backend's own choice, so passing it back pinned the backend to whatever
+/// this app happened to read - a stale copy included - instead of the one
+/// the backend itself resolves (`jarvis_token_store.resolve`).
+pub(crate) fn passes_as_hud_token(source: TokenSource) -> bool {
+    match source {
+        TokenSource::CredentialManager | TokenSource::SettingsFile | TokenSource::Environment => {
+            true
+        }
+        TokenSource::BackendCredentialManager | TokenSource::BackendFile => false,
     }
-    token_from_config_dir(app).map(|t| (t, TokenSource::BackendFile))
 }
 
 /// The backend's OLD plain-text token file. Read, never written.
@@ -750,6 +785,9 @@ fn inet_aton(s: &str) -> Option<u32> {
 /// It used to fall back to the settings file as plain text, which is exactly
 /// what CLAUDE.md rule 3 forbids.
 ///
+/// The settings file is saved (without any token) BEFORE Credential Manager
+/// is written - see [`save_file_then_token`] for why that order.
+///
 /// An empty token means **clear what was typed here**: it is removed from
 /// Credential Manager and from any old settings-file copy, and the app goes
 /// back to the environment or the backend's own token. It is never saved as
@@ -781,30 +819,36 @@ pub fn set_api_settings(
         validate_bind_address(bind_address)?;
     }
 
-    if let Some(token) = token.map(|t| t.trim().to_string()) {
-        if token.is_empty() {
-            match token_store::delete() {
-                Ok(()) | Err(StoreError::Unavailable) => {}
-                // Still in Credential Manager means still in use: say so
-                // rather than report a clear that did not happen.
-                Err(e) => return Err(format!("could not clear the token: {e}")),
-            }
-            store.delete("token");
-        } else {
-            match token_store::write(&token) {
-                Ok(()) => {
-                    store.delete("token");
-                }
-                // Before anything else in this call is written, so a refused
-                // token does not leave a half-saved change behind.
-                Err(e) => {
-                    return Err(format!(
-                        "The token was NOT saved, because {e}. Nothing was written to disk. \
-                         Try again, or set the JARVIS_TOKEN environment variable instead."
-                    ))
+    let token = token.map(|t| t.trim().to_string());
+    let base_before = jarvis_base(&app);
+
+    // What the settings file held before this call, to put back if any step
+    // below is refused - in memory, and on disk if it had been saved.
+    let keys = ["token", "base", "bind_address"];
+    let before: Vec<(&str, Option<serde_json::Value>)> =
+        keys.iter().map(|&k| (k, store.get(k))).collect();
+    let restore = || {
+        for (key, value) in &before {
+            match value {
+                // Only ever what was already in the file before this call:
+                // an older version's plain copy is put back as it was, never
+                // the new token.
+                Some(value) => store.set(*key, value.clone()),
+                None => {
+                    store.delete(*key);
                 }
             }
         }
+    };
+
+    // The settings file FIRST - without any plain-text token - and
+    // Credential Manager SECOND (CONN-7). It used to be the other way round:
+    // the new token went into Credential Manager, the old plain copy was
+    // deleted only in memory, and when the file then failed to save, the
+    // next start's migration (`migrate_plain_token`) found the OLD plain
+    // copy still on disk and moved it back over the new one.
+    if token.is_some() {
+        store.delete("token");
     }
     if let Some(base) = base {
         store.set("base", serde_json::Value::String(base));
@@ -812,10 +856,86 @@ pub fn set_api_settings(
     if let Some(bind_address) = bind_address {
         store.set("bind_address", serde_json::Value::String(bind_address));
     }
-    store
-        .save()
-        .map_err(|e| format!("unable to write the settings store: {e}"))?;
+    let credential_manager = || -> Result<(), String> {
+        match token.as_deref() {
+            None => Ok(()),
+            Some("") => match token_store::delete() {
+                Ok(()) | Err(StoreError::Unavailable) => Ok(()),
+                // Still in Credential Manager means still in use: say so
+                // rather than report a clear that did not happen.
+                Err(e) => Err(format!(
+                    "could not clear the token: {e}. Nothing in Settings was changed."
+                )),
+            },
+            Some(token) => token_store::write(token).map_err(|e| {
+                format!(
+                    "The token was NOT saved, because {e}. Nothing in Settings was changed, \
+                     and nothing was written to disk in plain text. Try again, or set the \
+                     JARVIS_TOKEN environment variable instead."
+                )
+            }),
+        }
+    };
+    save_file_then_token(
+        || store.save().map_err(|e| e.to_string()),
+        credential_manager,
+        || {
+            restore();
+            // Best effort: when this fails too, the file is left without
+            // the plain copy and with the new address - never with a token
+            // Credential Manager does not also hold.
+            let _ = store.save();
+        },
+        restore,
+    )?;
+    // "Hey Jarvis" listening sends room audio to the server address, and was
+    // started against the old one. It stops, and says so; turning it on
+    // again checks the new address from scratch (voice.rs
+    // wake_audio_refusal - which also runs before every clip, so this is
+    // the early, visible half of the same rule, not the only guard).
+    let base_after = jarvis_base(&app);
+    if base_after != base_before {
+        crate::voice::stop_listening_because(
+            &app,
+            format!(
+                "The Jarvis server address changed to {base_after}, so listening for \
+                 \"hey Jarvis\" stopped. Turn it on again to listen with the new address."
+            ),
+        );
+    }
     Ok(None)
+}
+
+/// The order [`set_api_settings`] writes in, pure so it is tested without an
+/// app or Credential Manager (CONN-7):
+///
+/// 1. the settings file, already without any plain-text token - refused,
+///    and the in-memory store is put back (`restore_memory`) and nothing
+///    else is touched;
+/// 2. then Credential Manager - refused, and the settings file is rolled
+///    back to what it held before the call (`roll_back_file`), so a refused
+///    token leaves nothing half-saved.
+///
+/// Never the other order: a new token in Credential Manager with the OLD
+/// plain copy still on disk is what the next start's migration moved back
+/// over it.
+pub(crate) fn save_file_then_token(
+    save_file: impl FnOnce() -> Result<(), String>,
+    credential_manager: impl FnOnce() -> Result<(), String>,
+    roll_back_file: impl FnOnce(),
+    restore_memory: impl FnOnce(),
+) -> Result<(), String> {
+    if let Err(e) = save_file() {
+        restore_memory();
+        return Err(format!(
+            "unable to write the settings store: {e}. Nothing was changed."
+        ));
+    }
+    if let Err(e) = credential_manager() {
+        roll_back_file();
+        return Err(e);
+    }
+    Ok(())
 }
 
 /// Checks a base URL before it is persisted.
@@ -2387,6 +2507,10 @@ pub async fn get_second_card(app: AppHandle) -> Result<serde_json::Value, String
 /// `pending: true` until the owner decides it there. OFF is immediate, because
 /// it only narrows what runs. There is no form that sends more than one
 /// switch. Settings window only, like [`get_second_card`].
+///
+/// ON is held while the event stream is stale - rule 4, the same
+/// one-direction hold as [`set_big_model`]: the card it raises should be
+/// answered by someone looking at a live queue. OFF always goes through.
 #[tauri::command]
 pub async fn set_second_card(
     app: AppHandle,
@@ -2394,6 +2518,13 @@ pub async fn set_second_card(
     enabled: bool,
 ) -> Result<serde_json::Value, String> {
     let feature = second_card_feature(&feature)?;
+    if enabled && app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be turned on until \
+             it does. Turning things off still works."
+                .to_string(),
+        );
+    }
     let base = jarvis_base(&app);
     let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
         .post(format!("{base}{SECOND_CARD_PATH}"))
@@ -3836,7 +3967,7 @@ mod health_tests {
 
 #[cfg(test)]
 mod token_tests {
-    use super::{pick_token, TokenSource};
+    use super::{passes_as_hud_token, pick_backend_token, pick_token, TokenSource};
 
     fn s(v: &str) -> Option<String> {
         Some(v.to_string())
@@ -3921,6 +4052,160 @@ mod token_tests {
     fn values_are_trimmed() {
         let got = pick_token(None, None, None, || file("  tok\n"));
         assert_eq!(got.map(|(t, _)| t), s("tok"));
+    }
+
+    /// CONN-3: the backend's own order (jarvis_token_store.resolve) - the
+    /// old file wins, because it exists only when an older backend wrote it
+    /// after the move into Credential Manager.
+    #[test]
+    fn the_backends_old_file_beats_its_credential_manager_copy() {
+        let got = pick_backend_token(s("from-file"), || s("from-cm"));
+        assert_eq!(
+            got,
+            Some(("from-file".to_string(), TokenSource::BackendFile))
+        );
+    }
+
+    #[test]
+    fn with_no_old_file_the_backends_credential_manager_copy_is_used() {
+        for none in [None, s(""), s("  \n")] {
+            let got = pick_backend_token(none, || s(" from-cm "));
+            assert_eq!(
+                got,
+                Some(("from-cm".to_string(), TokenSource::BackendCredentialManager))
+            );
+        }
+        assert_eq!(pick_backend_token(None, || None), None);
+        assert_eq!(pick_backend_token(s(""), || s("")), None);
+    }
+
+    #[test]
+    fn credential_manager_is_not_even_read_when_the_old_file_has_a_token() {
+        let got = pick_backend_token(s("from-file"), || panic!("not reached"));
+        assert_eq!(got.map(|(t, _)| t), s("from-file"));
+    }
+
+    /// CONN-7: the order set_api_settings writes in. A model of the two
+    /// places a typed token can be - the settings file on disk and
+    /// Credential Manager - and of the next start's migration, which moves a
+    /// plain copy it finds on disk into Credential Manager.
+    mod write_order {
+        use super::super::save_file_then_token;
+        use std::cell::RefCell;
+
+        #[derive(Clone, Debug, PartialEq)]
+        struct World {
+            /// The plain `token` key in the settings file ON DISK.
+            file: Option<&'static str>,
+            credential_manager: Option<&'static str>,
+        }
+
+        /// migrate_plain_token at the next start, as plan_migration does it.
+        fn next_start(mut w: World) -> World {
+            if let Some(plain) = w.file.take() {
+                w.credential_manager = Some(plain);
+            }
+            w
+        }
+
+        /// set_api_settings(token = new) against `w`, with the file save and
+        /// the Credential Manager write each allowed to fail.
+        fn set_token(
+            w: World,
+            new: &'static str,
+            save_ok: bool,
+            cm_ok: bool,
+        ) -> (World, Result<(), String>, Vec<&'static str>) {
+            let disk = RefCell::new(w.file);
+            let cm = RefCell::new(w.credential_manager);
+            let calls = RefCell::new(Vec::new());
+            let before = w.file;
+            let result = save_file_then_token(
+                || {
+                    calls.borrow_mut().push("save file");
+                    if save_ok {
+                        *disk.borrow_mut() = None; // saved without the token
+                        Ok(())
+                    } else {
+                        Err("disk full".to_string())
+                    }
+                },
+                || {
+                    calls.borrow_mut().push("credential manager");
+                    if cm_ok {
+                        *cm.borrow_mut() = Some(new);
+                        Ok(())
+                    } else {
+                        Err("refused".to_string())
+                    }
+                },
+                || {
+                    calls.borrow_mut().push("roll back file");
+                    *disk.borrow_mut() = before;
+                },
+                || calls.borrow_mut().push("restore memory"),
+            );
+            let world = World {
+                file: disk.into_inner(),
+                credential_manager: cm.into_inner(),
+            };
+            (world, result, calls.into_inner())
+        }
+
+        /// The bug: an old plain copy on disk, the new token saved to
+        /// Credential Manager, then the file save fails - and the next
+        /// start put the OLD token back. Now the file goes first, so a
+        /// failed save leaves Credential Manager untouched.
+        #[test]
+        fn a_failed_file_save_never_lets_the_old_token_come_back() {
+            let start = World {
+                file: Some("old"),
+                credential_manager: Some("old"),
+            };
+            let (w, result, calls) = set_token(start.clone(), "new", false, true);
+            assert!(result.unwrap_err().contains("Nothing was changed"));
+            assert_eq!(calls, ["save file", "restore memory"]);
+            assert_eq!(w, start, "Credential Manager was written before the file");
+            // Either way round, what the app reads after a restart is one
+            // consistent token, never a new one overwritten by an old one.
+            assert_eq!(next_start(w).credential_manager, Some("old"));
+        }
+
+        #[test]
+        fn a_refused_token_rolls_the_file_back() {
+            let start = World {
+                file: Some("old"),
+                credential_manager: None,
+            };
+            let (w, result, calls) = set_token(start.clone(), "new", true, false);
+            assert!(result.unwrap_err().contains("refused"));
+            assert_eq!(calls, ["save file", "credential manager", "roll back file"]);
+            assert_eq!(w, start, "a refused token left a half-saved change behind");
+        }
+
+        #[test]
+        fn a_saved_token_survives_the_next_start() {
+            let start = World {
+                file: Some("old"),
+                credential_manager: Some("old"),
+            };
+            let (w, result, calls) = set_token(start, "new", true, true);
+            assert!(result.is_ok());
+            assert_eq!(calls, ["save file", "credential manager"]);
+            assert_eq!(w.file, None, "the plain copy is still on disk");
+            assert_eq!(next_start(w).credential_manager, Some("new"));
+        }
+    }
+
+    /// CONN-3: only a token set on purpose is handed to a backend this app
+    /// starts. The backend's own token, read back, never is.
+    #[test]
+    fn only_a_deliberately_set_token_is_passed_as_hud_token() {
+        assert!(passes_as_hud_token(TokenSource::CredentialManager));
+        assert!(passes_as_hud_token(TokenSource::SettingsFile));
+        assert!(passes_as_hud_token(TokenSource::Environment));
+        assert!(!passes_as_hud_token(TokenSource::BackendCredentialManager));
+        assert!(!passes_as_hud_token(TokenSource::BackendFile));
     }
 }
 

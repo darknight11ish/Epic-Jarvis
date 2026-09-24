@@ -149,6 +149,76 @@ await check("Install sends the typed name, and only asks", async () => {
   assert.match(text, /Waiting for your approval: installing llama3\.1:8b/);
 });
 
+// AP-3 (audit 3): the "Waiting for your approval" line cleared only on a
+// `model` event. A card denied or left to expire brings none, so the line
+// kept claiming a card was waiting that no longer existed. The phone drops
+// it when the card leaves /api/pending (JarvisRuntime.noteModelRequest).
+const MODEL_CARD = { id: "gate-model-1", action: "install_model", tier: "ask",
+                     detail: { reference: "llama3.1:8b" }, created: 1 };
+
+async function installAsked(page) {
+  // The click raises exactly one new card: the one the line is about.
+  await page.evaluate((card) => { window.__pendingNow = [card]; }, MODEL_CARD);
+  await page.locator("#model-install-ref").fill("llama3.1:8b");
+  await page.locator("#model-install").click();
+  await page.waitForTimeout(300);
+  await page.evaluate((card) => window.__emit("approvals-changed", { count: 1, items: [card] }), MODEL_CARD);
+  await page.waitForTimeout(100);
+}
+const cardGone = (page) => page.evaluate(() => {
+  window.__pendingNow = [];
+  window.__emit("approvals-changed", { count: 0, items: [] });
+});
+const modelsText = (page) => page.locator("#models").innerText();
+
+await check("the waiting line goes when its card leaves the queue unanswered here, and says denied or ran out of time", async () => {
+  const page = await tab("faculties", {});
+  await installAsked(page);
+  const before = await modelsText(page);
+  await cardGone(page);
+  await page.waitForTimeout(3600); // the grace an approval's `model` event gets
+  const after = await modelsText(page);
+  await page.close();
+  assert.match(before, /Waiting for your approval: installing llama3\.1:8b/);
+  assert.doesNotMatch(after, /Waiting for your approval/, "the line still claims a card is waiting");
+  assert.match(after, /installing llama3\.1:8b is no longer waiting: it was denied or ran out of time/);
+});
+
+await check("a card denied on this PC says denied, at once", async () => {
+  const page = await tab("faculties", {});
+  await installAsked(page);
+  await page.evaluate((id) => window.__emit("approval-resolved", { id, approved: false }), MODEL_CARD.id);
+  await cardGone(page);
+  await page.waitForTimeout(200);
+  const after = await modelsText(page);
+  await page.close();
+  assert.doesNotMatch(after, /Waiting for your approval/);
+  assert.match(after, /You denied installing llama3\.1:8b\. Nothing changed\./);
+});
+
+await check("CONTROL: an approval's `model` event clears the line and says nothing about denying", async () => {
+  const page = await tab("faculties", {});
+  await installAsked(page);
+  await cardGone(page);
+  await page.evaluate(() => window.__emit("jarvis-event", { kind: "model", data: {} }));
+  await page.waitForTimeout(3600);
+  const after = await modelsText(page);
+  await page.close();
+  assert.doesNotMatch(after, /Waiting for your approval/);
+  assert.doesNotMatch(after, /denied/);
+});
+
+await check("CONTROL: while its card is still in the queue, the line stays", async () => {
+  const page = await tab("faculties", {});
+  await installAsked(page);
+  // Another card comes and goes; the model's own card is still there.
+  await page.evaluate((card) => window.__emit("approvals-changed", { count: 1, items: [card] }), MODEL_CARD);
+  await page.waitForTimeout(3600);
+  const after = await modelsText(page);
+  await page.close();
+  assert.match(after, /Waiting for your approval: installing llama3\.1:8b/);
+});
+
 await check("Install with nothing typed sends nothing", async () => {
   const page = await tab("faculties", {});
   await page.locator("#model-install").click();

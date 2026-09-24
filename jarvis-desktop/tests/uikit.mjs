@@ -364,7 +364,7 @@ export const HOTKEYS = [
     accelerator: "Super+Shift+J", default: "Super+Shift+J", registered: true, error: null },
   { id: "capture_screen", label: "Attach a screen capture", hint: "Not Win+Shift+S — the Snipping Tool owns that at the shell level.",
     accelerator: "Alt+Shift+S", default: "Alt+Shift+S", registered: true, error: null },
-  { id: "quick_note", label: "Quick note to Logseq", hint: "Summon the bar already prefixed with #log.",
+  { id: "quick_note", label: "Quick note", hint: "Summon the bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
     accelerator: "Alt+Shift+N", default: "Alt+Shift+N", registered: true, error: null },
   { id: "toggle_widget", label: "Show or hide the widget", hint: "The desktop pane with the meters and the gates.",
     accelerator: "Alt+Shift+W", default: "Alt+Shift+W", registered: true, error: null },
@@ -404,8 +404,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
         window.__calls.push([cmd, args]);
         switch (cmd) {
           case "get_link_state": return state;
-          case "get_pending_approvals":
-            return { count: pending.length, items: pending, stale: state.stale };
+          case "get_pending_approvals": {
+            // A scenario whose queue changes mid-test (a card raised by a
+            // click, then denied) sets window.__pendingNow; unset, the
+            // scenario's fixed `pending`.
+            const items = window.__pendingNow || pending;
+            return { count: items.length, items, stale: state.stale };
+          }
           case "get_digest": return digest;
           case "mark_digest_seen": return { ok: true, marked: 3 };
           case "set_attention_muted": return { muted: args.muted };
@@ -416,14 +421,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                                 { name: "litellm", online: false, optional: true }] };
           case "get_api_settings": {
             // Mirrors commands.rs pick_token: typed (Credential Manager),
-            // then the environment, then the backend's own token - from
-            // Credential Manager, else its old plain-text file; empty is
-            // "not set" at every step.
+            // then the environment, then the backend's own token - its old
+            // plain-text file first, else Credential Manager, the backend's
+            // own order (pick_backend_token); empty is "not set" at every
+            // step.
             const s = window.__apiSettings;
             const source = s.typedToken ? "credential-manager"
               : s.envToken ? "environment"
-              : s.backendCmToken ? "backend-credential-manager"
-              : s.backendFileToken ? "backend-file" : null;
+              : s.backendFileToken ? "backend-file"
+              : s.backendCmToken ? "backend-credential-manager" : null;
             return { base: s.base, hasToken: s.hasToken === false ? false : Boolean(source),
                      tokenSource: s.hasToken === false ? null : source,
                      bindAddress: window.__apiSettings.bindAddress,
@@ -432,7 +438,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "reveal_pairing_token": {
             const s = window.__apiSettings;
-            const t = s.typedToken || s.envToken || s.backendCmToken || s.backendFileToken;
+            const t = s.typedToken || s.envToken || s.backendFileToken || s.backendCmToken;
             if (!t) throw new Error("there is no token yet - start Jarvis once and it makes one for itself");
             return t;
           }
@@ -574,7 +580,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "start_automatic_listening":
             window.__voiceCalls.push("auto-start");
             if (window.__autoListenFails) throw new Error(window.__autoListenFails);
-            return null;
+            // voice.rs ListenInfo, when a scenario sets it; an older build's
+            // nothing otherwise.
+            return window.__listenInfo || null;
           case "stop_automatic_listening":
             window.__voiceCalls.push("auto-stop");
             return null;

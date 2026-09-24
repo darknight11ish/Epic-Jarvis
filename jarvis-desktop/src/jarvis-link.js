@@ -328,6 +328,15 @@ export function quickActionable(approval) {
   return approval.risk.swipeOk === true;
 }
 
+/**
+ * Where an approval card can be answered, in the one sentence-part every
+ * desktop surface uses (F3, audit 3). It used to be "the Jarvis bar" here,
+ * "the Jarvis bar and the widget" there, and never the phone - where the
+ * same card waits on the Home screen. voice.rs has the same words for its
+ * two wake-word sentences; tests/faq.mjs holds the two together.
+ */
+export const APPROVE_WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";
+
 /** The link as last reported. */
 export function currentLink() {
   return link;

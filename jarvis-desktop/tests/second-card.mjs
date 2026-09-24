@@ -199,11 +199,11 @@ await check("turning the main switch ON sends one request, raises a card, and st
   assert.equal(master.checked, false, "shown as on before the card was approved");
   assert.equal(master.disabled, true, "a second card could be raised for the same switch");
   assert.equal(master.state, "waiting");
-  assert.match(master.text, /Waiting for your approval\. The card is in the Jarvis bar and on the widget/);
+  assert.match(master.text, /Waiting for your approval\. Approve it in the Jarvis bar, on the widget, or on your phone's Home screen/);
   assert.match(s.status, /Waiting for your approval/);
   // The same words the Brain's model install uses while its card waits.
   assert.ok(read("src/brain.js").includes(
-    "The card is in the Jarvis bar and on the widget — nothing changes until you approve it there."));
+    "Approve it ${APPROVE_WHERE} — nothing changes until you do."));
 });
 
 await check("a card already waiting: that switch says so, and the others stay usable", async () => {
@@ -253,6 +253,46 @@ await check("a denied card: the switch is still off, and the page says it was no
   await page.close();
   assert.equal(row(s, "long_context").checked, false);
   assert.match(s.status, /"Longer conversations" was not turned on/);
+});
+
+// AP-6 (audit 3): the page always said "denied or ran out of time". A
+// backend with status().last ({feature, outcome, why, at}) says what really
+// happened; one without it keeps the old words. The fixture may not have
+// `last` yet, so these add it to a real status.
+const endedWith = async (last, feature = "long_context") => {
+  const page = await open({ status: SC.capable_pending });
+  await page.evaluate(({ next, last }) => {
+    if (last) next.last = { ...last, at: last.at ?? Date.now() / 1000 };
+    window.__secondCard.status = next;
+    window.__emit("approvals-changed", { count: 0, items: [] });
+  }, { next: { ...SC.capable_pending, pending: [] }, last: last && { feature, ...last } });
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  await page.close();
+  return s.status;
+};
+
+await check("how a card ended comes from the backend's `last`: denied, expired, refused, failed, withdrawn", async () => {
+  const L = '"Longer conversations"';
+  assert.match(await endedWith({ outcome: "denied" }), new RegExp(`${L} was not turned on: the card was denied\\.$`));
+  assert.match(await endedWith({ outcome: "expired" }), /ran out of time before anyone answered it/);
+  assert.match(await endedWith({ outcome: "timed_out" }), /ran out of time before anyone answered it/);
+  const refused = await endedWith({ outcome: "refused", why: "the second card is not capable" });
+  assert.match(refused, /Jarvis refused it\. The second card is not capable\./);
+  const failed = await endedWith({ outcome: "failed", why: "ollama did not start on the second card" });
+  assert.match(failed, /was approved, but turning it on failed\. Ollama did not start on the second card\./);
+  assert.match(await endedWith({ outcome: "withdrawn" }), /the card was withdrawn before it was answered/);
+  for (const words of [await endedWith({ outcome: "denied" }), refused, failed]) {
+    assert.doesNotMatch(words, /denied or ran out of time/);
+  }
+});
+
+await check("CONTROL: with no `last` (an older backend), or one about another switch or an older card, the old words stay", async () => {
+  const OLD = /"Longer conversations" was not turned on: the card was denied or ran out of time\./;
+  assert.match(await endedWith(null), OLD);
+  assert.match(await endedWith({ outcome: "denied" }, "vision"), OLD);
+  assert.match(await endedWith({ outcome: "denied", at: Date.now() / 1000 - 3600 }), OLD);
+  assert.match(await endedWith({ outcome: "something new" }), OLD);
 });
 
 await check("while a card waits and nothing else happens, the page re-reads gently on its own", async () => {
@@ -439,6 +479,20 @@ await check("CONTROL: both commands send X-Jarvis-Client: hud and the token the 
   // Transport errors are sentences built here, never reqwest's text.
   const unreachable = fnBody(rust, "fn second_card_unreachable(");
   assert.doesNotMatch(unreachable, /\{err\}|\{e\}|err\.to_string/);
+});
+
+// AP-2 / CONN-4 (audit 3): the big model's ON was held on a stale link and
+// the second card's was not, though both raise the same kind of card.
+await check("CONTROL: ON is held on a stale link before anything is sent; OFF never is", async () => {
+  const rust = read("src-tauri/src/commands.rs");
+  const set = fnBody(rust, "pub async fn set_second_card(");
+  const hold = set.indexOf("if enabled && app.state::<crate::stream::StreamState>().link().stale {");
+  const post = set.indexOf(".post(");
+  assert.ok(hold > -1, "set_second_card has no stale-link hold");
+  assert.ok(hold < post, "the stale-link hold comes after the POST");
+  // One direction only: the hold is conditioned on `enabled`, never on OFF.
+  assert.doesNotMatch(set, /if !enabled && [^\n]*stale/);
+  assert.match(set.slice(hold, post), /Turning things off still works\./);
 });
 
 await check("CONTROL: only the settings window may read or change the second card", async () => {

@@ -13,7 +13,7 @@
  * the backend answers with has a `state`:
  *
  *   reading   the model is reading it; no card yet
- *   waiting   the card is up, in the Jarvis bar and on the phone
+ *   waiting   the card is up, in the Jarvis bar, on the widget and on the phone
  *   writing   approved, writing the pages
  *   done      written                              (the server's sentence)
  *   refused   said no, nobody answered, or the plan was refused - and why
@@ -25,10 +25,15 @@
  * @module wiki
  */
 
+import { APPROVE_WHERE } from "./jarvis-link.js";
+
 /** How often to ask while a job runs, and for how long before giving up. */
 export const POLL_MS = 3000;
 /** Reading a long document on the second card, then the card's own wait. */
 export const GIVE_UP_MS = 30 * 60 * 1000;
+/** Failed polls in a row before the follow stops. One blip - a restart, a
+ *  timeout while the second card is busy - used to end it for good. */
+export const MAX_FAILED_POLLS = 3;
 
 /** A source state, in words and a tag colour. */
 export const STATES = {
@@ -77,7 +82,7 @@ export function describeJob(job) {
       return { text: said || "The model on the second card is reading it. No card yet.",
                tone: null, final: false };
     case "waiting":
-      return { text: said || "Waiting for your approval. Nothing is written until you answer.",
+      return { text: said || `Waiting for your approval. Approve it ${APPROVE_WHERE} — nothing is written until you do.`,
                tone: null, final: false };
     case "writing":
       return { text: said || "Writing the pages.", tone: null, final: false };
@@ -97,9 +102,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * "Add to wiki" for one source: asks, then follows the job until it ends,
  * calling `onSay` with each `describeJob` answer. Resolves to the last one.
+ *
+ * The follow survives a bad moment: up to `MAX_FAILED_POLLS - 1` failed
+ * polls in a row are said and retried, and only the next one ends it. While
+ * `linkDown()` says the link to the PC is down, no poll is sent at all -
+ * and that neither counts as a failure nor ends the follow; the job goes on
+ * on the PC either way.
  */
 export async function addToWiki(invoke, source, onSay,
-                                { pollMs = POLL_MS, giveUpMs = GIVE_UP_MS } = {}) {
+                                { pollMs = POLL_MS, giveUpMs = GIVE_UP_MS,
+                                  maxFailedPolls = MAX_FAILED_POLLS,
+                                  linkDown = () => false } = {}) {
   let said;
   let job;
   try {
@@ -113,6 +126,8 @@ export async function addToWiki(invoke, source, onSay,
   onSay(said);
   const id = job && job.id;
   const started = Date.now();
+  let failed = 0;
+  let skipping = false;
   while (!said.final && id) {
     await sleep(pollMs);
     if (Date.now() - started > giveUpMs) {
@@ -121,12 +136,29 @@ export async function addToWiki(invoke, source, onSay,
       onSay(said);
       break;
     }
+    let down = false;
+    try { down = Boolean(linkDown()); } catch { down = false; }
+    if (down) {
+      // Said once, not every tick; the last real answer is kept as is.
+      if (!skipping) {
+        skipping = true;
+        onSay({ text: "Waiting for the link to the PC to come back. The job carries on there.",
+                tone: null, final: false });
+      }
+      continue;
+    }
+    skipping = false;
     try {
       said = describeJob(await invoke("wiki_ingest_status", { id }));
+      failed = 0;
     } catch (error) {
-      said = { text: `Lost track of it (${String((error && error.message) || error)}). `
-                     + "Check the approval card and the wiki folder.",
-               tone: "bad", final: true };
+      failed += 1;
+      const why = String((error && error.message) || error);
+      said = failed >= maxFailedPolls
+        ? { text: `Lost track of it (${why}). Check the approval card and the wiki folder.`,
+            tone: "bad", final: true }
+        : { text: `Could not ask the PC how it is going (${why}). Trying again.`,
+            tone: null, final: false };
     }
     onSay(said);
   }

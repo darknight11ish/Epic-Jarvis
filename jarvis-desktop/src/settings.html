@@ -80,13 +80,15 @@
           <div class="row" id="pairing-shown" hidden>
             <input id="pairing-token" type="text" readonly spellcheck="false" autocomplete="off"
                    aria-label="The token to type into the phone" />
-            <button class="btn ghost small" id="copy-token" type="button">Copy</button>
             <button class="btn ghost small" id="hide-token" type="button">Hide</button>
           </div>
           <p class="note">
             Type it into the phone's <strong>Token</strong> box. It hides
-            itself after a minute. Anyone who has it can use Jarvis, so do not
-            send it to yourself in a chat app or an email.
+            itself after a minute. There is no Copy button on purpose: Windows
+            keeps what you copy in its clipboard history, and can send it to
+            your other devices with cloud clipboard, where the token would
+            stay long after this. Anyone who has it can use Jarvis, so do not
+            send it to yourself in a chat app or an email either.
           </p>
         </div>
 
@@ -450,10 +452,10 @@
             <summary class="faq-q">Where do I approve or deny what Jarvis wants to do?</summary>
             <p class="faq-a">
               On a card. When Jarvis wants to do something that is not
-              completely safe, it stops, and a card waits for you in the
-              Jarvis bar (<kbd>Alt</kbd>+<kbd>Space</kbd> opens it) and on the
-              widget. For anything important Windows also shows a
-              notification. Press Approve or Deny on the card; the
+              completely safe, it stops, and a card waits for you
+              <span class="approve-where">in the Jarvis bar, on the widget, or on your phone's Home screen</span>
+              (<kbd>Alt</kbd>+<kbd>Space</kbd> opens the Jarvis bar). For
+              anything important Windows also shows a notification. Press Approve or Deny on the card; the
               notification can only Deny. Nothing runs until you decide, one
               thing at a time.
             </p>
@@ -523,7 +525,7 @@
           <details class="faq-item">
             <summary class="faq-q">Jarvis suddenly got slow. What happened?</summary>
             <p class="faq-a">
-              Open the Brain window → Models. If the language model has
+              Open the Brain window → Faculties → Models. If the language model has
               fallen off the graphics card onto the processor instead,
               there is a yellow line at the top of that list saying so,
               with the percentage. That is almost always the cause — a
@@ -573,12 +575,18 @@
           <details class="faq-item">
             <summary class="faq-q">Is my pairing token safe?</summary>
             <p class="faq-a">
-              It is stored on this computer only, it is never shown again
-              once you save it here, and this page never sends it anywhere
-              except the Jarvis address set above. It is stored as plain
-              text on disk, not scrambled, so treat this computer's own user
-              account the way you would treat any other place a password
-              lives.
+              It is kept in Windows Credential Manager, the part of Windows
+              that holds saved passwords - not in a plain-text file. This app
+              sends it only to the Jarvis address set above, and never writes
+              it to its logs. <strong>Show the token for my phone</strong>
+              shows it for a minute so you can type it into the phone; there
+              is no Copy button, because anything copied stays in Windows'
+              clipboard history. Anyone signed in to this computer as you can
+              read it, the same as your other saved passwords, so keep your
+              Windows account password-protected. One exception: if the
+              Token line above says Jarvis's own token is still in its old
+              plain-text file, run apply-patches.ps1 to update the backend,
+              which moves it into Credential Manager.
             </p>
           </details>
         </div>

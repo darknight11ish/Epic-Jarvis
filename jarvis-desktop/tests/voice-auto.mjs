@@ -4,6 +4,7 @@
  * mock, since none of this has run against a real microphone.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import * as K from "./uikit.mjs";
 
 const { base, close } = await K.serve();
@@ -133,6 +134,111 @@ await check("an unavailable engine turns automatic listening off and sends nothi
   assert.equal(pressed, "false", "automatic listening should have turned itself off");
   assert.ok(voice.includes("auto-stop"), JSON.stringify(voice));
   assert.ok(!sent.some(([cmd]) => cmd === "stream_chat"));
+});
+
+// T2 (audit 3): the loopback rule was checked only when listening started,
+// while every clip and every Smart Turn check read the address again. These
+// read the Rust: the rule must run before EACH send, on the very address
+// the send then uses, and a changed address must stop listening.
+const rustSrc = (rel) => fs.readFileSync(new URL(`../src-tauri/src/${rel}`, import.meta.url), "utf8");
+const fnBody = (src, sig) => {
+  const at = src.indexOf(sig);
+  assert.ok(at > -1, `${sig} is gone`);
+  const rest = src.slice(at);
+  return rest.slice(0, rest.indexOf("\n}\n"));
+};
+
+await check("CONTROL (Rust): every wake-word clip and turn check is re-checked for loopback, on the address it is sent to", async () => {
+  const voice = rustSrc("voice.rs");
+  const loop = fnBody(voice, "fn run_vad_loop(");
+  for (const send of ["ask_turn(", "post_utterance("]) {
+    const at = loop.indexOf(send);
+    assert.ok(at > -1, `run_vad_loop no longer calls ${send}`);
+    const before = loop.slice(0, at);
+    const check = before.lastIndexOf("wake_audio_refusal(&base)");
+    const read = before.lastIndexOf("let base = jarvis_base(app);");
+    assert.ok(check > -1 && read > -1 && read < check, `${send} is not preceded by its own loopback check`);
+    // Nothing between the check and the send may read the address again.
+    assert.doesNotMatch(before.slice(check), /jarvis_base\(/, `${send} re-reads the address after the check`);
+    assert.match(before.slice(check), /stop_listening_because\(app, why\);\s*return VadEnd::Refused;/);
+  }
+  assert.match(loop, /ask_turn\(\s*app, &base,/);
+  assert.match(loop, /post_utterance\(\s*&app,\s*&base,/);
+  // The senders use the address they are given, never their own read.
+  for (const sig of ["async fn ask_turn(", "async fn post_utterance("]) {
+    assert.doesNotMatch(fnBody(voice, sig), /jarvis_base\(/, `${sig} reads the address itself`);
+  }
+  // Start uses the same rule.
+  assert.match(fnBody(voice, "async fn ensure_wake_ready("), /wake_audio_refusal\(&base\)/);
+});
+
+// AP-2 / CONN-4 (audit 3): asking to turn the wake word on raises an
+// approval card, and was not held on a stale link.
+await check("CONTROL (Rust): asking to turn \"hey Jarvis\" on is held on a stale link, before its POST", async () => {
+  const ready = fnBody(rustSrc("voice.rs"), "async fn ensure_wake_ready(");
+  const off = ready.indexOf("WakeReadiness::Off => {");
+  assert.ok(off > -1);
+  const branch = ready.slice(off);
+  const hold = branch.indexOf("app.state::<crate::stream::StreamState>().link().stale");
+  const post = branch.indexOf('.post(format!("{base}/api/voice/wake"))');
+  assert.ok(hold > -1, "the Off branch has no stale-link hold");
+  assert.ok(post > -1 && hold < post, "the stale-link hold comes after the POST");
+  // Only the ON request is held: the Ready branch (already on) is not.
+  assert.doesNotMatch(ready.slice(0, off), /link\(\)\.stale/);
+});
+
+await check("CONTROL (Rust): changing the server address in Settings stops \"hey Jarvis\" listening", async () => {
+  const set = fnBody(rustSrc("commands.rs"), "pub fn set_api_settings(");
+  const save = set.lastIndexOf(".save()");
+  const stop = set.indexOf("crate::voice::stop_listening_because(");
+  assert.ok(stop > save, "set_api_settings does not stop listening after the address changes");
+  assert.match(set, /if base_after != base_before \{/);
+  // And the stop reaches the quickbar in the shape it already acts on.
+  const stopFn = fnBody(rustSrc("voice.rs"), "pub(crate) fn stop_listening_because(");
+  assert.match(stopFn, /app\.emit\(VOICE_HEARD, HeardReply::unavailable\(why\)\)/);
+});
+
+// T9 (audit 3): which microphone is listened to, and what happens when the
+// echo-cancelled one dies while listening.
+const spoken = (page) => page.evaluate(() =>
+  [...document.querySelectorAll("[aria-live]")].map((n) => n.textContent).join(" | "));
+
+await check("the listening line names the microphone, and says when echo cancelling stops", async () => {
+  const page = await quickbar({});
+  await page.evaluate(() => {
+    window.__listenInfo = { echoCancelling: true, microphone: "Microphone (USB Headset)", note: null };
+  });
+  await page.locator("#voice-auto").click();
+  await page.waitForTimeout(200);
+  const first = await spoken(page);
+  await page.evaluate(() => window.__emit("voice-listening", {
+    echoCancelling: false, microphone: "Microphone (USB Headset)",
+    note: "Echo cancelling stopped working, so Jarvis is listening through the ordinary microphone now.",
+  }));
+  await page.waitForTimeout(200);
+  const after = await spoken(page);
+  const pressed = await page.locator("#voice-auto").getAttribute("aria-pressed");
+  await page.close();
+  assert.match(first, /Listening for "hey Jarvis" on Microphone \(USB Headset\)\. Say "stop"/);
+  assert.match(after, /Echo cancelling stopped working/);
+  assert.match(after, /Listening for "hey Jarvis" on Microphone \(USB Headset\)\.(?! Say)/);
+  assert.equal(pressed, "true", "still listening - through the ordinary microphone");
+});
+
+await check("CONTROL (Rust): a failed echo-cancelled microphone is noticed, and listening falls back or stops", async () => {
+  const voice = rustSrc("voice.rs");
+  const loop = fnBody(voice, "fn run_vad_loop(");
+  assert.match(loop, /if let Some\(why\) = mic_died\(died\) \{\s*return VadEnd::MicFailed\(why\);/);
+  const echo = fnBody(voice, "fn start_echo_cancelled(");
+  assert.match(echo, /Some\(&died_rx\)/, "the echo path does not hand the loop its `died` channel");
+  assert.match(echo, /if let VadEnd::MicFailed\(why\) = end \{\s*continue_without_echo_cancelling\(/);
+  const fallback = fnBody(voice, "fn continue_without_echo_cancelling(");
+  assert.match(fallback, /open_input_stream\(/);
+  assert.match(fallback, /Err\(e\) => stop_listening_because\(/, "no visible stop when the fallback fails");
+  const aec = rustSrc("aec.rs");
+  assert.match(aec, /GetDefaultAudioEndpoint\(eCapture, eConsole\)/, "not the same microphone as cpal's");
+  assert.match(aec, /SetDuckingPreference\(true\)/);
+  assert.match(aec, /report_failure\(&ready, &died, e\)/);
 });
 
 await check("CONTROL: no page error from any of the above", async () => {

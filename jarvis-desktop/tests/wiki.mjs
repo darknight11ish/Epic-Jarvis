@@ -88,6 +88,61 @@ await check("a job is followed until it ends", async () => {
   assert.match(seen[1], /Waiting for your approval/);
 });
 
+// CONN-8 (audit 3): the follow ended for good at the first failed poll.
+await check("one or two failed polls in a row are retried; the follow goes on to the end", async () => {
+  const answers = [body("ingest_started"), new Error("timed out"), new Error("timed out"),
+                   body("job_waiting"), new Error("reset"), body("job_done")];
+  const calls = [];
+  const invoke = async (cmd) => {
+    calls.push(cmd);
+    const next = answers.shift();
+    if (next instanceof Error) throw next;
+    return next;
+  };
+  const seen = [];
+  const last = await addToWiki(invoke, "x.md", (d) => seen.push(d), { pollMs: 1 });
+  assert.equal(calls.length, 6, JSON.stringify(calls));
+  assert.equal(last.tone, "ok", `the follow did not reach the end: ${last.text}`);
+  const retry = seen.find((d) => /Trying again/.test(d.text));
+  assert.ok(retry && retry.final === false && retry.tone !== "bad", JSON.stringify(seen));
+});
+
+await check("CONTROL: three failed polls in a row do end it, and say so", async () => {
+  const answers = [body("ingest_started"), new Error("a"), new Error("b"), new Error("c"),
+                   body("job_done")];
+  const invoke = async () => {
+    const next = answers.shift();
+    if (next instanceof Error) throw next;
+    return next;
+  };
+  const last = await addToWiki(invoke, "x.md", () => {}, { pollMs: 1 });
+  assert.equal(last.final, true);
+  assert.equal(last.tone, "bad");
+  assert.match(last.text, /Lost track of it \(c\)/);
+  assert.equal(answers.length, 1, "it kept polling after the third failure");
+});
+
+await check("while the link is down no poll is sent, nothing is counted, and the follow resumes", async () => {
+  const answers = [body("ingest_started"), body("job_waiting"), body("job_done")];
+  const calls = [];
+  const invoke = async (cmd) => { calls.push(cmd); return answers.shift(); };
+  let ticks = 0;
+  // Down for the first ten ticks - far more than three - then back.
+  const linkDown = () => ++ticks <= 10;
+  const seen = [];
+  const last = await addToWiki(invoke, "x.md", (d) => seen.push(d), { pollMs: 1, linkDown });
+  assert.deepEqual(calls, ["wiki_ingest", "wiki_ingest_status", "wiki_ingest_status"],
+    "a poll was sent while the link was down");
+  assert.equal(last.tone, "ok");
+  assert.equal(seen.filter((d) => /link to the PC/.test(d.text)).length, 1,
+    "the link line was said more than once, or never");
+});
+
+await check("CONTROL: the Brain tells the follow when the link is down", async () => {
+  const brainJs = fs.readFileSync(path.join(HERE, "..", "src", "brain.js"), "utf8");
+  assert.match(brainJs, /addToWiki\(invoke, source, [\s\S]*?\{ linkDown: \(\) => !currentLink\(\)\.connected \}\)/);
+});
+
 await check("giving up says nothing is written, not that it was", async () => {
   const invoke = async () => body("job_waiting");
   const last = await addToWiki(invoke, "x.md", () => {}, { pollMs: 1, giveUpMs: 5 });

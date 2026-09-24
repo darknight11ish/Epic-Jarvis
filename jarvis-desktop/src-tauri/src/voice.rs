@@ -128,10 +128,10 @@ use std::time::{Duration, Instant};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::{jarvis_base, jarvis_client, jarvis_headers};
-use crate::events::{VOICE_HEARD, VOICE_SPEECH_STARTED};
+use crate::events::{VOICE_HEARD, VOICE_LISTENING, VOICE_SPEECH_STARTED};
 
 /// Total round-trip budget for one utterance: speaker verification plus a
 /// whole-clip transcription is not instant, but it is also not a chat
@@ -356,6 +356,26 @@ pub struct HeardReply {
     pub stop: bool,
 }
 
+impl HeardReply {
+    /// "Listening cannot carry on", in the shape the quickbar already reads
+    /// that from (`available: false` with the reason).
+    pub(crate) fn unavailable(reason: String) -> Self {
+        Self {
+            is_owner: false,
+            text: String::new(),
+            score: 0.0,
+            threshold: 0.0,
+            available: false,
+            source: "wake_word".to_string(),
+            reason,
+            wake_heard: false,
+            awake: false,
+            awake_seconds: 0.0,
+            stop: false,
+        }
+    }
+}
+
 impl From<HeardRaw> for HeardReply {
     fn from(raw: HeardRaw) -> Self {
         Self {
@@ -372,6 +392,86 @@ impl From<HeardRaw> for HeardReply {
             stop: raw.stop,
         }
     }
+}
+
+/// The rate the server's speech models take: `jarvis_speech.AUDIO_IN` says
+/// "WAV, 16-bit mono PCM", 16000 Hz, and that the server does not convert.
+const SERVER_RATE: u32 = 16_000;
+/// The longest push-to-talk clip sent. At 16 kHz mono a second is 32 000
+/// bytes, so two minutes is about 3.7 MiB - under the server's 4 MiB body
+/// limit, with room for the WAV header. Longer is refused with a sentence
+/// rather than sent to be refused by the server.
+const MAX_PUSH_TO_TALK: Duration = Duration::from_secs(120);
+
+/// `samples` (interleaved, as captured, at `spec`) as the server takes them:
+/// one channel, 16 kHz.
+///
+/// It used to send the microphone's own format - 48 kHz stereo on many
+/// PCs, 192 000 bytes a second - so a push-to-talk clip passed the server's
+/// 4 MiB body limit after about 22 seconds. Channels are averaged; a higher
+/// rate is brought down by averaging each output sample's span of input
+/// (which also keeps what is above 8 kHz from folding back into the
+/// speech band), a lower one is brought up by straight-line interpolation.
+pub(crate) fn to_server_format(
+    spec: hound::WavSpec,
+    samples: &[i16],
+) -> (hound::WavSpec, Vec<i16>) {
+    let channels = usize::from(spec.channels.max(1));
+    let mono: Vec<i32> = samples
+        .chunks_exact(channels)
+        .map(|frame| frame.iter().map(|&s| i32::from(s)).sum::<i32>() / channels as i32)
+        .collect();
+    let out_spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: SERVER_RATE,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    (out_spec, resample(&mono, spec.sample_rate, SERVER_RATE))
+}
+
+/// One channel of samples from rate `from` to rate `to`.
+fn resample(mono: &[i32], from: u32, to: u32) -> Vec<i16> {
+    let narrow = |v: i64| v.clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16;
+    if from == to || from == 0 || to == 0 || mono.is_empty() {
+        return mono.iter().map(|&s| narrow(i64::from(s))).collect();
+    }
+    let (from, to) = (u64::from(from), u64::from(to));
+    let len = mono.len();
+    let n_out = (len as u64 * to / from) as usize;
+    if from > to {
+        (0..n_out)
+            .map(|j| {
+                let a = (j as u64 * from / to) as usize;
+                let b = (((j as u64 + 1) * from / to) as usize).clamp(a + 1, len);
+                let span = &mono[a..b];
+                narrow(span.iter().map(|&s| i64::from(s)).sum::<i64>() / span.len() as i64)
+            })
+            .collect()
+    } else {
+        (0..n_out)
+            .map(|j| {
+                let pos = j as f64 * from as f64 / to as f64;
+                let i = (pos.floor() as usize).min(len - 1);
+                let frac = pos - i as f64;
+                let a = f64::from(mono[i]);
+                let b = f64::from(mono[(i + 1).min(len - 1)]);
+                narrow((a + (b - a) * frac).round() as i64)
+            })
+            .collect()
+    }
+}
+
+/// `samples` as the WAV the server takes: [`to_server_format`], encoded.
+fn server_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> {
+    let (spec, samples) = to_server_format(spec, samples);
+    encode_wav(spec, &samples)
+}
+
+/// How long `samples` (interleaved, at `spec`) lasts.
+fn clip_length(spec: hound::WavSpec, samples: &[i16]) -> Duration {
+    let per_second = u64::from(spec.sample_rate.max(1)) * u64::from(spec.channels.max(1));
+    Duration::from_millis(samples.len() as u64 * 1000 / per_second)
 }
 
 /// `samples` (interleaved, as captured) as the bytes of one 16-bit WAV file.
@@ -392,11 +492,15 @@ fn encode_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> 
     Ok(cursor.into_inner())
 }
 
-/// Encodes `samples` as a WAV and posts it to `/api/voice/utterance`. Shared
-/// by push-to-talk and automatic listening; only `source` differs between
-/// them.
+/// Encodes `samples` as a WAV and posts it to `/api/voice/utterance` at
+/// `base`. Shared by push-to-talk and automatic listening; only `source`
+/// differs between them. `base` is passed in rather than read here so the
+/// wake-word listener sends to exactly the address it has just checked is
+/// loopback ([`wake_audio_refusal`]) - reading it again here would leave a
+/// gap for Settings to change it in between.
 async fn post_utterance(
     app: &AppHandle,
+    base: &str,
     spec: hound::WavSpec,
     samples: &[i16],
     source: &str,
@@ -404,15 +508,14 @@ async fn post_utterance(
     if samples.is_empty() {
         return Err("nothing was recorded - the microphone produced no audio".to_string());
     }
-    let wav_bytes = encode_wav(spec, samples)?;
+    let wav_bytes = server_wav(spec, samples)?;
 
     // mic=desktop: the server keeps one voice print per microphone and
     // checks this clip against this PC's own when there is one (a server
     // older than 2026-09-24 ignores it). See backend/voice-mic.patch.
     let response = jarvis_client(Some(UTTERANCE_TIMEOUT))?
         .post(format!(
-            "{}/api/voice/utterance?source={source}&mic={MIC_DESKTOP}",
-            jarvis_base(app)
+            "{base}/api/voice/utterance?source={source}&mic={MIC_DESKTOP}"
         ))
         .headers(jarvis_headers(app)?)
         .header("Content-Type", "audio/wav")
@@ -421,7 +524,7 @@ async fn post_utterance(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(app))
+                format!("could not reach the Jarvis server at {base}")
             } else {
                 format!("sending the recording failed: {e}")
             }
@@ -558,7 +661,19 @@ pub async fn stop_voice_capture(
         .map(|m| m.into_inner().unwrap_or_default())
         .unwrap_or_else(|arc| arc.lock().map(|g| g.clone()).unwrap_or_default());
 
-    post_utterance(&app, spec, &raw_samples, "push_to_talk").await
+    let held = clip_length(spec, &raw_samples);
+    if held > MAX_PUSH_TO_TALK {
+        return Err(format!(
+            "That was too long to send - {} seconds. Hold the button for under two \
+             minutes, and say a long request in parts. Nothing was sent.",
+            held.as_secs()
+        ));
+    }
+
+    // Push-to-talk may go to a server elsewhere: holding the button is a
+    // deliberate act, unlike the room audio the wake-word listener sends.
+    let base = jarvis_base(&app);
+    post_utterance(&app, &base, spec, &raw_samples, "push_to_talk").await
 }
 
 /// If a recording is in progress, discards it without sending anything -
@@ -591,8 +706,11 @@ const VAD_MAX_RMS: f32 = 0.05;
 const VAD_FLOOR_FACTOR: f32 = 3.0;
 /// Where the background estimate starts before the room has been heard.
 const VAD_INITIAL_FLOOR: f32 = 0.005;
-/// A burst of speech shorter than this is treated as noise (a cough, a
-/// click), not an utterance worth sending.
+/// A burst of speech with less VOICED time than this is treated as noise (a
+/// cough, a click), not an utterance worth sending: it is dropped when the
+/// pause after it is over. Voiced time, not time since the burst began - the
+/// pause itself used to count, so by the time the 900 ms hangover ended
+/// every cough had "lasted" 900 ms and was sent.
 const VAD_MIN_SPEECH: Duration = Duration::from_millis(250);
 /// How long the level must stay below the threshold after speech before the
 /// utterance is considered finished. Too short clips a mid-sentence
@@ -649,22 +767,32 @@ pub(crate) enum PauseStep {
     Ask,
     /// Cut here and send.
     Cut,
+    /// Too little of it was voice (a cough, a click): drop it, send nothing.
+    Discard,
 }
 
 /// The whole end-of-utterance rule, pure so it is tested: `silence` since
-/// the last loud chunk, `speech` since the utterance began, whether this
+/// the last loud chunk, `voiced` - how much of the utterance so far was
+/// loud enough to be speech - and `elapsed` since it began, whether this
 /// pause was already asked about, and whether Smart Turn is in use.
 pub(crate) fn pause_step(
     silence: Duration,
-    speech: Duration,
+    voiced: Duration,
+    elapsed: Duration,
     asked: bool,
     use_model: bool,
 ) -> PauseStep {
-    if speech >= VAD_MAX_UTTERANCE {
+    if elapsed >= VAD_MAX_UTTERANCE {
         return PauseStep::Cut;
     }
-    if speech < VAD_MIN_SPEECH {
-        return PauseStep::Listen;
+    if voiced < VAD_MIN_SPEECH {
+        // Never asked about, never sent: once the ordinary pause is over it
+        // is dropped, and until then more speech may still make it count.
+        return if silence >= VAD_SILENCE_HANGOVER {
+            PauseStep::Discard
+        } else {
+            PauseStep::Listen
+        };
     }
     let longest = if use_model {
         TURN_MAX_PAUSE
@@ -696,16 +824,19 @@ pub(crate) fn turn_usable(status: &serde_json::Value) -> bool {
     flag("enabled") && flag("available")
 }
 
-/// Asks the server whether the utterance so far is finished. `Ok(None)`:
-/// the server cannot say (no model) - the caller stops asking.
+/// Asks the server at `base` whether the utterance so far is finished.
+/// `Ok(None)`: the server cannot say (no model) - the caller stops asking.
+/// `base` must already have passed [`wake_audio_refusal`]: this is room
+/// audio, sent before any wake word was heard.
 async fn ask_turn(
     app: &AppHandle,
+    base: &str,
     spec: hound::WavSpec,
     samples: &[i16],
 ) -> Result<Option<bool>, String> {
-    let wav = encode_wav(spec, samples)?;
+    let wav = server_wav(spec, samples)?;
     let response = jarvis_client(Some(TURN_TIMEOUT))?
-        .post(format!("{}/api/voice/turn", jarvis_base(app)))
+        .post(format!("{base}/api/voice/turn"))
         .headers(jarvis_headers(app)?)
         .header("Content-Type", "audio/wav")
         .body(wav)
@@ -766,6 +897,24 @@ pub(crate) fn is_loopback_base(base: &str) -> bool {
             .unwrap_or(false)
 }
 
+/// Why wake-word audio may NOT go to `base`, or `None` when it may.
+///
+/// Checked when listening starts AND again before every clip and every
+/// Smart Turn check leaves this PC (`run_vad_loop`): the address is read
+/// from Settings on every request, so a check made only at the start let a
+/// base changed afterwards - to a server elsewhere - receive every sentence
+/// said in the room.
+pub(crate) fn wake_audio_refusal(base: &str) -> Option<String> {
+    if is_loopback_base(base) {
+        return None;
+    }
+    Some(format!(
+        "\"Hey Jarvis\" listening only works with the Jarvis server on this PC. \
+         It is set to {base}, and every sentence said in the room would be sent \
+         there before the wake word was heard."
+    ))
+}
+
 /// What `/api/voice/status` says about starting wake-word listening here.
 #[derive(Debug, PartialEq)]
 pub(crate) enum WakeReadiness {
@@ -816,12 +965,8 @@ pub(crate) fn wake_readiness(status: &serde_json::Value) -> WakeReadiness {
 /// whether Smart Turn may be asked (see [`turn_usable`]).
 async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
     let base = jarvis_base(app);
-    if !is_loopback_base(&base) {
-        return Err(format!(
-            "\"Hey Jarvis\" listening only works with the Jarvis server on this PC. \
-             It is set to {base}, and every sentence said in the room would be sent \
-             there before the wake word was heard."
-        ));
+    if let Some(why) = wake_audio_refusal(&base) {
+        return Err(why);
     }
     let client = jarvis_client(Some(WAKE_CHECK_TIMEOUT))?;
     let unreachable = |e: reqwest::Error| {
@@ -844,11 +989,24 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
         WakeReadiness::Ready => Ok(turn_usable(&status)),
         WakeReadiness::Cannot(why) => Err(why),
         WakeReadiness::Waiting => Err(
-            "Waiting for you to approve turning on \"hey Jarvis\". Approve the card, \
+            "Waiting for you to approve turning on \"hey Jarvis\". Approve the card \
+             in the Jarvis bar, on the widget, or on your phone's Home screen, \
              then turn this on again."
                 .to_string(),
         ),
         WakeReadiness::Off => {
+            // Asking for it raises an approval card, so it is held while
+            // the event stream is stale - rule 4, the same one-direction
+            // hold as the second card's and the big model's ON. Stopping
+            // listening never comes here and is never held.
+            if app.state::<crate::stream::StreamState>().link().stale {
+                return Err(
+                    "\"Hey Jarvis\" is off, and turning it on needs your approval. The \
+                     connection to Jarvis is catching up, so that is held until it does - \
+                     try again in a moment."
+                        .to_string(),
+                );
+            }
             let reply: serde_json::Value = client
                 .post(format!("{base}/api/voice/wake"))
                 .headers(jarvis_headers(app)?)
@@ -865,7 +1023,8 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
             if reply.get("pending").and_then(|b| b.as_bool()) == Some(true) {
                 return Err(
                     "\"Hey Jarvis\" is off. Jarvis has asked for your approval to turn it \
-                     on - approve the card, then turn this on again."
+                     on - approve the card in the Jarvis bar, on the widget, or on your \
+                     phone's Home screen, then turn this on again."
                         .to_string(),
                 );
             }
@@ -897,6 +1056,9 @@ enum VadPhase {
         started_at_index: usize,
         started_at: Instant,
         last_voiced_at: Instant,
+        /// How much of the audio since `started_at` was loud enough to be
+        /// speech - what the minimum-speech rule counts.
+        voiced: Duration,
         /// Smart Turn was already asked about the current pause.
         asked: bool,
     },
@@ -926,13 +1088,96 @@ fn busy_error(auto: bool, manual: bool) -> Option<String> {
     None
 }
 
-/// What `start_automatic_listening` tells the page.
+/// What `start_automatic_listening` tells the page, and what
+/// `VOICE_LISTENING` tells it when that changes while listening.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListenInfo {
     /// The microphone is open through Windows' echo cancelling, so "stop"
     /// and "hey Jarvis" can be heard over Jarvis's own voice.
     pub echo_cancelling: bool,
+    /// Windows' name for the microphone being listened to, when it gave
+    /// one - both paths open the default microphone (aec.rs, "WHICH
+    /// MICROPHONE"), so the page can say which one that is.
+    pub microphone: Option<String>,
+    /// Something to say about a change, in words; `None` when starting.
+    pub note: Option<String>,
+}
+
+/// Windows' name for the default microphone - the one both the ordinary
+/// capture (cpal) and the echo-cancelled one (aec.rs) open.
+fn default_microphone_name() -> Option<String> {
+    cpal::default_host()
+        .default_input_device()
+        .and_then(|d| d.name().ok())
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+}
+
+/// How the listening loop ended.
+#[derive(Debug, PartialEq)]
+pub(crate) enum VadEnd {
+    /// Told to stop, or its stop channel went away.
+    Stopped,
+    /// Refused to send (see [`wake_audio_refusal`]); listening is already
+    /// stopped and the page told.
+    Refused,
+    /// The echo-cancelled microphone stopped under it, for this reason.
+    MicFailed(String),
+}
+
+/// Whether the microphone feeding the loop has died: a message on `died`,
+/// or `died` gone without one (its thread ended - it only ends on its own
+/// when something went wrong, since the loop stops it, not the other way).
+pub(crate) fn mic_died(died: Option<&mpsc::Receiver<String>>) -> Option<String> {
+    match died?.try_recv() {
+        Ok(why) => Some(why),
+        Err(mpsc::TryRecvError::Empty) => None,
+        Err(mpsc::TryRecvError::Disconnected) => {
+            Some("the echo-cancelled microphone stopped without saying why".to_string())
+        }
+    }
+}
+
+/// The echo-cancelled microphone stopped while listening: carry on through
+/// the ordinary one, on the same stop channel, and tell the page - or, if
+/// that cannot be opened either, stop listening and say why. Never carries
+/// on deaf while the page still says "listening".
+fn continue_without_echo_cancelling(
+    app: &AppHandle,
+    stop_rx: &mpsc::Receiver<()>,
+    use_turn: bool,
+    why: String,
+) {
+    crate::logfile::log(&format!(
+        "[voice] the echo-cancelled microphone stopped ({why}); carrying on with the ordinary one"
+    ));
+    let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
+    match open_input_stream(Arc::clone(&samples)) {
+        Ok((spec, stream)) => {
+            let _ = app.emit(
+                VOICE_LISTENING,
+                ListenInfo {
+                    echo_cancelling: false,
+                    microphone: default_microphone_name(),
+                    note: Some(
+                        "Echo cancelling stopped working, so Jarvis is listening through the \
+                         ordinary microphone now. \"Stop\" may not be heard while Jarvis talks."
+                            .to_string(),
+                    ),
+                },
+            );
+            let _ = run_vad_loop(app, &samples, spec, stop_rx, use_turn, None);
+            drop(stream); // stops the microphone
+        }
+        Err(e) => stop_listening_because(
+            app,
+            format!(
+                "The microphone stopped ({why}), and it could not be opened again ({e}). \
+                 Listening for \"hey Jarvis\" is off."
+            ),
+        ),
+    }
 }
 
 /// Opens the microphone through Windows' echo cancelling (aec.rs) and runs
@@ -946,8 +1191,10 @@ fn start_echo_cancelled(
 ) -> Option<AutoListenHandle> {
     let (ready_tx, ready_rx) = mpsc::channel();
     let (mic_stop_tx, mic_stop_rx) = mpsc::channel();
+    let (died_tx, died_rx) = mpsc::channel();
     let mic_samples = Arc::clone(samples);
-    let mic = std::thread::spawn(move || crate::aec::run(mic_samples, ready_tx, mic_stop_rx));
+    let mic =
+        std::thread::spawn(move || crate::aec::run(mic_samples, ready_tx, mic_stop_rx, died_tx));
     match ready_rx.recv_timeout(STREAM_READY_TIMEOUT) {
         Ok(Ok(opened)) => {
             let (stop_tx, stop_rx) = mpsc::channel();
@@ -956,11 +1203,23 @@ fn start_echo_cancelled(
             // The microphone has its own thread (it must be drained every
             // few milliseconds, which the listener - blocking on a POST -
             // cannot promise); the listener runs here, and stopping it
-            // stops the microphone.
+            // stops the microphone. If the microphone's thread fails first,
+            // the listener hears it (`died`) and carries on through the
+            // ordinary microphone rather than listening to nothing.
             let join = std::thread::spawn(move || {
-                run_vad_loop(&app, &vad_samples, opened.spec, &stop_rx, use_turn);
+                let end = run_vad_loop(
+                    &app,
+                    &vad_samples,
+                    opened.spec,
+                    &stop_rx,
+                    use_turn,
+                    Some(&died_rx),
+                );
                 let _ = mic_stop_tx.send(());
                 let _ = mic.join();
+                if let VadEnd::MicFailed(why) = end {
+                    continue_without_echo_cancelling(&app, &stop_rx, use_turn, why);
+                }
             });
             Some(AutoListenHandle { stop_tx, join })
         }
@@ -1006,10 +1265,13 @@ pub async fn start_automatic_listening(
     }
 
     let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
+    let microphone = default_microphone_name();
     if let Some(handle) = start_echo_cancelled(&app, &samples, use_turn) {
         *guard = Some(handle);
         return Ok(ListenInfo {
             echo_cancelling: true,
+            microphone,
+            note: None,
         });
     }
     let (ready_tx, ready_rx) = mpsc::channel();
@@ -1019,7 +1281,9 @@ pub async fn start_automatic_listening(
         Arc::clone(&samples),
         ready_tx,
         stop_rx,
-        move |samples, spec, stop_rx| run_vad_loop(&app, samples, spec, stop_rx, use_turn),
+        move |samples, spec, stop_rx| {
+            let _ = run_vad_loop(&app, samples, spec, stop_rx, use_turn, None);
+        },
     );
 
     match wait_for_ready(ready_rx, stop_tx.clone()) {
@@ -1027,6 +1291,8 @@ pub async fn start_automatic_listening(
             *guard = Some(AutoListenHandle { stop_tx, join });
             Ok(ListenInfo {
                 echo_cancelling: false,
+                microphone,
+                note: None,
             })
         }
         Err(reason) => {
@@ -1039,14 +1305,17 @@ pub async fn start_automatic_listening(
 /// The trigger's state machine. Runs on the dedicated capture thread - NOT
 /// the realtime audio callback, which only ever appends samples - so
 /// blocking here on `tauri::async_runtime::block_on` to post a finished
-/// utterance is safe. Returns when `stop_rx` fires or disconnects.
+/// utterance is safe. Returns when `stop_rx` fires or disconnects, when a
+/// send is refused, or - with `died` given (the echo-cancelled microphone,
+/// which runs on a thread of its own) - when that microphone stops.
 fn run_vad_loop(
     app: &AppHandle,
     samples: &Arc<Mutex<Vec<i16>>>,
     spec: hound::WavSpec,
     stop_rx: &mpsc::Receiver<()>,
     mut use_turn: bool,
-) {
+    died: Option<&mpsc::Receiver<String>>,
+) -> VadEnd {
     let samples_per_ms = (spec.sample_rate as u128 * spec.channels as u128) / 1000;
     let ms_to_samples = |d: Duration| (d.as_millis() * samples_per_ms) as usize;
     let preroll = ms_to_samples(VAD_PREROLL);
@@ -1059,9 +1328,14 @@ fn run_vad_loop(
 
     loop {
         match stop_rx.recv_timeout(VAD_POLL_INTERVAL) {
-            Ok(()) => return,
-            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            Ok(()) => return VadEnd::Stopped,
+            Err(mpsc::RecvTimeoutError::Disconnected) => return VadEnd::Stopped,
             Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        // The echo-cancelled microphone's thread failed: nothing more will
+        // arrive in `samples`, so listening on would be listening to nothing.
+        if let Some(why) = mic_died(died) {
+            return VadEnd::MicFailed(why);
         }
 
         // Recovered, not bailed on. The old comment here said a poisoned lock
@@ -1085,6 +1359,10 @@ fn run_vad_loop(
         let level = rms(&buf[read_to..]);
         let now = Instant::now();
         let voiced = level >= start_threshold(floor);
+        // How much audio this tick looked at: the new samples, as time.
+        let chunk = Duration::from_millis(
+            ((buf.len() - read_to) as u128 / samples_per_ms.max(1)).min(u64::MAX as u128) as u64,
+        );
         // Set when the buffer grew during a Smart Turn round trip, so the
         // next tick still looks at the audio that arrived meanwhile.
         let mut analysed_to: Option<usize> = None;
@@ -1096,6 +1374,7 @@ fn run_vad_loop(
                         started_at_index: read_to.saturating_sub(preroll),
                         started_at: now,
                         last_voiced_at: now,
+                        voiced: chunk,
                         asked: false,
                     };
                     // No barge-in here any more. In this mode the trigger
@@ -1117,54 +1396,88 @@ fn run_vad_loop(
                 started_at_index,
                 started_at,
                 last_voiced_at,
+                voiced: voiced_time,
                 asked,
             } => {
                 if voiced {
                     *last_voiced_at = now;
+                    *voiced_time += chunk;
                     // Speech again after a pause the model called
                     // unfinished: the next pause is a new question.
                     *asked = false;
                 }
                 let silence_elapsed = now.duration_since(*last_voiced_at);
                 let speech_elapsed = now.duration_since(*started_at);
-                let mut should_cut =
-                    match pause_step(silence_elapsed, speech_elapsed, *asked, use_turn) {
-                        PauseStep::Cut => true,
-                        PauseStep::Listen => false,
-                        PauseStep::Ask => {
-                            *asked = true;
-                            analysed_to = Some(buf.len());
-                            let from = buf.len().saturating_sub(turn_window).max(*started_at_index);
-                            let window: Vec<i16> = buf[from..].to_vec();
-                            // Not holding the lock through the round trip:
-                            // the microphone keeps filling the buffer.
+                let voiced_so_far = *voiced_time;
+                let mut should_cut = match pause_step(
+                    silence_elapsed,
+                    voiced_so_far,
+                    speech_elapsed,
+                    *asked,
+                    use_turn,
+                ) {
+                    PauseStep::Cut => true,
+                    PauseStep::Listen => false,
+                    PauseStep::Discard => {
+                        // A cough, a click: nothing is sent, and the
+                        // next utterance starts from a clean buffer.
+                        buf.clear();
+                        read_to = 0;
+                        phase = VadPhase::Silence;
+                        continue;
+                    }
+                    PauseStep::Ask => {
+                        // Room audio is about to leave this thread: only
+                        // to this PC, checked now and not only when
+                        // listening started (see wake_audio_refusal).
+                        let base = jarvis_base(app);
+                        if let Some(why) = wake_audio_refusal(&base) {
                             drop(buf);
-                            let answer =
-                                tauri::async_runtime::block_on(ask_turn(app, spec, &window));
-                            buf = samples
-                                .lock()
-                                .unwrap_or_else(|poisoned| poisoned.into_inner());
-                            match answer {
-                                Ok(Some(finished)) => finished,
-                                Ok(None) | Err(_) => {
-                                    // No model after all, or it failed: the
-                                    // old fixed pause for the rest of this
-                                    // session, said once.
-                                    if let Err(reason) = answer {
-                                        eprintln!("[voice] Smart Turn off for now: {reason}");
-                                    }
-                                    use_turn = false;
-                                    false
+                            stop_listening_because(app, why);
+                            return VadEnd::Refused;
+                        }
+                        *asked = true;
+                        analysed_to = Some(buf.len());
+                        let from = buf.len().saturating_sub(turn_window).max(*started_at_index);
+                        let window: Vec<i16> = buf[from..].to_vec();
+                        // Not holding the lock through the round trip:
+                        // the microphone keeps filling the buffer.
+                        drop(buf);
+                        let answer =
+                            tauri::async_runtime::block_on(ask_turn(app, &base, spec, &window));
+                        buf = samples
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        match answer {
+                            Ok(Some(finished)) => finished,
+                            Ok(None) | Err(_) => {
+                                // No model after all, or it failed: the
+                                // old fixed pause for the rest of this
+                                // session, said once.
+                                if let Err(reason) = answer {
+                                    eprintln!("[voice] Smart Turn off for now: {reason}");
                                 }
+                                use_turn = false;
+                                false
                             }
                         }
-                    };
+                    }
+                };
                 if !should_cut && !use_turn {
                     // Just switched off above: judge this pause by the old rule.
                     should_cut =
-                        pause_step(silence_elapsed, speech_elapsed, true, false) == PauseStep::Cut;
+                        pause_step(silence_elapsed, voiced_so_far, speech_elapsed, true, false)
+                            == PauseStep::Cut;
                 }
                 if should_cut {
+                    // The same check as before a Smart Turn question: this
+                    // clip goes only to a server on this PC.
+                    let base = jarvis_base(app);
+                    if let Some(why) = wake_audio_refusal(&base) {
+                        drop(buf);
+                        stop_listening_because(app, why);
+                        return VadEnd::Refused;
+                    }
                     let clip: Vec<i16> = buf[*started_at_index..buf.len()].to_vec();
                     // Reset for the next utterance. Everything captured
                     // during this cut's own send() is preserved - it just
@@ -1178,6 +1491,7 @@ fn run_vad_loop(
                     let app = app.clone();
                     let heard = tauri::async_runtime::block_on(post_utterance(
                         &app,
+                        &base,
                         spec,
                         &clip,
                         "wake_word",
@@ -1230,6 +1544,26 @@ pub fn stop_automatic_listening(state: State<AutoListenState>) -> Result<(), Str
     Ok(())
 }
 
+/// Stops "hey Jarvis" listening from this side - the listener's own thread,
+/// or a Settings change - and tells the quickbar why, through the same
+/// "not available" `VOICE_HEARD` it already handles by saying the reason
+/// once and switching its button off. Does nothing when nothing is
+/// listening, so a Settings change with the listener off says nothing.
+pub(crate) fn stop_listening_because(app: &AppHandle, why: String) {
+    let Some(state) = app.try_state::<AutoListenState>() else {
+        return;
+    };
+    let taken = state
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
+    if let Some(active) = taken {
+        let _ = active.stop_tx.send(());
+        let _ = app.emit(VOICE_HEARD, HeardReply::unavailable(why));
+    }
+}
+
 #[cfg(test)]
 mod wake_tests {
     use super::*;
@@ -1255,6 +1589,140 @@ mod wake_tests {
         ] {
             assert!(!is_loopback_base(no), "{no}");
         }
+    }
+
+    #[test]
+    fn wake_audio_goes_only_to_this_pc() {
+        // Checked before every clip and every turn check (run_vad_loop), not
+        // only at start: a base changed to another machine mid-listen must
+        // be refused the moment the next clip is ready.
+        for ok in [
+            "http://127.0.0.1:4719",
+            "http://localhost:4719",
+            "http://[::1]:4719",
+        ] {
+            assert_eq!(wake_audio_refusal(ok), None, "{ok}");
+        }
+        for no in [
+            "http://100.64.0.7:4719",
+            "http://192.168.1.20:4719",
+            "https://jarvis.example.com",
+            "http://127.0.0.1.example.com:4719",
+            "",
+        ] {
+            let why = wake_audio_refusal(no).expect(no);
+            assert!(
+                why.contains("only works with the Jarvis server on this PC"),
+                "{why}"
+            );
+        }
+        // The refusal reaches the quickbar as "not available", which it
+        // already turns into "say why, switch the button off".
+        let reply = HeardReply::unavailable("why".to_string());
+        assert!(!reply.available);
+        assert_eq!(reply.reason, "why");
+        assert!(!reply.wake_heard && !reply.is_owner && reply.text.is_empty());
+    }
+
+    /// T9: the echo-cancelled microphone's thread failing is seen by the
+    /// listener, not ignored while it listens to nothing.
+    #[test]
+    fn a_dead_echo_cancelled_microphone_is_noticed() {
+        assert_eq!(mic_died(None), None, "the ordinary path has no such thread");
+        let (tx, rx) = mpsc::channel::<String>();
+        assert_eq!(mic_died(Some(&rx)), None, "alive and quiet");
+        tx.send("the microphone stopped: device invalidated".to_string())
+            .unwrap();
+        assert_eq!(
+            mic_died(Some(&rx)).as_deref(),
+            Some("the microphone stopped: device invalidated")
+        );
+        drop(tx);
+        assert!(
+            mic_died(Some(&rx)).is_some(),
+            "its thread ended without a word"
+        );
+    }
+
+    fn spec(channels: u16, sample_rate: u32) -> hound::WavSpec {
+        hound::WavSpec {
+            channels,
+            sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        }
+    }
+
+    /// T13 (audit 3): the microphone's own format went to the server - at
+    /// 48 kHz stereo the body passed 4 MiB after about 22 seconds.
+    #[test]
+    fn push_to_talk_is_sent_as_16k_mono() {
+        // 22 s of 48 kHz stereo: 8.4 MB as captured.
+        let raw = vec![1000i16; 48_000 * 2 * 22];
+        assert!(encode_wav(spec(2, 48_000), &raw).unwrap().len() > 4 * 1024 * 1024);
+        let (out_spec, out) = to_server_format(spec(2, 48_000), &raw);
+        assert_eq!((out_spec.channels, out_spec.sample_rate), (1, 16_000));
+        assert_eq!(out.len(), 16_000 * 22);
+        assert!(
+            out.iter().all(|&s| s == 1000),
+            "a steady level stays that level"
+        );
+        let wav = server_wav(spec(2, 48_000), &raw).unwrap();
+        assert!(wav.len() < 1024 * 1024, "{} bytes", wav.len());
+        // Two minutes, the most push-to-talk sends, fits under 4 MiB.
+        let most = (MAX_PUSH_TO_TALK.as_secs() as usize) * 16_000 * 2 + 44;
+        assert!(most < 4 * 1024 * 1024);
+    }
+
+    #[test]
+    fn channels_are_averaged_and_odd_rates_land_on_16k() {
+        // Left and right opposite: the average is silence.
+        let lr: Vec<i16> = (0..4_800).flat_map(|_| [8000i16, -8000]).collect();
+        let (_, out) = to_server_format(spec(2, 48_000), &lr);
+        assert_eq!(out.len(), 1_600);
+        assert!(out.iter().all(|&s| s == 0));
+        // 44.1 kHz: one second is 16 000 samples.
+        let (_, out) = to_server_format(spec(1, 44_100), &vec![-300i16; 44_100]);
+        assert_eq!(out.len(), 16_000);
+        assert!(out.iter().all(|&s| s == -300));
+        // Already 16 kHz mono: unchanged, sample for sample.
+        let same: Vec<i16> = (0..1_000).map(|i| (i * 7 % 2000 - 1000) as i16).collect();
+        assert_eq!(to_server_format(spec(1, 16_000), &same).1, same);
+        // 8 kHz: twice as many samples, the in-between ones between.
+        let (_, up) = to_server_format(spec(1, 8_000), &[0, 100, 200]);
+        assert_eq!(up, vec![0, 50, 100, 150, 200, 200]);
+    }
+
+    #[test]
+    fn a_voice_band_tone_survives_and_a_too_high_one_does_not_fold_back_loud() {
+        let tone = |hz: f64, rate: u32| -> Vec<i16> {
+            (0..rate)
+                .map(|n| {
+                    (10_000.0 * (2.0 * std::f64::consts::PI * hz * n as f64 / rate as f64).sin())
+                        as i16
+                })
+                .collect()
+        };
+        let peak = |v: &[i16]| v.iter().map(|s| i32::from(*s).abs()).max().unwrap_or(0);
+        // 1 kHz, squarely in speech: kept at nearly full level.
+        let (_, speech) = to_server_format(spec(1, 48_000), &tone(1_000.0, 48_000));
+        assert!(peak(&speech) > 9_500, "{}", peak(&speech));
+        // 16 kHz is silent after averaging three samples of it: it must not
+        // come back as a loud false tone in the speech band.
+        let (_, high) = to_server_format(spec(1, 48_000), &tone(16_000.0, 48_000));
+        assert!(peak(&high) < 500, "{}", peak(&high));
+    }
+
+    #[test]
+    fn a_clip_length_is_its_duration() {
+        assert_eq!(
+            clip_length(spec(2, 48_000), &vec![0i16; 48_000 * 2 * 3]),
+            Duration::from_secs(3)
+        );
+        assert_eq!(
+            clip_length(spec(1, 16_000), &vec![0i16; 8_000]),
+            Duration::from_millis(500)
+        );
     }
 
     #[test]
@@ -1297,43 +1765,78 @@ mod wake_tests {
 
     #[test]
     fn without_smart_turn_the_old_hangover_holds() {
+        // 1.5 s of voice, then a pause: cut only once the pause is 900 ms.
+        let step = |silence| pause_step(silence, ms(1500), ms(1500) + silence, false, false);
+        assert_eq!(step(ms(300)), PauseStep::Listen);
+        assert_eq!(step(ms(899)), PauseStep::Listen);
+        assert_eq!(step(ms(900)), PauseStep::Cut);
         assert_eq!(
-            pause_step(ms(300), ms(2000), false, false),
-            PauseStep::Listen
-        );
-        assert_eq!(
-            pause_step(ms(899), ms(2000), false, false),
-            PauseStep::Listen
-        );
-        assert_eq!(pause_step(ms(900), ms(2000), false, false), PauseStep::Cut);
-        // A cough is not an utterance, however quiet it gets after.
-        assert_eq!(
-            pause_step(ms(900), ms(100), false, false),
-            PauseStep::Listen
-        );
-        assert_eq!(
-            pause_step(ms(0), VAD_MAX_UTTERANCE, false, false),
+            pause_step(ms(0), ms(2000), VAD_MAX_UTTERANCE, false, false),
             PauseStep::Cut
+        );
+    }
+
+    /// T12 (audit 3): the minimum-speech rule counted ELAPSED time, which
+    /// includes the pause - so when the 900 ms pause ended, a 100 ms cough
+    /// had "lasted" a whole second and was sent. The old test,
+    /// `pause_step(ms(900), ms(100))`, described a state the loop could
+    /// never reach (900 ms of silence inside 100 ms of utterance). These are
+    /// the states it does reach.
+    #[test]
+    fn a_cough_is_dropped_however_long_the_pause_after_it() {
+        // 100 ms of voice, then silence: 100 ms voiced, elapsed = 100 + pause.
+        let cough = |silence| pause_step(silence, ms(100), ms(100) + silence, false, false);
+        assert_eq!(
+            cough(ms(300)),
+            PauseStep::Listen,
+            "more voice may still come"
+        );
+        assert_eq!(cough(ms(899)), PauseStep::Listen);
+        assert_eq!(cough(ms(900)), PauseStep::Discard, "a cough was sent");
+        assert_eq!(cough(ms(3000)), PauseStep::Discard);
+        // With Smart Turn it is not asked about either - just dropped.
+        let cough_turn = |silence| pause_step(silence, ms(100), ms(100) + silence, false, true);
+        assert_eq!(
+            cough_turn(ms(200)),
+            PauseStep::Listen,
+            "a cough was asked about"
+        );
+        assert_eq!(cough_turn(ms(900)), PauseStep::Discard);
+        // The threshold is voiced time: 250 ms of it is an utterance.
+        assert_eq!(
+            pause_step(ms(900), ms(250), ms(1150), false, false),
+            PauseStep::Cut
+        );
+        assert_eq!(
+            pause_step(ms(900), ms(249), ms(1149), false, false),
+            PauseStep::Discard
         );
     }
 
     #[test]
     fn with_smart_turn_a_short_pause_is_asked_about_once() {
+        let voiced = ms(1800);
         assert_eq!(
-            pause_step(ms(100), ms(2000), false, true),
+            pause_step(ms(100), voiced, ms(2000), false, true),
             PauseStep::Listen
         );
-        assert_eq!(pause_step(ms(200), ms(2000), false, true), PauseStep::Ask);
+        assert_eq!(
+            pause_step(ms(200), voiced, ms(2000), false, true),
+            PauseStep::Ask
+        );
         // Asked already, answered "not finished": the old 900 ms no longer
         // cuts it...
-        assert_eq!(pause_step(ms(900), ms(2000), true, true), PauseStep::Listen);
+        assert_eq!(
+            pause_step(ms(900), voiced, ms(2700), true, true),
+            PauseStep::Listen
+        );
         // ...the long pause does, whatever the model said.
         assert_eq!(
-            pause_step(TURN_MAX_PAUSE, ms(4000), true, true),
+            pause_step(TURN_MAX_PAUSE, voiced, ms(4000), true, true),
             PauseStep::Cut
         );
         assert_eq!(
-            pause_step(ms(0), VAD_MAX_UTTERANCE, false, true),
+            pause_step(ms(0), voiced, VAD_MAX_UTTERANCE, false, true),
             PauseStep::Cut
         );
     }
