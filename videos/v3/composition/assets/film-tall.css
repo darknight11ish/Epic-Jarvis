@@ -1,0 +1,25 @@
+/* The upright (1080x1920) layout. Loaded after film.css; only positions and
+   sizes change. Minimum text on screen: 44px. */
+body.tall #hero-wrap { left: 40px; top: 360px; }
+body.tall .cap { bottom: 300px; max-width: 960px; font-size: 52px; }
+body.tall .cap b { font-size: 52px; }
+body.tall .cap.big, body.tall .cap.big b { font-size: 84px; }
+body.tall .cap.prev { bottom: 450px; font-size: 44px; }
+body.tall .cap.prev b { font-size: 44px; }
+
+body.tall #h-ask { left: 70px; top: 200px; font-size: 80px; }
+body.tall #desk { left: 120px; top: 330px; width: 840px; }
+body.tall #desk .where { font-size: 28px; }
+body.tall #desk-card { width: 840px; }
+body.tall #desk-clear { width: 840px; top: 150px; font-size: 44px; }
+body.tall #phone { left: 325px; top: 690px; }
+
+body.tall #m-sept { left: 70px; top: 230px; font-size: 140px; }
+body.tall #h-keep { left: 70px; top: 420px; font-size: 80px; }
+body.tall #ask-wrap { left: 70px; top: 700px; width: 940px; padding: 10px 0 24px; border-radius: 22px; background: #090f18;
+                      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(56, 240, 255, 0.08); }
+body.tall #ask-text { display: block; width: 940px; }
+body.tall #ask-buttons { display: block; width: 470px; margin: 0 24px 0 auto; }
+body.tall #rip-keep { left: 563px; top: 371px; }
+
+body.tall .outro { top: 330px; flex-direction: column; align-items: center; gap: 18px; font-size: 118px; }

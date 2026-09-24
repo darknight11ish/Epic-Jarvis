@@ -1,0 +1,2 @@
+// Timing for the 15 s upright cut (vertical.html). Keep timing-vertical.json identical.
+window.TIMING = {"bpm": 120, "dur": 15, "hits": {"hey": 0.1, "cards": 0.0, "ask": 1.3, "tap": 2.9, "sheet": 3.1, "touch": 3.4, "ok": 4.0, "approved": 4.2, "clear": 4.33, "done": 4.5, "sept": 6.2, "septSay": 6.3, "askCard": 6.8, "keepLine": 7.1, "keep": 8.5, "drink": 9.3, "reply": 10.1, "stop": 12.0, "resume": 12.5, "outro": 12.6, "o1": 12.7, "pc": 13.1, "rules": 13.5, "end": 15.0}};
