@@ -2084,18 +2084,23 @@ object JarvisRuntime {
         if (!said.final && id != null) {
             scope.launch {
                 val started = SystemClock.elapsedRealtime()
+                // Survives a dropped link and a failed poll or two - see JobFollow.
+                val follow = com.jarvis.client.net.JobFollow()
                 while (true) {
                     delay(com.jarvis.client.net.NoteCapture.POLL_MS)
                     if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.NoteCapture.GIVE_UP_MS) {
                         _notice.value = com.jarvis.client.net.NoteCapture.GAVE_UP
                         break
                     }
+                    if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
                     val next = api.noteStatus(id)
                     if (next is ApiResult.Failed) {
+                        if (!follow.failed()) continue
                         _notice.value = "Lost track of the note (${describe(next.error)}). " +
                             "Check the approval card on the desktop and your notes app."
                         break
                     }
+                    follow.answered()
                     val now = com.jarvis.client.net.NoteCapture.describe(
                         (next as ApiResult.Ok).value, target,
                     )
@@ -2165,6 +2170,8 @@ object JarvisRuntime {
         if (!said.final && id != null) {
             scope.launch {
                 val started = SystemClock.elapsedRealtime()
+                // Survives a dropped link and a failed poll or two - see JobFollow.
+                val follow = com.jarvis.client.net.JobFollow()
                 while (true) {
                     delay(com.jarvis.client.net.Wiki.POLL_MS)
                     if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.Wiki.GIVE_UP_MS) {
@@ -2173,8 +2180,10 @@ object JarvisRuntime {
                         )
                         break
                     }
+                    if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
                     val next = api.wikiJob(id)
                     if (next is ApiResult.Failed) {
+                        if (!follow.failed()) continue
                         _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(
                             "Lost track of it (${describe(next.error)}). Check the approval " +
                                 "card on the desktop and the wiki folder.",
@@ -2182,6 +2191,7 @@ object JarvisRuntime {
                         )
                         break
                     }
+                    follow.answered()
                     val now = com.jarvis.client.net.Wiki.describe((next as ApiResult.Ok).value)
                     _wikiJob.value = source to now
                     if (now.final) break
