@@ -213,6 +213,11 @@ $PATCHES = @(
     # content_type(), and the patched code then falls back to the plain
     # relay exactly as before.
     'chat-stream.patch'
+    # Smart Turn ("finished, or only paused?"): adds POST /api/voice/turn
+    # right after voice-enroll's route, and its context is voice-enroll's
+    # last lines, so it comes after that one; nothing else touches them.
+    # Needs jarvis_turn.py copied in; without it the route answers 503.
+    'voice-turn.patch'
     # The pairing token moves out of the plain file token-file.patch wrote,
     # into Windows Credential Manager (CLAUDE.md rule 3). Its context is
     # token-file's _resolve_token and banner, with loopback-too's and
@@ -285,6 +290,7 @@ $SHIPPED = @(
     'jarvis_token_store.py'      # token-store.patch; the pairing token in Credential Manager
     'jarvis_second_card.py'      # second-card.patch; the second graphics card's switches
     'jarvis_wiki.py'             # wiki.patch; the wiki builder (runs only on the second card)
+    'jarvis_turn.py'             # voice-turn.patch: Smart Turn, "finished, or only paused?"
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

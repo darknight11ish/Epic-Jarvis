@@ -67,6 +67,15 @@
 //! defaults, not measured against a real microphone - none is reachable
 //! from the container this was written in.
 //!
+//! WHERE A SENTENCE ENDS: SMART TURN, WHEN THE SERVER HAS IT
+//! Loudness alone cannot tell "I have finished" from "I am thinking". When
+//! the server on this PC has the Smart Turn model (`turn` in
+//! `/api/voice/status`), a 200 ms pause is put to it (`POST /api/voice/turn`,
+//! loopback, the same audio this listener already sends there): "finished"
+//! ends the utterance at once, "not finished" keeps it open for up to two
+//! seconds of quiet. Without it, the fixed 900 ms hangover below is used, as
+//! before. See `pause_step` and backend/jarvis_turn.py.
+//!
 //! WHAT "STOP" ACTUALLY DOES
 //! `cpal::Stream` is not `Send` on every platform (it wraps native audio-API
 //! handles), so it cannot live in ordinary Tauri-managed state shared across
@@ -343,19 +352,8 @@ impl From<HeardRaw> for HeardReply {
     }
 }
 
-/// Encodes `samples` as a WAV and posts it to `/api/voice/utterance`. Shared
-/// by push-to-talk and automatic listening; only `source` differs between
-/// them.
-async fn post_utterance(
-    app: &AppHandle,
-    spec: hound::WavSpec,
-    samples: &[i16],
-    source: &str,
-) -> Result<HeardReply, String> {
-    if samples.is_empty() {
-        return Err("nothing was recorded - the microphone produced no audio".to_string());
-    }
-
+/// `samples` (interleaved, as captured) as the bytes of one 16-bit WAV file.
+fn encode_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> {
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut writer = hound::WavWriter::new(&mut cursor, spec)
@@ -369,7 +367,22 @@ async fn post_utterance(
             .finalize()
             .map_err(|e| format!("could not finish encoding the recording: {e}"))?;
     }
-    let wav_bytes = cursor.into_inner();
+    Ok(cursor.into_inner())
+}
+
+/// Encodes `samples` as a WAV and posts it to `/api/voice/utterance`. Shared
+/// by push-to-talk and automatic listening; only `source` differs between
+/// them.
+async fn post_utterance(
+    app: &AppHandle,
+    spec: hound::WavSpec,
+    samples: &[i16],
+    source: &str,
+) -> Result<HeardReply, String> {
+    if samples.is_empty() {
+        return Err("nothing was recorded - the microphone produced no audio".to_string());
+    }
+    let wav_bytes = encode_wav(spec, samples)?;
 
     let response = jarvis_client(Some(UTTERANCE_TIMEOUT))?
         .post(format!(
@@ -576,6 +589,117 @@ const VAD_IDLE_KEEP: Duration = Duration::from_millis(500);
 /// that takes longer than this is not going to hear anything either.
 const WAKE_CHECK_TIMEOUT: Duration = Duration::from_secs(8);
 
+// ---- Smart Turn: "finished, or only paused?" ------------------------------
+//
+// With the server's Smart Turn model available (`/api/voice/status` ->
+// `turn.enabled` and `turn.available`), a pause is no longer judged by its
+// length alone. After TURN_ASK_AFTER of quiet the last few seconds go to
+// `POST /api/voice/turn` - on this PC, over loopback, where this listener
+// already sends every utterance - and the model answers with the chance the
+// sentence is finished. Finished: the utterance is cut there and then,
+// instead of 900 ms later. Not finished: recording carries on, and the next
+// pause is asked about again; a pause reaching TURN_MAX_PAUSE ends it
+// whatever the model said, so a wrong "not finished" can never hang it. Any
+// failure falls back to the old fixed hangover for the rest of the session.
+// The model hears sound, not words - it produces one number
+// (backend/jarvis_turn.py).
+
+/// Quiet this long after speech, and the model is asked. Pipecat's own VAD
+/// setting for Smart Turn.
+const TURN_ASK_AFTER: Duration = Duration::from_millis(200);
+/// With the model: the longest pause kept inside a sentence it called
+/// unfinished.
+const TURN_MAX_PAUSE: Duration = Duration::from_millis(2000);
+/// The model looks at the last 8 s at most; no more is sent.
+const TURN_WINDOW: Duration = Duration::from_secs(8);
+/// One small WAV and one ~50 ms model run, over loopback.
+const TURN_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// What the listener does after one more tick of an utterance.
+#[derive(Debug, PartialEq)]
+pub(crate) enum PauseStep {
+    /// Keep recording.
+    Listen,
+    /// Ask Smart Turn whether the sentence is finished (once per pause).
+    Ask,
+    /// Cut here and send.
+    Cut,
+}
+
+/// The whole end-of-utterance rule, pure so it is tested: `silence` since
+/// the last loud chunk, `speech` since the utterance began, whether this
+/// pause was already asked about, and whether Smart Turn is in use.
+pub(crate) fn pause_step(
+    silence: Duration,
+    speech: Duration,
+    asked: bool,
+    use_model: bool,
+) -> PauseStep {
+    if speech >= VAD_MAX_UTTERANCE {
+        return PauseStep::Cut;
+    }
+    if speech < VAD_MIN_SPEECH {
+        return PauseStep::Listen;
+    }
+    let longest = if use_model {
+        TURN_MAX_PAUSE
+    } else {
+        VAD_SILENCE_HANGOVER
+    };
+    if silence >= longest {
+        return PauseStep::Cut;
+    }
+    if use_model && !asked && silence >= TURN_ASK_AFTER {
+        return PauseStep::Ask;
+    }
+    PauseStep::Listen
+}
+
+/// `jarvis_turn.Turn.as_dict()`, the fields read here.
+#[derive(Debug, Deserialize)]
+struct TurnRaw {
+    #[serde(default)]
+    available: bool,
+    #[serde(default)]
+    complete: bool,
+}
+
+/// Whether `/api/voice/status` says Smart Turn may be asked.
+pub(crate) fn turn_usable(status: &serde_json::Value) -> bool {
+    let turn = status.get("turn");
+    let flag = |k: &str| turn.and_then(|t| t.get(k)).and_then(|b| b.as_bool()) == Some(true);
+    flag("enabled") && flag("available")
+}
+
+/// Asks the server whether the utterance so far is finished. `Ok(None)`:
+/// the server cannot say (no model) - the caller stops asking.
+async fn ask_turn(
+    app: &AppHandle,
+    spec: hound::WavSpec,
+    samples: &[i16],
+) -> Result<Option<bool>, String> {
+    let wav = encode_wav(spec, samples)?;
+    let response = jarvis_client(Some(TURN_TIMEOUT))?
+        .post(format!("{}/api/voice/turn", jarvis_base(app)))
+        .headers(jarvis_headers(app)?)
+        .header("Content-Type", "audio/wav")
+        .body(wav)
+        .send()
+        .await
+        .map_err(|e| format!("could not ask whether the sentence was finished: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "the server answered HTTP {} to the turn check",
+            response.status().as_u16()
+        ));
+    }
+    let turn: TurnRaw = response
+        .json()
+        .await
+        .map_err(|e| format!("the turn check's answer could not be read: {e}"))?;
+    Ok(turn.available.then_some(turn.complete))
+}
+
 /// The level a chunk must reach to count as speech, given the background.
 pub(crate) fn start_threshold(noise_floor: f32) -> f32 {
     (noise_floor * VAD_FLOOR_FACTOR).clamp(VAD_MIN_RMS, VAD_MAX_RMS)
@@ -663,8 +787,9 @@ pub(crate) fn wake_readiness(status: &serde_json::Value) -> WakeReadiness {
 
 /// Asks the server whether wake-word listening can start, and - if the wake
 /// word is off - asks for it to be turned on, which raises the approval card
-/// and changes nothing by itself. `Ok(())` only when it is already on.
-async fn ensure_wake_ready(app: &AppHandle) -> Result<(), String> {
+/// and changes nothing by itself. `Ok` only when it is already on, carrying
+/// whether Smart Turn may be asked (see [`turn_usable`]).
+async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
     let base = jarvis_base(app);
     if !is_loopback_base(&base) {
         return Err(format!(
@@ -691,7 +816,7 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| format!("the server's voice status could not be read: {e}"))?;
     match wake_readiness(&status) {
-        WakeReadiness::Ready => Ok(()),
+        WakeReadiness::Ready => Ok(turn_usable(&status)),
         WakeReadiness::Cannot(why) => Err(why),
         WakeReadiness::Waiting => Err(
             "Waiting for you to approve turning on \"hey Jarvis\". Approve the card, \
@@ -710,7 +835,7 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<(), String> {
                 .await
                 .unwrap_or_default();
             if reply.get("enabled").and_then(|b| b.as_bool()) == Some(true) {
-                return Ok(());
+                return Ok(turn_usable(&status));
             }
             if reply.get("pending").and_then(|b| b.as_bool()) == Some(true) {
                 return Err(
@@ -747,6 +872,8 @@ enum VadPhase {
         started_at_index: usize,
         started_at: Instant,
         last_voiced_at: Instant,
+        /// Smart Turn was already asked about the current pause.
+        asked: bool,
     },
 }
 
@@ -792,7 +919,7 @@ pub async fn start_automatic_listening(
         }
     }
 
-    ensure_wake_ready(&app).await?;
+    let use_turn = ensure_wake_ready(&app).await?;
 
     // Checked again: the server round trip above is an await, and the
     // other mode may have taken the microphone meanwhile.
@@ -810,7 +937,7 @@ pub async fn start_automatic_listening(
         Arc::clone(&samples),
         ready_tx,
         stop_rx,
-        move |samples, spec, stop_rx| run_vad_loop(&app, samples, spec, stop_rx),
+        move |samples, spec, stop_rx| run_vad_loop(&app, samples, spec, stop_rx, use_turn),
     );
 
     match wait_for_ready(ready_rx, stop_tx.clone()) {
@@ -834,11 +961,13 @@ fn run_vad_loop(
     samples: &Arc<Mutex<Vec<i16>>>,
     spec: hound::WavSpec,
     stop_rx: &mpsc::Receiver<()>,
+    mut use_turn: bool,
 ) {
     let samples_per_ms = (spec.sample_rate as u128 * spec.channels as u128) / 1000;
     let ms_to_samples = |d: Duration| (d.as_millis() * samples_per_ms) as usize;
     let preroll = ms_to_samples(VAD_PREROLL);
     let idle_keep = ms_to_samples(VAD_IDLE_KEEP);
+    let turn_window = ms_to_samples(TURN_WINDOW);
 
     let mut read_to: usize = 0;
     let mut phase = VadPhase::Silence;
@@ -872,6 +1001,9 @@ fn run_vad_loop(
         let level = rms(&buf[read_to..]);
         let now = Instant::now();
         let voiced = level >= start_threshold(floor);
+        // Set when the buffer grew during a Smart Turn round trip, so the
+        // next tick still looks at the audio that arrived meanwhile.
+        let mut analysed_to: Option<usize> = None;
 
         match &mut phase {
             VadPhase::Silence => {
@@ -880,6 +1012,7 @@ fn run_vad_loop(
                         started_at_index: read_to.saturating_sub(preroll),
                         started_at: now,
                         last_voiced_at: now,
+                        asked: false,
                     };
                     // No barge-in here any more. In this mode the trigger
                     // fires on the TV, on other people, and on Jarvis's own
@@ -900,15 +1033,53 @@ fn run_vad_loop(
                 started_at_index,
                 started_at,
                 last_voiced_at,
+                asked,
             } => {
                 if voiced {
                     *last_voiced_at = now;
+                    // Speech again after a pause the model called
+                    // unfinished: the next pause is a new question.
+                    *asked = false;
                 }
                 let silence_elapsed = now.duration_since(*last_voiced_at);
                 let speech_elapsed = now.duration_since(*started_at);
-                let should_cut = (silence_elapsed >= VAD_SILENCE_HANGOVER
-                    && speech_elapsed >= VAD_MIN_SPEECH)
-                    || speech_elapsed >= VAD_MAX_UTTERANCE;
+                let mut should_cut =
+                    match pause_step(silence_elapsed, speech_elapsed, *asked, use_turn) {
+                        PauseStep::Cut => true,
+                        PauseStep::Listen => false,
+                        PauseStep::Ask => {
+                            *asked = true;
+                            analysed_to = Some(buf.len());
+                            let from = buf.len().saturating_sub(turn_window).max(*started_at_index);
+                            let window: Vec<i16> = buf[from..].to_vec();
+                            // Not holding the lock through the round trip:
+                            // the microphone keeps filling the buffer.
+                            drop(buf);
+                            let answer =
+                                tauri::async_runtime::block_on(ask_turn(app, spec, &window));
+                            buf = samples
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            match answer {
+                                Ok(Some(finished)) => finished,
+                                Ok(None) | Err(_) => {
+                                    // No model after all, or it failed: the
+                                    // old fixed pause for the rest of this
+                                    // session, said once.
+                                    if let Err(reason) = answer {
+                                        eprintln!("[voice] Smart Turn off for now: {reason}");
+                                    }
+                                    use_turn = false;
+                                    false
+                                }
+                            }
+                        }
+                    };
+                if !should_cut && !use_turn {
+                    // Just switched off above: judge this pause by the old rule.
+                    should_cut =
+                        pause_step(silence_elapsed, speech_elapsed, true, false) == PauseStep::Cut;
+                }
                 if should_cut {
                     let clip: Vec<i16> = buf[*started_at_index..buf.len()].to_vec();
                     // Reset for the next utterance. Everything captured
@@ -952,7 +1123,7 @@ fn run_vad_loop(
                 }
             }
         }
-        read_to = buf.len();
+        read_to = analysed_to.unwrap_or(buf.len());
     }
 }
 
@@ -1028,6 +1199,67 @@ mod wake_tests {
         // ...and one loud chunk does not drag the floor up past a voice.
         let g = update_floor(f, 0.3);
         assert!(start_threshold(g) < 0.02, "{g}");
+    }
+
+    fn ms(n: u64) -> Duration {
+        Duration::from_millis(n)
+    }
+
+    #[test]
+    fn without_smart_turn_the_old_hangover_holds() {
+        assert_eq!(
+            pause_step(ms(300), ms(2000), false, false),
+            PauseStep::Listen
+        );
+        assert_eq!(
+            pause_step(ms(899), ms(2000), false, false),
+            PauseStep::Listen
+        );
+        assert_eq!(pause_step(ms(900), ms(2000), false, false), PauseStep::Cut);
+        // A cough is not an utterance, however quiet it gets after.
+        assert_eq!(
+            pause_step(ms(900), ms(100), false, false),
+            PauseStep::Listen
+        );
+        assert_eq!(
+            pause_step(ms(0), VAD_MAX_UTTERANCE, false, false),
+            PauseStep::Cut
+        );
+    }
+
+    #[test]
+    fn with_smart_turn_a_short_pause_is_asked_about_once() {
+        assert_eq!(
+            pause_step(ms(100), ms(2000), false, true),
+            PauseStep::Listen
+        );
+        assert_eq!(pause_step(ms(200), ms(2000), false, true), PauseStep::Ask);
+        // Asked already, answered "not finished": the old 900 ms no longer
+        // cuts it...
+        assert_eq!(pause_step(ms(900), ms(2000), true, true), PauseStep::Listen);
+        // ...the long pause does, whatever the model said.
+        assert_eq!(
+            pause_step(TURN_MAX_PAUSE, ms(4000), true, true),
+            PauseStep::Cut
+        );
+        assert_eq!(
+            pause_step(ms(0), VAD_MAX_UTTERANCE, false, true),
+            PauseStep::Cut
+        );
+    }
+
+    #[test]
+    fn smart_turn_is_used_only_when_the_server_says_both() {
+        assert!(turn_usable(
+            &json!({"turn": {"enabled": true, "available": true}})
+        ));
+        assert!(!turn_usable(
+            &json!({"turn": {"enabled": false, "available": true}})
+        ));
+        assert!(!turn_usable(
+            &json!({"turn": {"enabled": true, "available": false}})
+        ));
+        assert!(!turn_usable(&json!({"wake": {}})));
     }
 }
 

@@ -87,6 +87,21 @@ sherpa-onnx (k2-fsa), Apache-2.0 - https://github.com/k2-fsa/sherpa-onnx
   (CC-BY-4.0), Kokoro-82M v0.19 (Apache-2.0), Silero VAD (MIT), 3D-Speaker
   CAM++ (Apache-2.0).
 
+Smart Turn v3.2 (Daily / Pipecat), BSD 2-Clause -
+https://github.com/pipecat-ai/smart-turn
+  smart-turn-v3.2-cpu.onnx, "finished speaking, or only paused?". Shipped
+  inside the Android app (jarvis-client/app/src/main/assets/turn/, with the
+  licence text beside it) and downloaded onto the PC by the owner from the
+  pipecat-ai 1.11.0 package on PyPI (backend/README.md). Unmodified.
+  Copyright (c) 2024-2025, Daily. Redistribution requires this notice, the
+  licence's two conditions and its disclaimer - the full text is in
+  jarvis-client/app/src/main/assets/turn/LICENSE.txt.
+  Its input features are computed by backend/jarvis_turn.py and
+  jarvis-client voice/SmartTurn.kt, re-implemented from Pipecat's
+  pipecat/audio/turn/smart_turn/_whisper_features.py (BSD 2-Clause,
+  Copyright (c) 2024-2026, Daily), itself a port of Hugging Face
+  transformers' WhisperFeatureExtractor (Apache-2.0).
+
 SUMMARY BY LICENCE
 ------------------
 (Apache-2.0 OR MIT) AND BSD-3-Clause (1): encoding_rs

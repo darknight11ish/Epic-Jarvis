@@ -24,7 +24,12 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.audio.Wav
+import com.jarvis.client.voice.OrtTurnModel
 import com.jarvis.client.voice.OrtWakeModels
+import com.jarvis.client.voice.SmartTurn
+import com.jarvis.client.voice.TurnEnd
+import com.jarvis.client.voice.TurnModel
+import com.jarvis.client.voice.TurnSettings
 import com.jarvis.client.voice.VoiceSession
 import com.jarvis.client.voice.WakeClip
 import com.jarvis.client.voice.WakeRules
@@ -133,14 +138,21 @@ class WakeWordService : Service() {
         }
         val models = runCatching {
             OrtWakeModels.load(
-                asset(OrtWakeModels.MEL_FILE),
-                asset(OrtWakeModels.EMB_FILE),
-                asset(OrtWakeModels.WAKE_FILE),
+                asset(ASSET_DIR, OrtWakeModels.MEL_FILE),
+                asset(ASSET_DIR, OrtWakeModels.EMB_FILE),
+                asset(ASSET_DIR, OrtWakeModels.WAKE_FILE),
             )
         }.getOrElse {
             Log.w(TAG, "wake-word model did not load", it)
             return fail("The wake-word model could not be loaded (${it.javaClass.simpleName}).")
         }
+        // Smart Turn: optional. Without it a sentence ends after the old
+        // fixed second of quiet, exactly as before.
+        val turnModel: TurnModel? = runCatching {
+            OrtTurnModel.load(asset(TURN_DIR, OrtTurnModel.FILE))
+        }.onFailure {
+            Log.w(TAG, "Smart Turn did not load; using the fixed pause", it)
+        }.getOrNull()
         try {
             val spotter = WakeSpotter(models)
             val ring = WakeClip.Ring((WakeClip.PREROLL_SECONDS * RATE).toInt())
@@ -188,7 +200,7 @@ class WakeWordService : Service() {
                         }
                         _state.value = WakeListen.Heard
                         goForeground(getString(R.string.wake_heard_text))
-                        val clip = recordUntilPause(rec, ring.snapshot(), GRACE_SECONDS)
+                        val clip = recordUntilPause(rec, ring.snapshot(), GRACE_SECONDS, turnModel)
                         // Not recording while the desktop answers and Jarvis
                         // speaks: its own voice must not wake it.
                         runCatching { rec.stop() }
@@ -200,6 +212,7 @@ class WakeWordService : Service() {
                                 rec,
                                 ShortArray(0),
                                 verdict.awakeSeconds.coerceIn(2f, 15f),
+                                turnModel,
                             )
                             runCatching { rec.stop() }
                             verdict = voice.deliverWakeClip(Wav.encode(next))
@@ -223,18 +236,47 @@ class WakeWordService : Service() {
             }
         } finally {
             models.close()
+            turnModel?.close()
         }
     }
 
     /**
      * Reads until the owner stops talking. [prefix] is the audio from before
      * the spotter fired, so the clip starts with "hey Jarvis" itself.
+     *
+     * When the sentence has ended is [TurnEnd]'s call: with Smart Turn
+     * ([turnModel], and the PC's `turn.enabled`), a short pause asks the
+     * model "finished?" - yes ends the clip at once, no keeps recording for
+     * up to two seconds of quiet. Without it, the old fixed second. The
+     * model hears sound and answers with one number; nothing here turns
+     * speech into words.
      */
-    private fun recordUntilPause(rec: AudioRecord, prefix: ShortArray, graceSeconds: Float): ShortArray {
+    private fun recordUntilPause(
+        rec: AudioRecord,
+        prefix: ShortArray,
+        graceSeconds: Float,
+        turnModel: TurnModel?,
+    ): ShortArray {
         val maxSamples = (MAX_SECONDS * RATE).toInt()
         var out = prefix.copyOf(maxOf(prefix.size, RATE * 4).coerceAtMost(maxSamples))
         var count = prefix.size.coerceAtMost(maxSamples)
-        val end = WakeClip.EndOfSpeech(graceSeconds = graceSeconds, maxSeconds = MAX_SECONDS - WakeClip.PREROLL_SECONDS)
+        val settings = JarvisRuntime.voice.status.value.turn
+        val turn = if (turnModel != null && TurnSettings.useModel(settings, true)) {
+            SmartTurn(turnModel, TurnSettings.threshold(settings))
+        } else {
+            null
+        }
+        val end = TurnEnd(
+            graceSeconds = graceSeconds,
+            askAfterSeconds = TurnSettings.askAfterSeconds(settings),
+            maxPauseSeconds = if (turn != null) {
+                TurnSettings.maxPauseSeconds(settings)
+            } else {
+                TurnEnd.PAUSE_WITHOUT_MODEL
+            },
+            maxSeconds = MAX_SECONDS - WakeClip.PREROLL_SECONDS,
+            useModel = turn != null,
+        )
         val buf = ShortArray(WakeSpotter.CHUNK)
         while (running && count < maxSamples) {
             if (!readFully(rec, buf)) break
@@ -242,7 +284,16 @@ class WakeWordService : Service() {
             if (count + take > out.size) out = out.copyOf(minOf(maxSamples, out.size * 2))
             System.arraycopy(buf, 0, out, count, take)
             count += take
-            if (end.push(Wav.rms(buf, buf.size), WakeSpotter.CHUNK / RATE.toFloat())) break
+            val step = end.push(Wav.rms(buf, buf.size), WakeSpotter.CHUNK / RATE.toFloat())
+            if (step == TurnEnd.Step.END) break
+            if (step == TurnEnd.Step.ASK && turn != null) {
+                // ~50-100 ms of model; the recorder's own buffer holds
+                // several hundred, so nothing said meanwhile is lost.
+                val finished = runCatching { turn.complete(out, count) }
+                    .onFailure { Log.w(TAG, "Smart Turn failed on this pause", it) }
+                    .getOrDefault(false)
+                if (end.answer(finished) == TurnEnd.Step.END) break
+            }
         }
         return out.copyOf(count)
     }
@@ -286,8 +337,8 @@ class WakeWordService : Service() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
 
-    private fun asset(name: String): ByteArray =
-        assets.open("$ASSET_DIR/$name").use { it.readBytes() }
+    private fun asset(dir: String, name: String): ByteArray =
+        assets.open("$dir/$name").use { it.readBytes() }
 
     private fun fail(why: String) {
         running = false
@@ -353,6 +404,8 @@ class WakeWordService : Service() {
         private const val NOTIFICATION_ID = 0x4A57
         const val ACTION_STOP = "com.jarvis.client.STOP_WAKE_WORD"
         private const val ASSET_DIR = "wakeword"
+        /** Smart Turn's model: `assets/turn/`. */
+        private const val TURN_DIR = "turn"
         private const val RATE = WakeSpotter.SAMPLE_RATE
         /** How long to wait for words after "hey Jarvis" before sending the phrase alone. */
         private const val GRACE_SECONDS = 3f

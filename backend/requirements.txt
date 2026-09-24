@@ -16,7 +16,7 @@
 
 numpy                                  # voice: reading and checking recorded audio (jarvis_speech.py, rebuilt jarvis_voice.py)
 sherpa-onnx                            # voice: speech-to-text on the PC, and the better "is it your voice" check (jarvis_speech.py, rebuilt jarvis_voice.py)
-onnxruntime                            # voice: the "hey Jarvis" wake-word spotter (jarvis_wakeword.py). The voice MODEL files are a separate download: backend\README.md, "Voice that works".
+onnxruntime                            # voice: the "hey Jarvis" wake-word spotter (jarvis_wakeword.py) and Smart Turn, "finished or only paused?" (jarvis_turn.py). The voice MODEL files are a separate download: backend\README.md, "Voice that works".
 fastembed                              # memory: finding facts by MEANING, not only by matching words (rebuilt jarvis_memory.py). Downloads its model the first time it runs.
 sqlite-vec                             # memory: the search index fastembed's numbers are kept in (rebuilt jarvis_memory.py)
 uiautomation; sys_platform == "win32"  # the "control_computer" tool: reading and clicking other apps' windows (jarvis_ui_control.py). Windows only.

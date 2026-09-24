@@ -121,6 +121,9 @@ CLASSIFICATION = {
     "/api/visual-spec": ("deliberate", "The phone bundles its own copy of the spec and checks it in a unit test (SpecDriftTest); JARVIS-API.md: the phone never fetches it."),
     "/api/voice/say": ("ported", ""),
     "/api/voice/status": ("ported", ""),
+    "/api/voice/turn": ("deliberate", "Smart Turn, 'finished or only paused?'. The phone runs the same model "
+                        "itself (assets/turn/, voice/SmartTurn.kt), so its audio never leaves it to ask; "
+                        "the desktop asks its own PC over loopback."),
     "/api/voice/utterance": ("ported", ""),
     "/api/voice/wake": ("ported", "The wake-word switch; turning it on raises an approval card."),
     "/api/watch": ("todo", "Watches - what Jarvis is keeping an eye on. Probably the single most useful unported feature."),

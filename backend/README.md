@@ -4771,6 +4771,102 @@ first.
 
 ---
 
+# Voice, part two (2026-09-24): Smart Turn, the "is it you saying hey Jarvis" check, better training, and interrupting Jarvis
+
+Four improvements you chose. Each has its own part below, with what it does,
+where it runs, what was measured, and what you need to do.
+
+## Smart Turn: not cutting you off when you pause to think
+
+**What it does.** Before, a sentence ended when the microphone had been
+quiet for about a second. That cut you off if you paused in the middle of a
+sentence to think, and it made every answer wait a whole second after a
+sentence that was obviously finished. Now, after a short pause (0.2 s), a
+small model called **Smart Turn** listens to the last few seconds and answers
+one question: *did you finish, or only pause?* "Finished" ends the recording
+straight away. "Not finished" keeps recording; a pause of 2 seconds ends it
+whatever the model said, so it can never hang.
+
+**It hears sound, not words.** Its whole answer is one number (the chance
+you have finished). It has no vocabulary and writes nothing down, so it does
+not break the "the phone must not turn speech into text" rule - the same
+reason the wake-word spotter may run on the phone.
+
+**Where it runs.**
+
+| | where | why there |
+|---|---|---|
+| phone ("hey Jarvis" listening) | on the phone, with the model inside the app (`assets/turn/`) | no network round trip per pause, and it keeps working when the link blips. The app grows by about **7.5 MB** (8.7 MB file, compressed in the APK) |
+| desktop ("hey Jarvis" listening) | the Jarvis server on the same PC (`POST /api/voice/turn`, new `voice-turn.patch` + `jarvis_turn.py`) | the desktop listener already sends every sentence to the server on this PC over loopback; this avoids building a second model runtime into the desktop app |
+| push-to-talk | not used | you decide when the sentence ends by letting go of the button |
+
+The model is **Smart Turn v3.2** by Daily / Pipecat, BSD 2-Clause licence
+(code and model), recorded in `THIRD-PARTY-NOTICES.txt`. It is 8.7 MB, runs
+on the processor, and never touches the graphics card.
+
+**Settings** (in `[voice]` in `jarvis-framework.toml`, both optional; the
+phone follows the PC's):
+
+- `turn_enabled = false` switches it off everywhere: back to the old fixed
+  one-second pause.
+- `turn_threshold = 0.5` - how sure the model must be that you have finished.
+  Higher means it waits more often for the 2-second pause.
+
+**Install the model on the PC** (for the desktop app; the phone already has
+its own copy). It downloads the `pipecat-ai` package from PyPI (the Python
+package index), because that is where the model file is published, checks it
+against a SHA-256, takes the one 8.7 MB model file out, checks that too, and
+throws the rest away. The model lands in `voice-models\turn` inside Jarvis's
+settings folder (normally `C:\Users\pcadmin\.openjarvis\voice-models\turn`):
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path (Join-Path $base 'voice-models') 'turn'; New-Item -ItemType Directory -Force -Path $d | Out-Null; $w = Join-Path ([IO.Path]::GetTempPath()) 'jarvis-pipecat.zip'; Write-Host 'Downloading Smart Turn (12 MB; the model is inside the pipecat-ai package)...'; Invoke-WebRequest -UseBasicParsing -Uri 'https://files.pythonhosted.org/packages/4f/cb/940ed11839a5236bfeca67e629ddd1b67919e20d1ecfdd5804a8132e9c8c/pipecat_ai-1.11.0-py3-none-any.whl' -OutFile $w; if ((Get-FileHash $w -Algorithm SHA256).Hash -ne '0126B81D453687573DDCC26AA29E2C9509E21D8A8BF9B8C266DA9DE68B6DF70D') { Remove-Item $w; Write-Host 'That is not the expected file, so nothing was installed. Run this line again.' -ForegroundColor Red } else { Add-Type -AssemblyName System.IO.Compression.FileSystem; $p = Join-Path $d 'smart-turn-v3.2-cpu.onnx'; $z = [IO.Compression.ZipFile]::OpenRead($w); try { [IO.Compression.ZipFileExtensions]::ExtractToFile($z.GetEntry('pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx'), $p, $true) } finally { $z.Dispose() }; Remove-Item $w; if ((Get-FileHash $p -Algorithm SHA256).Hash -ne '2BB026316B14A660486A75B1733CD3FBAB8C2FD0314DC9AF7BE49F8CCA967E4F') { Remove-Item $p; Write-Host 'The model inside was not the expected file, so it was deleted. Run this line again.' -ForegroundColor Red } else { Write-Host "OK - Smart Turn is in $d" -ForegroundColor Green } }
+```
+
+Then run `.\scripts\apply-patches.ps1` (it copies in `jarvis_turn.py` and
+applies `voice-turn.patch`) and restart Jarvis.
+
+**What was measured, and how honest the numbers are.** All with speech
+**synthesised by Kokoro** (5 of its voices, 8 sentences each) in the dev
+container - there is no recording of a real person here. Smart Turn was
+trained on real people's speech, so these are a stand-in, not a verdict.
+
+- The features the model is fed match Pipecat's own code exactly (0.0
+  difference), and the phone's Kotlin copy matches the PC's to within 0.001;
+  the phone and the PC gave the same probability (within 0.003) on the same
+  clips.
+- **Sentences that were finished:** after a 0.2 s pause, 39 of 40 were called
+  finished. With the phone's full listening rule, the recording stopped a
+  median **0.26 s** after the last word, instead of **1.06 s** before.
+- **Sentences that trail off** ("Can you remind me to call my, um,", "I want
+  to book a table for..."): only 12 of 40 were called finished after 0.2 s,
+  so most of those pauses are kept (up to 2 s).
+- **The weak spot:** a sentence cut in the middle of fluent speech with
+  silence pasted in (no "um", no trailing tone) was called finished about
+  half the time (21 of 40 at a 0.2 s pause). In that test the old one-second
+  rule kept every pause shorter than a second; the new rule cut 24 of 40
+  such 0.6 s pauses. Real pauses to think usually sound unfinished (a
+  drawn-out word, an "um"), which is what the model listens for - but that
+  has not been checked with a real voice. **If Jarvis cuts you off when you
+  pause, set `turn_threshold = 0.8`, or `turn_enabled = false` for the old
+  behaviour.**
+- Speed: features + model about **43 ms** per question on this container's
+  CPU (Python), 64 ms from the phone's Kotlin code on a desktop JVM. Not
+  measured on a phone.
+
+**Not checked:** a real phone (speed, battery), Windows, a real voice, the
+PowerShell line above (the session's sandbox refused to run PowerShell; the
+URL, both SHA-256 values and the file's path inside the package were checked
+with Python), and the route inside your real `jarvis_hud.py` (the patch was
+rehearsed on the lines `voice-enroll.patch` writes).
+
+**Test it:** `py -3 backend\test_turn.py` (the features, the window, the
+route's answers, that nothing is written or logged, and the patch). With
+`$env:JARVIS_TEST_VOICE_MODELS` set as above it also runs the real model on
+Kokoro sentences.
+
+---
+
 ---
 
 # `approval-expiry.patch` — how long each approval card has left

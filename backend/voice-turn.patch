@@ -1,0 +1,39 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1641,6 +1641,36 @@
+                 return self._send(500, {"error": type(exc).__name__})
+             return self._send(code, out)
+ 
++        if route == "/api/voice/turn":
++            # Smart Turn (voice-turn.patch): "has the owner finished
++            # speaking, or only paused?" One WAV in - the last few seconds of
++            # speech - one probability out. Sound, not words: nothing is
++            # transcribed, kept or logged. The desktop app asks this over
++            # loopback while it listens; the phone runs the same model itself.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                raw = _read_body(self)
++            except Exception as exc:
++                return self._send(400, {"error": "could not read the request "
++                                                 f"({type(exc).__name__})"})
++            try:
++                import jarvis_turn
++            except ImportError:
++                return self._send(503, {
++                    "available": False,
++                    "error": "Smart Turn is not installed on this PC",
++                    "reason": "copy backend\\jarvis_turn.py into the backend "
++                              "folder (apply-patches.ps1 does this)"})
++            try:
++                code, out = jarvis_turn.handle(raw)
++            except Exception as exc:
++                # The exception's NAME only: the request is the owner's voice.
++                return self._send(500, {"error": type(exc).__name__})
++            return self._send(code, out)
++
+         if route in ("/api/models/install", "/api/models/switch",
+                      "/api/models/rollback", "/api/config", "/api/skills/decide",
+                      "/api/appearance",

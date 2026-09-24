@@ -173,7 +173,7 @@ def t_the_client_files_are_readable():
     classes = kotlin_classes(KT)
     for c in ("VoiceStatus", "VoiceListening", "VoiceEngine", "VoiceAudioIn", "VoiceGate",
               "VoiceTrainingState", "VoiceTrainingLast", "VoiceTrainingReply", "Heard",
-              "VoiceWake", "VoiceSpotter"):
+              "VoiceWake", "VoiceSpotter", "VoiceTurn"):
         check(f"VoiceModels.kt declares {c}", c in classes and classes[c], f"{sorted(classes)}")
     check("VoiceListening reads push_to_talk (the field that hid the button)",
           ("push_to_talk", "Boolean") in classes.get("VoiceListening", []))
@@ -385,6 +385,25 @@ def t_the_utterance_reply_serves_both_clients():
     check("seconds is the clip's real length", abs(wires["a stranger"]["seconds"] - 1.0) < 0.01)
 
 
+def t_the_turn_answer_serves_the_desktop():
+    """voice.rs TurnRaw reads the /api/voice/turn reply (jarvis_turn.handle)."""
+    import jarvis_turn as T
+    raw = rust_struct(RS, "TurnRaw")
+    check("voice.rs declares TurnRaw with available and complete",
+          {f for f, _, _ in raw} >= {"available", "complete"}, raw)
+    fake = type("S", (), {"run": lambda self, _o, _f: [[[0.9]]]})()
+    with mock.patch.object(T, "_load", return_value=(fake, "input_features")):
+        code, out = T.handle(tone(220.0, 2.0))
+    wire = json.loads(json.dumps(out))
+    for field, rtype, _ in raw:
+        check(f"turn reply has {field} as {rtype}", field in wire and type_ok(
+            wire[field], {"bool": "Boolean", "f64": "Double"}.get(rtype, rtype), {}), wire)
+    with mock.patch.object(T, "_load", return_value=None):
+        code, out = T.handle(tone(220.0, 2.0))
+    check("no model: available is false, so voice.rs stops asking",
+          code == 200 and out["available"] is False, out)
+
+
 def t_an_older_jarvis_voice_still_works():
     """jarvis_speech.py is copied to the PC by apply-patches.ps1; the PC's
     jarvis_voice.py may be older and not take `sample_rate`. hear() must not
@@ -405,7 +424,8 @@ def t_an_older_jarvis_voice_still_works():
 if __name__ == "__main__":
     for fn in (t_the_client_files_are_readable, t_status_has_every_field_the_phone_reads,
                t_push_to_talk_means_it_can_work, t_training_state_in_every_shape,
-               t_the_utterance_reply_serves_both_clients, t_an_older_jarvis_voice_still_works):
+               t_the_utterance_reply_serves_both_clients, t_the_turn_answer_serves_the_desktop,
+               t_an_older_jarvis_voice_still_works):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

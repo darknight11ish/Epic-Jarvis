@@ -439,6 +439,7 @@ only what Jarvis itself said it did.
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
 | `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...]}` | **no** | `JarvisApi.enrollVoice` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
+| `/api/voice/turn` | POST | **WAV bytes** (the last few seconds of speech) | `voice.rs` `ask_turn` | **no** (runs the model itself) | Smart Turn: `{"available", "complete", "probability", "threshold", "ms"}`. Sound in, one number out; nothing kept. `voice-turn.patch`. |
 
 **The audio format is fixed and the server will not convert.** 16 kHz,
 16-bit, mono PCM in a WAV container, resampled on the client. The phone's
@@ -482,6 +483,19 @@ added to the reply: `wake_heard` (the phrase was heard, from the owner),
 clip within `awake_seconds` needs no phrase), `awake_seconds`. The returned
 `text` has the phrase removed. A client drops a reply with `wake_heard:
 false` silently. `backend/README.md`, "Voice that works", has the details.
+
+**`/api/voice/turn` - Smart Turn** (`voice-turn.patch`, module
+`jarvis_turn.py`, added 2026-09-24). "Has the speaker finished, or only
+paused?" The body is one WAV (any rate, mono or stereo, at most 30 s; only
+the last 8 s are used). The answer is always 200 unless the body is not a
+WAV (400): `{"available": true, "complete": bool, "probability": 0..1,
+"threshold": 0.5, "ms": 43.0}`, or `{"available": false, "why": "..."}` when
+the model is not installed. The desktop asks it after 200 ms of quiet while
+listening for "hey Jarvis" (the same audio already goes to this PC over
+loopback); the phone runs the same model on the phone. `/api/voice/status`
+carries `turn`: `{enabled, available, threshold, ask_after_ms: 200,
+max_pause_ms: 2000, engine, why}` - `enabled` (`[voice] turn_enabled`)
+governs both listeners.
 
 **`/api/voice/enroll` - "Train my voice"** (`voice-enroll.patch`, module
 `jarvis_voice_enroll.py`). The phone sends the owner's recorded sentences:

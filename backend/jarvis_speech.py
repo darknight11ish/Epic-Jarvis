@@ -432,6 +432,11 @@ def reload_engines() -> None:
         _stt_cache = _tts_cache = _vad_cache = _UNSET
     if jarvis_wakeword is not None:
         jarvis_wakeword.reload()
+    try:
+        import jarvis_turn
+        jarvis_turn.reload()
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -769,6 +774,39 @@ def _training_state() -> dict:
                 "why": f"could not read it ({type(exc).__name__})"}
 
 
+#: Smart Turn's pause rule, sent in status() so both listeners use one:
+#: after this much quiet the model is asked "finished?"; a pause it called
+#: unfinished is kept for up to TURN_MAX_PAUSE_MS. The phone (SmartTurn.kt
+#: TurnEnd) and the desktop (voice.rs pause_step) hold the same numbers.
+TURN_ASK_AFTER_MS = 200
+TURN_MAX_PAUSE_MS = 2000
+
+
+def _turn_state() -> dict:
+    """Smart Turn, for status(). `enabled` is the owner's switch ([voice]
+    turn_enabled, on unless set false) and governs the phone too, which runs
+    its own copy of the model; `available` is whether THIS PC has the model
+    (the desktop app asks this PC). Never raises."""
+    enabled = bool(_cfg("turn_enabled", True))
+    base = {"enabled": enabled, "available": False, "engine": "Smart Turn v3.2",
+            "threshold": 0.5, "why": "", "ask_after_ms": TURN_ASK_AFTER_MS,
+            "max_pause_ms": TURN_MAX_PAUSE_MS}
+    try:
+        import jarvis_turn
+    except Exception:
+        return {**base, "why": "jarvis_turn.py is not in the backend folder"}
+    try:
+        st = jarvis_turn.status()
+    except Exception as exc:
+        return {**base, "why": f"could not read it ({type(exc).__name__})"}
+    why = str(st.get("why", ""))
+    if not enabled:
+        why = "switched off ([voice] turn_enabled = false)"
+    return {**base, "available": bool(st.get("available")),
+            "engine": str(st.get("engine", base["engine"])),
+            "threshold": float(st.get("threshold", 0.5)), "why": why}
+
+
 def _push_to_talk(voice: dict, stt_ok: bool, voice_loaded: bool):
     """(can a push-to-talk clip actually get an answer?, why not).
 
@@ -829,7 +867,7 @@ def status() -> dict:
 
     TWO SHAPES IN ONE REPLY, on purpose. The flat keys (enabled, enrolled,
     stt_available, ...) are what this module always returned. The nested
-    ones - listening, stt, tts, audio_in, gate, wake, vad - are what the
+    ones - listening, stt, tts, audio_in, gate, wake, vad, turn - are what the
     phone reads (jarvis-client net/VoiceModels.kt). test_voice_contract.py
     reads the phone's own data classes and fails if a field goes missing.
     """
@@ -938,6 +976,8 @@ def status() -> dict:
                         "why": str(spotter.get("why", ""))},
         },
         "audio_in": dict(AUDIO_IN),
+        # "Finished, or only paused?" - see _turn_state().
+        "turn": _turn_state(),
         "gate": {
             "mode": voice.get("mode", "owner"),
             "enabled": bool(voice.get("enabled", False)),

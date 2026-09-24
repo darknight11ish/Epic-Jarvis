@@ -49,6 +49,14 @@ data class VoiceStatus(
      * and by the phone's own listener (its threshold).
      */
     val wake: VoiceWake = VoiceWake(),
+    /**
+     * Smart Turn ("finished, or only paused?"): the owner's switch and the
+     * bar, from the PC so both listeners follow one setting. The phone runs
+     * its own copy of the model; [VoiceTurn.available] is only about the PC's.
+     * Defaults: on, at the model's own 0.5 - a PC from before 2026-09-24
+     * does not send this, and the phone's copy works without it.
+     */
+    val turn: VoiceTurn = VoiceTurn(),
 ) {
     /**
      * Whether to show a microphone button.
@@ -148,6 +156,22 @@ data class VoiceWake(
     @SerialName("awake_seconds") val awakeSeconds: Double = 8.0,
     /** Whether the PC can hear "hey Jarvis" in a clip (it checks every one the phone sends). */
     val spotter: VoiceSpotter = VoiceSpotter(),
+)
+
+/** `/api/voice/status` -> `turn`. See [VoiceStatus.turn]. */
+@Serializable
+data class VoiceTurn(
+    /** `[voice] turn_enabled` on the PC. False: the old fixed one-second pause. */
+    val enabled: Boolean = true,
+    /** Whether the PC has the model (the desktop app asks it; the phone has its own). */
+    val available: Boolean = false,
+    /** "Finished" at or above this probability. */
+    val threshold: Double = 0.5,
+    /** Quiet this long after speech, and the model is asked. */
+    @SerialName("ask_after_ms") val askAfterMs: Int = 200,
+    /** The longest pause kept inside a sentence the model called unfinished. */
+    @SerialName("max_pause_ms") val maxPauseMs: Int = 2000,
+    val why: String = "",
 )
 
 @Serializable
