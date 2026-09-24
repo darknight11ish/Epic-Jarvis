@@ -633,6 +633,9 @@ fun TextInput(
     password: Boolean = false,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
+    /** False for prose: the field grows to [maxLines] lines, then scrolls. */
+    singleLine: Boolean = true,
+    maxLines: Int = 6,
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
@@ -678,7 +681,8 @@ fun TextInput(
                 },
                 keyboardOptions = keyboardOptions,
                 keyboardActions = keyboardActions,
-                singleLine = true,
+                singleLine = singleLine,
+                maxLines = if (singleLine) 1 else maxLines,
                 modifier = Modifier
                     .fillMaxWidth()
                     .onFocusChanged { focused = it.isFocused },

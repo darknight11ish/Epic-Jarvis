@@ -96,10 +96,10 @@ internal fun SecondCardPlate(
         // 2. The main switch, then one per feature.
         Gap(12)
         Rule()
-        SwitchRow(SecondCard.master(status), busy, canAct, onSet)
+        ApprovalSwitchRow(SecondCard.master(status), busy, canAct, onSet)
         for (view in SecondCard.switches(status)) {
             Rule()
-            SwitchRow(view, busy, canAct, onSet)
+            ApprovalSwitchRow(view, busy, canAct, onSet)
         }
         Rule()
 
@@ -163,8 +163,13 @@ internal fun SecondCardPlate(
     }
 }
 
+/**
+ * One approval-backed switch: its name, the toggle, and the PC's line under
+ * it. Shared with the big model's plate ([BigModelSection]), whose switches
+ * follow exactly the same rules.
+ */
 @Composable
-private fun SwitchRow(
+internal fun ApprovalSwitchRow(
     view: SecondCard.SwitchView,
     busy: String?,
     canAct: Boolean,

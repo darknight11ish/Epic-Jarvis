@@ -382,6 +382,15 @@ fun BrainScreen(
                 }
             }
 
+            // backend/big-model.patch - next to the second card: the other
+            // way to run a model the main card cannot. Both plates read and
+            // act through JarvisRuntime directly (BigModelPlate.kt), so these
+            // are their only lines.
+            item(key = "big-model") {
+                BigModelSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
+            }
+            item(key = "deep-questions") { DeepQuestionsSection(canAct = canAct) }
+
             item(key = "attention") {
                 Section("Attention budget") { AttentionPlate(attention) }
             }

@@ -24,6 +24,7 @@ import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
@@ -322,6 +323,24 @@ object JarvisRuntime {
      */
     private val _secondCard = MutableStateFlow<SecondCard.Read>(SecondCard.Read.NotAsked)
     val secondCard: StateFlow<SecondCard.Read> = _secondCard.asStateFlow()
+
+    /**
+     * `/api/big-model`: what the PC found for the big model (slow), and its
+     * switches ([BigModel]). Read on the Mind screen, after every switch,
+     * after a `deep` event (a finished question changes the measured speed)
+     * and after an approval is decided while one of its cards was waiting.
+     */
+    private val _bigModel = MutableStateFlow<BigModel.Read<BigModel.Status>>(BigModel.Read.NotAsked)
+    val bigModel: StateFlow<BigModel.Read<BigModel.Status>> = _bigModel.asStateFlow()
+
+    /**
+     * `/api/deep`: the deep questions and their answers. Read on the Mind
+     * screen, after asking, on every `deep` event (the doorbell for a
+     * finished question), and - only while one is still going - every
+     * [BigModel.DEEP_POLL_MS] while its plate is on screen.
+     */
+    private val _deep = MutableStateFlow<BigModel.Read<BigModel.Deep>>(BigModel.Read.NotAsked)
+    val deep: StateFlow<BigModel.Read<BigModel.Deep>> = _deep.asStateFlow()
 
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
@@ -876,6 +895,20 @@ object JarvisRuntime {
                 if (sc is SecondCard.Read.Loaded && sc.status.pending.isNotEmpty()) {
                     recheckSecondCardAfterDecision(sc.status.pending)
                 }
+                // The big model's switches work the same way
+                // (docs/JARVIS-API.md section 14: "read GET /api/big-model
+                // again after a card is decided").
+                val bm = _bigModel.value
+                if (bm is BigModel.Read.Loaded<BigModel.Status> && bm.value.pending.isNotEmpty()) {
+                    recheckBigModelAfterDecision(bm.value.pending)
+                }
+            }
+            // A deep question finished (`{"id", "state"}` only - a doorbell,
+            // never the question or the answer). The list is re-read for the
+            // answer, and the switches for the speed it measured.
+            "deep" -> {
+                refreshDeep()
+                refreshBigModel()
             }
             "attention" -> refreshAttention()
             "activity" -> {
@@ -1131,6 +1164,75 @@ object JarvisRuntime {
         if (enabled && result is ApiResult.Ok) refreshPending()
         refreshSecondCard()
         return SecondCard.replyLine(result)
+    }
+
+    // -------------------------------------------------------- big model ----
+
+    /**
+     * Re-reads `/api/big-model`. A failed read replaces what was there: the
+     * plate then says it could not ask, rather than showing switches the PC
+     * may no longer agree with.
+     */
+    suspend fun refreshBigModel() {
+        _bigModel.value = BigModel.readOf(api.bigModel())
+    }
+
+    /** [recheckSecondCardAfterDecision], for the big model's switches. */
+    private fun recheckBigModelAfterDecision(waiting: List<String>) {
+        scope.launch {
+            for (wait in SECOND_CARD_RECHECK_MS) {
+                delay(wait)
+                refreshBigModel()
+                val now = (_bigModel.value as? BigModel.Read.Loaded<BigModel.Status>)?.value?.pending
+                    ?: return@launch
+                if (!now.containsAll(waiting)) return@launch
+            }
+        }
+    }
+
+    /**
+     * Turns one big-model switch off, or asks for it to be turned on, then
+     * asks the PC what actually happened - the same shape as [setSecondCard].
+     *
+     * ON raises one approval card on the PC (`big_model_enable`, tier `ask`),
+     * so a success means "a card is up", never "it is on"; the card is
+     * decided on the PC or in this phone's approval list, one at a time. OFF
+     * is immediate. Either way [refreshBigModel] decides what the plate shows.
+     *
+     * Refused while the link is down or stale ([actionBlocker], rule 4).
+     *
+     * @param switch [BigModel.MASTER], [BigModel.WIKI] or [BigModel.DEEP].
+     * @return a sentence to show, or null when the plate already says it.
+     */
+    suspend fun setBigModel(switch: String, enabled: Boolean): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setBigModel(switch, enabled)
+        // The card should appear in this phone's approvals too.
+        if (enabled && result is ApiResult.Ok) refreshPending()
+        refreshBigModel()
+        // Turning the deep-questions switch changes whether a question can be asked.
+        refreshDeep()
+        return BigModel.replyLine(result)
+    }
+
+    /** Re-reads `/api/deep`. Starts nothing on the PC. */
+    suspend fun refreshDeep() {
+        _deep.value = BigModel.deepReadOf(api.deep())
+    }
+
+    /**
+     * "Ask slowly": queues one deep question on the PC. No approval card per
+     * question - the switch was approved with one, and a question acts on
+     * nothing - but it is still held on a stale or dropped link (rule 4).
+     * The list is re-read either way, so the new question shows at once.
+     */
+    suspend fun askDeep(question: String): BigModel.Asked {
+        actionBlocker()?.let { return BigModel.Asked(it, queued = false) }
+        val limit = (_deep.value as? BigModel.Read.Loaded<BigModel.Deep>)?.value?.questionChars ?: 4000
+        BigModel.askProblem(question, limit)?.let { return BigModel.Asked(it, queued = false) }
+        val asked = BigModel.askReply(api.deepAsk(question))
+        refreshDeep()
+        return asked
     }
 
     /**
@@ -1482,6 +1584,8 @@ object JarvisRuntime {
                 val initiative = async { api.probe("/api/initiative").asSection() }
                 val contentRisk = async { api.probe("/api/content-risk").asSection() }
                 val secondCardRead = async { refreshSecondCard() }
+                val bigModelRead = async { refreshBigModel() }
+                val deepRead = async { refreshDeep() }
                 val (computeData, computeRead) = compute.await()
                 val (memoryData, memoryRead) = memory.await()
                 val (ledgerData, ledgerRead) = ledger.await()
@@ -1534,6 +1638,8 @@ object JarvisRuntime {
                 jobs.await()
                 models.await()
                 secondCardRead.await()
+                bigModelRead.await()
+                deepRead.await()
             }
         } finally {
             val left = brainReadsInFlight.decrementAndGet()
