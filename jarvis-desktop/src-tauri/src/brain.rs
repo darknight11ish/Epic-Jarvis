@@ -311,6 +311,9 @@ pub async fn brain_memory_forget(
     id: i64,
     valid_to: Option<f64>,
 ) -> Result<serde_json::Value, String> {
+    // Gated like brain_memory_decide: this acts on a fact the window drew
+    // from a read that may be stale, and forgetting cannot be undone.
+    require_link_live(&app)?;
     let mut body = serde_json::json!({ "id": id });
     if let Some(vt) = valid_to {
         body["valid_to"] = serde_json::json!(vt);
@@ -332,6 +335,8 @@ pub async fn brain_memory_edit(
     text: String,
     valid_to: Option<f64>,
 ) -> Result<serde_json::Value, String> {
+    // Gated for the same reason as forget: it retires the fact it rewords.
+    require_link_live(&app)?;
     let mut body = serde_json::json!({ "id": id, "text": text });
     if let Some(vt) = valid_to {
         body["valid_to"] = serde_json::json!(vt);
@@ -349,6 +354,9 @@ pub async fn brain_memory_learning(
     app: AppHandle,
     enabled: bool,
 ) -> Result<serde_json::Value, String> {
+    // Gated like every other memory write (rule 4): the button's label came
+    // from a read that a stale link cannot confirm is still true.
+    require_link_live(&app)?;
     post(
         &app,
         "/api/memory/learning",
@@ -357,7 +365,8 @@ pub async fn brain_memory_learning(
     .await
 }
 
-/// Answers the daily "let Jarvis tidy its memory overnight?" card.
+/// Answers the daily overnight-tidy card ("not built yet" - switching it on
+/// only records the wish; nothing runs).
 ///
 /// Two independent fields because the card offers two independent actions:
 /// "enable" sends `enabled`, "stop asking" sends `remind`. "not now" calls
@@ -400,17 +409,169 @@ pub async fn brain_memory_keep_both(app: AppHandle, id: i64) -> Result<serde_jso
     .await
 }
 
-/// Every fact and every pending proposal, for the owner to keep a copy of.
+/// Every fact and every pending proposal, saved to a file the owner picks.
 ///
 /// A command rather than a read section because it is large and wanted rarely;
 /// putting it in the section table would fetch the whole store every time the
-/// pane opened. It leaves the machine only if the owner then saves it
-/// somewhere that does.
+/// pane opened.
+///
+/// A FILE, not the clipboard. It used to be copied to the clipboard, and
+/// Windows can sync the clipboard to the owner's other devices through their
+/// Microsoft account ("Sync across your devices") - so everything Jarvis knows
+/// about the owner could leave the machine with nobody deciding it should
+/// (rule 1). The standard Windows "Save as" dialog is opened here, by the app,
+/// so the window itself gets no file access at all; the only file written is
+/// the one the owner named in that dialog.
+///
+/// Returns `{"saved": <path>, "facts": <count>}`, or `{"cancelled": true}`
+/// when the owner closed the dialog. The facts themselves never go back to
+/// the window.
 #[tauri::command]
 pub async fn brain_memory_export(app: AppHandle) -> Result<serde_json::Value, String> {
     let base = commands::jarvis_base(&app);
     let headers = commands::jarvis_headers(&app)?;
-    get_json(&base, "/api/memory/export", headers, READ_TIMEOUT).await
+    // Read first: a backend that cannot answer is said before a dialog opens.
+    let export = get_json(&base, "/api/memory/export", headers, READ_TIMEOUT).await?;
+    let count = export
+        .get("facts")
+        .and_then(|f| f.as_array())
+        .map_or(0, Vec::len);
+    let text = serde_json::to_string_pretty(&export)
+        .map_err(|e| format!("could not write the export as JSON: {e}"))?;
+    let name = export_file_name(unix_now());
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    // Its own thread: the dialog needs a single-threaded COM apartment, which
+    // a shared runtime worker thread cannot promise.
+    std::thread::spawn(move || {
+        let _ = tx.send(save_dialog::pick(&name));
+    });
+    let picked = rx
+        .await
+        .map_err(|_| "the save dialog closed unexpectedly".to_string())??;
+    let Some(path) = picked else {
+        return Ok(serde_json::json!({ "cancelled": true }));
+    };
+    std::fs::write(&path, text).map_err(|e| format!("could not save {}: {e}", path.display()))?;
+    Ok(serde_json::json!({ "saved": path.display().to_string(), "facts": count }))
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// The name the dialog suggests: `jarvis-memory-2026-09-23.json` (UTC date).
+fn export_file_name(unix_seconds: u64) -> String {
+    // Days since 1970-01-01 to a civil date (Howard Hinnant's algorithm), so
+    // no date crate is pulled in for one file name.
+    let days = (unix_seconds / 86_400) as i64;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("jarvis-memory-{y:04}-{m:02}-{d:02}.json")
+}
+
+/// The Windows "Save as" dialog, and nothing else.
+#[cfg(windows)]
+mod save_dialog {
+    use std::path::PathBuf;
+    use windows::core::{w, HSTRING};
+    use windows::Win32::Foundation::ERROR_CANCELLED;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+    };
+    use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
+    use windows::Win32::UI::Shell::{
+        FileSaveDialog, IFileSaveDialog, FOS_FORCEFILESYSTEM, FOS_OVERWRITEPROMPT,
+        SIGDN_FILESYSPATH,
+    };
+
+    /// `Ok(None)` when the owner cancelled.
+    pub fn pick(suggested: &str) -> Result<Option<PathBuf>, String> {
+        // SAFETY: plain COM calls on this thread, which is ours alone and is
+        // initialised as a single-threaded apartment first. Every pointer
+        // handed out by COM is released: the interfaces by their Drop, the
+        // path string by CoTaskMemFree.
+        unsafe {
+            let init = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+            if init.is_err() {
+                return Err(format!("could not open the save dialog: {init:?}"));
+            }
+            let out = show(suggested);
+            CoUninitialize();
+            out
+        }
+    }
+
+    unsafe fn show(suggested: &str) -> Result<Option<PathBuf>, String> {
+        let fail = |e: windows::core::Error| format!("the save dialog failed: {e}");
+        let dialog: IFileSaveDialog =
+            CoCreateInstance(&FileSaveDialog, None, CLSCTX_INPROC_SERVER).map_err(fail)?;
+        let types = [COMDLG_FILTERSPEC {
+            pszName: w!("JSON file"),
+            pszSpec: w!("*.json"),
+        }];
+        dialog.SetFileTypes(&types).map_err(fail)?;
+        dialog.SetDefaultExtension(w!("json")).map_err(fail)?;
+        dialog
+            .SetTitle(w!("Save everything Jarvis remembers"))
+            .map_err(fail)?;
+        dialog
+            .SetFileName(&HSTRING::from(suggested))
+            .map_err(fail)?;
+        let options = dialog.GetOptions().map_err(fail)?;
+        dialog
+            .SetOptions(options | FOS_OVERWRITEPROMPT | FOS_FORCEFILESYSTEM)
+            .map_err(fail)?;
+        if let Err(e) = dialog.Show(None) {
+            if e.code() == ERROR_CANCELLED.to_hresult() {
+                return Ok(None);
+            }
+            return Err(fail(e));
+        }
+        let item = dialog.GetResult().map_err(fail)?;
+        let raw = item.GetDisplayName(SIGDN_FILESYSPATH).map_err(fail)?;
+        let path = raw.to_string();
+        CoTaskMemFree(Some(raw.0 as *const _));
+        path.map(|p| Some(PathBuf::from(p)))
+            .map_err(|e| format!("the chosen file name could not be read: {e}"))
+    }
+}
+
+/// Not Windows: this app is only built for Windows; say so rather than guess.
+#[cfg(not(windows))]
+mod save_dialog {
+    pub fn pick(_suggested: &str) -> Result<Option<std::path::PathBuf>, String> {
+        Err("saving the memory export needs the Windows save dialog".to_string())
+    }
+}
+
+#[cfg(test)]
+mod export_name_tests {
+    use super::export_file_name;
+
+    #[test]
+    fn the_suggested_name_carries_the_date() {
+        assert_eq!(export_file_name(0), "jarvis-memory-1970-01-01.json");
+        // 2026-09-23 12:00:00 UTC
+        assert_eq!(
+            export_file_name(1_790_164_800),
+            "jarvis-memory-2026-09-23.json"
+        );
+        // A leap day.
+        assert_eq!(
+            export_file_name(1_709_208_000),
+            "jarvis-memory-2024-02-29.json"
+        );
+    }
 }
 
 /// What Jarvis believed at a past moment, right or wrong.

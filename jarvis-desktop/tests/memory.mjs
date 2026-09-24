@@ -15,7 +15,19 @@
  * switch renders what the server ANSWERED, not what the button asked for.
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import * as K from "./uikit.mjs";
+
+// Real backend output, produced by the real Python modules in backend/ at
+// test time, so what the pane is tested against is what the backend sends -
+// not a fixture that agrees with the pane because the same hand wrote both.
+const BACKEND_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "backend");
+function realPython(code) {
+  return JSON.parse(execFileSync("python3", ["-c", code],
+    { cwd: BACKEND_DIR, encoding: "utf8", env: { ...process.env, JARVIS_NO_EMBED: "1" } }));
+}
 
 const { base, close } = await K.serve();
 const browser = await K.launch();
@@ -178,12 +190,14 @@ await check("a refused write surfaces rather than looking like success", async (
 
 /* ── The overnight-memory offer ──────────────────────────────────────────── */
 
-const OFFER = {
-  kind: "sleep_time_offer",
-  title: "Let Jarvis tidy its memory overnight?",
-  body: "Once a night it would re-read what it learned that day.",
-  actions: ["enable", "not now", "stop asking"],
-};
+// The REAL card, from the real jarvis_sleep.reminder_card() - not a copy of
+// it. It used to be a hand-made fixture here, which is how the pane could
+// promise "Jarvis will tidy its memory overnight" about a pass nobody built.
+const OFFER = realPython(
+  "import sys, json; sys.path.insert(0, 'rebuilt'); import jarvis_sleep as S\n"
+  + "S._cfg = lambda k, d=None: {'enabled': False, 'remind': True}.get(k, d)\n"
+  + "S._seen.clear(); print(json.dumps(S.reminder_card()))");
+const TITLE = new RegExp(OFFER.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
 
 const withOffer = (extra = {}) => ({
   brain: { ...K.BRAIN, memory_pending: {
@@ -197,14 +211,14 @@ await check("the daily card shows when the server offers it", async () => {
   const page = await memoryTab(withOffer());
   const text = await page.locator("#memory-learning").innerText();
   await page.close();
-  assert.match(text, /tidy its memory overnight/i, `said "${text}"`);
+  assert.match(text, TITLE, `said "${text}"`);
 });
 
 await check("nothing offers it when the server sends none", async () => {
   const page = await memoryTab();
   const text = await page.locator("#memory-learning").innerText();
   await page.close();
-  assert.doesNotMatch(text, /tidy its memory overnight/i,
+  assert.doesNotMatch(text, TITLE,
     "the default fixture carries no offer, so nothing should show one");
 });
 
@@ -218,7 +232,7 @@ await check("Enable sends {enabled: true} and stops offering", async () => {
   assert.equal(sent.length, 1);
   assert.equal(sent[0].cmd, "brain_memory_sleep_time");
   assert.equal(sent[0].enabled, true);
-  assert.doesNotMatch(stillThere, /tidy its memory overnight/i,
+  assert.doesNotMatch(stillThere, TITLE,
     "the card outlived the decision it was asking about");
 });
 
@@ -241,7 +255,7 @@ await check("Not now dismisses without sending anything", async () => {
   const text = await page.locator("#memory-learning").innerText();
   await page.close();
   assert.equal(sent.length, 0, "declining today should not be a network request");
-  assert.doesNotMatch(text, /tidy its memory overnight/i);
+  assert.doesNotMatch(text, TITLE);
 });
 
 await check("a failed Enable leaves the card in place, not dismissed", async () => {
@@ -253,7 +267,7 @@ await check("a failed Enable leaves the card in place, not dismissed", async () 
   await page.waitForTimeout(300);
   const text = await page.locator("#memory-learning").innerText();
   await page.close();
-  assert.match(text, /tidy its memory overnight/i,
+  assert.match(text, TITLE,
     "a refused write must not look like a handled decision");
 });
 
@@ -271,9 +285,178 @@ await check("the card survives an unrelated write refreshing the pane", async ()
   await page.waitForTimeout(300);
   const afterText = await page.locator("#memory-learning").innerText();
   await page.close();
-  assert.match(beforeText, /tidy its memory overnight/i);
-  assert.match(afterText, /tidy its memory overnight/i,
+  assert.match(beforeText, TITLE);
+  assert.match(afterText, TITLE,
     "the offer disappeared once the server stopped resending it, though the owner never dismissed it");
+});
+
+await check("Enable says plainly that nothing is built and nothing runs", async () => {
+  const page = await memoryTab(withOffer());
+  const card = await page.locator("#memory-learning").innerText();
+  await page.getByRole("button", { name: "Enable", exact: true }).click();
+  await page.waitForTimeout(300);
+  const toast = await page.locator("#toast").innerText();
+  await page.close();
+  assert.match(card, /not built/i, `the card said "${card}"`);
+  assert.doesNotMatch(toast, /will tidy/i, `the toast promised a pass: "${toast}"`);
+  assert.match(toast, /not built yet/i, `the toast said "${toast}"`);
+});
+
+/* ── Real backend output, read by the pane ───────────────────────────────── */
+
+// MemoryStore.status() from the real rebuilt store, in a scratch folder.
+const STATUS = realPython(
+  "import sys, json, tempfile, pathlib, types\n"
+  + "fw = types.ModuleType('jarvis_framework'); fw.CONFIG_DIR = pathlib.Path(tempfile.mkdtemp())\n"
+  + "fw.load_framework = lambda: {}; sys.modules['jarvis_framework'] = fw\n"
+  + "sys.path.insert(0, 'rebuilt'); import jarvis_memory as M\n"
+  + "st = M.MemoryStore(path=pathlib.Path(tempfile.mkdtemp()) / 'memory.db', embedder=M.HashEmbedder())\n"
+  + "a = st.add('The owner lives in York', source='user')\n"
+  + "st.add('The owner lives in Leeds', source='extracted', supersedes=a)\n"
+  + "print(json.dumps(st.status()))");
+
+await check("the Faculties memory card shows what the real store reports", async () => {
+  const memory = { available: true, ...STATUS, sleep_time: { enabled: false, remind: true } };
+  const page = await K.open(browser, base, "brain.html", { brain: { ...K.BRAIN, memory } }, SIZE);
+  await page.locator("#tab-faculties").click();
+  await page.waitForTimeout(300);
+  const text = await page.locator("#memory").innerText();
+  await page.close();
+  assert.match(text, /Facts in use\s*1\b/, `said "${text}"`);
+  assert.match(text, /No longer used\s*1\b/, "retired facts were counted as in use");
+  assert.ok(text.includes(STATUS.db), `the store's file never showed: "${text}"`);
+  assert.ok(text.includes(STATUS.embedder), `the embedder never showed: "${text}"`);
+  assert.match(text, /not built yet/i);
+});
+
+// pending() rows: the columns memory-intake.patch SELECTs, through the real
+// jarvis_intake.annotate(). Card 2 has the model's words in `replaces` but no
+// `replaces_id`, and jarvis_extract._accept() retires only by id.
+const PENDING = realPython(
+  "import sys, json; import jarvis_intake as I\n"
+  + "rows = [dict(id=61, text='I live in Leeds', replaces='lives in York', replaces_id=12,\n"
+  + "             replaces_text='The owner lives in York', confidence=0.8, source='conversation', created=1790000000),\n"
+  + "        dict(id=62, text='I like oat milk', replaces='milk preference', replaces_id=None,\n"
+  + "             replaces_text=None, confidence=0.7, source='conversation', created=1790000000)]\n"
+  + "print(json.dumps(I.annotate(rows)))");
+
+await check("'would replace' only on a card that really replaces a fact", async () => {
+  const page = await memoryTab({ brain: { ...K.BRAIN,
+    memory_pending: { available: true, pending: PENDING, setup: {} } } });
+  const rows = page.locator("#memory-proposals .row-item");
+  const withId = await rows.nth(0).innerText();
+  const noId = await rows.nth(1).innerText();
+  const both = await rows.nth(1).getByRole("button", { name: "Both are true" }).count();
+  await page.close();
+  assert.match(withId, /would replace: The owner lives in York/,
+    `the correction did not name the stored fact: "${withId}"`);
+  assert.doesNotMatch(noId, /would replace/,
+    "a card with no replaces_id retires nothing, and must not say it would");
+  assert.equal(both, 0);
+});
+
+await check("a replaced fact names what replaced it", async () => {
+  const facts = [
+    { id: 5, text: "The owner lives in Leeds", source: "extracted", valid_from: 1790000000,
+      created: 1790000000, valid_to: null, retired_at: null, retired_by: null, current: true },
+    { id: 4, text: "The owner lives in York", source: "user", valid_from: 1780000000,
+      created: 1780000000, valid_to: 1790000000, retired_at: 1790000000, retired_by: 5, current: false },
+  ];
+  const page = await memoryTab({ brain: { ...K.BRAIN,
+    memory_facts: { available: true, learning: true, pending: 0, facts } } });
+  const text = await page.locator("#memory-facts").innerText();
+  await page.close();
+  assert.match(text, /replaced by #5/, `said "${text}"`);
+});
+
+/* ── Export: to a file, never the clipboard ──────────────────────────────── */
+
+await check("Export saves to a file the owner picks, and never touches the clipboard", async () => {
+  // Windows can sync the clipboard to other devices, so a clipboard copy of
+  // the whole memory could leave the machine with nobody deciding it should.
+  const page = await memoryTab();
+  await page.evaluate(() => {
+    window.__clipboardWrites = 0;
+    try {
+      Object.defineProperty(navigator, "clipboard", { configurable: true,
+        value: { writeText: async () => { window.__clipboardWrites++; } } });
+    } catch (e) {}
+  });
+  await page.getByRole("button", { name: "Export everything" }).click();
+  await page.waitForTimeout(300);
+  const toast = await page.locator("#toast").innerText();
+  const clip = await page.evaluate(() => window.__clipboardWrites);
+  const sent = await writes(page);
+  await page.close();
+  assert.equal(clip, 0, "the export went to the clipboard");
+  assert.deepEqual(sent.map((w) => w.cmd), ["brain_memory_export"]);
+  assert.match(toast, /Saved 3 facts to .*jarvis-memory-2026-09-23\.json/, `said "${toast}"`);
+});
+
+await check("closing the Save dialog is not an error", async () => {
+  const page = await memoryTab();
+  await page.evaluate(() => { window.__exportCancelled = true; });
+  await page.getByRole("button", { name: "Export everything" }).click();
+  await page.waitForTimeout(300);
+  const toast = await page.locator("#toast").innerText().catch(() => "");
+  await page.close();
+  assert.doesNotMatch(toast, /saved|error|failed/i, `said "${toast}"`);
+});
+
+/* ── "What did you know on…": dates both apps read the same way ──────────── */
+
+async function askAsOf(page, typed) {
+  page.once("dialog", (d) => d.accept(typed));
+  await page.getByRole("button", { name: /What did you know on/ }).click();
+  await page.waitForTimeout(300);
+  return {
+    asked: await page.evaluate(() => window.__asOfAsked ?? null),
+    toast: await page.locator("#toast").innerText().catch(() => ""),
+    banner: await page.locator("#memory-facts .banner").count(),
+  };
+}
+
+await check("a date after today, or one that does not exist, is refused before asking", async () => {
+  for (const typed of ["2999-01-01", "2026-02-31", "1999-12-31"]) {
+    const page = await memoryTab();
+    const out = await askAsOf(page, typed);
+    await page.close();
+    assert.equal(out.asked, null, `${typed} was sent to the server`);
+    assert.match(out.toast, /real date/i, `${typed}: "${out.toast}"`);
+  }
+});
+
+await check("the moment asked for is the LAST second of that day, local time", async () => {
+  const page = await memoryTab();
+  const out = await askAsOf(page, "2026-06-01");
+  const expected = await page.evaluate(() => Math.floor(new Date(2026, 5, 1, 23, 59, 59).getTime() / 1000));
+  await page.close();
+  assert.equal(out.asked, expected);
+  assert.equal(out.banner, 1, "the as-of view did not open");
+});
+
+await check("a server that ignored the date is not shown as 'what Jarvis believed then'", async () => {
+  const page = await memoryTab();
+  await page.evaluate(() => { window.__asOfIgnored = true; });
+  const out = await askAsOf(page, "2026-06-01");
+  await page.close();
+  assert.equal(out.banner, 0, "today's facts were shown under a past date's heading");
+  assert.match(out.toast, /without using that date/i, `said "${out.toast}"`);
+});
+
+/* ── Skill notes ─────────────────────────────────────────────────────────── */
+
+await check("a skill's notes - which Jarvis reads with it every time - are shown", async () => {
+  const skills = { available: true, skills: [
+    { name: "invoice-triage", description: "Sorts invoices.", trust: "third_party", uses: 3,
+      notes: ["File by supplier, not by month.", { note: "Ask before moving anything over 1000." }] }] };
+  const page = await K.open(browser, base, "brain.html", { brain: { ...K.BRAIN, skills } }, SIZE);
+  await page.locator("#tab-faculties").click();
+  await page.waitForTimeout(300);
+  const text = await page.locator("#skills").innerText();
+  await page.close();
+  assert.match(text, /File by supplier, not by month\./);
+  assert.match(text, /Ask before moving anything over 1000\./);
 });
 
 /* ── Controls ────────────────────────────────────────────────────────────── */

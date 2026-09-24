@@ -382,6 +382,10 @@ async function load(sections, { quiet = false } = {}) {
         state.failed[section] = { why: String(value.error || "no reason given"), at: now };
       } else {
         state.data[section] = value;
+        // The overnight-tidy card is handed out once a day, to the first
+        // read that asks for it - which may be the Faculties view's, not
+        // the Memory tab's. Noted here so it is not lost either way.
+        if (section === "memory_pending" && value) noteSleepOffer(value.setup);
         if (failedRead) {
           state.failed[section] = { why: String(value.error || "no reason given"), at: now };
         } else {
@@ -756,11 +760,20 @@ function renderSkills() {
     (s) => {
       const name = String(s.name || s.id || "(unnamed)");
       const verdict = String(s.verdict || s.scan || (s.ok === false ? "flagged" : "clean"));
+      // skill-notes.patch sends each skill's notes: short lines Jarvis wrote
+      // for itself about the skill, which go into the model's context with
+      // the skill every time it is used. Anything that steers an answer has
+      // to be readable here. Strings, or objects carrying the words in
+      // `note`/`text` - whichever the backend's jarvis_skills.py stores.
+      const notes = (Array.isArray(s.notes) ? s.notes : [])
+        .map((n) => (typeof n === "string" ? n : n && (n.note || n.text)))
+        .filter((n) => typeof n === "string" && n.trim())
+        .map((n) => `Jarvis's note: “${n.trim()}”`);
       return row({
         tag: verdict,
         state: /clean|ok|pass/i.test(verdict) ? "ok" : "warn",
         title: name,
-        meta: [s.description || s.summary || "", s.path || ""],
+        meta: [s.description || s.summary || "", s.path || "", ...notes],
         actions: [
           button(
             "Remove",
@@ -810,13 +823,28 @@ function renderMemory() {
     if (v === undefined || v === null || v === "") return;
     dl.append(el("dt", "", k), el("dd", "", v));
   };
-  add("Facts", body.facts ?? body.count);
-  add("Documents", body.documents);
-  add("Chunks", body.chunks);
-  add("Store", body.path || body.store);
-  add("Embedding", body.model || body.embedding);
+  // The names jarvis_memory's MemoryStore.status() really sends (checked by
+  // backend/test_memory_honesty.py against the real store). This used to
+  // read path/model/documents/chunks, which status() never sends, so Store
+  // and Embedding never showed - and "Facts" was the total, retired ones
+  // included, while the pane said nothing about how many were retired.
+  const num = (v) => (Number.isFinite(Number(v)) ? String(v) : undefined);
+  add("Facts in use", num(body.current));
+  add("No longer used", num(body.retired));
+  add("Store", body.db);
+  if (body.embedder) {
+    add("Embedding", body.semantic === false
+      ? `${body.embedder} (matches words only until the real embedding model has downloaded)`
+      : String(body.embedder));
+  }
+  if (body.vector_search === false) {
+    add("Search by meaning", "off - facts are found by keyword");
+  }
+  if (Number(body.unembedded) > 0) add("Waiting to be indexed", String(body.unembedded));
   if (body.sleep_time) {
-    add("Sleep-time", body.sleep_time.enabled ? "on" : "off");
+    add("Overnight tidying", body.sleep_time.enabled
+      ? "switched on, but not built yet - nothing runs"
+      : "off (not built yet)");
   }
   if (dl.childElementCount) dom.memory.append(dl);
 
@@ -829,10 +857,11 @@ function renderMemory() {
         row({
           tag: "proposed",
           state: "warn",
-          // Decided in the quickbar's gate, not here. This pane says a
+          // Decided in the Memory tab, one card at a time, where each card
+          // shows what it would replace and any warning. This pane says a
           // decision is waiting; it does not offer to make it.
-          title: String(p.text || p.fact || p.summary || "(no text)"),
-          meta: [p.source ? `from ${p.source}` : "", ago(p.at || p.ts)],
+          title: String(p.text || "(no text)"),
+          meta: [p.source ? `from ${p.source}` : "", ago(p.created)],
           actions: [],
         })
       );
@@ -845,8 +874,8 @@ function renderMemory() {
         // This used to say "decided in the approval gate, one at a time - not
         // from here", which sent the owner somewhere that can never hold the
         // item: memory proposals live in jarvis_extract's table and never
-        // enter jarvis_gate's queue. The HUD window is the one surface that
-        // can decide one today; this pane cannot, and says so.
+        // enter jarvis_gate's queue. The Memory tab of this window is where
+        // they are decided (the HUD only points there); this pane cannot.
         "Decide these in the Memory tab, one at a time. The approval gate " +
           "never sees them — memory proposals live in their own queue."
       )
@@ -879,12 +908,15 @@ let memoryAsOf = null;
 let memoryAsOfRows = null;
 
 /**
- * The daily "tidy memory overnight?" card, cached client-side once seen.
+ * The daily overnight-tidy card, cached client-side once seen.
  *
- * The server marks itself as having offered the moment `/api/memory/pending`
- * is polled at all — not when the owner acts on it — so a second poll the
- * same day, from ANY write on this pane refreshing the section, comes back
- * with the card already gone. Without this cache the card would flash once
+ * The server marks the day's offer as made the moment this window reads
+ * `/api/memory/pending?...&sleep_offer=1` (routes.rs) - not when the owner
+ * acts on it - so a second read the same day, from ANY write on this pane
+ * refreshing the section, comes back with the card already gone. (Only
+ * clients that show the card send `sleep_offer=1`; the HUD page does not,
+ * so it no longer uses the offer up.) `load()` notes it whichever view read
+ * the section. Without this cache the card would flash once
  * and vanish the instant the owner clicked Keep or Discard on an unrelated
  * proposal, before they had a chance to read it.
  *
@@ -940,6 +972,40 @@ function promptValidTo(message) {
   return ts / 1000;
 }
 
+/** Dates before this are refused by "What did you know on…". The server
+ * ignores a moment before September 2001 and answers with today's facts
+ * instead; no Jarvis existed then anyway. The phone uses the same year. */
+const AS_OF_EARLIEST_YEAR = 2002;
+
+/**
+ * "What did Jarvis know on YYYY-MM-DD?" as the moment to ask the server
+ * about: the LAST second of that day, local time, so "the 1st" includes
+ * everything learned on the 1st - or null for a date that cannot be asked
+ * (not a real date, before AS_OF_EARLIEST_YEAR, or after today).
+ *
+ * `new Date("2026-06-01")` would be UTC midnight - the START of the day, in
+ * the wrong zone. The phone's `MemoryDates.knownAt` (net/Learning.kt) is the
+ * same rule, and backend/test_memory_honesty.py runs this function against
+ * the numbers the phone's unit test pins, so the same typed date means the
+ * same moment on both apps.
+ */
+function asOfSeconds(typed, now) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(typed == null ? "" : typed).trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const end = new Date(y, mo - 1, d, 23, 59, 59);
+  // new Date() quietly rolls 31 February into March; a date that does not
+  // exist is refused instead. (And years 0-99 into the 1900s.)
+  if (end.getFullYear() !== y || end.getMonth() !== mo - 1 || end.getDate() !== d) return null;
+  if (y < AS_OF_EARLIEST_YEAR) return null;
+  const today = now instanceof Date ? now : new Date();
+  const lastOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+  if (end.getTime() > lastOfToday.getTime()) return null;
+  return Math.floor(end.getTime() / 1000);
+}
+
 /** Re-read the pane's own sections and repaint. Used after every write. */
 async function refreshMemory() {
   await load(VIEW_SECTIONS.memory, { quiet: true });
@@ -993,7 +1059,7 @@ function renderLearning() {
       row({
         tag: "offer",
         state: "warn",
-        title: String(offer.title || "Let Jarvis tidy its memory overnight?"),
+        title: String(offer.title || "Overnight memory tidying - not built yet"),
         meta: [String(offer.body || "")],
         actions: [
           // Dismissed BEFORE the write, not after: `memoryWrite`'s own
@@ -1012,15 +1078,19 @@ function renderLearning() {
             const answered = cachedSleepOffer;
             dismissSleepOffer();
             render("memory");
+            // The truth, which is short: nothing is built, so nothing runs.
+            // This toast used to promise an overnight tidy that nothing does.
             const out = await memoryWrite("brain_memory_sleep_time", { enabled: true },
-              "Jarvis will tidy its memory overnight.");
+              "Noted that you want it. It is not built yet, so nothing runs "
+              + "and nothing in memory changes.");
             if (!out || out.ok === false) {
               cachedSleepOffer = answered;
               sleepOfferDismissed = false;
               render("memory");
             }
-          }, { title: "Once a night, re-read what was learned that day, merge "
-                     + "duplicates and retire facts newer ones replaced.", live: true }),
+          }, { title: "Records that you want overnight tidying. It is not built yet: "
+                     + "nothing runs, and no fact changes without your yes on that "
+                     + "one fact.", live: true }),
           button("Not now", () => {
             dismissSleepOffer();
             render("memory");
@@ -1030,13 +1100,15 @@ function renderLearning() {
             dismissSleepOffer();
             render("memory");
             const out = await memoryWrite("brain_memory_sleep_time", { remind: false },
-              "Won't ask again. Turn it on any time from here.");
+              "Won't ask again.");
             if (!out || out.ok === false) {
               cachedSleepOffer = answered;
               sleepOfferDismissed = false;
               render("memory");
             }
-          }, { title: "Never offer this again. You can still turn it on yourself.", live: true }),
+          }, { title: "Never offer this again. (The choice is saved in sleep_time.json "
+                     + "in Jarvis's config folder; deleting that file brings the offer back.)",
+               live: true }),
         ],
       })
     );
@@ -1048,6 +1120,17 @@ function renderLearning() {
   dl.append(el("dt", "", "Waiting"), el("dd", "",
     String(facts.pending ?? (Array.isArray(pending.pending) ? pending.pending.length : 0))));
   if (setup.note) dl.append(el("dt", "", "Note"), el("dd", "", String(setup.note)));
+  // memory-intake.patch: why the last "Remember:" did NOT become a card (a
+  // queued one is already a card, marked "your own words"), and how many
+  // repeat cards were dropped - the backend's own sentences, as the phone's
+  // MemoryCards.setupNotes shows them.
+  const last = setup.remember_last;
+  if (last && last.queued === false && last.note) {
+    dl.append(el("dt", "", "Last “Remember:”"), el("dd", "", String(last.note)));
+  }
+  if (setup.near_duplicates_note) {
+    dl.append(el("dt", "", "Repeats"), el("dd", "", String(setup.near_duplicates_note)));
+  }
   dom.memoryLearning.append(dl);
 
   const box = el("div", "row-actions");
@@ -1064,23 +1147,29 @@ function renderLearning() {
               : "Learning is off. Nothing new will be proposed."
       );
     }, { title: on
-        ? "Stop reading conversations for facts. Nothing already proposed is lost."
+        ? "Stop reading conversations for facts. Nothing already proposed is lost. "
+          + "A message that starts “Remember:” still makes a card."
         : "Read conversations for facts again. Each one still needs your yes." })
   );
   box.append(
     button("Export everything", async () => {
       try {
+        // To a file the owner picks, never the clipboard. Windows can sync
+        // the clipboard to other devices ("Sync across your devices"), so a
+        // clipboard copy of everything Jarvis knows about the owner could
+        // leave this machine with nobody deciding that it should. The save
+        // dialog is opened by the app itself (brain.rs); this window gets no
+        // file access of its own.
         const out = await invoke("brain_memory_export");
-        const n = Array.isArray(out && out.facts) ? out.facts.length : 0;
-        // Written to the clipboard rather than a file: this window has no
-        // save-file permission, and adding one to export a JSON blob would be
-        // a wider grant than the feature is worth.
-        await navigator.clipboard.writeText(JSON.stringify(out, null, 2));
-        toast(`${n} fact${n === 1 ? "" : "s"} copied to the clipboard.`, "ok");
+        if (!out || out.cancelled) return;
+        const n = Number(out.facts) || 0;
+        toast(`Saved ${n} fact${n === 1 ? "" : "s"} to ${out.saved}. `
+          + "Keep that file private: it holds everything Jarvis knows about you.", "ok");
       } catch (error) {
         toast(String((error && error.message) || error), "bad");
       }
-    }, { title: "Copy every fact, current and retired, as JSON. It stays on this machine." })
+    }, { title: "Save every fact, current and retired, to a file you choose. "
+        + "Nothing is sent anywhere." })
   );
   box.append(
     button(memoryAsOf === null ? "What did you know on\u2026" : "Back to now", async () => {
@@ -1103,23 +1192,21 @@ function renderLearning() {
         toast("A date like 2026-06-01.", "bad");
         return;
       }
-      // End of that day, in local time, so "the 1st" includes everything
-      // learned on the 1st. `new Date("2026-06-01")` would be UTC midnight —
-      // the START of the day, in the wrong zone, which west of Greenwich is
-      // the previous evening and quietly drops a day of facts.
-      const [y, m, d] = day.split("-").map(Number);
-      const end = new Date(y, m - 1, d, 23, 59, 59);
-      if (!Number.isFinite(end.getTime())) {
-        toast("That is not a date.", "bad");
-        return;
-      }
-      const when = Math.floor(end.getTime() / 1000);
-      if (when > Date.now() / 1000) {
-        toast("That is in the future. Jarvis has not been there yet.", "bad");
+      const when = asOfSeconds(day, new Date());
+      if (when === null) {
+        toast(`Pick a real date from ${AS_OF_EARLIEST_YEAR} up to today.`, "bad");
         return;
       }
       try {
         const out = await invoke("brain_memory_as_of", { when });
+        // The server answers a date it cannot use with TODAY's facts and no
+        // `known_at` - which this screen would then have labelled "what
+        // Jarvis believed on" the typed date. Refused instead.
+        if (!out || typeof out.known_at !== "number") {
+          toast("Jarvis answered without using that date, so nothing is shown "
+            + "rather than today's facts under the wrong heading.", "bad");
+          return;
+        }
         memoryAsOf = when;
         memoryAsOfRows = Array.isArray(out && out.facts) ? out.facts : [];
         render("memory");
@@ -1175,7 +1262,16 @@ function proposalRow(p) {
         ago(p.created),
       ]
     : [
-        p.replaces ? `would replace: ${p.replaces}` : "",
+        // Only a card that names the stored fact BY ID replaces anything:
+        // jarvis_extract._accept() retires by `replaces_id` and nothing else
+        // (memory-safety.patch). `replaces` alone is the model's own
+        // description of some fact, and a card with words but no id retires
+        // nothing - so it must not say it would. Same rule as the phone's
+        // MemoryCards.from. The stored fact's own words, when the server
+        // sent them, rather than the model's description of it.
+        p.replaces_id
+          ? `would replace: ${p.replaces_text || p.replaces || `fact #${p.replaces_id}`}`
+          : "",
         p.verbatim ? "your own words" : "",
         p.confidence != null ? `confidence ${Number(p.confidence).toFixed(2)}` : "",
         p.source ? `from ${p.source}` : "",
@@ -1312,7 +1408,10 @@ function renderFacts() {
         meta: [
           f.source ? `from ${f.source}` : "",
           current ? "" : "no longer recalled",
-          f.supersedes ? `replaced #${f.supersedes}` : "",
+          // `retired_by` is the column the store writes: the id of the fact
+          // that replaced this one. (It used to read `supersedes`, which is
+          // an argument to add(), not a column, so this never showed.)
+          f.retired_by ? `replaced by #${f.retired_by}` : "",
           ago(f.valid_from),
           // The two axes, and the only place the difference is visible. They
           // are usually the same day and this says nothing; when they are not,
@@ -2900,6 +2999,10 @@ onEvent((frame) => {
     model: ["models"],
     finding: ["watch", "watch_report"],
     job: ["jobs"],
+    // The learner filled the review queue on its own (or a "Remember:"
+    // made a card). Without this the Memory tab showed an old queue until
+    // something else refreshed it.
+    proposal: ["memory_pending"],
   };
   const sections = refreshes[kind];
   if (!sections) return;

@@ -96,6 +96,12 @@ windows = { version = "0.61", features = [
   "UI_Notifications",
   "Data_Xml_Dom",
   "Win32_UI_Shell",
+  # The Windows "Save as" dialog for the Brain's memory export (brain.rs,
+  # `save_dialog`): COM to create it, the filter type it takes. Features of
+  # a crate already here, so nothing new is downloaded or pinned.
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_UI_Shell_Common",
 ] }
 
 [target.'cfg(unix)'.dependencies]

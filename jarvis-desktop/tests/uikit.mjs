@@ -234,9 +234,15 @@ export const BRAIN = {
     { name: "invoice-triage", verdict: "clean", description: "Sorts supplier invoices into the ledger folders.", path: "skills/invoice-triage" },
     { name: "release-notes", verdict: "clean", description: "Turns merged PRs into a changelog." },
     { name: "meeting-digest", verdict: "flagged", description: "Summarises transcripts. Scanner noted an unpinned tool description." }] },
-  memory: { available: true, facts: 612, documents: 148, chunks: 4102,
-            path: "C:\\Users\\pcadmin\\.openjarvis\\memory.db",
-            model: "nomic-embed-text", sleep_time: { enabled: true, remind: true } },
+  // The field names jarvis_memory's MemoryStore.status() really sends, plus
+  // the route's own `available` and `sleep_time`. backend/test_memory_honesty.py
+  // fails if this fixture names a field the real status() does not send - it
+  // used to invent documents/chunks/path/model, which hid that the pane read
+  // fields that never arrive.
+  memory: { available: true, db: "C:\\Users\\pcadmin\\.openjarvis\\memory.db",
+            facts: 612, current: 590, retired: 22,
+            embedder: "BAAI/bge-small-en-v1.5", semantic: true, vector_search: true,
+            unembedded: 0, sleep_time: { enabled: false, remind: true } },
   memory_pending: { available: true, setup: { setup_complete: false, note:
       "extraction is a scaffold: review its proposals and tune the prompt against real conversations" },
     pending: [
@@ -658,8 +664,21 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return { ok: true };
           case "brain_memory_export":
+            // brain.rs saves the export to a file the owner picks in the
+            // Windows "Save as" dialog and answers with where it went - or
+            // with `cancelled` when the dialog was closed.
             window.__memoryWrites.push({ cmd });
-            return { available: true, facts: [{ id: 1, text: "exported" }], pending: [] };
+            return window.__exportCancelled
+              ? { cancelled: true }
+              : { saved: "C:\\Users\\pcadmin\\Documents\\jarvis-memory-2026-09-23.json", facts: 3 };
+          case "brain_memory_as_of":
+            // The server echoes the moment it answered for; one that could
+            // not use the date answers today's list with no `known_at`.
+            window.__asOfAsked = args.when;
+            return window.__asOfIgnored
+              ? { available: true, facts: [{ id: 7, text: "Works in Europe/London.", valid_to: null }] }
+              : { available: true, known_at: args.when,
+                  facts: [{ id: 4, text: "Standing desk arrives in March.", valid_to: null }] };
           default: return null;
         }
       },

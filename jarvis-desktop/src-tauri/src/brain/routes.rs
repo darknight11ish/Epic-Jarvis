@@ -30,7 +30,14 @@ const READ_ROUTES: &[(&str, &str)] = &[
     // fact?" cards with their own two buttons ("Stop using this fact" /
     // "Keep using it"), so it asks for them. A backend without the patch
     // ignores the parameter.
-    ("memory_pending", "/api/memory/pending?retire_cards=1"),
+    // `sleep_offer=1`: the Brain shows the daily overnight-tidy card, so it
+    // asks for it. The server hands that card out once a day, to the first
+    // read that asks - the HUD page does not ask, so it no longer uses the
+    // day's card up (memory-pane.patch).
+    (
+        "memory_pending",
+        "/api/memory/pending?retire_cards=1&sleep_offer=1",
+    ),
     // Every fact the store holds, retired ones included. A read: the pane
     // shows it, and each change is its own command below.
     ("memory_facts", "/api/memory/facts"),
