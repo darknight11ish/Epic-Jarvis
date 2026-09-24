@@ -653,6 +653,14 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
         // (ARCHITECTURE.md section 6: the handler ships with the event).
         "deep" => {}
 
+        // Facts saved without a card (JARVIS-API.md section 19): `{"ids":
+        // [...]}` and never the words. The Brain shows "Jarvis remembered 2
+        // things" from it - but the Brain is destroyed when it is closed, so
+        // a save that came while it was closed would never be counted. Rust
+        // keeps the ids for it (brain/auto_learn.rs), and the frame is fanned
+        // out below as well, for a Brain that is open.
+        "memory_saved" => crate::brain::auto_learn::note_saved(&event.data),
+
         // finding | persona | model | voice — nothing here consumes them, and
         // nothing here should: they are fanned out below like everything else,
         // and the surface that renders one owns what it means.

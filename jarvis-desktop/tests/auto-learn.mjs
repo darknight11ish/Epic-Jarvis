@@ -30,9 +30,16 @@ import {
   addPage,
   AUTO_DETAIL,
   AUTO_LABEL,
+  AUTO_OFF,
   cardReason,
+  EMPTY,
   factMeta,
+  FORGOTTEN,
   forgetQuestion,
+  HISTORY_NOTE,
+  lastLine,
+  lastLineNow,
+  LEARNING_OFF_NOTE,
   olderThan,
   readAuto,
   refreshRows,
@@ -40,6 +47,8 @@ import {
   savedIds,
   SENSITIVE_DETAIL,
   SENSITIVE_LABEL,
+  SENSITIVE_NEEDS_AUTO,
+  stillOffLine,
   SWITCHES,
 } from "../src/auto-learn.js";
 import * as K from "./uikit.mjs";
@@ -160,11 +169,17 @@ await check("paging: the next page goes under, never twice, and asks from the ol
 });
 
 await check("a row says when and where; Forget asks today's question; a card says why", async () => {
-  assert.equal(factMeta({ savedAt: NOW - 120, device: "phone" }, NOW * 1000), "2 min ago · on your phone");
+  // History's device names, as the phone says them (FIXLIST 9).
+  assert.equal(factMeta({ savedAt: NOW - 120, device: "phone" }, NOW * 1000), "2 min ago · from the phone");
+  assert.equal(factMeta({ savedAt: NOW - 120, device: "desktop" }, NOW * 1000), "2 min ago · from the PC");
+  assert.equal(factMeta({ savedAt: NOW - 120, device: "hud" }, NOW * 1000), "2 min ago · from the HUD");
   assert.equal(factMeta({ savedAt: NOW - 30, device: "" }, NOW * 1000), "just now");
+  // Both apps' Forget words (FIXLIST 25); the question itself stays
+  // (the owner's decision 24).
   assert.equal(forgetQuestion({ text: "Prefers tea." }),
-    "Stop recalling this?\n\nPrefers tea.\n\nIt stays in the history but Jarvis will not use it again. " +
-    "This cannot be undone.");
+    "Stop recalling this?\n\nPrefers tea.\n\nJarvis keeps a record that it once knew this, but will not use it " +
+    "again. This cannot be undone.");
+  assert.equal(FORGOTTEN, "Forgotten. Jarvis will not use it again.");
   assert.equal(cardReason({ auto_reason: "from pasted text" }), "Not saved automatically: from pasted text");
   assert.equal(cardReason({}), "");
 });
@@ -217,11 +232,11 @@ await check("the list: newest first, the fact, when, a 'said aloud' mark for voi
   assert.equal(rows.length, 3);
   assert.match(rows[0], /<b>Works nights<\/b>/);
   assert.match(rows[1], /Is building Jarvis/);
-  assert.match(rows[1], /5 min ago · on this PC/);
+  assert.match(rows[1], /5 min ago · from the PC/);
   assert.doesNotMatch(rows[1], /said aloud/);
   assert.match(rows[2], /Prefers tea to coffee/);
   assert.match(rows[2], /said aloud/);
-  assert.match(rows[2], /on your phone/);
+  assert.match(rows[2], /from the phone/);
   assert.equal(bold, 0, "a fact's text became markup");
   assert.match(markTitle, /said aloud/);
 });
@@ -245,7 +260,7 @@ await check("Forget asks first with the fact, sends one id, and a no sends nothi
   assert.deepEqual(afterYes, [{ cmd: "brain_memory_forget", id: 12 }]);
   assert.equal(left.length, 1);
   assert.match(left[0], /Prefers tea/);
-  assert.match(toast, /Forgotten/);
+  assert.equal(toast, FORGOTTEN);
 });
 
 await check("Load older asks for the page before the oldest shown, and adds it underneath", async () => {
@@ -306,10 +321,11 @@ await check("the card leaving the queue unapproved ends the wait and says so", a
   await page.evaluate((card) => window.__emit("approvals-changed", { count: 1, items: [card] }), CARD);
   await page.waitForTimeout(100);
   const before = await settingsText(page);
-  // Denied (or ran out of time): the card goes, and the PC says not waiting.
+  // Denied: the card goes, and the PC says not waiting, and how it ended.
   await page.evaluate(() => {
     window.__pendingNow = [];
     window.__auto.status.auto_waiting = false;
+    window.__auto.status.auto_last = { outcome: "denied", why: "", message: "", at: 1 };
     window.__emit("approvals-changed", { count: 0, items: [] });
   });
   await page.waitForTimeout(3600); // the grace an approval gets to land
@@ -318,7 +334,205 @@ await check("the card leaving the queue unapproved ends the wait and says so", a
   await page.close();
   assert.match(before, /Waiting for your approval/);
   assert.doesNotMatch(after, /Waiting for your approval/, "still claims a card is waiting");
-  assert.equal(toast, SWITCHES.auto.denied);
+  assert.equal(toast, "You said no, so \"Learn automatically\" stays off.");
+  assert.match(after, /You said no, so "Learn automatically" stays off\./);
+});
+
+await check("a card the PC refused says the PC's plain words - never \"denied or ran out of time\"", async () => {
+  const CARD = { id: "gate-sens-2", action: "learning_sensitive_enable", tier: "ask", detail: {}, created: 1 };
+  const MESSAGE = "Your PC's settings do not let this be approved, so it stayed off.";
+  const page = await memoryTab({ waits: ["sensitive"] });
+  await page.evaluate((card) => { window.__pendingNow = [card]; }, CARD);
+  await page.locator("#memory-sensitive-on").click();
+  await page.waitForTimeout(300);
+  await page.evaluate((card) => window.__emit("approvals-changed", { count: 1, items: [card] }), CARD);
+  await page.waitForTimeout(100);
+  await page.evaluate((message) => {
+    window.__pendingNow = [];
+    window.__auto.status.sensitive_waiting = false;
+    window.__auto.status.sensitive_last = { outcome: "refused", message, at: 1,
+      why: "the gate answered at tier 'auto', which is not a person saying yes" };
+    window.__emit("approvals-changed", { count: 0, items: [] });
+  }, MESSAGE);
+  await page.waitForTimeout(3600);
+  const toast = await page.locator("#toast").innerText();
+  const line = await page.locator("#memory-auto .auto-last").allInnerTexts();
+  const title = await page.locator("#memory-auto .auto-last").getAttribute("title");
+  await page.close();
+  assert.equal(toast, MESSAGE);
+  assert.deepEqual(line, [MESSAGE]);
+  assert.doesNotMatch(toast + line.join(" "), /denied or ran out of time|tier/);
+  // The PC's reason is kept for anyone who looks, out of the line itself.
+  assert.match(title, /tier 'auto'/);
+});
+
+await check("how the last card ended, in both apps' words, and only where it fits the switch", async () => {
+  const L = (outcome, extra = {}) => ({ outcome, why: "", message: "", ...extra });
+  assert.equal(lastLine("auto", L("enabled")), "Approved: \"Learn automatically\" is on now.");
+  assert.equal(lastLine("sensitive", L("denied")),
+    "You said no, so \"Also remember sensitive topics automatically\" stays off.");
+  assert.equal(lastLine("auto", L("timed_out")), "Nobody answered the card in time, so nothing changed.");
+  assert.equal(lastLine("auto", L("withdrawn")),
+    "You turned it off while the card waited, so approving it changed nothing.");
+  assert.equal(lastLine("auto", L("refused")), "Your PC's settings do not let this be approved, so it stayed off.");
+  assert.equal(lastLine("auto", L("failed", { message: "Jarvis could not save the setting." })),
+    "Jarvis could not save the setting.");
+  assert.equal(lastLine("auto", L("failed", { why: "OSError" })), "Your PC could not turn it on, so it stayed off.");
+  assert.equal(lastLine("auto", L("something new")), "");
+  assert.equal(lastLine("auto", null), "");
+  assert.equal(stillOffLine("auto"), "\"Learn automatically\" stays off. The card was not approved.");
+  // Read from the learning route; only the newest card, as the PC keeps it.
+  const STATUS = { enabled: true, auto: false, auto_sensitive: false, auto_waiting: false, sensitive_waiting: false,
+    auto_last: { outcome: "timed_out", why: "", at: 1 }, sensitive_last: { outcome: "enabled", why: "", at: 2 } };
+  const v = readAuto(LIST, STATUS);
+  assert.deepEqual(v.autoLast, { outcome: "timed_out", why: "", message: "" });
+  assert.equal(lastLineNow("auto", v), "Nobody answered the card in time, so nothing changed.");
+  // "Approved" under a switch that is off (turned off since) says nothing.
+  assert.equal(lastLineNow("sensitive", v), "");
+  // Nor anything while a card waits: the waiting line says it.
+  assert.equal(lastLineNow("auto", readAuto(LIST, { ...STATUS, auto_waiting: true })), "");
+  assert.equal(readAuto(LIST, { ...STATUS, auto_last: { why: "x" } }).autoLast, null, "no outcome, no line");
+});
+
+await check("a damaged settings file: the PC's sentence under \"Learn automatically\"", async () => {
+  const WHY = "The automatic-learning settings file was damaged, so \"Learn automatically\" is off. " +
+    "Turn \"Learn automatically\" on again to rewrite it.";
+  assert.equal(readAuto(LIST, { enabled: true, auto: false, auto_sensitive: false, why: WHY }).fileWhy, WHY);
+  const page = await memoryTab({ status: { auto: false, why: WHY } });
+  const line = await page.locator("#memory-auto .auto-file-why").allInnerTexts();
+  await page.close();
+  const fine = await memoryTab({});
+  const none = await fine.locator("#memory-auto .auto-file-why").count();
+  await fine.close();
+  assert.deepEqual(line, [WHY]);
+  assert.equal(none, 0);
+});
+
+await check("the sensitive switch says it does nothing while \"Learn automatically\" is off", async () => {
+  assert.equal(SENSITIVE_NEEDS_AUTO, "\"Learn automatically\" is off, so this changes nothing until it is on.");
+  const off = await memoryTab({ status: { auto: false } });
+  const offText = await settingsText(off);
+  await off.close();
+  const on = await memoryTab({});
+  const onText = await settingsText(on);
+  await on.close();
+  assert.ok(offText.includes(SENSITIVE_NEEDS_AUTO), offText);
+  assert.ok(!onText.includes(SENSITIVE_NEEDS_AUTO), onText);
+});
+
+await check("while a card waits the switch is greyed; Cancel turns it OFF, withdraws the card, and is never held", async () => {
+  const CARD = { id: "gate-auto-5", action: "learning_auto_enable", tier: "ask", detail: {}, created: 1 };
+  const page = await memoryTab({ waits: ["auto"], status: { auto: false } }, { link: { stale: false } });
+  await page.evaluate((card) => { window.__pendingNow = [card]; }, CARD);
+  await page.locator("#memory-auto-on").click();
+  await page.waitForTimeout(300);
+  await page.evaluate((card) => window.__emit("approvals-changed", { count: 1, items: [card] }), CARD);
+  await page.waitForTimeout(150);
+  const greyed = await page.locator("#memory-auto-on").isDisabled();
+  const cancel = page.locator("#memory-auto .auto-waiting").getByRole("button", { name: "Cancel the request" });
+  const cancelOnStale = await cancel.isDisabled();
+  await cancel.click();
+  await page.waitForTimeout(400);
+  const sent = (await autoState(page)).switches;
+  // The withdrawn card is still in the queue (the PC lets go of it; it
+  // leaves when answered or out of time) - and is not "waiting" any more.
+  await page.evaluate((card) => window.__emit("approvals-changed", { count: 1, items: [card] }), CARD);
+  await page.waitForTimeout(150);
+  const waitingAfter = await page.locator("#memory-auto .auto-waiting").count();
+  const usable = await page.locator("#memory-auto-on").isDisabled();
+  const toast = await page.locator("#toast").innerText();
+  // A NEW card (raised on the phone) is waiting again.
+  await page.evaluate((card) => window.__emit("approvals-changed",
+    { count: 2, items: [card, { ...card, id: "gate-auto-6" }] }), CARD);
+  await page.waitForTimeout(150);
+  const newCard = await page.locator("#memory-auto .auto-waiting").count();
+  await page.close();
+  assert.equal(greyed, true, "a second ON could be asked for while the card waits");
+  assert.equal(cancelOnStale, false);
+  assert.deepEqual(sent, [{ which: "auto", enabled: true }, { which: "auto", enabled: false }]);
+  assert.equal(waitingAfter, 0, "a withdrawn card still reads as waiting");
+  assert.equal(usable, false, "the switch stayed greyed after the card was withdrawn");
+  assert.equal(toast, "\"Learn automatically\" is off. Every fact waits for your yes.");
+  assert.equal(newCard, 1, "a new card raised elsewhere was not shown");
+  // Cancel is OFF: it is offered on a stale link too.
+  const stale = await memoryTab({ status: { auto: false, auto_waiting: true } }, { link: { stale: true } });
+  const staleCancel = await stale.locator("#memory-auto .auto-waiting")
+    .getByRole("button", { name: "Cancel the request" }).isDisabled();
+  await stale.close();
+  assert.equal(staleCancel, false, "OFF was held on a stale link");
+});
+
+await check("OFF says the PC's own sentence, and the app's own only when the PC sent none", async () => {
+  const page = await memoryTab({ offMessage: "Sensitive topics now wait for your yes." , status: { auto_sensitive: true } });
+  await page.locator("#memory-sensitive-on").click();
+  await page.waitForTimeout(400);
+  const said = await page.locator("#toast").innerText();
+  await page.close();
+  const older = await memoryTab({ offSilent: true, status: { auto_sensitive: true } });
+  await older.locator("#memory-sensitive-on").click();
+  await older.waitForTimeout(400);
+  const own = await older.locator("#toast").innerText();
+  await older.close();
+  assert.equal(said, "Sensitive topics now wait for your yes.");
+  assert.equal(own, SWITCHES.sensitive.off);
+});
+
+await check("the empty list, on and off, and the History line under Saved automatically", async () => {
+  assert.equal(EMPTY, "Nothing has been saved automatically yet.");
+  assert.equal(AUTO_OFF, "\"Learn automatically\" is off.");
+  const on = await memoryTab({});
+  const onText = (await listText(on)).trim();
+  const note = await on.locator("#memory-auto-card .note").first().innerText();
+  await on.close();
+  const off = await memoryTab({ status: { auto: false } });
+  const offText = (await listText(off)).trim();
+  await off.close();
+  assert.equal(onText, EMPTY);
+  assert.equal(offText, `${EMPTY} ${AUTO_OFF}`);
+  assert.equal(note, HISTORY_NOTE);
+  assert.equal(HISTORY_NOTE,
+    "Deleting a conversation from History does not forget facts learned from it - use Forget here.");
+  assert.equal(LEARNING_OFF_NOTE,
+    "Background learning is off, so nothing is saved automatically. Start learning above to use this.");
+});
+
+await check("saves while the Brain was closed are counted: Rust hands them over, and opening the list clears both", async () => {
+  const page = await memoryTab({ facts: LIST.facts, unseen: [11, 12] });
+  const line = await page.locator("#memory-saved-line").innerText();
+  // The same id live again is not counted twice.
+  await page.evaluate(() => window.__emit("jarvis-event", { kind: "memory_saved", id: 60, data: { ids: [12, 13] } }));
+  await page.waitForTimeout(300);
+  const line2 = await page.locator("#memory-saved-line").innerText();
+  await page.locator("#memory-saved-line button").click();
+  await page.waitForTimeout(250);
+  const calls = (await autoState(page)).unseenCalls;
+  await page.close();
+  assert.equal(line.trim(), "Jarvis remembered 2 things");
+  assert.equal(line2.trim(), "Jarvis remembered 3 things");
+  assert.deepEqual(calls, [false, true], "the count was not read on open, or not cleared when seen");
+  // CONTROL: the Rust keeps them from the event stream, ids only.
+  const stream = read("src-tauri/src/stream.rs");
+  assert.match(stream, /"memory_saved" => crate::brain::auto_learn::note_saved\(&event\.data\)/);
+  const rust = read("src-tauri/src/brain/auto_learn.rs");
+  assert.match(rust, /pub fn brain_memory_saved_unseen\(seen: bool\) -> serde_json::Value/);
+  assert.match(read("src-tauri/src/windows.rs"), /pub\(crate\) fn show_brain_unlocked/);
+});
+
+await check("the learning card says \"background learning\", and a \"Remember:\" saved without a card says so", async () => {
+  const pending = { ...K.BRAIN.memory_pending, setup: { ...K.BRAIN.memory_pending.setup,
+    remember_last: { queued: false, auto_saved: true, note: "Saved without a card: it was in your own words." } } };
+  const page = await memoryTab({}, { brain: { ...K.BRAIN, memory_pending: pending } });
+  const learning = await page.locator("#memory-learning").innerText();
+  await page.close();
+  assert.match(learning, /Background learning/);
+  assert.match(learning, /Saved without a card: it was in your own words\./);
+  // CONTROL: a queued "Remember:" (a card) has nothing to add.
+  const queued = { ...pending, setup: { ...pending.setup,
+    remember_last: { queued: true, auto_saved: false, note: "Made a card." } } };
+  const q = await memoryTab({}, { brain: { ...K.BRAIN, memory_pending: queued } });
+  const qText = await q.locator("#memory-learning").innerText();
+  await q.close();
+  assert.doesNotMatch(qText, /Made a card/);
 });
 
 await check("turning Learn automatically OFF is immediate, and what was saved stays listed", async () => {
@@ -480,7 +694,8 @@ await check("CONTROL: only the Brain holds the commands; ON and Forget are held 
   const sets = toml.split("[[set]]").slice(1);
   const holders = (perm) => sets.filter((s) => s.includes(`"${perm}"`))
     .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
-  const cmds = ["brain_memory_learning_status", "brain_memory_auto_list", "brain_memory_learning_auto", "brain_memory_learning_sensitive"];
+  const cmds = ["brain_memory_learning_status", "brain_memory_auto_list", "brain_memory_learning_auto",
+    "brain_memory_learning_sensitive", "brain_memory_saved_unseen"];
   for (const cmd of cmds) {
     const perm = `allow-${cmd.replace(/_/g, "-")}`;
     assert.deepEqual(holders(perm), ["brain-memory"], `${perm} is held by ${holders(perm)}`);

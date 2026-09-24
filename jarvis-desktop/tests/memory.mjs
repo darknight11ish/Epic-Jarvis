@@ -19,6 +19,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as K from "./uikit.mjs";
+import { FORGOTTEN, forgetQuestion } from "../src/auto-learn.js";
 
 // Real backend output, produced by the real Python modules in backend/ at
 // test time, so what the pane is tested against is what the backend sends -
@@ -122,6 +123,9 @@ await check("forgetting asks before it acts, and warns it cannot be undone", asy
   const sent = await writes(page);
   await page.close();
   assert.match(asked, /cannot be undone/i, `the confirm said "${asked}"`);
+  // Both apps' words, and the same question as "Saved automatically".
+  assert.equal(asked, forgetQuestion({ text: "Works in Europe/London." }));
+  assert.match(asked, /Jarvis keeps a record that it once knew this, but will not use it again\./);
   assert.equal(sent.length, 0, "dismissing the confirm still sent the write");
 });
 
@@ -132,10 +136,13 @@ await check("confirming it sends one forget for that id", async () => {
             .getByRole("button", { name: "Forget" }).click();
   await page.waitForTimeout(300);
   const sent = await writes(page);
+  const toast = await page.locator("#toast").innerText();
   await page.close();
   assert.equal(sent.length, 1, JSON.stringify(sent));
   assert.equal(sent[0].cmd, "brain_memory_forget");
   assert.equal(sent[0].id, 7);
+  assert.equal(toast, FORGOTTEN);
+  assert.equal(FORGOTTEN, "Forgotten. Jarvis will not use it again.");
 });
 
 await check("a retired fact offers no Forget or Reword at all", async () => {
@@ -183,8 +190,8 @@ await check("turning learning on waits for its approval card, and says so", asyn
   assert.equal(sent.length, 1);
   assert.equal(sent[0].enabled, true);
   assert.match(toast, /Waiting for your approval/, `the toast said "${toast}"`);
-  assert.doesNotMatch(toast, /Learning is (on|off)/);
-  assert.match(line, /Waiting for your approval to turn learning on/);
+  assert.doesNotMatch(toast, /[Ll]earning is (on|off)/);
+  assert.match(line, /Waiting for your approval to turn background learning on/);
   assert.equal(still, 1, "it is not on until the card is approved");
 });
 
@@ -206,7 +213,7 @@ await check("a learning card raised elsewhere (the phone) shows the waiting line
   await page.close();
   assert.equal(before, 0);
   assert.equal(line.length, 1, "no waiting line for a card raised on the phone");
-  assert.match(line[0], /^Waiting for your approval to turn learning on\. Approve it /);
+  assert.match(line[0], /^Waiting for your approval to turn background learning on\. Approve it /);
   assert.equal(other, 0, "the line stayed after the learning card left");
 });
 
