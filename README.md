@@ -4,6 +4,24 @@ A personal assistant that runs on your own Windows PC, with an Android app to
 reach it from your phone. Built on OpenJarvis and heavily extended.
 Non-commercial, for one owner.
 
+## Launch video
+
+[![Jarvis launch video: Your assistant. Your PC. Your rules.](brag-output/brag.jpg)](brag-output/brag.mp4)
+
+**Tap the picture to watch** (25 seconds, sound on). It opens the video file,
+and GitHub plays it in the browser.
+
+What it shows: the reactor face waking up to "Hey Jarvis", four of the face
+designs, the face changing as it listens, thinks and speaks, being cut off
+mid-sentence with "stop", the phone approval card being swiped to approve,
+and the desktop and phone joined over the private network.
+
+The faces in the video are not drawings of the app. They are the app's own
+face code from `jarvis-desktop/src/faces.html`, run frame by frame. The music
+was written for the video, in code, on the same beat as the cuts. Everything
+needed to make the video again is in [`brag-output/`](brag-output/): the plan,
+the Hyperframes project, and the scripts that produce the faces and the music.
+
 ## How it fits together
 
 - **Backend.** A Python server on the PC. It does the work, and uses a local
