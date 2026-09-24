@@ -75,7 +75,8 @@ pub struct Security {
     /// How long away before the lock asks again. One of [`RELOCK_CHOICES`].
     pub relock_after_secs: u32,
     pub approvals: ApprovalCheck,
-    /// The Brain's memory lists stay hidden until Show passes Windows Hello.
+    /// The Brain's memory lists and chat history stay hidden until Show passes
+    /// Windows Hello (brain_read, and brain/history.rs).
     pub private_answers: bool,
 }
 

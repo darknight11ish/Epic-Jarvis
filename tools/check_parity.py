@@ -118,6 +118,13 @@ CLASSIFICATION = {
     "/api/digest/seen": ("ported", ""),
     "/api/events": ("ported", ""),
     "/api/feedback/mark": ("ported", ""),
+    # Chat history on the PC (JARVIS-API.md section 18, 2026-09-24). Built for
+    # both apps at once; `todo` on the desktop branch until the phone's
+    # History screen merges, then `ported`.
+    "/api/history": ("todo", "Chat history kept on the PC: the list, the switch and the keep setting (backend/chat-history.patch). Desktop: the Brain's History tab (brain_history_list). Phone: a History screen, being built to the same contract."),
+    "/api/history/conversation": ("todo", "One conversation, read-only (chat-history.patch). Desktop: History, Open (brain_history_open). Phone: History screen."),
+    "/api/history/delete": ("todo", "Delete ONE conversation, after a confirm; no delete-all route exists (chat-history.patch). Desktop: History, Delete (brain_history_delete, held on a stale link). Phone: History screen."),
+    "/api/history/settings": ("todo", "\"Keep chat history on this PC\" (ON raises a history_enable card, OFF immediate) and \"Delete conversations older than\" (chat-history.patch). Desktop: History (brain_history_settings, ON held on a stale link). Phone: History screen."),
     "/api/graph": ("deliberate", "The memory graph is explicitly out of scope on the phone (CLAUDE.md)."),
     "/api/holds/cancel": ("ported", ""),
     "/api/initiative": ("ported", "Brain screen, read-only."),

@@ -66,6 +66,12 @@ fn main() {
             "brain_memory_sleep_time",
             // "Both are true" on a correction card (memory-intake.patch).
             "brain_memory_keep_both",
+            // Chat history on the PC (JARVIS-API.md section 18): list, open
+            // one read-only, delete ONE, and the two settings. Brain only.
+            "brain_history_list",
+            "brain_history_open",
+            "brain_history_delete",
+            "brain_history_settings",
             // Backend supervision — settings window only
             "supervisor_status",
             "set_supervision",

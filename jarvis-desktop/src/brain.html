@@ -58,6 +58,13 @@
             </button>
           </li>
           <li>
+            <button class="rail-item" role="tab" id="tab-history" data-goto="history"
+                    aria-selected="false" aria-controls="view-history" tabindex="-1">
+              <span class="rail-glyph" aria-hidden="true">◷</span>
+              <span class="rail-label">History</span>
+            </button>
+          </li>
+          <li>
             <button class="rail-item" role="tab" id="tab-faculties" data-goto="faculties"
                     aria-selected="false" aria-controls="view-faculties" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">◆</span>
@@ -350,6 +357,31 @@
                 <p class="deep-said" id="deep-said" role="status"></p>
               </div>
               <div id="deep-jobs"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── History ────────────────────────────────────────────────── -->
+        <!-- Chat history on the PC (JARVIS-API.md section 18). brain.js
+             draws both cards from GET /api/history, read through its own
+             commands (brain/history.rs), not brain_read; history-view.js
+             has the words and the transcript. -->
+        <section class="view view-panes" id="view-history" role="tabpanel"
+                 aria-labelledby="tab-history" hidden>
+          <div class="panes">
+            <div class="card card-wide">
+              <h2>Chat history</h2>
+              <div id="history-settings"></div>
+            </div>
+            <div class="card card-wide">
+              <h2>Conversations</h2>
+              <p class="note">
+                Newest first. Opening one only reads it. Deleting one removes
+                it from this PC and cannot be undone. There is no "delete
+                everything": delete them one at a time, or choose above how
+                long they are kept.
+              </p>
+              <div id="history-list"></div>
             </div>
           </div>
         </section>

@@ -40,6 +40,27 @@ import {
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import {
+  addPage,
+  deleteQuestion,
+  DENIED_REPLY,
+  deviceTag,
+  keepLabel,
+  keepReply,
+  KEEP_CHOICES,
+  notRecordingLine,
+  OFF_REPLY,
+  olderThan,
+  ON_REPLY,
+  PAGE as HISTORY_PAGE,
+  readConversation,
+  readHistory,
+  renderTranscript,
+  rowMeta,
+  SWITCH_DETAIL,
+  SWITCH_LABEL,
+  TAINT_TITLE,
+} from "./history-view.js";
+import {
   askDeep,
   leadLine as deepLead,
   POLL_MS as DEEP_POLL_MS,
@@ -62,6 +83,7 @@ const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
  */
 const VIEWS = {
   memory: { title: "Memory", sub: "what Jarvis has learned about you" },
+  history: { title: "History", sub: "your conversations, kept on this PC" },
   faculties: { title: "Faculties", sub: "models, compute, skills, memory" },
   work: { title: "Work", sub: "jobs in flight and what can be put back" },
   galaxy: { title: "Galaxy", sub: "what Jarvis knows" },
@@ -79,6 +101,8 @@ const VIEW_SECTIONS = {
   live: ["attention", "status"],
   faculties: ["models", "compute", "skills", "memory", "memory_pending"],
   memory: ["memory_facts", "memory_pending"],
+  // Read through its own commands (brain/history.rs), not brain_read.
+  history: [],
   work: ["jobs", "undo"],
   trust: ["content_risk", "ledger"],
   watch: ["watch", "watch_report"],
@@ -489,6 +513,9 @@ function render(name) {
       renderFacts();
       renderWikiPlate();
       renderDeepPlate();
+      break;
+    case "history":
+      renderHistory();
       break;
     case "work":
       renderJobs();
@@ -1993,6 +2020,370 @@ function setupDeepAsk() {
 }
 setupDeepAsk();
 
+/* ==========================================================================
+   History - chat history on the PC (JARVIS-API.md section 18). Its own tab,
+   next to Memory, read through its own commands (brain/history.rs), not
+   brain_read; the words and the transcript are history-view.js.
+
+   The switch is the learning switch's shape: ON raises one approval card
+   and shows "Waiting for your approval" until the card leaves the queue;
+   OFF is immediate. Rust holds ON (and a keep change) on a stale link, and
+   the controls are greyed then. Delete is one conversation, after a
+   confirm. There is no "delete all".
+   ========================================================================== */
+
+const chats = {
+  /** readHistory() of the first page, or null before the first read. */
+  view: null,
+  /** Every conversation shown, newest first: the first page, then older. */
+  rows: [],
+  /** The last page was full, so there may be older ones. */
+  more: false,
+  error: "",
+  at: 0,
+  loading: false,
+  older: false,
+  /** The conversation open below its row, and its transcript. */
+  openId: null,
+  open: null,
+  openError: "",
+  /** `{ cardId, gone }` while an ON card waits (like `learningAsk`). */
+  ask: null,
+};
+/** The tab repaints often; the list is re-read at most this often. */
+const HISTORY_READ_MS = 15000;
+
+const errorText = (error) => String((error && error.message) || error);
+
+async function loadHistory() {
+  if (chats.loading) return;
+  chats.loading = true;
+  try {
+    const v = readHistory(await invoke("brain_history_list", { before: null, limit: HISTORY_PAGE }));
+    chats.view = v;
+    chats.rows = v.conversations;
+    chats.more = v.conversations.length >= HISTORY_PAGE;
+    chats.error = "";
+    if (v.enabled) chats.ask = null; // the card was approved
+    if (chats.openId && !chats.rows.some((c) => c.id === chats.openId)) {
+      chats.openId = null;
+      chats.open = null;
+    }
+  } catch (error) {
+    chats.error = errorText(error);
+  } finally {
+    chats.loading = false;
+    chats.at = Date.now();
+  }
+  paintHistory();
+}
+
+async function loadOlderHistory() {
+  const before = olderThan(chats.rows);
+  if (before === null || chats.older) return;
+  chats.older = true;
+  try {
+    const v = readHistory(await invoke("brain_history_list", { before, limit: HISTORY_PAGE }));
+    chats.rows = addPage(chats.rows, v.conversations);
+    chats.more = v.conversations.length >= HISTORY_PAGE;
+  } catch (error) {
+    toast(errorText(error), "bad");
+  } finally {
+    chats.older = false;
+  }
+  paintHistory();
+}
+
+async function toggleConversation(id) {
+  if (chats.openId === id) {
+    chats.openId = null;
+    chats.open = null;
+    paintHistory();
+    return;
+  }
+  chats.openId = id;
+  chats.open = null;
+  chats.openError = "";
+  paintHistory();
+  try {
+    const conv = readConversation(await invoke("brain_history_open", { id }));
+    if (chats.openId === id) chats.open = conv;
+  } catch (error) {
+    if (chats.openId === id) chats.openError = errorText(error);
+  }
+  paintHistory();
+}
+
+async function deleteConversation(c) {
+  if (!window.confirm(deleteQuestion(c))) return;
+  try {
+    const out = await invoke("brain_history_delete", { id: c.id });
+    toast(out && out.gone ? "That conversation was already deleted." : "Deleted from this PC.", "ok");
+    chats.rows = chats.rows.filter((r) => r.id !== c.id);
+    if (chats.openId === c.id) {
+      chats.openId = null;
+      chats.open = null;
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  paintHistory();
+}
+
+async function setHistoryEnabled(on) {
+  const waitingBefore = new Set(
+    (currentQueue().items || []).map((item) => item && item.id).filter(Boolean)
+  );
+  try {
+    const out = await invoke("brain_history_settings", { enabled: on, keepDays: null });
+    if (out && out.ok === false) {
+      toast(String(out.error || out.reason || "Refused."), "bad");
+    } else if (on && out && out.waiting) {
+      // Turning history ON raises an approval card: it is NOT on yet.
+      chats.ask = { cardId: await findNewCard(waitingBefore) };
+      toast(String(out.message || `Waiting for your approval. Approve it ${APPROVE_WHERE}.`), "ok");
+    } else if (on) {
+      chats.ask = null;
+      toast(out && out.enabled === true ? ON_REPLY : String((out && out.message) || "Chat history is still off."),
+        out && out.enabled === true ? "ok" : "bad");
+    } else {
+      chats.ask = null;
+      toast(OFF_REPLY, "ok");
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  chats.at = 0;
+  await loadHistory();
+}
+
+async function setKeepDays(days) {
+  try {
+    const out = await invoke("brain_history_settings", { enabled: null, keepDays: days });
+    if (out && out.ok === false) toast(String(out.error || out.reason || "Refused."), "bad");
+    else toast(keepReply(days, out), "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  chats.at = 0;
+  await loadHistory();
+}
+
+async function revealHistory() {
+  try {
+    await invoke("reveal_private_answers");
+  } catch (error) {
+    toast(errorText(error), "bad");
+    return;
+  }
+  chats.at = 0;
+  await loadHistory();
+}
+
+/** The ON card left the queue: read the switch again after the backend has
+ *  had a moment to apply an approval. Still off: it was denied or ran out
+ *  of time, and that is said - the learning switch's handler, for history. */
+onQueue((queue) => {
+  const ask = chats.ask;
+  if (!ask || !ask.cardId || ask.gone) return;
+  const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
+  if (items.some((item) => item && item.id === ask.cardId)) return;
+  ask.gone = true;
+  setTimeout(async () => {
+    if (chats.ask !== ask) return;
+    chats.at = 0;
+    await loadHistory();
+    if (chats.ask === ask) {
+      chats.ask = null;
+      if (!(chats.view && chats.view.enabled)) toast(DENIED_REPLY, "bad");
+      paintHistory();
+    }
+  }, MODEL_ASK_GRACE_MS);
+});
+
+// Private answers turned on or off, or a Show ran out: read the list again -
+// Rust decides whether it comes back hidden.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  const rereadHistory = () => {
+    chats.at = 0;
+    if (state.view === "history") loadHistory();
+  };
+  TAURI.event.listen("security-changed", rereadHistory);
+  TAURI.event.listen("private-hidden", rereadHistory);
+}
+
+function paintHistorySettings() {
+  const box = $("history-settings");
+  if (!box) return;
+  box.replaceChildren();
+  const v = chats.view;
+  if (!v) {
+    const line = el("p", "empty", chats.error ? `Could not read the chat history: ${chats.error}` : "Reading…");
+    if (chats.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadHistory));
+    }
+    box.append(line);
+    return;
+  }
+  if (!v.available) {
+    box.append(el("p", "empty", v.why));
+    return;
+  }
+
+  const label = el("label", "history-switch");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = "history-enabled";
+  input.setAttribute("role", "switch");
+  input.setAttribute("aria-describedby", "history-switch-detail");
+  input.checked = v.enabled;
+  label.append(input, el("span", "history-switch-label", SWITCH_LABEL));
+  const detail = el("p", "note history-switch-detail", SWITCH_DETAIL);
+  detail.id = "history-switch-detail";
+  box.append(label, detail);
+  // Turning it ON waits for a live link (rule 4); OFF never does.
+  if (!v.enabled) {
+    input.dataset.title = "Asks you first, with an approval card.";
+    liveButtons.add(input);
+    syncLiveButton(input);
+  }
+  input.addEventListener("change", async () => {
+    const want = input.checked;
+    // Show what the PC says, never what was clicked: ON is only a card.
+    input.checked = v.enabled;
+    input.disabled = true;
+    input.dataset.busy = "true";
+    await setHistoryEnabled(want);
+  });
+
+  if (chats.ask || v.waiting) {
+    box.append(el("p", "hint learning-waiting history-waiting",
+      `Waiting for your approval to turn chat history on. Approve it ${APPROVE_WHERE}.`));
+  }
+  const why = notRecordingLine(v);
+  if (why) box.append(el("p", "history-why-not", why));
+
+  const keep = el("label", "history-keep");
+  keep.append(el("span", "history-keep-label", "Delete conversations older than"));
+  const select = document.createElement("select");
+  select.id = "history-keep";
+  select.className = "field";
+  const choices = KEEP_CHOICES.some((c) => c.days === v.keepDays)
+    ? KEEP_CHOICES
+    : [...KEEP_CHOICES, { days: v.keepDays, label: keepLabel(v.keepDays) }];
+  for (const c of choices) {
+    const option = document.createElement("option");
+    option.value = String(c.days);
+    option.textContent = c.label;
+    select.append(option);
+  }
+  select.value = String(v.keepDays);
+  select.dataset.title = "Older conversations are deleted from this PC. There is no undo.";
+  liveButtons.add(select);
+  syncLiveButton(select);
+  select.addEventListener("change", async () => {
+    const days = Number(select.value);
+    select.value = String(v.keepDays);
+    select.disabled = true;
+    select.dataset.busy = "true";
+    await setKeepDays(days);
+  });
+  keep.append(select);
+  box.append(keep);
+}
+
+function paintHistoryList() {
+  const box = $("history-list");
+  if (!box) return;
+  box.replaceChildren();
+  const v = chats.view;
+  if (!v) {
+    box.append(el("p", "empty", chats.error ? "Nothing to show until the chat history can be read." : "Reading…"));
+    return;
+  }
+  if (!v.available) {
+    box.append(el("p", "empty", "Nothing to show until this PC keeps chat history."));
+    return;
+  }
+  if (v.hidden) {
+    const hidden = el("div", "private-hidden");
+    const n = v.hiddenCount;
+    hidden.append(el("p", "empty", n
+      ? `${n} ${n === 1 ? "conversation" : "conversations"}, hidden until Windows Hello confirms it is you.`
+      : "Hidden until Windows Hello confirms it is you."));
+    hidden.append(button("Show", revealHistory,
+      { title: "Asks Windows Hello - your PIN, fingerprint or face - then shows this list." }));
+    box.append(hidden);
+    return;
+  }
+  if (!chats.rows.length) {
+    box.append(el("p", "empty", v.enabled
+      ? "No conversations kept yet."
+      : "No conversations kept. Chat history is off."));
+    return;
+  }
+  const list = el("div", "rows history-rows");
+  for (const c of chats.rows) {
+    const open = chats.openId === c.id;
+    const device = deviceTag(c.device);
+    const item = row({
+      tag: device.tag,
+      title: c.title || "(no title)",
+      meta: [rowMeta(c)],
+      actions: [
+        button(open ? "Close" : "Open", () => toggleConversation(c.id),
+          { title: open ? "Close the conversation." : "Read the conversation. Nothing changes." }),
+        button("Delete", () => deleteConversation(c),
+          { danger: true, live: true, title: "Delete this conversation from this PC. There is no undo." }),
+      ],
+    });
+    item.dataset.id = c.id;
+    if (device.words) item.querySelector(".row-tag").title = device.words;
+    const main = item.querySelector(".row-main");
+    if (c.hasVoice || c.tainted) {
+      const marks = el("span", "history-marks");
+      if (c.hasVoice) {
+        const mic = el("span", "history-mark history-mark-voice", "voice");
+        mic.title = "Some of it was said aloud to Jarvis.";
+        marks.append(mic);
+      }
+      if (c.tainted) {
+        const taint = el("span", "history-mark history-mark-taint", "read outside text");
+        taint.title = TAINT_TITLE;
+        marks.append(taint);
+      }
+      main.append(marks);
+    }
+    list.append(item);
+    if (open) {
+      const t = el("div", "history-transcript");
+      t.id = "history-transcript";
+      if (chats.openError) t.append(el("p", "empty failed", chats.openError));
+      else if (!chats.open) t.append(el("p", "empty", "Reading…"));
+      else renderTranscript(t, chats.open, { el });
+      list.append(t);
+    }
+  }
+  box.append(list);
+  if (chats.more) {
+    const more = el("div", "row-actions history-more");
+    more.append(button(chats.older ? "Loading…" : "Load older", loadOlderHistory,
+      { title: "Show the next page of older conversations." }));
+    box.append(more);
+  }
+}
+
+function paintHistory() {
+  paintHistorySettings();
+  paintHistoryList();
+}
+
+function renderHistory() {
+  paintHistory();
+  if (IS_TAURI && !chats.loading && Date.now() - chats.at > HISTORY_READ_MS) loadHistory();
+}
+
 /** "learned 12d ago" only when that differs from when the fact became true.
  *
  * valid_from and created are stamped together for anything typed or accepted
@@ -3420,6 +3811,7 @@ dom.refresh.addEventListener("click", async () => {
   // `render` calls `startLayout` itself, so calling it again here started the
   // simulation twice and cancelled the first one mid-flight.
   if (state.view === "galaxy") state.graph = null;
+  if (state.view === "history") chats.at = 0;
   await load(sectionsFor(state.view));
   render(state.view);
 });

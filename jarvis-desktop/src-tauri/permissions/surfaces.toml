@@ -359,6 +359,22 @@ permissions = [
   "allow-brain-memory-keep-both",
 ]
 
+# Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).
+# Listing and opening a conversation are reads - and both are held back
+# while "Windows Hello for private answers" hides the Brain's lists. Delete
+# is ONE conversation per call; there is no "delete all" anywhere. The switch
+# is ONE setting per call: ON only raises an approval card (tier `ask`) and
+# is held while the event stream is stale, OFF is immediate.
+[[set]]
+identifier = "brain-history"
+description = "List and read the chat history kept on the PC, delete one conversation, and change its two settings (turning it on only raises an approval card). No bulk delete."
+permissions = [
+  "allow-brain-history-list",
+  "allow-brain-history-open",
+  "allow-brain-history-delete",
+  "allow-brain-history-settings",
+]
+
 # Show, on the Brain's memory lists while "Windows Hello for private
 # answers" is on (lock.rs). It asks Windows Hello and, when the owner
 # confirms, lets brain_read return the entries until they have been away

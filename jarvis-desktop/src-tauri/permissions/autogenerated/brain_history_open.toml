@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-history-open"
+description = "Enables the brain_history_open command without any pre-configured scope."
+commands.allow = ["brain_history_open"]
+
+[[permission]]
+identifier = "deny-brain-history-open"
+description = "Denies the brain_history_open command without any pre-configured scope."
+commands.deny = ["brain_history_open"]
