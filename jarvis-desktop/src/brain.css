@@ -1110,3 +1110,50 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- Wiki (backend/wiki.patch; wiki.js) --------------------------------- */
+
+.wiki-state {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wiki-state[data-ready="true"] {
+  color: var(--ok);
+}
+
+.wiki-job {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--border-accent);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.wiki-job[data-tone="ok"] {
+  border-left-color: var(--ok);
+}
+
+.wiki-job[data-tone="bad"] {
+  border-left-color: var(--bad);
+}
+
+.wiki-foot {
+  margin-top: 10px;
+}
+
+.wiki-sub {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.wiki-recent {
+  margin: 0 0 10px;
+  padding-left: 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}

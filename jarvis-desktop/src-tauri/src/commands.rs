@@ -2560,6 +2560,289 @@ mod note_target_tests {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The wiki builder - backend/wiki.patch and backend/jarvis_wiki.py
+// ---------------------------------------------------------------------------
+
+/// The folder, inside the owner's Obsidian vault, that the wiki builder
+/// writes to. The only folder [`wiki_open_folder`] will ever open.
+const WIKI_FOLDER_NAME: &str = "Jarvis Wiki";
+
+/// What the wiki builder can do now: `GET /api/wiki`. Whether it can run
+/// (it needs the second graphics card's "wiki" lane) and why not, the
+/// documents in `Jarvis Wiki/Sources` with their state, the last few log
+/// lines, and how many pages there are. Never a page's text.
+#[tauri::command]
+pub async fn wiki_status(app: AppHandle) -> Result<serde_json::Value, String> {
+    let (status, body) = wiki_get(&app, "/api/wiki").await?;
+    wiki_answer(status, &body, "/api/wiki")
+}
+
+/// "Add to wiki" for one document in `Jarvis Wiki/Sources`:
+/// `POST /api/wiki/ingest`. The backend's model reads it and then raises ONE
+/// approval card (`wiki_update`); nothing is written before that card is
+/// answered. The answer is the job (`state: "reading"`), or an explained
+/// refusal (`state: "refused"` with `error`).
+///
+/// Held while the event stream is stale - rule 4 - for the reason
+/// [`decide_approval`] gives: the card it raises should be answered by
+/// someone looking at a live queue, and any window holding the capability
+/// reaches this command directly, whatever its button shows.
+#[tauri::command]
+pub async fn wiki_ingest(app: AppHandle, source: String) -> Result<serde_json::Value, String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "the event stream is stale, so nothing can be added to the wiki \
+                    until it reconnects"
+                .to_string(),
+        );
+    }
+    let source = source.trim();
+    if source.is_empty() {
+        return Err("say which document to add to the wiki".to_string());
+    }
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .post(format!("{}/api/wiki/ingest", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "source": source }))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("unable to reach `/api/wiki/ingest`: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    wiki_answer(status, &body, "/api/wiki/ingest")
+}
+
+/// How one "Add to wiki" is going: `GET /api/wiki/ingest?id=`. `state` is
+/// `reading`, `waiting` (the card is up), `writing`, `done`, `refused` or
+/// `failed`, with the backend's own sentence in `message`.
+#[tauri::command]
+pub async fn wiki_ingest_status(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err("that wiki job has no id to look up".to_string());
+    }
+    let path = format!("/api/wiki/ingest?id={}", encode_path_segment(id));
+    let (status, body) = wiki_get(&app, &path).await?;
+    wiki_answer(status, &body, "/api/wiki/ingest")
+}
+
+/// Opens `Jarvis Wiki` in Explorer. The folder comes from the backend's own
+/// answer, read here in Rust - never from the page - and is opened only when
+/// the backend is on this PC (a loopback address), the path is absolute,
+/// names a folder called exactly "Jarvis Wiki", and that folder is here.
+/// A folder, never a file: the same reasoning as [`open_log_folder`].
+#[tauri::command]
+pub async fn wiki_open_folder(app: AppHandle) -> Result<(), String> {
+    if !base_is_loopback(&jarvis_base(&app)) {
+        return Err(
+            "the wiki folder is on the PC Jarvis runs on, not this one - open it there".to_string(),
+        );
+    }
+    let (status, body) = wiki_get(&app, "/api/wiki").await?;
+    let answer = wiki_answer(status, &body, "/api/wiki")?;
+    let dir = wiki_folder_to_open(&answer)?;
+
+    #[cfg(target_os = "windows")]
+    let program = "explorer.exe";
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let program = "xdg-open";
+
+    std::process::Command::new(program)
+        .arg(dir.as_os_str())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("could not open {}: {e}", dir.display()))
+}
+
+async fn wiki_get(app: &AppHandle, path: &str) -> Result<(u16, String), String> {
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{}{path}", jarvis_base(app)))
+        .headers(jarvis_headers(app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(app))
+            } else {
+                format!("unable to reach the wiki builder: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    Ok((status, response.text().await.unwrap_or_default()))
+}
+
+/// Reads one of the wiki routes' answers. A JSON object on success is the
+/// answer; a refusal the backend explained (`"state": "refused"`, with its
+/// sentence in `error`) is an answer too, for the page to show as it is.
+/// Everything else becomes a sentence.
+pub(crate) fn wiki_answer(
+    status: u16,
+    body: &str,
+    path: &str,
+) -> Result<serde_json::Value, String> {
+    let parsed = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .filter(|v| v.is_object());
+    if let Some(v) = parsed.as_ref() {
+        if (200..300).contains(&status) || v.get("state").is_some() {
+            return Ok(v.clone());
+        }
+    }
+    if status == 404 && path == "/api/wiki/ingest" && parsed.is_some() {
+        return Err(
+            "Jarvis no longer knows this job - it may have restarted. Nothing \
+                    is written without an approval card; look in the wiki folder to see."
+                .to_string(),
+        );
+    }
+    if status == 404 {
+        return Err(
+            "this PC's Jarvis has no wiki builder yet - copy the new backend \
+                    files in (run apply-patches.ps1)"
+                .to_string(),
+        );
+    }
+    if (200..300).contains(&status) {
+        return Err("the server's answer about the wiki could not be read".to_string());
+    }
+    Err(server_sentence(status, path, body))
+}
+
+/// The folder [`wiki_open_folder`] may open, from `GET /api/wiki`'s answer.
+pub(crate) fn wiki_folder_to_open(
+    answer: &serde_json::Value,
+) -> Result<std::path::PathBuf, String> {
+    let folder = answer
+        .get("folder")
+        .and_then(|f| f.as_str())
+        .filter(|f| !f.trim().is_empty())
+        .ok_or_else(|| {
+            "the wiki folder is not set up yet - make a \"Jarvis Wiki\" folder in your vault"
+                .to_string()
+        })?;
+    let dir = std::path::PathBuf::from(folder);
+    if !dir.is_absolute() || dir.file_name() != Some(std::ffi::OsStr::new(WIKI_FOLDER_NAME)) {
+        return Err(format!(
+            "the backend named {folder}, which is not a \"{WIKI_FOLDER_NAME}\" folder, so it \
+             is not opened"
+        ));
+    }
+    if !dir.is_dir() {
+        return Err(format!("{} is not a folder on this PC", dir.display()));
+    }
+    Ok(dir)
+}
+
+/// Is the Jarvis address this PC (127.x, ::1 or localhost)?
+pub(crate) fn base_is_loopback(base: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(base) else {
+        return false;
+    };
+    match url.host_str() {
+        Some(h) if h.eq_ignore_ascii_case("localhost") => true,
+        Some(h) => h
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<std::net::IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false),
+        None => false,
+    }
+}
+
+#[cfg(test)]
+mod wiki_tests {
+    use super::{base_is_loopback, wiki_answer, wiki_folder_to_open};
+
+    /// The backend's real answers, written by `tools/gen_wiki_cases.py` from
+    /// `jarvis_wiki` itself; `backend/test_wiki.py` fails when it is stale.
+    const FIXTURE: &str = include_str!("../../tests/fixtures/wiki-cases.json");
+
+    fn case(name: &str) -> (u16, String, String) {
+        let all: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture parses");
+        let c = &all["cases"][name];
+        (
+            c["status"].as_u64().expect("status") as u16,
+            c["body"].to_string(),
+            name.to_string(),
+        )
+    }
+
+    #[test]
+    fn the_real_answers_are_read() {
+        let (status, body, _) = case("status_ready");
+        let v = wiki_answer(status, &body, "/api/wiki").expect("an answer");
+        assert_eq!(v["available"], serde_json::json!(true));
+        assert!(v["sources"].as_array().is_some_and(|s| s.len() == 5));
+        let (status, body, _) = case("ingest_started");
+        assert_eq!(status, 202);
+        let v = wiki_answer(status, &body, "/api/wiki/ingest").expect("a job");
+        assert_eq!(v["state"], serde_json::json!("reading"));
+    }
+
+    /// A refusal the backend explained reaches the page as it is.
+    #[test]
+    fn an_explained_refusal_is_an_answer() {
+        for name in [
+            "ingest_in_wiki",
+            "ingest_busy",
+            "ingest_off",
+            "ingest_too_big",
+        ] {
+            let (status, body, _) = case(name);
+            let v = wiki_answer(status, &body, "/api/wiki/ingest").expect(name);
+            assert_eq!(v["state"], serde_json::json!("refused"), "{name}");
+            assert!(v["error"].as_str().is_some_and(|e| !e.is_empty()), "{name}");
+        }
+    }
+
+    #[test]
+    fn an_older_backend_and_a_lost_job_say_so() {
+        let err = wiki_answer(404, "", "/api/wiki").expect_err("no route");
+        assert!(err.contains("apply-patches"), "{err}");
+        let (status, body, _) = case("job_unknown");
+        let err = wiki_answer(status, &body, "/api/wiki/ingest").expect_err("lost");
+        assert!(err.contains("no longer knows"), "{err}");
+    }
+
+    #[test]
+    fn only_a_real_jarvis_wiki_folder_is_opened() {
+        let dir = std::env::temp_dir().join(format!("jarvis-wiki-open-{}", std::process::id()));
+        let wiki = dir.join("Jarvis Wiki");
+        std::fs::create_dir_all(&wiki).expect("temp folder");
+        let ok = wiki_folder_to_open(&serde_json::json!({ "folder": wiki.to_string_lossy() }));
+        assert_eq!(ok.as_deref(), Ok(wiki.as_path()));
+        let other = wiki_folder_to_open(&serde_json::json!({ "folder": dir.to_string_lossy() }));
+        assert!(other.is_err());
+        assert!(wiki_folder_to_open(&serde_json::json!({ "folder": "Jarvis Wiki" })).is_err());
+        assert!(wiki_folder_to_open(&serde_json::json!({ "folder": null })).is_err());
+        // The fixture's folder is a made-up path, not a folder on this PC.
+        let (_, body, _) = case("status_ready");
+        let v: serde_json::Value = serde_json::from_str(&body).expect("json");
+        assert!(wiki_folder_to_open(&v).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_folder_opens_only_for_a_backend_on_this_pc() {
+        assert!(base_is_loopback("http://127.0.0.1:4719"));
+        assert!(base_is_loopback("http://localhost:4719"));
+        assert!(base_is_loopback("http://[::1]:4719"));
+        assert!(!base_is_loopback("http://100.64.1.2:4719"));
+        assert!(!base_is_loopback("http://desktop.tailnet.ts.net:4719"));
+        assert!(!base_is_loopback("not a url"));
+    }
+}
+
 #[cfg(test)]
 mod capture_tests {
     use super::{server_sentence, validate_bind_address, validate_external_url};

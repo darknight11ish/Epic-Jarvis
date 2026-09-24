@@ -33,6 +33,7 @@ import {
   onLink,
   start as startLink,
 } from "./jarvis-link.js";
+import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -469,6 +470,7 @@ function render(name) {
       renderLearning();
       renderProposals();
       renderFacts();
+      renderWikiPlate();
       break;
     case "work":
       renderJobs();
@@ -1580,6 +1582,61 @@ function renderFacts() {
     );
   } else {
     dom.memoryFacts.replaceChildren(list);
+  }
+}
+
+/* ==========================================================================
+   Wiki - backend/wiki.patch. Its own plate on the Memory tab, read through
+   its own commands (not brain_read); the plate itself is wiki.js.
+   ========================================================================== */
+
+const wiki = { view: null, error: "", job: null, at: 0, loading: false };
+/** The Memory tab repaints often; the list is re-read at most this often. */
+const WIKI_READ_MS = 15000;
+
+async function loadWiki() {
+  if (wiki.loading) return;
+  wiki.loading = true;
+  try {
+    wiki.view = readWiki(await invoke("wiki_status"));
+    wiki.error = "";
+  } catch (error) {
+    wiki.error = String((error && error.message) || error);
+  } finally {
+    wiki.loading = false;
+    wiki.at = Date.now();
+  }
+  paintWiki();
+}
+
+function paintWiki() {
+  const box = $("wiki");
+  if (!box) return;
+  renderWiki(box, { ...wiki, onAdd: addWiki, onOpen: openWikiFolder }, { el, row, button });
+}
+
+function renderWikiPlate() {
+  paintWiki();
+  if (IS_TAURI && !wiki.loading && Date.now() - wiki.at > WIKI_READ_MS) loadWiki();
+}
+
+/** "Add to wiki": one card is raised on the PC; this follows it to the end. */
+async function addWiki(source) {
+  wiki.job = { source, said: { text: "Asking the PC…", tone: null, final: false } };
+  paintWiki();
+  const last = await addToWiki(invoke, source, (said) => {
+    wiki.job = { source, said };
+    paintWiki();
+  });
+  announce(`${source}: ${last.text}`, last.tone === "bad" ? "assertive" : "polite");
+  await loadWiki();
+}
+
+async function openWikiFolder() {
+  try {
+    await invoke("wiki_open_folder");
+  } catch (error) {
+    toast(String((error && error.message) || error), "bad");
   }
 }
 

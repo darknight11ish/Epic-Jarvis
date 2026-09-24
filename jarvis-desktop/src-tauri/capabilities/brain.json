@@ -15,6 +15,7 @@
     "brain-read",
     "brain-act",
     "brain-faculties",
-    "brain-memory"
+    "brain-memory",
+    "brain-wiki"
   ]
 }

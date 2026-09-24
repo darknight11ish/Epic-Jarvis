@@ -127,6 +127,13 @@ fn main() {
             "capture_note_status",
             // Which note apps this PC is set up for - names only.
             "note_targets",
+            // The wiki builder (backend/wiki.patch): read the list, add one
+            // document (raises one approval card), follow that job, and
+            // open the Jarvis Wiki folder. Brain window only.
+            "wiki_status",
+            "wiki_ingest",
+            "wiki_ingest_status",
+            "wiki_open_folder",
             // Quickbar
             "hide_quickbar",
             "resize_quickbar",

@@ -330,6 +330,21 @@ permissions = [
   "allow-brain-memory-keep-both",
 ]
 
+# The wiki builder (backend/wiki.patch). Reading the list of documents and
+# following one job are reads; "Add to wiki" only raises ONE approval card
+# (wiki_update) - the backend writes nothing until it is answered, and the
+# command is held while the event stream is stale. Opening the folder opens
+# only a folder called "Jarvis Wiki" on this PC, named by the backend.
+[[set]]
+identifier = "brain-wiki"
+description = "Read the wiki builder's documents, add one document to the wiki (which raises one approval card), follow that, and open the Jarvis Wiki folder."
+permissions = [
+  "allow-wiki-status",
+  "allow-wiki-ingest",
+  "allow-wiki-ingest-status",
+  "allow-wiki-open-folder",
+]
+
 # ---------------------------------------------------------------------------
 # The faces window: read and write the appearance document.
 #
