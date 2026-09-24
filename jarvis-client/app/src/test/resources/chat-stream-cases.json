@@ -173,5 +173,77 @@
         "statuses": []
       }
     }
+  ],
+  "route_headers": [
+    {
+      "name": "local answer",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"injected_facts\": 1, \"injected_ids\": [\"fact_1\"], \"memory_side\": \"hud\", \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"local\"}",
+      "expect": {
+        "where": "local",
+        "lane": "jarvis-primary",
+        "turn_id": "0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "name": "local answer, older backend without `where`",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"injected_facts\": 1, \"injected_ids\": [\"fact_1\"], \"memory_side\": \"hud\", \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
+      "expect": {
+        "where": "local",
+        "lane": "jarvis-primary",
+        "turn_id": "0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "name": "cloud answer",
+      "header": "{\"lane\": \"jarvis-escalate\", \"reason\": \"complexity 0.9 and budget available\", \"gate\": \"escalate\", \"complexity\": 0.9, \"inject_memory\": false, \"tainted\": false, \"injected_facts\": 0, \"injected_ids\": [], \"memory_side\": \"none\", \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"cloud\"}",
+      "expect": {
+        "where": "cloud",
+        "lane": "jarvis-escalate",
+        "turn_id": "0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "name": "cloud answer, older backend without `where`",
+      "header": "{\"lane\": \"jarvis-escalate\", \"reason\": \"complexity 0.9 and budget available\", \"gate\": \"escalate\", \"complexity\": 0.9, \"inject_memory\": false, \"tainted\": false, \"injected_facts\": 0, \"injected_ids\": [], \"memory_side\": \"none\", \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
+      "expect": {
+        "where": "cloud",
+        "lane": "jarvis-escalate",
+        "turn_id": "0123456789abcdef0123456789abcdef"
+      }
+    }
+  ],
+  "activity_events": [
+    {
+      "name": "working with a sentence",
+      "kind": "activity",
+      "data": {
+        "key": "activity",
+        "value": {
+          "state": "working",
+          "detail": "Using calculator..."
+        }
+      },
+      "frame": "event: activity\ndata: {\"key\": \"activity\", \"value\": {\"state\": \"working\", \"detail\": \"Using calculator...\"}}\n\n",
+      "expect": {
+        "state": "working",
+        "detail": "Using calculator..."
+      }
+    },
+    {
+      "name": "idle",
+      "kind": "activity",
+      "data": {
+        "key": "activity",
+        "value": {
+          "state": "idle",
+          "detail": ""
+        }
+      },
+      "frame": "event: activity\ndata: {\"key\": \"activity\", \"value\": {\"state\": \"idle\", \"detail\": \"\"}}\n\n",
+      "expect": {
+        "state": "idle",
+        "detail": null
+      }
+    }
   ]
 }

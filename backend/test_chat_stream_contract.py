@@ -45,6 +45,7 @@ AG._record_chain = lambda steps: None
 AG._publish_step = lambda step: None
 
 COPIES = [REPO / "jarvis-client" / "app" / "src" / "test" / "resources" / "chat-stream-cases.json",
+          REPO / "jarvis-client" / "app" / "src" / "androidTest" / "resources" / "chat-stream-cases.json",
           REPO / "jarvis-desktop" / "tests" / "fixtures" / "chat-stream-cases.json"]
 
 FAILED, PASSED = [], []
@@ -177,12 +178,80 @@ def build_cases() -> list:
     return cases
 
 
-def document(cases) -> str:
+FIXED_TURN_ID = "0123456789abcdef0123456789abcdef"
+
+
+def build_route_headers() -> list:
+    """X-Jarvis-Route, as the PC builds it: the REAL router's
+    Decision.as_dict(), plus the fields the patches add - degrade-filter's
+    memory fields, feedback's turn_id (from the real jarvis_feedback), and
+    chat-stream's lane and where - with the values those patches write.
+    Each case in two versions: with `where`, and as an older backend without
+    it, which the apps must still read by its gate."""
+    import os
+    import tempfile
+    sys.path.insert(0, str(HERE / "rebuilt"))
+    os.environ.setdefault("OPENJARVIS_CONFIG_DIR", tempfile.mkdtemp(prefix="jarvis-route-"))
+    os.environ["JARVIS_FEEDBACK_DB"] = str(Path(tempfile.mkdtemp(prefix="jarvis-fb-")) / "f.db")
+    import jarvis_router as RT
+    import jarvis_feedback as FB
+
+    lanes = ["jarvis-escalate"]
+    local = RT.choose("what is on my calendar tomorrow", local_model="jarvis-primary",
+                      lanes=lanes, budget=RT.Budget(path=None)).as_dict()
+    long_q = ("explain in detail and compare the trade-offs of three sorting "
+              "algorithms, step by step, why each is chosen ") * 3
+    cloud = RT.choose(long_q, local_model="jarvis-primary", lanes=lanes,
+                      budget=RT.Budget(path=None)).as_dict()
+    assert local["lane"] == "jarvis-primary" and cloud["lane"] == "jarvis-escalate", (local, cloud)
+
+    def turn_id():
+        tid = FB.record_turn(["fact_1"])
+        assert re.fullmatch(r"[0-9a-f]{32}", tid), tid
+        return FIXED_TURN_ID
+
+    local.update({"injected_facts": 1, "injected_ids": ["fact_1"], "memory_side": "hud",
+                  "turn_id": turn_id(), "lane": "jarvis-primary", "where": "local"})
+    cloud.update({"inject_memory": False, "injected_facts": 0, "injected_ids": [],
+                  "memory_side": "none", "turn_id": turn_id(), "lane": "jarvis-escalate",
+                  "where": "cloud"})
+    out = []
+    for name, h in (("local answer", local), ("cloud answer", cloud)):
+        exp = {"where": h["where"], "lane": h["lane"], "turn_id": FIXED_TURN_ID}
+        out.append({"name": name, "header": json.dumps(h), "expect": exp})
+        old = {k: v for k, v in h.items() if k != "where"}
+        out.append({"name": name + ", older backend without `where`",
+                    "header": json.dumps(old), "expect": exp})
+    return out
+
+
+def build_activity_events() -> list:
+    """The `activity` event as the real bus sends it - the one that carries
+    what a tool is doing ("Using calculator..."), which jarvis_agent's
+    `announce` puts there through jarvis_hud._activity -> set_activity. The
+    phone read `activity_detail` off it and the desktop never read it at all;
+    the real field is `value.detail`."""
+    import jarvis_events as EV
+    out = []
+    for state, detail in (("working", "Using calculator..."), ("idle", "")):
+        EV.set_activity(state, detail)
+        ev = EV.BUS._events[-1]
+        assert ev.kind == "activity", ev
+        out.append({"name": f"{state}" + (" with a sentence" if detail else ""),
+                    "kind": ev.kind, "data": ev.data,
+                    "frame": re.sub(r"^id: \d+\n", "", ev.sse()),
+                    "expect": {"state": state, "detail": detail or None}})
+    return out
+
+
+def document(cases, routes=None) -> str:
     return json.dumps({
         "about": "What /api/chat really sends, made by running the producer "
                  "(backend/test_chat_stream_contract.py --write). Do not edit by hand.",
         "status_prefix": AG.STATUS_PREFIX.strip(),
         "cases": cases,
+        "route_headers": routes if routes is not None else build_route_headers(),
+        "activity_events": build_activity_events(),
     }, indent=2, ensure_ascii=False) + "\n"
 
 

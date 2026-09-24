@@ -711,6 +711,31 @@
     row.appendChild(right);
     row.appendChild(wrong);
     msg.appendChild(row);
+    // Only on an answer that FINISHED. A streamed answer's message is added
+    // empty and filled as it arrives, so the mark used to appear at once -
+    // and stayed on an answer that was then cut off and labelled
+    // "[interrupted]", inviting a right/wrong verdict on half a reply. The
+    // page sets data-state="done" when the answer ends properly and
+    // "interrupted" when it does not; until then the row is hidden.
+    function settle() {
+      var st = msg.dataset ? msg.dataset.state : "";
+      if (st === "done") {
+        row.hidden = false;
+        return true;
+      }
+      if (st === "interrupted") {
+        row.remove();
+        return true;
+      }
+      row.hidden = true;
+      return false;
+    }
+    if (!settle() && typeof MutationObserver !== "undefined") {
+      var until = new MutationObserver(function () {
+        if (settle()) until.disconnect();
+      });
+      until.observe(msg, { attributes: true, attributeFilter: ["data-state"] });
+    }
   }
 
   /* ---------------------------------------------------------------- *

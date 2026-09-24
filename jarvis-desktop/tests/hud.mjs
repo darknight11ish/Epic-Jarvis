@@ -152,6 +152,16 @@ async function openHud(browser, status, pageOptions = {}) {
       if (url.pathname === "/api/status") return route.fulfill({ status: 200, headers: cors, json: status });
       if (url.pathname === "/api/chat") {
         chats.push(JSON.parse(req.postData() || "{}"));
+        // A case from chat-stream-cases.json: the body AND Content-Type the
+        // backend's real producer made (backend/test_chat_stream_contract.py).
+        if (status.chatCase) {
+          const headers = { ...cors, "Content-Type": status.chatCase.content_type };
+          if (status.routeHeader) {
+            headers["X-Jarvis-Route"] = status.routeHeader;
+            headers["Access-Control-Expose-Headers"] = "X-Jarvis-Route";
+          }
+          return route.fulfill({ status: 200, headers, body: status.chatCase.body });
+        }
         // feedback.patch: the answer's id in X-Jarvis-Route, exposed to the
         // page as the backend exposes it. Only when a scenario asks for it.
         const routeHeaders = status.turnId
@@ -622,6 +632,67 @@ await check("the old OpenJarvis light is gone, and chat never depended on it", a
   await page.close();
   assert.deepEqual(problems, []);
 });
+
+/* ── The real reply, from the backend's own producer ─────────────────────
+ *
+ * chat-stream-cases.json is written by RUNNING the backend
+ * (backend/test_chat_stream_contract.py): Ollama's real stream, relayed by
+ * each branch of /api/chat, with the Content-Type that branch sends. The
+ * page's own reader must show what the model said - this is the reader that
+ * failed "Unexpected token 'd'" on a tool turn, while its tests used a
+ * hand-typed body. */
+const FIXTURE = JSON.parse(readFileSync(join(HERE, "fixtures", "chat-stream-cases.json"), "utf8"));
+const localRoute = FIXTURE.route_headers.find((r) => r.expect.where === "local");
+
+for (const c of FIXTURE.cases) {
+  await check(`HUD reads the real reply: ${c.name}`, async () => {
+    const { page, problems } = await openHud(browser,
+      { jarvis: false, ollama: true, proxy: false, chatCase: c, routeHeader: localRoute.header });
+    const log = await send(page, "hi");
+    // The answers to THIS question (the page greets with one of its own).
+    const state = await page.evaluate(() => {
+      const all = [...document.querySelectorAll("#log > .msg")];
+      const you = all.map((m) => m.classList.contains("user")).lastIndexOf(true);
+      return all.slice(you + 1).filter((m) => m.classList.contains("jarvis"))
+        .map((m) => m.dataset.state || "");
+    });
+    await page.close();
+    assert.deepEqual(problems, []);
+    const after = log.slice(log.findIndex((m) => m.who === "you"));
+    const answer = after.find((m) => m.who === "jarvis");
+    const system = after.find((m) => m.who === "system");
+    if (c.expect.error) {
+      assert.ok(system, `no error shown: ${JSON.stringify(after)}`);
+      assert.equal(system.body, `Jarvis could not answer: ${c.expect.error}`);
+      assert.ok(!state.includes("done"), "a failed turn must not be marked finished");
+      return;
+    }
+    assert.ok(!system, `an error was shown for a good reply: ${JSON.stringify(system)}`);
+    assert.ok(answer, `no answer shown: ${JSON.stringify(after)}`);
+    const shown = c.expect.length
+      ? `${c.expect.text} [answer cut short \u2014 ask \u201cgo on\u201d for the rest]`
+      : c.expect.text;
+    assert.equal(answer.body, shown);
+    assert.deepEqual(state, ["done"]);
+  });
+}
+
+for (const r of FIXTURE.route_headers) {
+  await check(`HUD badge from the real X-Jarvis-Route: ${r.name}`, async () => {
+    const ok = FIXTURE.cases.find((c) => c.name === "local turn");
+    const { page } = await openHud(browser,
+      { jarvis: false, ollama: true, proxy: false, chatCase: ok, routeHeader: r.header });
+    await send(page, "hi");
+    const chip = await page.evaluate(() => ({
+      text: document.getElementById("chip-model").textContent,
+      hot: document.getElementById("chip-model").classList.contains("hot"),
+    }));
+    await page.close();
+    assert.equal(chip.text, r.expect.lane);
+    assert.equal(chip.hot, r.expect.where === "cloud",
+      "gold is for an answer that left this PC, and only that");
+  });
+}
 
 await browser.close();
 if (fails.length) {

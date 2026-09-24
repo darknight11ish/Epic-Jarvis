@@ -1541,7 +1541,11 @@ async function send(){
   if(SEND_INFLIGHT){ SEND_INFLIGHT.abort(); }
   const ctrl = new AbortController();
   SEND_INFLIGHT = ctrl;
-  const watchdog = setTimeout(() => ctrl.abort("timeout"), 300000);
+  // Silence, not duration: the clock restarts on every byte. The PC sends a
+  // keepalive every 10 s even while an approval card waits, so two minutes
+  // of nothing is a wedge; a long answer, or a long wait for you, is not.
+  let watchdog = setTimeout(() => ctrl.abort("timeout"), 120000);
+  const stillAlive = () => { clearTimeout(watchdog); watchdog = setTimeout(() => ctrl.abort("timeout"), 120000); };
   $("input").value = "";
   $("input").style.height = "auto";
   const userNode = addMessage("user", text);
@@ -1568,8 +1572,10 @@ async function send(){
         : (S.lane === "local" ? (S.defaultModel || "local") : S.lane),
     messages: S.messages.slice(-12),
     stream: true,
-    temperature: 0.7,
-    max_tokens: 2048
+    temperature: 0.7
+    // No max_tokens: the PC uses one length for every window (1,024, the
+    // Modelfile's num_predict). This page used to ask for 2,048 while the
+    // quickbar and the phone got 1,024.
   };
 
   let node = null, full = "";
@@ -1586,8 +1592,11 @@ async function send(){
     });
     if(!res.ok){
       let msg = res.status + " " + res.statusText;
-      try{ const j = await res.json(); if(j.error) msg = j.error; }catch(e){}
-      throw new Error(msg);
+      try{
+        const j = await res.json();
+        if(j.error) msg = typeof j.error === "string" ? j.error : (j.error.message || msg);
+      }catch(e){}
+      const e = new Error(msg); e.fromServer = true; throw e;
     }
 
     // The proxy tells us which lane it picked and why.
@@ -1604,7 +1613,12 @@ async function send(){
           ? route.injected_facts + " facts"
           : (route.memory_side === "jarvis" ? "jarvis-side" : "none");
         $("chip-model").textContent = route.lane;
-        $("chip-model").className = "chip" + (route.gate === "privacy" ? "" : " hot");
+        // Gold means the answer left this PC. `where` says so (chat-stream
+        // .patch); an older backend is read by its gate - only "escalate"
+        // picks a cloud lane. This used to test gate === "privacy", a gate
+        // the router never returns, so EVERY answer was painted as cloud.
+        const cloud = route.where ? route.where === "cloud" : route.gate === "escalate";
+        $("chip-model").className = "chip" + (cloud ? " hot" : "");
       }
     }catch(e){}
 
@@ -1613,21 +1627,34 @@ async function send(){
       node = addMessage("jarvis","");
       const reader = res.body.getReader();
       const dec = new TextDecoder();
-      let buf = "", finished = false;
+      let buf = "", finished = false, cutShort = false;
       while(true){
         const {done, value} = await reader.read();
         if(done) break;
+        stillAlive();
         buf += dec.decode(value, {stream:true});
         const parts = buf.split("\n");
         buf = parts.pop();
         for(const line of parts){
           const s = line.trim();
+          // `: jarvis-status approval` (chat-stream.patch): an approval card
+          // is waiting, and nothing more happens until it is answered.
+          const status = /^:\s*jarvis-status\s+(\w+)/.exec(s);
+          if(status && !full){
+            node.textContent = status[1] === "approval" ? "Waiting for your approval\u2026"
+              : status[1] === "working" ? "Working\u2026" : "";
+            continue;
+          }
           if(!s.startsWith("data:")) continue;
           const payload = s.slice(5).trim();
           if(payload === "[DONE]"){ finished = true; continue; }
           try{
             const j = JSON.parse(payload);
-            if(j.error) throw new Error(typeof j.error === "string" ? j.error : (j.error.message || "upstream error"));
+            if(j.error){
+              const e = new Error(typeof j.error === "string" ? j.error : (j.error.message || "upstream error"));
+              e.fromServer = true; throw e;
+            }
+            if(j.choices?.[0]?.finish_reason === "length") cutShort = true;
             if(j.choices?.[0]?.finish_reason) finished = true;
             const d = j.choices?.[0]?.delta?.content;
             if(d){ full += d; node.textContent = full; $("log").scrollTop = $("log").scrollHeight; }
@@ -1640,14 +1667,24 @@ async function send(){
       // Without [DONE] or a finish_reason, what we have is a fragment, and a
       // fragment must not be committed to history as an answer.
       if(!finished){
-        if(node) node.textContent = full + (full ? " " : "") + "[interrupted]";
+        if(node){
+          node.textContent = full + (full ? " " : "") + "[interrupted]";
+          node.parentElement.dataset.state = "interrupted";
+        }
         throw new Error("the answer was cut off before it finished");
       }
+      // Stopped at the length limit: shown and kept, but said so.
+      if(cutShort) node.textContent = full + " [answer cut short \u2014 ask \u201cgo on\u201d for the rest]";
+      // Finished: the right/wrong mark (hud_bootstrap.js) may show now.
+      node.parentElement.dataset.state = "done";
     } else {
       const j = await res.json();
-      if(j.error) throw new Error(j.error);
+      if(j.error){
+        const e = new Error(typeof j.error === "string" ? j.error : (j.error.message || "upstream error"));
+        e.fromServer = true; throw e;
+      }
       full = j.choices?.[0]?.message?.content || "(empty reply)";
-      addMessage("jarvis", full);
+      addMessage("jarvis", full).parentElement.dataset.state = "done";
       $("r-model").textContent = j.model || "—";
       if(j.usage) $("r-tokens").textContent = j.usage.total_tokens ?? "—";
       if(j.complexity){
@@ -1670,7 +1707,9 @@ async function send(){
     const last = S.messages[S.messages.length - 1];
     if(last && last.role === "user" && last.content === text) S.messages.pop();
     const why = err && err.name === "AbortError" ? "the request was cancelled or timed out" : (err.message || String(err));
-    addMessage("system", "Could not reach Jarvis: " + why);
+    // The PC's own sentence (Ollama not running, a model not installed) is
+    // not "could not reach": Jarvis was reached and said what is wrong.
+    addMessage("system", (err && err.fromServer ? "Jarvis could not answer: " : "Could not reach Jarvis: ") + why);
     reactor.set("idle");
     return;
   }

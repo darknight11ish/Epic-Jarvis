@@ -281,6 +281,12 @@ const state = {
    *  and is not added to the conversation. */
   turnFramed: false,
   turnEnded: false,
+  /** The answer stopped at the length limit (`finish_reason: "length"`). It
+   *  is shown, and kept, with a note saying it was cut short. */
+  turnCutShort: false,
+  /** This turn's Local/Cloud badge came from the server's X-Jarvis-Route
+   *  header, so nothing in the stream may overwrite it with a guess. */
+  routeFromHeader: false,
   /** Cancels whichever transport is streaming; null when idle. */
   abort: null,
   startedAt: 0,
@@ -957,6 +963,38 @@ function routeFromPayload(payload) {
     label: isCloud ? "Cloud" : "Local",
     model: model || base.model,
   };
+}
+
+/**
+ * The badge from the server's own word, `X-Jarvis-Route`, which says which
+ * lane answered and - since chat-stream.patch - `where`: "local" or "cloud".
+ *
+ * The badge used to be guessed from each chunk's `model` string, which an
+ * Ollama chunk always carries and which says nothing about where it ran - so
+ * a cloud answer would have been labelled Local. An older backend with no
+ * `where` is read by its gate: only "escalate" sends a turn to a cloud lane.
+ */
+function routeFromHeader(route) {
+  if (!route || typeof route !== "object") return null;
+  const where =
+    route.where === "cloud" || route.where === "local"
+      ? route.where
+      : route.gate === "escalate"
+        ? "cloud"
+        : "local";
+  const cloud = where === "cloud";
+  return {
+    tier: cloud ? "cloud" : "local",
+    label: cloud ? "Cloud" : "Local",
+    model: typeof route.lane === "string" && route.lane ? route.lane : null,
+  };
+}
+
+function applyHeaderRoute(route) {
+  const next = routeFromHeader(route);
+  if (!next) return;
+  state.routeFromHeader = true;
+  applyRoute(next);
 }
 
 /** Paints the three health dots in the card footer. */
@@ -2109,8 +2147,14 @@ function consumeLine(rawLine) {
   let line = rawLine.trim();
   if (!line) return false;
 
-  // SSE comment / heartbeat.
-  if (line.startsWith(":")) return false;
+  // SSE comment / heartbeat. One kind says what the PC is waiting on
+  // (chat-stream.patch): `: jarvis-status approval` while an approval card
+  // waits - so the card says so instead of sitting on "Thinking…".
+  if (line.startsWith(":")) {
+    const status = /^:\s*jarvis-status\s+(\w+)/.exec(line);
+    if (status) showWaitStatus(status[1]);
+    return false;
+  }
 
   // SSE fields other than `data:` carry nothing we render.
   if (/^(event|id|retry):/i.test(line)) return false;
@@ -2140,14 +2184,36 @@ function consumeLine(rawLine) {
     return true;
   }
 
-  const route = routeFromPayload(chunk);
-  if (route) applyRoute(route);
+  // A guess from the chunk only when the server has not said: every Ollama
+  // chunk names a model, and that says nothing about where it ran.
+  if (!state.routeFromHeader) {
+    const route = routeFromPayload(chunk);
+    if (route) applyRoute(route);
+  }
 
   appendDelta(deltaFromChunk(chunk));
+
+  const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : null;
+  if (choice && choice.finish_reason === "length") state.turnCutShort = true;
 
   const ended = isTerminal(chunk);
   if (ended) state.turnEnded = true;
   return ended;
+}
+
+/** What `: jarvis-status <word>` means, for the card's status line. */
+const WAIT_STATUS = {
+  approval: "Waiting for your approval…",
+  working: "Working…",
+  thinking: "Thinking…",
+};
+
+function showWaitStatus(word) {
+  const text = WAIT_STATUS[word];
+  if (!text || state.phase !== "streaming" || dom.card.hidden) return;
+  if (dom.cardStatusText.textContent === text) return;
+  dom.cardStatusText.textContent = text;
+  if (word === "approval") announce("Waiting for your approval.");
 }
 
 /** Appends text to the buffer and schedules a repaint. */
@@ -2198,6 +2264,15 @@ async function streamViaBackend(payload) {
     // part of it, so it never reaches consumeLine.
     if (line.startsWith(TURN_LINE_PREFIX)) {
       state.turnId = line.slice(TURN_LINE_PREFIX.length);
+      return;
+    }
+    // Which lane answered, from X-Jarvis-Route - the same kind of line.
+    if (line.startsWith(ROUTE_LINE_PREFIX)) {
+      try {
+        applyHeaderRoute(JSON.parse(line.slice(ROUTE_LINE_PREFIX.length)));
+      } catch {
+        /* not a route - ignore it rather than show it */
+      }
       return;
     }
     if (settled) return;
@@ -2275,6 +2350,13 @@ async function streamViaFetch(payload) {
       throw new Error(
         `the server answered HTTP ${response.status} ${response.statusText}${hint}`
       );
+    }
+
+    try {
+      const header = response.headers.get("X-Jarvis-Route");
+      if (header) applyHeaderRoute(JSON.parse(header));
+    } catch {
+      /* no usable route header - the badge keeps its guess */
     }
 
     if (!response.body) {
@@ -2476,6 +2558,12 @@ async function send(promptText) {
   state.turnQuestion = text;
   state.turnFramed = false;
   state.turnEnded = false;
+  state.turnCutShort = false;
+  state.routeFromHeader = false;
+  // A mark that failed on the last answer (a 503 from a busy database, say)
+  // is tried again on this one: an answer that carries an id proves the
+  // backend keeps them. It used to stay hidden until the app restarted.
+  state.markUnavailable = false;
   syncNewConversation();
   const payload = {
     messages: [
@@ -2515,6 +2603,8 @@ async function send(promptText) {
 
 /** stream_chat's marker for the one line that is the answer's id. */
 const TURN_LINE_PREFIX = "\u001fjarvis-turn:";
+/** ...and for the one that is X-Jarvis-Route's lane, where and gate. */
+const ROUTE_LINE_PREFIX = "\u001fjarvis-route:";
 
 function paintAnswerMark() {
   if (!dom.answerMark) return;
@@ -2581,10 +2671,19 @@ function finishStream(phase, statusText) {
     state.conversation = commitExchange(state.conversation, question, state.buffer);
   }
 
+  // Stopped at the length limit: kept (it is what Jarvis said), but the
+  // card says it is not the whole answer, instead of looking finished.
+  const cutShort = state.turnCutShort && phase !== "error" && !statusText;
+  state.turnCutShort = false;
+  if (cutShort && state.buffer.trim()) {
+    state.buffer += "\n\n_(Answer cut short: it reached the length limit. Ask \"go on\" for the rest.)_";
+  }
+
   if (phase !== "error") {
     setPhase("done");
     dom.cardStatusText.textContent =
-      statusText || (state.buffer.trim() ? "Complete" : "No content returned");
+      statusText ||
+      (state.buffer.trim() ? (cutShort ? "Cut short" : "Complete") : "No content returned");
     if (!state.buffer.trim()) {
       state.buffer = "_The server closed the stream without sending content._";
     }

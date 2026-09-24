@@ -1284,6 +1284,41 @@ pub fn turn_id_from_route(header: &str) -> Option<String> {
     valid_turn_id(id).then(|| id.to_string())
 }
 
+/// Starts the line on the chat channel that carries `X-Jarvis-Route`'s lane,
+/// `where` ("local" / "cloud") and gate - never its reason text or memory ids.
+/// main.js paints the Local/Cloud badge from it rather than guessing from the
+/// model name each chunk carries, which says nothing about where it ran.
+pub const ROUTE_LINE_PREFIX: &str = "\u{1f}jarvis-route:";
+
+/// The small JSON object for [`ROUTE_LINE_PREFIX`], from an `X-Jarvis-Route`
+/// header value: `lane`, `where` and `gate`, each only when it is a string.
+pub fn route_line_from_header(header: &str) -> Option<String> {
+    let route: serde_json::Value = serde_json::from_str(header).ok()?;
+    let mut out = serde_json::Map::new();
+    for key in ["lane", "where", "gate"] {
+        if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
+            out.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
+        }
+    }
+    (!out.is_empty()).then(|| serde_json::Value::Object(out).to_string())
+}
+
+/// The sentence in a failed `/api/chat` body: `{"error": "..."}` (the
+/// backend's own shape) or `{"error": {"message": "..."}}` (Ollama's and
+/// OpenAI's). None when there is none to find.
+pub fn error_text_from_body(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let error = value.get("error")?;
+    let text = error
+        .as_str()
+        .or_else(|| error.get("message").and_then(|m| m.as_str()))?
+        .trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
 fn valid_turn_id(id: &str) -> bool {
     id.len() == 32
         && id
@@ -1380,11 +1415,26 @@ async fn pump_chat(
         // special case was inventing a protocol. Gates arrive inside the
         // stream as `tier: "ask"` instead.
         let body = body.trim();
-        return Err(if body.is_empty() {
-            format!("the server answered HTTP {}", status.as_u16())
-        } else {
-            format!("the server answered HTTP {}: {body}", status.as_u16())
+        // The server's own sentence when it sent one (`{"error": "..."}`, or
+        // `{"error": {"message": ...}}`), not the whole JSON body - which
+        // used to put the route dictionary, reasons and ids and all, on the
+        // card under "Jarvis could not answer".
+        return Err(match error_text_from_body(body) {
+            Some(said) => said,
+            None if body.is_empty() => format!("the server answered HTTP {}", status.as_u16()),
+            None => format!("the server answered HTTP {}: {body}", status.as_u16()),
         });
+    }
+
+    // Which lane answered and whether it is this PC, for the Local/Cloud
+    // badge - see ROUTE_LINE_PREFIX. Only those three fields go to the page.
+    if let Some(route) = response
+        .headers()
+        .get("X-Jarvis-Route")
+        .and_then(|v| v.to_str().ok())
+        .and_then(route_line_from_header)
+    {
+        let _ = on_event.send(format!("{ROUTE_LINE_PREFIX}{route}"));
     }
 
     // The answer's id, for the right/wrong mark (feedback.patch: `turn_id` in
@@ -2727,5 +2777,73 @@ mod turn_tests {
         assert_eq!(turn_id_from_route(r#"{"turn_id":"not-hex"}"#), None);
         assert_eq!(turn_id_from_route(r#"{"turn_id":["a","b"]}"#), None);
         assert_eq!(turn_id_from_route("not json"), None);
+    }
+
+    /// The fixture `backend/test_chat_stream_contract.py` writes by RUNNING
+    /// the producer: X-Jarvis-Route built from the real router's decision
+    /// plus the fields the patches add, and bodies from the real relay.
+    const CASES: &str = include_str!("../../tests/fixtures/chat-stream-cases.json");
+
+    fn cases() -> serde_json::Value {
+        serde_json::from_str(CASES).expect("chat-stream-cases.json is JSON")
+    }
+
+    /// The route line carries lane, where and gate - and never the reason
+    /// text or the memory ids. An older backend has no `where`; the page
+    /// then reads the gate (only "escalate" is a cloud lane).
+    #[test]
+    fn the_route_line_is_built_from_the_real_header() {
+        let doc = cases();
+        let routes = doc["route_headers"].as_array().expect("route_headers");
+        assert!(!routes.is_empty());
+        for case in routes {
+            let header = case["header"].as_str().unwrap();
+            let expect = &case["expect"];
+            let line = super::route_line_from_header(header).expect("a route line");
+            let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(got["lane"], expect["lane"], "{}", case["name"]);
+            let where_ = got["where"].as_str().unwrap_or_else(|| {
+                if got["gate"] == "escalate" {
+                    "cloud"
+                } else {
+                    "local"
+                }
+            });
+            assert_eq!(
+                where_,
+                expect["where"].as_str().unwrap(),
+                "{}",
+                case["name"]
+            );
+            assert!(got.get("reason").is_none() && got.get("injected_ids").is_none());
+            assert_eq!(
+                turn_id_from_route(header).as_deref(),
+                expect["turn_id"].as_str(),
+                "{}",
+                case["name"]
+            );
+        }
+    }
+
+    /// A failed /api/chat shows the server's sentence, not its JSON.
+    #[test]
+    fn a_failed_turn_shows_the_servers_sentence() {
+        use super::error_text_from_body;
+        assert_eq!(
+            error_text_from_body(
+                r#"{"error": "The local model is not running.", "route": {"lane": "x"}}"#
+            )
+            .as_deref(),
+            Some("The local model is not running.")
+        );
+        assert_eq!(
+            error_text_from_body(
+                r#"{"error": {"message": "model not found", "type": "not_found_error"}}"#
+            )
+            .as_deref(),
+            Some("model not found")
+        );
+        assert_eq!(error_text_from_body("<html>502</html>"), None);
+        assert_eq!(error_text_from_body(r#"{"error": ""}"#), None);
     }
 }
