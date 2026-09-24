@@ -254,6 +254,22 @@ def t_switches():
         check("unknown switch: 400", BM.request_change("chat", True)[0] == 400)
         check("enabled must be a boolean", BM.handle_post({"switch": "wiki", "enabled": 1})[0] == 400)
         check("a body that is not an object: 400", BM.handle_post([1])[0] == 400)
+    # AP-6: status()["last"] says how the most recent card ended.
+    with World() as w:
+        check("no card has ended yet: last is null", BM.status()["last"] is None)
+        BM.request_change("master", True, gate=lambda *a: Verdict(True, "ask", "approved"))
+        last = BM.status()["last"]
+        check("approved: enabled, with the switch and a sentence",
+              set(last) == {"feature", "outcome", "why", "at"} and last["feature"] == "master"
+              and last["outcome"] == "enabled" and last["why"] == "The big model was turned on.",
+              last)
+        BM.request_change("wiki", True, gate=lambda *a: Verdict(False, "ask", "denied"))
+        last = BM.status()["last"]
+        check("denied: said as denied, naming the job",
+              last["feature"] == "wiki" and last["outcome"] == "denied"
+              and last["why"] == "You said no, so \"Wiki builder\" stays off.", last)
+        BM.request_change("wiki", True, gate=lambda *a: Verdict(False, "ask", "timed_out"))
+        check("timed out: said as timed_out", BM.status()["last"]["outcome"] == "timed_out")
     # AP-4: the master card says what comes back; a job's card answered after
     # the master switch went off does not turn the job on.
     with World() as w:

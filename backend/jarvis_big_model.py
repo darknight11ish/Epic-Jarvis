@@ -1518,6 +1518,7 @@ def status() -> dict:
     _reconcile(sw)
     with _PENDING_LOCK:
         pending = [s for s in SWITCHES if s in _PENDING and not _PENDING[s].get("withdrawn")]
+        last = dict(_LAST_ANY) or None
     with _ENGINE.lock:
         eng = {"state": _ENGINE.state, "why": _ENGINE.why, "model": _ENGINE.model_id
                if _ENGINE.state != "off" else None,
@@ -1537,6 +1538,10 @@ def status() -> dict:
         "measured": {j: _last_measured(j) for j in JOBS},
         "verified": False,
         "unverified": UNVERIFIED,
+        # How the last approval card ended (AP-6): {feature, outcome, why,
+        # at} - `feature` is the switch's id - or null when none has ended
+        # since Jarvis started.
+        "last": last,
     }
 
 
@@ -1563,6 +1568,28 @@ _LAST: dict = {}
 #: flag went with it - after two ON/OFF rounds, approving the FIRST card
 #: turned the switch on although the owner's last word was OFF.
 _WITHDRAWN: set = set()
+#: The last card to end, whichever switch it was for: status()["last"].
+_LAST_ANY: dict = {}
+
+
+def _last_words(label: str, outcome: str, reason: str) -> str:
+    """How the last card ended, in words the apps can show as they are.
+    `outcome` is one of: enabled, denied, timed_out, refused, failed,
+    withdrawn (timed_out is jarvis_gate's own word for a card nobody
+    answered in time)."""
+    reason = str(reason or "").strip().rstrip(".")
+    if outcome == "enabled":
+        return f"{label} was turned on."
+    if outcome == "denied":
+        return f"You said no, so {label} stays off."
+    if outcome == "timed_out":
+        return f"Nobody answered the card in time, so {label} stays off."
+    if outcome == "withdrawn":
+        return (f"You turned {label} off while its card was waiting, so approving that "
+                f"card changed nothing.")
+    if outcome == "failed":
+        return f"{label} could not be turned on: {reason or 'an unexpected error'}."
+    return f"{label} was not turned on: {reason or 'refused'}."
 
 
 def describe_on(switch: str, det: dict, sw: Optional[dict] = None) -> str:
@@ -1629,6 +1656,11 @@ def _finish(switch: str, pid: str, outcome: str, reason: str = "", request_id=No
             del _PENDING[switch]
         _WITHDRAWN.discard(pid)
         _LAST[switch] = {"outcome": outcome, "reason": reason[:200]}
+        label = ("The big model" if switch == "master"
+                 else f"\"{JOB_NAMES[switch]}\"" if switch in JOB_NAMES else switch)
+        _LAST_ANY.clear()
+        _LAST_ANY.update(feature=switch, outcome=outcome,
+                         why=_last_words(label, outcome, reason[:200]), at=int(_now()))
     _audit("big_model.decided", {"switch": switch, "outcome": outcome,
                                  **({"request_id": request_id} if request_id else {})})
 
@@ -2044,6 +2076,7 @@ def _reset_for_tests() -> None:
         _PENDING.clear()
         _LAST.clear()
         _WITHDRAWN.clear()
+        _LAST_ANY.clear()
     try:
         _ENGINE.stop("reset")
     except Exception:

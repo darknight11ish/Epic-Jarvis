@@ -117,6 +117,7 @@
         "state": "off",
         "why": "nothing on the second card is switched on"
       },
+      "last": null,
       "main_ollama_pinned": false,
       "pending": [],
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
@@ -238,6 +239,7 @@
         "state": "off",
         "why": "nothing on the second card is switched on"
       },
+      "last": null,
       "main_ollama_pinned": true,
       "pending": [
         "long_context"
@@ -344,6 +346,7 @@
         "state": "off",
         "why": "no capable second card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
       },
+      "last": null,
       "main_ollama_pinned": null,
       "pending": [],
       "pin_command": null,
@@ -459,6 +462,7 @@
         "state": "off",
         "why": "no capable second card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need"
       },
+      "last": null,
       "main_ollama_pinned": false,
       "pending": [],
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
@@ -563,6 +567,7 @@
         "state": "off",
         "why": "no capable second card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
       },
+      "last": null,
       "main_ollama_pinned": null,
       "pending": [],
       "pin_command": null,
@@ -684,6 +689,7 @@
         "state": "running",
         "why": "running on 127.0.0.1:11435 (this PC only), using only the NVIDIA GeForce RTX 2060"
       },
+      "last": null,
       "main_ollama_pinned": true,
       "pending": [],
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",

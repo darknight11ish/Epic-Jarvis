@@ -1201,6 +1201,7 @@ def status() -> dict:
     with _PENDING_LOCK:
         pending = [f for f in ("master",) + FEATURE_IDS
                    if f in _PENDING and not _PENDING[f].get("withdrawn")]
+        last = dict(_LAST_ANY) or None
     feats = [_feature_row(f, sw, det, lane_state, lane_why, pending) for f in FEATURES]
     pinned, note = main_pin(det)
     prim = det.get("primary") or {}
@@ -1216,6 +1217,9 @@ def status() -> dict:
         "pin_note": note,
         "pin_command": cmd,
         "features": feats,
+        # How the last approval card ended (AP-6): {feature, outcome, why,
+        # at}, or null when none has ended since Jarvis started.
+        "last": last,
     }
 
 
@@ -1231,6 +1235,28 @@ _LAST: dict = {}           # feature -> how its last card ended
 #: the flag went with it - after two ON/OFF rounds, approving the FIRST
 #: card turned the switch on although the owner's last word was OFF.
 _WITHDRAWN: set = set()
+#: The last card to end, whichever switch it was for: status()["last"].
+_LAST_ANY: dict = {}
+
+
+def _last_words(label: str, outcome: str, reason: str) -> str:
+    """How the last card ended, in words the apps can show as they are.
+    `outcome` is one of: enabled, denied, timed_out, refused, failed,
+    withdrawn (timed_out is jarvis_gate's own word for a card nobody
+    answered in time)."""
+    reason = str(reason or "").strip().rstrip(".")
+    if outcome == "enabled":
+        return f"{label} was turned on."
+    if outcome == "denied":
+        return f"You said no, so {label} stays off."
+    if outcome == "timed_out":
+        return f"Nobody answered the card in time, so {label} stays off."
+    if outcome == "withdrawn":
+        return (f"You turned {label} off while its card was waiting, so approving that "
+                f"card changed nothing.")
+    if outcome == "failed":
+        return f"{label} could not be turned on: {reason or 'an unexpected error'}."
+    return f"{label} was not turned on: {reason or 'refused'}."
 
 
 def _tier(action: str) -> str:
@@ -1348,6 +1374,11 @@ def _finish(feature: str, pid: str, outcome: str, reason: str = "",
             del _PENDING[feature]
         _WITHDRAWN.discard(pid)
         _LAST[feature] = {"outcome": outcome, "reason": reason[:200]}
+        label = ("The second graphics card" if feature == "master"
+                 else f"\"{_BY_ID[feature]['name']}\"" if feature in _BY_ID else feature)
+        _LAST_ANY.clear()
+        _LAST_ANY.update(feature=feature, outcome=outcome,
+                         why=_last_words(label, outcome, reason[:200]), at=int(time.time()))
     _audit("second_card.decided", {"feature": feature, "outcome": outcome,
                                    **({"request_id": request_id} if request_id else {})})
 
@@ -1512,6 +1543,7 @@ def _reset_for_tests() -> None:
         _PENDING.clear()
         _LAST.clear()
         _WITHDRAWN.clear()
+        _LAST_ANY.clear()
     _TAGS.clear()
     try:
         _LANE.stop("reset")

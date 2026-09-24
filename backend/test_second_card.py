@@ -466,6 +466,36 @@ def t_big_model_holds_the_card():
         BM._reset_for_tests()
 
 
+def t_last_card():
+    # AP-6: _LAST was written and never read. status()["last"] says how the
+    # most recent card ended, so the apps can say what really happened.
+    with G.World(G.SMI["2080s_2060"]) as w:
+        check("no card has ended yet: last is null", SC.status()["last"] is None)
+        SC.request_change("master", True, gate=lambda *a: Verdict(True, "ask", "approved"))
+        last = SC.status()["last"]
+        check("approved: enabled, with the switch and a sentence",
+              set(last) == {"feature", "outcome", "why", "at"} and last["feature"] == "master"
+              and last["outcome"] == "enabled" and last["why"] == "The second graphics card "
+              "was turned on." and isinstance(last["at"], int), last)
+        for v, want, words in ((Verdict(False, "ask", "denied"), "denied", "You said no"),
+                               (Verdict(False, "ask", "timed_out"), "timed_out",
+                                "Nobody answered the card in time"),
+                               (Verdict(True, "auto", "auto"), "refused", "not a person saying yes")):
+            SC.request_change("vision", True, gate=lambda *a, v=v: v)
+            last = SC.status()["last"]
+            check(f"{want}: said as {want}, in words",
+                  last["feature"] == "vision" and last["outcome"] == want and words in last["why"],
+                  last)
+        held = []
+        SC.request_change("vision", True, gate=lambda *a: Verdict(True, "ask", "approved"),
+                          spawn=held.append)
+        SC.request_change("vision", False)
+        held[0]()
+        last = SC.status()["last"]
+        check("withdrawn: said as withdrawn", last["outcome"] == "withdrawn"
+              and "while its card was waiting" in last["why"], last)
+
+
 def t_lane_for_is_none_when_not_ready():
     def ready(**kw):
         return G.World(G.SMI["2080s_2060"], **kw)
@@ -518,7 +548,7 @@ def t_status_shape_and_no_secrets():
             os.environ.pop("HUD_TOKEN_TEST_PROBE", None)
     check("status() has exactly the contract's keys",
           set(st) == {"detected", "enabled", "active", "pending", "lane", "main_ollama_pinned",
-                      "pin_note", "pin_command", "features"}, sorted(st))
+                      "pin_note", "pin_command", "features", "last"}, sorted(st))
     check("detected has exactly its keys",
           set(st["detected"]) == {"capable", "why", "primary", "second", "cards"})
     check("each feature row has exactly its keys",
