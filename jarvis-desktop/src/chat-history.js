@@ -166,12 +166,16 @@ export function userMessage(content, provenance) {
  * The quickbar keeps one tag for its box and moves it here, so every rule is
  * in one place and tested without a browser (tests/chat-history.mjs):
  *
- * - `"clipboard"`: the clipboard hotkey put a short snippet in the box.
+ * - `"clipboard"`: the clipboard hotkey put a short snippet in the box. It
+ *   stays "clipboard" until the box is empty again, however much is typed
+ *   around it - the same rule as pasted text. (It used to become "typed"
+ *   after one keystroke, so adding a "?" to a copied web page made the
+ *   whole snippet count as the owner's own words - red-team R3.)
  * - `"paste"`: a `paste` or `drop` event on the box. It stays "pasted" until
  *   the box is empty again, however much is typed around it.
  * - `"edit"`: the owner changed the text by hand (an `input` event that was
  *   not a paste or a drop). An emptied box starts again as "typed"; an
- *   edited clipboard snippet or voice transcript is now the owner's typing.
+ *   edited voice transcript is now the owner's typing.
  * - `"clear"`: the app emptied the box (sent, dismissed).
  *
  * @param {string} tag   the box's tag now
@@ -184,7 +188,7 @@ export function boxTagAfter(tag, what, value = "") {
   if (what === "clear") return "typed";
   if (what === "edit") {
     if (!value) return "typed";
-    if (tag === "clipboard" || tag === "voice") return "typed";
+    if (tag === "voice") return "typed";
   }
   return knownProvenance(tag) || "typed";
 }

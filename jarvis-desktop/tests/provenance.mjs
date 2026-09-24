@@ -133,7 +133,7 @@ await check("a drop on the box tags the words pasted", async () => {
   assert.equal(sent[0].messages.at(-1).provenance, "pasted");
 });
 
-await check("the clipboard prefill is clipboard, and typed once the owner edits it", async () => {
+await check("the clipboard prefill is clipboard, edited or not, until the box is emptied", async () => {
   const page = await open({ chatReplies: ["a1", "a2"] });
   await page.evaluate(() => window.__emit("clipboard-inject", "short snippet"));
   await page.waitForTimeout(100);
@@ -150,7 +150,7 @@ await check("the clipboard prefill is clipboard, and typed once the owner edits 
   assert.equal(first.provenance, "clipboard", "sent unedited, the prefill is not the owner's typing");
   const second = sent[1].messages.at(-1);
   assert.equal(second.content, "another snippet?");
-  assert.equal(second.provenance, "typed", "the tag stayed clipboard after an edit");
+  assert.equal(second.provenance, "clipboard", "an edit made a clipboard snippet the owner's own words (R3)");
   // And the first turn keeps its tag in the second request's history.
   assert.equal(sent[1].messages[0].provenance, "clipboard");
 });
