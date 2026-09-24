@@ -365,6 +365,15 @@ class WakeWordService : Service() {
         turnModel: TurnModel?,
     ): Pair<Heard?, ShortArray?> = coroutineScope {
         val voice = JarvisRuntime.voice
+        // Rule 4, checked before EVERY post, not only the first clip. The
+        // follow-up sentence after "Hey Jarvis." and a sentence cut in over
+        // a reply both come through here too, and each can be recorded many
+        // seconds after the first check - long enough for the link to drop.
+        // Nothing is sent; the listener says why and carries on.
+        WakeRules.mayPost(voice.answered.value, voice.status.value, JarvisRuntime.stale.value)?.let { why ->
+            goForeground(why)
+            return@coroutineScope null to null
+        }
         val wav = Wav.encode(clip)
         if (!bargeInOn()) return@coroutineScope voice.deliverWakeClip(wav) to null
         voice.speaker.beginVoiceCall()
