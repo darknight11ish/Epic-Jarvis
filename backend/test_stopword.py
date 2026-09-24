@@ -284,10 +284,56 @@ def t_hear_ignores_jarvis_saying_stop():
         check("'stop' just after Jarvis said 'stop' itself: ignored, and said why",
               not h.stop and "itself" in h.reason, h)
         with S._SAYS_LOCK:
-            S._RECENT_SAYS[:] = [(t - S.STOP_ECHO_SECONDS - 1, s) for t, s in S._RECENT_SAYS]
+            S._RECENT_SAYS[:] = [(t - S.STOP_ECHO_SECONDS - 1, s, m)
+                                 for t, s, m in S._RECENT_SAYS]
         with mock.patch.object(W, "spot_stop", heard_stop):
             h = S.hear(tone(), source="wake_word")
         check("...but only for STOP_ECHO_SECONDS", h.stop, h)
+
+
+def t_only_the_whole_word_stop_counts():
+    # T11: r"\bstop" matched "stopped", "stopwatch", "stops"; the owner's own
+    # "stop" was then ignored for 30 s after any such sentence.
+    for said, want in (("The download stopped.", False), ("Your stopwatch is at 3 minutes.", False),
+                       ("It stops at nine.", False), ("Non-stop flights only.", True),
+                       ("The bus stop is on Main Street.", True), ("Stop.", True)):
+        with Env():
+            with mock.patch.object(S, "_tts_engine", return_value=None):
+                S.say(said)
+            got = S._jarvis_said_stop() is not None
+            check(f"Jarvis said {said!r}: counts as saying 'stop' = {want}", got == want)
+    with Env():
+        with mock.patch.object(S, "_tts_engine", return_value=None):
+            S.say("The download stopped.")
+        with mock.patch.object(W, "spot_stop", heard_stop):
+            h = S.hear(tone(), source="wake_word")
+        check("after 'The download stopped.', the owner's 'stop' is acted on at once",
+              h.stop and not h.stop_ignored, h)
+
+
+def t_the_stop_echo_window_is_per_app():
+    with Env():
+        with mock.patch.object(S, "_tts_engine", return_value=None):
+            S.say("I will stop the timer now.", mic="phone")
+        with mock.patch.object(W, "spot_stop", heard_stop):
+            desk = S.hear(tone(), source="wake_word", mic="desktop")
+            phone = S.hear(tone(), source="wake_word", mic="phone")
+            unnamed = S.hear(tone(), source="wake_word")
+        check("Jarvis said 'stop' on the phone: the desktop's stop is still acted on",
+              desk.stop and not desk.stop_ignored, desk)
+        check("... the phone's is ignored, with the reason as a field and in words",
+              not phone.stop and phone.stop_ignored and "said the word \"stop\" itself" in
+              phone.reason and "Say it again in" in phone.reason
+              and phone.as_dict()["stop_ignored"] is True, phone)
+        check("... and a clip with no microphone named is checked against everything",
+              not unnamed.stop and unnamed.stop_ignored, unnamed)
+    with Env():
+        with mock.patch.object(S, "_tts_engine", return_value=None):
+            S.say("Stop means stop.")          # no app named: what the route does today
+        with mock.patch.object(W, "spot_stop", heard_stop):
+            h = S.hear(tone(), source="wake_word", mic="desktop")
+        check("words said with no app named still count for both apps",
+              not h.stop and h.stop_ignored, h)
 
 
 def t_hear_not_stop_goes_on_as_before():
@@ -383,6 +429,7 @@ if __name__ == "__main__":
     for fn in (t_the_format, t_the_arithmetic, t_the_phone_has_the_same_numbers, t_spot_stop,
                t_hear_short_stop_does_nothing_else, t_hear_long_clip_is_never_a_stop,
                t_hear_push_to_talk_and_off_never_ask, t_hear_ignores_jarvis_saying_stop,
+               t_only_the_whole_word_stop_counts, t_the_stop_echo_window_is_per_app,
                t_hear_not_stop_goes_on_as_before, t_status_and_quiet, t_real_models):
         print(f"\n--- {fn.__name__} ---")
         try:

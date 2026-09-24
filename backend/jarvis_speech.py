@@ -1068,21 +1068,45 @@ STOP_MAX_SECONDS = 2.0
 #: While Jarvis itself said "stop" this recently (its own voice may reach
 #: the microphone), the stop word is not trusted.
 STOP_ECHO_SECONDS = 30.0
-_RECENT_SAYS: list = []           # [(monotonic time, text)], newest last
+_RECENT_SAYS: list = []           # [(monotonic time, text, mic)], newest last
 _SAYS_LOCK = threading.Lock()
+#: The WHOLE word (T11). r"\bstop" also matched "stopped", "stops",
+#: "stopwatch", so any sentence with one of those made the owner's real
+#: "stop" be ignored for 30 seconds.
+_STOP_WORD = re.compile(r"\bstop\b", re.I)
+#: say() takes `mic`: the route can say which app will play the words, so
+#: Jarvis saying "stop" to the phone does not silence the desktop's stop word.
+SAY_TAKES_MIC = True
 
 
-def _jarvis_said_stop() -> bool:
+def _norm_mic(mic) -> str:
+    mic = str(mic or "").strip().lower()
+    return mic if mic in ("phone", "desktop") else ""
+
+
+def _jarvis_said_stop(mic: str = "") -> Optional[tuple]:
+    """(seconds ago, what Jarvis said) when Jarvis itself said the word
+    "stop" within STOP_ECHO_SECONDS, where its voice could reach `mic`;
+    else None. Kept per app: words said for one app ("phone" or "desktop")
+    only count against that app's microphone. Words said with no app named
+    (what the say route does today) count against both, and a clip with no
+    microphone named is checked against everything."""
+    mic = _norm_mic(mic)
     now = time.monotonic()
     with _SAYS_LOCK:
-        return any(now - t < STOP_ECHO_SECONDS and re.search(r"\bstop", s, re.I)
-                   for t, s in _RECENT_SAYS)
+        for t, s, said_to in reversed(_RECENT_SAYS):
+            if now - t >= STOP_ECHO_SECONDS or not _STOP_WORD.search(s):
+                continue
+            if mic and said_to and said_to != mic:
+                continue
+            return now - t, s
+    return None
 
 
-def _remember_said(text: str) -> None:
+def _remember_said(text: str, mic: str = "") -> None:
     now = time.monotonic()
     with _SAYS_LOCK:
-        _RECENT_SAYS.append((now, text[:500]))
+        _RECENT_SAYS.append((now, text[:500], _norm_mic(mic)))
         del _RECENT_SAYS[:-20]
 
 #: hear() takes `mic` (voice-mic.patch checks for this before passing it, so
@@ -1119,6 +1143,10 @@ class Heard:
     #: source=wake_word only: the clip was the stop word. Silence the reply
     #: being spoken and do nothing else (no words, no owner check).
     stop: bool = False
+    #: source=wake_word only: the clip sounded like "stop", but Jarvis had
+    #: just said the word itself, so it was NOT acted on. `reason` says so,
+    #: in words an app can show as they are.
+    stop_ignored: bool = False
 
     def as_dict(self) -> dict:
         """What /api/voice/utterance sends back - assuming, as the desktop's
@@ -1198,12 +1226,18 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
                 and hasattr(jarvis_wakeword, "spot_stop"):
             stop = jarvis_wakeword.spot_stop(samples, sample_rate)
             if stop.ran and stop.heard:
-                if _jarvis_said_stop():
+                echo = _jarvis_said_stop(mic)
+                if echo is not None:
                     # Jarvis's own voice said "stop" a moment ago; this may be
                     # that, heard through the speakers. Not acted on.
-                    return Heard(False, source=source, seconds=seconds,
-                                 reason="that sounded like \"stop\", but Jarvis had just "
-                                        "said it itself, so it was ignored")
+                    ago, said = echo
+                    left = max(1, int(round(STOP_ECHO_SECONDS - ago)))
+                    return Heard(False, source=source, seconds=seconds, stop_ignored=True,
+                                 reason=(f"that sounded like \"stop\", but Jarvis said the "
+                                         f"word \"stop\" itself {int(ago)} seconds ago "
+                                         f"(\"{said[:80]}\"), and its own voice may have "
+                                         f"reached the microphone, so it was ignored. Say "
+                                         f"it again in {left} seconds, or press stop"))
                 return Heard(False, source=source, seconds=seconds, stop=True,
                              reason="stop")
         if _take_awake():
@@ -1286,7 +1320,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
     return Heard(True, text=rest, engine=engine, wake_heard=True, **common)
 
 
-def say(text: str) -> Optional[bytes]:
+def say(text: str, mic: str = "") -> Optional[bytes]:
     """Text in, one WAV out - or None, meaning "no engine", which the route
     turns into a 503 the client may answer with its own on-device voice.
 
@@ -1299,8 +1333,9 @@ def say(text: str) -> Optional[bytes]:
     if not text:
         return None
     # Remembered (in memory, for STOP_ECHO_SECONDS) only so Jarvis saying
-    # "stop" itself is not taken for the owner's stop word.
-    _remember_said(text)
+    # "stop" itself is not taken for the owner's stop word. `mic`: which app
+    # plays it ("phone" / "desktop"), when the route says; "" counts for both.
+    _remember_said(text, mic)
     engine = _tts_engine()
     if engine is None:
         return None
