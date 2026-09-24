@@ -473,8 +473,8 @@ private fun WakeWordCard(
                     "Your desktop takes \"hey Jarvis\". It checks the phrase and your voice " +
                         "again before it writes down a word."
                 state == WakeWord.OFF && pending ->
-                    "Waiting for you to approve the card that turns it on - on your desktop, " +
-                        "or in Inbox here. Nothing listens until you do."
+                    "A card to turn it on is waiting. ${com.jarvis.client.net.Approvals.WHERE} " +
+                        "Nothing listens until you do."
                 state == WakeWord.OFF ->
                     "Off. Nothing can wake Jarvis by speaking a phrase; the talk button still works."
                 else ->

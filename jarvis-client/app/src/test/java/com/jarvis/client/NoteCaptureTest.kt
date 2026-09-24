@@ -56,6 +56,8 @@ class NoteCaptureTest {
         assertFalse(said.final)
         assertFalse(said.filed)
         assertTrue(said.text.contains("Waiting for your approval"))
+        assertTrue("one sentence for where cards are", said.text.endsWith(com.jarvis.client.net.Approvals.WHERE))
+        assertTrue(NoteCapture.GAVE_UP.contains(com.jarvis.client.net.Approvals.WHERE))
     }
 
     @Test

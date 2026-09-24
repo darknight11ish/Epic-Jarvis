@@ -179,7 +179,7 @@ class SecondCardContractTest {
         val long = switch(s, "long_context")
         assertTrue(long.waiting)
         assertFalse(long.on)
-        assertEquals("Waiting for you to approve the card on your PC or phone.", long.line)
+        assertEquals("Waiting for your approval. Approve it on your PC or on this phone's Home screen.", long.line)
         assertFalse(long.canTurnOn)
         // The main switch is on, and the everyday Ollama is already pinned.
         assertTrue(SecondCard.master(s).on)

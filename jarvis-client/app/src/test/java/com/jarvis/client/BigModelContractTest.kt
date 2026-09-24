@@ -181,7 +181,7 @@ class BigModelContractTest {
         val master = BigModel.master(s)
         assertTrue(master.waiting)
         assertFalse(master.on)
-        assertEquals("Waiting for you to approve the card on your PC or phone.", master.line)
+        assertEquals("Waiting for your approval. Approve it on your PC or on this phone's Home screen.", master.line)
         assertFalse(master.canTurnOn)
         BigModel.switches(s).forEach { assertFalse(it.id, it.canTurnOn) }
     }

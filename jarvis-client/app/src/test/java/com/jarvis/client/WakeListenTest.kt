@@ -244,7 +244,8 @@ class WakeListenTest {
     fun `asking to turn it on is never reported as it being on`() {
         assertEquals(null, WakeRules.afterRequest(enabled = true, nowOn = true, pending = false))
         val waiting = WakeRules.afterRequest(enabled = true, nowOn = false, pending = true)
-        assertTrue(waiting!!.contains("Approve the card"))
+        assertTrue(waiting!!.contains(com.jarvis.client.net.Approvals.WHERE))
+        assertFalse("cards are on Home, not in Inbox", waiting.contains("Inbox"))
         assertNotNull(WakeRules.afterRequest(enabled = true, nowOn = false, pending = false))
         assertNull(WakeRules.afterRequest(enabled = false, nowOn = false, pending = false))
         assertTrue(WakeRules.afterRequest(enabled = false, nowOn = true, pending = false)!!.contains("still reports"))

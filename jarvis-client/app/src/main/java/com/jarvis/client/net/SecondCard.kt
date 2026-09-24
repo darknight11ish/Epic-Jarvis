@@ -48,7 +48,7 @@ object SecondCard {
             "Turning it off stops everything on the second card."
 
     /** While a card to turn something on is waiting. Same line for every switch. */
-    const val WAITING = "Waiting for you to approve the card on your PC or phone."
+    const val WAITING = "Waiting for your approval. " + Approvals.WHERE
 
     /** Where the pin command lives, since the phone does not show it. */
     const val PIN_ON_PC =

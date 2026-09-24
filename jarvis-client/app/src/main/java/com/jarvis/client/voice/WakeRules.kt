@@ -1,5 +1,6 @@
 package com.jarvis.client.voice
 
+import com.jarvis.client.net.Approvals
 import com.jarvis.client.net.Heard
 import com.jarvis.client.net.VoiceStatus
 
@@ -84,7 +85,7 @@ object WakeRules {
     fun afterRequest(enabled: Boolean, nowOn: Boolean, pending: Boolean): String? = when {
         enabled == nowOn -> null
         enabled && pending ->
-            "Approve the card on your desktop or in Inbox to turn it on. Nothing changes until you do."
+            "A card to turn it on is waiting. ${Approvals.WHERE} Nothing changes until you do."
         enabled ->
             "The desktop did not raise an approval card, so \"hey Jarvis\" is still off. " +
                 "Its settings may not allow it (change_own_config must be \"ask\")."

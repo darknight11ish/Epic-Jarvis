@@ -815,11 +815,11 @@ private fun ApprovalWaiting(request: ModelRequest, onOpenApprovals: ((cardId: St
     Gap(2)
     Text(
         if (request.install) {
-            "Installing ${request.ref} is waiting on a card on Home. Nothing " +
-                "downloads until you approve it there."
+            "Installing ${request.ref} is waiting for your approval. " +
+                "${com.jarvis.client.net.Approvals.WHERE} Nothing downloads until you do."
         } else {
-            "Switching to ${request.ref} is waiting on a card on Home. Nothing " +
-                "changes until you approve it there."
+            "Switching to ${request.ref} is waiting for your approval. " +
+                "${com.jarvis.client.net.Approvals.WHERE} Nothing changes until you do."
         },
         style = MaterialTheme.typography.bodySmall,
         color = chrome.textMid,
