@@ -941,7 +941,9 @@ object JarvisRuntime {
                 refreshStatus()
             }
             "power", "persona" -> refreshStatus()
-            "finding" -> Unit // the digest covers these; nothing to show live
+            // The brief covers these; the Watches plate on Mind reads its
+            // lists again, as the desktop's Brain does.
+            "finding" -> _watchTick.update { it + 1 }
             // A model download publishes progress here. The phone CAN start
             // one - Install, by typed name, raises a card (the owner's
             // 2026-09-20 amendment; see installModel) - but it cannot cancel
@@ -2240,6 +2242,89 @@ object JarvisRuntime {
             }
         }
         return ApiResult.Ok(Unit)
+    }
+
+    // ------------------------------------------------------------ watch ----
+
+    private val _watchTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one on every `finding` event, so the Watches plate on Mind
+     * reads its two lists again - the desktop's Brain re-reads the same two
+     * on that event (`brain.js`, `refreshes.finding`).
+     */
+    val watchTick: StateFlow<Int> = _watchTick.asStateFlow()
+
+    /** `GET /api/watch` - see [com.jarvis.client.net.Watch]. */
+    suspend fun watch(): ApiResult<JsonObject> = api.watch()
+
+    /** `GET /api/watch/report` - a peek; it marks nothing read. */
+    suspend fun watchReport(): ApiResult<JsonObject> = api.watchReport()
+
+    /**
+     * Watch a GitHub topic. Creating a watch is turning something ON, so it
+     * is held while the link is down or stale ([actionBlocker], rule 4). If
+     * the PC asks first, its card is answered like any other.
+     *
+     * @return whether the PC took it (added, or waiting for its card), and
+     *   the sentence to show. Not taken leaves the form filled in.
+     */
+    suspend fun addWatch(
+        name: String,
+        query: String,
+        minStars: String,
+        language: String,
+        notify: Boolean,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Watch.addBody(name, query, minStars, language, notify)
+            ?: return false to "Type a name. Min stars, if you fill it in, must be a whole number."
+        return when (val r = writeNoticingCards { api.watchAdd(body) }) {
+            is ApiResult.Ok -> (r.value !is com.jarvis.client.net.DesktopWrite.Outcome.Refused) to
+                com.jarvis.client.net.Watch.addSaid(name.trim(), r.value)
+            is ApiResult.Failed -> false to ("Not added. " +
+                (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error)))
+        }
+    }
+
+    /**
+     * Forget a topic. Never held on a stale link: it only stops something,
+     * the same rule as every OFF on this phone.
+     */
+    suspend fun removeWatch(name: String): String =
+        when (val r = writeNoticingCards { api.watchRemove(name) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.Watch.removeSaid(name, r.value)
+            is ApiResult.Failed -> "Not forgotten. " +
+                (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error))
+        }
+
+    /**
+     * "Mark these read". Not held on a stale link, like the brief's own
+     * mark-read ([markDigestSeen]) and like the desktop's: it approves and
+     * starts nothing.
+     */
+    suspend fun markWatchSeen(): String =
+        when (val r = writeNoticingCards { api.watchSeen() }) {
+            is ApiResult.Ok -> com.jarvis.client.net.Watch.seenSaid(r.value)
+            is ApiResult.Failed -> "Not marked read. " +
+                (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error))
+        }
+
+    /**
+     * Sends one change whose answer's shape is not written down, and counts
+     * it as waiting for a card when a new card turned up in the queue while
+     * it was out ([com.jarvis.client.net.DesktopWrite.withNewCard]) - so the
+     * phone never says "done" over a card it can see.
+     */
+    private suspend fun writeNoticingCards(
+        call: suspend () -> ApiResult<com.jarvis.client.net.DesktopWrite.Outcome>,
+    ): ApiResult<com.jarvis.client.net.DesktopWrite.Outcome> {
+        val before = _pending.value.map { it.id }.toSet()
+        val r = call()
+        if (r !is ApiResult.Ok) return r
+        refreshPending()
+        val newCard = _pending.value.any { it.id !in before }
+        return ApiResult.Ok(com.jarvis.client.net.DesktopWrite.withNewCard(r.value, newCard))
     }
 
     private suspend fun runTaskAction(call: suspend () -> ApiResult<Unit>): ApiResult<Unit> {

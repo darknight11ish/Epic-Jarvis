@@ -434,6 +434,46 @@ class JarvisApi(
     /** How one "Add to wiki" is going. Never carries a page's text. */
     suspend fun wikiJob(id: String): ApiResult<JsonObject> = probe(Wiki.statusPath(id))
 
+    // ------------------------------------------------------------ watch ----
+
+    /** `GET /api/watch` - the topics being watched ([Watch.read]). */
+    suspend fun watch(): ApiResult<JsonObject> = probe(Watch.PATH)
+
+    /** `GET /api/watch/report` - what is new. A peek: reading it marks nothing read. */
+    suspend fun watchReport(): ApiResult<JsonObject> = probe(Watch.REPORT_PATH)
+
+    /** Watch a topic. [body] is [Watch.addBody]'s. */
+    suspend fun watchAdd(body: String): ApiResult<DesktopWrite.Outcome> = postWrite(Watch.ADD_PATH, body)
+
+    /** Forget a topic and everything remembered about it. */
+    suspend fun watchRemove(name: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(Watch.REMOVE_PATH, Watch.removeBody(name))
+
+    /** Mark everything new as read - the consume, where [watchReport] is the peek. */
+    suspend fun watchSeen(): ApiResult<DesktopWrite.Outcome> = postWrite(Watch.SEEN_PATH, Watch.SEEN_BODY)
+
+    /**
+     * A POST whose answer's shape is not written down - read by
+     * [DesktopWrite.classify], which uses no field it has not seen the
+     * server's other routes use.
+     */
+    private suspend fun postWrite(path: String, json: String): ApiResult<DesktopWrite.Outcome> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    DesktopWrite.classify(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
     private suspend fun postForJob(path: String, json: String): ApiResult<JsonObject> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(
