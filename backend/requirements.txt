@@ -21,6 +21,7 @@ fastembed                              # memory: finding facts by MEANING, not o
 sqlite-vec                             # memory: the search index fastembed's numbers are kept in (rebuilt jarvis_memory.py)
 uiautomation; sys_platform == "win32"  # the "control_computer" tool: reading and clicking other apps' windows (jarvis_ui_control.py). Windows only.
 tomli; python_version < "3.11"         # reading jarvis-framework.toml on Python 3.10 or older; 3.11 and newer have it built in (rebuilt jarvis_framework.py)
+ddgs>=9.16.0                           # web search, only when you choose DuckDuckGo (jarvis_search.py). MIT; brings primp (MIT), lxml and click (BSD-3). Used with its DuckDuckGo engine ONLY, never its "auto" mix of other engines. SearXNG, Tavily and Brave need no package.
 cryptography                           # chat history: encrypting every kept chat on this PC (jarvis_chat_log.py). Without it NOTHING is kept - never a plain-text copy.
 tzdata; sys_platform == "win32"        # calendar: time-zone data, so an event stored in another time zone shows at the right hour (jarvis_calendar.py). Windows has none built in.
 

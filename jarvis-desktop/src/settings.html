@@ -839,6 +839,67 @@
         </div>
       </section>
 
+      <!-- ── Web search ───────────────────────────────────────────────────
+           The owner's decisions of 2026-09-25 (web-search-settings.js;
+           web_search.rs get_web_search, set_web_search, test_web_search,
+           save_search_key, forget_search_key). Four providers with the PC's
+           own "why use this one" lines; ONE change per tap; "Ask before
+           every web search" off raises an approval card on the PC. Changes
+           and the test are greyed on a stale link. The Tavily and Brave keys
+           go straight into Credential Manager on this PC - the phone has no
+           key box at all. -->
+      <section class="card" id="web-search">
+        <h2>Web search</h2>
+        <p class="note">Choose where Jarvis searches the web. Only the search words are sent, to the search you choose, and never quietly to another one: if it is not working, Jarvis says so and offers to switch.</p>
+
+        <p class="state" id="ws-state" role="status">Checking web search…</p>
+
+        <div id="ws-body" hidden>
+          <fieldset class="theme-list" id="ws-provider-list">
+            <legend class="label">Search with</legend>
+            <div id="ws-providers"></div>
+          </fieldset>
+          <p class="sc-line" id="ws-why"></p>
+          <p class="note" id="ws-default-why"></p>
+          <h3 class="subhead" id="ws-left-out-title">Left out</h3>
+          <ul class="sc-cards" id="ws-left-out"></ul>
+
+          <h3 class="subhead">When a search asks first</h3>
+          <label class="toggle">
+            <input id="ws-ask" type="checkbox" />
+            <span>
+              <span id="ws-ask-label">Ask before every web search</span>
+              <span class="toggle-detail" id="ws-ask-detail"></span>
+            </span>
+          </label>
+          <p class="sc-line" id="ws-ask-status" role="status"></p>
+
+          <h3 class="subhead">Test</h3>
+          <div class="row">
+            <button class="btn" id="ws-test" type="button">Test search</button>
+            <span class="status" id="ws-test-status" role="status"></span>
+          </div>
+          <p class="note" id="ws-test-note"></p>
+
+          <h3 class="subhead">SearXNG</h3>
+          <label class="label" id="ws-address-label" for="ws-address">SearXNG address</label>
+          <div class="row sc-command">
+            <input id="ws-address" type="text" spellcheck="false" autocomplete="off" />
+            <button class="btn small" id="ws-address-save" type="button">Save address</button>
+          </div>
+          <p class="note" id="ws-address-note"></p>
+          <p class="note">Setting SearXNG up (Docker, and switching on its JSON output) is in backend/README.md, "Web search".</p>
+
+          <h3 class="subhead">Keys</h3>
+          <p class="note" id="ws-key-entry"></p>
+          <div id="ws-keys"></div>
+
+          <div class="row">
+            <span class="status" id="ws-status" role="status"></span>
+          </div>
+        </div>
+      </section>
+
       <section class="card">
         <h2>Frequently asked questions</h2>
         <p class="note">
@@ -1180,5 +1241,6 @@
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="briefing-settings.js"></script>
+    <script type="module" src="web-search-settings.js"></script>
   </body>
 </html>

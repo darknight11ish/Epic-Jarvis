@@ -217,9 +217,9 @@ def t_ollama_dying_mid_answer_is_said_plainly():
 
 def t_only_real_tools_are_offered():
     check("names the agent does not have are not offered",
-          AG.offered_tools({"web_search", "ha_mcp", "calculator"}) == ["calculator"])
+          AG.offered_tools({"image_gen", "ha_mcp", "calculator"}) == ["calculator"])
     opener, calls = opener_for([("content", "ok"), ("done", "stop")])
-    turn(opener, enabled_tools={"web_search", "something_else"})
+    turn(opener, enabled_tools={"image_gen", "something_else"})
     check("a config listing only unknown tools sends no `tools` at all",
           "tools" not in calls[0], repr(calls[0].keys()))
 

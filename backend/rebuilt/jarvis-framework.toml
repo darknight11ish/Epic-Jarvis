@@ -151,6 +151,20 @@ models_create             = "ask"
 # file without this line asks too (unknown_action_tier).
 schedule_repeat           = "ask"
 
+# --- Web search (jarvis_search.py, the owner's decisions of 2026-09-25) -----
+# A search straight from your own question, in a conversation where Jarvis
+# has read nothing from outside, runs WITHOUT a card and does not read this
+# line. After Jarvis has read email, files, notes, saved memories or other
+# outside text - or with "Ask before every web search" on - the search is a
+# card showing its exact words, asked under this name. Must stay "ask":
+# anything else and such a search is refused rather than sent unasked.
+# "never" switches web search off altogether. A file without this line asks
+# too (unknown_action_tier).
+search_the_web            = "ask"
+# Turning "Ask before every web search" OFF is one card (turning it on is
+# immediate). Must stay "ask": anything else and the setting stays on.
+stop_asking_before_every_web_search       = "ask"
+
 # --- Power: turning the assistant down, at two depths --------------------
 # Putting Jarvis into quiet/standby, or waking it, is the safe direction
 # either way, so it does not interrupt you for a yes. Changing the rules

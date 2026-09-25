@@ -156,6 +156,17 @@ fn main() {
             "apply_hardware",
             "hardware_step",
             "measure_hardware",
+            // Settings' "Web search" (backend/web-search.patch): the four
+            // providers and their "why" lines, ONE change at a time (turning
+            // "Ask before every web search" off raises a card on the PC), a
+            // test search, and the Tavily / Brave key written straight into
+            // Credential Manager on this PC - never sent over HTTP, never
+            // shown again. Settings window only.
+            "get_web_search",
+            "set_web_search",
+            "test_web_search",
+            "save_search_key",
+            "forget_search_key",
             // Settings' "Voice": what the PC's voice settings are (GET
             // /api/voice/status) - whether each microphone's voice print is
             // trained, the wake word, the stop word, Smart Turn. Read only.

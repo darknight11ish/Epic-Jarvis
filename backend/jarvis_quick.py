@@ -22,6 +22,13 @@ and marks the calendar as read when it quotes it), "brief me every weekday
 at 7" (the scheduler's ONE card), "stop my briefing" (one, at once) and
 "when is my briefing".
 
+WEB SEARCH (2026-09-25) is here too, but only talk ABOUT it - nothing is
+searched: "which search should I use?", "why SearXNG?", "what about
+Tavily?" are answered from jarvis_search.py's own "why use this one" lines
+(the words both apps' Settings show), and "use DuckDuckGo for web search" /
+"switch web search to Brave" changes the provider at once, as a tap in
+either app's Settings does. Only the owner's own words, like everything here.
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
@@ -659,6 +666,11 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- web search: which one, and switching (jarvis_search.py) -----------------
+    got = _web_search(s)
+    if got is not None:
+        return got
+
     # --- reminders -----------------------------------------------------------------
     got = _reminder(s, now)
     if got is not None:
@@ -767,6 +779,72 @@ def _briefing(s: str, now: float) -> Optional[Intent]:
     return None
 
 
+#: The four providers and Whoogle, by the words the owner may use for them.
+_PROVIDER_WORDS = (("searxng", r"searx(?:ng)?"),
+                   ("duckduckgo", r"duck\s*duck\s*go|ddg"),
+                   ("tavily", r"tavily"),
+                   ("brave", r"brave(?:\s+search)?"),
+                   ("whoogle", r"whoogle"))
+_PROV = "|".join(f"(?P<{pid}>{rx})" for pid, rx in _PROVIDER_WORDS)
+_WS = r"(?:web\s+)?search(?:es|ing)?(?:\s+(?:engine|provider|service))?"
+
+
+def _provider_of(m) -> Optional[str]:
+    for pid, _ in _PROVIDER_WORDS:
+        if m.group(pid):
+            return pid
+    return None
+
+
+def _web_search(s: str) -> Optional[Intent]:
+    """Web search (jarvis_search.py, the owner's decisions of 2026-09-25):
+    "which search should I use?", "why SearXNG?", and "use DuckDuckGo for
+    web search". Whole sentences only; anything else goes to the model."""
+    if re.fullmatch(r"(?:which|what)\s+" + _WS + r"\s+(?:should|do|can|could)\s+(?:i|you|we|jarvis)"
+                    r"\s+use|(?:which|what)\s+" + _WS + r"\s+is\s+(?:best|better|the\s+best)"
+                    r"(?:\s+for\s+me)?|what\s+are\s+(?:my|the)\s+" + _WS + r"\s+(?:options|choices)"
+                    r"|compare\s+(?:the\s+)?" + _WS + r"(?:\s+(?:options|choices))?"
+                    r"|(?:which|what)\s+" + _WS + r"\s+(?:are\s+you|is\s+jarvis)\s+using", s):
+        return Intent("search_explain", {"which": None})
+    m = re.fullmatch(r"(?P<verb>why|why\s+(?:use|is\s+it|not|choose|pick|would\s+i\s+use)"
+                     r"|what\s+is|what's|whats|tell\s+me\s+about|what\s+about)\s+(?:" + _PROV
+                     + r")(?P<tail>\s+(?:for\s+)?" + _WS + r")?", s)
+    if m:
+        which = _provider_of(m)
+        # "what is brave" is not about search unless it says so.
+        if (which == "brave" and not m.group("verb").startswith("why")
+                and m.group("brave") == "brave" and not m.group("tail")):
+            return None
+        return Intent("search_explain", {"which": which})
+    m = (re.fullmatch(r"(?:use|switch\s+to|change\s+to)\s+(?:" + _PROV + r")\s+(?:for|as)\s+"
+                      r"(?:(?:the|my)\s+)?" + _WS, s)
+         or re.fullmatch(r"(?:switch|change|set)\s+(?:the\s+|my\s+)?" + _WS
+                         + r"\s+(?:to|over\s+to)\s+(?:" + _PROV + r")", s))
+    if m:
+        return Intent("search_use", {"which": _provider_of(m)})
+    return None
+
+
+SEARCH_MISSING = ("Your PC's Jarvis does not have web search yet - run apply-patches.ps1 "
+                  "on the PC.")
+
+
+def _run_search(intent: Intent) -> Result:
+    """Explained from jarvis_search's own words (the same both apps show),
+    or the provider switched - immediately, as from either app's Settings.
+    Nothing is searched here."""
+    n, which = intent.name, intent.f.get("which")
+    try:
+        import jarvis_search as WS
+    except Exception:
+        return Result(SEARCH_MISSING, n)
+    if n == "search_explain":
+        return Result(WS.explain(which), n)
+    if which == "whoogle":
+        return Result(WS.explain("whoogle"), n)
+    return Result(WS.use(which), n)
+
+
 def is_command(text) -> bool:
     """Does this sentence fit the grammar? For jarvis_intake.owner_turns:
     a command to set a timer or a reminder is not a fact to learn. Reads no
@@ -837,6 +915,8 @@ def run(intent: Intent, sched, now: float) -> Optional[Result]:
                       "here or under Coming up.", n)
     if n.startswith("briefing_"):
         return _run_briefing(intent, sched, now)
+    if n.startswith("search_"):
+        return _run_search(intent)
     if n == "timer_set":
         try:
             j = sched.add_timer(f["seconds"], f.get("label", ""), source="quick")

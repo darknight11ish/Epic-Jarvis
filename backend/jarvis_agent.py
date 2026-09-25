@@ -31,8 +31,11 @@ second, larger-context lane is running. Since 2026-09-24 that is enforced
 here too: it is offered only while the second graphics card's "Browser
 control" switch is on and working (jarvis_second_card.lane_for), and the
 rounds after it runs continue on that lane - see offered_tools() and
-choose_lane(), and run_local_turn's `lane_choice`. Docker-based execution, connectors
-and general web search remain excluded with the reasons README.md gives; a
+choose_lane(), and run_local_turn's `lane_choice`. Docker-based execution and
+connectors remain excluded with the reasons README.md gives. General web
+search is here since 2026-09-25 (`web_search`, jarvis_search.py, the owner's
+choice of four providers) with its own rule for when it asks - see
+WEB_SEARCH_* below. A
 memory_store tool that writes directly to `facts` was excluded on purpose
 because this project's memory system exists specifically so nothing reaches
 `facts` without a human accepting it through the review queue, and a
@@ -333,6 +336,26 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
     return R.matrix(out)
 
 
+def _prepare_web_search(args: dict):
+    """Only for the tool test and for a caller outside _one_call: the chat
+    loop handles web_search itself (_web_search_call), because when it asks
+    depends on the turn, not on a tier."""
+    try:
+        import jarvis_search as WS
+    except Exception as exc:
+        return None, f"Search the web for: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
+    p = WS.plan(args.get("query", ""))
+    return p, WS.describe(p)
+
+
+def _run_web_search(args: dict, plan_obj, **_) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "web search is not available here"}
+    import jarvis_search as WS
+    return WS.tool_result(WS.run(plan_obj, approved=True))
+
+
 def _prepare_calendar_read(args: dict):
     try:
         import jarvis_calendar as CAL
@@ -526,7 +549,8 @@ TOOLS: dict = {
          "required": ["query"]},
         _plain_prepare("Search memory for"),
         lambda args, state, **_: _run_memory_search(args),
-        instead={"notes_search": "For the owner's own notes, use notes_search."}),
+        instead={"notes_search": "For the owner's own notes, use notes_search.",
+                 "web_search": "For the public web, use web_search."}),
     "file_read": Tool(
         "file_read", "Read a local text file.",
         {"type": "object", "properties": {
@@ -640,7 +664,26 @@ TOOLS: dict = {
         # and jarvis_research.py's own run() already refuses if the token
         # state changes between its plan() and run() - this only decides
         # which action name (and therefore which tier) governs THIS call.
-        gate_lookup_name=lambda args: _github_search_action_name()),
+        gate_lookup_name=lambda args: _github_search_action_name(),
+        instead={"web_search": "For a general web search, use web_search."}),
+    # Web search (jarvis_search.py; the owner's decisions of 2026-09-25): the
+    # provider the owner chose - SearXNG on this PC by default - and never
+    # another one quietly. Handled by _web_search_call, not the generic path:
+    # whether it asks depends on what this turn has read (WEB_SEARCH_*).
+    "web_search": Tool(
+        "web_search",
+        "Search the public web for current or outside information. Returns up "
+        "to 5 results: title, link, snippet. Use a few plain search words; never "
+        "put private details in them.",
+        {"type": "object", "properties": {
+            "query": {"type": "string", "description": "the search words, short"}},
+         "required": ["query"]},
+        _prepare_web_search, _run_web_search,
+        gate_lookup_name=lambda args: "search_the_web",
+        instead={"memory_search": "For what Jarvis knows about the owner, use memory_search.",
+                 "notes_search": "For the owner's own notes, use notes_search.",
+                 "github_search": "To grade GitHub libraries for a coding idea, use "
+                                  "github_search."}),
     "calendar_read": Tool(
         "calendar_read",
         "Read the owner's calendar events for the next N days. Read-only.",
@@ -672,7 +715,8 @@ TOOLS: dict = {
         lambda args, state, **_: _run_notes_search(args, state),
         gate_lookup_name=lambda args: "jarvis_notes_search_run",
         instead={"memory_search": "For facts Jarvis remembers about the owner, "
-                                  "use memory_search."}),
+                                  "use memory_search.",
+                 "web_search": "For the public web, use web_search."}),
     "home_read": Tool(
         "home_read",
         "Read the state of named Home Assistant entities. Read-only.",
@@ -978,6 +1022,88 @@ NOTE_AFTER_READING = ("Jarvis read outside text in this conversation, so it asks
                       "before writing to your notes.")
 NOTE_AFTER_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before writing "
                         "to your notes.")
+
+
+#: Web search (jarvis_search.py). The owner's decision of 2026-09-25, "When
+#: a search asks first": by default ONLY when private things could slip into
+#: the search words - a card showing the exact words when the conversation
+#: has read email, files, notes, saved memories or other outside text; no
+#: card for a search that comes straight from the owner's own question in a
+#: conversation that has read nothing. "Ask before every web search" (a
+#: setting in both apps, jarvis_search.settings) makes every search ask.
+#:
+#: What counts, in this loop's own terms (_TurnWatch): a reading tool ran
+#: this turn - an earlier web search included, its results are outside
+#: text; the conversation is tainted (an earlier turn read outside text);
+#: saved memories were recalled into this turn (the quoted FACTS block the
+#: chat route adds - pinned facts too - or memory_search ran); the newest
+#: message was not typed or said by the owner (pasted, shared, from the
+#: clipboard, a picture's caption, untagged); or the app sent text of its
+#: own. Any one of them, and the search is put to the gate as
+#: jarvis_search.ACTION_SEARCH ("search_the_web", tier "ask" as shipped) and
+#: runs only on a person's yes (_a_person_said_yes), like NEEDS_A_PERSON.
+#: A "never" tier switches web search off altogether, card or not.
+#:
+#: Stricter still, and never a card: search words that look like a password
+#: or key are refused outright (jarvis_search.plan, rule 1).
+WEB_SEARCH_EVERY = ("You chose \"Ask before every web search\", so Jarvis asks before "
+                    "each one.")
+WEB_SEARCH_READ = ("Jarvis read outside text in this conversation (an email, a file, a "
+                   "note, a web page or another tool's answer), so it asks before "
+                   "searching - something private could be in the search words.")
+WEB_SEARCH_MEMORY = ("Jarvis recalled saved memories about you for this question, so it "
+                     "asks before searching - something private could be in the search "
+                     "words.")
+WEB_SEARCH_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before searching - "
+                        "something private could be in the search words.")
+WEB_SEARCH_APP = ("The app sent extra text with your message (for example the "
+                  "clipboard), so Jarvis asks before searching - something private "
+                  "could be in the search words.")
+WEB_SEARCH_OFF = ("refused: web search is switched off on this PC (search_the_web is "
+                  "\"never\" in jarvis-framework.toml's [autonomy.tiers]). Nothing was "
+                  "sent. Tell the owner.")
+
+
+def web_search_card_lines(watch: "_TurnWatch", ask_every_time: bool) -> list:
+    """The reasons this search asks first, in plain words; [] when it runs
+    without a card (see WEB_SEARCH_* above)."""
+    lines = []
+    if watch.read or watch.tainted:
+        lines.append(WEB_SEARCH_READ)
+    if watch.memory:
+        lines.append(WEB_SEARCH_MEMORY)
+    if watch.provenance:
+        lines.append(WEB_SEARCH_NOT_TYPED.format(how=_NOT_OWN_WORDS[watch.provenance]))
+    if watch.app_context:
+        lines.append(WEB_SEARCH_APP)
+    if ask_every_time:
+        lines.append(WEB_SEARCH_EVERY)
+    return lines
+
+
+#: The chat route's quoted block of recalled facts (auto-learn.patch,
+#: memory-profile.patch): a system message holding this line, then the facts,
+#: then the end line.
+_FACTS_START = "---FACTS---"
+_FACTS_END = "---END FACTS---"
+
+
+def recalled_memory(messages) -> bool:
+    """Did the chat route put saved memories into this turn? A system
+    message with a FACTS block that holds at least one line. A temporary
+    chat's fixed line has no block, so it counts as none."""
+    for m in messages or []:
+        if not isinstance(m, dict) or m.get("role") != "system":
+            continue
+        text = _text_of(m.get("content"))
+        i = text.find(_FACTS_START)
+        if i < 0:
+            continue
+        j = text.find(_FACTS_END, i + len(_FACTS_START))
+        block = text[i + len(_FACTS_START): j if j >= 0 else len(text)]
+        if block.strip():
+            return True
+    return False
 
 
 #: jarvis_gate stores a card's `detail` as `json.dumps(detail)[:4000]`. A
@@ -1952,6 +2078,10 @@ class _TurnWatch:
             if _provenance(m) in OWN_WORDS).lower()
         self.tainted = (bool(tainted) if tainted is not None
                         else _conversation_tainted(req.get("conversation_id")))
+        # Saved memories recalled into this turn by the chat route - read off
+        # `messages`, which carry the server's own system turns (the FACTS
+        # block), not off the request as the app sent it.
+        self.memory = recalled_memory(messages)
 
     # -- broken calls ------------------------------------------------------
     def broken(self, name: str) -> int:
@@ -3072,6 +3202,12 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                       "content": _tool_content({"ok": False, "error": problem})})
         return
     tool = TOOLS[name]
+    if name == "web_search":
+        # When a search asks depends on this turn, not on a tier - see
+        # WEB_SEARCH_* and _web_search_call.
+        _web_search_call(args, call, convo, steps, checker, announce, out, say_step,
+                         watch=watch, tell_owner=tell_owner)
+        return
     if name in SCHEDULE_TOOLS:
         # Timers, alarms, reminders and the to-do list - not put to the gate
         # here. See SCHEDULE_TOOLS for why.
@@ -3241,3 +3377,126 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         result["owner_note"] = card_note
     convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                   "content": _tool_content(result)})
+
+
+def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
+                     announce, out: "_Out", say_step, *, watch: "_TurnWatch",
+                     tell_owner: Optional[Callable[[str], None]] = None) -> None:
+    """One web_search call: planned (no socket), refused outright when its
+    words hold a secret or the provider is not ready, put to a card when
+    private things could slip in (web_search_card_lines), and otherwise run
+    straight away. The result is outside text, like a web page's."""
+    name = "web_search"
+
+    def reply(result: dict) -> None:
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+
+    try:
+        import jarvis_search as WS
+    except Exception as exc:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
+        say_step("tool_finished", name, ok=False)
+        return reply({"ok": False, "error": f"web search is not available here "
+                                            f"({type(exc).__name__})"})
+    if _tier_of(WS.ACTION_SEARCH) == "never":
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return reply({"ok": False, "error": WEB_SEARCH_OFF})
+    try:
+        s = WS.settings()
+        p = WS.plan(args.get("query", ""), s=s)
+    except Exception as exc:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
+        say_step("tool_finished", name, ok=False)
+        return reply({"ok": False, "error": f"web search could not be planned "
+                                            f"({type(exc).__name__}). Nothing was sent."})
+    if p.problem:
+        # Nothing to ask about: nothing would be sent (a secret in the words,
+        # no key, ddgs not installed...). Said plainly, with the offer to
+        # switch - never sent to another provider instead.
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return reply(WS.tool_result(WS.run(p, approved=True)))
+    lines = web_search_card_lines(watch, bool(s.get("ask_every_time")))
+    step = {"tool": name, "ran": False, "ok": False, "outcome": "no card needed"}
+    card_note = None
+    if lines:
+        if watch.cards >= CARDS_PER_TURN:
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            reply({"ok": False, "error": CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN)})
+            if "(card limit)" not in watch.told and tell_owner is not None:
+                watch.told.add("(card limit)")
+                tell_owner(CARD_LIMIT_LINE.format(n=CARDS_PER_TURN))
+            return
+        plan_text = WS.describe(p) + "\n\n" + "\n".join(lines)
+        shaped = watch.shaped_by(args)
+        if shaped:
+            plan_text = f"{plan_text}\n\nWhat shaped this request:\n{shaped}"
+        if len(json.dumps({"text": plan_text})) >= _GATE_DETAIL_LIMIT:
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return reply({"ok": False, "error": (
+                "refused: this search's card would be too long to show in full, so nobody "
+                "was asked and nothing was sent. Search with fewer words.")})
+        out.set_status("approval")
+        verdict = checker(WS.ACTION_SEARCH, {"text": plan_text},
+                          f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
+        out.set_status("thinking")
+        if _a_card_was_shown(verdict):
+            watch.cards += 1
+        step["outcome"] = str(getattr(verdict, "outcome", None) or "unknown")
+        tc = _task_control()
+        if tc is not None:
+            try:
+                card_note = tc.take_amend(getattr(verdict, "request_id", None))
+            except Exception:
+                card_note = None
+        if not getattr(verdict, "allowed", False):
+            steps.append(step)
+            say_step("tool_refused", name)
+            result = {"ok": False,
+                      "error": f"refused: {getattr(verdict, 'reason', 'not approved')}. "
+                               f"Nothing was searched."}
+            if card_note:
+                result["owner_note"] = card_note
+            return reply(result)
+        if not _a_person_said_yes(verdict):
+            steps.append(step)
+            say_step("tool_refused", name)
+            vtier = getattr(verdict, "tier", None) or "unknown"
+            return reply({"ok": False, "error": (
+                f"refused: this search asks the owner first ({lines[0]}) - but the "
+                f"approval gate let it through at tier {vtier!r} without asking anyone. "
+                f"Nothing was sent. To use it, set {WS.ACTION_SEARCH} to \"ask\" in "
+                f"jarvis-framework.toml's [autonomy.tiers].")})
+    if out.gone:
+        steps.append(step)
+        say_step("tool_refused", name)
+        raise ClientGone()
+    steps.append(step)
+    say_step("tool_started", name)
+    out.set_status("working")
+    if announce:
+        try:
+            announce(f"Using {name}...")
+        except Exception:
+            pass
+    step["ran"] = True
+    try:
+        result = WS.tool_result(WS.run(p, approved=True))
+    except Exception as exc:
+        result = {"ok": False, "error": f"{type(exc).__name__}: the search failed. Nothing "
+                                        f"else was tried."}
+    finally:
+        out.set_status("thinking")
+    # Outside text, like a web page: labelled, checked, and it marks the turn
+    # (and, through this PC's record of it, the rest of the conversation).
+    result = watch.took_in(name, result)
+    step["ok"] = isinstance(result, dict) and result.get("ok") is True
+    say_step("tool_finished", name, ok=step["ok"])
+    if card_note and isinstance(result, dict):
+        result = dict(result)
+        result["owner_note"] = card_note
+    reply(result)

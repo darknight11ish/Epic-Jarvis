@@ -394,6 +394,14 @@ $PATCHES = @(
     # patch. Needs jarvis_briefing.py and jarvis_backoff.py copied in;
     # without them the routes answer 503 and chat works exactly as before.
     'briefing.patch'
+    # Web search with a choice of four providers (the owner's decisions of
+    # 2026-09-25): GET /api/search and POST /api/search/settings and /test,
+    # and the approval notice's words for web_search (one search's card)
+    # and stop_asking_before_every_web_search in jarvis_gate.py. Its context is hardware's
+    # and schedule's route blocks and gate lines, so it goes after both.
+    # Needs jarvis_search.py copied in; without it the routes answer 503 and
+    # the model is never offered web_search's settings.
+    'web-search.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -481,6 +489,7 @@ $SHIPPED = @(
     'jarvis_email.py'            # tool "email_check"
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
+    'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Tavily or Brave) and its settings; web-search.patch
 )
 
 # The settings file. Installed only where none exists; never overwritten.

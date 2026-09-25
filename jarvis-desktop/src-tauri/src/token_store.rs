@@ -263,6 +263,64 @@ pub fn delete() -> Result<(), StoreError> {
     Ok(())
 }
 
+/// Where the web search keys are kept for the backend (Settings -> "Web
+/// search"; `backend/jarvis_search.py` `KEY_TARGETS` reads them under the same
+/// names - `test_web_search.py` checks the text). The owner's decision of
+/// 2026-09-25: keys are entered on the PC only, so this app writes them
+/// straight into Credential Manager and they never cross the link to the
+/// backend's API, nor reach the phone. Written, checked and deleted here;
+/// never read back to a page - only whether one is saved.
+pub const SEARCH_KEY_TARGETS: [(&str, &str); 2] = [
+    ("tavily", "Jarvis Backend/Tavily key"),
+    ("brave", "Jarvis Backend/Brave Search key"),
+];
+
+/// The Credential Manager name for `provider`'s key, or `None` for a
+/// provider that uses none.
+pub fn search_key_target(provider: &str) -> Option<&'static str> {
+    SEARCH_KEY_TARGETS
+        .iter()
+        .find(|(p, _)| *p == provider)
+        .map(|(_, t)| *t)
+}
+
+/// Whether `key` can be a key: 8 to 200 plain characters, no spaces - the
+/// backend's own rule (`jarvis_search.key_problem`). The reason never quotes it.
+pub fn search_key_problem(key: &str) -> Option<&'static str> {
+    let k = key.trim();
+    if k.is_empty() {
+        return Some("The key is empty.");
+    }
+    if k.len() < 8 || k.len() > 200 || !k.bytes().all(|b| (0x21..=0x7e).contains(&b)) {
+        return Some(
+            "The key must be 8 to 200 plain characters with no spaces - check that the \
+             whole key was copied, and nothing else.",
+        );
+    }
+    None
+}
+
+/// Saves a web search key, then reads it back to be sure it landed.
+pub fn write_search_key(provider: &str, key: &str) -> Result<(), StoreError> {
+    let target = search_key_target(provider)
+        .ok_or_else(|| StoreError::Failed("only Tavily and Brave Search use a key".into()))?;
+    let key = key.trim();
+    imp::write(target, key)?;
+    match imp::read(target)? {
+        Some(back) if back == key => Ok(()),
+        _ => Err(StoreError::Failed(
+            "the key read back from Credential Manager did not match".into(),
+        )),
+    }
+}
+
+/// Removes a web search key. Not an error when there was none.
+pub fn delete_search_key(provider: &str) -> Result<(), StoreError> {
+    let target = search_key_target(provider)
+        .ok_or_else(|| StoreError::Failed("only Tavily and Brave Search use a key".into()))?;
+    imp::delete(target)
+}
+
 /// The token the backend made for itself, if Credential Manager holds one.
 ///
 /// Asked every time, not cached: on a first run the backend makes it moments
@@ -314,6 +372,31 @@ mod tests {
         assert!(matches!(mismatched, Migration::KeepPlain(_)));
         let missing = plan_migration(Some("abc"), |_| Ok(()), || Ok(None));
         assert!(matches!(missing, Migration::KeepPlain(_)));
+    }
+
+    /// Web search keys: two names, the backend's; a key is checked the
+    /// backend's way; the reason never quotes it.
+    #[test]
+    fn search_keys_have_the_backends_names_and_rule() {
+        use super::{search_key_problem, search_key_target};
+        assert_eq!(
+            search_key_target("tavily"),
+            Some("Jarvis Backend/Tavily key")
+        );
+        assert_eq!(
+            search_key_target("brave"),
+            Some("Jarvis Backend/Brave Search key")
+        );
+        assert_eq!(search_key_target("searxng"), None);
+        assert_eq!(search_key_target("duckduckgo"), None);
+        let fake = format!("{}{}", "tvly-", "fake0123456789");
+        assert!(search_key_problem(&fake).is_none());
+        assert!(search_key_problem(&format!("  {fake}\n")).is_none());
+        for bad in ["", "short", "has a space in it", "tab\tin\tthe\tmiddle"] {
+            let why = search_key_problem(bad).expect(bad);
+            assert!(bad.len() < 5 || !why.contains(bad));
+        }
+        assert!(search_key_problem(&"x".repeat(201)).is_some());
     }
 
     /// The reason given never contains the token itself.

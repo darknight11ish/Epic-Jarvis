@@ -73,6 +73,7 @@ THIRD_PARTY = {
     "f5_tts": "f5-tts",
     "soundfile": "soundfile",
     "cryptography": "cryptography",
+    "ddgs": "ddgs",
 }
 
 # Packages in requirements.txt that no shipped module imports BY NAME,

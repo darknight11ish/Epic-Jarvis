@@ -1441,6 +1441,42 @@ object JarvisRuntime {
         return Hardware.replyLine(result)
     }
 
+    // ------------------------------------------------------- web search ----
+    // The owner's decisions of 2026-09-25 - see [com.jarvis.client.net.WebSearch]
+    // and ui/screens/WebSearchPlate.kt. The phone chooses the provider, sets
+    // the SearXNG address, turns "Ask before every web search" on or off (off
+    // raises ONE approval card on the PC) and runs a test search. It never
+    // takes a Tavily or Brave key: those are typed on the PC only.
+
+    /** `GET /api/search`. A read: never held. */
+    suspend fun webSearch(): ApiResult<JsonObject> = api.webSearch()
+
+    /**
+     * ONE web search setting, with [body] from [com.jarvis.client.net.WebSearch]'s
+     * providerBody / addressBody / askBody. Held on a stale link ([actionBlocker],
+     * rule 4). Turning "Ask before every web search" off raises a card on the PC,
+     * which this phone's approvals show too.
+     */
+    suspend fun setWebSearch(body: String?): String {
+        actionBlocker()?.let { return it }
+        if (body == null) return "That is not something this screen can change."
+        val result = api.webSearchPost(com.jarvis.client.net.WebSearch.SETTINGS_PATH, body)
+        if (result is ApiResult.Ok) refreshPending()
+        return com.jarvis.client.net.WebSearch.replyLine(result)
+    }
+
+    /**
+     * One test search for a fixed word through the chosen provider. Held on a
+     * stale link. @return whether it worked, and the PC's sentence (with its
+     * offer to switch when it did not).
+     */
+    suspend fun testWebSearch(): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return com.jarvis.client.net.WebSearch.testLine(
+            api.webSearchPost(com.jarvis.client.net.WebSearch.TEST_PATH, "{}"),
+        )
+    }
+
     /** Re-reads `/api/deep`. Starts nothing on the PC. */
     suspend fun refreshDeep() {
         _deep.value = BigModel.deepReadOf(api.deep())

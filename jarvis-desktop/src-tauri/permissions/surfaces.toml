@@ -324,6 +324,18 @@ permissions = [
   "allow-apply-hardware",
   "allow-hardware-step",
   "allow-measure-hardware",
+  # "Web search": the four providers with their "why" lines, and ONE change
+  # at a time - the provider, the SearXNG address, "Ask before every web
+  # search" (off raises an approval card on the PC). Changes and the test
+  # search are held while the event stream is stale. The Tavily and Brave
+  # keys are written straight into Credential Manager on this PC by
+  # save_search_key: never sent to the backend or the phone, never read
+  # back to a page. Settings window only - rule 3.
+  "allow-get-web-search",
+  "allow-set-web-search",
+  "allow-test-web-search",
+  "allow-save-search-key",
+  "allow-forget-search-key",
   # "Voice": what the PC says about listening to the owner - whether each
   # microphone's voice print is trained, which voice check is installed, the
   # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:
