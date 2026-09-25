@@ -191,6 +191,27 @@ LongMemEval (Di Wu et al.), MIT - https://github.com/xiaowu0162/LongMemEval
   is the one given for browser-use above with this copyright line in place
   of that one.
 
+Graphiti (Zep Software, Inc.), Apache-2.0 - https://github.com/getzep/graphiti
+  backend/rebuilt/jarvis_memory.py ("The entity layer", memory wave 3)
+  decides whether two names are a likely typo of each other the way
+  graphiti_core/utils/maintenance/dedup_helpers.py does:
+  _normalize_name_for_fuzzy, _name_entropy, _has_high_entropy, _shingles and
+  the Jaccard test, with its thresholds (6 characters or 2 words, entropy
+  1.5, 0.9), re-written here (no MinHash: every name is compared). The
+  rules in backend/jarvis_entities.py's model prompt paraphrase
+  graphiti_core/prompts/extract_nodes.py (what never to extract; relation
+  words are not names). Read on 2026-09-24/25. Copyright 2024, Zep
+  Software, Inc. Licensed under the Apache License, Version 2.0
+  (http://www.apache.org/licenses/LICENSE-2.0).
+
+LightRAG (HKUDS), MIT - https://github.com/HKUDS/LightRAG
+  backend/jarvis_entities.py's model prompt says "List fewer entities if
+  fewer are there. Do not try to fill the list." - the idea of
+  lightrag/prompt.py's "Output fewer records if fewer high-value items are
+  present. Do not try to fill the limit.", reworded. No code is used.
+  Licensed under the MIT License, whose full text is the one given for
+  browser-use above.
+
 SPOKEN ANSWERS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 unmute (kyutai-labs), MIT - https://github.com/kyutai-labs/unmute

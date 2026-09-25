@@ -469,6 +469,16 @@ auto_accept = false
 setup_complete = false
 review_queue_max = 200
 
+[memory.entities]
+# "Who is my sister?" (memory wave 3, 2026-09-25): every saved fact is
+# linked to the people and things it names by fixed rules, with no model,
+# always. model_pass = true ALSO asks this PC's local model, once per
+# learning pass, to name who and what the saved facts mention
+# (jarvis_entities.py) - only a model on this PC, and only names that are in
+# a fact word for word are kept. OFF because nobody has measured whether it
+# helps yet. JARVIS_ENTITY_MODEL=1 in the environment does the same.
+model_pass = false
+
 [memory.sleep_time]
 # The idea (Letta/MemGPT-style): while you are not talking, use the idle
 # GPU to re-read memory and SUGGEST tidying it - merging repeats, pointing

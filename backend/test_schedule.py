@@ -879,9 +879,11 @@ def t_the_patch():
     start = ps1.index("$PATCHES = @(")
     names = [l.strip().strip("'") for l in ps1[start:ps1.index("\n)", start)].splitlines()
              if l.strip().startswith("'")]
-    check("apply-patches.ps1 applies schedule.patch last, after hardware",
-          names[-1] == "schedule.patch" and names.index("hardware.patch") < names.index(
-              "schedule.patch"))
+    # Only the real dependencies are pinned - the patches whose lines its
+    # context uses - not "last", which the next new patch would break.
+    check("apply-patches.ps1 applies schedule.patch after the patches it builds on",
+          all(names.index(p) < names.index("schedule.patch")
+              for p in ("hardware.patch", "chat-history.patch", "extraction-wiring.patch")))
     shipped = ps1[ps1.index("$SHIPPED = @("):]
     import _where
     check("both new modules are copied in, in _where.SHIPPED too",

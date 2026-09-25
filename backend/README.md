@@ -114,7 +114,8 @@ on a throwaway copy instead.
 | `temporary-chat.patch` | `jarvis_hud.py` | **A temporary chat, and "Used in this answer"** (the owner's decisions, 2026-09-25). A chat request with `"temporary": true` recalls no facts (no pinned list either), learns nothing (no "Remember:" either) and is not kept in the chat history; `X-Jarvis-Route` says `"temporary": true` (and `"remember_off": true` for a "Remember:"). Adds `GET /api/memory/used?ids=`, the words of the facts an answer used, read by id. Last in the list, after `memory-profile.patch`, whose GET route and search lines it sits beside. The work is in the shipped `rebuilt/jarvis_memory.py` (`used_view`), `jarvis_chat_log.py` (`TEMPORARY_CHAT`) and `rebuilt/jarvis_events.py` (`capabilities.temporary_chat`). See "Temporary chat and Used in this answer", at the very end. |
 | `hardware.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Setups for any graphics card** (docs/HARDWARE-PROFILES.md, 2026-09-25). Adds `GET /api/hardware` (the cards, what runs now, three setups) and `POST /api/hardware/apply` (choose one - changes nothing by itself), `/create` (make a tuned model: ONE approval card, `models_create`) and `/measure`, and the approval notice's words for `models_create`. Two route blocks, each right after second-card's. Needs `jarvis_hardware.py` and `jarvis_profiles.py` - see "Setups for any graphics card", near the end. |
 | `log-scrub.patch` | `jarvis_hud.py` | **Passwords, keys and the pairing token kept out of `backend.log`** (the extraction research's Module 1, 2026-09-25). Right after the token is worked out, `jarvis_scrub.install(HUD_TOKEN)` scrubs everything the backend prints or logs from then on, including loggers set up earlier; the banner says so in one line. Its context is loopback-too's and bind-wildcard's lines. Needs `jarvis_scrub.py` - see "The log scrubber", near the very end. |
-| `schedule.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Timers, alarms, reminders and the to-do list, with one scheduler** (the owner's decisions, 2026-09-25). Adds `GET /api/schedule` and `POST /api/schedule/add` and `/act`, starts the scheduler at boot, answers "set a timer for 10 minutes" and the like in `/api/chat` WITHOUT the model, and the approval notice's words for `schedule_repeat` (anything that repeats is one card). Last in the list. Needs `jarvis_schedule.py` and `jarvis_quick.py` - see "Timers, alarms, reminders and the to-do list", at the very end. |
+| `schedule.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Timers, alarms, reminders and the to-do list, with one scheduler** (the owner's decisions, 2026-09-25). Adds `GET /api/schedule` and `POST /api/schedule/add` and `/act`, starts the scheduler at boot, answers "set a timer for 10 minutes" and the like in `/api/chat` WITHOUT the model, and the approval notice's words for `schedule_repeat` (anything that repeats is one card). Needs `jarvis_schedule.py` and `jarvis_quick.py` - see "Timers, alarms, reminders and the to-do list", at the very end. |
+| `memory-entities.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **"Who is my sister?" - people and things** (memory wave 3, 2026-09-25). Adds `GET /api/memory/entities` (the people and things facts are linked to, for the desktop's "About <name>"), leaves the "are these the same?" card out of `/api/memory/pending` unless asked for with `?merge_cards=1`, and gives `jarvis_extract.py` `propose_merge()` and `_accept_merge()` - accepting that card joins two entries and adds no fact. The work is in the shipped `rebuilt/jarvis_memory.py` (and `jarvis_past.py`, whose recall uses it); with an older copy the route answers 501. Last in the list, after `temporary-chat.patch`, whose route lines are its context. See "Memory wave 3", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -8120,3 +8121,175 @@ that the patch applies to what the earlier patches wrote.
   not run timers; the digest lives in your `jarvis_arbiter.py`, which this
   repository does not hold.
 - English only.
+
+---
+
+# Memory wave 3 (2026-09-25): "who is my sister?" - people and things
+
+**What it does, in plain words.** Ask Jarvis "where is my sister getting
+married?" and, before this, it could not find "Priya's wedding is in Lisbon
+next May": nothing in the question says Priya, and searching by words (or by
+meaning) cannot know that your sister IS Priya. But you told Jarvis once:
+"my sister is called Priya". Now Jarvis uses that.
+
+- **Every fact Jarvis saves is linked to the people, pets, places and things
+  it names**, and the word you use for someone ("sister", "boss", "cat")
+  becomes another name for them - only when the same fact says both ("My
+  sister is called Priya"). This happens when the fact is saved, by fixed
+  rules, with no model: names written with capital letters, and "my sister
+  is called Priya" / "my brother Arjun" / "Mario is my manager". **Those
+  relation words are English only.** Names in any language written in Latin
+  letters are found, but the list of capitalised words that are not names is
+  English, so other languages get a few more useless entries - which can
+  only add a fact to what Jarvis considers, never remove one.
+- **When you ask something**, Jarvis looks your words up in that list,
+  adds the full names to the search ("... Priya"), and also considers the
+  facts linked to those people. No model is asked; the five facts a chat
+  gets, and both relevance floors, are unchanged.
+- **On the desktop**, under each fact in "Saved automatically" and "What
+  Jarvis knows about you", the names it is linked to ("About: Lisbon,
+  Priya"). Each opens **"About Priya"**: her facts, word for word, and what
+  you call her. No summary - nothing there is written by a model. Hidden
+  with the other memory lists under Windows Hello.
+- **"Are these the same person?"** If a new name is very likely a typo of
+  one Jarvis knows ("Priya Sharma" / "Priya Sharmaa"), you get ONE card for
+  that pair, in "Waiting for you" on the desktop: **Yes, the same** joins
+  them (a question about one then finds the other's facts; no fact changes),
+  **No, keep them apart** keeps them apart for good - Jarvis never asks
+  about that pair again. Only exactly the same name (capitals and "'s"
+  aside) is joined without asking.
+- **Forget and Erase clean up after themselves.** Forget a fact and its
+  links go, and the word it taught ("sister") stops meaning Priya. Erase a
+  fact and, on top, every name that no other fact still says is wiped from
+  the file, with any card that showed it.
+- **The phone shows none of it**, on purpose: this is the memory graph,
+  which stays off the phone (CLAUDE.md). Its answers get better anyway,
+  because recall happens on the PC.
+- **An optional model pass, OFF, and unmeasured.** Jarvis can also ask
+  your local model to read the facts each learning pass saved and name who
+  and what is in them (`jarvis_entities.py`): one call per pass, on the
+  learner's own background thread, only to a model on this PC (by address
+  and by name). Nobody has measured whether it helps, so it stays off. To
+  try it, add `[memory.entities]` with `model_pass = true` to
+  `jarvis-framework.toml`, or set `JARVIS_ENTITY_MODEL=1`. Whatever it
+  finds still has to be in the fact word for word.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies the new `jarvis_memory.py`,
+`jarvis_past.py`, `jarvis_auto_learn.py` and `jarvis_entities.py`, applies
+`memory-entities.patch`), from this repository's folder, then restart
+Jarvis. Your existing facts are linked once, the first time the new memory
+code opens `memory.db`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. (Optional) Run the memory self-test.** It now has a line for the
+entity layer, off and on. The two result files land in `jarvis-memory-eval`
+in your home folder; the command opens it:
+
+```powershell
+py -3 backend\eval_memory.py; explorer "$env:USERPROFILE\jarvis-memory-eval"
+```
+
+To switch the entity layer off in chat, set `JARVIS_MEMORY_ENTITIES` to `0`
+for the backend and restart it.
+
+## What was measured here (words only, dev container, not your PC)
+
+The self-test has 11 new questions (138 in all): seven about people named
+only by what you call them ("What did I say about my sister's wedding?",
+"What colour is my cat?", "What does my partner do for a living?"), and two
+new "don't know" questions that the entity layer can only make worse ("What
+does my sister do for a living?", "When is my cat's next vet appointment?"),
+to measure that cost. Off = today's search with the word floor; on = the
+same with the entity layer, as chat now recalls.
+
+| Filler | Facts | Recall@5, off -> on | People questions found | Alias questions found | Recall@1 | "Don't know": facts per question | Search p50 / p95 |
+|---|---|---|---|---|---|---|---|
+| none | 63 | 73.4% -> 78.7% | 15/20 -> 20/20 | 4/9 -> 9/9 | 62.8% -> 63.8% | 0.79 -> 0.93 | 0.8/1.1 -> 0.9/1.2 ms |
+| unrelated | 1,063 | 72.3% -> 77.7% | 15/20 -> 20/20 | 4/9 -> 9/9 | 61.7% -> 61.7% | 0.97 -> 1.10 | 1.0/2.4 -> 1.3/3.0 ms |
+| unrelated | 10,063 | 72.3% -> 77.7% | 15/20 -> 20/20 | 4/9 -> 9/9 | 61.7% -> 61.7% | 0.97 -> 1.10 | 0.9/2.5 -> 1.0/2.5 ms |
+| same topic | 1,063 | 70.2% -> 75.5% | 15/20 -> 20/20 | 4/9 -> 9/9 | 60.6% -> 62.8% | 1.86 -> 1.86 | 1.0/3.4 -> 1.4/4.2 ms |
+| same topic | 10,063 | 70.2% -> 75.5% | 15/20 -> 20/20 | 4/9 -> 9/9 | 60.6% -> 62.8% | 1.86 -> 1.86 | 1.4/5.0 -> 1.6/4.9 ms |
+
+**Said plainly:**
+
+- **The sister's-wedding case is fixed.** Without the layer, "what did I
+  say about my sister's wedding?" found "Owner's sister is called Priya"
+  and someone else's wedding, never Priya's; with it, her wedding comes
+  first (`test_memory_entities.py`, and alias questions 4 of 9 -> 9 of 9
+  above).
+- **It costs a few wrong facts on "don't know" questions about someone
+  you have named**: "When is my cat's birthday?" now also brings back
+  "Biscuit is a ginger tabby..." (it is about your cat, but it is not the
+  answer), and "What does my sister do for a living?" brings back two
+  Priya facts. That is 4 more wrong facts across 29 "don't know" questions
+  with unrelated filler, and none more with same-topic filler. The share
+  of "don't know" questions that get nothing back is unchanged.
+- **Past questions, as-of questions and replaced facts are unchanged** at
+  every size (past 8/8 -> 8/8 with no filler, 7/7 at 10,000; a replaced
+  fact never came back).
+- **Saving a fact costs about 0.8 ms more** (2.09 -> 2.85 ms per fact,
+  2,000 same-topic filler facts, this container's processor).
+- **Typo cards are rare by design.** Graphiti's rule needs both names to
+  be specific enough and share 90% of their three-letter chunks. That
+  catches a letter added or dropped at the end of a longer name ("Priya
+  Sharma" / "Priya Sharmaa"). It does NOT catch a typo in a short name:
+  "Priya" / "Priyaa" share only 3 of 4 chunks, so they stay two entries
+  and no card is raised - the safe side, but it means the research
+  sketch's own example would not raise a card.
+- **Words only, again.** Meaning search is the owner's PC's first
+  measurement; the names are added to the question for it too, which has
+  not been measured anywhere.
+- **The word floor.** With the 11 new questions, the sweep now chooses 0.2
+  on its tuning half (0.0, 0.1 and 0.2 all lose nothing there); before, 0.1
+  and 0.2 tied. I did not change the default of 0.1 - this wave was asked
+  to keep the floors as they are - and your PC's run with meaning search
+  re-chooses it anyway.
+
+## What the code does
+
+- `rebuilt/jarvis_memory.py`, section "The entity layer": the three tables
+  (`entities`, `entity_aliases`, `fact_entities`) and the bookkeeping for
+  the cards (`entity_merge_asks`); `find_entities()` (the no-model rules);
+  `_grounded()`; `MemoryStore._link_fact()` from `add()` and `edit()`,
+  `_unlink_fact()` from `retire()`, a correction and `erase()`;
+  `search(..., entities=True)` - the alias lookup, the names added to the
+  question, and the linked facts as a third RRF list; `raise_merge_cards()`,
+  `merge_from_card()`, `merge()` (two ids, a pointer); `entities_view()` and
+  `handle_entities_get()`; `status()` gains `entities`. A store from before
+  is linked once, when first opened.
+- `jarvis_past.py`: `recall()` asks the store for the entity layer.
+- `jarvis_entities.py` (new, copied in): the optional model pass. Off.
+- `jarvis_auto_learn.py`: `after_pass()` hands the facts it saved to that
+  pass - which does nothing while it is off.
+- `memory-entities.patch`: `GET /api/memory/entities` in `jarvis_hud.py`,
+  beside `/api/memory/used`; the "are these the same?" card left out of
+  `/api/memory/pending` unless asked for with `?merge_cards=1`; and
+  `jarvis_extract.py`'s `MERGE_SOURCE`, `propose_merge()` and
+  `_accept_merge()` - accepting the card joins the pair and adds no fact.
+  Last in the list, after `hardware.patch`; its context is
+  `temporary-chat.patch`'s route lines and `feedback.patch`'s.
+- `eval_memory.py` and `eval/golden_questions.jsonl`: the table above.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_entities.py
+```
+
+About 120 checks, no network, no model: the three tables; names and aliases
+grounded or dropped, whoever found them; an alias only from a fact with both
+words, recording that fact; Forget, a correction, an edit and Erase take the
+links (Erase checked by reading `memory.db` and its `-wal` as raw bytes);
+exact names joined, a likely typo one card per pair, "no" never asked again,
+"yes" joins that one pair; the sister's-wedding case, `k` and the floors
+unchanged, no network connection opened on the chat path, a temporary chat
+still recalls nothing, the pinned list unchanged; the model pass off by
+default, one call, local only; the route, the pending filter and the
+accepted card lifted from the whole patch stack and run; the patch applies
+forwards and backwards. Every check about the entity layer fails on the code
+before this change.

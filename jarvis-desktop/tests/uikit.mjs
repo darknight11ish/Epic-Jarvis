@@ -1000,7 +1000,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               let body = (brain && brain[name]) || { available: false, error: "not stubbed" };
               // lock.rs redact_private: while private answers are hidden the
               // two memory lists come back EMPTY, with how many there were.
-              const key = { memory_facts: "facts", memory_pending: "pending" }[name];
+              const key = { memory_facts: "facts", memory_pending: "pending",
+                            memory_entities: "entities" }[name];
               if (key && sec.hidden && !sec.revealed && body.available !== false) {
                 const count = Array.isArray(body[key]) ? body[key].length : 0;
                 body = { ...body, [key]: [], hidden: true, hidden_count: count };

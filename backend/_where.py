@@ -126,6 +126,7 @@ SHIPPED = (
     "jarvis_auto_learn.py",
     "jarvis_sensitive.py",
     "jarvis_past.py",
+    "jarvis_entities.py",
     "jarvis_profiles.py", "jarvis_hardware.py",
     "jarvis_scrub.py",
     "jarvis_schedule.py", "jarvis_quick.py",

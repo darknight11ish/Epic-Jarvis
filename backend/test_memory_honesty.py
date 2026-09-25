@@ -468,7 +468,7 @@ def t_the_hud_does_not_use_up_the_sleep_card():
     check("the HUD page does not ask for the card", "sleep_offer" not in hud_src)
     rs = ROUTES_RS.read_text(encoding="utf-8")
     check("the Brain window asks for it (its read table, brain/routes.rs)",
-          re.search(r'"/api/memory/pending\?[^"]*sleep_offer=1"', rs) is not None)
+          re.search(r'"/api/memory/pending\?[^"]*\bsleep_offer=1(?:&[^"]*)?"', rs) is not None)
     kt = (KT / "net" / "Learning.kt").read_text(encoding="utf-8")
     m = re.search(r'const val PENDING_PATH = "([^"]+)"', kt)
     check("the phone asks for it (MemoryCards.PENDING_PATH)",

@@ -358,6 +358,59 @@ profile     fact_id INTEGER PRIMARY KEY, added REAL, how TEXT ("tap")
   (docs/RESEARCH-2026-09-24.md §3 item 2), without their rewriting: no
   model can add to, merge or summarise the list.
 
+**"Who is my sister?": the entity layer** (memory wave 3, 2026-09-25;
+`rebuilt/jarvis_memory.py` "The entity layer", `memory-entities.patch`,
+`jarvis_entities.py`, docs/JARVIS-API.md §6 `/api/memory/entities`). Words
+and meaning cannot connect "my sister's wedding" to "Priya's wedding is in
+Lisbon"; a saved fact can - "Owner's sister is called Priya". So every saved
+fact is linked to the people, pets, places and things it names, and the word
+the owner uses for one ("sister") becomes an alias of that name.
+
+```
+entities          id, name, kind, created, merged_into   (a merge is a pointer)
+entity_aliases    alias, entity_id, fact_id   (fact_id = the fact that taught it;
+                                               NULL = the name itself)
+fact_entities     fact_id, entity_id
+entity_merge_asks a, b, proposal_id, state    ("are these the same?", once per pair)
+```
+
+The rules, each one enforced where the rows are written:
+
+- **Links come from SAVED facts only** - `add()` and `edit()`, after every
+  check the fact already passed - never from the conversation. Nothing else
+  writes them, so the layer adds no new way to poison memory.
+- **A link can only ADD a candidate to recall.** Nothing in the layer
+  retires, edits, hides or reorders a fact.
+- **Grounded or dropped.** Every name and alias is in its fact word for
+  word, whoever found it. An alias is kept only with a name from the SAME
+  fact, and records that fact's id. Forget and a correction take the fact's
+  links and the aliases it taught; **Erase** also deletes every name no
+  other fact still says, and wipes (and turns down) any "are these the
+  same?" card that showed one - inside the erase's own transaction, so the
+  file scrub zeroes those bytes too.
+- **Merging is the owner's call, one pair at a time.** Only an exact match
+  after normalising is one entry by itself. A likely typo (Graphiti's
+  thresholds: both names specific enough, 90% of three-letter chunks
+  shared) raises ONE card per pair, ever, in the ordinary review queue
+  (`source: "entity_merge"`); yes joins the pair with a pointer, no is
+  remembered and never asked again. There is no list form.
+- **Found without a model**, on every save: capitalised names, and "my
+  sister is called Priya" / "my brother Arjun" / "Mario is my manager" -
+  the relation words are English only. An optional local-model pass
+  (`jarvis_entities.py`, one call per learner pass, loopback and not-cloud
+  checks) is **off** by default and unmeasured.
+- **Recall** (`jarvis_past.recall` -> `search(entities=True)`): the
+  question's words are looked up in the alias table ("sister's" folds to
+  "sister"), the full names are added to the question for word and meaning
+  search, and the facts linked to them are a third list in the RRF fusion.
+  No model call; `k` and both floors unchanged; an alias that names more
+  than two entries says nothing and is ignored. A temporary chat still
+  recalls nothing, and the pinned list is unchanged. `JARVIS_MEMORY_ENTITIES=0`
+  turns it off.
+- **The apps:** the desktop shows the names under each fact, "About
+  <name>" (that entry's facts, word for word - no summary) and the merge
+  card; the phone shows none of it (§8).
+
 **A temporary chat uses and makes no memory** (the owner's decision,
 2026-09-25; `temporary-chat.patch`, docs/JARVIS-API.md §4 and §18.1). A
 request with `"temporary": true` recalls nothing - no search, no pinned
@@ -679,6 +732,7 @@ backend routes, in both directions; the rest are listed here only.
 | what | why |
 |---|---|
 | The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
+| People and things (`/api/memory/entities`): the names under each fact, "About <name>", and the "are these the same?" card (memory wave 3, 2026-09-25) | The same rule: linking facts to the people and things they name, and joining two entries, is the memory graph, which stays off the phone (`CLAUDE.md`). The phone shows no names and never asks for the merge card (its pending list leaves out `?merge_cards=1`, so the card waits for the desktop). What the layer is for reaches the phone anyway: chat recall runs on the PC, so "where is my sister getting married?" finds Priya's wedding from either app. |
 | Rewording a stored fact (`/api/memory/edit`), and forgetting one from a list of every fact | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone calls it for facts in the "Saved automatically" list (JARVIS-API §19), and since 2026-09-25 for a fact shown under "Used in this answer" or "Jarvis remembered N things" - one the owner just saw Jarvis use or save, not a browse of the whole store. |
 | "Erase the words" beside Forget under "Used in this answer" and "Jarvis remembered N things" | The phone offers Erase in one place only, Mind → Saved automatically, for facts saved automatically that are still in use (the row below). A fact an answer used may be any fact, forgotten ones included (a question about the past recalls them), and erasing any fact at all is deep memory editing. On the phone those two lists offer Forget; the desktop offers both, as it does on every fact. |
 | "Erase the words" (`/api/memory/erase`) on a fact that was already forgotten, or was never saved automatically | The same line as Forget, above: the phone lists only facts saved automatically that are still in use, and a list of every fact, forgotten ones included, is deep memory editing. The phone offers Erase wherever it offers Forget (Mind → Saved automatically), so the route itself is on both apps. |

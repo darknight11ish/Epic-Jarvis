@@ -1320,9 +1320,24 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 result["saved"].append(fid)
         if result["saved"]:
             publish(result["saved"])
+            _entity_model_pass(result["saved"], ollama, model)
     except Exception as exc:
         result["error"] = type(exc).__name__
     return result
+
+
+def _entity_model_pass(ids: list, ollama, model) -> None:
+    """The entity layer's OPTIONAL model pass (jarvis_entities.py): off by
+    default, and then this does nothing at all. On, it starts ONE local
+    call over the facts this pass saved, on its own background thread, to
+    link the people and things they name - links only, grounded in each
+    fact's own words. The facts were linked by fixed rules when they were
+    saved either way."""
+    try:
+        import jarvis_entities
+        jarvis_entities.after_learner_pass(list(ids), ollama=ollama, model=model)
+    except Exception:
+        pass
 
 
 def after_remember(res, messages, *, conversation_id=None, learning_on: bool = True,

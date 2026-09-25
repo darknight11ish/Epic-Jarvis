@@ -461,6 +461,12 @@ class MemoryStore:
         self.path = Path(path or DOCS_DB)
         self.embedder = embedder or _make_embedder()
         self._vec_ok = False
+        # The entity layer's "is this a likely typo of a name we have?"
+        # index: {entity id: (fuzzy form, 3-letter chunks)}. Built on first
+        # use; only ever a hint for a card, so a copy that another process
+        # has moved on from costs at most one card not raised.
+        self._fuzzy_index: Optional[dict] = None
+        self._entity_errors = 0
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
@@ -655,6 +661,47 @@ class MemoryStore:
                     fact_id INTEGER PRIMARY KEY,
                     added   REAL NOT NULL,
                     how     TEXT NOT NULL DEFAULT 'tap')""")
+            # "Who is my sister?" - the entity layer (memory wave 3,
+            # 2026-09-25; the section "The entity layer" below). Three plain
+            # tables, the research sketch's own, plus the bookkeeping for
+            # the "are these the same?" cards. They never touch the three
+            # tables welded to one fact id. Links are made from SAVED facts
+            # only, and a link can only ADD a fact to what recall considers
+            # - nothing here retires, edits or hides a fact.
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS entities (
+                    id          INTEGER PRIMARY KEY,
+                    name        TEXT NOT NULL,
+                    kind        TEXT,
+                    created     REAL NOT NULL,
+                    merged_into INTEGER)""")      # a merge is a pointer, never a delete
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS entity_aliases (
+                    alias     TEXT NOT NULL,
+                    entity_id INTEGER NOT NULL,
+                    fact_id   INTEGER,               -- the fact that taught it; NULL = the name itself
+                    PRIMARY KEY (alias, entity_id))""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS fact_entities (
+                    fact_id   INTEGER NOT NULL,
+                    entity_id INTEGER NOT NULL,
+                    PRIMARY KEY (fact_id, entity_id))""")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_fe_entity ON fact_entities(entity_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_ea_fact ON entity_aliases(fact_id)")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS entity_merge_asks (
+                    a           INTEGER NOT NULL,    -- the older entity (kept)
+                    b           INTEGER NOT NULL,    -- the newer one
+                    proposal_id INTEGER,             -- the card, once raised
+                    state       TEXT NOT NULL DEFAULT 'waiting',
+                    created     REAL NOT NULL,
+                    PRIMARY KEY (a, b))""")
+            if not c.execute("SELECT 1 FROM meta WHERE k='entities'").fetchone():
+                # A store written before the entity layer: link the facts it
+                # already has, once. The same rules as a new fact.
+                self._backfill_entities(c)
+                c.execute("INSERT OR REPLACE INTO meta VALUES ('entities', ?)",
+                          (ENTITY_LAYER_VERSION,))
             row = c.execute("SELECT v FROM meta WHERE k='embedder'").fetchone()
             if row and row["v"] != self.embedder.name:
                 # A different model: the vectors are not comparable. Rebuild.
@@ -700,6 +747,11 @@ class MemoryStore:
                     "UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
                     " WHERE id=? AND valid_to IS NULL",
                     (now, now, fid, supersedes))
+                if done.rowcount:
+                    # The old wording is history now: its names and the
+                    # "sister" it taught stop being looked up (the entity
+                    # layer). The new wording links its own below.
+                    self._unlink_safely(c, int(supersedes))
                 if done.rowcount == 0:
                     # Already retired - and that is the DOCUMENTED workflow,
                     # not a failure. retire()'s own docstring tells a caller
@@ -732,7 +784,18 @@ class MemoryStore:
                 else:
                     self.last_supersede_failed = False
             self._embed_rows(c, [(fid, text)])
+            # The entity layer: who and what this SAVED fact names, found
+            # without a model, in the same breath as the save. Never raises -
+            # like _embed_rows, the fact is already stored by now.
+            self._link_safely(c, fid, text)
             c.commit()
+            try:
+                waiting = c.execute("SELECT 1 FROM entity_merge_asks"
+                                    " WHERE state='waiting' LIMIT 1").fetchone()
+            except sqlite3.Error:
+                waiting = None
+        if waiting:
+            self.raise_merge_cards()
         return fid
 
     #: The name jarvis_hud reaches for in one place. Same call, kept so a
@@ -773,6 +836,13 @@ class MemoryStore:
             cur = c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
                             " WHERE id=? AND valid_to IS NULL",
                             (vt, ra, replaced_by, fact_id))
+            if cur.rowcount and ra is not None:
+                # Forget (or a correction) takes the fact's links and the
+                # aliases it taught with it: "sister" stops meaning Priya the
+                # moment "My sister is called Priya" is forgotten. A lease
+                # that ends later is still current, so it keeps them until
+                # then - and every lookup checks the fact is current anyway.
+                self._unlink_safely(c, int(fact_id))
             c.commit()
             # rowcount, not None. "Retired a fact that was already retired" and
             # "retired the fact" have to be distinguishable, or the caller
@@ -811,6 +881,13 @@ class MemoryStore:
                     except Exception:
                         pass
                 self._embed_rows(c, [(int(fact_id), text)])
+                # New words, new links: the old wording's names and aliases
+                # go, and whatever the new wording names is linked instead
+                # (first, so a name both wordings say keeps its entry).
+                try:
+                    self._unlink_fact(c, int(fact_id), new_text=text)
+                except Exception:
+                    self._entity_errors += 1
             c.commit()
             return cur.rowcount > 0
 
@@ -926,6 +1003,13 @@ class MemoryStore:
                     except sqlite3.Error:
                         pass
                 copies = _erase_copies(c, fid, old_text if not already else "", now)
+                # The entity layer: this fact's links and the aliases it
+                # taught go, and so does every name that no other fact still
+                # says - with any "are these the same?" card that showed it.
+                # Inside this transaction, on this secure_delete connection,
+                # so the scrub below zeroes those bytes too. Not "safely":
+                # an erase that could not take the names out must fail.
+                copies += self._unlink_fact(c, fid, now=now)
                 c.execute("COMMIT")
             except Exception:
                 try:
@@ -1123,7 +1207,8 @@ class MemoryStore:
     def search(self, query: str, k: int = 8, candidates: int = 50,
                at: Optional[float] = None, include_retired: bool = False,
                known_at: Optional[float] = None,
-               word_floor: Optional[float] = None) -> list[dict]:
+               word_floor: Optional[float] = None,
+               entities: bool = False) -> list[dict]:
         """Words and meaning, fused with reciprocal rank fusion.
 
         at          VALID time: only facts true at that moment (default now).
@@ -1135,6 +1220,15 @@ class MemoryStore:
         include_retired  skip the valid-time filter (timeline()).
         word_floor  the share of the question a word-search hit must match;
                     None is _MIN_WORD_SHARE, 0 turns it off (find_one does).
+        entities    the entity layer (chat recall asks for it, through
+                    jarvis_past.recall; nothing else does). The question's
+                    words are looked up in the alias table - "my sister's"
+                    finds Priya - the full names are added to the question
+                    for word and meaning search, and the facts linked to
+                    those people and things are a THIRD list in the fusion.
+                    No model is asked. k and both floors are unchanged, and
+                    a link can only add a candidate. JARVIS_MEMORY_ENTITIES=0
+                    turns it off.
         """
         at_given = at is not None
         query = " ".join(str(query).split())
@@ -1150,6 +1244,20 @@ class MemoryStore:
         at = time.time() if at is None else at
         with _LOCK, closing(self._connect()) as c:
             ranks: dict[int, float] = {}
+            roots: list = []
+            if entities and _ENTITY_RECALL:
+                try:
+                    roots, names = self._entity_hits(c, query, at)
+                except Exception:
+                    roots, names = [], []
+                # The rewrite: "where is my sister getting married?" is also
+                # searched as "... Priya", so word and meaning search can
+                # find "Priya's wedding is in Lisbon". Only names the
+                # question does not already say.
+                have = " " + _name_key(query) + " "
+                extra = [n for n in names if f" {_name_key(n)} " not in have]
+                if extra:
+                    query = query + " " + " ".join(extra)
             # words. Content terms only, and RAW - see _fts_terms. An
             # OR-query over every word in the question matched most of the
             # store on "the" and "is", so a fact that shared nothing but
@@ -1193,6 +1301,21 @@ class MemoryStore:
                                     and row["distance"] > _MAX_VEC_DISTANCE):
                                 break
                             ranks[row["fact_id"]] = ranks.get(row["fact_id"], 0) + 1.0 / (60 + r)
+                except Exception:
+                    pass
+            # people and things: the facts linked to whoever the question
+            # named, most names shared first, newest first. The same RRF
+            # constant as the other two lists, so a linked fact that neither
+            # words nor meaning found ranks like a word hit would.
+            if roots:
+                try:
+                    linked = self._linked_facts(
+                        c, roots, candidates, at=at,
+                        include_retired=include_retired or (known_at is not None
+                                                            and not at_given),
+                        known_at=known_at)
+                    for r, fid in enumerate(linked, 1):
+                        ranks[fid] = ranks.get(fid, 0) + 1.0 / (60 + r)
                 except Exception:
                     pass
 
@@ -1345,11 +1468,15 @@ class MemoryStore:
                                 " AND erased_at IS NULL").fetchone()[0]
             erased = c.execute("SELECT COUNT(*) FROM facts"
                                " WHERE erased_at IS NOT NULL").fetchone()[0]
+            ents = c.execute("SELECT COUNT(*) FROM entities WHERE merged_into IS NULL"
+                             ).fetchone()[0]
         out = {"db": str(self.path), "facts": total, "current": current,
                "retired": total - current,
                "embedder": self.embedder.name, "semantic": self.embedder.semantic,
                "vector_search": self._vec_ok, "unembedded": pending,
-               "erased": erased}
+               "erased": erased, "entities": ents}
+        if self._entity_errors:
+            out["entity_errors"] = self._entity_errors
         if self._bad_vectors:
             # Only when it has happened. A permanent "bad_vectors: 0" line is
             # noise on every screen that renders status().
@@ -1464,6 +1591,473 @@ class MemoryStore:
             _audit("memory.unpinned", {"id": fid})
         return {"ok": True, "id": fid, "pinned": False, "changed": changed,
                 "chars": used, "limit": PROFILE_LIMIT}
+
+    # ---- the entity layer (memory wave 3, 2026-09-25) --------------------
+    #
+    # See the module-level section "The entity layer" for the rules. These
+    # methods are the store's half: linking a saved fact, unlinking one that
+    # was forgotten, corrected or erased, the lookup chat recall uses, the
+    # list the desktop shows, and merging two entries - one pair, by card.
+
+    def _link_safely(self, c, fid: int, text: str) -> None:
+        """_link_fact, never raising (a counted failure instead): the fact is
+        already saved, and a save must never fail because of its links."""
+        try:
+            self._link_fact(c, fid, text)
+        except Exception:
+            self._entity_errors += 1
+
+    def _unlink_safely(self, c, fid: int) -> None:
+        try:
+            self._unlink_fact(c, fid)
+        except Exception:
+            self._entity_errors += 1
+
+    def _link_fact(self, c, fid: int, text: str, found: Optional[dict] = None) -> dict:
+        """Link ONE saved fact to the people and things it names.
+
+        `found` is {"names": [(name, kind)], "aliases": [(alias, name)]} -
+        find_entities(text) when not given (the no-model linker), or what
+        the optional local-model pass read (jarvis_entities.py). Either way
+        the same rules hold here, where the rows are written:
+
+          * GROUNDED OR DROPPED: a name or alias that is not in this fact's
+            own text word for word is not linked.
+          * An alias ("sister") is kept only with a name from the SAME fact
+            ("My sister is called Priya"), and it records this fact's id -
+            forget the fact and the alias goes.
+          * The same name, once normalised, is the same entry (the only
+            automatic merge). A name that is only LIKE one already there
+            ("Priya Sharma" / "Priya Sharmaa") gets its own entry and a
+            waiting "are these the same?" question - see raise_merge_cards.
+
+        Returns {"entities": [ids linked], "aliases": n}."""
+        found = found if found is not None else find_entities(text)
+        c.execute("SAVEPOINT entity_link")
+        try:
+            out = self._link_rows(c, int(fid), text, found)
+        except Exception:
+            c.execute("ROLLBACK TO entity_link")
+            c.execute("RELEASE entity_link")
+            raise
+        c.execute("RELEASE entity_link")
+        return out
+
+    def _link_rows(self, c, fid: int, text: str, found: dict) -> dict:
+        out = {"entities": [], "aliases": 0}
+        now = time.time()
+        by_key: dict = {}
+        fresh: list = []
+        for name, kind in found.get("names") or []:
+            name = " ".join(str(name).split())
+            key = _name_key(name)
+            if not _entity_name_ok(name, key) or not _grounded(text, name):
+                continue
+            kind = kind if kind in ENTITY_KINDS else None
+            row = c.execute("SELECT entity_id FROM entity_aliases WHERE alias=? AND"
+                            " fact_id IS NULL ORDER BY entity_id LIMIT 1", (key,)).fetchone()
+            if row is None:
+                eid = c.execute("INSERT INTO entities (name, kind, created) VALUES (?, ?, ?)",
+                                (name, kind, now)).lastrowid
+                c.execute("INSERT OR IGNORE INTO entity_aliases (alias, entity_id, fact_id)"
+                          " VALUES (?, ?, NULL)", (key, eid))
+                fresh.append((eid, name))
+            else:
+                eid = int(row[0])
+                if kind:
+                    c.execute("UPDATE entities SET kind=? WHERE id=? AND kind IS NULL",
+                              (kind, eid))
+            c.execute("INSERT OR IGNORE INTO fact_entities (fact_id, entity_id) VALUES (?, ?)",
+                      (int(fid), eid))
+            by_key[key] = eid
+            if eid not in out["entities"]:
+                out["entities"].append(eid)
+        for alias, name in found.get("aliases") or []:
+            alias = " ".join(str(alias).split())
+            akey = _name_key(alias)
+            eid = by_key.get(_name_key(name))
+            if (eid is None or not _alias_ok(akey) or akey == _name_key(name)
+                    or not _grounded(text, alias) or not _grounded(text, name)):
+                continue
+            cur = c.execute("INSERT OR IGNORE INTO entity_aliases (alias, entity_id, fact_id)"
+                            " VALUES (?, ?, ?)", (akey, eid, int(fid)))
+            out["aliases"] += max(cur.rowcount, 0)
+        for eid, name in fresh:
+            self._note_likely_same(c, eid, name, now)
+        return out
+
+    def _unlink_fact(self, c, fid: int, now: Optional[float] = None,
+                     new_text: Optional[str] = None) -> int:
+        """Take ONE fact out of the entity layer: its links, the aliases it
+        taught, and every entry no fact links to any more - with the
+        "are these the same?" cards that named one (their words wiped, a
+        waiting one turned down). An alias another current fact ALSO
+        teaches is put back from that fact. `new_text`: the fact's new
+        wording (an edit in place), linked BEFORE the clean-up, so a name
+        both wordings say keeps its entry (and its merges and cards).
+        Returns how many cards' words were wiped."""
+        c.execute("SAVEPOINT entity_unlink")
+        try:
+            wiped = self._unlink_rows(c, int(fid), time.time() if now is None else now,
+                                      new_text)
+        except Exception:
+            c.execute("ROLLBACK TO entity_unlink")
+            c.execute("RELEASE entity_unlink")
+            raise
+        c.execute("RELEASE entity_unlink")
+        return wiped
+
+    def _unlink_rows(self, c, fid: int, now: float, new_text: Optional[str] = None) -> int:
+        linked = {r[0] for r in c.execute(
+            "SELECT entity_id FROM fact_entities WHERE fact_id=?", (fid,))}
+        taught = {r[0] for r in c.execute(
+            "SELECT entity_id FROM entity_aliases WHERE fact_id=?", (fid,))}
+        affected = linked | taught
+        c.execute("DELETE FROM fact_entities WHERE fact_id=?", (fid,))
+        c.execute("DELETE FROM entity_aliases WHERE fact_id=?", (fid,))
+        if new_text is not None:
+            self._link_fact(c, fid, new_text)
+        if not affected:
+            return 0
+        if taught:
+            # Only aliases can need putting back - another fact's LINKS were
+            # never touched - so only the facts about the entries this one
+            # taught an alias for are read again. Idempotent: the same names
+            # map to the same entries, and only the aliases a fact itself
+            # teaches come back.
+            marks = ",".join("?" * len(taught))
+            others = c.execute(
+                "SELECT DISTINCT f.id, f.text FROM fact_entities fe"
+                " JOIN facts f ON f.id = fe.fact_id"
+                f" WHERE fe.entity_id IN ({marks}) AND f.id != ? AND f.erased_at IS NULL"
+                " AND (f.valid_to IS NULL OR f.valid_to > ?)",
+                (*taught, fid, now)).fetchall()
+            for ofid, otext in others:
+                self._link_fact(c, int(ofid), str(otext or ""))
+        wiped = 0
+        for eid in sorted(affected):
+            if not c.execute("SELECT 1 FROM fact_entities WHERE entity_id=? LIMIT 1",
+                             (eid,)).fetchone():
+                wiped += self._drop_entity(c, eid, now)
+        return wiped
+
+    def _drop_entity(self, c, eid: int, now: float) -> int:
+        """Delete one entry nothing links to any more, and keep the merges
+        around it: entries merged INTO it now point where it pointed (or
+        the oldest of them becomes the entry the rest point at). Its cards
+        go with it. The only deletes in the entity layer, and only of
+        derived rows - a fact is never touched."""
+        row = c.execute("SELECT merged_into FROM entities WHERE id=?", (eid,)).fetchone()
+        parent = row[0] if row else None
+        kids = [r[0] for r in c.execute("SELECT id FROM entities WHERE merged_into=?"
+                                        " ORDER BY id", (eid,))]
+        if kids:
+            if parent is None:
+                parent = kids[0]
+                c.execute("UPDATE entities SET merged_into=NULL WHERE id=?", (parent,))
+            c.execute("UPDATE entities SET merged_into=? WHERE merged_into=? AND id != ?",
+                      (parent, eid, parent))
+        c.execute("DELETE FROM entity_aliases WHERE entity_id=?", (eid,))
+        c.execute("DELETE FROM entities WHERE id=?", (eid,))
+        if self._fuzzy_index is not None:
+            self._fuzzy_index.pop(eid, None)
+        wiped = 0
+        for pid, state in c.execute("SELECT proposal_id, state FROM entity_merge_asks"
+                                    " WHERE a=? OR b=?", (eid, eid)).fetchall():
+            if pid is not None:
+                wiped += _wipe_merge_card(c, int(pid), now)
+        c.execute("DELETE FROM entity_merge_asks WHERE a=? OR b=?", (eid, eid))
+        return wiped
+
+    def _backfill_entities(self, c) -> int:
+        """Link every current fact of a store that predates the entity
+        layer. Once (the meta row 'entities'), in one transaction."""
+        rows = c.execute("SELECT id, text FROM facts WHERE erased_at IS NULL"
+                         " AND (valid_to IS NULL OR valid_to > ?)", (time.time(),)).fetchall()
+        n = 0
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            for fid, text in rows:
+                try:
+                    # _link_fact undoes its own half-written rows on failure.
+                    self._link_fact(c, int(fid), str(text or ""))
+                    n += 1
+                except Exception:
+                    self._entity_errors += 1
+            c.execute("COMMIT")
+        except Exception:
+            try:
+                c.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        return n
+
+    def _root(self, c, eid: int) -> int:
+        """Follow `merged_into` to the entry a group is known by. A loop (a
+        hand-edited file) is walked at most a few steps."""
+        seen = set()
+        cur = int(eid)
+        while cur not in seen and len(seen) < 32:
+            seen.add(cur)
+            row = c.execute("SELECT merged_into FROM entities WHERE id=?", (cur,)).fetchone()
+            if row is None or row[0] is None:
+                return cur
+            cur = int(row[0])
+        return cur
+
+    def _group(self, c, root: int) -> list:
+        """The root and every entry merged into it, however deep."""
+        return [r[0] for r in c.execute(
+            "WITH RECURSIVE g(id) AS (SELECT ? UNION"
+            " SELECT e.id FROM entities e JOIN g ON e.merged_into = g.id)"
+            " SELECT id FROM g LIMIT 200", (int(root),))]
+
+    def _entity_hits(self, c, query: str, at: float) -> tuple:
+        """([root ids], [their names]) that the question names, by the alias
+        table. Aliases count only while the fact that taught them is
+        current; an alias that points at more than ALIAS_MAX_ENTITIES
+        different people or things ("friend", with thirty friends) says
+        nothing about which, so it is left out."""
+        grams = _query_grams(query)
+        if not grams:
+            return [], []
+        marks = ",".join("?" * len(grams))
+        rows = c.execute(
+            "SELECT a.alias, a.entity_id FROM entity_aliases a"
+            " LEFT JOIN facts f ON f.id = a.fact_id"
+            f" WHERE a.alias IN ({marks}) AND (a.fact_id IS NULL OR (f.id IS NOT NULL"
+            " AND f.erased_at IS NULL AND (f.valid_to IS NULL OR f.valid_to > ?)))",
+            (*grams, at)).fetchall()
+        by_alias: dict = {}
+        for alias, eid in rows:
+            by_alias.setdefault(alias, set()).add(self._root(c, eid))
+        order = {g: i for i, g in enumerate(grams)}
+        roots: list = []
+        for alias in sorted(by_alias, key=lambda a: order.get(a, 0)):
+            group = by_alias[alias]
+            if len(group) > ALIAS_MAX_ENTITIES:
+                continue
+            for r in sorted(group):
+                if r not in roots:
+                    roots.append(r)
+        roots = roots[:ENTITY_HITS_MAX]
+        names = []
+        for r in roots:
+            row = c.execute("SELECT name FROM entities WHERE id=?", (r,)).fetchone()
+            if row and row[0]:
+                names.append(str(row[0]))
+        return roots, names
+
+    def _linked_facts(self, c, roots, limit: int, *, at: float,
+                      include_retired: bool = False,
+                      known_at: Optional[float] = None) -> list:
+        """The third list: facts linked to these entries (and whatever was
+        merged into them), most of them named first, then newest first.
+        Never an erased fact; by default only facts true at `at`."""
+        ids = []
+        for r in roots:
+            for e in self._group(c, r):
+                if e not in ids:
+                    ids.append(e)
+        if not ids:
+            return []
+        marks = ",".join("?" * len(ids))
+        where, args = "", []
+        if known_at is not None:
+            where = " AND f.created <= ? AND (f.retired_at IS NULL OR f.retired_at > ?)"
+            args = [known_at, known_at]
+        if not include_retired:
+            where += " AND f.valid_from <= ? AND (f.valid_to IS NULL OR f.valid_to > ?)"
+            args += [at, at]
+        return [r[0] for r in c.execute(
+            "SELECT fe.fact_id, COUNT(*) AS n FROM fact_entities fe"
+            " JOIN facts f ON f.id = fe.fact_id"
+            f" WHERE fe.entity_id IN ({marks}) AND f.erased_at IS NULL{where}"
+            " GROUP BY fe.fact_id ORDER BY n DESC, fe.fact_id DESC LIMIT ?",
+            (*ids, *args, int(limit)))]
+
+    def _note_likely_same(self, c, eid: int, name: str, now: float) -> None:
+        """A NEW entry whose name is a likely typo of one already there
+        ("Priya Sharmaa" beside "Priya Sharma") gets ONE waiting question,
+        per pair, ever: entity_merge_asks. Graphiti's own test
+        (dedup_helpers.py): both names specific enough - at least 6
+        characters or two words, and entropy of at least 1.5 - and at least
+        90% of their three-letter chunks shared. Anything less stays apart."""
+        fz = _fuzzy_form(name)
+        if not _has_high_entropy(fz):
+            if self._fuzzy_index is not None:
+                self._fuzzy_index[eid] = (fz, None)
+            return
+        mine = _shingles(fz)
+        if self._fuzzy_index is None:
+            self._fuzzy_index = {}
+            for oid, oname in c.execute("SELECT id, name FROM entities"):
+                ofz = _fuzzy_form(oname)
+                self._fuzzy_index[int(oid)] = (
+                    ofz, _shingles(ofz) if _has_high_entropy(ofz) else None)
+        self._fuzzy_index[eid] = (fz, mine)
+        n = len(mine)
+        for oid, (ofz, theirs) in list(self._fuzzy_index.items()):
+            if oid == eid or not theirs or ofz == fz:
+                continue
+            m = len(theirs)
+            if min(n, m) < MERGE_JACCARD * max(n, m):
+                continue          # too different in length to reach 0.9
+            if _jaccard(mine, theirs) < MERGE_JACCARD:
+                continue
+            if not c.execute("SELECT 1 FROM entities WHERE id=?", (oid,)).fetchone():
+                self._fuzzy_index.pop(oid, None)
+                continue
+            if self._root(c, oid) == self._root(c, eid):
+                continue
+            a, b = min(oid, eid), max(oid, eid)
+            c.execute("INSERT OR IGNORE INTO entity_merge_asks (a, b, state, created)"
+                      " VALUES (?, ?, 'waiting', ?)", (a, b, now))
+
+    def raise_merge_cards(self) -> int:
+        """Turn each waiting "are these the same?" question into ONE card in
+        the ordinary review queue - jarvis_extract.propose_merge, which
+        memory-entities.patch adds. Never a list form, never an
+        approve-all: one pair, one card, one decision, the owner's.
+
+        Also notes the answers that came back: a card turned down means
+        "different", and the pair is never asked about again. Without the
+        patch in this process, the questions wait (nothing is guessed).
+        Returns how many cards were raised."""
+        import sys
+        x = sys.modules.get("jarvis_extract")
+        propose = getattr(x, "propose_merge", None) if x is not None else None
+        raised = 0
+        try:
+            with _LOCK, closing(self._connect()) as c:
+                if _has_table(c, "proposals"):
+                    c.execute(
+                        "UPDATE entity_merge_asks SET state='different' WHERE state='asked'"
+                        " AND proposal_id IN (SELECT id FROM proposals WHERE state='rejected')")
+                if propose is None:
+                    return 0
+                waiting = c.execute("SELECT a, b FROM entity_merge_asks WHERE state='waiting'"
+                                    " ORDER BY created, a, b LIMIT 20").fetchall()
+                for a, b in waiting:
+                    ra = c.execute("SELECT name, kind FROM entities WHERE id=?", (a,)).fetchone()
+                    rb = c.execute("SELECT name, kind FROM entities WHERE id=?", (b,)).fetchone()
+                    if ra is None or rb is None:
+                        c.execute("DELETE FROM entity_merge_asks WHERE a=? AND b=?", (a, b))
+                        continue
+                    if self._root(c, a) == self._root(c, b):
+                        c.execute("UPDATE entity_merge_asks SET state='same' WHERE a=? AND b=?",
+                                  (a, b))
+                        continue
+                    pid = propose(merge_card_text(ra[0], rb[0], ra[1] or rb[1]))
+                    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+                        break          # the queue is full: try again after the next save
+                    c.execute("UPDATE entity_merge_asks SET state='asked', proposal_id=?"
+                              " WHERE a=? AND b=?", (pid, a, b))
+                    raised += 1
+        except Exception:
+            self._entity_errors += 1
+        return raised
+
+    def merge_from_card(self, proposal_id: int) -> Optional[dict]:
+        """The owner said yes on ONE "are these the same?" card: join that
+        pair. Called by jarvis_extract when that card is accepted - never
+        by anything else, and never for more than the one pair the card
+        named. None when the card names no pair (or it is gone)."""
+        with _LOCK, closing(self._connect()) as c:
+            row = c.execute("SELECT a, b FROM entity_merge_asks WHERE proposal_id=?",
+                            (int(proposal_id),)).fetchone()
+        if row is None:
+            return None
+        out = self.merge(int(row[0]), int(row[1]))
+        if out is not None:
+            with _LOCK, closing(self._connect()) as c:
+                c.execute("UPDATE entity_merge_asks SET state='same' WHERE proposal_id=?",
+                          (int(proposal_id),))
+        return out
+
+    def merge(self, keep: int, other: int) -> Optional[dict]:
+        """Join two entries: `other`'s group now points at `keep`'s. A
+        pointer, never a delete - every link and alias stays where it is,
+        and lookups follow the pointer. Exactly two ids; there is no list
+        form. None when either is gone."""
+        with _LOCK, closing(self._connect()) as c:
+            if not (c.execute("SELECT 1 FROM entities WHERE id=?", (int(keep),)).fetchone()
+                    and c.execute("SELECT 1 FROM entities WHERE id=?", (int(other),)).fetchone()):
+                return None
+            rk, ro = self._root(c, keep), self._root(c, other)
+            if rk != ro:
+                c.execute("UPDATE entities SET merged_into=? WHERE id=?", (rk, ro))
+        _audit("memory.entities_merged", {"keep": rk, "other": ro})   # ids only
+        return {"keep": rk, "merged": ro, "changed": rk != ro}
+
+    def link_entities(self, fact_id: int, found: dict) -> Optional[dict]:
+        """Link one CURRENT fact to names a local model read in it (the
+        optional pass, jarvis_entities.py). Every rule of _link_fact holds -
+        above all, a name or alias not in the fact word for word is
+        dropped. None for a fact that is gone, forgotten or erased."""
+        with _LOCK, closing(self._connect()) as c:
+            row = c.execute("SELECT text, valid_to, erased_at FROM facts WHERE id=?",
+                            (int(fact_id),)).fetchone()
+            if (row is None or row["erased_at"] is not None
+                    or (row["valid_to"] is not None and float(row["valid_to"]) <= time.time())):
+                return None
+            out = self._link_fact(c, int(fact_id), str(row["text"] or ""), found=found)
+        self.raise_merge_cards()
+        return out
+
+    def entities_view(self, limit: int = 500, now: Optional[float] = None) -> dict:
+        """GET /api/memory/entities: the people and things Jarvis has linked
+        facts to, for the desktop's "About <name>".
+
+            {"entities": [{"id", "name", "kind", "also": [other names joined
+              to it], "aliases": ["sister"], "fact_ids": [newest first],
+              "facts": n}], "count": n, "limit": limit}
+
+        One entry per group (merges followed), only groups with at least
+        one current, unerased fact, most facts first. Words only as they
+        are in the facts; nothing is summarised. The facts' own words are
+        read by id (GET /api/memory/used)."""
+        now = time.time() if now is None else float(now)
+        with _LOCK, closing(self._connect()) as c:
+            ents = {int(r[0]): {"name": r[1], "kind": r[2], "into": r[3]}
+                    for r in c.execute("SELECT id, name, kind, merged_into FROM entities")}
+            root = {eid: self._root(c, eid) for eid in ents}
+            links = c.execute(
+                "SELECT fe.entity_id, fe.fact_id FROM fact_entities fe"
+                " JOIN facts f ON f.id = fe.fact_id WHERE f.erased_at IS NULL"
+                " AND (f.valid_to IS NULL OR f.valid_to > ?)", (now,)).fetchall()
+            aliases = c.execute(
+                "SELECT a.alias, a.entity_id FROM entity_aliases a JOIN facts f ON f.id = a.fact_id"
+                " WHERE f.erased_at IS NULL AND (f.valid_to IS NULL OR f.valid_to > ?)",
+                (now,)).fetchall()
+        groups: dict = {}
+        for eid, fid in links:
+            r = root.get(int(eid))
+            if r is None or r not in ents:
+                continue
+            g = groups.setdefault(r, {"facts": set(), "aliases": set()})
+            g["facts"].add(int(fid))
+        for alias, eid in aliases:
+            r = root.get(int(eid))
+            if r in groups:
+                groups[r]["aliases"].add(str(alias))
+        members: dict = {}
+        for e, r in root.items():
+            members.setdefault(r, []).append(e)
+        out = []
+        for r, g in groups.items():
+            group = members.get(r, [r])
+            also = sorted({ents[e]["name"] for e in group
+                           if e != r and ents[e]["name"] != ents[r]["name"]})
+            out.append({"id": r, "name": ents[r]["name"],
+                        "kind": ents[r]["kind"] or next(
+                            (ents[e]["kind"] for e in group if ents[e]["kind"]), None),
+                        "also": also, "aliases": sorted(g["aliases"]),
+                        "fact_ids": sorted(g["facts"], reverse=True),
+                        "facts": len(g["facts"])})
+        out.sort(key=lambda e: (-e["facts"], str(e["name"]).lower(), e["id"]))
+        return {"entities": out[:max(0, int(limit))], "count": len(out), "limit": int(limit)}
 
 
 # --------------------------------------------------------------------------
@@ -1898,6 +2492,436 @@ def handle_used_get(query: str) -> tuple:
                               "separated by commas (for example ?ids=12,15)"}
     try:
         return 200, used_view(ids)
+    except Exception as exc:
+        return 500, {"error": type(exc).__name__}
+
+
+# --------------------------------------------------------------------------
+#   The entity layer - "who is my sister?" (memory wave 3, 2026-09-25)
+# --------------------------------------------------------------------------
+#
+# Word search and meaning search cannot connect "my sister's wedding" to
+# "Priya's wedding is in Lisbon": nothing in the question says Priya. A fact
+# the owner saved can - "Owner's sister is called Priya" - so each saved fact
+# is linked to the people, pets, places and things it names, and the word
+# the owner uses for them ("sister") becomes an ALIAS of that name. Recall
+# then looks the question's words up in the alias table, adds the full names
+# to the search, and fuses the facts linked to them in as a third list.
+#
+# The research sketch's seven rules (memresearch/graph/REPORT.md, "Design
+# sketch: the entity layer"), and where each one is kept:
+#
+#   1. Links come from SAVED facts only, never from the conversation - they
+#      are made in MemoryStore.add() (and edit()), after every check the fact
+#      already passed. Nothing else writes them.
+#   2. A link can only ADD a candidate to recall. Nothing here retires,
+#      edits, hides or re-orders a stored fact; search() keeps its k and both
+#      floors, and the third list goes through the same current-only filter.
+#   3. Grounded or dropped: every name and alias must be in the fact's own
+#      text word for word (_grounded), whoever found it - these fixed rules
+#      or the optional local model. An alias is kept only with a name from
+#      the SAME fact, and records that fact's id; forgetting, correcting or
+#      erasing the fact takes the alias and the links with it, and erasing
+#      takes every name no other fact still says (_unlink_fact).
+#   4. Merging is the owner's call, one pair at a time: only an EXACT match
+#      after normalising joins by itself (the same entry is reused). A likely
+#      typo raises ONE "are these the same?" card per pair, ever, in the
+#      ordinary review queue; anything less stays apart.
+#   5. The model is optional (jarvis_entities.py, OFF by default, unmeasured):
+#      one local call per learner pass, on the learner's background thread.
+#      The no-model rules below run on every save.
+#   6. Recall: possessives folded, aliases looked up, names added to the
+#      question, linked facts as a third RRF list. No model call on the chat
+#      path - there is no import of anything that could make one.
+#   7. Both apps: recall improves in both because it happens on the PC. The
+#      desktop lists an entry's facts ("About Priya", no summary); the phone
+#      shows no graph, by rule (ARCHITECTURE.md section 8).
+#
+# LANGUAGES. The relation pattern ("my sister is called Priya", "my brother
+# Arjun", "Mario is my manager") is ENGLISH only. Finding capitalised names
+# works for any language written in Latin letters that capitalises names,
+# but the list of capitalised words that are not names (sentence starters,
+# days, months) is English, so another language gets more noise entries -
+# which can only add candidates, never remove one. Names in other scripts
+# are not found by these rules at all.
+
+#: Stored in meta once a store's existing facts have been linked.
+ENTITY_LAYER_VERSION = "1"
+
+#: The kinds an entry may have. The no-model rules only ever say person or
+#: pet (from the relation word); the optional model may say the rest.
+ENTITY_KINDS = ("person", "pet", "place", "organisation", "project", "thing")
+
+#: Chat recall uses the entity layer unless JARVIS_MEMORY_ENTITIES=0.
+_ENTITY_RECALL = os.environ.get("JARVIS_MEMORY_ENTITIES", "1").strip().lower() not in (
+    "0", "false", "off", "no")
+
+#: An alias that names more than this many different entries ("friend",
+#: with thirty friends in memory) does not say which one - it is ignored.
+ALIAS_MAX_ENTITIES = 2
+
+#: At most this many entries from one question.
+ENTITY_HITS_MAX = 5
+
+#: Graphiti's thresholds (graphiti_core/utils/maintenance/dedup_helpers.py,
+#: Apache-2.0, checked 2026-09-25): names must be at least 6 characters or
+#: two words, with character entropy of at least 1.5, and share at least 90%
+#: of their three-letter chunks. What that catches, measured in
+#: backend/test_memory_entities.py: a letter doubled or dropped at the END of
+#: a long name ("Priya Sharma" / "Priya Sharmaa"). What it does not: a typo
+#: inside a short name ("Priya" / "Priyaa" share 3 of 4 chunks, 0.75) - those
+#: stay two entries, which is the safe side.
+MERGE_JACCARD = 0.9
+_MIN_NAME_LENGTH = 6
+_MIN_TOKEN_COUNT = 2
+_NAME_ENTROPY_THRESHOLD = 1.5
+
+#: The review-queue `source` of an "are these the same?" card
+#: (jarvis_extract.MERGE_SOURCE, memory-entities.patch).
+MERGE_SOURCE = "entity_merge"
+
+#: Relation words, English. Each maps to the kind of entry it names.
+_PEOPLE = """
+sister brother sis bro mum mom mother mam mummy mommy dad father daddy parent
+wife husband partner spouse girlfriend boyfriend fiance fiancé fiancee fiancée
+son daughter child kid baby stepson stepdaughter
+aunt auntie aunty uncle cousin niece nephew godmother godfather goddaughter godson
+grandma grandmother gran granny nan nana nanna grandad granddad grandfather grandpa
+grandson granddaughter grandchild stepmum stepmom stepmother stepdad stepfather
+stepsister stepbrother sister-in-law brother-in-law mother-in-law father-in-law
+friend mate pal buddy colleague coworker co-worker boss manager supervisor
+flatmate roommate housemate neighbour neighbor landlord landlady lodger tenant
+doctor gp dentist therapist counsellor counselor physio optician vet
+teacher tutor coach trainer mentor babysitter nanny cleaner accountant lawyer solicitor
+""".split()
+_PETS = "cat dog puppy kitten rabbit bunny hamster guinea-pig parrot budgie horse pony tortoise turtle pet".split()
+_RELATIONS = {w: "person" for w in _PEOPLE}
+_RELATIONS.update({w: "pet" for w in _PETS})
+
+#: A modifier before a relation that means the name is NOT who that word
+#: means now ("my former manager Marta"): then only "former manager" is an
+#: alias, never "manager".
+_PAST_MODIFIERS = {"former", "old", "previous", "ex", "late", "last", "first"}
+
+#: Capitalised words that are not names on their own: pronouns and
+#: determiners, titles, the owner, days and months, common sentence starters.
+_NOT_NAMES = set("""
+i i'm i've i'd i'll im ive owner owners the a an my our your his her their its this that these
+those he she they we you it me him them us there here mr mrs ms miss mx dr prof sir madam
+monday tuesday wednesday thursday friday saturday sunday mondays tuesdays wednesdays thursdays
+fridays saturdays sundays weekend weekends today tomorrow yesterday tonight morning evening
+january february march april may june july august september october november december
+jan feb mar apr jun jul aug sep sept oct nov dec
+yes no ok okay please thanks thank hi hello hey also maybe sometimes usually every each all
+some most both when if after before since because remember note always never not once
+""".split())
+
+#: Titles stay on the front of a name: "Mrs Okafor" is one name, not "Okafor".
+_TITLES = {"mr", "mrs", "ms", "miss", "mx", "dr", "prof", "sir"}
+
+_UPPER = "A-ZÀ-ÖØ-Þ"
+_WORD_CAP = rf"[{_UPPER}][\w'’\-]*"
+#: A name: capitalised words, a title allowed first ("Dr Singh", "Mrs Okafor").
+_NAME_RX = rf"(?:(?:Dr|Mr|Mrs|Ms|Miss|Mx|Prof)\.?\s+)?{_WORD_CAP}(?:\s+{_WORD_CAP})*"
+_POSS_RX = r"(?i:my|our|the\s+owner['’]s|owner['’]s|owners['’])"
+_REL_RX = "|".join(re.escape(w) for w in sorted(_RELATIONS, key=len, reverse=True))
+_MOD_RX = r"(?:(?P<mod>(?i:[a-z][a-z\-]*))\s+)?"
+#: "my sister is called Priya", "Owner's best friend Kofi", "my dentist, Dr Singh".
+_REL_FORWARD = re.compile(
+    rf"(?<![\w']){_POSS_RX}\s+{_MOD_RX}(?P<rel>(?i:{_REL_RX}))(?![\w\-])\s*,?\s*"
+    r"(?:(?i:is\s+called|is\s+named|was\s+called|is|['’]s\s+name\s+is|called|named)\s+)?"
+    rf"(?P<name>{_NAME_RX})")
+#: "Mario is my manager".
+_REL_BACKWARD = re.compile(
+    rf"(?P<name>{_NAME_RX})\s+(?i:is)\s+{_POSS_RX}\s+{_MOD_RX}"
+    rf"(?P<rel>(?i:{_REL_RX}))(?![\w\-])")
+_TOKEN_RX = re.compile(r"[\w][\w'’\-]*|[.!?;:]")
+_CONNECT = {"of", "de", "da", "del", "della", "van", "von", "der", "den", "la", "le", "du",
+            "di", "dos", "das", "bin", "al"}
+
+
+def _fold(text: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFKC", str(text or "")).replace("’", "'").replace("‘", "'")
+
+
+def _key_tokens(text: str) -> list:
+    """Lowercased words with "'s" (and a bare trailing apostrophe) taken
+    off - "Priya's" and "Priya" are one name, "sister's" is "sister". Not
+    _words(): that strips ANY trailing s, so "Jonas" and "Jonas's" came out
+    different. Single letters go; numbers stay ("RTX 2080")."""
+    out = []
+    for w in re.findall(r"[\w][\w'\-]*", _fold(text).lower()):
+        w = re.sub(r"'s$", "", w).rstrip("'")
+        if len(w) > 1 or w.isdigit():
+            out.append(w)
+    return out
+
+
+def _name_key(text: str) -> str:
+    """The normalised form two names must share EXACTLY to be one entry
+    (the only merge that happens by itself), and the form every alias is
+    stored and looked up in. A leading "the" does not count."""
+    toks = _key_tokens(text)
+    if len(toks) > 1 and toks[0] == "the":
+        toks = toks[1:]
+    return " ".join(toks)
+
+
+def _grounded(text: str, phrase: str) -> bool:
+    """Is `phrase` in `text` word for word (case and spacing aside)? The
+    rule every name and alias must pass, whoever found it."""
+    t = " ".join(_fold(text).lower().split())
+    p = " ".join(_fold(phrase).lower().split())
+    if not p:
+        return False
+    return re.search(r"(?<![\w])" + re.escape(p) + r"(?![\w])", t) is not None
+
+
+def _entity_name_ok(name: str, key: str) -> bool:
+    if not key or len(key) > 80 or len(key.split()) > 6:
+        return False
+    toks = key.split()
+    if all(t in _NOT_NAMES or t in _STOP or t in _FRAME or t.isdigit() for t in toks):
+        return False
+    return any(ch.isalpha() for ch in name)
+
+
+def _alias_ok(akey: str) -> bool:
+    """An alias must say something: not a stop or framing word, not a
+    name-shaped nothing, at most four words."""
+    toks = akey.split()
+    if not toks or len(toks) > 4:
+        return False
+    return not all(t in _STOP or t in _FRAME or t in _NOT_NAMES for t in toks)
+
+
+def _query_grams(query: str) -> list:
+    """The question's word runs of one to four words, in the order they
+    appear, in the alias table's own form - only those with at least one
+    word that is not a stop or framing word ("my" alone never matches)."""
+    # A long message is looked at in full up to QUERY_TOKENS_MAX words, and
+    # the list stays under SQLite's oldest limit on "?" marks (999).
+    toks = _key_tokens(query)[:QUERY_TOKENS_MAX]
+    out, seen = [], set()
+    for n in (1, 2, 3, 4):
+        for i in range(len(toks) - n + 1):
+            g = toks[i:i + n]
+            if all(t in _STOP or t in _FRAME for t in g):
+                continue
+            s = " ".join(g)
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+            if len(out) >= 800:
+                return out
+    return out
+
+
+#: How many of a question's words the alias lookup reads.
+QUERY_TOKENS_MAX = 200
+
+
+def _clean_name(raw: str) -> str:
+    """A name as found: spacing tidied, a trailing "'s" off, a leading
+    "The" off."""
+    name = " ".join(str(raw).split())
+    name = re.sub(r"['’]s$", "", name).rstrip("'’")
+    name = re.sub(r"^The\s+", "", name)
+    return name.strip()
+
+
+def _capitalised_names(text: str) -> list:
+    """Runs of capitalised words that read as names: "Priya", "Hull City",
+    "Priory Medical Centre", "The Left Hand of Darkness" (kept as "Left Hand
+    of Darkness"). A single capitalised word that opens a sentence counts
+    only when it is not a common English word there ("Priya's wedding"
+    yes, "Tomorrow" no)."""
+    toks = [(m.group(0), m.start()) for m in _TOKEN_RX.finditer(_fold(text))]
+    out, i, start = [], 0, True
+    while i < len(toks):
+        tok, _ = toks[i]
+        if tok in ".!?;:":
+            start = True
+            i += 1
+            continue
+        if not (tok[:1].isupper() and tok[:1].isalpha()):
+            start = False
+            i += 1
+            continue
+        run, j = [tok], i + 1
+        while j < len(toks):
+            t = toks[j][0]
+            if t[:1].isupper() and t[:1].isalpha():
+                run.append(t)
+                j += 1
+            elif t.isdigit() and len(run) >= 1:
+                run.append(t)
+                j += 1
+            elif (t in _CONNECT and j + 1 < len(toks)
+                  and toks[j + 1][0][:1].isupper() and toks[j + 1][0][:1].isalpha()):
+                run += [t, toks[j + 1][0]]
+                j += 2
+            else:
+                break
+        at_start = start
+        start = False
+        i = j
+        # Words at the front that are not part of a name: "Owner's", "The".
+        while len(run) > 1 and _name_key(run[0]) in _NOT_NAMES and _name_key(run[0]) not in _TITLES:
+            run = run[1:]
+            at_start = False
+        name = _clean_name(" ".join(run))
+        key = _name_key(name)
+        if not _entity_name_ok(name, key):
+            continue
+        if len(key.split()) == 1 and at_start and (key in _STOP or key in _FRAME
+                                                    or key in _NOT_NAMES):
+            continue
+        out.append(name)
+    return out
+
+
+def find_entities(text: str) -> dict:
+    """The no-model linker: {"names": [(name, kind)], "aliases": [(alias,
+    name)]} for one fact's text. Fixed rules, no model, English relation
+    words (see LANGUAGES above). Everything returned is in the text word
+    for word; _link_fact checks that again anyway."""
+    text = str(text or "")
+    names: dict = {}
+    aliases: list = []
+
+    def add(name, kind=None):
+        name = _clean_name(name)
+        key = _name_key(name)
+        if not _entity_name_ok(name, key):
+            return None
+        old = names.get(key)
+        if old is None:
+            names[key] = (name, kind)
+        elif kind and not old[1]:
+            names[key] = (old[0], kind)
+        return names[key][0]
+
+    for rx in (_REL_FORWARD, _REL_BACKWARD):
+        for m in rx.finditer(_fold(text)):
+            rel = m.group("rel").lower()
+            mod = (m.group("mod") or "").lower()
+            if mod in _RELATIONS or mod in ("is", "was", "called", "named"):
+                mod = ""          # "my sister is ..." - no modifier there
+            name = add(m.group("name"), _RELATIONS.get(rel))
+            if name is None:
+                continue
+            if mod and mod not in _STOP:
+                aliases.append((f"{mod} {rel}", name))
+            if not mod or mod not in _PAST_MODIFIERS:
+                aliases.append((rel, name))
+    for name in _capitalised_names(text):
+        add(name)
+    return {"names": [v for v in names.values()], "aliases": aliases}
+
+
+# Graphiti's matching, word for word in behaviour (dedup_helpers.py
+# _normalize_name_for_fuzzy, _name_entropy, _has_high_entropy, _shingles,
+# _jaccard_similarity). Apache-2.0; see THIRD-PARTY-NOTICES.txt.
+
+def _fuzzy_form(name: str) -> str:
+    s = re.sub(r"[\s]+", " ", str(name or "").lower()).strip()
+    s = re.sub(r"[^a-z0-9' ]", " ", s).strip()
+    return re.sub(r"[\s]+", " ", s)
+
+
+def _name_entropy(fz: str) -> float:
+    chars = fz.replace(" ", "")
+    if not chars:
+        return 0.0
+    counts: dict = {}
+    for ch in chars:
+        counts[ch] = counts.get(ch, 0) + 1
+    total = len(chars)
+    return -sum((n / total) * math.log2(n / total) for n in counts.values())
+
+
+def _has_high_entropy(fz: str) -> bool:
+    if len(fz) < _MIN_NAME_LENGTH and len(fz.split()) < _MIN_TOKEN_COUNT:
+        return False
+    return _name_entropy(fz) >= _NAME_ENTROPY_THRESHOLD
+
+
+def _shingles(fz: str) -> set:
+    cleaned = fz.replace(" ", "")
+    if len(cleaned) < 2:
+        return {cleaned} if cleaned else set()
+    return {cleaned[i:i + 3] for i in range(len(cleaned) - 2)}
+
+
+def _jaccard(a: set, b: set) -> float:
+    if not a and not b:
+        return 1.0
+    if not a or not b:
+        return 0.0
+    union = len(a | b)
+    return len(a & b) / union if union else 0.0
+
+
+def likely_same(a: str, b: str) -> bool:
+    """Would these two names raise an "are these the same?" card? Not the
+    same after normalising (that joins by itself), both specific enough,
+    and at least MERGE_JACCARD of their three-letter chunks shared."""
+    fa, fb = _fuzzy_form(a), _fuzzy_form(b)
+    if _name_key(a) == _name_key(b) or fa == fb:
+        return False
+    if not (_has_high_entropy(fa) and _has_high_entropy(fb)):
+        return False
+    return _jaccard(_shingles(fa), _shingles(fb)) >= MERGE_JACCARD
+
+
+def merge_card_text(a: str, b: str, kind: Optional[str] = None) -> str:
+    """The card's words. Both names, as the facts wrote them - and nothing
+    else from any fact."""
+    who = "the same person" if kind in ("person", "pet") else "the same"
+    return (f"Are these {who}? “{a}” and “{b}”. Saying yes joins them, so "
+            f"a question about one also finds what Jarvis knows about the other. No fact is "
+            f"changed or forgotten. Saying no keeps them apart, and Jarvis will not ask again.")
+
+
+def _has_table(c, name: str) -> bool:
+    return c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                     (name,)).fetchone() is not None
+
+
+def _wipe_merge_card(c, pid: int, now: float) -> int:
+    """An "are these the same?" card that names an entry being deleted: its
+    words (the two names) go, and if it is still waiting it is turned down
+    - keeping it would keep the names. 1 if a card was changed."""
+    if not _has_table(c, "proposals"):
+        return 0
+    cols = {r[1] for r in c.execute("PRAGMA table_info(proposals)")}
+    if "text" not in cols:
+        return 0
+    cur = c.execute("UPDATE proposals SET text=? WHERE id=? AND text IS NOT ?",
+                    (ERASED_TEXT, pid, ERASED_TEXT))
+    if "state" in cols:
+        if "decided" in cols:
+            c.execute("UPDATE proposals SET state='rejected', decided=? WHERE id=?"
+                      " AND state='pending'", (now, pid))
+        else:
+            c.execute("UPDATE proposals SET state='rejected' WHERE id=? AND state='pending'",
+                      (pid,))
+    return 1 if cur.rowcount else 0
+
+
+def accept_merge_card(proposal_id: int) -> Optional[dict]:
+    """jarvis_extract calls this when the owner accepts ONE "are these the
+    same?" card (memory-entities.patch). Joins that pair, nothing else."""
+    return store().merge_from_card(int(proposal_id))
+
+
+def handle_entities_get() -> tuple:
+    """GET /api/memory/entities -> (http status, reply). memory-entities.patch
+    hands the route here after the token and origin checks. A read."""
+    try:
+        return 200, store().entities_view()
     except Exception as exc:
         return 500, {"error": type(exc).__name__}
 

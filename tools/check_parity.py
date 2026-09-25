@@ -133,6 +133,7 @@ CLASSIFICATION = {
     "/api/ledger": ("ported", "Brain screen, read-only."),
     "/api/memory/decide": ("ported", "The review queue: one card, one decision."),
     "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
+    "/api/memory/entities": ("deliberate", "\"Who is my sister?\" (memory wave 3, 2026-09-25; backend/memory-entities.patch, rebuilt/jarvis_memory.py entities_view()): the people and things saved facts are linked to, for the desktop's names under each fact and \"About <name>\", and the \"are these the same?\" card (/api/memory/pending?merge_cards=1). That is the memory graph, which stays off the phone (CLAUDE.md; ARCHITECTURE.md section 8). The phone's recall improves all the same: recall happens on the PC."),
     "/api/memory/export": ("deliberate", "A copy of everything Jarvis knows does not belong on a phone that can be lost."),
     "/api/memory/facts": ("ported", ""),
     "/api/memory/forget": ("ported", "Forget ONE fact (retired, not deleted; no undo). Desktop: Brain, Memory, every fact (brain_memory_forget, with an optional date). Phone, since automatic learning (owner, 2026-09-24: every auto-saved fact is listed in both apps with a one-tap Forget): Mind, Saved automatically, auto-saved facts only (AutoLearnPlate.kt, JarvisApi.forgetFact). Both ask first and hold it on a stale link. Rewording (/api/memory/edit) stays desktop-only."),
