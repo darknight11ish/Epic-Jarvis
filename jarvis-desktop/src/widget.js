@@ -36,6 +36,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./note-capture.js";
+import { EMAIL_APPROVE, EMAIL_DETAIL, isEmailCard } from "./email-sending.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -519,7 +520,8 @@ async function readAppLock() {
   }
 }
 
-/** Approve while App lock is on: open the Jarvis bar on this card. */
+/** Approve while App lock is on, or on an email: open the Jarvis bar on this
+ *  card. */
 async function approveInBar() {
   flash("Opening the Jarvis bar - approve it there.");
   try {
@@ -552,13 +554,19 @@ function openApproval(approval) {
   }
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
+  // An email is approved in the Jarvis bar, lock or not: this card shows
+  // one line, and an email's card is its recipients, subject and every word
+  // (the owner's decision of 2026-09-25). Rust refuses an email's Approve
+  // from this window too (commands.rs, `waiting_email`).
+  const email = isEmailCard(approval);
   dom.apprAction.textContent = locked ? lockedTitle(approval) : approval.action;
   // textContent, never innerHTML: this string comes from a model.
-  dom.apprDetail.textContent = locked ? LOCKED_DETAIL : approvalDetail(approval);
-  dom.btnApprYes.textContent = locked ? LOCKED_APPROVE : "Approve";
+  dom.apprDetail.textContent = locked ? LOCKED_DETAIL
+    : email ? EMAIL_DETAIL : approvalDetail(approval);
+  dom.btnApprYes.textContent = locked ? LOCKED_APPROVE : email ? EMAIL_APPROVE : "Approve";
   dom.btnApprYes.title = locked
     ? "App lock is on: opens the Jarvis bar, which asks Windows Hello, to approve there"
-    : "";
+    : email ? "Opens the Jarvis bar on this email, to read all of it and approve there" : "";
   // A note changes the plan, so it waits for the unlocked Jarvis bar too.
   const noteRow = dom.apprNoteInput.closest(".appr-note-row");
   if (noteRow) noteRow.hidden = locked;
@@ -720,8 +728,9 @@ setInterval(() => {
 
 async function decide(approved, optionId = null) {
   if (!state.approval || state.deciding) return;
-  // App lock on: this window approves nothing (see `applyAppLock`).
-  if (approved && state.appLock) {
+  // App lock on: this window approves nothing (see `applyAppLock`). Nor,
+  // lock or not, an email: all of it is read in the Jarvis bar first.
+  if (approved && (state.appLock || isEmailCard(state.approval))) {
     await approveInBar();
     return;
   }

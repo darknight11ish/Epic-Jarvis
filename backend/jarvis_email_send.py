@@ -98,7 +98,7 @@ import ssl
 import unicodedata
 from dataclasses import dataclass, field, replace
 from email.message import EmailMessage
-from email.policy import SMTP as SMTP_POLICY
+from email.policy import SMTP as _SMTP
 from email.utils import formatdate, make_msgid
 from typing import Callable, Optional
 
@@ -123,14 +123,22 @@ MAX_ADDRESS_CHARS = 254
 MAX_MESSAGE_ID_CHARS = 250
 TIMEOUT = 30.0
 
+#: How the email is written for the wire: CRLF line ends, and 7-bit only -
+#: accented letters and emoji in the text are encoded (quoted-printable or
+#: base64), so the email arrives intact even through a server that does not
+#: take 8-bit mail. What the recipient reads is the text on the card.
+SMTP_POLICY = _SMTP.clone(cte_type="7bit")
+
 TLS_MODES = ("ssl", "starttls", "off")
 _DEFAULT_PORT = {"ssl": 465, "starttls": 587, "off": 25}
 
 #: The words a card and the Settings line use for each way of travelling.
 TLS_WORDS = {
-    "ssl": "encrypted from the first byte (SSL/TLS)",
-    "starttls": "encrypted after the server agrees (STARTTLS); nothing is sent if it does not",
-    "off": "NOT encrypted - allowed only because the server is on this PC or your own network",
+    "ssl": "encrypted from the start (SSL/TLS)",
+    "starttls": "encrypted before logging in (STARTTLS - if the server will not encrypt, "
+                "nothing is sent)",
+    "off": "NOT encrypted (allowed only because the server is on this PC or your own "
+           "network)",
 }
 
 #: What saying no costs. Always on the card.
@@ -434,8 +442,8 @@ def describe(p: Plan) -> str:
         "---------- end of the email ----------",
         "",
         "No attachments, no hidden (Bcc) recipients.",
-        f"It goes through {p.host}, port {p.port}, {TLS_WORDS[p.tls]}, logged in as "
-        f"{p.sender}. Your password goes to that server and nowhere else.",
+        f"It goes through {p.host}, port {p.port}, {TLS_WORDS[p.tls]}. Jarvis logs in "
+        f"there as {p.sender}; your password goes to that server and nowhere else.",
         "Once sent, an email cannot be taken back.",
         "",
         f"If you say no: {IF_REFUSED}",
@@ -511,8 +519,8 @@ def view(*, tools_enabled: Optional[Callable[[], set]] = None,
              f"{'encrypted' if st.tls != 'off' else 'not encrypted (your own network)'}")
     if st.problem:
         state = "not_set_up"
-        said = (f"Not set up: {st.problem}. Sending uses the same account as reading "
-                f"email - see backend/README.md, \"Sending email\".")
+        said = (f"Not set up: {st.problem}. The steps are in backend/README.md, "
+                f"\"Sending email\".")
     elif tier_why:
         state = "off" if tier_of(ACTION) == "never" else "refused"
         said = f"Set up ({route}), but {tier_why}."

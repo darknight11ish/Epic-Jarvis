@@ -94,6 +94,12 @@ export const VOICE = JSON.parse(fsSync.readFileSync(path.join(
   path.dirname(fileURLToPath(import.meta.url)), "fixtures", "voice-status-cases.json"),
   "utf8"));
 
+/** GET /api/email/sending as the backend answers it, and one email's card
+ *  (tools/gen_email_sending_cases.py). */
+export const EMAIL_SENDING = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "fixtures", "email-sending-cases.json"),
+  "utf8"));
+
 /**
  * Where the browser is.
  *
@@ -407,9 +413,10 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing, emailSending }) {
   const listeners = {};
   window.__calls = [];
+  window.__emailSending = emailSending || null;
   // App lock on or off, for get_app_lock (apps security audit M3).
   window.__appLock = Boolean(appLock);
   const state = {
@@ -1432,6 +1439,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             h.status.keep_days = args.keepDays;
             return { ok: true, keep_days: args.keepDays, deleted: h.deletedByKeep || 0 };
           }
+          // email_sending.rs: the Settings line for sending email.
+          // `window.__emailSending` is the PC's answer (a scenario's, else
+          // "set up, not offered to the model yet").
+          case "get_email_sending":
+            return JSON.parse(JSON.stringify(window.__emailSending));
           default: return null;
         }
       },
@@ -1653,6 +1665,7 @@ export async function open(browser, base, file, data, viewport) {
     memoryRefuses: null, learningFloor: false, learningWaits: false, apiSettings: null, tokenSaveRefuses: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     vision: null,
+    emailSending: EMAIL_SENDING.cases.tool_off,
     secondCard: { status: SECOND_CARD.one_card },
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
     ...data,

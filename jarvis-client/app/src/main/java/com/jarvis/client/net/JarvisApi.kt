@@ -836,6 +836,14 @@ class JarvisApi(
      */
     suspend fun webSearch(): ApiResult<JsonObject> = probe(WebSearch.PATH)
 
+    /**
+     * `GET /api/email/sending` - whether sending email is set up, from which
+     * address and through which server, in the PC's own words
+     * ([EmailSending.parse]). A read; never the password. A 404 or 503 is a
+     * PC without it ([EmailSending.missing]).
+     */
+    suspend fun emailSending(): ApiResult<JsonObject> = probe(EmailSending.PATH)
+
     /** A test search waits for the provider (up to 15 seconds on the PC). */
     private val webSearchTestCall: OkHttpClient by lazy {
         client.newBuilder()

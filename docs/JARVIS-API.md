@@ -3965,3 +3965,178 @@ says only `key_saved: true|false`.
   `memory_search`); an earlier turn's recalled facts are not tracked, so a
   later search in the same conversation that has read nothing else runs
   without a card.
+
+## 24. Sending email (added 2026-09-25)
+
+The owner's decision of 2026-09-25, after the audit against Meta's Muse
+(`CLAUDE.md`: "Jarvis may SEND email, one approval card per email, the card
+showing the exact recipients, subject and full text; never an 'always
+allow'; the card says plainly when the conversation has read outside
+text"). `backend/jarvis_email_send.py` (shipped whole),
+`backend/email-send.patch` (one route and the gate's words), and the model
+tool `send_email` in `backend/jarvis_agent.py`. `jarvis_email.py` stays
+read-only. A new way out of the PC: docs/ARCHITECTURE.md section 4,
+"sending email".
+
+**Both apps**: every email is an ordinary approval card in `/api/pending`,
+answered through the same Approve and Deny as every other card (section 3).
+The one route below is the Settings line: the desktop's Settings, "Sending
+email" (`email_sending.rs` `get_email_sending`, Settings window only;
+`email-sending-settings.js`, `email-sending.js`), and the phone's Mind,
+"Sending email" (`EmailSendingPlate.kt`, `net/EmailSending.kt`). `ported` in
+`tools/check_parity.py`. The contract file both apps build against is
+`tests/fixtures/email-sending-cases.json` /
+`contract/email-sending-cases.json`, written by
+`tools/gen_email_sending_cases.py` from the real code - the route's answers
+and one real card.
+
+### 24.1 The card
+
+Gate action `send_email`, tier `ask` in the shipped `jarvis-framework.toml`
+(it was already there). One card per email; two emails are two cards, each
+counted toward the five cards one answer may raise (`CARDS_PER_TURN`). The
+row's `detail` is `{"text": <the card>}`, and the card is the WHOLE email -
+never cut: a card that would not fit the gate's 4,000 characters is refused
+before anyone is asked. An example, word for word (the fixture's
+`example_card`):
+
+```
+Send this email from your account? It goes only if you approve, exactly as shown - every word is below.
+
+From: owner@example.com
+To: alex@example.com
+Cc: sam@example.org
+Subject: Dinner on Friday
+
+---------- the whole email ----------
+Hi Alex,
+
+Friday at 7 works for me. [the menu](https://example.com/menu)
+
+**See you there.**
+
+Mario
+---------- end of the email ----------
+
+No attachments, no hidden (Bcc) recipients.
+It goes through smtp.office365.com, port 587, encrypted before logging in (STARTTLS - if the server will not encrypt, nothing is sent). Jarvis logs in there as owner@example.com; your password goes to that server and nowhere else.
+Once sent, an email cannot be taken back.
+
+If you say no: nothing is sent, and Jarvis tells you it was not sent.
+```
+
+When outside text shaped the turn - a reading tool ran (the inbox, a file,
+a web page...), the conversation had read outside text before, the newest
+message was not typed or said by the owner, or the app sent text of its own
+- the card STARTS with one plain line, before "Send this email...":
+
+```
+This conversation read outside text (an email, a web page, a file or another tool's answer) before this email was written - check that sending it was your idea.
+```
+
+(or "Your newest message was pasted in, not typed - check that sending this
+email was your idea.", or the app's-own-text line), and ends with the usual
+"What shaped this request:" list, which names an address that came from
+what Jarvis read rather than from the owner.
+
+**What each app must do with it** (both do):
+
+- Show `detail.text` WORD FOR WORD, and all of it. The phone's card shows
+  it as plain text in the scrolling approval list (`PendingRows.kt`
+  `summary`). The desktop's Jarvis bar shows an email's card in a `<pre>`
+  (`main.js`, `isEmailCard`), never through the Markdown renderer - which
+  would show `[the menu](https://...)` as "the menu" and hide where the link
+  goes - wrapped, in the scrolling preview.
+- Never approve an email from a one-line surface. The desktop's widget
+  shows "An email - open the Jarvis bar to read all of it before
+  approving." and its button opens the Jarvis bar on the card; Rust refuses
+  an email's Approve from the widget as well (`commands.rs`
+  `waiting_email`). Deny works from anywhere.
+- Lock screens, notifications, the phone's home-screen widget and the
+  desktop's widget under App lock show the `notice` only - "Jarvis wants to
+  send email" and "sends the email shown on the card from your own account,
+  to exactly the people it lists; once sent it cannot be taken back.
+  nothing has happened yet." - never a recipient, the subject or a word of
+  the text. `weight` is `heavy` (it leaves the PC and cannot be undone).
+- A "no" proposes no memory rule (`_NO_RULE_FROM_DENIAL`): it answers one
+  email, not a standing wish.
+
+### 24.2 When it is refused with no card at all
+
+The model is told why, in words, and nobody is asked:
+
+- the turn's model is not on this PC - an Ollama cloud model, or
+  `OLLAMA_URL` pointing at another machine (rule 1: an email is written by
+  the local model only; the whole turn is refused up front for the same
+  reason, and `_one_call` checks again);
+- `send_email` is not tier `ask` (`auto` or `notify` would send with nobody
+  asked; `never` switches sending off);
+- the plan says why nothing could be sent: an address that is not a plain
+  address (no names, commas or line breaks), more than 10 people in To and
+  Cc, no subject or one over 200 characters or holding a line break, no
+  text or more than 2,500 characters, an invisible or control character
+  (a right-to-left override, a zero-width joiner) that would make the card
+  read differently from what is sent, or sending not set up;
+- the card would not fit whole on one card.
+
+A tool call is offered only when `[tools].enabled` names `send_email`.
+
+### 24.3 What is sent
+
+Exactly the plan the card showed: `From` (the owner's account), `To`, `Cc`,
+`Subject`, `Date`, a `Message-ID`, and the text as `text/plain; charset=utf-8`
+- no Bcc, no attachment, no HTML. A reply (`plan(..., reply_to_message_id=)`)
+adds `In-Reply-To` and `References`; the model's tool does not offer it yet
+(24.5). `run()` refuses, and sends nothing, if the plan's fingerprint no
+longer matches (its content changed after the card was made) or the account,
+server or encryption setting changed since. It sends once and never retries:
+a connection that drops after the email was handed over is reported as "may
+have been sent - check your Sent folder".
+
+### 24.4 The route
+
+Needs the pairing token and passes the origin check.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/email/sending` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_email_send.py` | A read of the settings only: connects to no mail server and sends nothing. |
+
+```
+{"available": true,
+ "state": "not_set_up" | "tool_off" | "refused" | "off" | "ready",
+ "ready": bool, "said": <the one line both apps show>,
+ "from": "owner@example.com" | "", "server": "smtp.gmail.com", "port": 465,
+ "encryption": "ssl" | "starttls" | "off", "server_guessed": bool,
+ "password_set": bool,          never the password
+ "tool_enabled": bool,          "send_email" in [tools].enabled
+ "limits": {"recipients": 10, "subject_chars": 200, "body_chars": 2500,
+            "attachments": false}}
+```
+
+Both apps show `said` as it is. The settings are environment variables on
+the PC (`backend/README.md`, "Sending email"): the account and password are
+`JARVIS_IMAP_USER` and `JARVIS_IMAP_PASSWORD`; the server is `smtp.X` for
+`JARVIS_IMAP_HOST = imap.X`, or `JARVIS_SMTP_HOST` / `JARVIS_SMTP_PORT` /
+`JARVIS_SMTP_TLS`. Neither app has a box for any of them.
+
+### 24.5 Known gaps, said plainly
+
+- **Nothing has reached a real mail server.** Every test uses a stand-in
+  SMTP server on 127.0.0.1 written with the standard library
+  (`backend/test_email_send.py`): SSL, STARTTLS, a server that will not
+  encrypt, a refused login, refused recipients, a dropped connection. That
+  Gmail takes the same app password for sending (`smtp.gmail.com`, port
+  465) is general knowledge of how Google's app passwords work - not
+  checked here against a real account, and Google's pages were not read
+  for it.
+- **The model cannot thread a reply yet.** `email_check` does not return a
+  message's `Message-ID`, so the tool does not offer `reply_to_message_id`;
+  the module supports it. A reply is a new email with "Re:" in its subject
+  until then.
+- **The Sent folder.** Gmail files a copy of what it sends by itself; other
+  providers may not, and Jarvis does not save one.
+- **Plain ASCII addresses only**; no Bcc; no attachments; no HTML.
+- A program already on the PC could approve a card with the pairing token,
+  without Windows Hello - the known limit in docs/ARCHITECTURE.md section 3,
+  which the owner chose to close later. It applies to an email's card as to
+  every other.

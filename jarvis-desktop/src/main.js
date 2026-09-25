@@ -141,6 +141,7 @@ import {
 } from "./private-speech.js";
 // The renderer the answer card and the approval preview use - see markdown.js.
 import { escapeHtml, renderMarkdown } from "./markdown.js";
+import { approvalPlainText, isEmailCard } from "./email-sending.js";
 import {
   boxTagAfter,
   commitExchange,
@@ -1295,8 +1296,20 @@ function refreshApproval(approval) {
 
   renderRaised(approval.raised);
 
-  dom.approvalPreview.innerHTML = renderMarkdown(approvalPreview(approval));
-  decorateDiff(dom.approvalPreview);
+  if (isEmailCard(approval)) {
+    // An email is shown exactly as it will be sent - never as Markdown,
+    // which would turn `[words](link)` into "words" and hide where the link
+    // goes, or eat a line's `**`. textContent in a <pre>: every character
+    // and line break, nothing interpreted (the owner's decision of
+    // 2026-09-25: the card shows the recipients, the subject and every word).
+    const pre = document.createElement("pre");
+    pre.className = "approval-verbatim";
+    pre.textContent = approvalPlainText(approval);
+    dom.approvalPreview.replaceChildren(pre);
+  } else {
+    dom.approvalPreview.innerHTML = renderMarkdown(approvalPreview(approval));
+    decorateDiff(dom.approvalPreview);
+  }
   renderOptions(approval);
   // ONLY on a different card. The old comment here said this was "safe
   // unconditionally" and it was not: the queue subscription calls

@@ -22,6 +22,7 @@ pub mod attention;
 pub mod autostart;
 pub mod brain;
 pub mod commands;
+pub mod email_sending;
 pub mod hardware;
 pub mod hotkeys;
 pub mod hud_proxy;
@@ -777,6 +778,7 @@ pub fn run() {
             web_search::test_web_search,
             web_search::save_search_key,
             web_search::forget_search_key,
+            email_sending::get_email_sending,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,

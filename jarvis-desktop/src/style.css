@@ -1302,6 +1302,18 @@ html[data-state="error"] .pulse {
   display: none;
 }
 
+/* An email's card: every character as it will be sent (main.js, isEmailCard).
+   Wrapped, so a long line never hides off to the side; the preview above
+   scrolls, so a long email is all there to read. */
+.approval-preview pre.approval-verbatim {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  color: inherit;
+  background: none;
+}
+
 /* Unified-diff colouring for a preview that arrives as a patch. The renderer
    tags the lines; nothing here depends on parsing the diff in CSS. */
 .approval-preview pre code .diff-add {

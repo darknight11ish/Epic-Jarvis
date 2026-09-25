@@ -507,6 +507,8 @@ def t_what_arrives_is_exactly_the_card():
         m = parsed(srv.emails[0]) if srv.emails else None
         check("accents and emoji arrive exactly", m is not None and m["Subject"] == "Café on Friday"
               and body_of(m) == "Ça marche - à vendredi. 😊", out)
+        check("... sent 7-bit (encoded), so a server without 8-bit mail cannot mangle them",
+              bool(srv.emails) and all(b < 128 for b in srv.emails[0]))
     finally:
         SEND._SSL_CONTEXT = ssl.create_default_context
 
@@ -746,6 +748,9 @@ def t_one_card_showing_all_of_it_and_only_a_yes_sends():
                                              ("send_email", dict(EMAIL_ARGS, subject="Two"))])
     check("two emails: two cards, never one for both", [g[0] for g in gates] ==
           ["send_email", "send_email"] and len(s.emails) == 2, gates)
+    check("... the first one being sent is not 'outside text' on the second card",
+          len(gates) == 2 and AG.SEND_EMAIL_READ not in gates[1][1]["text"]
+          and "What shaped" not in gates[1][1]["text"], gates[1][1]["text"][:300] if gates else "")
     with Sent() as s:
         gates, told, summary, steps = _turn([("send_email", dict(EMAIL_ARGS, subject=f"n{i}"))
                                              for i in range(AG.CARDS_PER_TURN + 1)])

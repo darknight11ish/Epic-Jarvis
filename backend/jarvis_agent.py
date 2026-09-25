@@ -2023,8 +2023,11 @@ def _provenance(m: dict) -> str:
     p = m.get("provenance")
     return p if isinstance(p, str) and (p in OWN_WORDS or p in _NOT_OWN_WORDS) else "unknown"
 
-#: The one tool whose result is not outside text: a number worked out here.
-_NOT_READING = {"calculator"}
+#: The tools whose result is not outside text: a number worked out here, and
+#: send_email's own confirmation ("Sent to ..."), built from the plan the
+#: owner approved - so a second email in the same answer is not marked as
+#: shaped by outside text just because the first one was sent.
+_NOT_READING = {"calculator", "send_email"}
 
 
 def strip_chat_markers(text: str) -> str:

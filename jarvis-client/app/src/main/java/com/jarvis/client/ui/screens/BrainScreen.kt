@@ -412,6 +412,14 @@ fun BrainScreen(
                 WebSearchSection(canAct = canAct)
             }
 
+            // "Sending email" (the owner's decision of 2026-09-25): whether
+            // Jarvis can send email, from which address and through which
+            // server, in the PC's words (EmailSendingPlate.kt) - the desktop's
+            // Settings -> Sending email. Each email is its own approval card.
+            item(key = "email-sending") {
+                EmailSendingSection()
+            }
+
             if (models != null) {
                 item(key = "models") {
                     Section("Model") {

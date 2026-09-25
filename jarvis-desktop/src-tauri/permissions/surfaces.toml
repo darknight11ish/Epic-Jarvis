@@ -336,6 +336,10 @@ permissions = [
   "allow-test-web-search",
   "allow-save-search-key",
   "allow-forget-search-key",
+  # "Sending email": whether it is set up, from which address and through
+  # which server (GET /api/email/sending). A read: it sends nothing and
+  # never carries the password. Each email is its own approval card.
+  "allow-get-email-sending",
   # "Voice": what the PC says about listening to the owner - whether each
   # microphone's voice print is trained, which voice check is installed, the
   # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:
