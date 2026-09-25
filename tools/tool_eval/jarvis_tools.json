@@ -407,5 +407,128 @@
     ]
    }
   }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "set_timer",
+   "description": "Start a countdown timer on this PC.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "minutes": {
+      "type": "number",
+      "description": "how long, in minutes (0.5 = 30 seconds)"
+     },
+     "label": {
+      "type": "string",
+      "description": "optional short name, e.g. pasta"
+     }
+    },
+    "required": [
+     "minutes"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "set_reminder",
+   "description": "Set a reminder or alarm on this PC, once or repeating. `when` is plain English, e.g. \"tomorrow at 6pm\" or \"in 20 minutes\". A repeat waits for the owner's yes on a card.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "what to remind the owner of, in their words"
+     },
+     "when": {
+      "type": "string"
+     },
+     "alarm": {
+      "type": "boolean",
+      "description": "true for a wake-up alarm"
+     },
+     "repeat": {
+      "type": "object",
+      "description": "only for something that repeats",
+      "properties": {
+       "every": {
+        "type": "string",
+        "enum": [
+         "day",
+         "weekday",
+         "week",
+         "hours"
+        ]
+       },
+       "at": {
+        "type": "string",
+        "description": "HH:MM, 24-hour"
+       },
+       "days": {
+        "type": "array",
+        "items": {
+         "type": "integer"
+        },
+        "description": "0 = Monday ... 6 = Sunday"
+       },
+       "hours": {
+        "type": "integer"
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "todo_add",
+   "description": "Add one item to the owner's to-do list on this PC.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "todo_done",
+   "description": "Mark one item on the owner's to-do list as done.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "item": {
+      "type": "string",
+      "description": "the item's words, or enough of them"
+     }
+    },
+    "required": [
+     "item"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "coming_up",
+   "description": "List the owner's timers, alarms, reminders and to-do list on this PC.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
  }
 ]

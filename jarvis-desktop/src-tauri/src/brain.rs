@@ -39,6 +39,7 @@ pub mod auto_learn;
 pub mod history;
 pub mod profile;
 mod routes;
+pub mod schedule;
 pub mod used;
 use routes::{first_line, route_for};
 

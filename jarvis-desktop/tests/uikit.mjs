@@ -407,7 +407,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule }) {
   const listeners = {};
   window.__calls = [];
   // App lock on or off, for get_app_lock (apps security audit M3).
@@ -1174,6 +1174,50 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return out;
           }
+          // brain/schedule.rs (Coming up). `window.__schedule` is null - a PC
+          // without the scheduler, which Rust answers {available: false} for -
+          // unless the scenario names `schedule: {jobs, todo}`. Words are
+          // taken out while the private lists are hidden, as Rust does.
+          case "brain_schedule": {
+            const sc = window.__schedule;
+            if (!sc) {
+              return { available: false, why: "Your PC's Jarvis does not have timers and " +
+                "reminders yet - run apply-patches.ps1 on the PC." };
+            }
+            sc.reads += 1;
+            if (sc.fails) throw new Error(sc.fails);
+            const out = JSON.parse(JSON.stringify({ available: true, jobs: sc.jobs, todo: sc.todo }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              for (const j of [...out.jobs, ...out.todo]) { j.text = ""; j.hidden = true; }
+              out.hidden = true;
+            }
+            return out;
+          }
+          case "brain_schedule_act": {
+            window.__scheduleCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const sc = window.__schedule;
+            const all = [...sc.jobs, ...sc.todo];
+            const j = all.find((x) => x.id === args.id);
+            if (!j) throw new Error("That is not on the list any more.");
+            if (args.action === "delete" || args.action === "done") {
+              sc.jobs = sc.jobs.filter((x) => x.id !== args.id);
+              sc.todo = sc.todo.filter((x) => x.id !== args.id);
+            } else if (args.action === "pause") j.state = "paused";
+            else if (args.action === "resume") j.state = "active";
+            return { ok: true, id: args.id, said: { delete: "Deleted.", done: "Marked done.",
+              pause: "Paused.", resume: "Resumed." }[args.action] };
+          }
+          case "brain_schedule_add_todo": {
+            window.__scheduleCalls.push({ cmd, ...args });
+            const sc = window.__schedule;
+            const job = { id: "s" + (0xa000000000 + sc.todo.length).toString(16), kind: "todo",
+                          text: args.text,
+                          state: "active", repeats: false };
+            sc.todo.push(job);
+            return { ok: true, job };
+          }
           case "brain_memory_pin": {
             window.__memoryWrites.push({ cmd, ...args });
             const p = window.__profile;
@@ -1442,6 +1486,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // PC's sentence for a refused pin (Rust hands it on as the error).
   window.__profile = profile ? JSON.parse(JSON.stringify({
     facts: [], limit: 1200, refuse: null, reads: 0, ...profile })) : null;
+  window.__schedule = schedule ? JSON.parse(JSON.stringify({
+    jobs: [], todo: [], reads: 0, fails: null, ...schedule })) : null;
+  window.__scheduleCalls = [];
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;

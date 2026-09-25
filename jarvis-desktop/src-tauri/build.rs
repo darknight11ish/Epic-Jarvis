@@ -234,6 +234,13 @@ fn main() {
             // Brain window only.
             "get_deep",
             "ask_deep",
+            // "Coming up" (backend/schedule.patch): timers, alarms,
+            // reminders and the to-do list - a read, ONE job per change
+            // (pause, resume, delete, done, add time), and one new to-do
+            // item. No card; every change held on a stale link. Brain only.
+            "brain_schedule",
+            "brain_schedule_act",
+            "brain_schedule_add_todo",
             // Quickbar
             "hide_quickbar",
             "resize_quickbar",

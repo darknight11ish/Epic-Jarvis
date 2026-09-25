@@ -414,6 +414,18 @@
         <section class="view view-panes" id="view-work" role="tabpanel"
                  aria-labelledby="tab-work" hidden>
           <div class="panes">
+            <div class="card card-wide" id="coming-up-card">
+              <h2>Coming up</h2>
+              <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. Anything that repeats waits for your yes on an approval card.</p>
+              <div id="coming-up"></div>
+              <h3 class="subhead">To-do list</h3>
+              <div id="todo-list"></div>
+              <form id="todo-form" class="todo-form" autocomplete="off">
+                <input id="todo-text" class="field todo-text" type="text" maxlength="300"
+                       placeholder="Add to the to-do list" aria-label="Add to the to-do list">
+                <button id="todo-add" class="btn small" type="submit">Add</button>
+              </form>
+            </div>
             <div class="card card-wide">
               <h2>Long Fuse jobs</h2>
               <p class="note">

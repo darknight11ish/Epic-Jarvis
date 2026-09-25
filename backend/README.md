@@ -112,8 +112,9 @@ on a throwaway copy instead.
 | `past-recall.patch` | `jarvis_hud.py` | **Questions about the past get the old facts, labelled** (memory wave 1, 2026-09-24). "Where did I live before?" also recalls the matching retired facts, each ending "(no longer true since <date>)"; every other question gets exactly the search it got before. One line of the chat turn's recall. After `auto-learn.patch`. Needs `jarvis_past.py` - without it the old search runs. See "Memory wave 1", near the end. |
 | `memory-profile.patch` | `jarvis_hud.py` | **"Always keep in mind"** (memory wave 2, the owner's decision, 2026-09-24). A short list of facts the owner pins - at most 1,200 characters - is read with every local chat question, word for word, first in the recalled-facts block; a pinned fact the search also found is not repeated. Adds `GET` and `POST /api/memory/profile` (one fact per request, no card, like Forget). Last in the list, after `past-recall.patch`, whose search lines it extends. The work is in the shipped `rebuilt/jarvis_memory.py` - with an older copy the routes answer 501 and chat recalls exactly as before. See "Memory wave 2", near the end. |
 | `temporary-chat.patch` | `jarvis_hud.py` | **A temporary chat, and "Used in this answer"** (the owner's decisions, 2026-09-25). A chat request with `"temporary": true` recalls no facts (no pinned list either), learns nothing (no "Remember:" either) and is not kept in the chat history; `X-Jarvis-Route` says `"temporary": true` (and `"remember_off": true` for a "Remember:"). Adds `GET /api/memory/used?ids=`, the words of the facts an answer used, read by id. Last in the list, after `memory-profile.patch`, whose GET route and search lines it sits beside. The work is in the shipped `rebuilt/jarvis_memory.py` (`used_view`), `jarvis_chat_log.py` (`TEMPORARY_CHAT`) and `rebuilt/jarvis_events.py` (`capabilities.temporary_chat`). See "Temporary chat and Used in this answer", at the very end. |
-| `hardware.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Setups for any graphics card** (docs/HARDWARE-PROFILES.md, 2026-09-25). Adds `GET /api/hardware` (the cards, what runs now, three setups) and `POST /api/hardware/apply` (choose one - changes nothing by itself), `/create` (make a tuned model: ONE approval card, `models_create`) and `/measure`, and the approval notice's words for `models_create`. Two route blocks, each right after second-card's. Last in the list. Needs `jarvis_hardware.py` and `jarvis_profiles.py` - see "Setups for any graphics card", at the very end. |
-| `log-scrub.patch` | `jarvis_hud.py` | **Passwords, keys and the pairing token kept out of `backend.log`** (the extraction research's Module 1, 2026-09-25). Right after the token is worked out, `jarvis_scrub.install(HUD_TOKEN)` scrubs everything the backend prints or logs from then on, including loggers set up earlier; the banner says so in one line. Last in the list; its context is loopback-too's and bind-wildcard's lines. Needs `jarvis_scrub.py` - see "The log scrubber", near the very end. |
+| `hardware.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Setups for any graphics card** (docs/HARDWARE-PROFILES.md, 2026-09-25). Adds `GET /api/hardware` (the cards, what runs now, three setups) and `POST /api/hardware/apply` (choose one - changes nothing by itself), `/create` (make a tuned model: ONE approval card, `models_create`) and `/measure`, and the approval notice's words for `models_create`. Two route blocks, each right after second-card's. Needs `jarvis_hardware.py` and `jarvis_profiles.py` - see "Setups for any graphics card", near the end. |
+| `log-scrub.patch` | `jarvis_hud.py` | **Passwords, keys and the pairing token kept out of `backend.log`** (the extraction research's Module 1, 2026-09-25). Right after the token is worked out, `jarvis_scrub.install(HUD_TOKEN)` scrubs everything the backend prints or logs from then on, including loggers set up earlier; the banner says so in one line. Its context is loopback-too's and bind-wildcard's lines. Needs `jarvis_scrub.py` - see "The log scrubber", near the very end. |
+| `schedule.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Timers, alarms, reminders and the to-do list, with one scheduler** (the owner's decisions, 2026-09-25). Adds `GET /api/schedule` and `POST /api/schedule/add` and `/act`, starts the scheduler at boot, answers "set a timer for 10 minutes" and the like in `/api/chat` WITHOUT the model, and the approval notice's words for `schedule_repeat` (anything that repeats is one card). Last in the list. Needs `jarvis_schedule.py` and `jarvis_quick.py` - see "Timers, alarms, reminders and the to-do list", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -8013,3 +8014,109 @@ list, and its saved backup copy was updated to match.
 
 Not measured: whether the model now picks tools better. Only the model on
 your PC can show that, using the line in `tools/tool_eval/README.md`.
+
+---
+
+# Timers, alarms, reminders and the to-do list: `schedule.patch`, `jarvis_schedule.py`, `jarvis_quick.py`
+
+**What it is for.** The owner's decisions of 2026-09-25: timers, reminders and
+ONE shared scheduler first. Say or type "set a timer for 10 minutes",
+"remind me at 6 to call Mum", "wake me up at 7", "add milk to my to-do list"
+or "what's on my to-do list", and Jarvis does it and answers in one short
+sentence - **without asking the AI model**, so it works when the model is
+slow, unloaded or asleep. Both apps then show it under "Coming up" (the
+desktop's Brain, Work tab; the phone's Mind), each item with its own Pause,
+Resume, Delete or Done, and both show a notification when it goes off.
+
+**What asks first, and what does not.** A timer, an alarm or a reminder that
+goes off ONCE needs no approval card (the owner's decision). Anything that
+REPEATS - "remind me every weekday at 7 to take my pills" - is ONE approval
+card, `schedule_repeat`, which lists the next three times it will go off;
+nothing is set up until you say yes. Deleting or pausing anything is
+immediate, one item at a time. There is no "delete all".
+
+**Where it goes off.** On the PC, by the PC's clock (its own time zone,
+clock changes included). The apps show a job going off while they are
+connected to the PC: the desktop as a Windows toast, the phone as a
+notification. The phone sets no alarm of its own, so a reminder due while
+the phone is away from the PC is not shown on the phone then - it is still
+on the list. If the PC was off or asleep when something was due, it goes off
+once when the PC is back, and says "missed at 07:00".
+
+**What it understands without the model.** English only, and only whole
+sentences it is sure of - the full list is in `docs/JARVIS-API.md` section
+21.5. Anything else goes to the model exactly as before. Only words you
+typed or said count: a pasted message, a shared one or a picture goes to
+the model.
+
+**What is private.** A reminder's and a to-do item's words stay in
+`schedule.db` in the Jarvis settings folder on the PC. They are never put in
+the event stream or the audit log (ids only), never sent anywhere, and never
+learned as facts about you. While "Windows Hello for memory lists and chat
+history" (desktop) or "Hide memory lists and chat history" (phone) is on,
+the words are hidden in Coming up and a notification says only "Jarvis: a
+reminder is due."
+
+**What is where.**
+
+- `jarvis_schedule.py` - the scheduler: the jobs, the clock, repeating
+  rules, the card for a repeat, missed-while-off, the `schedule` event, and
+  the three routes' answers. Later features (a morning briefing, sleep
+  mode, the overnight tidy) plug in as new kinds of job
+  (`register_kind`), not as schedulers of their own.
+- `jarvis_quick.py` - the small English grammar, the one-sentence answers,
+  and the reply in the same format as a model's.
+- `schedule.patch` - the routes, starting the scheduler at boot (the
+  banner says `schedule   on - ...`), the fast path at the top of
+  `/api/chat`'s answering part, and `schedule_repeat`'s words in
+  `jarvis_gate.py`. Last in `$PATCHES`.
+- `jarvis_intake.py` - the learner skips a sentence that set a reminder.
+- `jarvis_agent.py` - five tools for the model (`set_timer`,
+  `set_reminder`, `todo_add`, `todo_done`, `coming_up`), for sentences the
+  grammar does not understand. Offered only when `[tools].enabled` in
+  `jarvis-framework.toml` names them, like every tool. After outside text
+  (a web page, an email) they set nothing.
+
+## Owner steps (one line each, in PowerShell)
+
+Put the new code on the PC (copies `jarvis_schedule.py`, `jarvis_quick.py`
+and the updated `jarvis_agent.py` and `jarvis_intake.py`, applies
+`schedule.patch`), from this repository's folder, then restart Jarvis and
+look for the `schedule   on` line in its window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+Then type "set a timer for 1 minute" in the Jarvis bar. The answer should
+say "Timer set for 1 minute." with "Done - answered on this PC without the
+AI model." under it, and a minute later a Windows toast should say "Timer
+done".
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_schedule.py
+```
+
+No model, no network, no graphics card. It checks the next-run times across
+the clock changes (in London and New York - this part is skipped on Windows,
+which cannot switch time zone inside one program, and says so), restarts,
+missed jobs going off once, the card for a repeat and none for a one-off,
+no words in the events or the audit log, one item per change, the grammar
+with its near-misses, that the model is never reached on a match (every
+network connection is made to fail), the learner, the model's tools, and
+that the patch applies to what the earlier patches wrote.
+
+## Not checked, said plainly
+
+- Nothing has run on your PC. The toast and the phone's notification have
+  not been seen on a real Windows PC or phone.
+- Daylight saving on Windows: the code asks Windows' own clock rules
+  (`time.mktime`), which the tests could not switch; the London and New York
+  checks ran on Linux.
+- The initiative engine and the daily digest are not hooked in. The engine
+  ticks every 30 minutes and forgets its findings on a restart, so it could
+  not run timers; the digest lives in your `jarvis_arbiter.py`, which this
+  repository does not hold.
+- English only.

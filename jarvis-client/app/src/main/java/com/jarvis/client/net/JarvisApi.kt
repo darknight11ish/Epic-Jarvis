@@ -574,6 +574,53 @@ class JarvisApi(
     suspend fun memoryProfile(): ApiResult<JsonObject> = probe(MemoryProfile.PATH)
 
     /**
+     * `GET /api/schedule`: "Coming up" - the timers, alarms, reminders and
+     * the to-do list ([Schedule.parse]). A 404 or 501 is a PC without the
+     * scheduler ([Schedule.missing]). A read.
+     */
+    suspend fun schedule(): ApiResult<JsonObject> = probe(Schedule.PATH)
+
+    /**
+     * `GET /api/schedule?id=`: ONE job, also one that went off in the last
+     * day - how a notification gets its words, since the `schedule` event
+     * carries the id and the kind only ([Schedule.parseOne]). A read.
+     */
+    suspend fun scheduleJob(id: String): ApiResult<JsonObject> {
+        if (!Schedule.validId(id)) return ApiResult.Failed(ApiError.Malformed("not a job id"))
+        return probe(Schedule.PATH + "?id=" + id)
+    }
+
+    /**
+     * `POST /api/schedule/act` (ONE job: pause, resume, delete, done) or
+     * `POST /api/schedule/add` (one to-do item). The status and body come
+     * back whole ([Schedule.Reply]), like [pinFact]: a 404 that says "no such
+     * job" and a 404 from a PC without the route must read differently.
+     */
+    suspend fun scheduleWrite(path: String, json: String): ApiResult<Schedule.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != Schedule.ACT_PATH && path != Schedule.ADD_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a schedule route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Schedule.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
+    /**
      * `GET /api/memory/used?ids=`: the words of the few facts an answer used
      * (its `X-Jarvis-Route` names them by id only), or that automatic
      * learning just saved (the `memory_saved` event's ids) - the owner's

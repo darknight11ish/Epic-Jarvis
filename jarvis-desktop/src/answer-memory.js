@@ -50,6 +50,7 @@ import {
   FORGOTTEN,
   forgetQuestion,
 } from "./auto-learn.js";
+import { DONE_LINE } from "./coming-up.js";
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -181,6 +182,9 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     const outcome = temporaryOutcome(a.sentTemporary, a.route);
     if (a.done && outcome === "unconfirmed") lines.push(TEMPORARY_NOT_CONFIRMED);
     if (a.route && a.route.remember_off === true) lines.push(REMEMBER_OFF);
+    // Answered WITHOUT the model (a timer, a reminder, the to-do list -
+    // JARVIS-API.md section 21): the small "done" line both apps show.
+    if (a.route && typeof a.route.quick === "string" && a.route.quick) lines.push(DONE_LINE);
     note.textContent = lines.join(" ");
     note.hidden = !lines.length;
     note.dataset.tone = outcome === "unconfirmed" ? "warn" : "quiet";

@@ -237,6 +237,13 @@ object JarvisRuntime {
 
     lateinit var settings: ClientSettings
         private set
+
+    /**
+     * The application context, for the one notification this object posts
+     * itself: a timer, an alarm or a reminder that went off on the PC
+     * ([onScheduleEvent]). The application's, never an Activity's.
+     */
+    @Volatile private var appContext: Context? = null
     lateinit var tokens: TokenStore
         private set
 
@@ -558,6 +565,7 @@ object JarvisRuntime {
         }
 
         settings = clientSettings
+        appContext = app
         tokens = tokenStore
         api = jarvisApi
         appearance = AppearanceStore(app)
@@ -1068,6 +1076,11 @@ object JarvisRuntime {
             // itself again, and a quiet line counts them. Never a
             // notification: nothing here reaches ApprovalNotifier.
             com.jarvis.client.net.AutoLearn.EVENT -> onMemorySaved(event.data)
+            // A timer, alarm or reminder went off on the PC, or Coming up
+            // changed (`{"id", "kind", "state"}` only - a doorbell, never the
+            // words). The list on Mind reads itself again; a job that went
+            // off is read by id and shown as a notification.
+            com.jarvis.client.net.Schedule.EVENT -> onScheduleEvent(event.data)
             // Face and bindings changed on another device. Each device renders
             // its own face and the server is only the sync channel, so this
             // just re-reads the shared document; nothing here redraws
@@ -2900,6 +2913,85 @@ object JarvisRuntime {
                 if (gone) _profileTick.update { it + 1 }
             }
             is ApiResult.Failed -> false to ("Not erased. " + describe(r.error))
+        }
+    }
+
+    // ------------------------------------------------------- Coming up ----
+    // Timers, alarms, reminders and the to-do list (the owner's decisions of
+    // 2026-09-25) - see [com.jarvis.client.net.Schedule] and
+    // ui/screens/ComingUpPlate.kt. The PC is the clock: everything goes off
+    // there, and this phone hears of it while it is connected.
+
+    private val _scheduleTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one on every `schedule` event and after every change made
+     * from this phone, so Mind's "Coming up" reads itself again.
+     */
+    val scheduleTick: StateFlow<Int> = _scheduleTick.asStateFlow()
+
+    /** The jobs already shown as notifications, by id and when they went off. */
+    private val scheduleShown = LinkedHashSet<String>()
+
+    /** `GET /api/schedule`. A read: never held. */
+    suspend fun schedule(): ApiResult<JsonObject> = api.schedule()
+
+    /**
+     * ONE job: pause, resume, delete or done. No card - none of them can make
+     * Jarvis do more - but held on a stale link (rule 4), like every change,
+     * and the desktop's `brain_schedule_act`. @return whether it changed, and
+     * the sentence to show.
+     */
+    suspend fun scheduleAct(id: String, action: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Schedule.actBody(id, action)
+            ?: return false to "That is not something one job can do."
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ACT_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+    }
+
+    /** One new to-do item, in the owner's words. Held on a stale link. */
+    suspend fun addTodo(text: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Schedule.todoBody(text)
+            ?: return false to "Type what to add first (up to ${com.jarvis.client.net.Schedule.MAX_TEXT} characters)."
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not added. " + describe(r.error))
+        }
+    }
+
+    private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?) {
+        _scheduleTick.update { it + 1 }
+        val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(data as? JsonObject) ?: return
+        val context = appContext ?: return
+        scope.launch {
+            val job = when (val r = api.scheduleJob(id)) {
+                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+                is ApiResult.Failed -> null
+            }
+            // Once per job going off: a replayed event after a reconnect
+            // must not ring twice.
+            val key = id + "@" + (job?.firedAt?.toLong() ?: 0L)
+            val fresh = synchronized(scheduleShown) {
+                if (scheduleShown.size > 500) scheduleShown.clear()
+                scheduleShown.add(key)
+            }
+            if (!fresh) return@launch
+            val security = settings.security.value
+            // A notification is outside the app: a lock that is ON counts,
+            // whether or not the lists were shown a moment ago.
+            val locked = security.appLock || security.privateLists
+            val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
+            val lockScreen = job?.lockScreen?.takeIf { it.isNotEmpty() }
+                ?: com.jarvis.client.net.Schedule.lockScreen(kind)
+            com.jarvis.client.service.ScheduleNotifier.post(context, id, kind, title, text, lockScreen)
         }
     }
 

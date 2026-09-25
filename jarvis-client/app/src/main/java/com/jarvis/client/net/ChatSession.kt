@@ -381,6 +381,10 @@ class ChatSession(
                     // header, second-card.patch): still this PC, but not the
                     // everyday model, so it gets a line of its own.
                     val secondCard = SecondCard.routeFromHeader(routeHeader)
+                    // Answered on the PC WITHOUT the model - a timer, a
+                    // reminder, the to-do list (`quick` in the same header;
+                    // docs/JARVIS-API.md section 21): the small "done" line.
+                    val quick = Schedule.quickFromRouteHeader(routeHeader)
                     // The facts this answer used, by id, for "Used 2
                     // memories" - none on a temporary one - and what the PC
                     // said about a temporary question (TemporaryChat.notes).
@@ -545,6 +549,7 @@ class ChatSession(
                             },
                             if (cloud && !failed) "Answered by a cloud model, not on your PC." else null,
                             if (secondCard != null && !cloud && !failed) SecondCard.routeNote(secondCard) else null,
+                            if (quick && !failed) Schedule.DONE_LINE else null,
                         ).plus(temporaryNotes).joinToString(" ").ifEmpty { null }
                     }
                 }

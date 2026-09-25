@@ -210,8 +210,32 @@ def owner_turns(messages: Iterable, origin: str) -> list[dict]:
         # learner read it too would put a reworded second copy in the queue.
         if remember_command(text) is not None:
             continue
+        # A command to the scheduler - "remind me to call Mum at 6", "add
+        # milk to my to-do list" - is not a fact about the owner. Its words
+        # are kept in jarvis_schedule's own file and nowhere else (the
+        # owner's decision, 2026-09-25: a reminder is not learned as a fact).
+        if schedule_command(text):
+            continue
         out.append({"role": "user", "content": text})
     return out
+
+
+def schedule_command(text) -> bool:
+    """Did this sentence set a timer, an alarm, a reminder or a to-do item?
+    True when it fits jarvis_quick's grammar, or when the scheduler recorded
+    it as a command (the model set it with a tool). False when neither
+    module is there - the learner then reads it, as it did before."""
+    try:
+        import jarvis_quick
+        if jarvis_quick.is_command(text):
+            return True
+    except Exception:
+        pass
+    try:
+        import jarvis_schedule
+        return jarvis_schedule.was_command(text)
+    except Exception:
+        return False
 
 
 # --------------------------------------------------------------------------
