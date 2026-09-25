@@ -96,7 +96,8 @@ memory for this run only.
 
 DEEP QUESTIONS. POST /api/deep/ask queues one background job; it asks the
 big model the question with no tools, no memory and no web, and keeps the
-answer in <config dir>/deep-questions.jsonl, capped. There is NO approval
+answer in memory until Jarvis stops - never on disk (security audit L2,
+see _keep). There is NO approval
 card per question, on purpose: the owner approved the switch, a question
 acts on nothing and nothing leaves this PC. Every job's speed is measured
 and kept (tokens and words per second), because none of colibri's speed
@@ -466,10 +467,6 @@ def _state_path() -> Path:
 
 def _log_path() -> Path:
     return _config_dir() / "big-model-engine.log"
-
-
-def _deep_path() -> Path:
-    return _config_dir() / "deep-questions.jsonl"
 
 
 def _port() -> int:
@@ -1924,8 +1921,6 @@ def handle_post(body) -> tuple:
 MAX_QUESTION_CHARS = 4000
 MAX_ANSWER_CHARS = 60000
 MAX_QUEUED = 3
-KEEP_JOBS = 100
-MAX_FILE_BYTES = 2 * 1024 * 1024
 LIST_JOBS = 20
 
 DEEP_SYSTEM = ("You are answering one question from the owner of this PC, carefully and in "
@@ -1936,7 +1931,6 @@ DEEP_SYSTEM = ("You are answering one question from the owner of this PC, carefu
 _DEEP_LOCK = threading.Lock()
 _DEEP: "OrderedDict[str, dict]" = OrderedDict()     # jobs of this run, oldest first
 _DEEP_WORKER = {"running": False}
-_FILE_LOCK = threading.Lock()
 
 
 def _public_job(j: dict) -> dict:
@@ -1949,48 +1943,26 @@ def _public_job(j: dict) -> dict:
 
 
 def _load_deep() -> list:
-    """The kept jobs, oldest first. A broken line is skipped."""
-    out = []
-    try:
-        with open(_deep_path(), encoding="utf-8") as f:
-            for line in f:
-                try:
-                    r = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(r, dict) and isinstance(r.get("id"), str):
-                    out.append(r)
-    except OSError:
-        pass
-    return out
+    """The kept jobs, oldest first: none. Deep questions are no longer
+    written to disk (security audit L2, 2026-09-25) - see _keep."""
+    return []
 
 
 def _keep(job: dict) -> None:
-    """Append one finished job; trim the file to KEEP_JOBS and
-    MAX_FILE_BYTES, oldest first, by rewriting it whole."""
-    row = {"v": 1, **{k: job.get(k) for k in ("id", "question", "state", "answer", "queued",
-                                              "started", "finished", "seconds", "tokens",
-                                              "prompt_tokens", "words", "words_per_s",
-                                              "tokens_per_s", "model", "why")}}
-    with _FILE_LOCK:
-        p = _deep_path()
-        try:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            with open(p, "a", encoding="utf-8", newline="\n") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            if p.stat().st_size <= MAX_FILE_BYTES and len(_load_deep()) <= KEEP_JOBS:
-                return
-            rows = _load_deep()[-KEEP_JOBS:]
-            lines = [json.dumps(r, ensure_ascii=False) + "\n" for r in rows]
-            while lines and sum(len(l.encode("utf-8")) for l in lines) > MAX_FILE_BYTES:
-                lines.pop(0)
-            tmp = p.with_suffix(".jsonl.tmp")
-            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines)
-            tmp.replace(p)
-        except OSError:
-            job["why"] = (job.get("why") or "") + " (It could not be saved to disk, so it is " \
-                                                  "gone after a restart.)"
+    """Keeps nothing on disk, on purpose (security audit L2, 2026-09-25).
+
+    A deep question and its answer used to be appended, in plain text, to
+    <config dir>/deep-questions.jsonl - beside a chat history that is
+    "encrypted or not kept" (docs/ARCHITECTURE.md section 5), and outside
+    its switch, its delete and its keep period. The smallest change that
+    makes that sentence true is to keep them only in memory, for this run:
+    they are listed until Jarvis stops, as a question still waiting always
+    was. Keeping them encrypted, under the history switch, would reuse
+    jarvis_chat_log's key - a larger change, left for when the owner wants
+    answers to survive a restart. A deep-questions.jsonl written by an
+    older Jarvis is no longer read or written; backend/README.md says how
+    to delete it."""
+    return None
 
 
 def deep_available() -> tuple:
@@ -2035,7 +2007,7 @@ def ask(question, *, spawn: Optional[Callable] = None) -> tuple:
     approval card per question, on purpose: the owner approved the
     "deep_questions" switch with a card, a question acts on nothing (no
     tools, no memory writes, no web), and nothing leaves this PC - the
-    answer is kept in <config dir>/deep-questions.jsonl, on this PC."""
+    answer is kept in memory, on this PC, until Jarvis stops."""
     if not isinstance(question, str) or not question.strip():
         return 400, {"ok": False, "state": "refused",
                      "error": "say what to ask: {\"question\": \"...\"}"}

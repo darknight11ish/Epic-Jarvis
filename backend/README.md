@@ -1257,11 +1257,12 @@ a local model whose name merely contains "cloud" is not caught), and
 `test_router_private_terms.py` with five real cloud names and five local
 controls.
 
-**Still open, for the security audit:** the switch and install routes
-live in the owner's `jarvis_models.py`, which is not in this repo, so they
-do not refuse such a name yet, and the learner checks only `OLLAMA_URL`'s
-address, not the model's name. Both are on the automatic-learning build's
-list of required guards.
+**Since then:** the learner checks the model's name as well as
+`OLLAMA_URL`'s address (`auto-learn.patch`), and the chat path refuses such
+a model outright (security audit H1, 2026-09-25 - "The PC-side security
+audit's fixes", at the end of this file). **Still open:** the switch and
+install routes live in the owner's `jarvis_models.py`, which is not in this
+repo, so they do not refuse such a name yet.
 
 ## Test it
 
@@ -2986,10 +2987,10 @@ environment before it can do anything at all:
 
 | integration | environment variables |
 |---|---|
-| calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` |
+| calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` (the URL `https://`, or plain `http://` only to this PC or a Tailscale address - security audit L7, 2026-09-25) |
 | email | `JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` (default 993), `JARVIS_IMAP_USER`, `JARVIS_IMAP_PASSWORD`, `JARVIS_IMAP_MAILBOX` (default `INBOX`) |
 | notes | `JARVIS_OBSIDIAN_VAULT` or `[notes.obsidian] vault_directory` (the vault read as a folder - no key; used first when set, since 2026-09-24), `JARVIS_NOTES_BACKEND` (`"vault"`, `"joplin"` or `"obsidian"`, optional - otherwise the vault, then whichever token is set), `JARVIS_JOPLIN_URL`/`JARVIS_JOPLIN_TOKEN`, `JARVIS_OBSIDIAN_URL`/`JARVIS_OBSIDIAN_API_KEY` |
-| home | `JARVIS_HOME_URL`, `JARVIS_HOME_TOKEN` |
+| home | `JARVIS_HOME_URL`, `JARVIS_HOME_TOKEN` (the same rule for the URL as the calendar's) |
 
 Turning one on with nothing configured is safe - `plan()`/`plan_states()`/
 `plan_service()` all notice and return a plan that only ever explains why it
@@ -5708,8 +5709,9 @@ does.
 - **Deep questions.** `ask()` queues one job (at most three waiting or
   running) and returns 202; one worker answers them in turn with no tools,
   no memory writes and no web; the answer, its time, tokens and tokens and
-  words per second go to `<config dir>/deep-questions.jsonl` (last 100 jobs,
-  2 MB at most). No approval card per question - said in the docstring: the
+  words per second are kept in memory until the backend stops - never on
+  disk since 2026-09-25 (security audit L2; they went to
+  `deep-questions.jsonl` in plain text before). No approval card per question - said in the docstring: the
   switch was approved, a question acts on nothing and leaves the PC for
   nowhere. A `deep` event (`{"id", "state"}` only) is published when one
   finishes.
@@ -7043,7 +7045,9 @@ of `jarvis_intake.py`:
    result is also checked with the same warning rules memory cards use.
 4. **Cards say what shaped them.** If Jarvis read something before proposing
    an action - or read outside text earlier in the same conversation, or your
-   newest message was pasted, shared or from the clipboard - the card ends
+   newest message was not typed or said by you (pasted, shared, from the
+   clipboard, sent with a picture, or with no tag at all), or the app sent
+   extra text of its own (since 2026-09-25, security audit M1) - the card ends
    with a short "What shaped this request:" list: which tools it had read,
    a warning if that text looked like planted instructions, and any address,
    link, path or command on the card that came from what it read rather than
@@ -7053,7 +7057,7 @@ of `jarvis_intake.py`:
    turn where Jarvis has read an email, a web page, a file or anything else
    a tool gave back (not the calculator, and not its own "note saved"), or
    the conversation read outside text earlier, or your newest message was
-   pasted, shared or from the clipboard, a note it wants to add to
+   not typed or said by you (see item 4), a note it wants to add to
    Obsidian, Logseq or Joplin raises an approval card. The card says why in
    one line - "Jarvis read outside text in this conversation, so it asks
    before writing to your notes." - above the "What shaped this request"
@@ -7413,3 +7417,180 @@ block exactly as before when nothing is pinned; on a first question the
 Jarvis rules still go first; the routes; no retire card for a pinned fact;
 and the patch applies forwards and backwards. Every check about pinning
 fails on the code before this change.
+
+---
+
+# The PC-side security audit's fixes (2026-09-25)
+
+A security audit of the PC side (#57) found one high, four medium and nine
+low problems. This section says what each fix does, in plain words, what
+you may notice, and what is still open. Nothing here is a patch against
+your own files: every change is in a module this repository ships whole
+(`jarvis_agent.py`, `jarvis_ui_control.py`, `jarvis_android_control.py`,
+`jarvis_browser_control.py`, `jarvis_task_control.py`, `jarvis_wiki.py`,
+`jarvis_big_model.py`, `jarvis_calendar.py`, `jarvis_home.py`,
+`jarvis_local_http.py`, `rebuilt/jarvis_router.py`,
+`rebuilt/jarvis_memory.py`, `rebuilt/jarvis-framework.toml`), so
+`apply-patches.ps1` copies them in as usual.
+
+## What changed, finding by finding
+
+- **H1 - a cloud model as the everyday model.** Ollama can run some models
+  on its own servers (names ending in `-cloud` or `:cloud`, such as
+  `gpt-oss:120b-cloud`). They are reached through the Ollama on this PC, so
+  every privacy check used to say "stays on this machine" while your
+  emails, files and chats went to ollama.com. Now:
+  - `jarvis_agent.run_local_turn` - which answers every local chat turn -
+    sends such a model **nothing** and shows, instead of an answer:
+    "Jarvis did not answer: the everyday model ... is one of Ollama's cloud
+    models ... Switch the everyday model to one that runs on this PC
+    (Brain -> Models). A cloud model belongs in a cloud lane, where Jarvis
+    asks you before each question."
+  - It also refuses when `OLLAMA_URL` points at another machine (anything
+    but `127.0.0.1`, `localhost` or `::1`), the same check the learner has
+    always made. The second graphics card's lane is checked the same way.
+  - The router (`jarvis_router.choose`) gives such a turn the gate
+    `cloud_model`, no memory, and a reason that starts "refused", instead
+    of "stays on this machine".
+- **M1 - the note rule after outside text had two holes.** Only words you
+  typed or said (`typed`, `voice`) now count as your own. A message with no
+  tag, `unknown`, `picture_caption` (a picture can show text you did not
+  write), `voice_unverified`, or any tag nobody defined counts as outside
+  text: a note write in that turn asks first, and cards say so under "What
+  shaped this request". A `system` message the app itself sent counts too
+  ("The app sent extra text with your message (for example the clipboard),
+  which you did not type."). The desktop now sends clipboard text as its
+  own user message tagged `clipboard`, just before your question - the
+  same shape as the phone's Share - instead of as a system message.
+- **M2 - a shell command inherited every password.** An approved shell
+  command, and the `adb` commands phone control runs, now start with only
+  what a program needs to run (the Windows folders, `PATH`, the temp
+  folders, your profile folder, PowerShell's module path, and adb's own
+  `ANDROID_*`/`ADB_*` settings) - never `HUD_TOKEN`, `JARVIS_*_PASSWORD`,
+  `JARVIS_*_TOKEN`, `*_API_KEY` or anything else that looks like a secret
+  (`jarvis_child_env.inherited()`, the list the second Ollama already
+  uses). A command that needs one of those can no longer see it; set it in
+  the command itself if you really mean it to.
+- **M3 - Jarvis could press its own buttons.** "Control the computer"
+  refuses every window of Jarvis's own - the titles the desktop app sets
+  ("Jarvis", "Jarvis Desktop Widget", "Jarvis - Brain", "Jarvis Desktop -
+  Settings", the HUD, Faces, Welcome), and any window whose title starts
+  with the word Jarvis (so the HUD page open in a browser is covered too).
+  "Control the phone" asks the phone which app is in front before every
+  tap, swipe, key or typing step, and stops if it is a Jarvis app
+  (`com.jarvis.client`, the older `com.jarvis.assistant`, or a debug build
+  of either) - or if the phone's answer cannot be read. A screenshot is
+  still allowed: it presses nothing.
+- **L1 - two places trusted "allowed" instead of your yes.** Resuming a
+  paused task and writing to the wiki now run only when a person approved
+  the card. If your settings file sets either to `auto` or `notify`, the
+  job is refused and says which line to set back to `"ask"`.
+- **L2 - deep questions were kept in plain text.** Deep questions and their
+  answers are now kept in memory only, until Jarvis stops - never on disk.
+  They used to go to `deep-questions.jsonl` in plain text, outside the chat
+  history's switch and encryption. This was the smallest change that makes
+  "encrypted or not kept" true; the cost is that an answer is gone after a
+  restart. Keeping them encrypted under the history switch (reusing the
+  chat history's key) is possible later if you want answers to survive a
+  restart. An older `deep-questions.jsonl` is no longer read or written;
+  delete it with the command below.
+- **L3 - Erase left the earlier wording of an edited fact.** "Erase the
+  words" now also erases every earlier wording that fact replaced (an edit,
+  or a correction), all the way back, the same way: words gone, dates kept.
+  It never erases a LATER wording - erasing an old version does not erase
+  the fact that replaced it. The reply lists the ids as `earlier`.
+- **L4 - the event stream carried some content.** While Jarvis drives a
+  browser, a window or the phone, the live status line (the `activity`
+  event, and `activity_detail` in `/api/status`) now says only the step's
+  number and a fixed word - "Step 2/3: a click in another program's
+  window", "Step 1/2: opening a page in the browser", "Step 1/1: a tap on
+  the phone" - never an address, a window title, a control's name or text
+  being typed. Those are on the approval card.
+- **L6 - `server/jarvis_mobile_ws.py`** is marked at its top as legacy and
+  unused, and its README example now binds to `127.0.0.1` and requires the
+  token. It is not deleted - that is your call.
+- **L7 - no password over plain `http://` to another machine.** The
+  calendar (`JARVIS_CALDAV_URL`) and Home Assistant (`JARVIS_HOME_URL`)
+  refuse a plain `http://` address unless it is this PC or a Tailscale
+  address (`100.64.x.x`-`100.127.x.x`, or a name ending in `.ts.net`),
+  which Tailscale encrypts. **This may stop your Home Assistant working**:
+  Home Assistant serves plain `http://` on port 8123 unless you set up
+  https, and an address like `http://192.168.1.10:8123` or
+  `http://homeassistant.local:8123` is now refused, with the reason in
+  plain words. Use its https address, or its Tailscale address. There is no
+  switch to allow plain http anyway; whether there should be is your call.
+- **L8 - settings that claimed a sandbox.** The four `sandbox_*` settings
+  in `[security]` are gone from the shipped `jarvis-framework.toml`, with a
+  comment saying why: nothing ever read them, and there is no sandbox.
+  If your own file has them, they do nothing; `apply-patches.ps1` will
+  show them as a difference.
+
+## Owner steps (one line each, in PowerShell)
+
+See whether your calendar or Home Assistant address is plain `http://` to
+another machine (it prints both; nothing is changed):
+
+```powershell
+'JARVIS_CALDAV_URL = ' + [Environment]::GetEnvironmentVariable('JARVIS_CALDAV_URL','User'); 'JARVIS_HOME_URL = ' + [Environment]::GetEnvironmentVariable('JARVIS_HOME_URL','User')
+```
+
+Delete the old plain-text deep-questions file (it lives in your Jarvis
+settings folder, usually `%USERPROFILE%\.openjarvis`; nothing else is
+touched):
+
+```powershell
+$f = "$env:USERPROFILE\.openjarvis\deep-questions.jsonl"; if (Test-Path $f) { Remove-Item $f; 'Deleted ' + $f } else { 'Nothing to delete at ' + $f }
+```
+
+## Still open, said plainly
+
+- **Service passwords and tokens still live in environment variables.**
+  `JARVIS_IMAP_PASSWORD`, `JARVIS_CALDAV_PASSWORD`, `JARVIS_HOME_TOKEN`,
+  `JARVIS_GITHUB_TOKEN`, `JARVIS_JOPLIN_TOKEN` and `JARVIS_OBSIDIAN_API_KEY`
+  are read from the environment. One saved with
+  `SetEnvironmentVariable(..., 'User')` sits in plain text in the registry,
+  and every program you start inherits it - not only Jarvis. This pass
+  stops Jarvis handing them to the commands it runs (M2 above); moving them
+  into Windows Credential Manager, the way the pairing token and the chat
+  history key already are, is a separate task.
+- **Switching to or installing a cloud model is not refused yet.** The
+  switch and install routes live in your own `jarvis_models.py`, which is
+  not in this repository, and no patch here reaches that code. So you can
+  still pick `gpt-oss:120b-cloud` - and then every chat is refused with the
+  sentence above. The chat refusal is the backstop; refusing at the switch
+  itself needs a patch against `jarvis_models.py`.
+- **One place is not covered by the chat refusal:** if `jarvis_agent.py`
+  were missing or older than `chat-stream.patch`, `jarvis_hud.py` would
+  fall back to its plain relay, which does not check. That relay is on your
+  PC only; `jarvis_agent.py` ships with every install, so this should not
+  happen.
+- **One pairing token opens everything** (M4 - per-device tokens, #74),
+  **supply-chain pinning** (L5: no versions or hashes in
+  `requirements.txt`, no checksum on the F5-TTS download) and **the ledger
+  key beside its data** (L9) are separate tasks.
+- The phone-control check reads `dumpsys window`'s `mCurrentFocus` and
+  `mFocusedApp` lines. They are the same on every Android version this
+  project targets as far as the documentation says, but it was not run on
+  a real phone here; if your phone words them differently, phone control
+  stops before every tap and says it could not tell which app is in front.
+- A `system` message sent by an app now counts as outside text. Checked in
+  this repository: the desktop no longer sends one, the phone never did,
+  and the HUD page (`jarvis-desktop/src/jarvis_hud.html`) sends only user
+  and assistant messages, each user message tagged. An older app, or
+  anything else that sends a `system` message or an untagged question,
+  will now get a card before a note is written.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_security_pc.py; py -3 backend\test_task_control.py; py -3 backend\test_wiki.py; py -3 backend\test_big_model.py
+```
+
+`test_security_pc.py` turns the audit's proof scripts into tests, about 120
+checks, no network, no model, no real adb and no real clicks. Run against
+the code the audit read, every finding above fails at least one of them
+(86 failures there, counting a test that stops at a function the old code
+did not have). L1's tests are in `test_task_control.py` and `test_wiki.py`,
+L2's in `test_big_model.py`, L4's in `test_ui_control.py`,
+`test_browser_control.py` and `test_android_control.py`, and the
+desktop's clipboard message in `jarvis-desktop/tests/provenance.mjs`.

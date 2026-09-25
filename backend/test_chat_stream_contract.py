@@ -93,7 +93,7 @@ def _agent(bodies, *, stream=True, wait=0.0, model="jarvis-primary", legacy=Fals
             raise b
         return W.FakeResponse(W.stream(b, model=model, legacy=legacy))
     out = []
-    AG.run_local_turn([{"role": "user", "content": "hi"}], model, ollama_url="http://ollama",
+    AG.run_local_turn([{"role": "user", "content": "hi"}], model, ollama_url="http://127.0.0.1:11434",
                       stream_out=out.append, open_stream=opener, stream=stream,
                       enabled_tools={"calculator"}, gate_check=_gate(wait),
                       context_length=16384, keepalive_seconds=keepalive,

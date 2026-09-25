@@ -365,7 +365,7 @@ def _fake_turn(fake_mod, gate, *, press=None, tool_args=None):
         def read(self, n=1024): return b""
     try:
         fake_mod.on_step = press
-        AG.run_local_turn([{"role": "user", "content": "go"}], "m", ollama_url="http://x",
+        AG.run_local_turn([{"role": "user", "content": "go"}], "m", ollama_url="http://127.0.0.1:11434",
                           stream_out=lambda b: None, post=post, gate_check=gate,
                           open_stream=lambda u, p: S(), record_chain=lambda s: None)
     finally:
@@ -443,6 +443,41 @@ def t_a_denied_resume_runs_nothing_and_stays_paused():
     code, out = TC.handle_post("/api/task/stop", {})
     check("stop on a paused task forgets it", code == 200 and out["forgot_paused"] == "appr_d")
     check("nothing is paused now", TC.paused() is None)
+
+
+def t_a_resume_let_through_with_nobody_asked_runs_nothing():
+    """Security audit L1: `allowed` is not a person's yes. At tier auto or
+    notify the gate allows with nobody asked (ARCHITECTURE.md section 3), and
+    resume ran on `allowed` alone - so an owner file with the action at auto
+    or notify resumed a paused task with no card. Fails on the old code."""
+    for tier in ("auto", "notify"):
+        _reset()
+        mod = FakeModule()
+        TC.remember_paused("appr_l1", tool="control_computer", action="jarvis_ui_control_run",
+                           module="fake", plan=FakePlan("g", ["a", "b"]), not_run=2, done=0)
+        v = Verdict(True, tier)
+        v.tier = tier
+        TC.resume("t", gate_check=lambda *a, v=v: v, importer=lambda n: mod, wait=True)
+        check(f"a resume allowed at tier {tier}, nobody asked: nothing ran", mod.ran == [],
+              repr(mod.ran))
+        check(f"... it is still paused", TC.paused() is not None)
+        last = TC.status()["last_resumed"]
+        check(f"... and the reason says so in plain words, with the line to change",
+              last and last["ok"] is False and "without asking anyone" in last["reason"]
+              and "jarvis_ui_control_run" in last["reason"], repr(last))
+    # A gate from before gate-outcome.patch: no outcome; allowed at tier
+    # "ask" is a person, allowed at any other tier is not.
+    _reset()
+    mod = FakeModule()
+    TC.remember_paused("appr_l1b", tool="control_computer", action="jarvis_ui_control_run",
+                       module="fake", plan=FakePlan("g", ["a"]), not_run=1, done=0)
+    old = Verdict(True, None)
+    old.tier = "notify"
+    TC.resume("t", gate_check=lambda *a: old, importer=lambda n: mod, wait=True)
+    check("an older gate, allowed at notify: nothing ran", mod.ran == [])
+    old.tier = "ask"
+    TC.resume("t", gate_check=lambda *a: old, importer=lambda n: mod, wait=True)
+    check("an older gate, allowed at ask (a person was asked): it ran", mod.ran == ["a"])
 
 
 def t_a_broken_gate_fails_closed():
@@ -651,6 +686,7 @@ NEW_TESTS = (t_stop_and_pause_refuse_when_nothing_runs,
              t_pause_mid_run_keeps_the_rest_for_resume,
              t_resume_asks_first_and_runs_only_the_rest,
              t_a_denied_resume_runs_nothing_and_stays_paused,
+             t_a_resume_let_through_with_nobody_asked_runs_nothing,
              t_a_broken_gate_fails_closed, t_stop_while_the_resume_card_waits_wins,
              t_only_one_resume_card_at_a_time, t_a_stale_pause_is_forgotten,
              t_the_card_note_reaches_the_model_with_the_answer,

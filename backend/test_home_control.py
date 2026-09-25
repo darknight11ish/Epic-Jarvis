@@ -76,7 +76,7 @@ with with_env():
     check("no entity ids given -> refuses before needing a URL",
           "no entity ids" in p_none.reason_empty)
 
-with with_env(url="http://ha.local:8123", token="tok123"):
+with with_env(url="https://ha.local:8123", token="tok123"):
     with NoNetwork():
         p = H.plan_states(["light.kitchen", "lock.front_door"])
     check("plan_states() opens no socket", True)
@@ -86,14 +86,14 @@ with with_env(url="http://ha.local:8123", token="tok123"):
           all("tok123" not in q.url for q in p.queries))
     check("get_states plans are never marked heavy", p.heavy is False)
 
-with with_env(url="http://ha.local:8123"):
+with with_env(url="https://ha.local:8123"):
     many = [f"light.room{i}" for i in range(50)]
     p = H.plan_states(many)
     check("entity list is capped", len(p.queries) == H._MAX_ENTITIES)
 
 # ── plan_service(): opens no socket, marks lock/alarm/cover heavy ────────
 
-with with_env(url="http://ha.local:8123", token="tok123"):
+with with_env(url="https://ha.local:8123", token="tok123"):
     with NoNetwork():
         p_light = H.plan_service("light", "turn_on", "light.kitchen", {"brightness": 200})
         p_lock = H.plan_service("lock", "unlock", "lock.front_door")
@@ -111,14 +111,14 @@ with with_env(url="http://ha.local:8123", token="tok123"):
     check("the URL names the domain and service",
           p_light.queries[0].url.endswith("/api/services/light/turn_on"))
 
-with with_env(url="http://ha.local:8123"):
+with with_env(url="https://ha.local:8123"):
     p_bad = H.plan_service("", "turn_on", "light.kitchen")
     check("a missing domain refuses before needing a URL",
           "are all required" in p_bad.reason_empty)
 
 # ── describe(): the literal request and body, never the token ────────────
 
-with with_env(url="http://ha.local:8123", token="tok123"):
+with with_env(url="https://ha.local:8123", token="tok123"):
     text = H.describe(H.plan_states(["light.kitchen"]))
     check("describe() prints the literal URL", "/api/states/light.kitchen" in text)
     check("describe() says a token will be sent, never what it is",
@@ -132,14 +132,14 @@ with with_env(url="http://ha.local:8123", token="tok123"):
     check("describe() prints the literal POST body",
           '"entity_id": "light.kitchen"' in light_text)
 
-with with_env(url="http://ha.local:8123", token=None):
+with with_env(url="https://ha.local:8123", token=None):
     text = H.describe(H.plan_states(["light.kitchen"]))
     check("unauthenticated calls this out rather than staying silent",
           "No access token is configured" in text)
 
 # ── run(): refuses without approval ───────────────────────────────────────
 
-with with_env(url="http://ha.local:8123", token="tok123"):
+with with_env(url="https://ha.local:8123", token="tok123"):
     p = H.plan_states(["light.kitchen"])
     unapproved = H.run(p)
     check("run() without approval does nothing (read)", unapproved["ok"] is False)
@@ -150,7 +150,7 @@ with with_env(url="http://ha.local:8123", token="tok123"):
 
 # ── run(): get_states, normalised and bounded ─────────────────────────────
 
-with with_env(url="http://ha.local:8123", token="tok123"):
+with with_env(url="https://ha.local:8123", token="tok123"):
     p = H.plan_states(["light.kitchen", "lock.front_door"])
     calls = []
 
@@ -177,7 +177,7 @@ with with_env(url="http://ha.local:8123", token="tok123"):
 
 # ── run(): call_service, exactly one request ──────────────────────────────
 
-with with_env(url="http://ha.local:8123", token="tok123"):
+with with_env(url="https://ha.local:8123", token="tok123"):
     p = H.plan_service("lock", "unlock", "lock.front_door")
     calls = []
 
@@ -199,7 +199,7 @@ with with_env(url="http://ha.local:8123", token="tok123"):
 
 # ── heavy is decided by the ENTITY too, not only the service domain ───────
 
-with with_env(url="http://ha.local:8123", token="tok123"):
+with with_env(url="https://ha.local:8123", token="tok123"):
     # `homeassistant.turn_on/turn_off/toggle` are real services that FORWARD
     # to the entity's own domain. Classifying on the service domain alone
     # left the approval card for an unlock without its "this is marked
@@ -229,7 +229,7 @@ with with_env(url="http://ha.local:8123", token="tok123"):
 # been computed from: turn_off on a light, unlocking a door, with no "marked
 # HEAVY" line anywhere on the card.
 
-with with_env(url="http://ha.local:8123", token="tok123"):
+with with_env(url="https://ha.local:8123", token="tok123"):
     smuggled = H.plan_service("homeassistant", "turn_off", "light.kitchen",
                               {"entity_id": "lock.front_door"})
     body = smuggled.queries[0].body if smuggled.queries else {}
@@ -267,7 +267,7 @@ with with_env(url="http://ha.local:8123", token="tok123"):
 
 # ── an entity id is not free text, and never reaches a URL raw ────────────
 
-with with_env(url="http://ha.local:8123", token="tok123"):
+with with_env(url="https://ha.local:8123", token="tok123"):
     # plan_states ships at tier `auto` - no card, so nobody sees the URL
     # before it is sent. A traversal in an id would have reached the wire as
     # a request to a completely different route, under a standing grant
@@ -289,7 +289,7 @@ with with_env(url="http://ha.local:8123", token="tok123"):
     good = H.plan_states(["light.kitchen"])
     check("a real entity id still plans a read", len(good.queries) == 1)
     check("and lands on the states route",
-          good.queries[0].url == "http://ha.local:8123/api/states/light.kitchen",
+          good.queries[0].url == "https://ha.local:8123/api/states/light.kitchen",
           good.queries[0].url)
 
     # A mixed list keeps the good ones and drops the rest, rather than

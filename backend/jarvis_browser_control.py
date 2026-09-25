@@ -1905,6 +1905,9 @@ def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets)
         out.update(extra)
         return out
 
+    _STEP_WORD = {"navigate": "opening a page", "read_page": "reading the page",
+                  "click": "a click", "type": "typing", "select": "a selection",
+                  "read": "reading a value", "read_new": "reading what changed"}
     for i, step in enumerate(p.steps, 1):
         # The checkpoint comes FIRST, before the announcement. It used to
         # come second, and `announce` is wired to a sticky
@@ -1923,7 +1926,14 @@ def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets)
             label = "read the page's text"
         else:
             label = f'{step.action} "{step.name}"'
-        tell(f"Step {i}/{len(p.steps)}: {label} in session {step.session}")
+        # The line goes out on the event stream (`announce` is wired to
+        # jarvis_events.set_activity), which reaches a phone with the screen
+        # off - and ARCHITECTURE.md section 6 says an event carries "never
+        # content". So only the step's number and a word from a fixed list;
+        # never the address, the element's name or the text typed. Those are on the card the owner approved
+        # (security audit L4, 2026-09-25).
+        tell(f"Step {i}/{len(p.steps)}: {_STEP_WORD.get(step.action, 'a step')} in the "
+             f"browser")
 
         current: dict = {}
         if step.action != "navigate":

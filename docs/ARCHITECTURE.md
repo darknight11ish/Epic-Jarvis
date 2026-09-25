@@ -62,6 +62,13 @@ decision. Approving eight enumerated, printed search queries for one audit is
 one decision. Approving "web access" as a standing setting is not — that is
 the thing this rule exists to prevent.
 
+It also means Jarvis never drives its own approval surfaces. "Control the
+computer" refuses every window of Jarvis's own, and "control the phone"
+stops before any tap while a Jarvis app is in front (security audit M3,
+2026-09-25): one card approving a click on another card's Approve button
+would be an approve-all by the back door. `backend/README.md`, "The PC-side
+security audit's fixes".
+
 ---
 
 ## 3. The permission model — one mechanism, no exceptions
@@ -101,8 +108,11 @@ shaped this request:" - which tools were read, and which values came from
 that text, not the owner. The card still shows the plan in full; this only
 adds to it. One thing there does change which tools ask (the owner's
 decision of 2026-09-24, after the safety research): in a turn shaped by
-outside text - a reading tool ran, the conversation is tainted, or the
-newest message was pasted, shared or from the clipboard - a note write
+outside text - a reading tool ran, the conversation is tainted, the
+newest message was not typed or said by the owner (pasted, shared, from the
+clipboard, a picture's caption, or with no tag at all - only `typed` and
+`voice` are the owner's own words), or the app sent a `system` message of
+its own (security audit M1, 2026-09-25) - a note write
 (Obsidian, Logseq, Joplin) is put to the same gate as
 `write_notes_after_outside_text`, tier `ask`, and runs only on a person's
 yes, like `NEEDS_A_PERSON`. Not a second approval path: the same gate, the
@@ -211,8 +221,14 @@ comment claims "downward only" — that is a contract with `jarvis_router` which
 the loop never checked, so the fix does not depend on it holding.
 
 The **local model is also egress** if `OLLAMA_URL` does not point at this
-machine. The learner asserts loopback before it runs; anything else that talks
-to Ollama in the background must do the same.
+machine, or if the "local" model is one of Ollama's cloud models (`-cloud` /
+`:cloud`: reached through the Ollama on this PC, answered on ollama.com). The
+learner checks both before it runs, and since 2026-09-25 (security audit H1)
+so does the chat path: `jarvis_agent.run_local_turn` sends such a model
+nothing and says why, and `jarvis_router.choose` gives it the gate
+`cloud_model` instead of "stays on this machine". Anything else that talks to
+Ollama must do the same. Not yet: the model switch and install routes (the
+owner's `jarvis_models.py`) do not refuse a cloud model's name.
 
 ---
 
@@ -412,6 +428,10 @@ reads from on its own. Three things about it are invariants:
   in-memory registry of the same facts (hashes, never words) that is kept
   even while history is off - instead of the history an app re-sends (the
   memory-safety audit).
+- **Deep questions are not kept at all** (`jarvis_big_model.py`, security
+  audit L2, 2026-09-25): they live in memory until the backend stops. They
+  used to be written to `deep-questions.jsonl` in plain text, outside this
+  switch and its encryption.
 - **Turning it back on is a card; off is immediate. No delete-all.**
   One conversation per delete, and both apps hold deleting and shortening
   the keep period on a stale link.
@@ -438,7 +458,10 @@ shows the same line on Mind and re-reads the list
 (`JarvisRuntime.onMemorySaved`) - never a notification. JARVIS-API §19.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
-never content. This bus reaches a phone that surfaces notifications with the
+never content. That includes `activity`'s sentence: while Jarvis drives a
+browser, a window or the phone it is a step number and a fixed word ("Step
+2/3: a click in another program's window"), never an address, a window
+title, a control's name or typed text (security audit L4, 2026-09-25). This bus reaches a phone that surfaces notifications with the
 screen off. Clients fetch the authenticated route for the content.
 
 If you add an event kind, add the client handler in the same change. A
@@ -712,7 +735,8 @@ they landed):
   when idle, and uses no graphics card unless the owner sets `cuda = "on"`,
   and then only the second card. Deep questions: no card per question (the
   switch was the approval; a question acts on nothing), answers kept in
-  `deep-questions.jsonl` on the PC with their measured speed.
+  memory until the backend stops, with their measured speed - never on disk
+  (security audit L2, 2026-09-25).
   `GET`/`POST /api/big-model`, `GET /api/deep`, `POST /api/deep/ask`
   (`big-model.patch`). Both apps have its screens: the three switches in the
   desktop's Settings ("Big model (slow)", `settings.js`) and the phone's Mind

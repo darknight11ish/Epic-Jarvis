@@ -28,7 +28,7 @@ So it is used for two things only:
 | Job | What it does |
 |---|---|
 | **Wiki builder** (`wiki`) | The wiki builder (see [SECOND-CARD.md](SECOND-CARD.md), "Wiki builder") uses the big model instead of the second graphics card. Every page still goes through its one approval card. |
-| **Deep questions** (`deep_questions`) | You ask one question; it is answered in the background, with no tools, no internet and no memory of your other conversations, and the answer is kept for you to read. |
+| **Deep questions** (`deep_questions`) | You ask one question; it is answered in the background, with no tools, no internet and no memory of your other conversations, and the answer is kept for you to read until Jarvis stops (never on disk). |
 
 It is **never** used for chat, voice or approvals. Those stay on your
 everyday model, where answers take seconds.
@@ -346,14 +346,14 @@ A few things that fail on purpose, rather than saving something wrong:
   model fails to start, Jarvis normally waits a minute before trying it
   again. Asking a new question skips that wait.
 
-**Where the answers are kept:** `deep-questions.jsonl` in your Jarvis settings
-folder, on this PC - your own question and answer, like a chat you chose to
-keep. The last 100 are kept, or fewer when the answers are long: the file is
-held to 2 MB in total, and the oldest drop off first. To forget them all,
-delete the file **and restart Jarvis** - the questions asked since Jarvis
-last started are also held in its memory, and still show until then. Note the difference from chat: the apps keep chat history in memory
-only and never write it to disk. These are written to disk because an answer
-can take an hour and should survive a restart.
+**Where the answers are kept:** in Jarvis's memory only, until Jarvis
+stops - never on disk (security audit L2, 2026-09-25). They used to be
+written to `deep-questions.jsonl` in your Jarvis settings folder in plain
+text, while chat history is kept encrypted or not at all. The cost: an
+answer is gone after a restart, so read it before you restart Jarvis. An
+older `deep-questions.jsonl` is no longer read or written;
+`backend/README.md` ("The PC-side security audit's fixes") has a one-line
+command to delete it.
 
 ---
 
@@ -364,12 +364,8 @@ words) the model wrote, and tokens and words per second. The words counted
 include the model's reasoning (the part between `<think>` and `</think>`),
 not only the answer you see, because the time was spent writing all of it.
 The time includes reading your question, so it is a little slower than
-colibri's "decode" figures. To list them (the file is in your settings folder; this changes
-nothing):
-
-```powershell
-Get-Content "$env:USERPROFILE\.openjarvis\deep-questions.jsonl" | ForEach-Object { $j = $_ | ConvertFrom-Json; '{0}  {1}  {2} tokens/s  {3} words/s  {4} s' -f $j.state, $j.model, $j.tokens_per_s, $j.words_per_s, $j.seconds }
-```
+colibri's "decode" figures. Each question's figures are shown under it in
+the apps, while Jarvis runs (nothing is kept on disk any more).
 
 The last measurement is also in `GET /api/big-model` under `measured`, and
 the wiki's model calls are measured the same way while Jarvis runs.

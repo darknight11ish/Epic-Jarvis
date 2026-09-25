@@ -405,6 +405,24 @@ def _gate_check(action: str, detail: dict, prompt: str):
         return _Refused(f"the approval gate raised {type(exc).__name__}: {exc}")
 
 
+def _a_person_said_yes(verdict) -> bool:
+    """True only when the gate's verdict records a human approving - the
+    same rule as jarvis_agent._a_person_said_yes and jarvis_skill_discovery.
+
+    `allowed` alone is not a yes: jarvis_gate.check() also allows at tier
+    notify ("you were told after") and auto, with nobody asked
+    (docs/ARCHITECTURE.md section 3). Read off `outcome` when the gate sets
+    one (gate-outcome.patch): only "approved" is a person. A gate from
+    before that patch has no `outcome`; then allowed AND tier "ask" is the
+    only reading that means somebody was asked. Security audit L1."""
+    if getattr(verdict, "allowed", False) is not True:
+        return False
+    outcome = getattr(verdict, "outcome", None)
+    if outcome is not None:
+        return outcome == "approved"
+    return getattr(verdict, "tier", None) == "ask"
+
+
 def resume_card_text(task_id: str, rec: dict, module) -> str:
     """The card for "continue this paused task?". Every remaining step, in full.
 
@@ -447,10 +465,19 @@ def _resume_worker(task_id: str, rec: dict, by: str, gate_check: Callable,
             return
         verdict = gate_check(rec["action"], {"text": text},
                              f"resume paused task {rec['tool']} ({task_id})")
-        if not getattr(verdict, "allowed", False):
-            # Denied, timed out or refused: nothing runs, and it stays paused.
-            _audit("resume_refused", {"task": task_id, "by": by,
-                                      "outcome": str(getattr(verdict, "outcome", "refused"))})
+        if not _a_person_said_yes(verdict):
+            # Denied, timed out or refused - or let through at tier auto or
+            # notify with nobody asked: nothing runs, and it stays paused.
+            # Resuming is one new decision by a person (security audit L1).
+            outcome = str(getattr(verdict, "outcome", None) or "refused")
+            _audit("resume_refused", {"task": task_id, "by": by, "outcome": outcome})
+            if getattr(verdict, "allowed", False) is True:
+                _record_last(task=task_id, ok=False,
+                             reason=(f"not resumed: the approval gate let it through "
+                                     f"without asking anyone (tier "
+                                     f"{getattr(verdict, 'tier', 'auto or notify')}), and a "
+                                     f"paused task continues only on your yes. Set "
+                                     f"{rec['action']} to \"ask\" in jarvis-framework.toml."))
             return
         with _lock:
             if _paused.get(task_id) is not rec:

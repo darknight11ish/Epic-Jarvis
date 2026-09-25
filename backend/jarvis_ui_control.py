@@ -60,6 +60,7 @@ inside a missing dependency.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Optional
 
@@ -202,6 +203,51 @@ def _default_act(step: Step) -> Optional[str]:
     return None
 
 
+# --------------------------------------------------------------------------
+#   Never Jarvis's own windows (security audit M3, GUARDS S4, 2026-09-25)
+#
+#   A plan shaped by outside text could otherwise say: click "Approve" in
+#   "Jarvis Desktop Widget". One card would then approve ANOTHER card, whose
+#   details the owner never saw - an approve-all by the back door. So no
+#   window of Jarvis's own is ever planned against, or run against.
+#
+#   The titles are the desktop app's own, read from jarvis-desktop:
+#   tauri.conf.json ("Jarvis" - the quickbar - and "Jarvis Desktop Widget"),
+#   src-tauri/src/windows.rs (Settings, Brain, Faces, Welcome) and lib.rs
+#   (the HUD window, also "Jarvis"), plus each page's own <title>, in case
+#   Windows shows that instead ("Jarvis HUD", "Jarvis Widget", "Jarvis
+#   Faces"). Any title that STARTS with the word Jarvis is refused as well,
+#   so a renamed window, or the HUD page open in a browser tab ("Jarvis HUD -
+#   Microsoft Edge"), is covered too. The cost - a window of some other
+#   program whose title starts with "Jarvis" cannot be driven - is accepted.
+# --------------------------------------------------------------------------
+
+JARVIS_WINDOWS = (
+    "Jarvis", "Jarvis Desktop Widget", "Jarvis Desktop \u2014 Settings",
+    "Jarvis \u2014 Brain", "Jarvis \u2014 Faces", "Jarvis \u2014 Welcome",
+    "Jarvis HUD", "Jarvis Widget", "Jarvis Faces",
+)
+
+
+def is_jarvis_window(window: str) -> bool:
+    """True for a window that belongs to Jarvis itself (see above)."""
+    title = " ".join(str(window or "").split())
+    if title in JARVIS_WINDOWS:
+        return True
+    return re.match(r"jarvis(?![\w'])", title, re.I) is not None
+
+
+def own_window_refusal(window: str) -> str:
+    return (f"Jarvis does not click or type in its own windows (\"{window}\"): a "
+            f"click there could approve a card you never saw. If something in "
+            f"Jarvis needs doing, do it yourself.")
+
+
+#: The words a live status line may use for a step (see run()).
+_STEP_WORD = {"click": "a click", "type": "typing", "select": "a selection",
+              "read": "reading a value"}
+
+
 def _find(tree: list, name: str) -> Optional[dict]:
     for c in tree:
         if c.get("name") == name:
@@ -225,6 +271,9 @@ def plan(goal: str, window: str, requests: list,
     that is not there yet - or not there any more - is not guessed at; it is
     reported in `unmatched` and simply does not become a step.
     """
+    if is_jarvis_window(window):
+        # Before the tree is even read: nothing about the window is needed.
+        raise ValueError(own_window_refusal(window))
     getter = read or _default_read
     tree = getter(window) or []
     steps, unmatched = [], []
@@ -331,6 +380,10 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
     if not approved:
         return {"ok": False, "reason": "not approved; nothing was done",
                 "plan": p.as_dict()}
+    if is_jarvis_window(p.window) or any(is_jarvis_window(s.window) for s in p.steps):
+        # plan() already refuses these; a Plan built any other way is too.
+        return {"ok": False, "reason": own_window_refusal(p.window),
+                "done": [], "not_run": [s.as_dict() for s in p.steps]}
     getter = read or _default_read
     actor = act or _default_act
     tell = announce or (lambda _text: None)
@@ -354,8 +407,14 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
             if signal == "pause":
                 result["paused"] = True
             return result
-        tell(f"Step {i}/{len(p.steps)}: {step.action} \"{step.control}\" "
-             f"in {step.window}")
+        # The line goes out on the event stream (`announce` is wired to
+        # jarvis_events.set_activity), which reaches a phone with the screen
+        # off - and ARCHITECTURE.md section 6 says an event carries "never
+        # content". So only the step's number and a word from a fixed list;
+        # never the control's name or the window's title. Those are on the card the owner approved
+        # (security audit L4, 2026-09-25).
+        tell(f"Step {i}/{len(p.steps)}: {_STEP_WORD.get(step.action, 'a step')} "
+             f"in another program's window")
         tree = getter(step.window) or []
         current = _find(tree, step.control)
         same_control = (

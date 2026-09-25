@@ -31,8 +31,9 @@ What it proves:
     card; its call goes to colibri with the schema as instructions, no
     response_format; GET /api/wiki does not start colibri.
   - deep questions: queued, run against a stub server on loopback, kept in
-    deep-questions.jsonl (capped), listed, a failure said honestly, tokens
-    and words per second recorded, one doorbell event with no text.
+    memory only - nothing on disk, and an older deep-questions.jsonl is not
+    read (security audit L2) - listed, a failure said honestly, tokens and
+    words per second recorded, one doorbell event with no text.
   - big-model.patch applies after wiki.patch to what the earlier patches
     wrote, and reverses; the install lists, the toml, the fixture.
 """
@@ -832,9 +833,10 @@ def t_deep_question_speed_and_cut_reasoning():
         check("reasoning cut off at the token limit: failed, honestly, no answer saved",
               j["state"] == "failed" and "answer" not in j and "while still thinking" in j["why"]
               and "deep_max_tokens" in j["why"], j)
-        kept = [r for r in BM._load_deep() if r["id"] == j["id"]]
-        check("and the raw reasoning is not written to deep-questions.jsonl as an answer",
-              kept and not kept[0].get("answer"), kept)
+        check("and the raw reasoning is written nowhere on disk",
+              not (w.dir / "deep-questions.jsonl").exists()
+              and "hmm hmm" not in "".join(f.read_text(encoding="utf-8", errors="replace")
+                                           for f in w.dir.rglob("*") if f.is_file()))
     with World(answer="<think>" + " ".join(["hmm"] * 50)) as w:
         w.switches(master=True, deep_questions=True)
         BM.ask("Prove it.")
@@ -909,19 +911,21 @@ def t_deep_questions():
             check("every request to the stub carried the key as a Bearer header",
                   all(s[0] == "POST" or s[2].get("Authorization") == f"Bearer {KEY}"
                       for s in _Colibri.seen))
-            rows = [json.loads(l) for l in (w.dir / "deep-questions.jsonl").read_text(
-                encoding="utf-8").splitlines()]
-            check("kept in <config dir>/deep-questions.jsonl, one line, the answer in it",
-                  len(rows) == 1 and rows[0]["id"] == "deep_000001"
-                  and rows[0]["answer"].startswith("Rayleigh"))
+            # Security audit L2: the question and the answer are kept in
+            # memory only. They used to go to deep-questions.jsonl in plain
+            # text, beside a chat history that is "encrypted or not kept".
+            on_disk = "".join(f.read_text(encoding="utf-8", errors="replace")
+                              for f in w.dir.rglob("*") if f.is_file())
+            check("the question and the answer are in no file on disk",
+                  not (w.dir / "deep-questions.jsonl").exists()
+                  and "Why is the sky blue" not in on_disk and "Rayleigh" not in on_disk)
             check("one doorbell event, id and state only - no question, no answer",
                   w.events == [("deep", {"id": "deep_000001", "state": "done"})])
             check("status shows the measured speed", BM.status()["measured"]["deep_questions"]
                   ["tokens"] == 20)
             BM._reset_for_tests()
-            check("after a restart the job is still listed, from the file",
-                  BM.deep_status()["jobs"][0]["answer"].startswith("Rayleigh")
-                  and BM.status()["measured"]["deep_questions"]["tokens_per_s"])
+            check("after a restart the job is gone: nothing was kept to list it from",
+                  BM.deep_status()["jobs"] == [])
             # Failure, said honestly.
             _Colibri.fail = 500
             BM.ask("And sunsets?")
@@ -953,17 +957,23 @@ def t_deep_questions():
             pass
     with World() as w:
         w.switches(master=True, deep_questions=True)
+        # A file an older Jarvis wrote, in plain text: neither read nor
+        # added to (security audit L2). Deleting it is the owner's call.
         lines = [json.dumps({"v": 1, "id": f"deep_old{i:04d}", "question": "q", "state": "done",
-                             "answer": "a" * 100, "queued": i}) for i in range(BM.KEEP_JOBS + 5)]
-        (w.dir / "deep-questions.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+                             "answer": "a" * 100, "queued": i}) for i in range(105)]
+        old = "\n".join(lines) + "\n"
+        (w.dir / "deep-questions.jsonl").write_text(old, encoding="utf-8")
+        for i in range(25):
+            BM._DEEP[f"deep_mem{i:04d}"] = {"id": f"deep_mem{i:04d}", "question": f"q{i}",
+                                            "state": "done", "answer": "a", "queued": 1000 + i}
         BM.ask("One more?")
-        rows = BM._load_deep()
-        check(f"the file is capped at {BM.KEEP_JOBS} jobs, oldest dropped",
-              len(rows) == BM.KEEP_JOBS and rows[-1]["question"] == "One more?"
-              and rows[0]["id"] == "deep_old0006")
+        jobs = BM.deep_status()["jobs"]
+        check("an older deep-questions.jsonl is not read: none of its jobs is listed",
+              not any(j["id"].startswith("deep_old") for j in jobs), [j["id"] for j in jobs])
+        check("... and not written to", (w.dir / "deep-questions.jsonl").read_text(
+            encoding="utf-8") == old)
         check("GET /api/deep lists at most 20, newest first",
-              len(BM.deep_status()["jobs"]) == 20
-              and BM.deep_status()["jobs"][0]["question"] == "One more?")
+              len(jobs) == 20 and jobs[0]["question"] == "One more?")
     with World(ram=(31.9, 10.0)) as w:
         w.switches(master=True, deep_questions=True)
         code, body = BM.ask("Now?")
@@ -989,7 +999,6 @@ def t_the_key_is_never_shown():
                   [p.args for p in w.started]]
         log = w.dir / "big-model-engine.log"
         things.append(log.read_text(encoding="utf-8", errors="replace") if log.exists() else "")
-        things.append((w.dir / "deep-questions.jsonl").read_text(encoding="utf-8"))
         things.append((w.dir / "big-model.json").read_text(encoding="utf-8"))
         check("the key is in no status, card, audit line, event, command line, log or file",
               no_key(*things))

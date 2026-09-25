@@ -342,7 +342,10 @@ def t_announce_is_called_once_per_step_and_is_optional():
         out = B.run(p, read=lambda _s: live, act=lambda s: None, announce=heard.append,
                     approved=True)
     check("announce heard the step and a final message", len(heard) == 2, repr(heard))
-    check("the step text names the element", "Send" in heard[0], heard[0])
+    # Security audit L4: no content on the event stream - never the element,
+    # the address or the text typed (those are on the card).
+    check("the step text is the step's number and a fixed word",
+          heard[0] == "Step 1/1: a click in the browser", heard[0])
     with NoRealAction():
         p2 = B.plan("send", "s", [{"role": "button", "name": "Send", "action": "click", "why": "x"}],
                     read=lambda _s: live)
@@ -415,9 +418,9 @@ def t_the_checkpoint_is_read_before_the_step_is_announced():
                     approved=True)
     check("only the first step ran", acted == ["Message"], repr(acted))
     check("the paused step was never announced",
-          not any("Send" in line for line in heard), repr(heard))
+          not any(line.startswith("Step 2/") for line in heard), repr(heard))
     check("the step that DID run was announced",
-          any("Message" in line for line in heard), repr(heard))
+          any(line.startswith("Step 1/2") for line in heard), repr(heard))
     check("nothing claimed the run finished",
           not any("Done" in line for line in heard), repr(heard))
 

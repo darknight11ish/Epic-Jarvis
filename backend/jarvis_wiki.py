@@ -1439,6 +1439,24 @@ def _wait_for_big(job_id: str):
         _wait_sleep(5.0)
 
 
+def _a_person_said_yes(verdict) -> bool:
+    """True only when the gate's verdict records a human approving - the
+    same rule as jarvis_agent._a_person_said_yes and jarvis_skill_discovery.
+
+    `allowed` alone is not a yes: jarvis_gate.check() also allows at tier
+    notify ("you were told after") and auto, with nobody asked
+    (docs/ARCHITECTURE.md section 3). Read off `outcome` when the gate sets
+    one (gate-outcome.patch): only "approved" is a person. A gate from
+    before that patch has no `outcome`; then allowed AND tier "ask" is the
+    only reading that means somebody was asked. Security audit L1."""
+    if getattr(verdict, "allowed", False) is not True:
+        return False
+    outcome = getattr(verdict, "outcome", None)
+    if outcome is not None:
+        return outcome == "approved"
+    return getattr(verdict, "tier", None) == "ask"
+
+
 def _worker(job_id: str, source: str, lane, call, gate_check) -> None:
     try:
         if lane is None:
@@ -1467,12 +1485,21 @@ def _worker(job_id: str, source: str, lane, call, gate_check) -> None:
                   "folder": WIKI_DIR, "leaves_this_pc": False}
         verdict = gate_check(ACTION, detail, f'add "{source}" to your wiki '
                                              f"({len(p.changes)} pages)")
-        if not getattr(verdict, "allowed", False):
+        if not _a_person_said_yes(verdict):
+            # Security audit L1: `allowed` is not a yes - tier auto or notify
+            # lets it through with nobody asked. The wiki is written only on
+            # a person's yes, whatever the owner's file says.
             outcome = str(getattr(verdict, "outcome", "refused") or "refused")
-            _set(job_id, state="refused", outcome=outcome,
-                 message=_REFUSED_WORDS.get(outcome, "The approval gate refused it, so "
-                                            "nothing was written: "
-                                            + str(getattr(verdict, "reason", ""))[:200]))
+            if getattr(verdict, "allowed", False) is True:
+                words = (f"The approval gate let this through without asking anyone "
+                         f"(tier {getattr(verdict, 'tier', 'auto or notify')}), and the "
+                         f"wiki is written only on your yes, so nothing was written. Set "
+                         f"{ACTION} to \"ask\" in jarvis-framework.toml.")
+            else:
+                words = _REFUSED_WORDS.get(outcome, "The approval gate refused it, so "
+                                           "nothing was written: "
+                                           + str(getattr(verdict, "reason", ""))[:200])
+            _set(job_id, state="refused", outcome=outcome, message=words)
             _audit("refused", {"job": job_id, "source": source, "outcome": outcome})
             return
         _set(job_id, state="writing", message="Writing the pages.")

@@ -810,7 +810,7 @@ class MemoryStore:
             c.commit()
             return cur.rowcount > 0
 
-    def erase(self, fact_id: int) -> Optional[dict]:
+    def erase(self, fact_id: int, *, earlier: bool = True) -> Optional[dict]:
         """"Erase the words": wipe one fact's text for good. Keep its dates.
 
         The owner's decision of 2026-09-24 (CLAUDE.md). Forget (retire())
@@ -847,11 +847,35 @@ class MemoryStore:
         the owner can erase something forgotten earlier. Erasing an erased
         fact again changes nothing but re-runs the clean-up.
 
+        THE EARLIER WORDINGS GO TOO (security audit L3, 2026-09-25). A fact
+        that was reworded (/api/memory/edit) or corrected is a NEW row that
+        supersedes the old one, and the old row keeps the old words as
+        history ("Owner's bank PIN is 4821" under "... 4822"). Erasing only
+        the newest row left the earlier words in memory.db - and the phone,
+        which lists only current facts, could never reach them. So `earlier`
+        (the default) erases, the same way, every row this fact replaced,
+        and every row THOSE replaced: the whole chain of this fact's earlier
+        wordings, found by `retired_by`. Never a LATER one - erasing an old
+        wording does not erase the fact that replaced it, which may be what
+        the owner still wants remembered.
+
         Returns None if there is no such fact, else
         {"id", "erased_at", "already_erased", "retired_now", "file_clean",
-        "copies"}. Never the words.
+        "copies", "earlier"} - `earlier` the ids of the earlier wordings
+        erased with it. Never the words.
         """
         fid = int(fact_id)
+        if earlier:
+            out = self.erase(fid, earlier=False)
+            if out is None:
+                return None
+            chain = self._earlier_wordings(fid)
+            for old in chain:
+                done = self.erase(old, earlier=False)
+                if done is not None and not done["file_clean"]:
+                    out["file_clean"] = False
+            out["earlier"] = chain
+            return out
         with _LOCK, closing(self._connect()) as c:
             row = c.execute("SELECT * FROM facts WHERE id=?", (fid,)).fetchone()
             if row is None:
@@ -912,7 +936,25 @@ class MemoryStore:
         except Exception:
             pass
         return {"id": fid, "erased_at": erased_at, "already_erased": already,
-                "retired_now": retired_now, "file_clean": file_clean, "copies": copies}
+                "retired_now": retired_now, "file_clean": file_clean, "copies": copies,
+                "earlier": []}
+
+    def _earlier_wordings(self, fact_id: int) -> list:
+        """The ids of every fact `fact_id` replaced, directly or through
+        another: the rows whose `retired_by` leads, step by step, to it.
+        Oldest last. A loop in the links (which add() cannot make, but a
+        hand-edited file could) is walked once."""
+        seen, chain, todo = {int(fact_id)}, [], [int(fact_id)]
+        with _LOCK, closing(self._connect()) as c:
+            while todo:
+                cur = todo.pop(0)
+                for (i,) in c.execute("SELECT id FROM facts WHERE retired_by=? ORDER BY id DESC",
+                                      (cur,)).fetchall():
+                    if i not in seen:
+                        seen.add(i)
+                        chain.append(i)
+                        todo.append(i)
+        return chain
 
     # Counted rather than logged: this module has no logger, and a print on a
     # background thread in a windowed app goes to a closed handle. status() is

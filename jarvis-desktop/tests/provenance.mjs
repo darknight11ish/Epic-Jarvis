@@ -155,6 +155,22 @@ await check("the clipboard prefill is clipboard, edited or not, until the box is
   assert.equal(sent[1].messages[0].provenance, "clipboard");
 });
 
+await check("clipboard context is its own user turn tagged clipboard, never a system turn", async () => {
+  // Security audit M1: sent as a system turn, it slipped past the PC's
+  // outside-text rules, which read user turns. Now the same shape as the
+  // phone's Share: its own user message, just before the question.
+  const long = "x".repeat(250);   // too long for the box: it rides as context
+  const page = await open({ chatReplies: ["a1"] });
+  await page.evaluate((t) => window.__emit("clipboard-inject", t), long);
+  await page.waitForTimeout(100);
+  await submit(page, "what does this say?");
+  const sent = await calls(page);
+  await page.close();
+  assert.deepEqual(tags(sent[0]), ["user:clipboard", "user:typed"]);
+  assert.equal(sent[0].messages[0].content, `Context:\n${long}`);
+  assert.ok(!sent[0].messages.some((m) => m.role === "system"), "a system turn was sent");
+});
+
 await check("a voice turn is voice", async () => {
   const page = await open({ chatReplies: ["a1"] });
   await page.evaluate(() => window.__emit("voice-heard",
