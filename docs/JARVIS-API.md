@@ -3696,3 +3696,161 @@ offer as a remembered preference; that part was not taken.
   the section again) - there is no event for a briefing asked for by hand.
 - **Email senders are not shown** - only the count. Whether they should be
   is the owner's call.
+
+## 23. Web search (added 2026-09-25)
+
+The owner's decisions of 2026-09-25 (`CLAUDE.md`, "Web search with a choice
+of four providers" and "When a search asks first"). `backend/jarvis_search.py`
+(shipped whole), `backend/web-search.patch` (the routes and the gate's words),
+and the model tool `web_search` in `backend/jarvis_agent.py`. **Both apps
+call all three routes**: the desktop's Settings, "Web search"
+(`web_search.rs`: `get_web_search`, `set_web_search`, `test_web_search`,
+Settings window only; `web-search-settings.js`, `web-search.js`), and the
+phone's Mind, "Web search" (`WebSearchPlate.kt`, `net/WebSearch.kt`) - on the
+phone, settings for a PC feature live on Mind. `ported` in
+`tools/check_parity.py`. The contract file both apps build against is
+`tests/fixtures/web-search-cases.json` / `contract/web-search-cases.json`,
+written by `tools/gen_web_search_cases.py` from the real code.
+
+### 23.1 The four providers
+
+| id | label | where the words go | needs |
+|---|---|---|---|
+| `searxng` (**default**) | SearXNG (on this PC) | the owner's own SearXNG, `http://127.0.0.1:8888` unless set otherwise - which asks several search engines itself | Docker, and `json` added to its `formats` (it ships `html` only; without it SearXNG answers 403) |
+| `duckduckgo` | DuckDuckGo | `html.duckduckgo.com`, through the `ddgs` package with `backend="duckduckgo"` ONLY | `py -3 -m pip install ddgs` |
+| `tavily` | Tavily | `POST https://api.tavily.com/search`, `Authorization: Bearer <key>` | a key |
+| `brave` | Brave Search | `GET https://api.search.brave.com/res/v1/web/search`, `X-Subscription-Token: <key>` | a key |
+
+Whoogle is left out, and `left_out` says why: "Not offered: its own README
+says it no longer returns results, since Google blocked searching without
+JavaScript in 2025."
+
+Each provider's **"why use this one"** line (`why`) comes from the PC and both
+apps show it word for word; each app also carries a copy, used only when an
+answer lacks it, and `backend/test_web_search.py` checks all three are the
+same words. `jarvis_quick.py` answers "which search should I use?", "why
+SearXNG?", "what about Tavily?" from the same words without the model, and
+"use DuckDuckGo for web search" / "switch web search to Brave" changes the
+provider at once (the owner's own typed or said words only, like every fast
+path).
+
+**The SearXNG address** may be this PC or the owner's own networks only -
+`jarvis_local_http`'s rule (this PC, private addresses and `.local` names,
+Tailscale, NordVPN Meshnet), judged by spelling, for `http://` and `https://`
+alike. It is reached with NO proxy. No user name, password, `?` or `#` part.
+
+**No silent fallback.** A search goes to the chosen provider or nowhere. When
+it cannot run - SearXNG not running, its JSON off (403), no key, a key
+refused, the month's credits used up, rate-limited, `ddgs` not installed or
+without its DuckDuckGo engine - the answer says so in plain words and adds an
+offer, e.g. "Switch web search to DuckDuckGo? Say "use DuckDuckGo for web
+search", or choose it in Settings, Web search." Nothing is tried elsewhere.
+
+### 23.2 Routes
+
+Every route needs the pairing token and passes the origin check.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/search` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_search.py` | A read. |
+| `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}` | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. |
+| `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit. Held on a stale link in both apps. |
+
+The view:
+
+```
+{"available": true, "provider": "searxng" | ... | null (damaged settings),
+ "why": "" | why nothing is searched, "default": "searxng", "default_why",
+ "providers": [{"id", "label", "why", "needs_key", "key_saved": bool | null,
+                "key_where", "needs_docker", "ready", "state", "said"}],
+ "left_out": [{"id": "whoogle", "label", "why"}],
+ "searxng_url", "searxng_default", "ask_every_time", "ask_every_time_label",
+ "ask_every_time_detail", "key_entry", "test_query": "wikipedia",
+ "waiting": bool, "last": {"outcome", "why", "at", "message"} | null}
+```
+
+`state` (and a test's `state`) is one of `works`, `not_running`, `json_off`,
+`key_missing`, `key_refused`, `quota_used`, `rate_limited`, `not_installed`,
+`no_results`, `timeout`, `not_allowed`, `failed`, `secret`,
+`settings_damaged`, `empty` - for an icon; the apps show `said`. `ready` is
+worked out without a socket, so SearXNG shows ready until a search or a test
+finds it is not running.
+
+Settings live in `<config folder>/web-search.json` (no key, no search words).
+No file: SearXNG on this PC, not asking every time. A damaged file fails
+closed both ways: no provider (nothing is searched, `why` says so) and "ask
+every time" on.
+
+### 23.3 When a search asks first
+
+In the chat loop (`jarvis_agent._web_search_call`), never through a tier
+alone:
+
+- **No card** for a search straight from the owner's own question: the
+  newest message typed or said by the owner (`typed` / `voice`), nothing
+  read from outside in this turn, the conversation not tainted, no saved
+  memories recalled into the turn, no text the app attached.
+- **One card** (gate action **`search_the_web`**, tier `ask` in the shipped
+  toml; `"ask"` by `unknown_action_tier` without the line) showing the
+  **exact search words**, where they go, whether a key goes with them and
+  what saying no costs, plus the reason, whenever any of these holds: a
+  reading tool ran this turn (an earlier web search included); the
+  conversation read outside text before (`jarvis_chat_log` taint); saved
+  memories were recalled into the turn (the chat route's quoted FACTS block,
+  pinned facts too, or `memory_search` ran); the newest message was pasted,
+  shared, from the clipboard, a picture's caption or untagged; the app sent
+  a `system` message; or **"Ask before every web search"** is on. "What
+  shaped this request:" follows, as on every card after outside text. It
+  runs only when the verdict records a person approving - a toml that sets
+  `search_the_web` to `auto` gets the search refused, never sent unasked. The
+  card counts toward the five-cards-per-answer limit.
+- **Refused, never a card**: search words holding what looks like a password
+  or key (`jarvis_router.looks_like_a_secret`, `jarvis_scrub.find_secret`,
+  which also knows this PC's own secrets by value) - the answer names the
+  kind, never the value; `search_the_web = "never"` in the toml (web search
+  switched off); and a provider that cannot run (see 23.1).
+
+**"Ask before every web search"**: turning it ON is immediate; turning it
+OFF is ONE approval card, **`stop_asking_before_every_web_search`** (tier `ask`; any other
+tier and the route answers 503), like the other settings that loosen
+something. Turning it on while that card waits withdraws the card. A "no" on
+either card never becomes a proposed memory rule (`gate-outcome.patch`'s
+list). The notices: `search_the_web` is outbound ("Jarvis wants to search the web",
+heavy), `stop_asking_before_every_web_search` local.
+
+**Results are outside text**: at most 5, each `{title, url, snippet}` (title
+150 characters, snippet 300, tags and control characters removed, only
+`http(s)` links). The model reads them labelled as outside data and checked
+for planted instructions; the turn records `web_search` in `tools_ran`, so
+the rest of the conversation counts as having read outside text.
+
+### 23.4 The keys (rule 3)
+
+The Tavily and Brave keys live in **Windows Credential Manager** on the PC,
+as `Jarvis Backend/Tavily key` and `Jarvis Backend/Brave Search key` (UTF-8,
+the same format as the pairing token). They are entered **on the PC only**:
+the desktop's Settings, Web search (`save_search_key` / `forget_search_key`,
+written by Rust straight into Credential Manager - never sent over HTTP), or
+`py -3 jarvis_search.py key tavily` in the backend folder (it asks for the
+key without showing it). **The phone has no way to enter one** (ARCHITECTURE
+section 8). A key is read fresh for each search, registered with the log
+scrubber (`jarvis_scrub.register_secret`), sent only to its own service's
+fixed `https` address, never after a redirect, and never put in a plan, a
+card, an answer, an error, the settings file or a log. `GET /api/search`
+says only `key_saved: true|false`.
+
+### 23.5 Known gaps, said plainly
+
+- **Nothing here has reached a real SearXNG, DuckDuckGo, Tavily or Brave.**
+  Every test uses local stand-in servers and a stand-in `ddgs`. The error
+  codes for "credits used up" (Tavily 432/433, Brave 402/429) are from their
+  documentation as understood, not seen.
+- DuckDuckGo through `ddgs`: whether its HTTP client (`primp`) uses the
+  Windows system proxy is not checked; Jarvis passes it none. `ddgs` cannot
+  tell "no results" from "blocked for a while", so the answer says both.
+- The phone learns of a setting changed on the desktop at its next read
+  (Refresh or opening Mind) - there is no event for it.
+- "Saved memories were read" is judged on THIS turn (the FACTS block, or
+  `memory_search`); an earlier turn's recalled facts are not tracked, so a
+  later search in the same conversation that has read nothing else runs
+  without a card.

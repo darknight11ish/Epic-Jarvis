@@ -196,10 +196,10 @@ DDG_GAP = 1.1                 # seconds between two DuckDuckGo searches, at leas
 TEST_QUERY = "wikipedia"
 
 #: The approval card for turning "Ask before every web search" OFF.
-ACTION_ASK_LESS = "web_search_ask_less"
+ACTION_ASK_LESS = "stop_asking_before_every_web_search"
 
 #: The gate action a search is asked under, when it asks (jarvis_agent.py).
-ACTION_SEARCH = "web_search"
+ACTION_SEARCH = "search_the_web"
 
 ASK_EVERY_TIME_LABEL = "Ask before every web search"
 ASK_EVERY_TIME_DETAIL = (

@@ -823,6 +823,49 @@ class JarvisApi(
     // --------------------------------------------------------- hardware ----
 
     /**
+     * `GET /api/search` - web search's four providers with the PC's own "why
+     * use this one" lines, which is chosen, and its settings ([WebSearch.parse]).
+     * A read. A 404 is an older backend ([WebSearch.missing]).
+     */
+    suspend fun webSearch(): ApiResult<JsonObject> = probe(WebSearch.PATH)
+
+    /** A test search waits for the provider (up to 15 seconds on the PC). */
+    private val webSearchTestCall: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(40, TimeUnit.SECONDS)
+            .callTimeout(45, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * One of web search's two POSTs: ONE setting ([WebSearch.SETTINGS_PATH],
+     * a body made by [WebSearch.providerBody], [WebSearch.addressBody] or
+     * [WebSearch.askBody]) or a test search ([WebSearch.TEST_PATH]). Anything
+     * else is refused here, before anything is sent - there is no route for a
+     * key, and this phone never sends one (CLAUDE.md rule 3).
+     */
+    suspend fun webSearchPost(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            if (path != WebSearch.SETTINGS_PATH && path != WebSearch.TEST_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a web search route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            val caller = if (path == WebSearch.TEST_PATH) webSearchTestCall else shortCall
+            runCatching {
+                caller.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
+    /**
      * `GET /api/hardware` - the cards, what runs now, the three setups the PC
      * worked out for its own cards ([Hardware.parse]). Reads only. A 404 is
      * an older backend and a 503 a module that did not load.

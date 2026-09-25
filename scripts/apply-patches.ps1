@@ -397,7 +397,7 @@ $PATCHES = @(
     # Web search with a choice of four providers (the owner's decisions of
     # 2026-09-25): GET /api/search and POST /api/search/settings and /test,
     # and the approval notice's words for web_search (one search's card)
-    # and web_search_ask_less in jarvis_gate.py. Its context is hardware's
+    # and stop_asking_before_every_web_search in jarvis_gate.py. Its context is hardware's
     # and schedule's route blocks and gate lines, so it goes after both.
     # Needs jarvis_search.py copied in; without it the routes answer 503 and
     # the model is never offered web_search's settings.

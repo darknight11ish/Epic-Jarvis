@@ -649,8 +649,8 @@ def t_settings_and_the_card_to_ask_less():
         return answer["v"]
     code, out = WS.request_ask_every_time(False, gate=gate, tier_of=lambda a: "ask",
                                           spawn=lambda fn: fn())
-    check("OFF raises ONE card (web_search_ask_less) and is on only after a yes",
-          code == 202 and len(cards) == 1 and cards[0][0] == "web_search_ask_less"
+    check("OFF raises ONE card (stop_asking_before_every_web_search) and is on only after a yes",
+          code == 202 and len(cards) == 1 and cards[0][0] == "stop_asking_before_every_web_search"
           and WS.settings()["ask_every_time"] is False, (code, cards))
     check("... the card says what changes and what saying no costs",
           "If you say no" in cards[0][1]["text"] and "exact words" in cards[0][1]["text"])
@@ -769,9 +769,9 @@ def t_no_card_for_the_owners_own_question():
 def _card_case(label, want_line, **kw):
     reset()
     gates, told, summary, seen = _turn(**kw)
-    ws = [g for g in gates if g[0] == "web_search"]
+    ws = [g for g in gates if g[0] == WS.ACTION_SEARCH]
     text = ws[0][1]["text"] if ws else ""
-    check(f"{label}: ONE card, under web_search", len(ws) == 1, gates)
+    check(f"{label}: ONE card, under {WS.ACTION_SEARCH}", len(ws) == 1, gates)
     check(f"{label}: the card shows the EXACT search words and why it asks",
           f"“{kw.get('query', 'walking boots')}”" in text and want_line in text, text)
     check(f"{label}: searched after the yes", _searched(seen))
@@ -794,7 +794,7 @@ def t_a_card_when_private_things_could_slip_in():
         AG.TOOLS["memory_search"].execute = saved_run
     reset(ask_every_time=True)
     gates, told, summary, seen = _turn()
-    ws = [g for g in gates if g[0] == "web_search"]
+    ws = [g for g in gates if g[0] == WS.ACTION_SEARCH]
     check("\"Ask before every web search\" on: a card even for the owner's own question",
           len(ws) == 1 and AG.WEB_SEARCH_EVERY in ws[0][1]["text"], gates)
 
@@ -813,7 +813,7 @@ def t_only_a_person_s_yes_runs_it():
         if label.startswith("let through"):
             check(f"... {label}: the model is told which line to set to ask",
                   "without asking anyone" in told[-1]["content"]
-                  and "web_search" in told[-1]["content"])
+                  and WS.ACTION_SEARCH in told[-1]["content"])
 
 
 def t_refusals_that_never_ask():
@@ -824,13 +824,13 @@ def t_refusals_that_never_ask():
           not gates and not _searched(seen) and "AWS access key" in out["error"], out)
     check("... the model never sees the value echoed back", FAKE_AWS not in told[-1]["content"])
     saved = AG._tier_of
-    AG._tier_of = lambda a: "never" if a == "web_search" else saved(a)
+    AG._tier_of = lambda a: "never" if a == WS.ACTION_SEARCH else saved(a)
     try:
         reset()
         gates, told, summary, seen = _turn()
     finally:
         AG._tier_of = saved
-    check("web_search = \"never\": switched off, nothing sent, no card",
+    check("search_the_web = \"never\": switched off, nothing sent, no card",
           not gates and not _searched(seen) and "switched off" in told[-1]["content"])
     reset(provider="tavily")
     FakeStore.DATA.clear()
@@ -980,11 +980,11 @@ def t_the_patch():
     check("... not JSON is 400", h.sent[0] == 400)
     ns["f"](h, "/api/search/test", lambda s: True, lambda s: False, lambda s: b"{}")
     check("... 401 without the token", h.sent[0] == 401)
-    check("the gate's words: web_search outbound, web_search_ask_less local",
-          '"web_search": ("yes", "outbound",' in gate
-          and '"web_search_ask_less": ("yes", "local",' in gate)
+    check("the gate's words: search_the_web outbound, stop_asking_before_every_web_search local",
+          '"search_the_web": ("yes", "outbound",' in gate
+          and '"stop_asking_before_every_web_search": ("yes", "local",' in gate)
     check("a \"no\" on either card proposes no memory rule",
-          '    "web_search",             #' in gate and '    "web_search_ask_less",    #' in gate)
+          '    "search_the_web",         #' in gate and '    "stop_asking_before_every_web_search",    #' in gate)
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     start = ps1.index("$PATCHES = @(")
     names = [l.strip().strip("'") for l in ps1[start:ps1.index("\n)", start)].splitlines()
@@ -994,8 +994,8 @@ def t_the_patch():
               for p in ("hardware.patch", "schedule.patch")))
     toml = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
     check("the shipped settings file asks for both",
-          re.search(r'^web_search\s*=\s*"ask"', toml, re.M)
-          and re.search(r'^web_search_ask_less\s*=\s*"ask"', toml, re.M))
+          re.search(r'^search_the_web\s*=\s*"ask"', toml, re.M)
+          and re.search(r'^stop_asking_before_every_web_search\s*=\s*"ask"', toml, re.M))
 
 
 if __name__ == "__main__":

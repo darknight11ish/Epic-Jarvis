@@ -679,7 +679,7 @@ TOOLS: dict = {
             "query": {"type": "string", "description": "the search words, short"}},
          "required": ["query"]},
         _prepare_web_search, _run_web_search,
-        gate_lookup_name=lambda args: "web_search",
+        gate_lookup_name=lambda args: "search_the_web",
         instead={"memory_search": "For what Jarvis knows about the owner, use memory_search.",
                  "notes_search": "For the owner's own notes, use notes_search.",
                  "github_search": "To grade GitHub libraries for a coding idea, use "
@@ -1040,7 +1040,7 @@ NOTE_AFTER_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before writin
 #: message was not typed or said by the owner (pasted, shared, from the
 #: clipboard, a picture's caption, untagged); or the app sent text of its
 #: own. Any one of them, and the search is put to the gate as
-#: jarvis_search.ACTION_SEARCH ("web_search", tier "ask" as shipped) and
+#: jarvis_search.ACTION_SEARCH ("search_the_web", tier "ask" as shipped) and
 #: runs only on a person's yes (_a_person_said_yes), like NEEDS_A_PERSON.
 #: A "never" tier switches web search off altogether, card or not.
 #:
@@ -1059,7 +1059,7 @@ WEB_SEARCH_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before search
 WEB_SEARCH_APP = ("The app sent extra text with your message (for example the "
                   "clipboard), so Jarvis asks before searching - something private "
                   "could be in the search words.")
-WEB_SEARCH_OFF = ("refused: web search is switched off on this PC (web_search is "
+WEB_SEARCH_OFF = ("refused: web search is switched off on this PC (search_the_web is "
                   "\"never\" in jarvis-framework.toml's [autonomy.tiers]). Nothing was "
                   "sent. Tell the owner.")
 

@@ -41,6 +41,7 @@ pub mod vision;
 pub mod voice;
 pub mod voice_flow;
 pub mod voice_training;
+pub mod web_search;
 pub mod windows;
 #[cfg(windows)]
 pub mod winrt_toast;
@@ -770,6 +771,11 @@ pub fn run() {
             hardware::apply_hardware,
             hardware::hardware_step,
             hardware::measure_hardware,
+            web_search::get_web_search,
+            web_search::set_web_search,
+            web_search::test_web_search,
+            web_search::save_search_key,
+            web_search::forget_search_key,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,

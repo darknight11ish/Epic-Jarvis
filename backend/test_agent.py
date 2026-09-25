@@ -388,7 +388,7 @@ def t_every_tool_resolves_to_a_real_jarvis_gate_action():
     for tname, tool in AG.TOOLS.items():
         if tname == "web_search":
             # Put to the gate under its own action (jarvis_search.ACTION_SEARCH,
-            # "web_search", which web-search.patch gives words in _RISK), never
+            # "search_the_web", which web-search.patch gives words in _RISK), never
             # through action_for_tool - see jarvis_agent._web_search_call.
             continue
         lookup = tool.gate_lookup_name({}) if tool.gate_lookup_name else tname

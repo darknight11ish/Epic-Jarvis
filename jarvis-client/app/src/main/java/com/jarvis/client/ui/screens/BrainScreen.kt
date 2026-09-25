@@ -403,6 +403,15 @@ fun BrainScreen(
                 )
             }
 
+            // "Web search" (the owner's decisions of 2026-09-25): the four
+            // providers with the PC's "why" lines, "Ask before every web
+            // search", the SearXNG address and Test search
+            // (WebSearchPlate.kt) - the desktop's Settings -> Web search.
+            // No key box: keys are typed on the PC only.
+            item(key = "web-search") {
+                WebSearchSection(canAct = canAct)
+            }
+
             if (models != null) {
                 item(key = "models") {
                     Section("Model") {

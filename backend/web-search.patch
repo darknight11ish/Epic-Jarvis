@@ -38,7 +38,7 @@
 +            #     {"searxng_url": address} (this PC or the owner's own
 +            #     networks only) at once; {"ask_every_time": true} at once
 +            #     (stricter); {"ask_every_time": false} 202, ONE approval
-+            #     card (web_search_ask_less, tier "ask"). There is no route
++            #     card (stop_asking_before_every_web_search, tier "ask"). There is no route
 +            #     for a Tavily or Brave key: keys are entered on the PC only,
 +            #     straight into Credential Manager (CLAUDE.md rule 3).
 +            #   test: one search for a fixed harmless word through the chosen
@@ -69,8 +69,8 @@
      "switch_model",           # shipped "ask"; the owner picked the model
      "models_create",          # jarvis_hardware.py acts only on tier "ask" (hardware.patch)
      "schedule_repeat",        # jarvis_schedule.py acts only on tier "ask" (schedule.patch)
-+    "web_search",             # jarvis_agent.py: this card asks about ONE search's words (web-search.patch)
-+    "web_search_ask_less",    # jarvis_search.py acts only on tier "ask" (web-search.patch)
++    "search_the_web",         # jarvis_agent.py: this card asks about ONE search's words (web-search.patch)
++    "stop_asking_before_every_web_search",    # jarvis_search.py acts only on tier "ask" (web-search.patch)
      "write_notes_after_outside_text",  # jarvis_agent.py: a note after outside text asks every time
      "power_manage",           # shipped "auto": a card means the owner chose "ask"
      "append_obsidian_daily",  # shipped "auto": the same
@@ -83,11 +83,11 @@
 +    # owner chose "Ask before every web search"): the words shown on the card
 +    # go to the search the owner chose - SearXNG on this PC, which asks other
 +    # engines, DuckDuckGo, Tavily or Brave. Outbound, so the notice is heavy.
-+    "web_search": ("yes", "outbound", "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent"),
++    "search_the_web": ("yes", "outbound", "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent"),
 +    # Turning "Ask before every web search" off: a setting on this PC. It
 +    # sends nothing; searches straight from the owner's own question then run
 +    # without a card again.
-+    "web_search_ask_less": ("yes", "local", "stops asking before every web search - a search straight from your own question runs without a card again, and any search after Jarvis has read email, files, notes, saved memories or other outside text still asks; nothing is sent by this change"),
++    "stop_asking_before_every_web_search": ("yes", "local", "stops asking before every web search - a search straight from your own question runs without a card again, and any search after Jarvis has read email, files, notes, saved memories or other outside text still asks; nothing is sent by this change"),
      # schedule.patch (jarvis_schedule.py). Setting up something that repeats
      # ("every weekday at 7", a standby schedule): it acts only on this PC,
      # and deleting it is immediate. Without this line the action would be
