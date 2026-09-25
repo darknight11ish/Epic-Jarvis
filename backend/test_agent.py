@@ -1019,6 +1019,57 @@ def t_a_second_card_turn_carries_the_jarvis_system_block():
           == {"role": "system", "content": "facts"})
 
 
+def t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note():
+    # The two other ways a system message ends up at position 0, each through
+    # the whole turn, so they fail if keep_rules_first() ever stops running
+    # last in one_round.
+    def first_request(msgs, ctx):
+        sent = []
+
+        def opener(url, body):
+            sent.append(body)
+            return W.FakeResponse(W.stream([("content", "ok"), ("done", "stop")]))
+        AG.run_local_turn(msgs, "jarvis-primary", ollama_url="http://127.0.0.1:11434",
+                          stream_out=lambda b: None, open_stream=opener, enabled_tools=set(),
+                          context_length=ctx, on_step=lambda s: None,
+                          record_chain=lambda s: None, keepalive_seconds=60, status_delay=60,
+                          lane_choice=None)
+        return sent[0]["messages"]
+
+    rules = {"role": "system", "content": AG.LANE_SYSTEM}
+
+    # Trimming. fit_messages drops earlier user and assistant turns but never a
+    # system message, so on a long conversation the recalled facts - or any
+    # system note - can be left first once the turns before them are gone.
+    recalled = {"role": "system", "content": "Things you know about the user: recalled facts"}
+    long = [{"role": "user", "content": "earlier question " + "x" * 6000},
+            {"role": "assistant", "content": "earlier answer " + "y" * 6000},
+            recalled,
+            {"role": "user", "content": "the new question"}]
+    got = first_request(long, 2048)
+    check("trimming really happened (else this test measures nothing)",
+          long[0] not in got and long[1] not in got, [m["role"] for m in got])
+    check("trimmed until the recalled facts would be first - the Jarvis rules go in front",
+          got[:1] == [rules] and got[1:] == [recalled, long[-1]],
+          [str(m.get("content"))[:30] for m in got])
+
+    # An app's own system message. The desktop app sends attached clipboard
+    # text as a system message just before the question (jarvis-desktop's
+    # main.js: `Context:\n...`), which on a first question is position 0.
+    # The owner's decision, 2026-09-25: the rules still go first.
+    clip = [{"role": "system", "content": "Context:\nsome copied text"},
+            {"role": "user", "content": "what does this say"}]
+    got = first_request(clip, 16384)
+    check("an app's own leading system message gets the Jarvis rules in front of it",
+          got == [rules] + clip, [str(m.get("content"))[:30] for m in got])
+
+    # A conversation that already starts with a user turn is sent unchanged:
+    # Ollama adds the Modelfile's SYSTEM block itself.
+    plain = [{"role": "user", "content": "hello"}]
+    check("a first question with nothing recalled is sent as it is",
+          first_request(plain, 16384) == plain)
+
+
 if __name__ == "__main__":
     for fn in (t_no_tool_call_streams_straight_through, t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
@@ -1049,7 +1100,8 @@ if __name__ == "__main__":
                t_a_step_carries_no_text_ever,
                t_a_step_sink_that_raises_never_breaks_the_turn,
                t_the_default_step_sink_is_the_event_bus,
-               t_a_second_card_turn_carries_the_jarvis_system_block):
+               t_a_second_card_turn_carries_the_jarvis_system_block,
+               t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
