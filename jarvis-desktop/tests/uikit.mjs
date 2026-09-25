@@ -407,7 +407,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing }) {
   const listeners = {};
   window.__calls = [];
   // App lock on or off, for get_app_lock (apps security audit M3).
@@ -1072,6 +1072,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 : { ok: true, enabled: args.enabled };
             }
             if (cmd === "brain_memory_sleep_time") {
+              if (args.notNow === true) {
+                return { ok: true, enabled: false, remind: true,
+                         said: "Not now. It will not offer this again for 1 day." };
+              }
               return { ok: true, enabled: args.enabled ?? true, remind: args.remind ?? true };
             }
             if (cmd === "brain_memory_forget" || cmd === "brain_memory_erase") {
@@ -1209,6 +1213,51 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             else if (args.action === "resume") j.state = "active";
             return { ok: true, id: args.id, said: { delete: "Deleted.", done: "Marked done.",
               pause: "Paused.", resume: "Resumed." }[args.action] };
+          }
+          // brain/briefing.rs (the morning briefing). `window.__briefing` is
+          // null - a PC without it, which Rust answers {available: false}
+          // for - unless the scenario names `briefing: {...}`. Lines are
+          // taken out while the private lists are hidden, as Rust does.
+          case "brain_briefing":
+          case "brain_briefing_now":
+          case "get_briefing_setup": {
+            window.__briefingCalls.push({ cmd, ...args });
+            const br = window.__briefing;
+            if (!br) {
+              return { available: false, why: "Your PC's Jarvis does not have the morning " +
+                "briefing yet - run apply-patches.ps1 on the PC." };
+            }
+            br.reads += 1;
+            if (br.fails) throw new Error(br.fails);
+            if (cmd === "brain_briefing_now") br.briefing = JSON.parse(JSON.stringify(br.now || br.briefing));
+            const out = JSON.parse(JSON.stringify({ available: true, building: false,
+              briefing: br.briefing, setups: br.setups, sources: br.sources }));
+            if (cmd === "get_briefing_setup") out.briefing = null;
+            const sec = window.__security;
+            if (out.briefing && sec.hidden && !sec.revealed) {
+              out.briefing.text = "";
+              for (const s of out.briefing.sections || []) s.items = [];
+              out.briefing.hidden = true;
+              out.hidden = true;
+            }
+            return out;
+          }
+          case "set_briefing":
+          case "stop_briefing": {
+            window.__briefingCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const br = window.__briefing;
+            if (cmd === "stop_briefing") {
+              br.setups = br.setups.filter((j) => j.id !== args.id);
+              return { ok: true, id: args.id, said: "Deleted." };
+            }
+            const rule = args.every === "week" ? `every ${args.days.length} chosen days at ${args.at}`
+              : args.every === "day" ? `every day at ${args.at}`
+                : `every weekday (Monday to Friday) at ${args.at}`;
+            const job = { id: "s" + (0xb000000000 + br.setups.length).toString(16), kind: "briefing",
+              state: "waiting", repeats: true, repeat: rule };
+            br.setups.push(job);
+            return { ok: true, waiting: true, job, said: "It repeats, so it waits for your yes on the card." };
           }
           case "brain_schedule_add_todo": {
             window.__scheduleCalls.push({ cmd, ...args });
@@ -1490,6 +1539,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__schedule = schedule ? JSON.parse(JSON.stringify({
     jobs: [], todo: [], reads: 0, fails: null, ...schedule })) : null;
   window.__scheduleCalls = [];
+  window.__briefing = briefing ? JSON.parse(JSON.stringify({
+    briefing: null, setups: [], sources: {}, reads: 0, fails: null, ...briefing })) : null;
+  window.__briefingCalls = [];
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;

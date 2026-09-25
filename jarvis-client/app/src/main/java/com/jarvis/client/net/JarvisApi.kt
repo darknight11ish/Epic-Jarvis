@@ -591,6 +591,46 @@ class JarvisApi(
     }
 
     /**
+     * `GET /api/briefing`: the latest morning briefing, the briefing jobs and
+     * what a briefing includes ([Briefing.parse]). A 404 or 501 is a PC
+     * without it ([Briefing.missing]). A read.
+     */
+    suspend fun briefing(): ApiResult<JsonObject> = probe(Briefing.PATH)
+
+    /** "Brief me now" can wait for a slow calendar or mail server: the PC gives them 25 seconds. */
+    private val briefingCall: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(50, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * `POST /api/briefing/now`: put one together now ([Briefing.parse] reads
+     * the answer). It only READS on the PC - no card, nothing changes - so
+     * it is not held on a stale link, like every read.
+     */
+    suspend fun briefingNow(): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
+        val target = url(Briefing.NOW_PATH) ?: return@withContext ApiResult.Failed(
+            ApiError.Unreachable("No desktop address set"),
+        )
+        val req = Request.Builder().url(target)
+            .post("{}".toRequestBody("application/json".toMediaType())).authed().build()
+        runCatching {
+            briefingCall.newCall(req).execute().use {
+                if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                val text = it.body?.string().orEmpty()
+                runCatching {
+                    when (val el = JarvisJson.parseToJsonElement(text)) {
+                        is JsonObject -> ApiResult.Ok(el)
+                        else -> ApiResult.Failed(ApiError.Malformed("not a JSON object"))
+                    }
+                }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+    }
+
+    /**
      * `POST /api/schedule/act` (ONE job: pause, resume, delete, done) or
      * `POST /api/schedule/add` (one to-do item). The status and body come
      * back whole ([Schedule.Reply]), like [pinFact]: a 404 that says "no such
@@ -960,19 +1000,23 @@ class JarvisApi(
 
     /**
      * Answers the daily overnight-tidy card (not built yet) - see
-     * `BrainSnapshot.memory`'s own `setup.sleep_time_offer`. This app's two
-     * real actions ("enable" and "stop asking") each send exactly one of
-     * [enabled]/[remind]; "not now" needs no call at all, since the card
-     * already tracks "already offered today" itself
-     * (`jarvis_sleep.py`'s own `_seen`), so a plain dismiss still does not
-     * return until tomorrow. The server reports a write that failed to
-     * persist as a non-2xx status, same as every other write here, so no
-     * response body needs reading.
+     * `BrainSnapshot.memory`'s own `setup.sleep_time_offer`. Each of its
+     * three actions sends exactly one field: "enable" [enabled], "stop
+     * asking" [remind] false, and "not now" [notNow] (since 2026-09-25,
+     * jarvis_backoff.py: the PC then keeps the offer quiet for a day, then
+     * a week, then a month; an older PC answers it with nothing written).
+     * The server reports a write that failed to persist as a non-2xx status,
+     * same as every other write here, so no response body needs reading.
      */
-    suspend fun setSleepTime(enabled: Boolean? = null, remind: Boolean? = null): ApiResult<Unit> {
+    suspend fun setSleepTime(
+        enabled: Boolean? = null,
+        remind: Boolean? = null,
+        notNow: Boolean = false,
+    ): ApiResult<Unit> {
         val fields = buildList {
             enabled?.let { add(""""enabled":$it""") }
             remind?.let { add(""""remind":$it""") }
+            if (notNow && enabled == null && remind == null) add(""""not_now":true""")
         }
         return postJson("/api/memory/sleep_time", "{${fields.joinToString(",")}}")
     }

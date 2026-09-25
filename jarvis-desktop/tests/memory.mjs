@@ -302,14 +302,21 @@ await check("Stop asking sends {remind: false} and stops offering", async () => 
   assert.equal(sent[0].remind, false);
 });
 
-await check("Not now dismisses without sending anything", async () => {
+await check("Not now dismisses and tells the PC {notNow: true} - nothing else", async () => {
+  // Since 2026-09-25 (jarvis_backoff.py) "not now" is a real answer: the PC
+  // keeps the offer quiet for a day, then a week, then a month. It sends no
+  // enabled and no remind - it changes no setting.
   const page = await memoryTab(withOffer());
   await page.getByRole("button", { name: "Not now" }).click();
   await page.waitForTimeout(200);
   const sent = await writes(page);
   const text = await page.locator("#memory-learning").innerText();
   await page.close();
-  assert.equal(sent.length, 0, "declining today should not be a network request");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].cmd, "brain_memory_sleep_time");
+  assert.equal(sent[0].notNow, true);
+  assert.equal(sent[0].enabled, undefined);
+  assert.equal(sent[0].remind, undefined);
   assert.doesNotMatch(text, TITLE);
 });
 

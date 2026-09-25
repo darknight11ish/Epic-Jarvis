@@ -7,6 +7,7 @@ import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.Briefing
 import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.Hardware
 import com.jarvis.client.net.JarvisApi
@@ -665,6 +666,52 @@ class ApiContractTest {
         assertTrue(api.scheduleWrite("/api/shutdown", "{}") is ApiResult.Failed)
         assertTrue(api.scheduleJob("all") is ApiResult.Failed)
         assertEquals("a request reached the server", 0, server.requestCount)
+    }
+
+    // -------------------------------------------------- morning briefing ---
+
+    /**
+     * `briefing.patch` (JARVIS-API §22): the briefing is read with the token
+     * and the client header; "Brief me now" is a POST of an empty object.
+     */
+    @Test
+    fun theBriefingReadAndBriefMeNow() = runBlocking {
+        val body = """{"available":true,"building":false,"briefing":null,"setups":[],"sources":{}}"""
+        routes[Briefing.PATH] = ok(body)
+        routes[Briefing.NOW_PATH] = ok(body)
+        val out = api.briefing()
+        assertTrue("read failed: $out", out is ApiResult.Ok)
+        assertNotNull(Briefing.parse((out as ApiResult.Ok).value))
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals(Briefing.PATH, req.path)
+        assertEquals(TOKEN, req.getHeader("X-Jarvis-Token"))
+        assertEquals("hud", req.getHeader("X-Jarvis-Client"))
+        assertTrue(api.briefingNow() is ApiResult.Ok)
+        val now = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("POST", now.method)
+        assertEquals(Briefing.NOW_PATH, now.path)
+        assertEquals("{}", now.body.readUtf8())
+    }
+
+    /** Setting one up is the scheduler's own route, with ONE repeat and nothing else. */
+    @Test
+    fun settingUpABriefingIsOneRepeatOnTheSchedulersRoute() = runBlocking {
+        routes[Schedule.ADD_PATH] = MockResponse().setResponseCode(202)
+            .setHeader("Content-Type", "application/json")
+            .setBody("""{"ok":true,"waiting":true,"job":{"id":"s0123456789","kind":"briefing"}}""")
+        val out = api.scheduleWrite(Schedule.ADD_PATH, Briefing.setupBody("weekday", "07:00")!!)
+        assertTrue(out is ApiResult.Ok)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("""{"kind":"briefing","repeat":{"every":"weekday","at":"07:00"}}""", req.body.readUtf8())
+    }
+
+    /** The overnight-tidy card's "Not now" sends not_now and nothing else. */
+    @Test
+    fun notNowOnTheOvernightCardSendsOnlyNotNow() = runBlocking {
+        routes["/api/memory/sleep_time"] = ok("""{"ok":true}""")
+        assertTrue(api.setSleepTime(notNow = true) is ApiResult.Ok)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("""{"not_now":true}""", req.body.readUtf8())
     }
 
     private companion object {

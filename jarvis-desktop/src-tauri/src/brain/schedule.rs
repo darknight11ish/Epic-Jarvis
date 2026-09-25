@@ -180,6 +180,7 @@ pub(crate) fn toast_title(kind: &str) -> &'static str {
         "alarm" => "Alarm",
         "reminder" => "Reminder",
         "todo" => "To-do",
+        "briefing" => "Morning briefing",
         _ => "Jarvis",
     }
 }
@@ -192,6 +193,7 @@ pub(crate) fn lock_screen_words(kind: &str) -> &'static str {
         "alarm" => "Jarvis: alarm.",
         "reminder" => "Jarvis: a reminder is due.",
         "todo" => "Jarvis: a to-do item is due.",
+        "briefing" => "Jarvis: your morning briefing is ready.",
         _ => "Jarvis: something is due.",
     }
 }
@@ -241,7 +243,7 @@ pub(crate) fn toast_words(
 /// event after a reconnect does not toast twice.
 static TOASTED: Mutex<Option<HashSet<(String, i64)>>> = Mutex::new(None);
 
-fn first_time(id: &str, fired_at: i64) -> bool {
+pub(crate) fn first_time(id: &str, fired_at: i64) -> bool {
     let mut guard = TOASTED.lock().unwrap_or_else(|e| e.into_inner());
     let set = guard.get_or_insert_with(HashSet::new);
     if set.len() > 500 {
@@ -266,6 +268,12 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    // A morning briefing is toasted when it is READY (briefing.rs
+    // toast_ready), not when its time comes: it takes a moment to put
+    // together, and the toast must not arrive before the briefing does.
+    if kind == "briefing" {
+        return;
+    }
     let job = read_job(&app, &base, &id).await;
     let fired_at = job
         .as_ref()
@@ -281,7 +289,7 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     commands::notify(&app, &title, &body);
 }
 
-async fn read_job(app: &AppHandle, base: &str, id: &str) -> Option<serde_json::Value> {
+pub(crate) async fn read_job(app: &AppHandle, base: &str, id: &str) -> Option<serde_json::Value> {
     let headers = commands::jarvis_headers(app).ok()?;
     let response = commands::jarvis_client(Some(READ_TIMEOUT))
         .ok()?

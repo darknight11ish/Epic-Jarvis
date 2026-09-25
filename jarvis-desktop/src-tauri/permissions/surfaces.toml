@@ -302,6 +302,15 @@ permissions = [
   # switch.
   "allow-get-big-model",
   "allow-set-big-model",
+  # "Morning briefing": when it arrives, and what it includes. Setting one up
+  # approves nothing - it repeats, so the PC raises the scheduler's ONE
+  # approval card (schedule_repeat) listing the next three times - and is
+  # held while the event stream is stale. Stopping one is immediate, one
+  # briefing at a time, and only for a job the PC lists as a briefing. The
+  # briefing itself is never read here.
+  "allow-get-briefing-setup",
+  "allow-set-briefing",
+  "allow-stop-briefing",
   # "Hardware and models": the cards and the three setups for them. Choosing
   # a setup changes nothing by itself; each of its steps is ONE request that
   # raises its own existing approval card (model install, model switch, a
@@ -540,6 +549,21 @@ permissions = [
   "allow-brain-schedule",
   "allow-brain-schedule-act",
   "allow-brain-schedule-add-todo",
+]
+
+# The morning briefing (backend/briefing.patch; the owner's decisions of
+# 2026-09-25): read the latest one, and "Brief me now". Both only READ - the
+# PC puts it together without the model and reads the calendar and the
+# unread-email count only as their own settings allow - so neither is held on
+# a stale link, like every read. The lines are taken out in Rust while the
+# private lists are hidden. Setting one up and stopping one are Settings'
+# (settings-surface), not here.
+[[set]]
+identifier = "brain-briefing"
+description = "Read the latest morning briefing and ask for one now (reads only; the lines hidden in Rust with the private lists). Cannot set one up or stop one."
+permissions = [
+  "allow-brain-briefing",
+  "allow-brain-briefing-now",
 ]
 
 # ---------------------------------------------------------------------------

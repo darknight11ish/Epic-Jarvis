@@ -571,6 +571,43 @@
            until the owner picks one; picking one lists its steps, and each
            step is ONE button that raises that step's own approval card.
            docs/HARDWARE-PROFILES.md is the design. -->
+      <!-- ── Morning briefing ─────────────────────────────────────────────
+           When the briefing arrives, and what it includes (briefing-settings.js;
+           brain/briefing.rs get_briefing_setup, set_briefing, stop_briefing).
+           It repeats, so setting one up raises the scheduler's ONE approval
+           card listing the next three times; stopping one is immediate. The
+           briefing itself is read in the Brain (Work tab), never here. -->
+      <section class="card" id="briefing-settings">
+        <h2>Morning briefing</h2>
+        <p class="note">Choose when your briefing arrives. It repeats, so Jarvis asks you once with an approval card that lists the next three times; nothing is set up until you say yes. Stopping it is immediate. You can also say "brief me every weekday at 7", or "brief me now" at any time.</p>
+
+        <p class="state" id="br-state" role="status">Checking your briefing…</p>
+
+        <div id="br-body" hidden>
+          <h3 class="subhead">When it arrives</h3>
+          <ul class="sc-cards" id="br-setups"></ul>
+
+          <fieldset class="br-form" id="br-form">
+            <legend>Set up a briefing</legend>
+            <div class="row">
+              <label for="br-time">Time</label>
+              <input id="br-time" type="time" value="07:00" step="60" required>
+            </div>
+            <div class="choices" id="br-every" role="group" aria-label="How often"></div>
+            <div class="choices" id="br-days" role="group" aria-label="Which days" hidden></div>
+            <div class="row">
+              <button class="btn" id="br-set" type="button">Set up</button>
+              <span class="status" id="br-status" role="status"></span>
+            </div>
+          </fieldset>
+
+          <h3 class="subhead">What it includes</h3>
+          <ul class="sc-cards" id="br-reads"></ul>
+          <p class="note" id="br-spoken"></p>
+          <p class="note">The notification says only "Jarvis: your morning briefing is ready." The briefing itself is in the Brain, on the Work tab.</p>
+        </div>
+      </section>
+
       <section class="card" id="hardware">
         <h2>Hardware and models</h2>
         <p class="note">
@@ -1125,5 +1162,6 @@
 
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
+    <script type="module" src="briefing-settings.js"></script>
   </body>
 </html>

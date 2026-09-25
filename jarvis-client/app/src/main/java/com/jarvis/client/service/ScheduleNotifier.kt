@@ -59,7 +59,16 @@ object ScheduleNotifier {
      * [com.jarvis.client.net.Schedule.notification]; [lockScreen] is the
      * kind's lock-screen words, the only thing a locked phone shows.
      */
-    fun post(context: Context, jobId: String, kind: String, title: String, text: String, lockScreen: String) {
+    fun post(
+        context: Context,
+        jobId: String,
+        kind: String,
+        title: String,
+        text: String,
+        lockScreen: String,
+        /** A morning briefing: the tap opens Mind, where the briefing is. */
+        openBriefing: Boolean = false,
+    ) {
         if (!allowed(context)) {
             Log.w(TAG, "POST_NOTIFICATIONS is not granted, so a $kind that went off is not shown")
             return
@@ -77,7 +86,7 @@ object ScheduleNotifier {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(locked(context, lockScreen))
             .setAutoCancel(true)
-            .setContentIntent(open(context, notificationId))
+            .setContentIntent(open(context, notificationId, openBriefing))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(notificationId, n) }
             .onFailure { Log.w(TAG, "could not post a $kind that went off", it) }
@@ -91,9 +100,10 @@ object ScheduleNotifier {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
 
-    private fun open(context: Context, requestCode: Int): PendingIntent {
+    private fun open(context: Context, requestCode: Int, openBriefing: Boolean): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        if (openBriefing) intent.action = MainActivity.ACTION_OPEN_BRIEFING
         return PendingIntent.getActivity(
             context,
             requestCode,

@@ -52,6 +52,16 @@ import {
   KIND_TAGS,
 } from "./coming-up.js";
 import {
+  BUILDING as BRIEFING_BUILDING,
+  EMPTY as BRIEFING_EMPTY,
+  KEPT as BRIEFING_KEPT,
+  lateLine,
+  NOW_BUSY as BRIEFING_NOW_BUSY,
+  NOW_LABEL as BRIEFING_NOW_LABEL,
+  OUTSIDE_LINE as BRIEFING_OUTSIDE,
+  readBriefing,
+} from "./briefing.js";
+import {
   addPage,
   deleteQuestion,
   DENIED_REPLY,
@@ -266,6 +276,8 @@ const dom = {
   todoForm: $("todo-form"),
   todoText: $("todo-text"),
   todoAdd: $("todo-add"),
+  briefing: $("briefing"),
+  briefingNow: $("briefing-now"),
   contentRisk: $("content-risk"),
   ledger: $("ledger"),
   watch: $("watch"),
@@ -626,6 +638,7 @@ function render(name) {
       break;
     case "work":
       renderComingUp();
+      renderBriefing();
       renderJobs();
       renderUndo();
       break;
@@ -1579,10 +1592,21 @@ function renderLearning() {
           }, { title: "Records that you want overnight tidying. It is not built yet: "
                      + "nothing runs, and no fact changes without your yes on that "
                      + "one fact.", live: true }),
-          button("Not now", () => {
+          button("Not now", async () => {
             dismissSleepOffer();
             render("memory");
-          }, { title: "Dismiss for today. It offers again another day." }),
+            // A real answer since 2026-09-25 (jarvis_backoff.py): the PC keeps
+            // this offer quiet for a day, then a week, then a month. Not held
+            // on a stale link - it only makes Jarvis quieter - and a failure
+            // only means the offer may come back tomorrow, as before.
+            try {
+              const out = await invoke("brain_memory_sleep_time", { notNow: true });
+              if (out && out.said) toast(String(out.said), "ok");
+            } catch {
+              /* dismissed here either way */
+            }
+          }, { title: "Not now. Jarvis waits a day before offering this again, then a week, "
+                     + "then a month. Turning it on stays one tap away." }),
           button("Stop asking", async () => {
             const answered = cachedSleepOffer;
             dismissSleepOffer();
@@ -3582,6 +3606,122 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("private-hidden", rereadSchedule);
 }
 
+/* ==========================================================================
+   Morning briefing (the owner's decisions of 2026-09-25; JARVIS-API.md
+   section 22; briefing.js).
+
+   The latest briefing, read through its own command (brain/briefing.rs), so
+   while the private lists are hidden Rust takes every line out and only the
+   counts reach this page. "Brief me now" only READS - the PC puts one
+   together without the model - so, like every read, it is not held on a
+   stale link. When it arrives each morning is set in Settings. The
+   `schedule` event with kind "briefing" (ids only) reads it again; the
+   toast is Rust's (toast_ready), with the fixed words only.
+   ========================================================================== */
+
+const brief = { view: null, error: "", loading: false, at: 0, asking: false };
+const BRIEFING_READ_MS = 15000;
+
+async function loadBriefing() {
+  if (!IS_TAURI || brief.loading) return;
+  brief.loading = true;
+  try {
+    brief.view = readBriefing(await invoke("brain_briefing"));
+    brief.error = "";
+  } catch (error) {
+    brief.error = errorText(error);
+  } finally {
+    brief.loading = false;
+    brief.at = Date.now();
+  }
+  if (state.view === "work") paintBriefing();
+}
+
+async function briefNow() {
+  if (brief.asking) return;
+  brief.asking = true;
+  paintBriefing();
+  try {
+    brief.view = readBriefing(await invoke("brain_briefing_now"));
+    brief.error = "";
+  } catch (error) {
+    toast(errorText(error), "bad");
+  } finally {
+    brief.asking = false;
+    brief.at = Date.now();
+  }
+  paintBriefing();
+}
+
+function paintBriefing() {
+  const box = dom.briefing;
+  if (!box) return;
+  if (dom.briefingNow) {
+    dom.briefingNow.disabled = brief.asking;
+    dom.briefingNow.textContent = brief.asking ? BRIEFING_NOW_BUSY : BRIEFING_NOW_LABEL;
+  }
+  const v = brief.view;
+  if (!v) {
+    const line = el("p", "empty", brief.error ? `Could not read the briefing: ${brief.error}` : "Reading…");
+    if (brief.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadBriefing));
+    }
+    box.replaceChildren(line);
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why));
+    if (dom.briefingNow) dom.briefingNow.hidden = true;
+    return;
+  }
+  if (dom.briefingNow) dom.briefingNow.hidden = false;
+  const b = v.briefing;
+  const out = [];
+  if (v.building || brief.asking) out.push(el("p", "empty", BRIEFING_BUILDING));
+  if (!b) {
+    if (!v.building && !brief.asking) out.push(el("p", "empty", BRIEFING_EMPTY));
+    box.replaceChildren(...out);
+    return;
+  }
+  out.push(el("p", "briefing-heading", b.heading));
+  const late = lateLine(b);
+  if (late) out.push(el("p", "empty", late));
+  const list = el("div", "rows");
+  for (const s of b.sections) {
+    list.append(row({
+      tag: s.title,
+      state: s.state === "ok" ? "ok" : s.state === "empty" ? "" : "warn",
+      title: s.summary,
+      meta: b.hidden ? [] : s.items,
+    }));
+  }
+  out.push(list);
+  out.push(el("p", "note", BRIEFING_OUTSIDE));
+  for (const n of b.notIncluded) out.push(el("p", "note", n));
+  if (b.hidden) out.push(hiddenNode(0, "lines"));
+  out.push(el("p", "note", BRIEFING_KEPT));
+  box.replaceChildren(...out);
+}
+
+function renderBriefing() {
+  paintBriefing();
+  if (IS_TAURI && !brief.loading && Date.now() - brief.at > BRIEFING_READ_MS) loadBriefing();
+}
+
+if (dom.briefingNow) dom.briefingNow.addEventListener("click", briefNow);
+
+// Hiding turned on or off, or a Show ran out: read it again - Rust decides
+// whether the lines come back.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  const rereadBriefing = () => {
+    brief.at = 0;
+    if (state.view === "work") loadBriefing();
+  };
+  TAURI.event.listen("security-changed", rereadBriefing);
+  TAURI.event.listen("private-hidden", rereadBriefing);
+}
+
 function renderJobs() {
   const body = state.data.jobs || {};
   const why = unavailable("jobs");
@@ -5138,6 +5278,12 @@ onEvent((frame) => {
   if (kind === "schedule") {
     upL.at = 0;
     if (state.view === "work") loadComingUp();
+    // A briefing went off or is ready (`{id, kind: "briefing", state}`):
+    // read the briefing again, its lines by the authenticated route only.
+    if (frame && frame.data && frame.data.kind === "briefing") {
+      brief.at = 0;
+      if (state.view === "work") loadBriefing();
+    }
   }
 
   const refreshes = {

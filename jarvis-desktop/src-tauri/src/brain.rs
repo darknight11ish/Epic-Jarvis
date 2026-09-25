@@ -36,6 +36,7 @@ use tauri::{AppHandle, Manager};
 use crate::commands;
 
 pub mod auto_learn;
+pub mod briefing;
 pub mod history;
 pub mod profile;
 mod routes;
@@ -450,16 +451,29 @@ pub async fn brain_memory_learning(
 /// Answers the daily overnight-tidy card ("not built yet" - switching it on
 /// only records the wish; nothing runs).
 ///
-/// Two independent fields because the card offers two independent actions:
-/// "enable" sends `enabled`, "stop asking" sends `remind`. "not now" calls
-/// nothing at all — the server's own once-a-day tracking already keeps the
-/// card from returning today regardless, so a plain dismiss needs no request.
+/// Independent fields because the card offers independent actions:
+/// "enable" sends `enabled`, "stop asking" sends `remind`, and "not now"
+/// sends `not_now` (backend/briefing.patch): each "not now" keeps the card
+/// quiet on the PC for 1 day, then 7, then 30 (jarvis_backoff.py). An older
+/// PC answers it with nothing written - the card then returns tomorrow, as
+/// before.
 #[tauri::command]
 pub async fn brain_memory_sleep_time(
     app: AppHandle,
     enabled: Option<bool>,
     remind: Option<bool>,
+    not_now: Option<bool>,
 ) -> Result<serde_json::Value, String> {
+    if enabled.is_none() && remind.is_none() && not_now == Some(true) {
+        // "Not now" only makes Jarvis quieter, so it is not held on a stale
+        // link - the phone sends it the same way (JarvisRuntime.sleepNotNow).
+        return post(
+            &app,
+            "/api/memory/sleep_time",
+            serde_json::json!({ "not_now": true }),
+        )
+        .await;
+    }
     // Gated like brain_memory_decide above: this answers a card the Brain
     // drew from a read that may be stale, and the phone refuses the same
     // answer while its link is stale (JarvisRuntime.setSleepTime).
