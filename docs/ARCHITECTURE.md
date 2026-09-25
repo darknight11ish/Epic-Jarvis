@@ -155,10 +155,27 @@ approvals", `jarvis-desktop/src-tauri/src/lock.rs`) is made by the desktop
 app. The backend's `POST /api/approve` asks only for the pairing token, and
 any program running as the owner can read that token from Credential
 Manager (`backend/README.md`, the token store). So a harmful program already
-on the PC could approve a card without meeting Windows Hello. The phone is
-not affected in the same way (its token is in the Android Keystore). The
-owner chose to close this later by having the backend itself require the
-check for risky approvals; until then this paragraph is the record.
+on the PC could approve a card without meeting Windows Hello.
+
+Corrected 2026-09-25, while designing the fix (`docs/APPROVAL-GAP-DESIGN.md`).
+This paragraph used to say the phone was "not affected in the same way".
+That was wrong in two ways:
+- **The phone uses the same pairing token as the PC.** There is only one
+  (`jarvis_token_store.py show` prints it for typing into the phone). So a
+  program on the PC can approve while pretending to be the phone. The
+  phone's fingerprint check is made inside the phone app, and the backend
+  never sees it, just like the desktop's.
+- **`/api/approve` is not the only way in.** The gate waits for its row in
+  `approvals.db` (in `~/.openjarvis/`) to say "approved"
+  (`gate-outcome.patch`), and a program running as the owner can write that
+  file directly.
+
+A program written specifically to attack Jarvis, running as the owner, can
+also change Jarvis's own files. No fix inside the owner's Windows account
+can stop that. The design says what a fix can and cannot stop. The owner
+chose to close this by having the backend itself require the check for
+risky approvals. `docs/APPROVAL-GAP-DESIGN.md` is the plan, waiting on two
+answers from the owner. Until it is built, this paragraph is the record.
 
 ### The notification contract — `notice`
 
