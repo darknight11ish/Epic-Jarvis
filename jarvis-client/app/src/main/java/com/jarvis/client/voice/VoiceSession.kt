@@ -73,12 +73,18 @@ class VoiceSession(
     /**
      * Sends a turn and returns the reply, or null if it could not be sent.
      * `onRoute` is called once with the answer's `X-Jarvis-Route` header (or
-     * null) before any words; `onDelta`, zero or more times, with the reply
-     * accumulated so far as it streams in - see [ChatSession.send]'s own doc
-     * for why these are call-local callbacks and not subscriptions to a
-     * shared flow.
+     * null) before any words; `onStatus` with each `: jarvis-status` word
+     * (a card is waiting, and how it ended - [CardVoice]); `onDelta`, zero
+     * or more times, with the reply accumulated so far as it streams in -
+     * see [ChatSession.send]'s own doc for why these are call-local
+     * callbacks and not subscriptions to a shared flow.
      */
-    private val chat: suspend (String, onRoute: (String?) -> Unit, onDelta: (String) -> Unit) -> String?,
+    private val chat: suspend (
+        String,
+        onRoute: (String?) -> Unit,
+        onStatus: (String) -> Unit,
+        onDelta: (String) -> Unit,
+    ) -> String?,
 ) {
 
     enum class Phase {
@@ -875,11 +881,22 @@ class VoiceSession(
                 stopped = { turn.silenced },
                 fetch = { sentence -> api.say(sentence) },
                 play = { sentence, said -> playClip(turn, sentence, said) },
+                // "I need your OK for that..." and how the card ended: fixed
+                // words, said whatever the private-answer rule says.
+                fixedLine = { line -> CardVoice.isCardLine(line) },
             ).speak(queue)
         }
 
+        // A card this question waits on is said aloud, in order with the
+        // answer's own sentences (CardVoice): that one is waiting, then how
+        // it ended. Called on the reading thread, one word at a time.
+        val cardVoice = CardVoice()
+        val onStatus: (String) -> Unit = { word ->
+            cardVoice.onStatus(word)?.let { line -> queue.trySend(line) }
+        }
+
         try {
-            val reply = chat(text, { header -> route.set(PrivateAloud.route(header)) }) { soFar ->
+            val reply = chat(text, { header -> route.set(PrivateAloud.route(header)) }, onStatus) { soFar ->
                 // Nothing cut yet: the first piece may end at its first
                 // comma, so the phone starts speaking sooner (SpeechText).
                 val firstPiece = spokenUpTo == 0
@@ -948,7 +965,9 @@ class VoiceSession(
         momentJob?.join()
         if (turn.silenced) return
         interrupt.replyStarted(SystemClock.elapsedRealtime())
-        if (text != PrivateAloud.ON_SCREEN) lastPlayed = text
+        // Only the answer's own words count as where the owner cut it off -
+        // never a fixed line of Jarvis's ("It's on your screen.", a card line).
+        if (text != PrivateAloud.ON_SCREEN && !CardVoice.isCardLine(text)) lastPlayed = text
         _speakingText.value = text
         recentSpeech.started(text)
         try {

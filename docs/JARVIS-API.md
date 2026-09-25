@@ -261,9 +261,39 @@ decide-with-option route exists on the server (see §8's own note on this).
 `id`, `action`, `tier`, `detail`, `prompt`, `created`, `raised` (stored by
 `jarvis_gate`), plus `risk`, `notice` and - with `approval-expiry.patch` -
 `expires_in` (added when the list is read). There is **no `title` and no
-`summary`**: a client makes its title from `notice.title` (else the action
-name) and never from `prompt` or `detail`, because a title also ends up on a
-lock screen. Shapes vary, so both clients read each row on its own and
+`summary`**: a client makes its title from `notice.title` (else the PC's
+fallback, below) and never from `prompt` or `detail`, because a title also
+ends up on a lock screen.
+
+**`notice.title` is a plain sentence (2026-09-25).** It comes from
+`backend/jarvis_card_words.py` `TITLES`, one phrase per gate action: "Jarvis
+wants to switch to a different AI model", "Jarvis wants to turn on automatic
+learning", "Jarvis wants to search the web". It used to be the action name
+with its underscores removed ("Jarvis wants to learning enable"). An action
+with no phrase reads `Jarvis wants your OK for "<its name in words>"`, and a
+row with no action "Jarvis is asking for your approval". A row with **no
+`notice`** (a backend older than approval-notice.patch) gets that same
+fallback in both apps. `backend/test_card_words.py` fails when an action the
+gate knows has no phrase.
+
+**One card on every screen.** The Jarvis bar, the widget, the HUD page, the
+phone's card and its home-screen widget all show the label "Needs your OK",
+then the title, then the rest of the card, with **Deny on the left and
+Approve on the right** (docs/ARCHITECTURE.md §3 says why). A notification
+still offers Deny only, never Approve.
+
+**"Open the card".** Settings and the Brain on the PC, and every phone screen
+but Home, show one line while a card waits: the label, the title of the last
+card in the queue, "and N more waiting", and an "Open the card" button. It decides
+nothing: on the PC it calls the Tauri command `open_approval_in_quickbar`
+with the card's `id` (the Jarvis bar, behind App lock, opens on that card);
+on the phone it opens Home on that card. No backend route is involved.
+
+**Windows notifications.** The PC now shows a toast for **every** card that
+arrives, not only `weight: "heavy"` ones: a heavy card with the usual sound,
+a normal one silently (the phone already posted normal cards to its quiet
+channel). While App lock is on the toast shows the title only. Deny is still
+the only button. Shapes vary, so both clients read each row on its own and
 accept all of them: `detail` as JSON text or an object; `raised` as an
 object, `true`, or JSON text (any truthy value counts as raised); `id` as
 text or a number. A row that still cannot be read is skipped and the phone
@@ -382,6 +412,31 @@ token 'd'"). An older note here said the phone mis-reads SSE; it has not since
 nothing else to send, and `: jarvis-status approval` (or `working`) while an
 approval card for a tool waits. The apps show "Waiting for your approval…"
 for the second.
+
+**How the card ended (added 2026-09-25).** After an `approval` line, and only
+then, the PC sends one more at once: `: jarvis-status approved`, `denied` or
+`timed_out` - the gate's own outcome word (`jarvis_agent.CARD_OUTCOME_WORDS`,
+`_Out.card_answered`). Nothing else is in it, never what the card was for. A
+gate that answers before the `approval` line went out (under 1.5 seconds)
+sends neither. During a **spoken** question both apps say, in fixed words
+(`backend/jarvis_card_words.py` `VOICE`; desktop `card-words.js`, phone
+`voice/CardVoice.kt`):
+
+| Word | Said aloud |
+|---|---|
+| `approval` (once per card) | "I need your OK for that. There's a card on your screen." |
+| `approved` | "Approved. Carrying on." |
+| `denied` | "OK, I won't do that." |
+| `timed_out` | "That card timed out, so nothing was done." |
+
+An outcome is said only after the waiting line was. These are fixed lines,
+so they are said whatever the private-answer rule decides for the answer
+itself (§16); the answer's own words still follow that rule. **There is no
+approving by voice** and there will be none: the voice check cannot tell a
+recording from the owner, so a "yes" said aloud answers nothing - only a tap
+on the card does. `tools/gen_card_words_cases.py` writes the lines and a set
+of status-word sequences (`voice_script`) into one file both apps' tests
+read.
 
 **Cancelling.** Android cancels the OkHttp `Call` (`ChatSession.cancel`); the
 desktop drops the request future (`commands.rs` `cancel_chat`). While words

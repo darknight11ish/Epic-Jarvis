@@ -142,8 +142,10 @@ def build_cases() -> list:
                  ("done", "stop")],
                 [("content", "It is "), ("content", "4."), ("done", "stop")]],
                wait=0.4, keepalive=0.1),
+        # "approved" right after "approval": how the card ended
+        # (jarvis_agent._Out.card_answered), which a spoken question says aloud.
         {"text": "It is 4.", "ended": True, "length": False, "error": None,
-         "statuses": ["approval"]})
+         "statuses": ["approval", "approved"]})
     add("local turn, Qwen3 thinking", "jarvis_agent.run_local_turn",
         _agent([[("reasoning", "Let me think about the diary..."),
                  ("content", "<think>more thinking</think>\n\n"),
@@ -316,6 +318,9 @@ def t_the_producer_does_what_each_case_says():
         check(f"{c['name']}: the words", text == exp["text"], repr(text))
         check(f"{c['name']}: the error", err == exp["error"], repr(err))
         check(f"{c['name']}: finished", ended == exp["ended"], repr(ended))
+        said = re.findall(r"^: jarvis-status (\w+)$", body, re.M)
+        said = [w for w in said if w not in ("thinking", "working")]
+        check(f"{c['name']}: the status words, in order", said == exp["statuses"], repr(said))
 
 
 def t_both_copies_are_what_the_producer_makes_today():

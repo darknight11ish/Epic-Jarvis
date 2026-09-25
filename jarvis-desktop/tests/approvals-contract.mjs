@@ -63,7 +63,10 @@ check("detail as JSON text and as an object both reach the card", () => {
 });
 
 check("the notice is carried, in the gate's own words", () => {
-  assert.equal(byId("a1").notice.title, "Jarvis wants to send email");
+  assert.equal(byId("a1").notice.title, "Jarvis wants to send an email");
+  // ...and it is the card's title on every desktop surface (card-words.js).
+  assert.equal(byId("a1").title, "Jarvis wants to send an email");
+  assert.equal(byId("12").title, "Jarvis wants to run a command on this PC");
   assert.equal(byId("12").notice.weight, "heavy");
 });
 
@@ -98,8 +101,8 @@ const lift = (name) => {
   return m[0];
 };
 const hudSrc = ["apprEscape", "apprDescribe", "apprCardHtml", "apprRaised", "apprRiskLine",
-                "apprCutOff"].map(lift).join("\n");
-const hud = new Function(`${hudSrc}; return { apprCardHtml, apprCutOff };`)();
+                "apprCutOff", "apprTitle"].map(lift).join("\n");
+const hud = new Function(`${hudSrc}; return { apprCardHtml, apprCutOff, apprTitle };`)();
 
 check("the HUD card shows the rush warning, its quote and the risk sentence", () => {
   const html = hud.apprCardHtml(rows.find((r) => r.id === "abc123"), Date.now());

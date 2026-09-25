@@ -66,6 +66,14 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
+#: How an answer that raised a card ends. A "yes" said aloud approves
+#: nothing - only the card does - so it names the card (creativity audit,
+#: 2026-09-25: the old ending, "...until you say" + " yes", invited a
+#: spoken yes that did nothing).
+#: The same words as jarvis_card_words.UNTIL_APPROVED; test_card_words.py
+#: holds them together.
+UNTIL_APPROVED = "Nothing is set up until you approve the card."
+
 LANGUAGES = ("English",)
 
 #: The words both apps show under an answer made here.
@@ -1057,7 +1065,7 @@ def _set_at(kind: str, w: When, text: str, sched, now: float, n: str) -> Result:
         except (ValueError, OverflowError) as exc:
             return Result(S._sentence(exc), n)
         return Result(f"That repeats ({S.rule_words(j.get('rule') or w.rule)}), so there is an "
-                      f"approval card for it. Nothing is set up until you say yes.", n, [j["id"]])
+                      f"approval card for it on your screen. {UNTIL_APPROVED}", n, [j["id"]])
     if w.passed:
         return Result(f"{S.when_words(w.at, now)} has already passed. Say another time.", n)
     try:
@@ -1132,7 +1140,7 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
         except (ValueError, OverflowError) as exc:
             return Result(S._sentence(exc), n)
         return Result(f"That repeats ({S.rule_words(j.get('rule') or w.rule)}), so there is an "
-                      f"approval card for it. Nothing is set up until you say yes.", n, [j["id"]])
+                      f"approval card for it on your screen. {UNTIL_APPROVED}", n, [j["id"]])
     if w.passed:
         return Result(f"{S.when_words(w.at, now)} has already passed. Say another time.", n)
     try:

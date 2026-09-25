@@ -1260,6 +1260,12 @@ def _get_json(url: str, payload: Optional[dict] = None, timeout: float = 4.0) ->
 #                                 it. Only said once the wait has lasted
 #                                 STATUS_DELAY_SECONDS, so a tool the gate
 #                                 lets through at once never flashes it.
+#                                 After an "approval" line, and only then,
+#                                 how that card ended, at once: one word from
+#                                 CARD_OUTCOME_WORDS - the gate's own outcome.
+#                                 A spoken question says it aloud
+#                                 (jarvis_card_words.VOICE); nothing else is
+#                                 in it, never what the card was for.
 #
 # With `stream: false` the answer is ONE JSON body, Ollama's own
 # `chat.completion` shape, and the only thing written before it is blank
@@ -1269,6 +1275,8 @@ KEEPALIVE_SECONDS = 10.0
 STATUS_DELAY_SECONDS = 1.5
 STATUS_PREFIX = ": jarvis-status "
 STATUS_WORDS = ("thinking", "approval", "working")
+#: How a card the app was told about ended (gate-outcome.patch's words).
+CARD_OUTCOME_WORDS = ("approved", "denied", "timed_out")
 
 #: When the app does not say how long an answer may be. The same number as
 #: `num_predict` in jarvis-primary.Modelfile, so every window gets the same
@@ -1390,6 +1398,18 @@ class _Out:
         self.status = word
         self.status_since = time.monotonic()
         self.status_said = word is None
+
+    def card_answered(self, verdict) -> None:
+        """How the card this turn waited on ended - said only when the app
+        was told it was waiting (an "approval" line went out), so a card
+        answered before that line never gets an outcome it cannot place.
+        Sent at once, not after a delay: a spoken question is waiting to
+        hear it. The gate's outcome word only (CARD_OUTCOME_WORDS); a gate
+        from before gate-outcome.patch says none, and then nothing is sent."""
+        outcome = getattr(verdict, "outcome", None)
+        told = self.status == "approval" and self.status_said
+        if self.sse and told and outcome in CARD_OUTCOME_WORDS:
+            self.send(_status_line(outcome))
 
 
 def _heartbeat(out: _Out, stop: threading.Event, every: float, delay: float) -> None:
@@ -3279,6 +3299,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     out.set_status("approval")
     verdict = checker(action_name, {"text": plan_text},
                       f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
+    out.card_answered(verdict)
     out.set_status("thinking")
     if _a_card_was_shown(verdict):
         watch.cards += 1
@@ -3443,6 +3464,7 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
         out.set_status("approval")
         verdict = checker(WS.ACTION_SEARCH, {"text": plan_text},
                           f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
+        out.card_answered(verdict)
         out.set_status("thinking")
         if _a_card_was_shown(verdict):
             watch.cards += 1

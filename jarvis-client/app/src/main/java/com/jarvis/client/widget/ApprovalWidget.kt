@@ -39,6 +39,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.service.EventService
 import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
+import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.PendingItem
 
 /**
@@ -172,12 +173,13 @@ class ApprovalWidget : GlanceAppWidget() {
                 modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity<MainActivity>()),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // The same label as every card (CardWords): the headline below
+                // already says "Jarvis wants to ...", and the tier word ("ASK")
+                // meant nothing to the reader.
                 Text(
-                    text = "Jarvis wants to:",
+                    text = CardWords.KICKER,
                     style = TextStyle(color = Palette.Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold),
                 )
-                Spacer(GlanceModifier.defaultWeight())
-                Badge(item.tier.uppercase())
             }
 
             Spacer(GlanceModifier.height(4.dp))
@@ -221,15 +223,9 @@ class ApprovalWidget : GlanceAppWidget() {
                 Spacer(GlanceModifier.height(4.dp))
             }
 
+            // Deny on the left, the way to Approve on the right: the same order
+            // as every card on the phone and the desktop (CardWords.BUTTONS).
             Row(modifier = GlanceModifier.fillMaxWidth()) {
-                // Approve opens the app - never a one-tap widget action. See
-                // the class doc for why this is not the retired app's shape.
-                PillButton(
-                    label = "Review",
-                    tint = Palette.StatusOk,
-                    onClick = actionStartActivity<MainActivity>(),
-                    modifier = GlanceModifier.defaultWeight(),
-                )
                 // Deny alone is a direct widget action - refusing is always
                 // the safe direction, the same rule the lock-screen
                 // notification's own Deny action already runs on.
@@ -242,7 +238,6 @@ class ApprovalWidget : GlanceAppWidget() {
                 // surfaces disagreeing about whether an item is safe to
                 // refuse unread is the disagreement mattering most.
                 if (item.notice?.denyOk != false) {
-                    Spacer(GlanceModifier.width(8.dp))
                     PillButton(
                         label = "Deny",
                         tint = Palette.StatusBad,
@@ -251,18 +246,17 @@ class ApprovalWidget : GlanceAppWidget() {
                         ),
                         modifier = GlanceModifier.defaultWeight(),
                     )
+                    Spacer(GlanceModifier.width(8.dp))
                 }
+                // Approve opens the app - never a one-tap widget action. See
+                // the class doc for why this is not the retired app's shape.
+                PillButton(
+                    label = "Review",
+                    tint = Palette.StatusOk,
+                    onClick = actionStartActivity<MainActivity>(),
+                    modifier = GlanceModifier.defaultWeight(),
+                )
             }
-        }
-    }
-
-    @Composable
-    private fun Badge(label: String) {
-        Box(
-            modifier = GlanceModifier.background(Palette.Surface1).cornerRadius(4.dp)
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        ) {
-            Text(label, style = TextStyle(color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold))
         }
     }
 

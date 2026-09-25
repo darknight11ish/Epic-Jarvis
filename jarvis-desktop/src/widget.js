@@ -36,6 +36,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./note-capture.js";
+import { CARD_KICKER, cardTitle } from "./card-words.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -546,13 +547,14 @@ function openApproval(approval) {
   const locked = state.appLock;
   if (!state.approval || state.approval.id !== approval.id) {
     announce(
-      `Approval required: ${locked ? lockedTitle(approval) : approval.action}. ${riskLine(approval.risk)}.`,
+      `${CARD_KICKER}: ${locked ? lockedTitle(approval) : cardTitle(approval)}. ${riskLine(approval.risk)}.`,
       "assertive"
     );
   }
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
-  dom.apprAction.textContent = locked ? lockedTitle(approval) : approval.action;
+  // The PC's own words for it (card-words.js), never the code name.
+  dom.apprAction.textContent = locked ? lockedTitle(approval) : cardTitle(approval);
   // textContent, never innerHTML: this string comes from a model.
   dom.apprDetail.textContent = locked ? LOCKED_DETAIL : approvalDetail(approval);
   dom.btnApprYes.textContent = locked ? LOCKED_APPROVE : "Approve";

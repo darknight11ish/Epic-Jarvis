@@ -50,10 +50,12 @@ await check("an arriving gate is announced, with its risk", async () => {
     { count: 1, items: [item] }), K.APPROVAL_RAISED);
   await page.waitForTimeout(400);
   const spoken = await page.evaluate(() => window.__spoken);
-  const hit = spoken.find((s) => /Approval required/.test(s.text));
+  const hit = spoken.find((s) => /Needs your OK/.test(s.text));
   assert.ok(hit, `nothing announced. saw: ${JSON.stringify(spoken)}`);
   assert.equal(hit.live, "assertive", "a halted action should interrupt");
-  assert.match(hit.text, /send_email/, "the action must be named");
+  // Named in the PC's own words (notice.title, card-words.js), not the code name.
+  assert.match(hit.text, /Jarvis wants to send an email/, "the action must be named");
+  assert.doesNotMatch(hit.text, /send_email/, "never the code name");
   assert.match(hit.text, /no unsend|undo|machine/i, "the risk must be said");
   await page.close();
 });

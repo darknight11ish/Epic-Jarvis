@@ -84,7 +84,7 @@ on a throwaway copy instead.
 | `memory-noise.patch` | `jarvis_extract.py`, `jarvis_hud.py` | A discarded proposal came straight back, and recalled facts carried no date. |
 | `decide-once.patch` | `jarvis_extract.py` | Found during a self-improvement audit: `decide()` was a plain check-then-act, so two concurrent accepts on one proposal could both win. A full queue also dropped proposals with no record. Needs `memory-noise`. |
 | `event-allowlist.patch` | `jarvis_events.py` | The approval doorbell shipped `raised` — which quotes hostile outside text — to every subscriber, including a phone lock screen. |
-| `approval-notice.patch` | `jarvis_gate.py`, `jarvis_events.py` | A waiting approval reached a phone as "fields: args, tool". Adds `notice_for()` — a readable title and reason built only from this module's own tables, so it is safe on a lock screen by construction. Needs `event-allowlist`. |
+| `approval-notice.patch` | `jarvis_gate.py`, `jarvis_events.py` | A waiting approval reached a phone as "fields: args, tool". Adds `notice_for()` — a readable title and reason built only from this module's own tables, so it is safe on a lock screen by construction. Since 2026-09-25 the title is a plain phrase from `jarvis_card_words.py` ("Jarvis wants to switch to a different AI model"), copied in by the script. Needs `event-allowlist`. |
 | `ui-control-wiring.patch` | `jarvis_gate.py` | Registers the three new capabilities below with the gate's own `_RISK`/`_TOOL_ACTIONS` tables. Textually independent of everything above it — see its own section. |
 | `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
 | `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
@@ -2128,6 +2128,38 @@ toast is a prompt to open the app.
 `test_approval_notice.py`: 37 checks. The central one feeds a row stuffed with
 private strings and attacker text and asserts that none of them appear in the
 notice, end to end through the doorbell.
+
+## Added 2026-09-25: plain titles, from `jarvis_card_words.py`
+
+The title used to be the action name with its underscores taken out, on the
+theory that the names were written to be read. They read "Jarvis wants to
+learning enable" and "Jarvis wants to models create" (the creativity audit,
+`docs/creativity-2026-09-25/experience.md` finding 1). Now `notice_for` takes
+its title from **`jarvis_card_words.py`** - a new shipped module, copied in by
+`apply-patches.ps1` - which has one plain phrase for every action the gate
+knows: "Jarvis wants to switch to a different AI model", "Jarvis wants to turn
+on automatic learning". It still reads the action NAME only, so the notice is
+as safe on a lock screen as before. An action with no phrase reads `Jarvis
+wants your OK for "<its name in words>"`; without the module at all (an older
+copy), `notice_for` builds that same fallback itself.
+
+The same module holds the card's label ("Needs your OK"), the button order
+(Deny left, Approve right), what Jarvis says aloud about a card during a
+spoken question, and how a card's answer ends in `jarvis_quick.py` ("Nothing
+is set up until you approve the card." - it used to say "until you say yes",
+and a spoken yes does nothing). `tools/gen_card_words_cases.py` writes it all
+into one file both apps' tests read.
+
+`jarvis_agent.py` also tells the app how a card ended: right after a
+`: jarvis-status approval` line, one of `approved`, `denied` or `timed_out`
+(`_Out.card_answered`) - the words a spoken question turns into "Approved.
+Carrying on." and the rest.
+
+`test_card_words.py` checks that every action in `_RISK` (the whole patch
+stack), in `[autonomy.tiers]`, in a shipped module's `ACTION` and in the tool
+mappings has a phrase; that `notice_for` gives exactly those words, with and
+without the module; that the spoken lines never invite a spoken yes; and that
+the shared file is current. `test_chat_stream.py` checks the outcome lines.
 
 ---
 
@@ -5289,7 +5321,8 @@ That function, rewritten:
   and `[DONE]` of a round that only asked for a tool (every app stops reading
   at those);
 - sends `: keepalive` after 10 seconds of silence, and `: jarvis-status
-  approval` while a card waits - both SSE comment lines, which an app that
+  approval` while a card waits, then `approved`, `denied` or `timed_out` once
+  it is answered - all SSE comment lines, which an app that
   does not know them simply skips;
 - notices when the app has gone (a keepalive cannot be written), and then
   **does not run** a tool the card approved, tells you so on the doorbell,
@@ -8042,7 +8075,7 @@ Resume, Delete or Done, and both show a notification when it goes off.
 goes off ONCE needs no approval card (the owner's decision). Anything that
 REPEATS - "remind me every weekday at 7 to take my pills" - is ONE approval
 card, `schedule_repeat`, which lists the next three times it will go off;
-nothing is set up until you say yes. Deleting or pausing anything is
+nothing is set up until you approve the card. Deleting or pausing anything is
 immediate, one item at a time. There is no "delete all".
 
 **Where it goes off.** On the PC, by the PC's clock (its own time zone,
@@ -8507,7 +8540,7 @@ asleep. It holds only what Jarvis can already read on this PC:
   (Morning briefing) or the phone's Mind (Morning briefing). It repeats, so
   it is **one approval card** - the scheduler's own `schedule_repeat`,
   listing the next three times and what each briefing reads. Nothing is set
-  up until you say yes. "brief me tomorrow at 7" is a one-off: no card.
+  up until you approve the card. "brief me tomorrow at 7" is a one-off: no card.
 - Stop one: "stop my briefing", or Stop in Settings / Mind, or Delete under
   Coming up. Immediate, one at a time.
 

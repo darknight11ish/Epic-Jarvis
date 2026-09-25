@@ -548,7 +548,7 @@ object JarvisRuntime {
             // Where the owner cut a spoken answer off: sent once, with the
             // next question (typed or spoken), as `interrupted`.
             onCutOff = { said -> chatSession.cutOff.cut(said, android.os.SystemClock.elapsedRealtime()) },
-        ) { text, onRoute, onDelta ->
+        ) { text, onRoute, onStatus, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
             // cancel the spoken one and leave its own partial reply in there —
@@ -559,8 +559,11 @@ object JarvisRuntime {
             // is the same kind of callback, for the answer's header.
             // Tagged "voice": this is the transcript the PC's speech route
             // gave back (chat history, docs/JARVIS-API.md section 18).
+            // `onStatus`: a card this spoken question waits on is said aloud,
+            // and then how it ended (voice/CardVoice.kt).
             chatSession.send(
                 text, onDelta, onRoute = onRoute, provenance = com.jarvis.client.net.Provenance.VOICE,
+                onStatus = onStatus,
             )?.takeIf { it.isNotBlank() }
         }
 

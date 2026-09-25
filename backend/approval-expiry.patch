@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -1195,6 +1195,19 @@
+@@ -1207,6 +1207,19 @@
          # desktop cannot word the same warning two different ways - and so
          # there is one place to audit what a notification may contain.
          d["notice"] = notice_for(d)

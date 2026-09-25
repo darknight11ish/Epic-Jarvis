@@ -15,6 +15,8 @@
  * @module jarvis-link
  */
 
+import { fallbackTitle } from "./card-words.js";
+
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 
@@ -194,6 +196,12 @@ export function normaliseApproval(row) {
           weight: String(notice.weight || "heavy"),
         }
       : null,
+    // What every surface shows as the card's title (card-words.js): the
+    // notice's, else the PC's own fallback built from the action's name.
+    // Never from `prompt` or `detail`.
+    title: notice && typeof notice.title === "string" && notice.title.trim()
+      ? notice.title.trim()
+      : fallbackTitle(row.action),
     action: String(row.action || "run an action"),
     tier: String(row.tier || ""),
     prompt: typeof row.prompt === "string" ? row.prompt : "",
@@ -549,6 +557,19 @@ export async function decide(id, approved, optionId = null) {
   const args = { id: String(id), approved };
   if (optionId !== null && optionId !== undefined) args.option_id = String(optionId);
   return TAURI.core.invoke("decide_approval", args);
+}
+
+/**
+ * Opens the Jarvis bar on a waiting card ("Open the card", card-link.js).
+ * DECIDES NOTHING: the bar is where Deny and Approve are, and it sits
+ * behind App lock, so Windows Hello is asked first when the lock is on.
+ * `id` names the card to show; without one (or once it is gone) the bar
+ * shows the first card waiting.
+ */
+export async function openCardInBar(id = null) {
+  if (!IS_TAURI) throw new Error("no desktop app to open the Jarvis bar in");
+  const args = id === null || id === undefined ? {} : { id: String(id) };
+  return TAURI.core.invoke("open_approval_in_quickbar", args);
 }
 
 /**

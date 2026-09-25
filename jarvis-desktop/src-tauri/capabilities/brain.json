@@ -16,6 +16,7 @@
     "core:webview:allow-set-webview-zoom",
     "core:webview:allow-internal-toggle-devtools",
     "jarvis-link",
+    "open-card",
     "theme-write",
     "brain-read",
     "brain-act",

@@ -2454,13 +2454,21 @@ pub fn get_app_lock(app: AppHandle) -> bool {
     crate::lock::current(&app).app_lock
 }
 
-/// The widget's Approve while App lock is on: opens the Jarvis bar on the
+/// The widget's Approve while App lock is on, and "Open the card" in
+/// Settings and the Brain (card-link.js): opens the Jarvis bar on the
 /// waiting card. The bar is behind the lock, so Windows Hello is asked
 /// before it shows, and the approval is made there. Decides nothing.
+///
+/// `id` names the card to show (the one the owner's click just raised);
+/// without one, or once it is no longer waiting, the bar shows the first.
+/// Only an id is passed on - the bar reads the card itself from its queue.
 #[tauri::command]
-pub fn open_approval_in_quickbar(app: AppHandle) -> Result<(), String> {
+pub fn open_approval_in_quickbar(app: AppHandle, id: Option<String>) -> Result<(), String> {
     windows::show_quickbar(&app)?;
-    crate::emit_quickbar(&app, crate::events::SHOW_APPROVAL, ());
+    let id = id
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s.len() <= 200);
+    crate::emit_quickbar(&app, crate::events::SHOW_APPROVAL, id);
     Ok(())
 }
 

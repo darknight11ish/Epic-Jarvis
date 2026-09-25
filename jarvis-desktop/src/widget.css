@@ -445,13 +445,19 @@ body {
   white-space: nowrap;
 }
 
-.action-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* The card's title - the PC's own words ("Jarvis wants to search the web"),
+   up to two lines, never cut to a code name. */
+.appr-title {
+  margin: 0 0 6px;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .appr-detail {

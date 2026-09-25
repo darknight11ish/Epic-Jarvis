@@ -154,6 +154,9 @@ import { fileNote, loadTargets, notSetUp, noTargetsLine, targetName } from "./no
 import { nextSpeechPiece } from "./speech-pieces.js";
 // Temporary chat and "Used in this answer" (2026-09-25) - answer-memory.js.
 import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
+// One card on every screen, and what a spoken question hears about a card
+// (the creativity audit, 2026-09-25) - card-words.js.
+import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -1264,8 +1267,8 @@ function openApproval(approval) {
   // What the role used to imply, said explicitly and with the part that
   // actually matters — what getting it wrong costs.
   announce(
-    `Approval required: ${approval.action}. ${riskLine(approval.risk)}. ` +
-      "Approve and Deny are in the gate; Escape puts it aside.",
+    `${CARD_KICKER}: ${cardTitle(approval)}. ${riskLine(approval.risk)}. ` +
+      "Deny and Approve are in the gate; Escape puts it aside.",
     "assertive"
   );
 
@@ -1286,7 +1289,9 @@ function refreshApproval(approval) {
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
 
-  dom.approvalAction.textContent = approval.action;
+  // The PC's own words for it (notice.title, card-words.js), never the code
+  // name: "Jarvis wants to switch to a different AI model", not `switch_model`.
+  dom.approvalAction.textContent = cardTitle(approval);
   const target = approval.detail && typeof approval.detail === "object"
     ? approval.detail.target || approval.detail.note_target || approval.detail.to
     : null;
@@ -1667,10 +1672,10 @@ function renderRaised(raised) {
  */
 function parkApproval() {
   if (!state.approval) return;
-  const action = state.approval.action;
+  const title = cardTitle(state.approval);
   state.parked.add(state.approval.id);
   closeApproval();
-  announce(`Put aside: ${action}. It is still waiting; nothing was decided.`);
+  announce(`Put aside: ${title}. It is still waiting; nothing was decided.`);
   syncParkedBar();
   focusInput({ selectAll: false });
 }
@@ -1814,9 +1819,10 @@ async function decideApproval(approved, optionId = null) {
 
   try {
     await decideOnBackend(approval.id, approved, optionId);
+    // The card's own title (card-words.js), not the code name.
     state.buffer += `${state.buffer.trim() ? "\n\n" : ""}> ${
       approved ? "Approved" : "Denied"
-    } \`${approval.action}\` from the desktop spotlight.`;
+    } in the Jarvis bar: ${cardTitle(approval)}.`;
     openCard(approved ? "Approved" : "Denied");
     paint({ immediate: true });
   } catch (error) {
@@ -2104,16 +2110,28 @@ const WAIT_STATUS = {
   approval: "Waiting for your approval…",
   working: "Working…",
   thinking: "Thinking…",
+  // How the card ended (jarvis_agent.CARD_OUTCOME_WORDS): the wait is over,
+  // and the answer is on its way.
+  approved: "Thinking…",
+  denied: "Thinking…",
+  timed_out: "Thinking…",
 };
 
 function showWaitStatus(word) {
+  // A spoken question waiting on a card hears so, and then how it ended
+  // (card-words.js). Fixed lines, never the card's words - and never an
+  // invitation to answer by voice: only a tap on the card decides.
+  const cardLine = state.voiceTurn ? cardVoice.onStatus(word) : null;
+  if (cardLine) sayCardLine(cardLine);
   // A tool ran (or waited on its card) while this answer was written: the
   // rest of a voice answer is not read aloud unless the owner allowed it.
   if (TOOL_WORDS.includes(word) && !state.toolRan) {
     state.toolRan = true;
     if (!speakableNow()) {
       dropAnswerSpeech();
-      if (state.voiceTurn) sayPrivateLineOnce();
+      // Not straight after "there's a card on your screen": the fixed
+      // private line comes when the answer's words do (enqueueSpeech).
+      if (state.voiceTurn && !cardLine) sayPrivateLineOnce();
     }
   }
   const text = WAIT_STATUS[word];
@@ -2465,6 +2483,7 @@ async function send(promptText, provenance = "typed") {
   state.turnRoute = null;
   state.toolRan = false;
   state.privateLineSaid = false;
+  cardVoice.reset();
   // Where the tool counters stood when the question was sent: a `step`
   // event after this, or a drop in the event stream, keeps the rest of a
   // voice answer on screen (private-speech.js).
@@ -2964,12 +2983,29 @@ function recheckSpeech() {
 }
 
 /** Drops what is queued of the answer, and a clip already being made for
- *  it ahead of time - but never the fixed line, which may already be
+ *  it ahead of time - but never a fixed line, which may already be
  *  queued or made (`privateLineSaid` is set when it is queued, so dropping
  *  it here would mean it is never said at all). */
 function dropAnswerSpeech() {
-  speechQueue = speechQueue.filter((text) => text === PRIVATE_LINE);
-  if (aheadClip && aheadClip.text !== PRIVATE_LINE) aheadClip = null;
+  speechQueue = speechQueue.filter(isFixedLine);
+  if (aheadClip && !isFixedLine(aheadClip.text)) aheadClip = null;
+}
+
+/** A line Jarvis says in its own fixed words - "It's on your screen." or a
+ *  card line - never the answer's: always safe to say, whatever the answer. */
+function isFixedLine(text) {
+  return text === PRIVATE_LINE || isCardLine(text);
+}
+
+/** Which card line this spoken question has said (card-words.js). */
+const cardVoice = createCardVoice();
+
+/** Says one card line ("I need your OK for that..."), in the answer's
+ *  queue so it never talks over a sentence already playing. */
+function sayCardLine(line) {
+  if (speechMuted) return;
+  speechQueue.push(line);
+  drainSpeechQueue();
 }
 
 /** Instead of a private answer, one fixed line - once per answer. */
@@ -2986,7 +3022,7 @@ function sayPrivateLineOnce() {
 function takeNextLine() {
   for (;;) {
     const next = speechQueue.shift();
-    if (next === undefined || next === PRIVATE_LINE || speakableNow()) return next;
+    if (next === undefined || isFixedLine(next) || speakableNow()) return next;
     dropAnswerSpeech();
     if (!state.privateLineSaid) {
       state.privateLineSaid = true;
@@ -3051,7 +3087,7 @@ async function drainSpeechQueue() {
       // was asked for: a tool may have run, or the event stream dropped,
       // while the sound was being made. Then this clip is dropped unplayed
       // and the fixed line said instead, once.
-      if (clip.text !== PRIVATE_LINE && !speakableNow()) {
+      if (!isFixedLine(clip.text) && !speakableNow()) {
         dropAnswerSpeech();
         if (!state.privateLineSaid) {
           state.privateLineSaid = true;
@@ -3091,7 +3127,7 @@ async function playClip(dataUri, generation, text = "") {
   currentAudio = audio;
   clipPlaying = true;
   // "It's on your screen." is not a sentence of the answer.
-  const own = text && text !== PRIVATE_LINE ? text : null;
+  const own = text && !isFixedLine(text) ? text : null;
   playingText = own;
   if (own) lastPlayedText = own;
   try {
@@ -4094,9 +4130,13 @@ dom.attentionClose.addEventListener("click", () => {
 // The tray's approvals row opens the gate here rather than in the HUD: this is
 // the surface that renders the risk line and the `raised` block.
 if (IS_TAURI) {
-  TAURI.event.listen("show-approval", () => {
+  TAURI.event.listen("show-approval", (event) => {
     const queue = currentQueue();
-    const next = queue.items[0];
+    // "Open the card" names the card its window showed (card-link.js); the
+    // tray and the widget name none. A card no longer waiting falls back to
+    // the first one that is.
+    const wanted = event && typeof event.payload === "string" ? event.payload : null;
+    const next = (wanted && queue.items.find((item) => item.id === wanted)) || queue.items[0];
     if (!next) return;
     state.parked.delete(next.id);
     openApproval(next);

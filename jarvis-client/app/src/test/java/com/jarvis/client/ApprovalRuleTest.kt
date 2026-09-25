@@ -83,7 +83,8 @@ class ApprovalRuleTest {
         val read = decodePendingRows(listOf(JarvisJson.parseToJsonElement(json)))
         assertEquals(0, read.skipped)
         val item = read.items.single()
-        assertEquals("Jarvis wants to send email", item.title)
+        // No notice on this row: the PC's own fallback, from the name (CardWords).
+        assertEquals("Jarvis wants your OK for \"send email\"", item.title)
         assertEquals("there is no unsend", item.risk.why)
         assertEquals("quick, before it expires", item.raised?.quote)
         assertEquals("tool:browser_navigate", item.raised?.source)

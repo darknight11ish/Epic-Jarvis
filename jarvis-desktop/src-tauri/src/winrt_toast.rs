@@ -149,7 +149,14 @@ pub fn set_explicit_aumid() {
 /// (buttonless) toast the plugin already knows how to show if anything here
 /// fails - a WinRT call erroring must not mean the owner hears nothing at
 /// all about a pending approval.
-pub fn notify_approval(app: &AppHandle, title: &str, body: &str, id: &str) {
+///
+/// `silent`: a "normal" card (the notice's weight: it can be undone and it
+/// stays on this PC) shows without a sound - it waits to be found rather
+/// than interrupting - where a "heavy" one plays the usual sound. Every card
+/// gets a toast either way (the creativity audit, 2026-09-25: a normal card
+/// used to get none, and expired unseen). The plain fallback cannot be made
+/// silent through the plugin, so it keeps its sound.
+pub fn notify_approval(app: &AppHandle, title: &str, body: &str, id: &str, silent: bool) {
     // An uninstalled build has no shortcut carrying this AUMID, so
     // `CreateToastNotifierWithId` is resolving a name that points at
     // nothing. Straight to the plain toast rather than through a WinRT call
@@ -160,7 +167,7 @@ pub fn notify_approval(app: &AppHandle, title: &str, body: &str, id: &str) {
         crate::commands::notify(app, title, body);
         return;
     }
-    if let Err(e) = try_notify_approval(title, body, id) {
+    if let Err(e) = try_notify_approval(title, body, id, silent) {
         crate::logfile::log(&format!(
             "[jarvis] actionable toast failed, falling back to a plain one: {e}"
         ));
@@ -168,24 +175,44 @@ pub fn notify_approval(app: &AppHandle, title: &str, body: &str, id: &str) {
     }
 }
 
-fn try_notify_approval(title: &str, body: &str, id: &str) -> windows::core::Result<()> {
-    let xml = format!(
+/// The toast's XML. Deny is the ONLY action, whatever the arguments: Approve
+/// never goes on a notification (docs/ARCHITECTURE.md §3, rule 2). An empty
+/// body (App lock: the title only) leaves out its line.
+fn approval_toast_xml(title: &str, body: &str, id: &str, silent: bool) -> String {
+    let body_line = if body.trim().is_empty() {
+        String::new()
+    } else {
+        format!("\n      <text>{}</text>", escape_xml(body))
+    };
+    let audio = if silent {
+        "\n  <audio silent=\"true\"/>"
+    } else {
+        ""
+    };
+    format!(
         r#"<toast activationType="foreground" launch="jarvis-open">
   <visual>
     <binding template="ToastGeneric">
-      <text>{title}</text>
-      <text>{body}</text>
+      <text>{title}</text>{body_line}
     </binding>
-  </visual>
+  </visual>{audio}
   <actions>
     <action content="Deny" arguments="{prefix}{id}" activationType="foreground"/>
   </actions>
 </toast>"#,
         title = escape_xml(title),
-        body = escape_xml(body),
         prefix = DENY_PREFIX,
         id = escape_xml(id),
-    );
+    )
+}
+
+fn try_notify_approval(
+    title: &str,
+    body: &str,
+    id: &str,
+    silent: bool,
+) -> windows::core::Result<()> {
+    let xml = approval_toast_xml(title, body, id, silent);
 
     let doc = XmlDocument::new()?;
     doc.LoadXml(&HSTRING::from(xml))?;
@@ -338,6 +365,24 @@ mod tests {
     fn an_empty_id_is_not_a_deny() {
         let argv = vec!["jarvis-desktop.exe".to_string(), "jarvis-deny:".to_string()];
         assert_eq!(deny_id_from_argv(&argv), None);
+    }
+
+    #[test]
+    fn the_toast_offers_deny_and_never_approve() {
+        for silent in [false, true] {
+            let xml = approval_toast_xml("Jarvis wants to search the web", "Why.", "a1", silent);
+            assert!(xml.contains(r#"<action content="Deny""#));
+            assert!(!xml.to_lowercase().contains("approve"));
+            assert_eq!(xml.matches("<action ").count(), 1);
+            assert_eq!(xml.contains(r#"<audio silent="true"/>"#), silent);
+        }
+    }
+
+    #[test]
+    fn app_lock_s_title_only_toast_has_one_line() {
+        let xml = approval_toast_xml("Jarvis wants to send an email", "", "a1", false);
+        assert_eq!(xml.matches("<text>").count(), 1);
+        assert!(xml.contains("<text>Jarvis wants to send an email</text>"));
     }
 
     #[test]

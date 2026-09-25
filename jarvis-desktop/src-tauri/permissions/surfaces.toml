@@ -57,6 +57,15 @@ permissions = [
   "allow-open-approval-in-quickbar",
 ]
 
+# "Open the card" (card-link.js): Settings and the Brain show one line while
+# an approval card waits, with a button that opens the Jarvis bar on it. That
+# DECIDES NOTHING - the bar, behind App lock, is where Deny and Approve are -
+# so those two windows get only this, not `approvals` above.
+[[set]]
+identifier = "open-card"
+description = "Open the Jarvis bar on a waiting approval card. Decides nothing."
+permissions = ["allow-open-approval-in-quickbar"]
+
 # Pause, resume or stop the turn Jarvis is running right now, and annotate it.
 # Granted to the two windows that actually draw those controls - the quickbar
 # and the widget - and to nothing else, the same reasoning `approvals` above

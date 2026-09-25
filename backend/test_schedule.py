@@ -554,8 +554,9 @@ def t_acting_and_the_replies():
     job = w.s.job(r.ids[0])
     check("... and keeps the owner's own words, capitals and all", job["text"] == "call Mum")
     r = Q.answer("remind me every weekday at 7 to take my pills", sched=w.s, now=now)
-    check("a repeat says a card is up and nothing is set until yes",
-          "approval card" in r.reply and "Nothing is set up until you say yes" in r.reply
+    check("a repeat says a card is up and nothing is set until the card is approved",
+          "approval card" in r.reply and "Nothing is set up until you approve the card" in r.reply
+          and "say yes" not in r.reply
           and len(w.cards) == 1, r.reply)
     Q.answer("add milk to my to-do list", sched=w.s, now=now)
     Q.answer("add call the bank to my to-do list", sched=w.s, now=now)

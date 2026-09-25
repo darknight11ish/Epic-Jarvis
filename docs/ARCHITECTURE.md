@@ -186,11 +186,13 @@ done by **generating** the text from tables we wrote.
 `jarvis_gate.notice_for(item)` reads exactly two things off an approval row —
 `action`, and whether `raised` is truthy. It reads no `detail`, no `prompt`,
 and nothing inside `raised`. Every word it returns comes from `_RISK` and from
-the action name. It is attached to every `/api/pending` row as `notice`, and
-allowed through the SSE doorbell by name.
+`jarvis_card_words.TITLES` (a table of plain phrases, one per action, written
+by us - `backend/jarvis_card_words.py`). It is attached to every
+`/api/pending` row as `notice`, and allowed through the SSE doorbell by name.
 
 ```
-title        "Jarvis wants to send email"   from the action name
+title        "Jarvis wants to send an email"   from jarvis_card_words.TITLES;
+             an action with no phrase: 'Jarvis wants your OK for "<name>"'
 body         why it matters, that something tried to hurry you if `raised`
              is set, and that nothing has happened yet
 weight       "heavy" | "normal"
@@ -200,10 +202,14 @@ approve_ok   false   — always
 
 **Three rules for any client reading this.**
 
-1. **`weight: "heavy"` interrupts; `"normal"` waits to be found.** Heavy is
+1. **`weight: "heavy"` interrupts; `"normal"` arrives quietly.** Heavy is
    earned by any one of three things: the action cannot be undone, it leaves
    this machine, or outside text pushed the tier up. Three named reasons a
-   person can argue with, not a score nobody can.
+   person can argue with, not a score nobody can. Both weights get a
+   notification on both apps - heavy with a sound, normal silently (the
+   phone's quiet channel; a Windows toast with `<audio silent="true"/>`).
+   Until 2026-09-25 the PC showed none at all for a normal card, which then
+   sat unseen and ran out of time (the creativity audit).
 
 2. **`deny_ok` and `approve_ok` are not symmetric, and a client does not get
    to decide that for itself.** Refusing something you have not fully read
@@ -245,6 +251,42 @@ not confirmed — and note the one real gap even once it does: unlike
 Android's `decideDetached`, this still briefly activates the process on
 click rather than never touching it, because a true background action
 needs registry/COM plumbing this session could not add with confidence.
+
+### One card on every screen
+
+Decided 2026-09-25 after the creativity audit (`docs/CREATIVITY-AUDIT-2026-09-25.md`,
+items 2, 4 and 8), which found the card speaking three dialects: the Jarvis
+bar showed the code name (`switch_model`), the widget "APPROVAL REQUIRED",
+the phone "Jarvis wants to learning enable", and Approve and Deny swapped
+places between screens. Presentation only - no approval logic changed.
+
+- **The same words everywhere.** The title is always `notice.title`
+  (`jarvis_card_words.TITLES`, above), under the label "Needs your OK". The
+  Jarvis bar, the widget, the HUD page, the phone's card, its home-screen
+  widget, both apps' notifications and the fingerprint prompt all show it.
+  `tools/gen_card_words_cases.py` writes the words into one file that
+  `backend/test_card_words.py`, the desktop's `tests/card-words.mjs`, the
+  Rust `stream.rs` tests and the phone's `CardWordsContractTest` all read.
+- **The same button order everywhere: Deny on the left, Approve on the
+  right.** Why this order: Android's own dialogs put the confirming button
+  on the right; the phone's card already approves with a swipe to the right
+  and denies with one to the left, so the buttons now sit where the gesture
+  goes; the Jarvis bar, the desktop's main card, already had it; and the
+  first button the keyboard's Tab reaches is the safe one. Notifications are
+  unchanged: Deny only, never Approve (rule 2 above).
+- **"Open the card"** wherever a button raises one. Settings and the Brain on
+  the PC, and every phone screen but Home, show one line while any card
+  waits, with a button that goes to it (the Jarvis bar on the PC, behind App
+  lock; Home on the phone). One line per window rather than a link under each
+  button, so a button added later cannot miss it. It decides nothing.
+- **Voice says a card is waiting, and what happened.** A spoken question that
+  waits on a card hears "I need your OK for that. There's a card on your
+  screen.", then "Approved. Carrying on.", "OK, I won't do that." or "That
+  card timed out, so nothing was done." - from `: jarvis-status` lines the PC
+  sends (JARVIS-API §4). Fixed words, never the card's. **Never
+  approve-by-voice**: the voice check cannot tell a recording from the owner,
+  so a spoken "yes" answers nothing. For the same reason no sentence says
+  "until you say yes" any more ("until you approve the card").
 
 ---
 
@@ -835,6 +877,16 @@ own spotter already heard the phrase), and only the phone opens its
 microphone by itself after a question (the desktop's listener is always
 listening). Still in neither app: the "Voice delay" panel (`flow.summary`)
 - the one-line command in `backend/README.md` prints it.
+
+**One card on every screen is in both apps since 2026-09-25** (§3): the
+same title and label, Deny left and Approve right, "Open the card", a
+notification for every card, and the spoken card lines. One small
+difference, on purpose: "Open the card" sits in Settings and the Brain on
+the PC (the Jarvis bar, the widget and the HUD show the card itself) and on
+every screen but Home on the phone (Home shows the cards). Both name the
+last card in the queue as read. The phone's home-screen widget has no
+Approve at all - "Review" opens the app - and sits where Approve sits
+elsewhere, on the right.
 
 ---
 

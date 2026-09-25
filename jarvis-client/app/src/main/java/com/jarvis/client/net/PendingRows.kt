@@ -63,7 +63,8 @@ private val DETAIL_TEXT_KEYS = listOf("diff", "command", "cmd", "preview", "cont
  *
  * - `id`: a string, or a number turned into one.
  * - `title`: what Jarvis wants to do, from `notice.title` (built by the
- *   desktop's own tables) or else the action name in words. The server sends
+ *   PC from its own tables, backend/jarvis_card_words.py) or else the PC's
+ *   fallback built from the action's name ([CardWords.fallbackTitle]). The server sends
  *   no `title`; this used to default to "Approval required" on every card and
  *   on the fingerprint prompt, so the phone never said what it was asking.
  *   Never from `prompt` or `detail`: the title is also a notification's title.
@@ -150,11 +151,12 @@ internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
  */
 private const val MAX_EXPIRES_IN_S = 24 * 3600.0
 
-/** The action name in words, in the same form the desktop's `notice_for` uses. */
-internal fun titleForAction(action: String?): String {
-    val phrase = action?.replace('_', ' ')?.trim().orEmpty()
-    return if (phrase.isEmpty()) "Jarvis is asking for your approval" else "Jarvis wants to $phrase"
-}
+/**
+ * The title of a row with no notice: the PC's own fallback, built from the
+ * action's name ([CardWords.fallbackTitle]) - the same words the desktop
+ * shows for the same row.
+ */
+internal fun titleForAction(action: String?): String = CardWords.fallbackTitle(action)
 
 private fun idOf(el: JsonElement?): String? {
     val p = el as? JsonPrimitive ?: return null

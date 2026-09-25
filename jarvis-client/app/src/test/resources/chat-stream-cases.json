@@ -71,14 +71,15 @@
       "name": "local turn with a tool and an approval card",
       "producer": "jarvis_agent.run_local_turn",
       "content_type": "text/event-stream",
-      "body": ": jarvis-status approval\n\n: keepalive\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"It is \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"4.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+      "body": ": jarvis-status approval\n\n: keepalive\n\n: jarvis-status approved\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"It is \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"4.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
       "expect": {
         "text": "It is 4.",
         "ended": true,
         "length": false,
         "error": null,
         "statuses": [
-          "approval"
+          "approval",
+          "approved"
         ]
       }
     },
