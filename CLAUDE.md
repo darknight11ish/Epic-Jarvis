@@ -193,6 +193,10 @@ Decided 2026-09-25, after the competitiveness audit
   refused to anything on the open internet.
 - **The "I heard you" sound gets a switch in both apps, off by default**,
   next to the "One moment" switch (the owner changed on to off, 2026-09-25).
+- **The standby schedule wakes Jarvis only if the schedule put it on
+  standby.** Standby switched on by hand stays on at the end of the hours.
+- **The morning briefing shows new emails' count AND senders by default**,
+  with a setting in both apps to show the count only.
 
 ## Every new feature gets its own audit, without being asked
 
