@@ -793,13 +793,25 @@ def _post_json(url: str, payload: dict, timeout: float = 120.0) -> dict:
     req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
                                  headers={"Content-Type": "application/json"},
                                  method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with _urlopen(req, timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
 def _get_json(url: str, timeout: float = 4.0) -> dict:
-    with urllib.request.urlopen(url, timeout=timeout) as r:
+    with _urlopen(url, timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
+
+
+def _urlopen(req, timeout: float):
+    """Ollama on this PC, never through a proxy (CONN-1): a set HTTPS_PROXY
+    would otherwise carry the request - model names and the fixed test
+    prompts - to the proxy. jarvis_local_http is shipped alongside."""
+    try:
+        import jarvis_local_http
+    except ImportError:
+        return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+            req, timeout=timeout)
+    return jarvis_local_http.urlopen(req, timeout)
 
 
 def is_loaded(model: str, *, base: Optional[str] = None,
