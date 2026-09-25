@@ -1286,12 +1286,43 @@ outside text"). This route is not affected.
 
 | Route | Body | Answers | What it does |
 |---|---|---|---|
-| `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?, "also"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs, or while another power card waits; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model, and (2026-09-24) stops the second card's Ollama and the big model when they run: `also` is one sentence per engine that had something to say, and each sentence is appended to `message`, so an app that shows `message` shows them. The second card then stays stopped - status reads do not restart it - until the owner uses a second-card feature or Jarvis leaves standby; background learning does not wake it. A big-model job already under way is left to finish. |
+| `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?, "still_loaded"?, "also"?, "note"?, "warm_up"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs, or while another power card waits; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model, and (2026-09-24) stops the second card's Ollama and the big model when they run: `also` is one sentence per engine that had something to say, and each sentence is appended to `message`, so an app that shows `message` shows them. The second card then stays stopped - status reads do not restart it - until the owner uses a second-card feature or Jarvis leaves standby; background learning does not wake it. A big-model job already under way is left to finish. |
 
 The mode clients show still comes from `/api/status` and the `power` event.
 Desktop: tray → Change power mode (`commands::set_power_mode`). Phone: Mind
 screen buttons (`JarvisRuntime.setPower`). Both hold **waking** on a stale
 link and let going quieter through.
+
+**Added 2026-09-25, with the standby schedule (§21.8):**
+
+- **Every model, not only the one `jarvis_models` names.** After
+  `jarvis_models.unload()`, standby asks the everyday Ollama itself
+  (`GET /api/ps`) for every model it still holds and unloads each
+  (`POST /api/generate {"model", "keep_alive": 0}`, no prompt - Ollama's
+  documented unload), then reads `/api/ps` again for up to three seconds.
+  `unloaded` lists what is really gone; `still_loaded` (and a sentence in
+  `also` and `message`) what Ollama did not let go of. Loopback only
+  (`OLLAMA_URL` must be this PC, else nothing is asked and `note` says so),
+  through `jarvis_local_http` (no proxy); only model names are sent.
+- **Warm-up on waking.** Leaving standby (for `active` or `quiet`) loads
+  the chat model again at once, in the background: `jarvis_models.
+  current_model()` (else `JARVIS_MODEL`), `POST /api/generate {"model"}`
+  with no prompt and no `keep_alive` (Ollama's own setting decides - `-1`
+  on the owner's PC). `warm_up` names the model and `message` says it is
+  loading. Never a cloud model (`:cloud`, `-cloud`) and never another
+  machine's Ollama - the chat path's two checks (ARCHITECTURE §4). If
+  Jarvis is back on standby when the load finishes, the model is unloaded
+  again.
+- **The answer comes when the mode has changed.** Freeing the cards can
+  take seconds; an answer that waited for it past `wait_s` (1.5 s) used to
+  be the 202 "Waiting for your approval" with no card up. Now, once the
+  gate has allowed it and the mode has changed, a slow unload answers 200
+  `changed: true` with "Freeing the graphics card now." and carries on
+  behind it (the audit log gets `power.standby`).
+- **`why`.** A change the standby schedule makes is recorded by
+  `jarvis_power` as `"the standby schedule"`, not `"the owner, from ..."`,
+  so the desktop's tray says "Power: standby · standby schedule" rather than
+  "set by hand" (`stream.rs power_set_by` -> `"standby_schedule"`).
 
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->
 
@@ -3182,7 +3213,9 @@ card, anything that repeats asks once with a card that lists the next run
 times; simple commands like timers are answered without the AI model.
 
 `backend/schedule.patch`, `backend/jarvis_schedule.py` (the scheduler) and
-`backend/jarvis_quick.py` (the answers without the model). **Both apps call
+`backend/jarvis_quick.py` (the answers without the model), and since
+2026-09-25 the first kind that plugs in, the standby schedule
+(`backend/jarvis_standby_schedule.py`, 21.8). **Both apps call
 all three routes.** The desktop: the Brain's Work tab, "Coming up"
 (`coming-up.js`, `brain/schedule.rs`: `brain_schedule`,
 `brain_schedule_act`, `brain_schedule_add_todo`, Brain window only), and a
@@ -3217,7 +3250,7 @@ repeating job then moves to its next time - never once per missed time.
 A `job`:
 
 ```
-{"id": "s0123456789", "kind": "timer"|"alarm"|"reminder"|"todo"|<a later kind>,
+{"id": "s0123456789", "kind": "timer"|"alarm"|"reminder"|"todo"|"standby"|<a later kind>,
  "text": str,                     the owner's own words ("" for a plain timer or alarm)
  "state": "active"|"paused"|"waiting"|"fired"|"done",
  "due": epoch|null, "left": seconds (active, or a paused timer), "when": "07:00 tomorrow",
@@ -3226,6 +3259,8 @@ A `job`:
  "card": "Waiting for your yes on the approval card." (waiting),
  "fired_at", "late": bool, "missed": "missed at 07:00",
  "lock_screen": "Jarvis: a reminder is due.",   the kind's words, never the job's
+ "notify": false,                 only for a kind that tells nobody (the standby schedule)
+ "note": "Went on standby at 01:00.",   a kind's line about how it last went (21.8)
  "created", "source": "quick"|"tool"|"app"}
 ```
 
@@ -3261,16 +3296,20 @@ If you say no: nothing is set up.
 ```
 
 Its notice (the lock screen's words) comes from `jarvis_gate`'s table like
-every other card: "sets up a reminder or alarm that repeats, on this PC;
-nothing is sent anywhere, and deleting it is immediate". Denied, timed out
+every other card: "sets up a reminder, an alarm or a standby schedule that
+repeats, on this PC; nothing is sent anywhere, and deleting it is
+immediate" (the standby schedule's words added 2026-09-25). Denied, timed out
 or refused: the job is removed, and a `schedule` event says the list
 changed. A "no" to it proposes no standing rule (`_NO_RULE_FROM_DENIAL`):
 the owner asked for it.
 
 ### 21.4 The event
 
-`schedule`: `{"id", "kind", "state": "fired" | "changed", "late"?: bool}` -
-**ids and the kind only, never the words** (ARCHITECTURE section 6).
+`schedule`: `{"id", "kind", "state": "fired" | "changed", "late"?: bool,
+"notify"?: false}` - **ids and the kind only, never the words**
+(ARCHITECTURE section 6). `"notify": false` (since 2026-09-25) marks a kind
+that tells nobody - the standby schedule at 01:00 - and then neither app
+shows a toast or a notification; both still read Coming up again.
 `"fired"` is a job going off; `"changed"` is the list changing (added,
 paused, deleted, a card decided). Both apps read Coming up again on it. On
 `"fired"`:
@@ -3363,5 +3402,103 @@ the times stay, so a timer still counts down.
   30-minute heartbeat and in-memory findings could not host timers
   (`jarvis_schedule.py`'s header says why); the digest lives in the owner's
   `jarvis_arbiter.py`, which this repository does not hold. The scheduler is
-  the one clock; briefings, sleep mode and the overnight tidy are to plug in
-  as new kinds (`register_kind`), not as schedulers of their own.
+  the one clock; briefings and the overnight tidy are to plug in as new
+  kinds (`register_kind`), not as schedulers of their own - as sleep mode
+  now has (21.8).
+
+### 21.8 The standby schedule - "sleep mode" (added 2026-09-25)
+
+Task #55 ("sleep feature - schedule + manual sleep/wake, unload ALL models
+on both GPUs, warm-up on wake"), built on what was there. `backend/
+jarvis_standby_schedule.py`; the changes to Standby itself are in §11.
+
+**One concept, not two.** Jarvis already had Standby (§11, both apps call
+it that), which frees the graphics cards. Sleep mode is that Standby on a
+timetable, so it is called the **standby schedule** in both apps. Manual
+sleep and wake are the Standby and Active controls that already exist -
+nothing new. "Sleep" is avoided because `[memory.sleep_time]` /
+`jarvis_sleep.py` is the overnight memory tidy, which the toml warns does
+the opposite.
+
+**A kind of job, not a loop.** Kind `"standby"`, registered with
+`jarvis_schedule.register_kind` (ARCHITECTURE section 12): a **window**
+kind, one of its kind at a time, that notifies nobody. Its rule:
+
+```
+{"every": "day", "at": "01:00", "until": "07:00"}     every day only; the two times must differ
+```
+
+It goes off at both ends (`next_run` is whichever end comes first). Which
+end it is comes from the clock (`jarvis_schedule.in_window`), not from which
+end last fired, so a night the PC was off - 01:00 and 07:00 both overdue,
+found together, going off ONCE late - agrees: it is after 07:00, so awake.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `POST /api/schedule/add` | `{"kind": "standby", "repeat": {"every": "day", "at": "HH:MM", "until": "HH:MM"}}` | **202** `{"ok": true, "waiting": true, "job", "said"}`; 400 bad times or no `repeat`; **409** there is already one ("delete it first to set a different one") | ONE `schedule_repeat` card (21.3). Desktop: `brain_schedule_add_standby` (Brain window only, held on a stale link). Phone: `JarvisRuntime.addStandbySchedule` (held on a stale link). |
+| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete"}` | as 21.2 | Pause skips it, Delete turns it off - immediate, no card. **Neither wakes Jarvis**; Active does that. |
+| `GET /api/schedule` | - | as 21.2 | Listed with the others: `repeat` "every day from 01:00 to 07:00", `when` "on standby at 01:00 tomorrow" or "awake at 07:00 today", `note` how the last end went, `notify: false`. |
+
+The card (21.3's action and tier, its own words):
+
+```
+Set up a standby schedule.
+
+When: every day from 01:00 to 07:00.
+
+At the start, Jarvis goes on standby - the same as choosing Standby: it unloads its models and frees the graphics card(s).
+At the end, it wakes (Active) and loads the chat model again, so the first answer is not slow.
+Timers, alarms and reminders still go off while it is on standby. A question asked then is answered, but the first answer takes 5-15 seconds.
+Turning it off does not wake Jarvis if it is on standby at that moment - choose Active for that.
+
+The next three times:
+  - Saturday 26 September, 01:00 to 07:00
+  - Sunday 27 September, 01:00 to 07:00
+  - Monday 28 September, 01:00 to 07:00
+
+It runs on this PC, by this PC's clock. Nothing is sent anywhere.
+Stopping or deleting it is immediate, from either app.
+
+If you say no: nothing is set up.
+```
+
+**Each end** calls `jarvis_power_switch.set_mode` - the same call as the
+Standby and Active buttons, through the gate as `power_manage` (`auto` as
+shipped; a card at 01:00 if the owner set it to `ask`), with `why` "the
+standby schedule":
+
+- start: on standby, unless it already is ("Already on standby at 01:00.").
+  Refused while a task runs: that night is skipped ("Skipped standby at
+  01:00: a task was running, ...").
+- end: Active, and the warm-up loads the chat model (§11) - if Jarvis is on
+  standby, whoever put it there; if it is already awake, nothing ("Already
+  awake at 07:00.").
+- a start found late inside the window (the PC came on at 03:00): standby
+  then, once.
+
+The last end's sentence is the job's `note` (kept in memory; gone on a
+restart). The going-off event says `"notify": false`: no toast, no phone
+notification. The `power` event updates both apps' Power line.
+
+**While on standby** - the same as Standby by hand: timers, alarms and
+reminders still go off (the scheduler does not look at the power mode, and
+21.5 answers without the model); a question is answered after 5-15 seconds
+while Ollama loads the model, and Jarvis stays on standby (nothing in this
+repository changes the mode on a question) until the end of the window or
+Active.
+
+**Both apps**, in the same words (`coming-up.js`, `net/Schedule.kt`,
+checked against each other by `tests/coming-up.mjs`): under Coming up, a
+"Standby schedule" part with "Standby at" and "Wake at" (01:00 and 07:00
+to start with) and **Set up**; once one exists, its row sits in the list
+("standby, repeats", Pause, Delete, and its `note`) and the part says "Your
+standby schedule is in the list above. Pause skips it and Delete turns it
+off. Neither wakes Jarvis - choose Active for that." The desktop's tray
+Power row says "· standby schedule" when the schedule set the mode.
+
+**Known gaps, said plainly.** Not run on the owner's PC; Ollama was a
+stand-in in every test. Every day only (no weekdays-only window yet). The
+power mode is kept in memory, so a backend restart inside the window comes
+back Active until the next start (the start already went off). With one
+graphics card, the second card's part of standby finds nothing and says
+nothing.

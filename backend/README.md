@@ -4663,6 +4663,13 @@ stand-in `jarvis_hud.py`; the test uses this repo's rebuilt `jarvis_power.py`.
 Unloading uses `jarvis_models.resident_models()` / `unload()` if your copy has
 them — if not, the answer says the model stayed loaded.
 
+**Since 2026-09-25** (with the standby schedule, at the end of this file):
+Standby also asks Ollama on this PC for every model it still holds and
+unloads each, then says if anything is still loaded; leaving Standby loads
+the chat model again straight away; and the answer comes as soon as the
+mode has changed, instead of saying "Waiting for your approval" when
+freeing the card took longer than a second and a half.
+
 ## Test it
 
 ```powershell
@@ -8293,3 +8300,149 @@ default, one call, local only; the route, the pending filter and the
 accepted card lifted from the whole patch stack and run; the patch applies
 forwards and backwards. Every check about the entity layer fails on the code
 before this change.
+
+---
+
+# The standby schedule ("sleep mode"): `jarvis_standby_schedule.py`, with changes to `jarvis_power_switch.py` and `jarvis_schedule.py`
+
+Added 2026-09-25 (task #55, "sleep feature").
+
+**What it does, in plain words.** Jarvis already had **Standby** - the tray's
+Change power mode, or the Standby button on the phone's Mind screen. It
+unloads the models and frees the graphics card(s). The standby schedule is
+that same Standby on a timetable: "on standby from 01:00, awake at 07:00,
+every day". It is not a second kind of sleep. You set it up under **Coming
+up** - the desktop's Brain, Work tab, or the phone's Mind - with two times and
+**Set up**.
+
+**Why "standby schedule" and not "sleep mode".** Both apps already call the
+thing that frees the graphics card "Standby", so the timetable for it uses
+the same word - one name for one thing. "Sleep" was also already taken: the
+overnight memory tidy (`jarvis_sleep.py`, `[memory.sleep_time]`) does the
+opposite, and your `jarvis-framework.toml` warns about that name clash.
+
+**What asks first, and what does not.**
+- Setting it up **asks once**, with an approval card (it repeats, so it is
+  the same `schedule_repeat` card as a repeating reminder). The card lists
+  the next three nights in full. Nothing happens until you approve it.
+- Going on standby and waking at those times go through the same gate as
+  the Standby and Active buttons (`power_manage`, which your settings file
+  sets to `auto` - no card). If you have changed `power_manage` to `ask`, a
+  card appears at 01:00 too, and nothing changes unless it is approved.
+- **Pause** (skips it) and **Delete** (turns it off) are immediate, on its
+  row in Coming up. Neither wakes Jarvis if it is on standby right then -
+  choose Active for that.
+- There is only one standby schedule. To change the times, delete it and
+  set up a new one (a new card).
+
+**What happens at each end.**
+- **01:00**: Jarvis goes on standby, exactly as if you had chosen Standby.
+  If a multi-step task is running, that night is skipped (standby would
+  unload the model the task is using), and the row in Coming up says so.
+- **07:00**: Jarvis wakes (Active) and **loads the chat model straight
+  away**, so your first question in the morning is not the slow one. If you
+  woke it by hand earlier, nothing happens.
+- If the PC was off all night, nothing happens when it comes back after
+  07:00 (it would already be time to be awake). If it comes on at 03:00,
+  Jarvis goes on standby then, once.
+- No toast and no phone notification at 01:00 or 07:00. The tray's Power
+  line says "Power: standby · standby schedule", and the row in Coming up
+  says what the last end did ("Went on standby at 01:00.").
+
+**While it is on standby** (the same as Standby by hand):
+- Timers, alarms and reminders still go off, on the PC and on the phone.
+  "Set a timer for 10 minutes" is still answered without the AI model.
+- A question is still answered, but the first answer takes 5-15 seconds
+  while the chat model loads. Jarvis stays on standby until 07:00 or until
+  you choose Active.
+
+**Two things Standby itself now does better (for the schedule and for the
+buttons alike).**
+- **Every model is unloaded, not only the everyday one.** Standby used to
+  unload only what your `jarvis_models.py` listed, and only if it has an
+  `unload()`. Now it also asks Ollama on this PC what it still has loaded
+  and unloads each one (a picture model, an embedding model, the extra
+  models a one-card setup runs), then checks again and says plainly if
+  anything is still there. The second graphics card, the big model and the
+  better voice were already stopped by Standby; with one card, that part
+  finds nothing and says nothing.
+- **Waking loads the chat model again at once** (Active or Quiet after
+  Standby). Never a cloud model, and only Ollama on this PC.
+
+**What is where.**
+- `jarvis_standby_schedule.py` (new, copied in by `apply-patches.ps1`): the
+  kind of job "standby" on the one scheduler, and what each end does. It
+  unloads nothing itself; every change goes through `jarvis_power_switch.py`.
+- `jarvis_schedule.py`: jobs that are a time window ("from 01:00 to
+  07:00"), one-of-a-kind jobs, jobs that notify nobody, and a line under a
+  job saying how it last went.
+- `jarvis_power_switch.py`: unloading every model, the warm-up, and the
+  answer coming as soon as the mode has changed.
+- `schedule.patch`: the card's notice now says "a reminder, an alarm or a
+  standby schedule".
+
+No new route and no new patch file: the apps use `POST /api/schedule/add`
+with `{"kind": "standby", ...}` (`docs/JARVIS-API.md` section 21.8).
+
+## Owner steps (one line each, in PowerShell)
+
+Put the new code on the PC, from this repository's folder, then restart
+Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+Then check that Standby really frees the card: choose Standby in the tray
+(right-click the Jarvis icon by the clock, Change power mode, Standby), wait
+ten seconds, and run this. It lists what Ollama still has loaded (it should
+list nothing) and how much memory each graphics card is using (it should be
+much lower than before). Nothing is saved to a file:
+
+```powershell
+ollama ps; nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv
+```
+
+Then choose Active, wait twenty seconds, and run the same line again: the
+chat model should be listed again, loaded by the warm-up.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_standby_schedule.py; py -3 backend\test_power_switch.py
+```
+
+No model, no network, no graphics card. It checks the times (both ends,
+across midnight, and across both clock changes - that part is skipped on
+Windows, which cannot switch time zone inside one program), the one card
+and what it says, only one schedule, going on standby and waking through
+the real `jarvis_power_switch.py` with a stand-in Ollama (every model
+unloaded, the chat model loaded again), a task skipping a night, a night
+the PC was off, pausing and deleting, timers still going off on standby,
+and no notification for the schedule's own going-off.
+
+## Not checked, said plainly
+
+- **Nothing has run on your PC.** Ollama was a stand-in in every test. The
+  unload request (`keep_alive: 0`, no prompt) and the load request (no
+  prompt) are the ones Ollama's own documentation gives, but they have not
+  been watched working against your Ollama.
+- **Whether Standby leaves anything else on the card.** Only Ollama's
+  models, the second card's Ollama, the big model and the better voice are
+  freed. If something else holds memory on the card, the `nvidia-smi` line
+  above will show it.
+- **Your `jarvis_models.py`.** The warm-up asks it which model chat uses
+  (`current_model()`, the same call the Models screen makes). If it cannot
+  say, nothing is loaded and the first answer loads it instead (5-15
+  seconds); set `JARVIS_MODEL` to the model's name to tell it.
+- **A restart during the night.** The power mode is kept in memory only, so
+  if Jarvis's backend restarts at 03:00 it comes back Active, and stays
+  Active until 07:00 - the 01:00 start already went off before the restart,
+  so there is nothing "missed" to catch up. The models it unloaded stay
+  unloaded until the first question, so the card stays mostly free, but the
+  Power line says Active and the second card's features may start again.
+  Only if the PC was off at 01:00 itself does Jarvis go on standby when it
+  comes back.
+- The desktop's two time boxes and the phone's were checked in this
+  container (the desktop's with a stand-in backend); the phone's screen has
+  not been built here - only GitHub's build can compile it.
