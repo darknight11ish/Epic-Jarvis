@@ -621,7 +621,9 @@ await check("a refused or missing shell says where the mic is, instead of doing 
 await check("the HUD holds exactly one app command, and it cannot record", async () => {
   const cap = JSON.parse(readFileSync(join(HERE, "..", "src-tauri", "capabilities", "hud.json"), "utf8"));
   assert.deepEqual(cap.permissions,
-    ["core:default", "core:webview:allow-set-webview-zoom", "hud-voice"]);
+    ["core:app:default", "core:event:allow-listen", "core:event:allow-unlisten",
+      "core:path:default", "core:webview:default", "core:window:default",
+      "core:webview:allow-set-webview-zoom", "hud-voice"]);
   const toml = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
   const set = toml.slice(toml.indexOf('identifier = "hud-voice"'));
   const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1);

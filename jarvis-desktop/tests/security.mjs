@@ -14,7 +14,7 @@
  * Windows only.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
@@ -363,6 +363,28 @@ await check("CONTROL: only Settings may change these, only the Brain may Show, a
     assert.ok(!perms.some((p) => String(p).startsWith("store:")), `${name} can write the store`);
     assert.equal(perms.includes("settings-surface"), name === "settings", `${name} holds settings-surface`);
     assert.equal(perms.includes("private-reveal"), name === "brain", `${name} holds private-reveal`);
+  }
+});
+
+await check("no window can send events to the others (apps security audit M1)", () => {
+  // `core:default` carries `core:event:default`, which allows `emit` and
+  // `emit_to`. No page emits anything, and the quickbar trusts what it hears
+  // (`voice-heard` with isOwner, the approval queue), so a script in any
+  // window could have faked the owner's checked voice or an approval card.
+  // Every window lists its core permissions by hand instead, without emit.
+  const caps = ["brain", "faces", "hud", "onboarding", "quickbar", "settings", "widget"]
+    .map((c) => [c, JSON.parse(read(`src-tauri/capabilities/${c}.json`)).permissions.map(String)]);
+  for (const [name, perms] of caps) {
+    for (const banned of ["core:default", "core:event:default", "core:event:allow-emit", "core:event:allow-emit-to"]) {
+      assert.ok(!perms.includes(banned), `${name} holds ${banned}`);
+    }
+    assert.ok(perms.includes("core:event:allow-listen"), `${name} can no longer listen`);
+  }
+  // And no page tries to: an emit from a page would now be refused, so one
+  // appearing here means a feature that silently does nothing.
+  for (const f of readdirSync(join(HERE, "..", "src")).filter((f) => /\.(js|html)$/.test(f))) {
+    const text = read(`src/${f}`);
+    assert.doesNotMatch(text, /TAURI\??\.event\??\.emit|plugin:event\|emit/, `src/${f} emits an event`);
   }
 });
 

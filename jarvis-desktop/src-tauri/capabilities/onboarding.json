@@ -6,7 +6,12 @@
     "onboarding"
   ],
   "permissions": [
-    "core:default",
+    "core:app:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:path:default",
+    "core:webview:default",
+    "core:window:default",
     "jarvis-link",
     "onboarding-surface"
   ]
