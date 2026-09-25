@@ -183,8 +183,16 @@ def is_private(text: str) -> bool:
 # flags far more and explains far less.
 _SECRET_PATTERNS = [
     ("a private key", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
-    ("an AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("a GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b")),
+    # AKIA is a long-lived key, ASIA a temporary one; both are keys.
+    ("an AWS access key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
+    # Classic tokens (ghp_ and friends) and fine-grained ones (github_pat_),
+    # which GitHub has handed out by default since 2023 and the old pattern
+    # missed (extraction research, Module 1).
+    ("a GitHub token", re.compile(
+        r"\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})")),
+    ("a GitLab token", re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}")),
+    ("a Stripe key", re.compile(r"\b(?:sk|rk)_(?:test|live)_[A-Za-z0-9]{16,}")),
+    ("a Google OAuth token", re.compile(r"\bya29\.[0-9A-Za-z_-]{20,}")),
     ("a Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     # Anthropic (sk-ant-api03-...) and today's OpenAI keys (sk-proj-...,
     # sk-svcacct-...) have dashes and underscores inside. The old pattern

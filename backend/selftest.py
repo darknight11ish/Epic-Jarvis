@@ -178,6 +178,8 @@ def stage_config() -> None:
 
 def stage_gate() -> None:
     header("4. Does the approval gate refuse what it should?")
+    # First, and whether or not the gate imports: a way round the gate.
+    say(*openjarvis_autoapprove())
     try:
         import jarvis_gate as G
     except Exception as exc:
@@ -213,6 +215,57 @@ def stage_gate() -> None:
             "" if not bad else f"found: {', '.join(bad)}")
     except SyntaxError as exc:
         say(FAIL, "jarvis_gate.py does not parse", str(exc))
+
+
+#: How OpenJarvis switches its own asking off: a confirm callback that says
+#: yes to everything. The same pattern the extraction research's PowerShell
+#: line uses; against OpenJarvis e86c582 it finds all seven places.
+_AUTO_APPROVE = r"confirm_callback\W{0,3}\s*=\s*lambda[^:]*:\s*True"
+
+
+def openjarvis_autoapprove(package_dir=None) -> tuple:
+    """(status, what, detail): does the installed OpenJarvis approve tools by
+    itself anywhere? (Gate fix 4a, docs/EXTRACTION-RESEARCH-2026-09-23.md.)
+
+    Jarvis's backend was built on OpenJarvis, and current OpenJarvis has
+    seven places - four server routes, three commands - that hand a tool
+    call a callback answering "yes" with nobody asked. A tool call through
+    one of those never reaches jarvis_gate. Whether this backend ever calls
+    them cannot be told from here, so a hit is reported for a person to look
+    at, never guessed away. Reads files only; imports nothing from OpenJarvis.
+    """
+    import importlib.util
+    import re
+    if package_dir is None:
+        try:
+            spec = importlib.util.find_spec("openjarvis")
+        except Exception:
+            spec = None
+        places = list(getattr(spec, "submodule_search_locations", None) or []) if spec else []
+        if not places:
+            return (SKIP, "OpenJarvis is not installed for this Python, so it cannot "
+                          "approve anything by itself")
+        package_dir = places[0]
+    root = Path(package_dir)
+    pattern = re.compile(_AUTO_APPROVE)
+    hits = []
+    for path in sorted(root.rglob("*.py")):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for n, line in enumerate(text.splitlines(), 1):
+            if pattern.search(line):
+                hits.append(f"{path.relative_to(root)}:{n}")
+    if not hits:
+        return (PASS, "OpenJarvis has no place that approves tools by itself")
+    shown = ", ".join(hits[:10]) + (f" and {len(hits) - 10} more" if len(hits) > 10 else "")
+    return (FAIL, f"OpenJarvis approves tools by itself in {len(hits)} place(s)",
+            f"In {root}: {shown}. A tool call made through one of these never "
+            "reaches Jarvis's approval gate. This does not prove Jarvis uses "
+            "them - send this output back so that can be checked. Until then, "
+            "use Jarvis through its own apps, not OpenJarvis's own commands "
+            "(such as `jarvis ask`).")
 
 
 # ==========================================================================

@@ -353,6 +353,14 @@ $PATCHES = @(
     # Needs jarvis_hardware.py and jarvis_profiles.py copied in; without
     # them the routes answer 503.
     'hardware.patch'
+    # The log scrubber (docs/EXTRACTION-RESEARCH-2026-09-23.md, Module 1):
+    # right after HUD_TOKEN is resolved, jarvis_scrub.install(HUD_TOKEN)
+    # takes passwords, keys and the pairing token out of everything the
+    # backend prints or logs - backend.log - and the banner says so. Its
+    # context is loopback-too's and bind-wildcard's lines; last, like every
+    # new patch. Needs jarvis_scrub.py copied in; without it the log is
+    # written as before and the banner line is not printed.
+    'log-scrub.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -419,6 +427,7 @@ $SHIPPED = @(
     'jarvis_past.py'             # past-recall.patch: questions about the past also get retired facts, labelled
     'jarvis_profiles.py'         # hardware.patch: the three setups' arithmetic, words and one-line command (no I/O)
     'jarvis_hardware.py'         # hardware.patch: finding the cards, the steps, making a tuned model, measuring
+    'jarvis_scrub.py'            # log-scrub.patch: passwords, keys and the token kept out of backend.log
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

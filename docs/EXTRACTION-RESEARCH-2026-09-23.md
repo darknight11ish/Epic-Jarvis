@@ -44,6 +44,7 @@ Nothing in `/home/user/Epic-Jarvis` was changed. All design files are in `/tmp/c
 Every module follows the one approval model: plan, show the card, `jarvis_gate`, run. None of them has an "approve all" button, and none lets the model pick its own risk level. That is true of all four designs as written, and I checked it in the code.
 
 ### Module 1: Log scrubber (`jarvis_scrub.py`). Effort **S**
+**Status (2026-09-25): built.** `backend/jarvis_scrub.py` and `backend/log-scrub.patch`, tested by `backend/test_scrub.py`. Both "change first" items are fixed: an unended key block hides at most 240 key-like lines, and loggers made early are re-pointed. The shape list is now the router's own list, which gained `github_pat_` and four more key kinds. The Joplin-token bug was already fixed in `jarvis_notes.py` (`_scrub_secrets`). The audit log was left alone, as advised. See `backend/README.md`, "The log scrubber".
 **What it does for you:** it removes passwords, API keys and your pairing token from `backend.log` and from error messages before they are written to disk. That matters because you paste those files into bug reports.
 
 **Safe as designed?** Yes. It never uses the network and never runs code. It only reads your token file so that it can hide the token. 95 of its 95 tests pass.
@@ -92,6 +93,7 @@ Every module follows the one approval model: plan, show the card, `jarvis_gate`,
 - Servers that only speak the newest MCP version (2026-07-28) will not connect (`changelog.mdx:14`).
 
 ### Module 4: Tighten the existing approval gate (from `gate/REVIEW.md`). Effort **S/M**
+**Status (2026-09-25): done.** 4b and 4c were already fixed by the 2026-09-25 security audit (M2, L1). This pass added three things. 4a is now a check in `backend/selftest.py`, step 4, which finds all 7 places in the OpenJarvis copy the research read. There is a limit of 5 approval cards per answer. A key read by a tool is now named on the next card. Borrowing a built-in tool's name waits for Module 3, because no outside tools exist yet. Tests: `backend/test_gate_fixes.py`. See `backend/README.md`, "The approval gate, tightened".
 **What it does for you:** it closes gaps that already exist in Jarvis today. Every change only makes things stricter.
 
 **Must do (4a is the most important item in this whole report):**

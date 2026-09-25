@@ -126,6 +126,13 @@ yes, like `NEEDS_A_PERSON`. Not a second approval path: the same gate, the
 same card, one more line on it saying why. `backend/README.md`, "Outside
 text in the tool loop".
 
+One answer raises at most five cards (`jarvis_agent.CARDS_PER_TURN`,
+2026-09-25). After that, a call that would ask is refused before it is
+put to anyone, and the answer says so. A flood of cards is how a planted
+instruction tries to wear a person into pressing Approve without reading.
+The limit is a refusal, never a grant. `backend/README.md`, "The approval
+gate, tightened".
+
 ### Two rules that are easy to get wrong
 
 **`allowed` is not "a human decided".** `jarvis_gate.check()` returns

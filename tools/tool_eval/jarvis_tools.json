@@ -21,7 +21,7 @@
   "type": "function",
   "function": {
    "name": "memory_search",
-   "description": "Search what Jarvis has been told and remembers.",
+   "description": "Search the facts Jarvis has learned about the owner. For the owner's own notes, use notes_search.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -82,7 +82,7 @@
   "type": "function",
   "function": {
    "name": "control_computer",
-   "description": "Click or type inside another Windows program, by naming its on-screen controls. Reads the target window first; a control that cannot be found is reported, not guessed at.",
+   "description": "Click or type in another Windows program by naming its on-screen controls. A control that cannot be found is reported, not guessed.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -138,7 +138,7 @@
   "type": "function",
   "function": {
    "name": "control_phone",
-   "description": "Tap, swipe, type, press a key, or take a screenshot on the owner's own paired Android phone over adb.",
+   "description": "Tap, swipe, type, press a key or take a screenshot on the owner's paired Android phone.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -212,7 +212,7 @@
   "type": "function",
   "function": {
    "name": "github_search",
-   "description": "Check whether a library or approach for a coding idea already exists on GitHub, graded by maintenance and licence, before building it from scratch.",
+   "description": "Check GitHub for an existing library for a coding idea, graded by maintenance and licence.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -236,13 +236,13 @@
   "type": "function",
   "function": {
    "name": "calendar_read",
-   "description": "Read the owner's own calendar (CalDAV) for the next N days - event titles, times, and locations. Read-only; never creates or changes an event.",
+   "description": "Read the owner's calendar events for the next N days. Read-only. For messages, use email_check.",
    "parameters": {
     "type": "object",
     "properties": {
      "days_ahead": {
       "type": "integer",
-      "description": "how many days ahead to look, default 7, max 90"
+      "description": "default 7, max 90"
      }
     }
    }
@@ -252,17 +252,17 @@
   "type": "function",
   "function": {
    "name": "email_check",
-   "description": "Check the owner's own IMAP inbox for recent messages - sender, subject, date, and a short plain-text preview of each. Read-only; never sends, replies to, deletes, or marks anything.",
+   "description": "Read recent messages in the owner's inbox: sender, subject, date, preview. Read-only; never sends. For appointments and events, use calendar_read.",
    "parameters": {
     "type": "object",
     "properties": {
      "limit": {
       "type": "integer",
-      "description": "how many messages, default 10, max 25"
+      "description": "default 10, max 25"
      },
      "unread_only": {
       "type": "boolean",
-      "description": "true (default) for unread mail only, false for all"
+      "description": "default true"
      }
     }
    }
@@ -272,7 +272,7 @@
   "type": "function",
   "function": {
    "name": "notes_search",
-   "description": "Search the owner's own notes: the Obsidian vault folder on this PC, or Joplin or Obsidian over each app's local REST API. Read-only; never creates or edits a note.",
+   "description": "Search the owner's own notes (Obsidian or Joplin). Read-only. For facts Jarvis remembers about the owner, use memory_search.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -281,7 +281,7 @@
      },
      "limit": {
       "type": "integer",
-      "description": "how many results, default 10, max 20"
+      "description": "default 10, max 20"
      }
     },
     "required": [
@@ -294,7 +294,7 @@
   "type": "function",
   "function": {
    "name": "home_read",
-   "description": "Read the current state of specific, named Home Assistant entities - never the whole house at once. Read-only.",
+   "description": "Read the state of named Home Assistant entities. Read-only. To change something, use home_control.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -303,7 +303,7 @@
       "items": {
        "type": "string"
       },
-      "description": "e.g. [\"light.kitchen\", \"lock.front_door\"], max 20"
+      "description": "e.g. [\"light.kitchen\"], max 20"
      }
     },
     "required": [
@@ -316,24 +316,24 @@
   "type": "function",
   "function": {
    "name": "home_control",
-   "description": "Call one Home Assistant service on one named entity - turn a light on, unlock a door, and so on. This changes something real, not just data; a lock, alarm, or cover action is treated as especially consequential.",
+   "description": "Call one Home Assistant service on one entity, e.g. turn a light on or unlock a door. Changes something real. To only check a state, use home_read.",
    "parameters": {
     "type": "object",
     "properties": {
      "domain": {
       "type": "string",
-      "description": "e.g. \"light\", \"lock\""
+      "description": "e.g. \"light\""
      },
      "service": {
       "type": "string",
-      "description": "e.g. \"turn_on\", \"unlock\""
+      "description": "e.g. \"turn_on\""
      },
      "entity_id": {
       "type": "string"
      },
      "data": {
       "type": "object",
-      "description": "extra service data, e.g. {\"brightness\": 200}"
+      "description": "e.g. {\"brightness\": 200}"
      }
     },
     "required": [
@@ -348,13 +348,13 @@
   "type": "function",
   "function": {
    "name": "append_logseq_journal",
-   "description": "Add one entry to the end of today's Logseq journal page on this PC. Only ever adds; never changes or removes anything already written.",
+   "description": "Add one entry to today's Logseq journal page. Only adds.",
    "parameters": {
     "type": "object",
     "properties": {
      "text": {
       "type": "string",
-      "description": "the entry, in the owner's words"
+      "description": "in the owner's words"
      }
     },
     "required": [
@@ -367,13 +367,13 @@
   "type": "function",
   "function": {
    "name": "append_obsidian_daily",
-   "description": "Add one entry to the end of today's Obsidian daily note on this PC. Only ever adds; never changes or removes anything already written.",
+   "description": "Add one entry to today's Obsidian daily note. Only adds. For a separate note with its own title, use create_joplin_note.",
    "parameters": {
     "type": "object",
     "properties": {
      "text": {
       "type": "string",
-      "description": "the entry, in the owner's words"
+      "description": "in the owner's words"
      }
     },
     "required": [
@@ -386,7 +386,7 @@
   "type": "function",
   "function": {
    "name": "create_joplin_note",
-   "description": "Create one NEW note in Joplin on this PC. Never edits an existing note and never creates a notebook.",
+   "description": "Create one new note in Joplin. Never edits a note or makes a notebook. To add to today's daily note, use append_obsidian_daily.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -398,7 +398,7 @@
      },
      "notebook": {
       "type": "string",
-      "description": "an existing notebook's exact name; omit for Joplin's default"
+      "description": "an existing notebook's exact name (optional)"
      }
     },
     "required": [
