@@ -1,0 +1,124 @@
+--- a/jarvis_extract.py
++++ b/jarvis_extract.py
+@@ -202,11 +202,69 @@
+     return int(fid or 0)
+ 
+ 
++#: memory-entities.patch - the `source` of an "are these the same?" card.
++#: jarvis_memory raises one when a newly named person or thing is a likely
++#: typo of one already known ("Priya Sharma" / "Priya Sharmaa"): ONE card per
++#: pair, ever. Accepting it joins the two entries so a question about one
++#: finds the other's facts; discarding keeps them apart. No fact is added,
++#: changed or retired either way. Clients label its buttons for that (see
++#: backend/README.md, "Memory wave 3"), which is why /api/memory/pending
++#: leaves it out unless asked for with ?merge_cards=1.
++MERGE_SOURCE = "entity_merge"
++
++
++def propose_merge(text: str) -> Optional[int]:
++    """Queue ONE "are these the same?" card with these words. Merges
++    nothing. Called only by jarvis_memory.MemoryStore.raise_merge_cards,
++    once per pair. In THIS queue, like propose_retire, so it is one card and
++    one decision like every other - never a list, never an approve-all.
++
++    Returns the proposal id, or None when the queue is full (counted in
++    _dropped_full, like any other dropped proposal; the pair waits and is
++    asked about after the next save)."""
++    store = M.store()
++    with closing(store._connect()) as c:
++        _init(c)
++        cap = int(_cfg("review_queue_max", 200))
++        if c.execute("SELECT COUNT(*) FROM proposals WHERE state='pending'").fetchone()[0] >= cap:
++            global _dropped_full
++            _dropped_full += 1
++            return None
++        cur = c.execute(
++            "INSERT INTO proposals (text, replaces, confidence, source, created,"
++            " replaces_id, replaces_text) VALUES (?,?,?,?,?,?,?)",
++            (str(text), None, None, MERGE_SOURCE, time.time(), None, None))
++        try:
++            c.commit()
++        except Exception:
++            pass
++        return cur.lastrowid
++
++
++def _accept_merge(c, store, row) -> int:
++    """Accepting an "are these the same?" card: join that one pair, add no
++    fact. Returns 0 - there is no new fact - and the card is marked accepted
++    either way (a pair that has gone since, because its facts were erased,
++    has nothing left to join)."""
++    join = getattr(M, "accept_merge_card", None)
++    if join is None:
++        raise RuntimeError("this jarvis_memory.py cannot join two entries - "
++                           "apply-patches.ps1 copies in the one that can")
++    join(int(row["id"]))
++    c.execute("UPDATE proposals SET state='accepted', decided=? WHERE id=?",
++              (time.time(), row["id"]))
++    return 0
++
++
+ def _accept(c, store, row) -> int:
+     # A "retire this?" card has no new fact in it. Without this branch its
+     # sentence would be stored as a fact and the named fact superseded by it.
+     if row.get("source") == RETIRE_SOURCE:
+         return _accept_retire(c, store, row)
++    # memory-entities.patch: nor has an "are these the same?" card. Without
++    # this branch its question would be saved as a fact.
++    if row.get("source") == MERGE_SOURCE:
++        return _accept_merge(c, store, row)
+     # Only the target recorded when the proposal was queued, which is the one
+     # the approval card showed. The old code re-ran `store.search(replaces,
+     # k=1)` here and retired the top hit - and search has no floor, so it
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1681,6 +1681,31 @@
+                 return self._send(500, {"error": type(exc).__name__})
+             return self._send(code, out)
+ 
++        if path == "/api/memory/entities":
++            # memory-entities.patch - "who is my sister?" (memory wave 3,
++            # 2026-09-25): the people and things Jarvis has linked saved
++            # facts to, with the words the owner calls them ("sister") and
++            # the ids of their current facts, for the desktop's "About
++            # <name>". Names only as the facts wrote them; nothing is
++            # summarised. Read-only, behind the token like every memory
++            # route. The work is in jarvis_memory.py (entities_view).
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            if not MEMORY:
++                return self._send(503, {"error": "memory layer not importable"})
++            view = getattr(jarvis_memory, "handle_entities_get", None)
++            if view is None:
++                return self._send(501, {
++                    "error": "this PC's jarvis_memory.py does not link facts to people "
++                             "and things yet - apply-patches.ps1 copies in the one that does"})
++            try:
++                code, out = view()
++            except Exception as exc:
++                return self._send(500, {"error": type(exc).__name__})
++            return self._send(code, out)
++
+         if path == "/api/memory/profile":
+             # memory-profile.patch - "Always keep in mind" (the owner's
+             # decision, 2026-09-24): the facts the owner pinned, which every
+@@ -1744,6 +1769,17 @@
+                     if want != "1":
+                         retire = getattr(jarvis_extract, "RETIRE_SOURCE", "feedback_retire")
+                         rows = [r for r in rows if r.get("source") != retire]
++                    # memory-entities.patch: an "are these the same?" card
++                    # the same way, unless asked for with ?merge_cards=1.
++                    # Accepting it JOINS two people or things; a client that
++                    # does not know the card would offer it as "Keep" - a
++                    # word that says nothing about joining. Left out of the
++                    # list, not out of the queue: it waits, undecided.
++                    merge_q = (parse_qs(self.path.split("?", 1)[1]).get("merge_cards")
++                               or [""])[0] if "?" in self.path else ""
++                    if merge_q != "1":
++                        merge = getattr(jarvis_extract, "MERGE_SOURCE", "entity_merge")
++                        rows = [r for r in rows if r.get("source") != merge]
+                     return self._send(200, {"available": True, "pending": rows,
+                                             "setup": setup})
+                 if path == "/api/memory/facts":

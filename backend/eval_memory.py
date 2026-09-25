@@ -10,7 +10,7 @@ WHAT IT DOES, IN PLAIN WORDS
 It makes up a person - about 60 facts in backend/eval/golden_facts.jsonl,
 including people and what the owner calls them, an address that changed,
 facts that were replaced, "tea, not coffee", dates and preferences - and
-asks about 125 questions from backend/eval/golden_questions.jsonl whose
+asks about 140 questions from backend/eval/golden_questions.jsonl whose
 right answers are known. About 25 of them have NO answer in memory ("what
 is my dog called?"): for those, the right number of facts to bring back is
 zero. Then it buries the made-up person under 100, 1,000 and 10,000 filler
@@ -54,6 +54,13 @@ WHAT IT MEASURES
                         alone, and is it in the prompt with the pin
                         (jarvis_memory.with_profile) - and what the pinned
                         list costs in characters
+  the entity layer      (memory wave 3) every number with the floor on,
+                        again with "who is my sister?" switched on: the
+                        alias table, the names added to the question, and
+                        the linked facts as a third list - as chat recall
+                        now runs. People and alias questions are counted on
+                        their own line, and so are the "don't know" facts
+                        it adds
 
 The embedder is the real one (fastembed) when this PC has it, and the
 words-only fallback otherwise; the output says which, on its first line.
@@ -325,14 +332,28 @@ def ndcg(got: list, answers: set, k: int) -> float:
     return dcg([1 if g in answers else 0 for g in got], k) / ideal if ideal else 0.0
 
 
+def _entity_search(st):
+    """Does this jarvis_memory.py have the entity layer (search(entities=))?"""
+    import inspect
+    try:
+        return "entities" in inspect.signature(st.search).parameters
+    except (TypeError, ValueError):
+        return False
+
+
 def _score(M, P, st, qs: list, gid: dict, now: float) -> dict:
-    """Every question once. Returns per-question rows."""
+    """Every question once, as chat recall asks it. Returns per-question
+    rows. Whether the entity layer is on is M._ENTITY_RECALL, set by the
+    caller (jarvis_past.recall asks for it; the flag switches it)."""
     rows = []
+    ent = _entity_search(st)
     for q in qs:
         if q["type"] == "past":
             res = P.recall(st, q["q"], k=K, now=now)
         elif q["type"] == "belief":
             res = st.search(q["q"], k=K, known_at=_day(q["known_at"]))
+        elif ent:
+            res = st.search(q["q"], k=K, entities=True)
         else:
             res = st.search(q["q"], k=K)
         got = [gid.get(r["id"], "filler") for r in res]
@@ -384,6 +405,10 @@ def _summary(rows: dict, split: str = None) -> dict:
         "as_of_wrong_version": sum(r["stale"] for r in bel),
         "as_of_before_told_facts": sum(r["n"] for r in bel_none),
         "recall_tokens_avg": round(statistics.mean([r["chars"] for r in cur]) / 4) if cur else 0,
+        "people_questions": len([r for r in cur if r["type"] in ("person", "alias")]),
+        "people_found": sum(r["hit5"] for r in cur if r["type"] in ("person", "alias")),
+        "alias_questions": len([r for r in cur if r["type"] == "alias"]),
+        "alias_found": sum(r["hit5"] for r in cur if r["type"] == "alias"),
     }
 
 
@@ -392,12 +417,13 @@ def _hits_total(rows: dict, split: str) -> int:
     return sum(r["hit5"] for r in rows.values() if r["split"] == split)
 
 
-def _timings(st, qs: list, reps: int = 3) -> dict:
+def _timings(st, qs: list, reps: int = 3, entities: bool = False) -> dict:
     lat = []
+    kw = {"entities": True} if entities and _entity_search(st) else {}
     for _ in range(reps):
         for q in qs:
             t0 = time.perf_counter()
-            st.search(q["q"], k=K)
+            st.search(q["q"], k=K, **kw)
             lat.append((time.perf_counter() - t0) * 1000)
     lat.sort()
     return {"search_p50_ms": round(statistics.median(lat), 2),
@@ -441,6 +467,12 @@ def run(sizes: list, words_only: bool, scratch: Path) -> dict:
     now = _day(EVAL_NOW_TEXT)
     configured_floor = M._MIN_WORD_SHARE
     configured_distance = M._MAX_VEC_DISTANCE
+    # The entity layer is measured on its own line ("entities"); every
+    # other number here is taken with it OFF, so they stay comparable with
+    # the runs before it existed.
+    has_entities = hasattr(M, "_ENTITY_RECALL")
+    entities_configured = bool(getattr(M, "_ENTITY_RECALL", False))
+    M._ENTITY_RECALL = False
     out = {"levels": [], "floor_sweep": [], "distance_sweep": []}
     for kind in ("neutral", "same_topic"):
         d = scratch / kind
@@ -477,6 +509,19 @@ def run(sizes: list, words_only: bool, scratch: Path) -> dict:
             level["before"].update(_timings(st, timed))
             M._MIN_WORD_SHARE = configured_floor
             level.update(_timings(st, timed))
+            if has_entities:
+                # "Who is my sister?": the floor as configured, and the
+                # entity layer on - the way a chat turn now recalls.
+                M._ENTITY_RECALL = True
+                try:
+                    rows = _score(M, P, st, qs, gid, now)
+                    level["entities"] = _summary(rows)
+                    level["entities"].update(_timings(st, timed, entities=True))
+                    level["misses_entities"] = sorted(
+                        r["id"] for r in rows.values() if r["answerable"] and not r["hit5"])
+                    level["entities"]["linked_entities"] = st.status().get("entities")
+                finally:
+                    M._ENTITY_RECALL = False
             level["db_bytes"] = _db_bytes(db)
             level["pinned"] = _pin_effect(M, P, st, gid, now)
             out["levels"].append(level)
@@ -500,10 +545,15 @@ def run(sizes: list, words_only: bool, scratch: Path) -> dict:
                         "dont_know_facts_avg": s["dont_know_facts_avg"],
                         "dont_know_none_pct": s["dont_know_none_pct"]})
                 M._MAX_VEC_DISTANCE = configured_distance
+            ent = level.get("entities") or {}
             print(f"  {kind:<10} {size:>6} filler: recall@5 "
-                  f"{level['before']['recall_at_5']} -> {level['after']['recall_at_5']}, "
-                  f"don't-know facts {level['before']['dont_know_facts_avg']} -> "
-                  f"{level['after']['dont_know_facts_avg']}", flush=True)
+                  f"{level['before']['recall_at_5']} -> {level['after']['recall_at_5']}"
+                  + (f" -> {ent['recall_at_5']} with the entity layer" if ent else "")
+                  + f", don't-know facts {level['before']['dont_know_facts_avg']} -> "
+                  f"{level['after']['dont_know_facts_avg']}"
+                  + (f" -> {ent['dont_know_facts_avg']}" if ent else ""), flush=True)
+    M._ENTITY_RECALL = entities_configured
+    out["entities_available"] = has_entities
     out["word_floor_configured"] = configured_floor
     out["max_distance_configured"] = configured_distance
     out["word_floor_choice"] = choose_floor(out["floor_sweep"])
@@ -576,6 +626,41 @@ def markdown(res: dict) -> str:
             f"| {b['search_p50_ms']}/{b['search_p95_ms']} -> "
             f"{lv['search_p50_ms']}/{lv['search_p95_ms']} "
             f"| {lv['db_bytes'] / 1e6:.2f} |")
+    ent_rows = [lv for lv in res["levels"] if lv.get("entities")]
+    if ent_rows:
+        lines += [
+            "",
+            "**The entity layer** (\"who is my sister?\", memory wave 3): the same "
+            "questions with the word floor on, the entity layer off -> on. People = the "
+            "person and alias questions; alias = the ones that name someone only by what "
+            "the owner calls them (\"my sister\").",
+            "",
+            "| Filler | Facts | Recall@5 | People found | Alias found | MRR "
+            "| Don't know: facts per question | Don't know: none returned "
+            "| Search p50/p95 ms | Entries linked |",
+            "|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for lv in ent_rows:
+            a, e = lv["after"], lv["entities"]
+            lines.append(
+                f"| {lv['filler'].replace('_', '-')} | {lv['facts']:,} "
+                f"| {a['recall_at_5']}% -> {e['recall_at_5']}% "
+                f"| {a['people_found']}/{a['people_questions']} -> "
+                f"{e['people_found']}/{e['people_questions']} "
+                f"| {a['alias_found']}/{a['alias_questions']} -> "
+                f"{e['alias_found']}/{e['alias_questions']} "
+                f"| {a['mrr']} -> {e['mrr']} "
+                f"| {a['dont_know_facts_avg']} -> {e['dont_know_facts_avg']} "
+                f"| {a['dont_know_none_pct']}% -> {e['dont_know_none_pct']}% "
+                f"| {lv['search_p50_ms']}/{lv['search_p95_ms']} -> "
+                f"{e['search_p50_ms']}/{e['search_p95_ms']} "
+                f"| {e.get('linked_entities')} |")
+        lines += ["", "Missed with the entity layer: "
+                  + "; ".join(f"{lv['filler']} {lv['filler_facts']}: "
+                              f"{', '.join(lv.get('misses_entities') or []) or 'none'}"
+                              for lv in ent_rows)]
+    elif res.get("entities_available") is False:
+        lines += ["", "The entity layer: not measured - this jarvis_memory.py does not have it."]
     ch = res["word_floor_choice"]
     lines += [
         "",

@@ -126,6 +126,7 @@ SHIPPED = (
     "jarvis_auto_learn.py",
     "jarvis_sensitive.py",
     "jarvis_past.py",
+    "jarvis_entities.py",
     "jarvis_profiles.py", "jarvis_hardware.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",

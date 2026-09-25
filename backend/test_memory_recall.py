@@ -305,14 +305,18 @@ def t_what_did_jarvis_believe_uses_known_at():
 
 def t_ordinary_questions_are_unchanged():
     st = _moved()
+    # Since memory wave 3 the current search asks for the entity layer
+    # ("my sister" -> Priya; test_memory_entities.py). On facts that name
+    # nobody that is the same search.
     for q in ("Where do I live?", "Remind me in June where I live", "lives"):
         check(f"guard: {q!r} gets exactly store.search()",
-              P.recall(st, q, k=5, now=NOW) == st.search(q, k=5))
+              P.recall(st, q, k=5, now=NOW) == st.search(q, k=5, entities=True)
+              == st.search(q, k=5))
     check("k=0 is none at all, past question or not",
           P.recall(st, "Where did I live before?", k=0, now=NOW) == [])
     class Boom:
         def search(self, q, k=8, **kw):
-            if kw:
+            if set(kw) - {"entities"}:
                 raise RuntimeError("the past half broke")
             return [{"id": 1, "text": "Owner lives in York", "current": True}]
     check("if the past half fails, the current facts still come back",
@@ -412,7 +416,7 @@ def t_the_golden_set_is_made_up_and_complete():
           .read_text(encoding="utf-8").splitlines() if x.strip()]
     ids = {f["id"] for f in facts}
     check("about 60 facts", 55 <= len(facts) <= 70, len(facts))
-    check("about 120 questions", 115 <= len(qs) <= 135, len(qs))
+    check("about 140 questions", 115 <= len(qs) <= 150, len(qs))
     check("about 25 'don't know' questions",
           sum(q["type"] == "abstain" for q in qs) >= 25)
     check("past-belief questions carry a known_at date",

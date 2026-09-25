@@ -353,6 +353,18 @@ $PATCHES = @(
     # Needs jarvis_hardware.py and jarvis_profiles.py copied in; without
     # them the routes answer 503.
     'hardware.patch'
+    # "Who is my sister?" - the entity layer (memory wave 3, 2026-09-25):
+    # GET /api/memory/entities (the people and things facts are linked to,
+    # for the desktop's "About <name>"), the "are these the same?" card
+    # left out of /api/memory/pending unless asked for with ?merge_cards=1,
+    # and jarvis_extract's propose_merge() / _accept_merge() - accepting that
+    # card joins two entries and adds no fact. Its context is
+    # temporary-chat's /api/memory/used route, memory-profile's GET line,
+    # and feedback's pending filter and _accept() lines, so it goes after
+    # temporary-chat - last, like every new patch. The work is in the
+    # shipped rebuilt\jarvis_memory.py (the entity layer; recall uses it
+    # through jarvis_past.py); with an older copy the route answers 501.
+    'memory-entities.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -417,6 +429,7 @@ $SHIPPED = @(
     'jarvis_auto_learn.py'       # auto-learn.patch: facts from the owner's own words saved without a card
     'jarvis_sensitive.py'        # the sensitive-topic check jarvis_auto_learn.py asks: word lists, shapes, the local model
     'jarvis_past.py'             # past-recall.patch: questions about the past also get retired facts, labelled
+    'jarvis_entities.py'         # the entity layer's optional local-model pass (off by default); jarvis_auto_learn.py calls it
     'jarvis_profiles.py'         # hardware.patch: the three setups' arithmetic, words and one-line command (no I/O)
     'jarvis_hardware.py'         # hardware.patch: finding the cards, the steps, making a tuned model, measuring
     # --- the tools jarvis_agent.py offers the model ---

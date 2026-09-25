@@ -286,9 +286,9 @@ def past_hits(store, query: str, *, k: int = PAST_K, now: Optional[float] = None
     if window is not None and is_belief_question(query):
         # What Jarvis believed at the END of that window - the latest moment
         # the question covers, and never later than now.
-        cands = store.search(query, k=_WIDE, known_at=min(window[1], now) - 0.001)
+        cands = _search(store, query, k=_WIDE, known_at=min(window[1], now) - 0.001)
     else:
-        cands = store.search(query, k=_WIDE, include_retired=True)
+        cands = _search(store, query, k=_WIDE, include_retired=True)
     skip = set(exclude)
     out = []
     for f in cands:
@@ -312,15 +312,29 @@ def past_hits(store, query: str, *, k: int = PAST_K, now: Optional[float] = None
     return out
 
 
+def _search(store, query: str, **kw) -> list:
+    """store.search with the entity layer on (memory wave 3, 2026-09-25):
+    "my sister" also finds what is saved about Priya - the alias table
+    looked up, the names added to the question, the linked facts a third
+    list. No model is asked (jarvis_memory.py, "The entity layer"). A store
+    from before the entity layer does not take the argument: the old
+    search, unchanged."""
+    try:
+        return store.search(query, entities=True, **kw)
+    except TypeError:
+        return store.search(query, **kw)
+
+
 def recall(store, query: str, k: int, now: Optional[float] = None) -> list:
-    """What a chat turn recalls. Exactly store.search(query, k=k) for an
-    ordinary question; for a question about the past, that plus up to
-    min(PAST_K, k) retired facts, labelled. k <= 0 is none at all.
+    """What a chat turn recalls. Exactly store.search(query, k=k,
+    entities=True) for an ordinary question; for a question about the past,
+    that plus up to min(PAST_K, k) retired facts, labelled. k <= 0 is none
+    at all.
 
     Only the current search can raise (as it always could - the caller
     already handles that). Anything going wrong in the past half gives the
     current facts alone: the old behaviour."""
-    hits = store.search(query, k=k)
+    hits = _search(store, query, k=k)
     if k <= 0:
         return hits
     try:

@@ -125,3 +125,14 @@
 {"id": "q125", "q": "What does my laptop run?", "answers": ["f44"], "type": "belief", "split": "tune", "stale": ["f45"], "known_at": "2026-04-01"}
 {"id": "q126", "q": "When is my dentist appointment?", "answers": ["f35"], "type": "belief", "split": "test", "stale": ["f63"], "known_at": "2026-09-01"}
 {"id": "q127", "q": "What's my cat called?", "answers": [], "type": "belief", "split": "tune", "known_at": "2025-07-01"}
+{"id": "q128", "q": "What did I say about my sister's wedding?", "answers": ["f02", "f59"], "type": "alias", "split": "test"}
+{"id": "q129", "q": "What is my cat scared of?", "answers": ["f14"], "type": "alias", "split": "tune"}
+{"id": "q130", "q": "What colour is my cat?", "answers": ["f14"], "type": "alias", "split": "test"}
+{"id": "q131", "q": "What does my partner do for a living?", "answers": ["f04"], "type": "alias", "split": "tune"}
+{"id": "q132", "q": "When is my sister getting married?", "answers": ["f02"], "type": "alias", "split": "tune"}
+{"id": "q133", "q": "Which city is my sister's wedding in?", "answers": ["f02"], "type": "alias", "split": "test"}
+{"id": "q134", "q": "Who is my cello teacher?", "answers": ["f24"], "type": "person", "split": "tune"}
+{"id": "q135", "q": "Where does my best friend live?", "answers": ["f07"], "type": "person", "split": "test"}
+{"id": "q136", "q": "How old is my nephew?", "answers": ["f09"], "type": "person", "split": "tune"}
+{"id": "q137", "q": "What does my sister do for a living?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q138", "q": "When is my cat's next vet appointment?", "answers": [], "type": "abstain", "split": "tune"}
