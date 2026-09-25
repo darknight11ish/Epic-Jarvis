@@ -73,6 +73,7 @@ THIRD_PARTY = {
     "f5_tts": "f5-tts",
     "soundfile": "soundfile",
     "cryptography": "cryptography",
+    "ddgs": "ddgs",
 }
 
 # Files in backend/ that are NOT shipped, on purpose. Tools run from this

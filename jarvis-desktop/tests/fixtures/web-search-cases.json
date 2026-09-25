@@ -1,0 +1,684 @@
+{
+ "cases": {
+  "brave_no_key_ask_every_time": {
+   "ask_every_time": true,
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_label": "Ask before every web search",
+   "available": true,
+   "default": "searxng",
+   "default_why": "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.",
+   "key_entry": "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service.",
+   "last": null,
+   "left_out": [
+    {
+     "id": "whoogle",
+     "label": "Whoogle",
+     "why": "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
+    }
+   ],
+   "provider": "brave",
+   "providers": [
+    {
+     "id": "searxng",
+     "key_saved": null,
+     "key_where": "",
+     "label": "SearXNG (on this PC)",
+     "needs_docker": true,
+     "needs_key": false,
+     "ready": true,
+     "said": "",
+     "state": "",
+     "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
+    },
+    {
+     "id": "duckduckgo",
+     "key_saved": null,
+     "key_where": "",
+     "label": "DuckDuckGo",
+     "needs_docker": false,
+     "needs_key": false,
+     "ready": false,
+     "said": "The DuckDuckGo search needs the ddgs package, which is not installed on this PC. Install it with one line in PowerShell: py -3 -m pip install ddgs",
+     "state": "not_installed",
+     "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
+    },
+    {
+     "id": "tavily",
+     "key_saved": false,
+     "key_where": "https://app.tavily.com (sign in, then API Keys)",
+     "label": "Tavily",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": false,
+     "said": "No Tavily key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://app.tavily.com (sign in, then API Keys)).",
+     "state": "key_missing",
+     "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
+    },
+    {
+     "id": "brave",
+     "key_saved": false,
+     "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+     "label": "Brave Search",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": false,
+     "said": "No Brave Search key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)).",
+     "state": "key_missing",
+     "why": "Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key."
+    }
+   ],
+   "searxng_default": "http://127.0.0.1:8888",
+   "searxng_url": "http://127.0.0.1:8888",
+   "test_query": "wikipedia",
+   "waiting": false,
+   "why": ""
+  },
+  "damaged": {
+   "ask_every_time": true,
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_label": "Ask before every web search",
+   "available": true,
+   "default": "searxng",
+   "default_why": "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.",
+   "key_entry": "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service.",
+   "last": null,
+   "left_out": [
+    {
+     "id": "whoogle",
+     "label": "Whoogle",
+     "why": "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
+    }
+   ],
+   "provider": null,
+   "providers": [
+    {
+     "id": "searxng",
+     "key_saved": null,
+     "key_where": "",
+     "label": "SearXNG (on this PC)",
+     "needs_docker": true,
+     "needs_key": false,
+     "ready": true,
+     "said": "",
+     "state": "",
+     "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
+    },
+    {
+     "id": "duckduckgo",
+     "key_saved": null,
+     "key_where": "",
+     "label": "DuckDuckGo",
+     "needs_docker": false,
+     "needs_key": false,
+     "ready": false,
+     "said": "The DuckDuckGo search needs the ddgs package, which is not installed on this PC. Install it with one line in PowerShell: py -3 -m pip install ddgs",
+     "state": "not_installed",
+     "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
+    },
+    {
+     "id": "tavily",
+     "key_saved": false,
+     "key_where": "https://app.tavily.com (sign in, then API Keys)",
+     "label": "Tavily",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": false,
+     "said": "No Tavily key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://app.tavily.com (sign in, then API Keys)).",
+     "state": "key_missing",
+     "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
+    },
+    {
+     "id": "brave",
+     "key_saved": false,
+     "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+     "label": "Brave Search",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": false,
+     "said": "No Brave Search key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)).",
+     "state": "key_missing",
+     "why": "Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key."
+    }
+   ],
+   "searxng_default": "http://127.0.0.1:8888",
+   "searxng_url": "http://127.0.0.1:8888",
+   "test_query": "wikipedia",
+   "waiting": false,
+   "why": "the web search settings file is damaged, so Jarvis does not know which search you chose and searches nothing. Choose a search again in Settings, Web search, to rewrite it"
+  },
+  "default": {
+   "ask_every_time": false,
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_label": "Ask before every web search",
+   "available": true,
+   "default": "searxng",
+   "default_why": "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.",
+   "key_entry": "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service.",
+   "last": null,
+   "left_out": [
+    {
+     "id": "whoogle",
+     "label": "Whoogle",
+     "why": "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
+    }
+   ],
+   "provider": "searxng",
+   "providers": [
+    {
+     "id": "searxng",
+     "key_saved": null,
+     "key_where": "",
+     "label": "SearXNG (on this PC)",
+     "needs_docker": true,
+     "needs_key": false,
+     "ready": true,
+     "said": "",
+     "state": "",
+     "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
+    },
+    {
+     "id": "duckduckgo",
+     "key_saved": null,
+     "key_where": "",
+     "label": "DuckDuckGo",
+     "needs_docker": false,
+     "needs_key": false,
+     "ready": false,
+     "said": "The DuckDuckGo search needs the ddgs package, which is not installed on this PC. Install it with one line in PowerShell: py -3 -m pip install ddgs",
+     "state": "not_installed",
+     "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
+    },
+    {
+     "id": "tavily",
+     "key_saved": false,
+     "key_where": "https://app.tavily.com (sign in, then API Keys)",
+     "label": "Tavily",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": false,
+     "said": "No Tavily key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://app.tavily.com (sign in, then API Keys)).",
+     "state": "key_missing",
+     "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
+    },
+    {
+     "id": "brave",
+     "key_saved": false,
+     "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+     "label": "Brave Search",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": false,
+     "said": "No Brave Search key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)).",
+     "state": "key_missing",
+     "why": "Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key."
+    }
+   ],
+   "searxng_default": "http://127.0.0.1:8888",
+   "searxng_url": "http://127.0.0.1:8888",
+   "test_query": "wikipedia",
+   "waiting": false,
+   "why": ""
+  },
+  "duckduckgo_not_installed": {
+   "ask_every_time": false,
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_label": "Ask before every web search",
+   "available": true,
+   "default": "searxng",
+   "default_why": "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.",
+   "key_entry": "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service.",
+   "last": null,
+   "left_out": [
+    {
+     "id": "whoogle",
+     "label": "Whoogle",
+     "why": "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
+    }
+   ],
+   "provider": "duckduckgo",
+   "providers": [
+    {
+     "id": "searxng",
+     "key_saved": null,
+     "key_where": "",
+     "label": "SearXNG (on this PC)",
+     "needs_docker": true,
+     "needs_key": false,
+     "ready": true,
+     "said": "",
+     "state": "",
+     "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
+    },
+    {
+     "id": "duckduckgo",
+     "key_saved": null,
+     "key_where": "",
+     "label": "DuckDuckGo",
+     "needs_docker": false,
+     "needs_key": false,
+     "ready": false,
+     "said": "The DuckDuckGo search needs the ddgs package, which is not installed on this PC. Install it with one line in PowerShell: py -3 -m pip install ddgs",
+     "state": "not_installed",
+     "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
+    },
+    {
+     "id": "tavily",
+     "key_saved": false,
+     "key_where": "https://app.tavily.com (sign in, then API Keys)",
+     "label": "Tavily",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": false,
+     "said": "No Tavily key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://app.tavily.com (sign in, then API Keys)).",
+     "state": "key_missing",
+     "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
+    },
+    {
+     "id": "brave",
+     "key_saved": false,
+     "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+     "label": "Brave Search",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": false,
+     "said": "No Brave Search key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)).",
+     "state": "key_missing",
+     "why": "Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key."
+    }
+   ],
+   "searxng_default": "http://127.0.0.1:8888",
+   "searxng_url": "http://127.0.0.1:8888",
+   "test_query": "wikipedia",
+   "waiting": false,
+   "why": ""
+  },
+  "post_address": {
+   "body": {
+    "ask_every_time": false,
+    "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+    "ask_every_time_label": "Ask before every web search",
+    "available": true,
+    "default": "searxng",
+    "default_why": "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.",
+    "key_entry": "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service.",
+    "last": null,
+    "left_out": [
+     {
+      "id": "whoogle",
+      "label": "Whoogle",
+      "why": "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
+     }
+    ],
+    "ok": true,
+    "provider": "searxng",
+    "providers": [
+     {
+      "id": "searxng",
+      "key_saved": null,
+      "key_where": "",
+      "label": "SearXNG (on this PC)",
+      "needs_docker": true,
+      "needs_key": false,
+      "ready": true,
+      "said": "",
+      "state": "",
+      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
+     },
+     {
+      "id": "duckduckgo",
+      "key_saved": null,
+      "key_where": "",
+      "label": "DuckDuckGo",
+      "needs_docker": false,
+      "needs_key": false,
+      "ready": false,
+      "said": "The DuckDuckGo search needs the ddgs package, which is not installed on this PC. Install it with one line in PowerShell: py -3 -m pip install ddgs",
+      "state": "not_installed",
+      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
+     },
+     {
+      "id": "tavily",
+      "key_saved": false,
+      "key_where": "https://app.tavily.com (sign in, then API Keys)",
+      "label": "Tavily",
+      "needs_docker": false,
+      "needs_key": true,
+      "ready": false,
+      "said": "No Tavily key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://app.tavily.com (sign in, then API Keys)).",
+      "state": "key_missing",
+      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
+     },
+     {
+      "id": "brave",
+      "key_saved": false,
+      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+      "label": "Brave Search",
+      "needs_docker": false,
+      "needs_key": true,
+      "ready": false,
+      "said": "No Brave Search key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)).",
+      "state": "key_missing",
+      "why": "Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key."
+     }
+    ],
+    "said": "SearXNG address set to http://192.168.1.20:8888.",
+    "searxng_default": "http://127.0.0.1:8888",
+    "searxng_url": "http://192.168.1.20:8888",
+    "test_query": "wikipedia",
+    "waiting": false,
+    "why": ""
+   },
+   "status": 200
+  },
+  "post_ask_off": {
+   "body": {
+    "ok": true,
+    "said": "Waiting for your approval. Jarvis keeps asking before every web search until you approve the card, on your PC or phone.",
+    "waiting": true
+   },
+   "status": 202
+  },
+  "post_ask_on": {
+   "body": {
+    "ask_every_time": true,
+    "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+    "ask_every_time_label": "Ask before every web search",
+    "available": true,
+    "default": "searxng",
+    "default_why": "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.",
+    "key_entry": "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service.",
+    "last": null,
+    "left_out": [
+     {
+      "id": "whoogle",
+      "label": "Whoogle",
+      "why": "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
+     }
+    ],
+    "ok": true,
+    "provider": "searxng",
+    "providers": [
+     {
+      "id": "searxng",
+      "key_saved": null,
+      "key_where": "",
+      "label": "SearXNG (on this PC)",
+      "needs_docker": true,
+      "needs_key": false,
+      "ready": true,
+      "said": "",
+      "state": "",
+      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
+     },
+     {
+      "id": "duckduckgo",
+      "key_saved": null,
+      "key_where": "",
+      "label": "DuckDuckGo",
+      "needs_docker": false,
+      "needs_key": false,
+      "ready": false,
+      "said": "The DuckDuckGo search needs the ddgs package, which is not installed on this PC. Install it with one line in PowerShell: py -3 -m pip install ddgs",
+      "state": "not_installed",
+      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
+     },
+     {
+      "id": "tavily",
+      "key_saved": false,
+      "key_where": "https://app.tavily.com (sign in, then API Keys)",
+      "label": "Tavily",
+      "needs_docker": false,
+      "needs_key": true,
+      "ready": false,
+      "said": "No Tavily key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://app.tavily.com (sign in, then API Keys)).",
+      "state": "key_missing",
+      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
+     },
+     {
+      "id": "brave",
+      "key_saved": false,
+      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+      "label": "Brave Search",
+      "needs_docker": false,
+      "needs_key": true,
+      "ready": false,
+      "said": "No Brave Search key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)).",
+      "state": "key_missing",
+      "why": "Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key."
+     }
+    ],
+    "said": "Jarvis now asks before every web search.",
+    "searxng_default": "http://127.0.0.1:8888",
+    "searxng_url": "http://127.0.0.1:8888",
+    "test_query": "wikipedia",
+    "waiting": false,
+    "why": ""
+   },
+   "status": 200
+  },
+  "post_bad_address": {
+   "body": {
+    "error": "That SearXNG address cannot be used: searx.example.com is not this PC or one of your own networks (your home network, Tailscale or NordVPN Meshnet). SearXNG runs on your own machine; Jarvis does not send searches to a SearXNG on the internet.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "post_provider": {
+   "body": {
+    "ask_every_time": false,
+    "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+    "ask_every_time_label": "Ask before every web search",
+    "available": true,
+    "default": "searxng",
+    "default_why": "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.",
+    "key_entry": "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service.",
+    "last": null,
+    "left_out": [
+     {
+      "id": "whoogle",
+      "label": "Whoogle",
+      "why": "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
+     }
+    ],
+    "ok": true,
+    "provider": "duckduckgo",
+    "providers": [
+     {
+      "id": "searxng",
+      "key_saved": null,
+      "key_where": "",
+      "label": "SearXNG (on this PC)",
+      "needs_docker": true,
+      "needs_key": false,
+      "ready": true,
+      "said": "",
+      "state": "",
+      "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
+     },
+     {
+      "id": "duckduckgo",
+      "key_saved": null,
+      "key_where": "",
+      "label": "DuckDuckGo",
+      "needs_docker": false,
+      "needs_key": false,
+      "ready": false,
+      "said": "The DuckDuckGo search needs the ddgs package, which is not installed on this PC. Install it with one line in PowerShell: py -3 -m pip install ddgs",
+      "state": "not_installed",
+      "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
+     },
+     {
+      "id": "tavily",
+      "key_saved": false,
+      "key_where": "https://app.tavily.com (sign in, then API Keys)",
+      "label": "Tavily",
+      "needs_docker": false,
+      "needs_key": true,
+      "ready": false,
+      "said": "No Tavily key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://app.tavily.com (sign in, then API Keys)).",
+      "state": "key_missing",
+      "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
+     },
+     {
+      "id": "brave",
+      "key_saved": false,
+      "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+      "label": "Brave Search",
+      "needs_docker": false,
+      "needs_key": true,
+      "ready": false,
+      "said": "No Brave Search key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)).",
+      "state": "key_missing",
+      "why": "Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key."
+     }
+    ],
+    "said": "Web search now uses DuckDuckGo. The DuckDuckGo search needs the ddgs package, which is not installed on this PC. Install it with one line in PowerShell: py -3 -m pip install ddgs",
+    "searxng_default": "http://127.0.0.1:8888",
+    "searxng_url": "http://127.0.0.1:8888",
+    "test_query": "wikipedia",
+    "waiting": false,
+    "why": ""
+   },
+   "status": 200
+  },
+  "tavily_key_saved": {
+   "ask_every_time": false,
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_label": "Ask before every web search",
+   "available": true,
+   "default": "searxng",
+   "default_why": "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.",
+   "key_entry": "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service.",
+   "last": null,
+   "left_out": [
+    {
+     "id": "whoogle",
+     "label": "Whoogle",
+     "why": "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
+    }
+   ],
+   "provider": "tavily",
+   "providers": [
+    {
+     "id": "searxng",
+     "key_saved": null,
+     "key_where": "",
+     "label": "SearXNG (on this PC)",
+     "needs_docker": true,
+     "needs_key": false,
+     "ready": true,
+     "said": "",
+     "state": "",
+     "why": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on."
+    },
+    {
+     "id": "duckduckgo",
+     "key_saved": null,
+     "key_where": "",
+     "label": "DuckDuckGo",
+     "needs_docker": false,
+     "needs_key": false,
+     "ready": false,
+     "said": "The DuckDuckGo search needs the ddgs package, which is not installed on this PC. Install it with one line in PowerShell: py -3 -m pip install ddgs",
+     "state": "not_installed",
+     "why": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address."
+    },
+    {
+     "id": "tavily",
+     "key_saved": true,
+     "key_where": "https://app.tavily.com (sign in, then API Keys)",
+     "label": "Tavily",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": true,
+     "said": "",
+     "state": "",
+     "why": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
+    },
+    {
+     "id": "brave",
+     "key_saved": false,
+     "key_where": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
+     "label": "Brave Search",
+     "needs_docker": false,
+     "needs_key": true,
+     "ready": false,
+     "said": "No Brave Search key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)).",
+     "state": "key_missing",
+     "why": "Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key."
+    }
+   ],
+   "searxng_default": "http://127.0.0.1:8888",
+   "searxng_url": "http://127.0.0.1:8888",
+   "test_query": "wikipedia",
+   "waiting": false,
+   "why": ""
+  },
+  "test_json_off": {
+   "body": {
+    "offer": "Switch web search to DuckDuckGo? Say \"use DuckDuckGo for web search\", or choose it in Settings, Web search.",
+    "ok": false,
+    "provider": "searxng",
+    "said": "SearXNG is running, but its JSON output is switched off (it answered 403 Forbidden). Add json to the formats list in its settings.yml and restart it - backend/README.md, \"Web search\", has the exact steps.",
+    "state": "json_off"
+   },
+   "status": 200
+  },
+  "test_key_missing": {
+   "body": {
+    "offer": "Switch web search to SearXNG (on this PC)? Say \"use SearXNG for web search\", or choose it in Settings, Web search.",
+    "ok": false,
+    "provider": "tavily",
+    "said": "No Tavily key is saved on this PC. Add it in the desktop app's Settings, Web search (get one at https://app.tavily.com (sign in, then API Keys)).",
+    "state": "key_missing"
+   },
+   "status": 200
+  },
+  "test_not_running": {
+   "body": {
+    "offer": "Switch web search to DuckDuckGo? Say \"use DuckDuckGo for web search\", or choose it in Settings, Web search.",
+    "ok": false,
+    "provider": "searxng",
+    "said": "SearXNG isn't running on this PC - nothing answered at http://127.0.0.1:8888. Start it in Docker Desktop (backend/README.md, \"Web search\"), or switch web search to another provider.",
+    "state": "not_running"
+   },
+   "status": 200
+  },
+  "test_works": {
+   "body": {
+    "ok": true,
+    "provider": "searxng",
+    "results": 2,
+    "said": "SearXNG (on this PC) works: a test search for \"wikipedia\" found 2 results.",
+    "state": "works"
+   },
+   "status": 200
+  }
+ },
+ "default": "searxng",
+ "labels": {
+  "brave": "Brave Search",
+  "duckduckgo": "DuckDuckGo",
+  "searxng": "SearXNG (on this PC)",
+  "tavily": "Tavily"
+ },
+ "left_out": [
+  {
+   "id": "whoogle",
+   "label": "Whoogle",
+   "why": "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
+  }
+ ],
+ "providers": [
+  "searxng",
+  "duckduckgo",
+  "tavily",
+  "brave"
+ ],
+ "why": {
+  "brave": "Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key.",
+  "duckduckgo": "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address.",
+  "searxng": "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on.",
+  "tavily": "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key."
+ }
+}

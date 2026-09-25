@@ -41,6 +41,9 @@ CASES = [
     # github_search
     ("is there already a library for parsing ical files in python", "github_search", {"idea": str}),
     ("before I build it, check github for an existing rust crate that does fuzzy search", "github_search", {"idea": str}),
+    # web_search (2026-09-25)
+    ("search the web for the latest stable Python release", "web_search", {"query": str}),
+    ("look up online what time the Science Museum closes on Sundays", "web_search", {"query": str}),
     # control_computer
     ("in Notepad, type 'hello' into the editor", "control_computer", {"goal": str, "window": str, "requests": list}),
     ("click the Save button in the Paint window", "control_computer", {"goal": str, "window": str, "requests": list}),
@@ -78,6 +81,7 @@ HELD_OUT = [
     ("dim the hallway lamp", "home_control", {"domain": str, "service": str, "entity_id": str}),
     ("lock up the back door please", "home_control", {"domain": str, "service": str, "entity_id": str}),
     ("does a crate for reading exif data exist", "github_search", {"idea": str}),
+    ("google whether the M25 is closed tonight", "web_search", {"query": str}),
     ("press OK in the installer dialog", "control_computer", {"goal": str, "window": str, "requests": list}),
     ("swipe up on the phone to unlock it", "control_phone", {"device": str, "goal": str, "requests": list}),
     ("jot in my logseq that the car passed its MOT", "append_logseq_journal", {"text": str}),

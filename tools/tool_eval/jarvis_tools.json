@@ -21,7 +21,7 @@
   "type": "function",
   "function": {
    "name": "memory_search",
-   "description": "Search the facts Jarvis has learned about the owner. For the owner's own notes, use notes_search.",
+   "description": "Search the facts Jarvis has learned about the owner. For the owner's own notes, use notes_search. For the public web, use web_search.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -212,7 +212,7 @@
   "type": "function",
   "function": {
    "name": "github_search",
-   "description": "Check GitHub for an existing library for a coding idea, graded by maintenance and licence.",
+   "description": "Check GitHub for an existing library for a coding idea, graded by maintenance and licence. For a general web search, use web_search.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -228,6 +228,25 @@
     },
     "required": [
      "idea"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "web_search",
+   "description": "Search the public web for current or outside information. Returns up to 5 results: title, link, snippet. Use a few plain search words; never put private details in them. For what Jarvis knows about the owner, use memory_search. For the owner's own notes, use notes_search. To grade GitHub libraries for a coding idea, use github_search.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "the search words, short"
+     }
+    },
+    "required": [
+     "query"
     ]
    }
   }
@@ -272,7 +291,7 @@
   "type": "function",
   "function": {
    "name": "notes_search",
-   "description": "Search the owner's own notes (Obsidian or Joplin). Read-only. For facts Jarvis remembers about the owner, use memory_search.",
+   "description": "Search the owner's own notes (Obsidian or Joplin). Read-only. For facts Jarvis remembers about the owner, use memory_search. For the public web, use web_search.",
    "parameters": {
     "type": "object",
     "properties": {

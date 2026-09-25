@@ -386,6 +386,11 @@ def t_every_tool_resolves_to_a_real_jarvis_gate_action():
     except Exception:
         return check("SKIP - jarvis_gate not importable in this environment", True)
     for tname, tool in AG.TOOLS.items():
+        if tname == "web_search":
+            # Put to the gate under its own action (jarvis_search.ACTION_SEARCH,
+            # "web_search", which web-search.patch gives words in _RISK), never
+            # through action_for_tool - see jarvis_agent._web_search_call.
+            continue
         lookup = tool.gate_lookup_name({}) if tool.gate_lookup_name else tname
         check(f"jarvis_gate._TOOL_ACTIONS has an entry for {tname}'s lookup name {lookup!r}",
               lookup in jarvis_gate._TOOL_ACTIONS, lookup)
@@ -588,6 +593,14 @@ def t_every_outbound_gate_action_is_covered():
     outbound |= {"web_research", "control_browser"}
     tiers = _shipped_tiers()
     for tname, (action, _tier) in tiers.items():
+        if tname == "web_search":
+            # The one outbound tool that is NOT in NEEDS_A_PERSON, on purpose
+            # (the owner's decision of 2026-09-25): a search straight from the
+            # owner's own question needs no card. Whenever it DOES ask, it
+            # runs only on a person's yes - test_web_search.py proves that.
+            check("web_search is handled by its own path, not the generic one",
+                  "_web_search_call(args" in Path(AG.__file__).read_text(encoding="utf-8"))
+            continue
         if action in outbound:
             check(f"{tname} ({action}) is in NEEDS_A_PERSON", tname in AG.NEEDS_A_PERSON)
 

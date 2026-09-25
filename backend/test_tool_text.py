@@ -47,7 +47,11 @@ PER_TOOL_EXCEPT = {"browser_control": 600}
 
 #: The pairs the research found the model mixes up, each told apart both ways.
 CONFUSABLE = (("memory_search", "notes_search"), ("home_read", "home_control"),
-              ("calendar_read", "email_check"), ("append_obsidian_daily", "create_joplin_note"))
+              ("calendar_read", "email_check"), ("append_obsidian_daily", "create_joplin_note"),
+              # web_search (2026-09-25): three searches the model could reach for
+              # instead - the owner's facts, the owner's notes, GitHub's libraries.
+              ("web_search", "memory_search"), ("web_search", "notes_search"),
+              ("web_search", "github_search"))
 
 
 def check(name, cond, detail=""):
