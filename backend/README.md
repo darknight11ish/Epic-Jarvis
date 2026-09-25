@@ -3017,7 +3017,7 @@ environment before it can do anything at all:
 
 | integration | environment variables |
 |---|---|
-| calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` (the URL `https://`, or plain `http://` only inside your own networks - this PC, the home network, Tailscale or NordVPN Meshnet - security audit L7, 2026-09-25) |
+| calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` (the URL `https://`, or plain `http://` only inside your own networks - this PC, the home network, Tailscale or NordVPN Meshnet - security audit L7, 2026-09-25); **or** `JARVIS_CALENDAR_ICS_SECRET_URL`, a private calendar link such as Google Calendar's "Secret address in iCal format" (since 2026-09-25; it wins when both are set - see "Google Calendar, by its private link", at the end of this file) |
 | email | `JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` (default 993), `JARVIS_IMAP_USER`, `JARVIS_IMAP_PASSWORD`, `JARVIS_IMAP_MAILBOX` (default `INBOX`) |
 | notes | `JARVIS_OBSIDIAN_VAULT` or `[notes.obsidian] vault_directory` (the vault read as a folder - no key; used first when set, since 2026-09-24), `JARVIS_NOTES_BACKEND` (`"vault"`, `"joplin"` or `"obsidian"`, optional - otherwise the vault, then whichever token is set), `JARVIS_JOPLIN_URL`/`JARVIS_JOPLIN_TOKEN`, `JARVIS_OBSIDIAN_URL`/`JARVIS_OBSIDIAN_API_KEY` |
 | home | `JARVIS_HOME_URL`, `JARVIS_HOME_TOKEN` (the same rule for the URL as the calendar's) |
@@ -8459,7 +8459,9 @@ and no notification for the schedule's own going-off.
 asleep. It holds only what Jarvis can already read on this PC:
 
 - today's calendar events - only if your calendar is set up for Jarvis
-  (`JARVIS_CALDAV_URL`, and `calendar_read` in `[tools].enabled`), and only
+  (`JARVIS_CALDAV_URL` or Google Calendar's private link,
+  `JARVIS_CALENDAR_ICS_SECRET_URL`, and `calendar_read` in
+  `[tools].enabled`), and only
   while `calendar_read` runs without a card (`"auto"`, as shipped). If your
   settings ask for a yes each time, the briefing leaves the calendar out and
   says why - it does not wake you with a card at 7 in the morning;
@@ -8565,12 +8567,239 @@ near misses; and the patch applied to what the earlier patches wrote, run.
 
 - Nothing has run on your PC. The toast and the phone's notification have
   not been seen on a real Windows PC or phone.
-- Not tried against a real calendar or mail server. The calendar reader
-  does not work out repeating events: a repeating event is shown with the
-  time of its first date, marked "(repeats)". An event kept in another time
-  zone (not UTC) is shown as if it were in this PC's time zone.
+- Not tried against a real calendar or mail server. Since the Google
+  Calendar change (the last section of this file) the calendar reader works
+  out the common repeating events; a rule it cannot work out is shown with
+  the time of its first date, marked "(repeats)". An event kept in another
+  time zone is shown at the right hour only when Python has time-zone data
+  (on Windows, the `tzdata` package, not installed by the script);
+  otherwise as if it were in this PC's time zone.
 - On the desktop the toast is the same plain kind the timers use. What a
   click on it does has not been seen on a real PC, and nothing makes it open
   the Brain's Work tab - open the Brain yourself. The phone's notification
   opens Mind.
 - English only, like the timers.
+
+---
+
+# Google Calendar, by its private link - and Gmail for email (2026-09-25)
+
+**What it is for.** Jarvis could read a calendar only over CalDAV (the open
+calendar protocol). Google Calendar does not let a program in that way
+without an OAuth sign-in (a Google app registration and cloud keys), so it
+could not connect. You decided on 2026-09-25: yes, read it through Google's
+**private calendar link** instead - read-only, and the link kept as safely
+as a password.
+
+Google gives every calendar a "Secret address in iCal format": a private
+`https://calendar.google.com/...` link to a read-only file of the whole
+calendar. **Anyone who has that link can read your calendar**, so Jarvis
+treats it as a password (below). Nothing new to install.
+
+## Set it up (about two minutes)
+
+1. On a computer, open Google Calendar in a web browser
+   (`calendar.google.com`). The phone app does not show this setting.
+2. Click the gear at the top right, then **Settings**.
+3. On the left, under **Settings for my calendars**, click the calendar you
+   want Jarvis to read (usually the one with your name).
+4. Click **Integrate calendar** (on the left, or scroll down).
+5. Find **Secret address in iCal format** and click the copy button next to
+   it. (If it is missing altogether, your organisation's administrator has
+   switched it off - a work or school account - and this cannot be used.)
+6. Open PowerShell on the PC and paste this one line. It asks for the link;
+   paste it there and press Enter. The link is typed at the question, not
+   into the command, so it does not end up in PowerShell's history file:
+
+```powershell
+$u = Read-Host 'Paste the Secret address in iCal format, then press Enter'; $u = $u.Trim(); if ($u -notlike 'https://*') { 'That does not start with https:// - nothing was saved. Copy the Secret address in iCal format again.' } else { [Environment]::SetEnvironmentVariable('JARVIS_CALENDAR_ICS_SECRET_URL', $u, 'User'); 'Saved for your Windows user. Quit Jarvis from the tray icon and start it again.' }; Remove-Variable u
+```
+
+7. Make sure the calendar tool is switched on: in your settings file,
+   `jarvis-framework.toml` (in `%USERPROFILE%\.openjarvis\` unless you moved
+   it), the `enabled` list under `[tools]` must include `"calendar_read"`.
+   Like every tool that reads your own accounts, it is off until you add it.
+8. Quit Jarvis from the tray icon and start it again (a program only sees a
+   new setting when it starts). Then ask "what's on my calendar this week?".
+
+To check it is set (it prints only `calendar.google.com`, never the link):
+
+```powershell
+$v = [Environment]::GetEnvironmentVariable('JARVIS_CALENDAR_ICS_SECRET_URL', 'User'); if ($v) { 'Set, for ' + ([Uri]$v).Host + ' (the rest of the link is not shown)' } else { 'Not set' }; Remove-Variable v
+```
+
+To remove it:
+
+```powershell
+[Environment]::SetEnvironmentVariable('JARVIS_CALENDAR_ICS_SECRET_URL', $null, 'User'); 'Removed. Quit Jarvis from the tray icon and start it again.'
+```
+
+**If the link ever gets out** (pasted somewhere, shown on a screen share),
+go back to step 5 and click **Reset** next to the secret address. Google
+then stops the old link working. Then run step 6 again with the new one.
+
+**If you also have `JARVIS_CALDAV_URL` set**, the private link wins, and
+the calendar card says the CalDAV address was not read. One read is one
+request to one calendar; clear the one you do not want.
+
+The desktop's and the phone's morning-briefing settings then say
+"Included: your Google Calendar (private link)." Nothing else in either app
+changes, and **there is no way to type the link into the phone** - it is a
+PC setting, like every other password Jarvis uses.
+
+## How the link is protected
+
+- **Its name has SECRET in it** (`JARVIS_CALENDAR_ICS_SECRET_URL`), on
+  purpose. That is the rule `jarvis_child_env.py` uses to keep secrets out
+  of every program Jarvis starts - an approved shell command, the second
+  Ollama, the big model - and the rule `jarvis_scrub.py` uses to take its
+  value out of `backend.log`, whatever it looks like.
+- **The log also removes anything shaped like one**: a
+  `.../calendar/ical/.../private-<letters and digits>/...` address, the path
+  alone, or a `private-<hex>` piece, even when the variable is not set.
+- **It is never on a card, in an answer, or in an error.** The card says
+  "Jarvis would like to read your Google Calendar (private link)" and
+  "1 request, to calendar.google.com" - the host only. The plan Jarvis keeps
+  in memory holds only `https://calendar.google.com/`; the link itself is
+  read from the environment at the moment the request is sent, and nowhere
+  else. If it changed after the card was shown, nothing is sent. Every
+  error is reworded without it.
+- **It is sent only to the host it names, and only over https://.**
+  Plain `http://` is refused unless the address is inside your own networks
+  (the same rule as the CalDAV address). If Google answers "go to another
+  address", Jarvis follows only to https on the same host or to another of
+  Google's calendar hosts (`calendar.google.com`, `www.google.com`,
+  `google.com`), at most three times. Anything else is not followed, and
+  nothing is sent there.
+- **It is kept off the cloud lane.** A message that contains the link
+  counts as a secret to `jarvis_router` (like an API key), so it stays on
+  the local model.
+- **Nothing is written to disk by Jarvis.** Not the link, not the
+  calendar: the calendar file is read into memory, the requested days are
+  picked out, and the rest is dropped.
+- **What Google learns:** that the link was used, from this PC's internet
+  address. Not which days Jarvis wanted - the whole calendar comes back and
+  the days are picked out on this PC.
+- **What reads back counts as outside text**, like every calendar read: a
+  turn that read your calendar asks before writing notes, and the answer is
+  kept on screen under your private-answers voice setting.
+
+**Said plainly - where the link is kept.** Step 6 saves it the same way as
+every other service password Jarvis uses today (`JARVIS_IMAP_PASSWORD`,
+`JARVIS_CALDAV_PASSWORD`, `JARVIS_HOME_TOKEN`, ...): as a Windows
+environment variable for your user. Windows keeps those in the registry,
+not encrypted, and every program you start can read them - not only
+Jarvis. It is not in a plain file, and it is not in any file Jarvis
+writes. Moving all of these into Windows Credential Manager (where the
+pairing token already is) is still an open task, not part of this change.
+
+## How much it reads, and repeating events
+
+- **A cap on size and time.** A Google calendar kept for years is a file of
+  a few megabytes. Jarvis reads at most **10 MB**, for at most **30 seconds**
+  (20 seconds for any one wait). Past that the rest is not read, and the
+  answer says "some events may be missing". The same cap now applies to a
+  CalDAV answer too.
+- **Repeating events are worked out now**, for both sources. The private
+  link holds a weekly meeting once, with its first date (perhaps years ago)
+  and a rule; before this change it would have looked like nothing was on.
+  Worked out: daily, weekly, monthly and yearly repeats, every N days /
+  weeks / months / years, "stop after N times" and "until a date", chosen
+  weekdays, "the 2nd Tuesday" or "the last Friday" of the month, "the last
+  day of the month", and deleted, moved or cancelled single occurrences.
+  **Not worked out** (rare in Google calendars): rules with BYSETPOS
+  ("the last weekday of the month"), week numbers, days of the year,
+  several times in one day, and extra one-off dates added to a series
+  (RDATE). Such an event is shown once, at its first date, marked
+  "(repeats)" - as every repeating event was before - never dropped.
+- **Time zones.** An event saved "in" a time zone (Google does this for
+  every timed event) is shown at the right hour **when Python on the PC has
+  time-zone data**. On Windows that needs the `tzdata` package, which
+  `requirements.txt` does not install. Without it, the time is taken as the
+  PC's own time zone - right whenever the event's zone is the PC's zone
+  (the usual case), and wrong by the difference when it is not (an event
+  made in another country's time). Adding `tzdata` would fix it; that is
+  your call (`py -3 -m pip install tzdata`).
+
+## Gmail, for email
+
+Jarvis reads email over IMAP (the standard mail protocol), with an
+**app password**: a separate 16-letter password Google makes for one
+program, which you can cancel on its own without changing your real
+password. It is still a password, and it is kept like the others (above).
+
+1. Your Google account needs **2-Step Verification** on:
+   `myaccount.google.com` -> **Security** -> **2-Step Verification**.
+   Google does not offer app passwords without it.
+2. Make an app password: `myaccount.google.com/apppasswords`. Name it
+   "Jarvis". Google shows 16 letters in four groups; copy them. (If the page
+   says the setting is not available, your account is a work or school
+   account whose administrator turned it off, or it uses Advanced
+   Protection - then this cannot be used.)
+3. Paste this one line into PowerShell. It asks for your Gmail address and
+   the app password (typed at the questions, not into the command), and
+   saves the server `imap.gmail.com` and port `993`:
+
+```powershell
+$a = Read-Host 'Your Gmail address'; $p = Read-Host 'Paste the 16-letter app password'; [Environment]::SetEnvironmentVariable('JARVIS_IMAP_HOST', 'imap.gmail.com', 'User'); [Environment]::SetEnvironmentVariable('JARVIS_IMAP_PORT', '993', 'User'); [Environment]::SetEnvironmentVariable('JARVIS_IMAP_USER', $a.Trim(), 'User'); [Environment]::SetEnvironmentVariable('JARVIS_IMAP_PASSWORD', ($p -replace '\s', ''), 'User'); Remove-Variable a, p; 'Saved for your Windows user. Quit Jarvis from the tray icon and start it again.'
+```
+
+4. Add `"email_check"` to the `enabled` list under `[tools]` in
+   `jarvis-framework.toml`, quit Jarvis from the tray icon and start it
+   again, and ask "any new email?".
+
+If the read fails with a login error, open Gmail on the web -> the gear ->
+**See all settings** -> **Forwarding and POP/IMAP**: if there is an
+"Enable IMAP" choice, choose it and save (newer accounts may not show one).
+To stop Jarvis reading your mail, delete the app password at
+`myaccount.google.com/apppasswords`.
+
+## What changed, file by file
+
+- `jarvis_calendar.py` - the second source (`JARVIS_CALENDAR_ICS_SECRET_URL`,
+  `source()`, `source_words()`), the card for it, the fetch that reads the
+  link only when sending (`_fetch_feed`) and follows redirects only as above
+  (`_FeedRedirect`), the size and time caps for both sources, errors without
+  the link (`_hide_link`), and the reader: repeats worked out, time zones,
+  a reminder's own title no longer taken for the event's, `\,` read as a
+  comma, `DURATION`, cancelled events left out. Shipped whole, no patch.
+- `jarvis_briefing.py` - the calendar counts as set up with either source,
+  its settings line names the one in use, and it says when the calendar was
+  too big to read whole.
+- `jarvis_scrub.py` - the three log shapes above.
+- `rebuilt/jarvis_router.py` - "a private calendar link" joins the secrets
+  kept off the cloud lane.
+- `rebuilt/jarvis-framework.toml` - one comment that said Jarvis never
+  touches a Google account, corrected.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_calendar_link.py; py -3 backend\test_calendar.py; py -3 backend\test_briefing.py; py -3 backend\test_scrub.py; py -3 backend\test_security_pc.py
+```
+
+`test_calendar_link.py` (about 70 checks) builds a fake private link from
+pieces and looks for it - and for its secret part, its calendar name and
+its URL-quoted form - in the plan, the card, the result the model reads,
+nine kinds of error, the log (by shape and by value), a program's
+environment, the router, the briefing, what the gate saw and what went on
+the bus. It also runs a real request to a stand-in server on this PC:
+one request, a same-host redirect followed, a redirect to another host not
+followed (and the other host never contacted), a link changed after the
+card refused, and the size cap. `test_calendar.py` adds the repeat rules,
+moved and cancelled occurrences, the caps, and time zones.
+`test_security_pc.py` now also puts the link in the environment of an
+approved shell command, and checks the command cannot see it.
+
+## Not checked, said plainly
+
+- **Nothing here has talked to the real Google.** The link's shape and the
+  hosts come from Google's "Secret address in iCal format" as described
+  above; whether Google redirects this link at all, and whether it answers
+  Python's plain request without complaint, has not been seen. The first
+  real read will tell: if it fails, the answer says why (for example "the
+  calendar service answered with an error (403)"), without the link.
+- The PowerShell lines above were not run: this session could not start
+  PowerShell. They were read by hand for Windows PowerShell 5.1 problems.
+- The repeat rules are tested against hand-written calendars, not a real
+  exported Google calendar.

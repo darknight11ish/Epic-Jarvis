@@ -205,6 +205,11 @@ _SECRET_PATTERNS = [
     ("a JSON web token", re.compile(
         r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
     ("a bearer token", re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}", re.I)),
+    # A private calendar link (Google Calendar's "Secret address in iCal
+    # format": .../calendar/ical/<calendar>/private-<32 hex>/basic.ics).
+    # Whoever has it can read the calendar, so it is a password in all but
+    # name - jarvis_calendar.py reads one from JARVIS_CALENDAR_ICS_SECRET_URL.
+    ("a private calendar link", re.compile(r"/private-[0-9a-f]{16,}", re.I)),
     # A labelled assignment, not a bare high-entropy string: `token = <blob>`
     # is specific enough to act on; an unlabelled 20-character string is not
     # - it is also a hash, an id, a filename.

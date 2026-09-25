@@ -727,8 +727,10 @@ full_reread_drift = 0.35
 # Mail, calendar, browser history and documents. The one rule: reading any
 # of them pins the conversation to the local model (belt: the result is
 # stamped; braces: the gate's timed taint flag is latched), so personal data
-# reaches a cloud lane by no path. Jarvis never touches your Google or
-# iCloud account - the calendar is a LOCAL CalDAV server's .ics files.
+# reaches a cloud lane by no path. Jarvis never signs in to your Google or
+# iCloud account - the calendar here is a LOCAL CalDAV server's .ics files.
+# (Separately, the calendar_read tool can read a Google calendar through its
+# private link, when you set one: backend/README.md, "Google Calendar".)
 [connectors]
 enabled = true
 

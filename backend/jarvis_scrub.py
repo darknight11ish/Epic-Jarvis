@@ -326,6 +326,22 @@ _CONTEXT_SHAPES: List[Tuple[str, "re.Pattern[str]", str]] = [
     ("password in a URL",
      re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)(?!\[redacted)[^/\s@]+(?=@)"),
      _keep1("password")),
+    # A private calendar link - Google Calendar's "Secret address in iCal
+    # format", https://calendar.google.com/calendar/ical/<calendar>/private-
+    # <hex>/basic.ics - or any address with a /private-<hex> part: whoever
+    # has it can read the calendar (jarvis_calendar.py). The scheme and host
+    # stay; the path, which holds both the secret and the calendar's name
+    # (often the owner's e-mail address, URL-quoted), goes.
+    ("private calendar link",
+     re.compile(r"(?i)\b((?:https?|webcal)://[^/\s\"'<>]+)(?!/\[redacted)"
+                r"/[^\s\"'<>]*?(?:/calendar/ical/|/private-[0-9a-f]{8,})[^\s\"'<>]*"),
+     r"\1/" + _mark("private calendar link")),
+    ("private calendar link",
+     re.compile(r"(?i)(/calendar/ical/)(?!\[redacted)[^\s\"'<>]+"),
+     _keep1("private calendar link")),
+    ("private calendar link",
+     re.compile(r"(?i)(?<![\w-])private-[0-9a-f]{16,}(?![0-9a-f])"),
+     _mark("private calendar link")),
     # ?token=... &api_key=... - jarvis_notes.py builds exactly this for Joplin.
     ("secret in a URL",
      re.compile(r"(?i)([?&](?:access_|refresh_|id_|auth_)?(?:token|api[_-]?key|key"

@@ -6,6 +6,7 @@ that `plan()` cannot touch the network and `run()` cannot be tricked into it.
 import os
 import socket
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -202,6 +203,150 @@ END:VCALENDAR</C:calendar-data></D:prop></D:propstat>
     out = C.run(p, fetch=lambda q: huge, approved=True)
     check("the event list is capped", len(out["events"]) == C._MAX_EVENTS)
     check("a capped result says so", out["truncated"] is True)
+
+# ── repeating events: the common rules, worked out (both sources) ─────────
+# Every time here ends in Z (or is all-day with days to spare), so the
+# checks hold in any time zone this runs in.
+
+
+def ics(*events):
+    return "BEGIN:VCALENDAR\r\n" + "".join(
+        "BEGIN:VEVENT\r\n" + "\r\n".join(lines) + "\r\nEND:VEVENT\r\n" for lines in events
+    ) + "END:VCALENDAR\r\n"
+
+
+def feed_read(text, days, now):
+    """What run() keeps from `text` for `days` from `now`, as a private link
+    (the window is picked out here, not by a server)."""
+    link = "https://calendar.google.com/calendar/ical/x/" + "private-" + "9a" * 16 + "/basic.ics"
+    saved = os.environ.get("JARVIS_CALENDAR_ICS_SECRET_URL")
+    os.environ["JARVIS_CALENDAR_ICS_SECRET_URL"] = link
+    try:
+        p = C.plan(days, now=now)
+        return C.run(p, fetch=lambda q: text, approved=True)
+    finally:
+        if saved is None:
+            os.environ.pop("JARVIS_CALENDAR_ICS_SECRET_URL", None)
+        else:
+            os.environ["JARVIS_CALENDAR_ICS_SECRET_URL"] = saved
+
+
+def starts(out, summary=None):
+    return [e["start"] for e in out["events"] if summary is None or e["summary"] == summary]
+
+
+def ev(uid, summary, start, *more):
+    return [f"UID:{uid}", f"SUMMARY:{summary}", f"DTSTART:{start}", *more]
+
+
+W = datetime(2026, 9, 14, 0, 0, 0, tzinfo=timezone.utc)      # a Monday
+
+cases = [
+    ("DAILY", ev("d", "Pills", "20260101T080000Z", "RRULE:FREQ=DAILY"), 3,
+     ["20260914T080000Z", "20260915T080000Z", "20260916T080000Z"]),
+    ("DAILY, every 2 days", ev("d2", "Run", "20260901T060000Z", "RRULE:FREQ=DAILY;INTERVAL=2"), 5,
+     ["20260915T060000Z", "20260917T060000Z"]),
+    ("WEEKLY on two days, years back", ev("w", "Gym", "20190101T180000Z",
+                                          "RRULE:FREQ=WEEKLY;BYDAY=TU,TH"), 7,
+     ["20260915T180000Z", "20260917T180000Z"]),
+    ("WEEKLY, every 2 weeks, week starting Sunday",
+     ev("w2", "Bins", "20260906T070000Z", "RRULE:FREQ=WEEKLY;INTERVAL=2;WKST=SU;BYDAY=SU,MO"),
+     14, ["20260920T070000Z", "20260921T070000Z"]),
+    ("MONTHLY on its day", ev("m", "Rent", "20250315T090000Z", "RRULE:FREQ=MONTHLY"), 7,
+     ["20260915T090000Z"]),
+    ("MONTHLY, the second Tuesday", ev("m2", "Club", "20250101T190000Z",
+                                        "RRULE:FREQ=MONTHLY;BYDAY=2TU"), 30,
+     ["20261013T190000Z"]),
+    ("MONTHLY, the last Friday", ev("m3", "Payday", "20250131T120000Z",
+                                     "RRULE:FREQ=MONTHLY;BYDAY=-1FR"), 30,
+     ["20260925T120000Z"]),
+    ("MONTHLY, the last day (BYMONTHDAY=-1)", ev("m4", "Invoice", "20250131T100000Z",
+                                                 "RRULE:FREQ=MONTHLY;BYMONTHDAY=-1"), 20,
+     ["20260930T100000Z"]),
+    ("MONTHLY on the 31st skips short months", ev("m5", "Odd", "20260131T100000Z",
+                                                  "RRULE:FREQ=MONTHLY"), 60,
+     ["20261031T100000Z"]),
+    ("YEARLY, a birthday (all day)", ["UID:y", "SUMMARY:Mum", "DTSTART;VALUE=DATE:19600916",
+                                      "DTEND;VALUE=DATE:19600917", "RRULE:FREQ=YEARLY"], 7,
+     ["20260916"]),
+    ("YEARLY, the second Sunday of May", ev("y2", "Mothers", "20200510T100000Z",
+                                            "RRULE:FREQ=YEARLY;BYMONTH=5;BYDAY=2SU"), 90,
+     []),
+    ("COUNT ends it", ev("c", "Course", "20260901T170000Z", "RRULE:FREQ=WEEKLY;COUNT=3"), 21,
+     ["20260915T170000Z"]),
+    ("UNTIL ends it", ev("u", "Trial", "20260901T170000Z",
+                         "RRULE:FREQ=DAILY;UNTIL=20260915T170000Z"), 7,
+     ["20260914T170000Z", "20260915T170000Z"]),
+    ("EXDATE removes one", ev("x", "Lesson", "20260907T160000Z", "RRULE:FREQ=DAILY;COUNT=20",
+                              "EXDATE:20260915T160000Z,20260916T160000Z"), 4,
+     ["20260914T160000Z", "20260917T160000Z"]),
+]
+for name, lines, days, want in cases:
+    out = feed_read(ics(lines), days, W)
+    check(f"repeats worked out - {name}", starts(out) == want, starts(out))
+
+out = feed_read(ics(ev("y3", "Mothers", "20200510T100000Z", "RRULE:FREQ=YEARLY;BYMONTH=5;BYDAY=2SU")),
+                30, datetime(2027, 5, 1, tzinfo=timezone.utc))
+check("repeats worked out - YEARLY, the second Sunday of May 2027", starts(out) == ["20270509T100000Z"],
+      starts(out))
+
+# One occurrence moved, one cancelled (RECURRENCE-ID), the series itself weekly.
+out = feed_read(ics(
+    ev("s", "Standup", "20260107T090000Z", "DTEND:20260107T091500Z", "RRULE:FREQ=WEEKLY"),
+    ev("s", "Standup (moved)", "20260916T110000Z", "DTEND:20260916T111500Z",
+       "RECURRENCE-ID:20260916T090000Z"),
+    ev("s", "Standup", "20260923T090000Z", "RECURRENCE-ID:20260923T090000Z",
+       "STATUS:CANCELLED")), 14, W)
+check("a moved occurrence replaces the one it moved, and a cancelled one is gone",
+      [(e["summary"], e["start"]) for e in out["events"]] == [("Standup (moved)", "20260916T110000Z")],
+      [(e["summary"], e["start"]) for e in out["events"]])
+check("an occurrence keeps its length (DTEND follows it)", out["events"][0]["end"] == "20260916T111500Z",
+      out["events"])
+
+out = feed_read(ics(ev("b", "Odd rule", "20260101T100000Z", "RRULE:FREQ=MONTHLY;BYSETPOS=-1;BYDAY=MO")),
+                7, W)
+check("a rule not worked out is kept once, at its first date, and says so",
+      len(out["events"]) == 1 and out["events"][0].get("rule_not_worked_out") is True
+      and out["events"][0]["start"] == "20260101T100000Z", out["events"])
+out = feed_read(ics(ev("b2", "Ended", "20200101T100000Z",
+                       "RRULE:FREQ=MONTHLY;BYSETPOS=-1;BYDAY=MO;UNTIL=20210101T000000Z")), 7, W)
+check("... but not when its UNTIL has passed", out["events"] == [], out["events"])
+
+real = C._MAX_STEPS
+C._MAX_STEPS = 50
+try:
+    out = feed_read(ics(ev("cap", "Daily", "20000101T080000Z", "RRULE:FREQ=DAILY;COUNT=100000")), 3, W)
+finally:
+    C._MAX_STEPS = real
+check("a rule past the step cap is not worked out (kept once, said)",
+      len(out["events"]) == 1 and out["events"][0].get("rule_not_worked_out") is True, out["events"])
+t0 = time.time()
+out = feed_read(ics(*[ev(f"many{i}", "Daily", "19900101T080000Z", "RRULE:FREQ=DAILY")
+                      for i in range(300)]), 90, W)
+check("300 daily repeats since 1990, 90 days asked: fast, and capped at 50",
+      time.time() - t0 < 10 and len(out["events"]) == C._MAX_EVENTS and out["truncated"] is True,
+      (time.time() - t0, len(out["events"])))
+
+# A reminder inside the event has a SUMMARY of its own; the event's is shown.
+out = feed_read(ics(["UID:a", "DTSTART:20260915T090000Z", "BEGIN:VALARM", "ACTION:DISPLAY",
+                     "SUMMARY:Reminder text", "TRIGGER:-PT10M", "END:VALARM",
+                     "SUMMARY:Call the bank\\, then lunch", "DURATION:PT30M"]), 3, W)
+check("a reminder's own SUMMARY is not taken for the event's, and \\, reads as a comma",
+      [e["summary"] for e in out["events"]] == ["Call the bank, then lunch"], out["events"])
+check("DURATION gives the end", out["events"][0]["end"] == "20260915T093000Z", out["events"])
+
+# A time zone Python knows is turned into an exact time; one it does not is
+# shown as this PC's time (as before).
+zone_known = C._zone("America/New_York") is not None
+out = feed_read(ics(["UID:tz", "SUMMARY:NY call", "DTSTART;TZID=America/New_York:20260915T090000",
+                     "RRULE:FREQ=WEEKLY"]), 7, W)
+want = ["20260915T130000Z"] if zone_known else ["20260915T090000"]
+check(f"a TZID event ({'zone data here' if zone_known else 'no zone data here'})",
+      starts(out) == want, starts(out))
+out = feed_read(ics(["UID:tz2", "SUMMARY:Somewhere", 'DTSTART;TZID="Nowhere/Made up":20260915T090000']),
+                7, W)
+check("an unknown TZID is shown as this PC's time", starts(out) == ["20260915T090000"], starts(out))
+
 
 print()
 if FAILED:

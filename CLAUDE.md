@@ -193,6 +193,10 @@ Decided 2026-09-25, after the competitiveness audit
   refused to anything on the open internet.
 - **The "I heard you" sound gets a switch in both apps, off by default**,
   next to the "One moment" switch (the owner changed on to off, 2026-09-25).
+- **Jarvis may read Google Calendar through its private link** ("Secret
+  address in iCal format"): read-only, set on the PC only, and the link
+  kept as safely as a password (never logged, shown or sent anywhere but
+  Google).
 
 ## Every new feature gets its own audit, without being asked
 

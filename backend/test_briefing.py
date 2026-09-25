@@ -509,15 +509,20 @@ def t_calendar_lines():
                        ("Mum's birthday", ";VALUE=DATE", "20260925"),
                        ("Lunch with Sam", ";TZID=Europe/London", "20260925T123000"),
                        ("Conference", "", "20260924T090000Z"),
-                       ("Dentist", "", "20260925T083000Z"))
+                       ("Dentist", "", "20260925T083000Z"),
+                       # A rule jarvis_calendar does not work out (BYSETPOS):
+                       # kept at its first date, and said to repeat.
+                       ("Board", "", "20260911T100000Z",
+                        "RRULE:FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1\n"))
     w = World(now, name="cal")
     b = B.build(sched=w.s, now=now, deps=deps(w, cal=lambda q: xml, tools=("calendar_read",)))
     cal = next(s for s in b["sections"] if s["key"] == "calendar")
-    check("all day first, then by this PC's time; repeats and ongoing said",
-          cal["items"] == ["All day: Mum's birthday", "09:00 Stand-up (repeats)",
+    check("all day first, then by this PC's time; a weekly repeat on today's date, "
+          "a repeat not worked out and ongoing said",
+          cal["items"] == ["All day: Mum's birthday", "09:00 Stand-up",
                            "09:30 Dentist", "10:00 Conference (continues from an earlier day)",
-                           "12:30 Lunch with Sam"], repr(cal["items"]))
-    check("the count", cal["summary"] == "5 events today.")
+                           "11:00 Board (repeats)", "12:30 Lunch with Sam"], repr(cal["items"]))
+    check("the count", cal["summary"] == "6 events today.")
     check("the read went through the gate as calendar_read", w.reads == ["calendar_read"])
     check("email not set up: not in it, and not listed as left out",
           all(s["key"] != "email" for s in b["sections"])

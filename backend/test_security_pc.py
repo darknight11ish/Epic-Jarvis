@@ -212,7 +212,11 @@ def t_only_typed_and_voice_are_the_owners_words():
 
 SECRETS = {"HUD_TOKEN": "pairing-token-XYZ", "JARVIS_IMAP_PASSWORD": "mail-pw-123",
            "JARVIS_GITHUB_TOKEN": "ghp_fake", "JARVIS_HOME_TOKEN": "ha-token",
-           "JARVIS_CALDAV_PASSWORD": "cal-pw", "JARVIS_OBSIDIAN_API_KEY": "obs-key"}
+           "JARVIS_CALDAV_PASSWORD": "cal-pw", "JARVIS_OBSIDIAN_API_KEY": "obs-key",
+           # The private calendar link (jarvis_calendar.ICS_URL_ENV), built
+           # in pieces so no whole link sits in this file.
+           "JARVIS_CALENDAR_ICS_SECRET_URL": "https://calendar.google.com/calendar/ical/x/"
+                                             + "private-" + "ab" * 16 + "/basic.ics"}
 
 
 def t_a_shell_command_inherits_no_secret():

@@ -20,7 +20,9 @@ THE OWNER'S DECISIONS THAT SHAPE IT (2026-09-25, CLAUDE.md)
 
 WHAT IS IN IT - only what Jarvis can already read on this PC
   * Today's calendar events - only when the calendar is set up for Jarvis
-    (JARVIS_CALDAV_URL, and `calendar_read` in [tools].enabled), read through
+    (JARVIS_CALDAV_URL, or the private calendar link
+    JARVIS_CALENDAR_ICS_SECRET_URL - Google Calendar's - and `calendar_read`
+    in [tools].enabled), read through
     jarvis_calendar.py's one read-only request, and only when the gate lets
     that read run without a person (tier "auto" or "notify", the shipped
     "auto"). Tier "ask": it is left out and the briefing says why - a
@@ -232,14 +234,23 @@ def _env(deps: Deps, name: str) -> str:
     return str(os.environ.get(name, "") or "").strip()
 
 
+def _calendar_words() -> str:
+    try:
+        import jarvis_calendar as CAL
+        return CAL.source_words()
+    except Exception:
+        return "your calendar"
+
+
 def sources(deps: Optional[Deps] = None) -> dict:
     """What a briefing would include, without reading anything: for the
     apps' settings ("Your calendar: included"). Opens no socket."""
     deps = deps or Deps()
     enabled = deps.tools_enabled()
 
-    def one(tool: str, action: str, env_name: str, what: str) -> dict:
-        if tool not in enabled or not _env(deps, env_name):
+    def one(tool: str, action: str, env_names, what: str) -> dict:
+        names = (env_names,) if isinstance(env_names, str) else tuple(env_names)
+        if tool not in enabled or not any(_env(deps, n) for n in names):
             return {"state": "off",
                     "said": f"Not included: {what} is not set up for Jarvis on this PC."}
         tier = deps.tier_of(action)
@@ -250,7 +261,12 @@ def sources(deps: Optional[Deps] = None) -> dict:
         return {"state": "on", "said": f"Included: {what}."}
 
     return {
-        "calendar": one(CALENDAR_TOOL, CALENDAR_ACTION, "JARVIS_CALDAV_URL", "your calendar"),
+        # Either calendar source counts (jarvis_calendar.source()); the words
+        # name the one in use - "your Google Calendar (private link)" - and
+        # never the link itself.
+        "calendar": one(CALENDAR_TOOL, CALENDAR_ACTION,
+                        ("JARVIS_CALDAV_URL", "JARVIS_CALENDAR_ICS_SECRET_URL"),
+                        _calendar_words()),
         "email": one(EMAIL_TOOL, EMAIL_ACTION, "JARVIS_IMAP_HOST",
                      "how many unread emails you have"),
         "weather": {"state": "not_available", "said": OUTSIDE_LINE},
@@ -306,9 +322,10 @@ def calendar_items(events: list, now: float) -> list:
         day, hhmm = when
         tail = ""
         if day != today:
-            # The server says it is on today: a repeating event (its first
-            # date is what the file holds - repeats are not worked out here)
-            # or one that began earlier and is still going.
+            # The calendar says it is on today: a repeating event whose rule
+            # jarvis_calendar could not work out (so its first date is what
+            # is shown - the common rules ARE worked out, and then the date
+            # is today's), or one that began earlier and is still going.
             tail = " (repeats)" if repeats else " (continues from an earlier day)"
         if hhmm is None:
             rows.append(((0, ""), f"All day: {summary}{tail}"))
@@ -341,11 +358,18 @@ def _read_calendar(now: float, deps: Deps) -> dict:
                         "Not read: the calendar server did not answer.")
     items = calendar_items(out.get("events") or [], now)
     if not items:
-        return _section("calendar", title, "empty", "Nothing on your calendar today.")
+        return _section("calendar", title, "empty", "Nothing on your calendar today." + (
+            " Some events may be missing: the calendar is larger than Jarvis reads at once."
+            if out.get("incomplete") else ""))
     shown = items[:MAX_ITEMS]
     more = len(items) - len(shown)
     summary = _plural(len(items), "event") + " today" + ("" if not out.get("truncated")
                                                          else " (the first 50 read)")
+    if out.get("incomplete"):
+        # A private calendar link hands over the whole calendar; past
+        # jarvis_calendar's cap the rest is not read.
+        summary += (". Some may be missing: the calendar is larger than Jarvis "
+                    "reads at once")
     if more > 0:
         shown.append(f"... and {more} more")
     return _section("calendar", title, "ok", summary + ".", shown)
