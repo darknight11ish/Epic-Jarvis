@@ -1155,6 +1155,7 @@ class MainActivity : FragmentActivity() {
                         val phoneListening by WakeWordService.state.collectAsState()
                         val bargeInSaved by JarvisRuntime.settings.bargeIn.collectAsState()
                         val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
+                        val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
                         // Asked once: whether this phone has an echo canceller
                         // at all. It decides the barge-in default.
                         val echoCanceller = remember {
@@ -1240,6 +1241,9 @@ class MainActivity : FragmentActivity() {
                             // played when a tool starts during a spoken question.
                             oneMoment = oneMomentOn,
                             onOneMoment = { on -> JarvisRuntime.settings.setOneMoment(on) },
+                            // And whether the "I heard you" sound plays.
+                            heardSound = heardSoundOn,
+                            onHeardSound = { on -> JarvisRuntime.settings.setHeardSound(on) },
                             onPhoneListening = { on ->
                                 if (on) {
                                     wakeNotice = startPhoneListening()

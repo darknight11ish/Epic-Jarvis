@@ -42,7 +42,16 @@ import {
   THEMES,
 } from "./jarvis-link.js";
 import { BARGE_IN_KEY, describeBargeIn, loadBargeIn, saveBargeIn } from "./barge-in.js";
-import { describeMoment, loadMoment, MOMENT_KEY, saveMoment } from "./voice-flow.js";
+import {
+  describeHeard,
+  describeMoment,
+  HEARD_KEY,
+  loadHeard,
+  loadMoment,
+  MOMENT_KEY,
+  saveHeard,
+  saveMoment,
+} from "./voice-flow.js";
 import {
   checkLine as voiceCheckLine,
   isTrained as voiceIsTrained,
@@ -2363,6 +2372,33 @@ if (oneMoment) {
     if (event.key === MOMENT_KEY) paintOneMoment();
   });
   paintOneMoment();
+}
+
+/* "Play a short sound when I finish speaking" - this PC's own too
+   (voice-flow.js), read by the Jarvis bar each time it would play the
+   "I heard you" sound. On by default (owner's decision, 2026-09-25). */
+const heardSound = $("voice-heard-sound");
+const heardSoundDetail = $("voice-heard-sound-detail");
+
+function paintHeardSound() {
+  if (!heardSound) return;
+  const on = loadHeard();
+  heardSound.checked = on;
+  heardSoundDetail.textContent = describeHeard(on);
+}
+
+if (heardSound) {
+  heardSound.addEventListener("change", () => {
+    if (!saveHeard(heardSound.checked)) {
+      announce("That could not be saved on this PC.", "assertive");
+    }
+    paintHeardSound();
+    announce(heardSoundDetail.textContent);
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === HEARD_KEY) paintHeardSound();
+  });
+  paintHeardSound();
 }
 
 onQueue(() => {

@@ -35,7 +35,9 @@
  * "I HEARD YOU." A tiny two-note sound, made here from numbers (no file, no
  * new dependency), played when the owner's turn has been cut: on letting go
  * of the talk button, and when the PC says "hey Jarvis" was heard. The phone
- * makes the same sound from the same numbers.
+ * makes the same sound from the same numbers. It has its own switch, "Play a
+ * short sound when I finish speaking", on by default, beside "One moment"
+ * (owner's decision, 2026-09-25) - this PC's own, like that one.
  *
  * @module voice-flow
  */
@@ -217,25 +219,35 @@ export const MOMENT_KEY = "jarvis.voice.oneMoment";
 /** The switch's name, the words JARVIS-API section 17 suggests - the phone's too. */
 export const MOMENT_NAME = "Say \"One moment\" if I'm kept waiting";
 
-/** The owner's setting, or ON when none was saved (or storage is unreadable). */
-export function loadMoment(storage = globalThis.localStorage) {
+/** An on-by-default switch saved under `key`: ON unless saved "off" (or storage is unreadable). */
+function loadOnByDefault(key, storage) {
   try {
-    if (storage && storage.getItem(MOMENT_KEY) === "off") return false;
+    if (storage && storage.getItem(key) === "off") return false;
   } catch {
     /* private mode or cleared site data: the default */
   }
   return true;
 }
 
-/** Saves the setting. Returns whether it could be saved. */
-export function saveMoment(on, storage = globalThis.localStorage) {
+/** Saves an on-by-default switch. Returns whether it could be saved. */
+function saveOnOff(key, on, storage) {
   try {
     if (!storage) return false;
-    storage.setItem(MOMENT_KEY, on ? "on" : "off");
+    storage.setItem(key, on ? "on" : "off");
     return true;
   } catch {
     return false;
   }
+}
+
+/** The owner's setting, or ON when none was saved (or storage is unreadable). */
+export function loadMoment(storage = globalThis.localStorage) {
+  return loadOnByDefault(MOMENT_KEY, storage);
+}
+
+/** Saves the setting. Returns whether it could be saved. */
+export function saveMoment(on, storage = globalThis.localStorage) {
+  return saveOnOff(MOMENT_KEY, on, storage);
 }
 
 /** The switch's line in Settings - the phone's `OneMoment.describe`, word for word. */
@@ -244,6 +256,32 @@ export function describeMoment(on) {
   return on
     ? "On: when Jarvis has to look something up for a spoken question, it says \"One moment.\" first, once, in its own voice."
     : "Off: Jarvis stays quiet until its answer is ready.";
+}
+
+/* ── The "I heard you" switch - this PC's own, beside "One moment" ── */
+
+/** The localStorage key. */
+export const HEARD_KEY = "jarvis.voice.heardSound";
+
+/** The switch's name - the phone's `HeardSound.NAME`. */
+export const HEARD_NAME = "Play a short sound when I finish speaking";
+
+/** The owner's setting, or ON when none was saved (or storage is unreadable). */
+export function loadHeard(storage = globalThis.localStorage) {
+  return loadOnByDefault(HEARD_KEY, storage);
+}
+
+/** Saves the setting. Returns whether it could be saved. */
+export function saveHeard(on, storage = globalThis.localStorage) {
+  return saveOnOff(HEARD_KEY, on, storage);
+}
+
+/** The switch's line in Settings - the phone's `HeardSound.describe`, word for word. */
+export function describeHeard(on) {
+  // One literal each: the phone's VoiceFlowTest finds these very lines here.
+  return on
+    ? "On: a short two-note sound plays as you finish speaking, so you know Jarvis heard you."
+    : "Off: no sound; Jarvis just answers.";
 }
 
 /* ── "I heard you" ── */

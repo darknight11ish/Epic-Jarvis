@@ -6870,7 +6870,10 @@ often comes back through the microphone); "stop" works from the first word
 as before. "One moment." is played when Jarvis starts a tool for a spoken
 question - once, and only before the answer makes a sound - not on a timer;
 each app has a switch for it, "Say "One moment" if I'm kept waiting", on by
-default. A tiny "I heard you" sound plays when your turn is taken.
+default. A tiny "I heard you" sound plays when your turn is taken; each
+app has a switch for that too, right under the "One moment" one, "Play a
+short sound when I finish speaking", on by default (your decision,
+2026-09-25). It is the app's own setting - nothing on the PC changes.
 
 ## Two additions, 2026-09-25
 

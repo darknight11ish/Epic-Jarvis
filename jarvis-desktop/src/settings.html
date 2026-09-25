@@ -460,13 +460,21 @@
 
         <!-- Also this PC's own (voice-flow.js); the phone has the same
              switch for itself. The PC's own [voice] one_moment_enabled can
-             still turn the clip off for every app. -->
+             still turn the clip off for every app. The "I heard you" sound
+             is this PC's own too, made here, with nothing on the PC. -->
         <h3 class="subhead">While you wait</h3>
         <label class="toggle">
           <input id="voice-one-moment" type="checkbox" />
           <span>
             Say "One moment" if I'm kept waiting
             <span class="toggle-detail" id="voice-one-moment-detail"></span>
+          </span>
+        </label>
+        <label class="toggle">
+          <input id="voice-heard-sound" type="checkbox" />
+          <span>
+            Play a short sound when I finish speaking
+            <span class="toggle-detail" id="voice-heard-sound-detail"></span>
           </span>
         </label>
       </section>
