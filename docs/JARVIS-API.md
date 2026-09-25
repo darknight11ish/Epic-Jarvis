@@ -180,6 +180,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
 | `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on Mind; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
+| `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on); the Brain reads Coming up again (`brain.js`) | Mind's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
@@ -3138,3 +3139,197 @@ Whether `LLAMA_ARG_FIT_TARGET` reaches llama.cpp through Ollama as a single
 MiB number has not been checked; if it does not, models may fail to load
 until the undo line is run. Ollama's `/api/create` with `from` and
 `parameters` was not run either.
+
+---
+
+## 21. Timers, alarms, reminders and the to-do list (added 2026-09-25)
+
+The owner's decisions of 2026-09-25 (`CLAUDE.md`): timers, reminders and ONE
+shared scheduler come first; a timer or a one-time reminder needs no approval
+card, anything that repeats asks once with a card that lists the next run
+times; simple commands like timers are answered without the AI model.
+
+`backend/schedule.patch`, `backend/jarvis_schedule.py` (the scheduler) and
+`backend/jarvis_quick.py` (the answers without the model). **Both apps call
+all three routes.** The desktop: the Brain's Work tab, "Coming up"
+(`coming-up.js`, `brain/schedule.rs`: `brain_schedule`,
+`brain_schedule_act`, `brain_schedule_add_todo`, Brain window only), and a
+Windows toast when a job goes off (`stream.rs` -> `toast_fired`). The phone:
+Mind, "Coming up" (`ComingUpPlate.kt`, `net/Schedule.kt`), and a
+notification when a job goes off (`JarvisRuntime.onScheduleEvent` ->
+`ScheduleNotifier`). `tools/check_parity.py` records all three as `ported`.
+
+### 21.1 The PC is the clock
+
+Every job lives in `schedule.db` in the Jarvis settings folder (beside
+`memory.db`) and goes off **on the PC, by the PC's own clock** - its local
+time, with both daylight-saving changes handled (a daily 07:00 stays 07:00;
+a time in the hour the clocks skip goes off when they jump; a time that
+happens twice goes off once, the first time). The apps show what goes off
+**while they are connected**. The phone sets no alarm of its own and asks
+for no exact-alarm permission: a reminder due while the phone is off, or out
+of reach of the PC, is not shown on the phone then - it is still on the
+list, and the PC still shows its toast. A job found overdue after the PC was
+off or asleep goes off **once**, late, and says `missed at 07:00`; a
+repeating job then moves to its next time - never once per missed time.
+
+### 21.2 Routes
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items, oldest first. |
+| `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
+| `POST /api/schedule/add` | `{"kind": "todo", "text"}` · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}`; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat; 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once. A repeat raises ONE card and is set up only on its yes. Both apps add only a to-do item here; timers and reminders are said or typed to Jarvis. |
+| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time", "seconds"?}` | 200 `{"ok": true, "id", "said"}`; 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing); 400 anything else | ONE job, at once, no card - it only makes things quieter. **There is no list form and no "delete all"**: `id` must be one job id (`s` and ten hex digits). Both apps hold it on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. |
+
+A `job`:
+
+```
+{"id": "s0123456789", "kind": "timer"|"alarm"|"reminder"|"todo"|<a later kind>,
+ "text": str,                     the owner's own words ("" for a plain timer or alarm)
+ "state": "active"|"paused"|"waiting"|"fired"|"done",
+ "due": epoch|null, "left": seconds (active, or a paused timer), "when": "07:00 tomorrow",
+ "duration": seconds (timers), "repeats": bool,
+ "rule": {...}, "repeat": "every weekday (Monday to Friday) at 07:00", "next": [3 epochs],
+ "card": "Waiting for your yes on the approval card." (waiting),
+ "fired_at", "late": bool, "missed": "missed at 07:00",
+ "lock_screen": "Jarvis: a reminder is due.",   the kind's words, never the job's
+ "created", "source": "quick"|"tool"|"app"}
+```
+
+`rule` is one of `{"every": "day", "at": "HH:MM"}`, `{"every": "weekday",
+"at"}`, `{"every": "week", "at", "days": [0-6, 0 = Monday]}`, `{"every":
+"hours", "hours": N, "start": epoch}` (N at least 1). Limits: 300
+characters of words, 100 timers and reminders, 300 open to-do items, a
+timer up to 24 hours, a time up to a year ahead - each said in a sentence
+when reached.
+
+### 21.3 The card for anything that repeats
+
+Action **`schedule_repeat`**, tier `ask` (the shipped toml has the line; a
+toml without it asks too; any other tier is refused and nothing is set up -
+a config line is not the owner's yes). The card reads, for example:
+
+```
+Set up a repeating reminder.
+
+What: take my pills
+When: every weekday (Monday to Friday) at 07:00.
+
+The next three times it will go off:
+  - Monday 28 September at 07:00
+  - Tuesday 29 September at 07:00
+  - Wednesday 30 September at 07:00
+
+It runs on this PC, by this PC's clock. It goes off on both apps while they
+are connected. Nothing is sent anywhere.
+Stopping or deleting it is immediate, from either app.
+
+If you say no: nothing is set up.
+```
+
+Its notice (the lock screen's words) comes from `jarvis_gate`'s table like
+every other card: "sets up a reminder or alarm that repeats, on this PC;
+nothing is sent anywhere, and deleting it is immediate". Denied, timed out
+or refused: the job is removed, and a `schedule` event says the list
+changed. A "no" to it proposes no standing rule (`_NO_RULE_FROM_DENIAL`):
+the owner asked for it.
+
+### 21.4 The event
+
+`schedule`: `{"id", "kind", "state": "fired" | "changed", "late"?: bool}` -
+**ids and the kind only, never the words** (ARCHITECTURE section 6).
+`"fired"` is a job going off; `"changed"` is the list changing (added,
+paused, deleted, a card decided). Both apps read Coming up again on it. On
+`"fired"`:
+
+- **Desktop**: reads the job by id and shows a Windows toast - title "Timer
+  done", "Alarm", "Reminder" or "To-do", and the words (or "The pasta timer
+  is done."), with "(missed at 07:00 - the PC was off or asleep.)" when it
+  was late. While **App lock** is on, or the private lists are hidden
+  ("Windows Hello for memory lists and chat history"), the toast says only
+  the kind's lock-screen words. Shown once per job going off, even when a
+  reconnect replays the event.
+- **Phone**: the same words as a notification on the approval channel. Its
+  lock-screen version is always only the kind's words ("Jarvis: a reminder
+  is due."); while App lock or "Hide memory lists and chat history" is on,
+  the notification itself says only that too.
+
+### 21.5 Answered without the model - `/api/chat`
+
+Before a chat turn can reach the model, `jarvis_quick.answer_turn` tries a
+small fixed grammar on the newest message. **English only.** It must match
+the WHOLE sentence (after "please", "Jarvis," and the like are taken off);
+anything else - or anything unclear - goes to the model exactly as before.
+What it understands:
+
+| | Examples |
+|---|---|
+| Timers | "set a timer for 10 minutes", "10 minute timer", "timer for 1h30", "set a pasta timer for 12 minutes", "cancel the timer", "cancel the pasta timer", "pause / resume the timer", "add 5 minutes to the timer", "5 more minutes" (only while a timer runs), "take 2 minutes off the timer", "how long is left" |
+| Alarms | "set an alarm for 7" (the next 7 o'clock), "alarm at 7:30am", "wake me up at 6", "set an alarm for tomorrow at 6" (an alarm on another day: the morning), "cancel my 7am alarm", "what alarms do I have" |
+| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (a card), "remind me to stretch every 2 hours" (a card) |
+| To-do list | "add milk to my to-do list", "what's on my to-do list", "mark milk as done", "tick off milk", "remove milk from my to-do list" |
+
+"cancel all timers", "clear my to-do list" and the like are answered
+"Jarvis does not clear everything at once" and change nothing. Two timers
+and "cancel the timer": it asks which, and cancels nothing.
+
+**Only the owner's own words act**: the newest message tagged `typed` or
+`voice`, with no app system message and no Share or clipboard message sent
+with it, and no picture. Anything else goes to the model. A "Hey Jarvis"
+turn is fine either way: setting a reminder is an action the owner asked
+for, not a fact being saved.
+
+**The answer** is one short sentence ("Timer set for 10 minutes.",
+"Reminder set for 18:00 today." - a reminder's words are not repeated back)
+in exactly the format a model's answer comes in (SSE chunks, or one JSON
+body for `stream: false`). `X-Jarvis-Route` then carries `"quick": <what was
+done>`, `"where": "local"`, `"lane": "no AI model"`, and no facts used; a
+reply that reads the to-do list out carries `"gate": "private"`, so a voice
+answer stays on screen under the apps' private-answer rule. Both apps show
+a small line under such an answer: **"Done - answered on this PC without the
+AI model."**
+
+**A temporary chat** still sets the reminder - it is an action, not memory -
+and, as for any temporary chat, the chat is not kept and nothing is learned.
+
+**The model's own tools** (`jarvis_agent.py`, offered only when
+`[tools].enabled` names them, like every tool): `set_timer`, `set_reminder`
+(once or repeating; `when` in plain English or `2026-10-02 17:30`),
+`todo_add`, `todo_done`, `coming_up`. They are not put to the gate for a
+one-off (the owner's decision); a repeat raises the scheduler's own card
+above. In a turn shaped by outside text (the same test as a note write -
+section 4) they set and change nothing, so a web page or an email cannot
+set Jarvis's alarms.
+
+### 21.6 What is private, and where it stays
+
+A reminder's and a to-do item's words are the owner's own. They stay in
+`schedule.db` on the PC (plain SQLite, like `memory.db`), are never put on
+the event bus or in the audit log (ids and kinds only), and are never sent
+anywhere. **They are not learned as facts**: `jarvis_intake.owner_turns`
+skips a sentence the grammar matches, and one the model set a reminder
+from (the scheduler keeps its digest, never its words). The chat history
+keeps the turn like any other (encrypted, and not for a temporary chat).
+While the private lists are hidden, the desktop's Rust takes the words out
+of Coming up before the page sees them, and the phone hides them on Mind;
+the times stay, so a timer still counts down.
+
+### 21.7 Known gaps, said plainly
+
+- **Not run on the owner's PC.** Everything above was tested in the dev
+  container: the scheduler with a hand-moved clock and real SQLite files,
+  daylight saving with the London and New York rules (`time.tzset`, which
+  Windows does not have - on Windows the same code asks Windows' own
+  time-zone rules, and that was not watched), and `/api/chat` through the
+  patched block lifted from the whole patch stack. The toast and the phone
+  notification have not been seen on a real Windows PC or phone.
+- **English only.** Other languages go to the model, whose tools can still
+  set a timer when they are switched on.
+- **The phone hears of a job going off only while connected** (21.1).
+- **The initiative engine and the digest are not hooked in.** The engine's
+  30-minute heartbeat and in-memory findings could not host timers
+  (`jarvis_schedule.py`'s header says why); the digest lives in the owner's
+  `jarvis_arbiter.py`, which this repository does not hold. The scheduler is
+  the one clock; briefings, sleep mode and the overnight tidy are to plug in
+  as new kinds (`register_kind`), not as schedulers of their own.

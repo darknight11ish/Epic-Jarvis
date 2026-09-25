@@ -485,7 +485,7 @@ reads from on its own. Three things about it are invariants:
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
 changes from it and from nowhere else. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
-`deep`, `memory_saved`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
+`deep`, `memory_saved`, `schedule`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
 and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.
 `deep` is a deep question finishing, `{"id", "state"}` only -
@@ -499,7 +499,14 @@ auto list and `memory_facts` (`brain.js` `noteMemorySaved`), and the phone
 shows the same line on Mind and re-reads the list
 (`JarvisRuntime.onMemorySaved`) - never a notification. Since 2026-09-25
 the line opens those facts, their words read by id from
-`/api/memory/used` only then. JARVIS-API §19.)
+`/api/memory/used` only then. JARVIS-API §19.
+`schedule` is a timer, an alarm or a reminder going off, or Coming up
+changing, `{"id", "kind", "state", "late"?}` only - `jarvis_schedule.py`;
+added 2026-09-25. Both apps handle it: the desktop's Rust reads the job by
+id and shows a Windows toast (`brain/schedule.rs` `toast_fired`) and the
+Brain reads Coming up again; the phone reads Coming up again and shows a
+notification (`JarvisRuntime.onScheduleEvent`). The words are read by id,
+never carried; a locked screen gets only the kind. JARVIS-API §21.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. That includes `activity`'s sentence: while Jarvis drives a
@@ -843,6 +850,29 @@ they landed):
   models") and the phone's Mind ("Hardware"). Not run on a real card.
   [`HARDWARE-PROFILES.md`](HARDWARE-PROFILES.md) is the design.
 
+- **Timers, alarms, reminders and the to-do list, with ONE scheduler**
+  (added 2026-09-25, the owner's decisions of that day).
+  `jarvis_schedule.py` is the one clock: jobs of a kind (timer, alarm,
+  reminder, to-do - and `register_kind` for the briefing, sleep mode and the
+  overnight tidy still to come) in `schedule.db`, the PC's local time with
+  both clock changes handled, a job missed while the PC was off going off
+  once, late. A one-off needs no card; anything that repeats is ONE card
+  (`schedule_repeat`, the same four steps as section 3, listing the next
+  three times). Stopping or deleting is immediate, one job at a time; there
+  is no delete-all. `jarvis_quick.py` answers the plain sentences ("set a
+  timer for 10 minutes", "remind me at 6 to call Mum") WITHOUT the model, so
+  they work when it is slow, unloaded or asleep - English only; anything
+  else goes to the model as before. A reminder's words stay on the PC and
+  are not learned as a fact. `GET /api/schedule`, `POST /api/schedule/add`
+  and `/act` (`schedule.patch`). Both apps: the desktop's Brain -> Work ->
+  Coming up with a toast when a job goes off, and the phone's Mind -> Coming
+  up with a notification. The PC is the clock: the phone hears of a job
+  going off only while it is connected. The initiative engine could not
+  host it (a 30-minute heartbeat, findings kept in memory only, off with
+  `[initiative] enabled = false`), so it is left as it was; the digest is in
+  the owner's `jarvis_arbiter.py`, not here. Not run on the owner's PC.
+  JARVIS-API §21.
+
 **Still missing:**
 
 - **Obsidian daily notes in every date format.** Only formats that can be
@@ -944,6 +974,12 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    and nothing invokes it, it is not finished.
 3. Does it act, or leave the machine? Then it is `plan` / `describe` / gate /
    `run`, with the tier asserted.
+   Does it happen at a time, or on its own - a briefing, a nudge, a nightly
+   job? Then it is a KIND of job on the one scheduler
+   (`jarvis_schedule.register_kind`), with its own `on_fire`: the same
+   clock, the same missed-while-off rule, the same `schedule` event and the
+   same Coming up list in both apps. Not a timer thread of its own. And
+   anything that repeats is set up by one card, like `schedule_repeat`.
 4. Can you state, in one sentence, what it sends and where? If not, you do not
    know yet.
 5. Does it need a test that fails on the unpatched tree? Yes. Every patch here
