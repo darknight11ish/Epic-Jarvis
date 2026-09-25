@@ -501,6 +501,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             // which `finishStream` already turns into its own honest
             // placeholder - still a real "done" turn, just with nothing
             // scripted to say.
+            // A PC without a temporary chat refuses one here, as
+            // commands.rs stream_chat does, before anything is sent.
+            if (args && args.temporary === true && window.__temporaryOk !== true) {
+              throw new Error("Temporary chat isn't available on this PC's version of Jarvis, " +
+                "so nothing was sent. Run apply-patches.ps1 on the PC to update it.");
+            }
             const reply = (window.__chatReplies || []).shift();
             const onmessage = args && args.onEvent && args.onEvent.onmessage;
             // The answer's id, sent ahead of the answer exactly as
@@ -1013,7 +1019,24 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (cmd === "brain_memory_forget" || cmd === "brain_memory_erase") {
               // A forgotten (or erased) fact is no longer current, so it leaves the
               // "Saved automatically" list the PC sends.
+              // ...and memory_used then says so (brain/used.rs): the fact is
+              // still on the PC, only no longer in use.
+              const was = window.__auto.facts.find((f) => f.id === args.id);
+              window.__usedFacts = window.__usedFacts || {};
+              if (was && !window.__usedFacts[args.id]) {
+                window.__usedFacts[args.id] = { id: args.id, text: was.text, current: true,
+                                                pinned: false, erased_at: null };
+              }
               window.__auto.facts = window.__auto.facts.filter((f) => f.id !== args.id);
+              const used = window.__usedFacts[args.id];
+              if (used) {
+                used.current = false;
+                used.pinned = false;
+                if (cmd === "brain_memory_erase") {
+                  used.text = "";
+                  used.erased_at = 1790000000;
+                }
+              }
             }
             return { ok: true };
           case "brain_memory_export":
@@ -1044,6 +1067,42 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           // (`before` exclusive), with the two switches, emptied while
           // private answers are hidden; each switch's ON is a 202 card when
           // `waits` names it; every call recorded in `window.__auto`.
+          // Temporary chat (commands.rs temporary_chat_available): a
+          // scenario sets window.__temporaryOk; unset, an older PC.
+          case "temporary_chat_available":
+            return window.__temporaryOk === true;
+          // "Used in this answer" (brain/used.rs memory_used): the facts a
+          // scenario puts in window.__usedFacts, by id, in the order asked;
+          // unknown ids are `missing`; emptied while the lists are hidden;
+          // window.__usedMissingRoute is an older PC.
+          case "memory_used": {
+            (window.__usedReads = window.__usedReads || []).push([...(args.ids || [])]);
+            if (window.__usedMissingRoute) {
+              return { available: false,
+                       why: "Your PC's Jarvis cannot show which facts these were yet - run apply-patches.ps1 on the PC to update it." };
+            }
+            const known = window.__usedFacts || {};
+            // Unset for an id: the fact as "Saved automatically" lists it.
+            const auto = (id) => {
+              const f = (window.__auto.facts || []).find((x) => x.id === id);
+              return f && { id, text: f.text, current: true, pinned: false, erased_at: null };
+            };
+            const facts = [];
+            const missing = [];
+            for (const id of args.ids || []) {
+              const f = known[id] || auto(id);
+              if (f) facts.push(JSON.parse(JSON.stringify(f)));
+              else missing.push(id);
+            }
+            const out = { facts, missing };
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              out.hidden = true;
+              out.hidden_count = out.facts.length;
+              out.facts = [];
+            }
+            return out;
+          }
           case "brain_memory_profile": {
             const p = window.__profile;
             if (!p) return null;

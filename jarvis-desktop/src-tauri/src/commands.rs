@@ -1421,6 +1421,16 @@ pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, Str
 /// [`chat_extras`] - only when well formed, so a bad one is left out rather
 /// than sent for the PC to ignore. The PC strips all three before anything
 /// reaches a model.
+///
+/// `temporary: true` (the owner's decision, 2026-09-25; JARVIS-API.md
+/// section 18.1) asks for a temporary chat: no memory used, nothing learned,
+/// nothing kept. It is sent only to a PC whose `/api/version` says it has
+/// one; otherwise nothing is sent and the answer is [`TEMPORARY_UNAVAILABLE`].
+///
+/// Eight arguments, one over clippy's line: each is a field main.js already
+/// names at the top level of the call (the tests read them there), and
+/// folding three into a struct would change that call's shape for nothing.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn stream_chat(
     app: AppHandle,
@@ -1429,11 +1439,33 @@ pub async fn stream_chat(
     auto: bool,
     conversation_id: Option<String>,
     device: Option<String>,
+    temporary: Option<bool>,
     on_event: Channel<String>,
 ) -> Result<(), String> {
     let cancel = app.state::<ChatState>().begin();
     let base = jarvis_base(&app);
     let headers = jarvis_headers(&app)?;
+    let temporary = temporary == Some(true);
+    // A temporary chat is sent only to a PC that says it has one - an older
+    // PC would ignore the flag and use, learn from and keep the chat. Asked
+    // before every temporary question, not once: the backend can be updated
+    // (or rolled back) while this window is open. Stop during the check
+    // stops it, like Stop during the answer.
+    if temporary {
+        let supported = tokio::select! {
+            result = temporary_chat_supported(&app) => result,
+            _ = cancel.notified() => {
+                app.state::<ChatState>().finish(&cancel);
+                return Ok(());
+            }
+        };
+        if supported != Ok(true) {
+            app.state::<ChatState>().finish(&cancel);
+            return Err(supported
+                .err()
+                .unwrap_or_else(|| TEMPORARY_UNAVAILABLE.to_string()));
+        }
+    }
 
     let mut payload = serde_json::json!({
         "messages": messages,
@@ -1443,6 +1475,9 @@ pub async fn stream_chat(
     });
     if let Some(body) = payload.as_object_mut() {
         body.extend(chat_extras(conversation_id.as_deref(), device.as_deref()));
+        if temporary {
+            body.insert("temporary".into(), serde_json::json!(true));
+        }
     }
 
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
@@ -1472,7 +1507,8 @@ pub fn turn_id_from_route(header: &str) -> Option<String> {
 }
 
 /// Starts the line on the chat channel that carries `X-Jarvis-Route`'s lane,
-/// `where` ("local" / "cloud") and gate - never its reason text or memory ids.
+/// `where` ("local" / "cloud") and gate - never its reason text, and the
+/// memory it used only as fact ids (`memory_ids`, numbers), never words.
 /// main.js paints the Local/Cloud badge from it rather than guessing from the
 /// model name each chunk carries, which says nothing about where it ran.
 pub const ROUTE_LINE_PREFIX: &str = "\u{1f}jarvis-route:";
@@ -1512,7 +1548,55 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
     if let Some(n) = route.get("injected_sensitive").and_then(|v| v.as_u64()) {
         out.insert("injected_sensitive".to_string(), serde_json::json!(n));
     }
+    // temporary-chat.patch (the owner's decision, 2026-09-25): whether the PC
+    // really treated this as a temporary chat, and whether the question was
+    // a "Remember:" it did not act on. Booleans only.
+    for key in ["temporary", "remember_off"] {
+        if let Some(b) = route.get(key).and_then(|v| v.as_bool()) {
+            out.insert(key.to_string(), serde_json::json!(b));
+        }
+    }
+    // "Used in this answer": which remembered facts went in, as the fact ids
+    // alone (`injected_ids`' "mem:<id>" entries, as numbers) - never a word
+    // of them. The quickbar asks for the words only when the owner opens the
+    // list (brain/used.rs), and Rust holds them back there while the memory
+    // lists are hidden.
+    let ids = memory_ids_from_route(&route);
+    if !ids.is_empty() {
+        out.insert("memory_ids".to_string(), serde_json::json!(ids));
+    }
     (!out.is_empty()).then(|| serde_json::Value::Object(out).to_string())
+}
+
+/// The fact ids in `X-Jarvis-Route`'s `injected_ids`: each `"mem:<id>"`
+/// entry as a whole number above 0, in order, each once, at most
+/// [`crate::brain::used::USED_MAX`]. `"fact:<n>"` (the older word list,
+/// which has no id) and anything else are left out.
+pub(crate) fn memory_ids_from_route(route: &serde_json::Value) -> Vec<i64> {
+    let mut out: Vec<i64> = Vec::new();
+    for v in route
+        .get("injected_ids")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+    {
+        let Some(n) = v
+            .as_str()
+            .and_then(|s| s.strip_prefix("mem:"))
+            .filter(|d| !d.is_empty() && d.len() <= 12 && d.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|d| d.parse::<i64>().ok())
+            .filter(|n| *n > 0)
+        else {
+            continue;
+        };
+        if !out.contains(&n) {
+            out.push(n);
+        }
+        if out.len() >= crate::brain::used::USED_MAX {
+            break;
+        }
+    }
+    out
 }
 
 /// The sentence in a failed `/api/chat` body: `{"error": "..."}` (the
@@ -2756,6 +2840,49 @@ pub(crate) fn capabilities_answer(status: u16, body: &str) -> Result<serde_json:
         "on": on,
         "off": off,
     }))
+}
+
+/// What the quickbar says when the owner turns on a temporary chat and the
+/// PC's backend has no such thing (JARVIS-API.md section 18.1). The phone
+/// says the same (`TemporaryChat.UNAVAILABLE`).
+pub(crate) const TEMPORARY_UNAVAILABLE: &str = "Temporary chat isn't available on this PC's \
+     version of Jarvis, so nothing was sent. Run apply-patches.ps1 on the PC to update it.";
+
+/// Whether `GET /api/version`'s answer says the running server has a
+/// temporary chat: `capabilities.temporary_chat` present, read the way the
+/// phone reads a capability. Anything else - an older server, an unreadable
+/// answer, an error status - is "no": a temporary chat that is not one would
+/// use, learn from and keep what the owner said.
+pub(crate) fn temporary_chat_in_version(status: u16, body: &str) -> bool {
+    (200..300).contains(&status)
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| {
+                v.get("capabilities")
+                    .and_then(|c| c.get("temporary_chat"))
+                    .cloned()
+            })
+            .is_some_and(|v| capability_present(&v))
+}
+
+async fn temporary_chat_supported(app: &AppHandle) -> Result<bool, String> {
+    let base = jarvis_base(app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}/api/version"))
+        .headers(jarvis_headers(app)?)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    Ok(temporary_chat_in_version(status, &body))
+}
+
+/// Can this PC hold a temporary chat? The quickbar asks when the owner turns
+/// one on, and says [`TEMPORARY_UNAVAILABLE`] rather than pretend. Read only.
+#[tauri::command]
+pub async fn temporary_chat_available(app: AppHandle) -> Result<bool, String> {
+    temporary_chat_supported(&app).await
 }
 
 /// What the Jarvis server says it supports: `GET /api/version`'s
@@ -4716,6 +4843,61 @@ mod turn_tests {
             let line = super::route_line_from_header(&header).unwrap();
             assert!(!line.contains("injected_sensitive"), "{odd}: {line}");
         }
+    }
+
+    /// Temporary chat and "Used in this answer" (2026-09-25): the two marks
+    /// pass on as booleans, and the facts an answer used as ids alone -
+    /// "mem:<id>" as a number, each once, in order - never "fact:<n>",
+    /// never a word, never the raw `injected_ids`.
+    #[test]
+    fn the_route_line_carries_temporary_and_the_ids_of_the_facts_used() {
+        let line = super::route_line_from_header(
+            r#"{"lane": "x", "gate": "offer", "injected_facts": 4,
+                "injected_ids": ["mem:12", "fact:3", "mem:7", "mem:12", "mem:0", "mem:-2",
+                                 "mem:1e3", "mem:٣", 5],
+                "temporary": false, "remember_off": true}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["memory_ids"], serde_json::json!([12, 7]));
+        assert_eq!(got["temporary"], false);
+        assert_eq!(got["remember_off"], true);
+        assert!(got.get("injected_ids").is_none());
+        let t = super::route_line_from_header(
+            r#"{"lane": "x", "temporary": true, "injected_facts": 0, "injected_ids": []}"#,
+        )
+        .unwrap();
+        let t: serde_json::Value = serde_json::from_str(&t).unwrap();
+        assert_eq!(t["temporary"], true);
+        assert!(t.get("memory_ids").is_none(), "no ids, no list: {t}");
+        let odd = super::route_line_from_header(r#"{"lane": "x", "temporary": "yes"}"#).unwrap();
+        assert!(!odd.contains("temporary"), "{odd}");
+        let many: Vec<String> = (1..=150).map(|i| format!("mem:{i}")).collect();
+        let header = serde_json::json!({ "lane": "x", "injected_ids": many }).to_string();
+        let capped: serde_json::Value =
+            serde_json::from_str(&super::route_line_from_header(&header).unwrap()).unwrap();
+        assert_eq!(
+            capped["memory_ids"].as_array().unwrap().len(),
+            crate::brain::used::USED_MAX
+        );
+    }
+
+    /// Only a server that says it has a temporary chat gets one.
+    #[test]
+    fn a_temporary_chat_needs_the_capability() {
+        use super::temporary_chat_in_version as has;
+        assert!(has(200, r#"{"capabilities": {"temporary_chat": true}}"#));
+        for (status, body) in [
+            (200, r#"{"capabilities": {"temporary_chat": false}}"#),
+            (200, r#"{"capabilities": {"memory": true}}"#),
+            (200, r#"{"capabilities": {"temporary_chat": "false"}}"#),
+            (200, r#"{"api": 1}"#),
+            (200, "not json"),
+            (503, r#"{"capabilities": {"temporary_chat": true}}"#),
+        ] {
+            assert!(!has(status, body), "{status} {body}");
+        }
+        assert!(super::TEMPORARY_UNAVAILABLE.contains("isn't available"));
     }
 
     /// A turn the second graphics card answered. `chat-stream-cases.json` has

@@ -1,0 +1,179 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2156,6 +2156,30 @@
+                 code, out = jarvis_auto_learn.handle_get(
+                     path, self.path.split("?", 1)[1] if "?" in self.path else "",
+                     learning_on=learning_enabled(), floor=EXTRACT_ENABLED)
++            except Exception as exc:
++                return self._send(500, {"error": type(exc).__name__})
++            return self._send(code, out)
++
++        if path == "/api/memory/used":
++            # temporary-chat.patch - "Used in this answer" (the owner's
++            # decision, 2026-09-25): the words of the facts whose ids an
++            # answer's X-Jarvis-Route or a memory_saved event named
++            # (?ids=12,15 - both carry ids only), so an app can show them
++            # with Forget beside each. Read-only, behind the token like every
++            # memory route. The work is in jarvis_memory.py (used_view).
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            if not MEMORY:
++                return self._send(503, {"error": "memory layer not importable"})
++            view = getattr(jarvis_memory, "handle_used_get", None)
++            if view is None:
++                return self._send(501, {
++                    "error": "this PC's jarvis_memory.py cannot list the facts an answer "
++                             "used yet - apply-patches.ps1 copies in the one that can"})
++            try:
++                code, out = view(self.path.split("?", 1)[1] if "?" in self.path else "")
+             except Exception as exc:
+                 return self._send(500, {"error": type(exc).__name__})
+             return self._send(code, out)
+@@ -2800,7 +2824,10 @@
+                         import jarvis_past as _past
+                     except Exception:
+                         _past = None
+-                    if _past is not None:
++                    # temporary-chat.patch: a temporary chat searches nothing.
++                    if _temporary_chat(body):
++                        hits = []
++                    elif _past is not None:
+                         hits = _past.recall(jarvis_memory.store(), query, k=MEMORY_K)
+                     else:
+                         hits = jarvis_memory.store().search(query, k=MEMORY_K)
+@@ -2830,7 +2857,7 @@
+                     # memory at all, pinned facts included. Without a
+                     # jarvis_memory.py that has the list: the search alone.
+                     _pin = getattr(jarvis_memory, "with_profile", None)
+-                    if _pin is not None:
++                    if _pin is not None and not _temporary_chat(body):
+                         hits = _pin(jarvis_memory.store(), hits, MEMORY_K)
+                     if hits:
+                         # `created` comes along now: _dated_fact needs it, and
+@@ -2930,6 +2957,15 @@
+                 # If delimiters are ever added around recalled facts, add them
+                 # HERE, to `recalled` - wrapping the whole message list, or
+                 # putting a marker at position 0, puts both problems back.
++                #
++                # temporary-chat.patch: in a temporary chat NOTHING recalled
++                # goes in - not a searched fact, not a pinned one, not one the
++                # older word matcher found - and the header counts none. The
++                # model is told it is a temporary chat instead, in fixed words,
++                # in the same place.
++                if _temporary_chat(body):
++                    chosen_facts, injected, injected_ids, _al_plain = [], 0, [], set()
++                    recalled = {"role": "system", "content": _TEMPORARY_NOTE}
+                 messages = (messages[:-1] + [recalled, messages[-1]]
+                             if messages else [recalled])
+                 # Memory is now in the transcript. Pin the conversation local
+@@ -3000,6 +3036,25 @@
+         try:
+             if first_error is not None:
+                 raise first_error
++            # temporary-chat.patch: say so in X-Jarvis-Route - and only when
++            # it is true. No fact is counted as used, whatever set the
++            # counts above. `temporary` is left out when memory is Jarvis's
++            # own upstream's (memory_side "jarvis"): that server's memory
++            # cannot be turned off from here, and the apps then say the PC
++            # did not confirm a temporary chat. `remember_off`: the newest
++            # message was a "Remember: ...", which was not acted on.
++            if _temporary_chat(body):
++                route_header["inject_memory"] = False
++                route_header["injected_facts"] = 0
++                route_header["injected_ids"] = []
++                if route_header.get("memory_side") != "jarvis":
++                    route_header["memory_side"] = "none"
++                    route_header["temporary"] = True
++                try:
++                    if _temporary_remember(body):
++                        route_header["remember_off"] = True
++                except Exception:
++                    pass
+             # feedback.patch: give this answer an id the owner can mark right
+             # or wrong, and note which remembered facts went into it - ids
+             # only, never text. Here, AFTER the degrade loop, because
+@@ -3190,15 +3245,22 @@
+             # like the learner: keeping history must never be the reason an
+             # answered turn reports an error, and without jarvis_chat_log.py
+             # nothing is kept and chat works as before.
++            #
++            # temporary-chat.patch: a temporary chat is never kept, and never
++            # learned from - not even a "Remember:". A jarvis_chat_log.py
++            # older than this (no TEMPORARY_CHAT) would keep it, so it is not
++            # called for one at all.
+             try:
+                 import jarvis_chat_log
+-                jarvis_chat_log.record_turn(
+-                    body, lane=str(route_header.get("lane") or lane),
+-                    turn=_history["turn"], at=_history["at"])
++                if (body.get("temporary") is not True
++                        or getattr(jarvis_chat_log, "TEMPORARY_CHAT", False)):
++                    jarvis_chat_log.record_turn(
++                        body, lane=str(route_header.get("lane") or lane),
++                        turn=_history["turn"], at=_history["at"])
+             except Exception:
+                 pass
+             try:
+-                if MEMORY and not jarvis_side_memory:
++                if MEMORY and not jarvis_side_memory and body.get("temporary") is not True:
+                     LEARNER.offer(body.get("messages") or [], origin="owner",
+                                   conversation_id=body.get("conversation_id"))
+             except Exception:
+@@ -3400,7 +3462,7 @@
+ # request the relay sends. `origin` is not touched: it has always gone to
+ # the model, and the learner reads it. The request body itself is left as
+ # it arrived, because the learner and the history record read it.
+-_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device")
++_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "temporary")
+ 
+ _NO_CHAT_LOG = {
+     "available": False,
+@@ -3420,6 +3482,46 @@
+         return messages
+     return [{k: v for k, v in m.items() if k not in _CHAT_CLIENT_FIELDS}
+             if isinstance(m, dict) else m for m in messages]
++
++
++# temporary-chat.patch (the owner's decision, 2026-09-25). A TEMPORARY chat -
++# `"temporary": true` on the /api/chat request, and nothing else turns it on -
++# recalls no facts (no pinned list either), learns nothing (no background
++# learning, no proposal, no "Remember:"), and is not kept in the chat history.
++# Everything else is unchanged: the same tools, the same approval cards, the
++# same local-first routing. It needs no card to turn on or off: it only ever
++# makes a turn stricter. The route header says `"temporary": true`, so an app
++# can show the turn was really treated so; /api/version's
++# capabilities.temporary_chat asks the running server for this function by
++# name (jarvis_events._hud_has), so an app offers the mode only on a PC that
++# has it.
++def _temporary_chat(body) -> bool:
++    return isinstance(body, dict) and body.get("temporary") is True
++
++
++# What the model is told instead of the recalled facts in a temporary chat,
++# so it never claims to remember or to be saving anything.
++_TEMPORARY_NOTE = (
++    "This is a temporary chat. You have no saved facts about the user in it, "
++    "and nothing said in it is remembered, learned or kept. If the user asks "
++    "you to remember something, say that Remember is off in a temporary chat.")
++
++
++def _temporary_remember(body) -> bool:
++    """Is the newest user message of this temporary chat a "Remember: ..."?
++    It is not acted on (the learner is not called at all); the route header
++    says `remember_off`, and the apps show "Remember: is off in a temporary
++    chat". The same test as jarvis_intake.remember_command."""
++    said = [m for m in (body.get("messages") or [])
++            if isinstance(m, dict) and m.get("role") == "user"]
++    text = said[-1].get("content") if said else None
++    if not isinstance(text, str):
++        return False
++    try:
++        import jarvis_intake
++        return bool(jarvis_intake.remember_command(text))
++    except Exception:
++        return text.lstrip().lower().startswith("remember")
+ 
+ 
+ def _ro_sqlite(db_path):

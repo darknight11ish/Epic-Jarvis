@@ -742,6 +742,12 @@ def _capability_probe() -> dict:
         # appearance.patch adds functions to jarvis_hud itself, so this asks
         # the running server whether it has them.
         "appearance": _hud_has("_appearance_view"),
+        # A temporary chat (`"temporary": true` on /api/chat): no memory
+        # used, nothing learned, nothing kept (temporary-chat.patch, the
+        # owner's decision of 2026-09-25). Asked of the running server, like
+        # appearance: both apps refuse to offer it - rather than send the
+        # flag to a PC that would ignore it - unless this is true.
+        "temporary_chat": _hud_has("_temporary_chat"),
         "connectors": {},
     }
 

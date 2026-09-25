@@ -162,7 +162,7 @@ await check("on a stale link Erase is greyed in both lists, like Forget", async 
 
 /* ── CONTROL: the Rust ────────────────────────────────────────────────── */
 
-await check("CONTROL: brain_memory_erase is held on a stale link, sends one id, Brain only", async () => {
+await check("CONTROL: brain_memory_erase is held on a stale link, sends one id, Brain and the quickbar's \"Used in this answer\" only", async () => {
   const rs = read("src-tauri/src/brain.rs");
   const f = rs.slice(rs.indexOf("pub async fn brain_memory_erase("));
   const body = f.slice(0, f.indexOf("\n}\n"));
@@ -175,7 +175,13 @@ await check("CONTROL: brain_memory_erase is held on a stale link, sends one id, 
   const sets = read("src-tauri/permissions/surfaces.toml").split("[[set]]").slice(1);
   const holders = sets.filter((s) => s.includes('"allow-brain-memory-erase"'))
     .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
-  assert.deepEqual(holders, ["brain-memory"]);
+  // Since 2026-09-25 also "memory-used": Forget and Erase beside each fact
+  // under an answer (the quickbar) and under "Jarvis remembered N things".
+  // Held on a stale link in Rust either way; no other window has it.
+  assert.deepEqual(holders, ["memory-used", "brain-memory"]);
+  const windows = ["brain", "quickbar", "hud", "widget", "settings", "faces", "onboarding"]
+    .filter((w) => read(`src-tauri/capabilities/${w}.json`).includes('"memory-used"'));
+  assert.deepEqual(windows, ["brain", "quickbar"]);
   assert.match(read("src-tauri/src/brain/routes.rs"), /"\/api\/memory\/erase",/,
     "the write-route list the read allowlist is checked against lacks erase");
   assert.match(read("src-tauri/src/hud_bootstrap.js"), /forget\|erase\|/,

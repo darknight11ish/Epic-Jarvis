@@ -109,6 +109,16 @@ import {
   usedLine,
 } from "./memory-profile.js";
 import {
+  missingLine,
+  NOT_CURRENT_MARK,
+  PINNED_MARK,
+  readUsed,
+  REMEMBERED_LINE_TITLE,
+  REMEMBERED_TITLE,
+  rowActions,
+  SHOW_ALL,
+} from "./memory-used.js";
+import {
   askDeep,
   leadLine as deepLead,
   POLL_MS as DEEP_POLL_MS,
@@ -1379,7 +1389,8 @@ async function refreshMemory() {
   // The "Saved automatically" list is read through its own command
   // (brain/auto_learn.rs), next to the pane's sections: a Forget or a
   // decision changes it too.
-  await Promise.all([load(VIEW_SECTIONS.memory, { quiet: true }), loadAuto(), loadProfile()]);
+  await Promise.all([load(VIEW_SECTIONS.memory, { quiet: true }), loadAuto(), loadProfile(),
+    loadSavedFacts()]);
   render("memory");
 }
 
@@ -2670,18 +2681,109 @@ function noteMemorySaved(data) {
   if (state.view === "memory") loadAuto();
 }
 
-/** The quiet line opens the list: shown, scrolled to, and the line goes -
- *  here and in Rust's copy of the count (below). */
-async function openSavedList() {
-  autoL.unseen.clear();
-  if (IS_TAURI) invoke("brain_memory_saved_unseen", { seen: true }).catch(() => {});
+/** The whole "Saved automatically" list: shown and scrolled to. */
+async function showSavedList() {
   if (state.view !== "memory") await showView("memory");
-  paintSavedLine();
   const card = $("memory-auto-card");
   if (card) {
     card.scrollIntoView({ block: "start" });
     dom.memoryAutoList.focus({ preventScroll: true });
   }
+}
+
+/* "Jarvis remembered 2 things" opens the facts themselves (the owner's
+   decision, 2026-09-25; JARVIS-API.md section 19.5): their words read from
+   the PC by id (memory-used.js, brain/used.rs memory_used - hidden like
+   every memory list under Windows Hello), each with Forget and "Erase the
+   words", the same one-fact commands and confirms as the list below. */
+const savedFacts = { ids: [], open: false, view: null, error: "", loading: false };
+
+async function loadSavedFacts() {
+  if (!savedFacts.open || !savedFacts.ids.length || !IS_TAURI) return;
+  savedFacts.loading = true;
+  paintSavedLine();
+  try {
+    savedFacts.view = readUsed(await invoke("memory_used", { ids: savedFacts.ids }));
+    savedFacts.error = "";
+  } catch (error) {
+    savedFacts.view = null;
+    savedFacts.error = errorText(error);
+  } finally {
+    savedFacts.loading = false;
+  }
+  paintSavedLine();
+}
+
+/** The quiet line opens those facts, and the line goes - here and in
+ *  Rust's copy of the count (below). */
+async function openSavedList() {
+  savedFacts.ids = [...autoL.unseen];
+  savedFacts.open = true;
+  savedFacts.view = null;
+  autoL.unseen.clear();
+  if (IS_TAURI) invoke("brain_memory_saved_unseen", { seen: true }).catch(() => {});
+  if (state.view !== "memory") await showView("memory");
+  paintSavedLine();
+  await loadSavedFacts();
+  const box = dom.memorySavedLine;
+  if (box) box.scrollIntoView({ block: "nearest" });
+}
+
+function savedFactsNode() {
+  const box = el("div", "memory-saved-facts");
+  box.append(el("h3", "memory-saved-title", REMEMBERED_TITLE));
+  const v = savedFacts.view;
+  if (!v) {
+    box.append(el("p", `empty${savedFacts.error ? " failed" : ""}`, savedFacts.error
+      ? `Could not read these facts: ${savedFacts.error}` : "Reading…"));
+  } else if (!v.available) {
+    box.append(el("p", "empty", v.why));
+  } else if (v.hidden) {
+    box.append(hiddenNode(v.hiddenCount || savedFacts.ids.length, "facts"));
+  } else {
+    const list = el("div", "rows saved-fact-rows");
+    const past = memoryAsOf !== null;
+    for (const f of v.facts) {
+      const acts = rowActions(f);
+      const marks = [];
+      if (f.pinned) marks.push(PINNED_MARK);
+      if (!f.current && !f.erasedAt) marks.push(NOT_CURRENT_MARK);
+      const item = row({
+        tag: "auto",
+        state: f.current ? "ok" : "idle",
+        title: f.erasedAt ? erasedLine(f.erasedAt) : (f.text || "(no text)"),
+        meta: marks,
+        actions: past ? [] : [
+          ...(acts.forget ? [button("Forget", () => forgetSaved(f),
+            { danger: true, live: true, title: "Stop this being recalled. There is no undo." })] : []),
+          ...(acts.erase ? [button(ERASE_LABEL, () => eraseSaved(f),
+            { danger: true, live: true, title: ERASE_TITLE })] : []),
+        ],
+      });
+      item.dataset.id = String(f.id);
+      list.append(item);
+    }
+    box.append(list);
+    const gone = missingLine(v.missing.length);
+    if (gone) box.append(el("p", "empty", gone));
+  }
+  const foot = el("div", "row-actions");
+  foot.append(
+    button(SHOW_ALL, showSavedList, { title: "The whole list, newest first." }),
+    button("Close", () => { savedFacts.open = false; paintSavedLine(); }),
+  );
+  box.append(foot);
+  return box;
+}
+
+async function forgetSaved(f) {
+  await forgetAuto(f);
+  await loadSavedFacts();
+}
+
+async function eraseSaved(f) {
+  await eraseFact(f);
+  await loadSavedFacts();
 }
 
 /** The ON card left the queue: read the switch again after the backend has
@@ -2737,6 +2839,8 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   const rereadAuto = () => {
     autoL.at = 0;
     if (state.view === "memory") loadAuto();
+    // The facts "Jarvis remembered N things" opened are a memory list too.
+    loadSavedFacts();
   };
   TAURI.event.listen("security-changed", rereadAuto);
   TAURI.event.listen("private-hidden", rereadAuto);
@@ -2853,12 +2957,15 @@ function paintSavedLine() {
   if (!box) return;
   box.replaceChildren();
   const words = rememberedLine(autoL.unseen.size);
-  if (!words) return;
-  const b = el("button", "btn small ghost memory-saved", words);
-  b.type = "button";
-  b.title = "Show what was saved automatically.";
-  b.addEventListener("click", openSavedList);
-  box.append(b);
+  if (words) {
+    const b = el("button", "btn small ghost memory-saved", words);
+    b.type = "button";
+    b.title = REMEMBERED_LINE_TITLE;
+    b.addEventListener("click", openSavedList);
+    box.append(b);
+  }
+  // The facts the line opened, with Forget beside each.
+  if (savedFacts.open) box.append(savedFactsNode());
 }
 
 function paintAutoList() {

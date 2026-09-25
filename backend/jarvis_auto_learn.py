@@ -567,6 +567,11 @@ _PROVENANCE_WHY = {
     "pasted": "from pasted text",
     "picture_caption": "from words sent with a picture",
     "voice_unverified": "said aloud, but this PC could not check it was your voice",
+    # temporary-chat.patch (2026-09-25): a turn of a temporary chat is noted
+    # in the live-turn registry (a hash, never the words, so the
+    # conversation's "read outside text" mark still works) under this
+    # provenance, so nothing re-sent from it is ever saved without a card.
+    "temporary": "said in a temporary chat, which Jarvis never learns from",
     "unknown": "not marked as typed or said by you",
 }
 

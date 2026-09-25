@@ -39,6 +39,7 @@ pub mod auto_learn;
 pub mod history;
 pub mod profile;
 mod routes;
+pub mod used;
 use routes::{first_line, route_for};
 
 /// Reads are small JSON except the graph, which walks several SQLite files and

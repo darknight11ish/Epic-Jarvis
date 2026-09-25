@@ -151,6 +151,8 @@ import {
 import { fileNote, loadTargets, notSetUp, noTargetsLine, targetName } from "./note-capture.js";
 // Where a spoken answer is cut into pieces - the same rule as the phone.
 import { nextSpeechPiece } from "./speech-pieces.js";
+// Temporary chat and "Used in this answer" (2026-09-25) - answer-memory.js.
+import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -214,6 +216,14 @@ const dom = {
   markRight: $("mark-right"),
   markWrong: $("mark-wrong"),
   answerMarkNote: $("answer-mark-note"),
+  temporary: $("temporary"),
+  temporaryStrip: $("temporary-strip"),
+  temporaryLine: $("temporary-line"),
+  temporaryRefused: $("temporary-refused"),
+  answerUsed: $("answer-used"),
+  answerUsedLine: $("answer-used-line"),
+  answerUsedList: $("answer-used-list"),
+  answerMemoryNote: $("answer-memory-note"),
   approvalOptionsWhy: $("approval-options-why"),
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
@@ -450,6 +460,49 @@ const state = {
   previousAnswer: null,
 };
 
+/**
+ * Temporary chat (the owner's decision, 2026-09-25): the toggle and the
+ * marker strip. Turning it on or off starts a new conversation, so nothing
+ * said in one kind of chat is re-sent in the other. On only when the PC
+ * says it can hold one (commands.rs temporary_chat_available; stream_chat
+ * checks again before each temporary question).
+ */
+const temporaryChat = createTemporaryToggle({
+  button: dom.temporary,
+  strip: dom.temporaryStrip,
+  line: dom.temporaryLine,
+  refused: dom.temporaryRefused,
+  root: dom.shell,
+  check: () => (IS_TAURI ? invokeStrict("temporary_chat_available") : Promise.resolve(false)),
+  restart: () => {
+    state.turnQuestion = null;
+    state.conversation = [];
+    closeCard();
+    focusInput();
+  },
+  busy: () => Boolean(state.inFlight || state.abort),
+  announce,
+  onChange: () => syncWindowHeight(),
+});
+
+/**
+ * "Used 2 memories" under the answer, and the temporary-chat notes. The
+ * words of the facts are read from the PC only when the line is opened;
+ * Forget and Erase are ONE fact each, asked about first, held on a stale
+ * link (answer-memory.js).
+ */
+const answerMemory = createAnswerMemory({
+  box: dom.answerUsed,
+  lineButton: dom.answerUsedLine,
+  list: dom.answerUsedList,
+  note: dom.answerMemoryNote,
+  invoke: (command, args) => invokeStrict(command, args),
+  isStale: () => Boolean(currentLink().stale),
+  confirm: (question) => window.confirm(question),
+  announce,
+  onChange: () => syncWindowHeight(),
+});
+
 /** Tools that ran (`step` events) and drops of the event stream, for the
  *  private-answer rule - fed below, where this window subscribes to the
  *  link (private-speech.js `createToolWatch`). */
@@ -668,6 +721,8 @@ function closeCard() {
   setPhase("idle");
   renderPreviousAnswer();
   syncNewConversation();
+  answerMemory.clear();
+  temporaryChat.paint(true);
   paint({ immediate: true });
 }
 
@@ -790,6 +845,8 @@ function applyHeaderRoute(route) {
   // Kept whole for the private-answer rule (gate, injected_facts) - the
   // route line carries nothing else (commands.rs route_line_from_header).
   state.turnRoute = route && typeof route === "object" ? route : null;
+  // The facts this answer used (ids only) and the temporary-chat marks.
+  answerMemory.route(state.turnRoute);
   const next = routeFromHeader(route);
   if (!next) return;
   state.routeFromHeader = true;
@@ -2187,6 +2244,7 @@ async function streamViaFetch(payload) {
         auto: payload.auto,
         conversation_id: payload.conversationId,
         device: payload.device,
+        ...(payload.temporary ? { temporary: true } : {}),
       }),
       signal: controller.signal,
     });
@@ -2486,7 +2544,14 @@ async function send(promptText, provenance = "typed") {
     // device it knows.
     conversationId: state.conversationId,
     device: "desktop",
+    // A temporary chat (section 18.1): no memory used, nothing learned,
+    // nothing kept. stream_chat sends it only to a PC that has one.
+    temporary: temporaryChat.on,
   };
+  // What this answer used, and what the PC said about a temporary one,
+  // start from nothing (answer-memory.js).
+  answerMemory.begin(temporaryChat.on);
+  temporaryChat.paint(false);
 
   if (IS_TAURI) {
     await streamViaBackend(payload);
@@ -2608,6 +2673,9 @@ function finishStream(phase, statusText) {
   updateStat();
   paint({ immediate: true });
   paintAnswerMark();
+  // "Used 2 memories" on an answer that came back, and whether a temporary
+  // one was confirmed (answer-memory.js).
+  answerMemory.finish(phase !== "error");
 
   // Once, at the end. The answer element carries no live region any more —
   // announcing a growing buffer per repaint is what left a screen reader
@@ -3644,6 +3712,7 @@ document.addEventListener("keydown", (event) => {
 dom.stop.addEventListener("click", abortStream);
 
 if (dom.newConversation) dom.newConversation.addEventListener("click", newConversation);
+if (dom.temporary) dom.temporary.addEventListener("click", () => temporaryChat.toggle());
 
 dom.copy.addEventListener("click", async () => {
   const text = state.buffer.trim();
@@ -3845,6 +3914,8 @@ startVoice(dom.root);
 onLink((link) => {
   toolWatch.link(link);
   recheckSpeech();
+  // Forget and Erase under "Used in this answer" are held on a stale link.
+  answerMemory.linkChanged();
 });
 onEvent((frame) => {
   toolWatch.event(frame);

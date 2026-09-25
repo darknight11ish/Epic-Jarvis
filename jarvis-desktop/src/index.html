@@ -156,6 +156,25 @@
             <span class="sr-only">Toggle listening for "hey Jarvis"</span>
           </button>
 
+          <!-- Temporary chat (the owner's decision, 2026-09-25): while it is
+               pressed, Jarvis uses and learns nothing from memory and the PC
+               keeps nothing of the chat. Turning it on or off starts a new
+               conversation. answer-memory.js. -->
+          <button
+            id="temporary"
+            class="icon-button"
+            type="button"
+            aria-pressed="false"
+            title="Start a temporary chat: Jarvis won't use or learn from your memory, and it isn't kept"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M8 1.75c-2.9 0-5 2.2-5 5.1v6.9l1.7-1.2 1.6 1.2L8 12.5l1.7 1.25 1.6-1.2 1.7 1.2V6.85c0-2.9-2.1-5.1-5-5.1Z" />
+              <circle cx="6.1" cy="6.8" r="0.9" />
+              <circle cx="9.9" cy="6.8" r="0.9" />
+            </svg>
+            <span class="sr-only">Temporary chat</span>
+          </button>
+
           <button
             id="pin"
             class="icon-button"
@@ -178,6 +197,14 @@
            never grow past the window's 720px clamp and hide the Approve and
            Deny buttons below the cut. -->
       <div class="stack" id="stack">
+        <!-- The marker for a whole temporary chat, and its one line while
+             the chat is still empty (answer-memory.js). -->
+        <div class="temporary-strip" id="temporary-strip" role="status" hidden>
+          <strong class="temporary-label" id="temporary-label">Temporary chat</strong>
+          <span class="temporary-line" id="temporary-line"></span>
+          <span class="temporary-refused" id="temporary-refused" hidden></span>
+        </div>
+
         <div class="attachments" id="attachments" hidden>
           <div class="attachment" id="attachment-capture" hidden>
             <img id="capture-thumb" alt="Desktop capture attached to the next prompt" />
@@ -591,6 +618,18 @@
               <button class="text-button" type="button" id="mark-right" aria-pressed="false">Right</button>
               <button class="text-button" type="button" id="mark-wrong" aria-pressed="false">Wrong</button>
               <span class="answer-mark-note" id="answer-mark-note" role="status"></span>
+            </div>
+            <!-- Temporary chat: what the PC said about this answer - a
+                 "Remember:" that was not acted on, or a PC that did not
+                 confirm the chat was temporary (answer-memory.js). -->
+            <p class="answer-memory-note" id="answer-memory-note" role="status" hidden></p>
+            <!-- "Used 2 memories": the facts this answer used, by id from
+                 X-Jarvis-Route; opened, their words are read from the PC,
+                 each with Forget and Erase (answer-memory.js). -->
+            <div class="answer-used" id="answer-used" hidden>
+              <button class="text-button answer-used-line" type="button" id="answer-used-line"
+                      aria-expanded="false" aria-controls="answer-used-list"></button>
+              <div class="answer-used-list" id="answer-used-list" hidden></div>
             </div>
           </div>
 

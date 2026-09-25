@@ -81,6 +81,12 @@ fn main() {
             // facts, and pin or unpin ONE fact. Brain only.
             "brain_memory_profile",
             "brain_memory_pin",
+            // "Used in this answer" / "Jarvis remembered N things" (the
+            // owner's decision, 2026-09-25): the words of a few facts, by id.
+            // A read. The quickbar and the Brain.
+            "memory_used",
+            // Can this PC hold a temporary chat? A read. The quickbar.
+            "temporary_chat_available",
             // Chat history on the PC (JARVIS-API.md section 18): list, open
             // one read-only, delete ONE, and the two settings. Brain only.
             "brain_history_list",

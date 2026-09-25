@@ -175,6 +175,26 @@ permissions = [
   "allow-capture-note-status",
   # Which of those note apps this PC is set up for: names only.
   "allow-note-targets",
+  # Temporary chat (the owner's decision, 2026-09-25): can this PC hold one?
+  # GET /api/version's capabilities. A read; stream_chat checks again before
+  # it sends a temporary question.
+  "allow-temporary-chat-available",
+]
+
+# "Used in this answer" under the quickbar's answer, and "Jarvis remembered N
+# things" in the Brain (the owner's decision, 2026-09-25): the words of the
+# few facts an answer used or automatic learning just saved, by id (brain/
+# used.rs) - held back like every memory list while "Windows Hello for memory
+# lists and chat history" hides them - and Forget or "Erase the words" on ONE
+# of them. Those two are the Brain's own one-fact commands: held on a stale
+# link in Rust, one id per call, asked about first by the page, no list form.
+[[set]]
+identifier = "memory-used"
+description = "Read the words of the few facts an answer used (or automatic learning just saved), and forget or erase the words of ONE of them. No bulk form."
+permissions = [
+  "allow-memory-used",
+  "allow-brain-memory-forget",
+  "allow-brain-memory-erase",
 ]
 
 # ---------------------------------------------------------------------------

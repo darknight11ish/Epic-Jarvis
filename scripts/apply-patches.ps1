@@ -332,6 +332,18 @@ $PATCHES = @(
     # rebuilt\jarvis_memory.py (pin(), profile(), with_profile()); with an
     # older copy the routes answer 501 and chat recalls exactly as before.
     'memory-profile.patch'
+    # Temporary chat and "Used in this answer" (the owner's decisions,
+    # 2026-09-25): a request with "temporary": true recalls no facts (no
+    # pinned list either), learns nothing (no "Remember:" either) and is not
+    # kept in the chat history; X-Jarvis-Route says "temporary": true. Adds
+    # GET /api/memory/used?ids=, the words of the facts an answer used. Its
+    # context is memory-profile's GET route and search lines, past-recall's,
+    # memory-prefix's placement, feedback's header lines and chat-history's
+    # and auto-learn's record and learner lines - last, like every new
+    # patch. The work is in the shipped rebuilt\jarvis_memory.py
+    # (used_view) and jarvis_chat_log.py (TEMPORARY_CHAT); with older copies
+    # the route answers 501 and a temporary chat is not recorded at all.
+    'temporary-chat.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

@@ -704,6 +704,10 @@ class MainActivity : FragmentActivity() {
         // one line under a finished answer (cut short / from a cloud model).
         val chatWaiting by chat.waiting.collectAsState()
         val answerNote by chat.answerNote.collectAsState()
+        // A temporary chat, and the facts the answer on screen used (ids
+        // only) - docs/JARVIS-API.md sections 18.1 and 4, 2026-09-25.
+        val temporaryChat by chat.temporary.collectAsState()
+        val usedIds by chat.usedIds.collectAsState()
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
         val face = remember(faceId) { Faces.byId(faceId) }
@@ -1774,6 +1778,10 @@ class MainActivity : FragmentActivity() {
                             pictureBusy = pictureBusy.value,
                             noteTargets = noteTargets,
                             updateLine = updateState.newerLine.takeIf { updateChecks },
+                            temporary = temporaryChat,
+                            usedIds = usedIds,
+                            memoryHidden = privateHidden,
+                            showPrivateBusy = ownerCheckBusy.value,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1857,6 +1865,18 @@ class MainActivity : FragmentActivity() {
                                 onRemovePicture = { picture.value = null },
                                 onInterrupt = { chat.cancel() },
                                 onNewConversation = { chat.newConversation() },
+                                // A temporary chat: no card and no hold - it only
+                                // makes Jarvis stricter. A PC without it says so.
+                                onToggleTemporary = {
+                                    JarvisRuntime.setTemporaryChat(!chat.temporary.value)
+                                        ?.takeIf { it == com.jarvis.client.net.TemporaryChat.UNAVAILABLE }
+                                        ?.let { JarvisRuntime.setNotice(it) }
+                                },
+                                // "Used 2 memories": the words read by id, Forget
+                                // on one fact after the confirm, held on a stale link.
+                                onLoadUsed = { ids -> JarvisRuntime.memoryUsed(ids) },
+                                onForgetUsed = { id -> JarvisRuntime.forgetAutoFact(id) },
+                                onShowPrivate = ::showPrivateLists,
                                 // A fingerprint instead of a tap for anything that
                                 // leaves the machine, cannot be undone, or arrived
                                 // with a rush latch on it. The phone is the surface
