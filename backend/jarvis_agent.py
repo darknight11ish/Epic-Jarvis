@@ -741,7 +741,156 @@ TOOLS: dict = {
          "required": ["title", "body"]},
         _prepare_note("joplin"), _run_note,
         gate_lookup_name=lambda args: "create_joplin_note"),
+    # Timers, alarms, reminders and the to-do list (jarvis_schedule.py). Most
+    # of these never reach the model: jarvis_quick.py answers the plain ones
+    # in /api/chat before the model is asked (schedule.patch). These are for
+    # what that small grammar does not understand. Offered only when
+    # [tools].enabled names them, like every tool here. See SCHEDULE_TOOLS.
+    "set_timer": Tool(
+        "set_timer", "Start a countdown timer on this PC.",
+        {"type": "object", "properties": {
+            "minutes": {"type": "number", "description": "how long, in minutes (0.5 = 30 seconds)"},
+            "label": {"type": "string", "description": "optional short name, e.g. pasta"}},
+         "required": ["minutes"]},
+        _plain_prepare("Timer"), lambda args, state, **_: {"ok": False}),
+    "set_reminder": Tool(
+        "set_reminder",
+        "Set a reminder or an alarm on this PC, once or repeating. `when` is plain "
+        "English like \"tomorrow at 6pm\", \"in 20 minutes\", \"friday at 9\", or "
+        "\"2026-10-02 17:30\". A repeating one waits for the owner's yes on a card.",
+        {"type": "object", "properties": {
+            "text": {"type": "string", "description": "what to remind the owner of, in their words"},
+            "when": {"type": "string"},
+            "alarm": {"type": "boolean", "description": "true for a wake-up alarm"},
+            "repeat": {"type": "object", "description": "only for something that repeats",
+                       "properties": {
+                           "every": {"type": "string", "enum": ["day", "weekday", "week", "hours"]},
+                           "at": {"type": "string", "description": "HH:MM, 24-hour"},
+                           "days": {"type": "array", "items": {"type": "integer"},
+                                    "description": "for every week: 0 = Monday ... 6 = Sunday"},
+                           "hours": {"type": "integer", "description": "for every N hours"}}}}},
+        _plain_prepare("Reminder"), lambda args, state, **_: {"ok": False}),
+    "todo_add": Tool(
+        "todo_add", "Add one item to the owner's to-do list on this PC.",
+        {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+        _plain_prepare("To-do"), lambda args, state, **_: {"ok": False}),
+    "todo_done": Tool(
+        "todo_done", "Mark one item on the owner's to-do list as done.",
+        {"type": "object", "properties": {
+            "item": {"type": "string", "description": "the item's words, or enough of them"}},
+         "required": ["item"]},
+        _plain_prepare("To-do done"), lambda args, state, **_: {"ok": False}),
+    "coming_up": Tool(
+        "coming_up", "List the owner's timers, alarms, reminders and to-do list on this PC.",
+        {"type": "object", "properties": {}},
+        _plain_prepare("Coming up"), lambda args, state, **_: {"ok": False}),
 }
+
+
+#: The scheduler's tools (jarvis_schedule.py), which are NOT put to the gate
+#: in _one_call. The owner decided on 2026-09-25 that a timer, an alarm or a
+#: reminder that goes off once needs no approval card; one that repeats
+#: raises its own card, inside jarvis_schedule, through the same gate
+#: (action `schedule_repeat`, tier "ask", listing the next three times), and
+#: nothing goes off before a yes. Deleting and marking done only make things
+#: quieter. Reading the list reads the owner's own words from this PC.
+#:
+#: Stricter in one case: in a turn shaped by outside text (the same test as
+#: a note write - a reading tool ran, the conversation is tainted, the
+#: newest message was not typed or said by the owner, or the app sent text
+#: of its own) they set and change nothing, so a web page or an email cannot
+#: set Jarvis's alarms. The owner can type or say it instead.
+SCHEDULE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done", "coming_up"})
+
+SCHEDULE_AFTER_OUTSIDE = ("refused: outside text shaped this turn, so Jarvis does not set or "
+                          "change timers, reminders or the to-do list from it. Nothing was "
+                          "changed. Tell the owner they can type or say it themselves.")
+
+
+def _newest_user_text(convo: list) -> str:
+    for m in reversed(convo):
+        if isinstance(m, dict) and m.get("role") == "user":
+            return _text_of(m.get("content"))
+    return ""
+
+
+def _schedule_run(name: str, args: dict, sched, now: float) -> dict:
+    """One scheduler tool call. {"ok", "said"} for the model to pass on."""
+    import jarvis_quick as Q
+    import jarvis_schedule as S
+    if name == "coming_up":
+        jobs = [{"kind": j["kind"], "text": j.get("text", ""), "state": j["state"],
+                 "when": j.get("when") or j.get("repeat") or "",
+                 "left": S.length_words(j["left"]) if j["kind"] == "timer" and j.get("left")
+                 is not None else ""} for j in sched.listed()]
+        return {"ok": True, "coming_up": jobs,
+                "todo": [t["text"] for t in sched.todos()]}
+    if name == "set_timer":
+        minutes = args.get("minutes")
+        if isinstance(minutes, bool) or not isinstance(minutes, (int, float)):
+            return {"ok": False, "error": "minutes must be a number"}
+        res = Q.run(Q.Intent("timer_set", {"seconds": float(minutes) * 60,
+                                           "label": str(args.get("label") or "").strip()}),
+                    sched, now)
+        return {"ok": bool(res.ids), "said": res.reply}
+    if name == "todo_add":
+        res = Q.run(Q.Intent("todo_add", {"text": str(args.get("text") or "")}), sched, now)
+        return {"ok": bool(res.ids), "said": res.reply}
+    if name == "todo_done":
+        res = Q.run(Q.Intent("todo_done", {"text": str(args.get("item") or "")}), sched, now)
+        if res is None:
+            return {"ok": False, "error": "nothing on the to-do list matches that"}
+        return {"ok": bool(res.ids), "said": res.reply}
+    # set_reminder
+    kind = "alarm" if args.get("alarm") is True else "reminder"
+    text = str(args.get("text") or "").strip()
+    if isinstance(args.get("repeat"), dict):
+        res = Q._set_at(kind, Q.When(rule=args["repeat"]), text, sched, now, "reminder_set")
+        return {"ok": bool(res.ids), "said": res.reply}
+    when_s = str(args.get("when") or "").strip()
+    w = None
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})", when_s)
+    if m:
+        try:
+            w = Q.When(at=S.wall_to_epoch(*(int(x) for x in m.groups())))
+        except (OverflowError, ValueError):
+            w = None
+    if w is None:
+        w = Q.parse_when(Q.normalise(when_s), now, kind)
+    if w is None:
+        return {"ok": False, "error": "could not read `when`; use words like \"tomorrow at 6pm\" "
+                                      "or a date like 2026-10-02 17:30"}
+    res = Q._set_at(kind, w, text, sched, now, "reminder_set")
+    return {"ok": bool(res.ids), "said": res.reply}
+
+
+def _schedule_call(name: str, args: dict, call: dict, convo: list, steps: list, say_step,
+                   watch) -> None:
+    """A scheduler tool: straight to jarvis_schedule, no gate (SCHEDULE_TOOLS)."""
+    step = {"tool": name, "ran": False, "ok": False, "outcome": "no card needed"}
+    steps.append(step)
+    if name != "coming_up" and watch is not None and watch.note_needs_a_person():
+        say_step("tool_refused", name)
+        step["outcome"] = "refused"
+        result = {"ok": False, "error": SCHEDULE_AFTER_OUTSIDE}
+    else:
+        say_step("tool_started", name)
+        step["ran"] = True
+        try:
+            import jarvis_schedule
+            sched = jarvis_schedule.get()
+            result = _schedule_run(name, args, sched, time.time())
+            if name != "coming_up" and result.get("ok"):
+                # The sentence that asked is a command, not a fact to learn
+                # (jarvis_intake.owner_turns) - its digest, never its words.
+                sched.mark_command(_newest_user_text(convo))
+        except Exception as exc:
+            result = {"ok": False, "error": f"the scheduler is not available here "
+                                            f"({type(exc).__name__})"}
+        step["ok"] = result.get("ok") is True
+        say_step("tool_finished", name, ok=step["ok"])
+    convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                  "content": _tool_content(result)})
 
 
 #: The tools that run a multi-step plan, and the module that plans and runs
@@ -2865,6 +3014,11 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                       "content": _tool_content({"ok": False, "error": problem})})
         return
     tool = TOOLS[name]
+    if name in SCHEDULE_TOOLS:
+        # Timers, alarms, reminders and the to-do list - not put to the gate
+        # here. See SCHEDULE_TOOLS for why.
+        _schedule_call(name, args, call, convo, steps, say_step, watch)
+        return
     lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
     action_name = lookup_name
     try:

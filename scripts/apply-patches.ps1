@@ -353,6 +353,17 @@ $PATCHES = @(
     # Needs jarvis_hardware.py and jarvis_profiles.py copied in; without
     # them the routes answer 503.
     'hardware.patch'
+    # Timers, alarms, reminders and the to-do list, with ONE scheduler (the
+    # owner's decisions, 2026-09-25): GET /api/schedule and POST
+    # /api/schedule/add and /act, the scheduler started at boot, the fast
+    # path in /api/chat that answers "set a timer for 10 minutes" WITHOUT
+    # the model, and the approval notice's words for schedule_repeat in
+    # jarvis_gate.py. Its context is hardware's route blocks and gate line,
+    # chat-history's lines at the top of the answering part of /api/chat and
+    # extraction-wiring's start-up banner - last, like every new patch. Needs
+    # jarvis_schedule.py and jarvis_quick.py copied in; without them the
+    # routes answer 503 and chat works exactly as before.
+    'schedule.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -419,6 +430,8 @@ $SHIPPED = @(
     'jarvis_past.py'             # past-recall.patch: questions about the past also get retired facts, labelled
     'jarvis_profiles.py'         # hardware.patch: the three setups' arithmetic, words and one-line command (no I/O)
     'jarvis_hardware.py'         # hardware.patch: finding the cards, the steps, making a tuned model, measuring
+    'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
+    'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

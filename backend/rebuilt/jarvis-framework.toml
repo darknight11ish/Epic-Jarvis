@@ -143,6 +143,14 @@ rollback_model            = "auto"
 # file without this line asks too (unknown_action_tier).
 models_create             = "ask"
 
+# --- Timers, alarms and reminders (jarvis_schedule.py) ------------------
+# A timer, an alarm or a reminder that goes off ONCE needs no card - the
+# owner's decision, 2026-09-25 - so it has no line here. Anything that
+# REPEATS ("every weekday at 7") is one card, which lists the next three
+# times. Must stay "ask": anything else and it is refused, not set up. A
+# file without this line asks too (unknown_action_tier).
+schedule_repeat           = "ask"
+
 # --- Power: turning the assistant down, at two depths --------------------
 # Putting Jarvis into quiet/standby, or waking it, is the safe direction
 # either way, so it does not interrupt you for a yes. Changing the rules
