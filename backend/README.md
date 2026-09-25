@@ -811,16 +811,37 @@ and this block is at the tail, in the kept region. The one exception is a
 conversation truncated to its final message alone, where there is no prefix
 left to preserve anyway.
 
-**One case this edit missed (fixed 2026-09-24, in `jarvis_agent.py`).** On a
-conversation's *first* question there is no earlier turn, so "just before the
-newest question" IS index 0: the list is `[recalled facts, question]`, and
-the invariants were dropped on every first question that recalled a fact.
+**Cases this edit missed (fixed 2026-09-24, in `jarvis_agent.py`; tests
+added 2026-09-25).** Moving the block off index 0 only works when there is
+something before it. Three ways a system message still ends up first, and so
+drops the Jarvis rules:
+
+- **A conversation's first question.** There is no earlier turn, so "just
+  before the newest question" IS index 0: the list is
+  `[recalled facts, question]`. The rules were dropped on every first
+  question that recalled a fact.
+- **Trimming.** On a long conversation (a long tool turn, say)
+  `jarvis_agent.fit_messages` drops the oldest user and assistant turns but
+  never a system message, so it can leave the recalled facts first.
+- **An app's own system message.** The desktop app sends attached clipboard
+  text as a system message just before the question (`Context: ...`), which
+  on a first question is index 0 too.
+
 `jarvis_agent.keep_rules_first()` now runs on every request to the local
-model, last: if message 0 is a system message other than the Jarvis rules
-block, it puts that block (`LANE_SYSTEM`, held word for word to the
-Modelfile by `test_agent.py`) in front - exactly what Ollama would have
-added. A request starting with a user message is left alone.
-`test_agent.py` checks both, and the first check fails on the code before.
+model, last - after trimming and after the spoken-style note: if message 0
+is a system message other than the Jarvis rules block, it puts that block
+(`LANE_SYSTEM`, held word for word to the Modelfile by `test_agent.py`) in
+front - exactly what Ollama would have added. A request starting with a user
+message is left alone, because Ollama adds the block itself. It does this for
+an app's own leading system message too: the owner's decision of 2026-09-25
+is that the rules are never dropped, whoever put a system message first.
+
+Tested in two places. `test_agent.py` sends each case through the whole
+turn and checks what reaches Ollama. `test_memory_prefix.py`
+(`t_the_first_question_keeps_the_rules`) feeds this patch's real placement
+line into `keep_rules_first()`; it needs your `jarvis_hud.py`, so it is
+skipped in the container. The rules-first checks in both fail when
+`keep_rules_first()` is switched off.
 
 **One thing to check on the machine**, because it cannot be checked from here:
 the HUD posts to `JARVIS_URL/v1/chat/completions`, not to Ollama directly. All

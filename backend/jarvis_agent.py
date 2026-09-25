@@ -2252,8 +2252,12 @@ def keep_rules_first(msgs: list) -> list:
     just before the newest user message, which on a conversation's FIRST
     question is position 0 - so on exactly the turns where the model holds
     private facts, the rules ("say what is a guess...") were dropped. Any
-    other system message that ends up first (after trimming, say) does the
-    same. When that happens, the rules block goes first, word for word
+    other system message that ends up first does the same: after trimming
+    (fit_messages never drops a system message), or an app's own - the
+    desktop sends attached clipboard text as one, just before the question.
+    That last is not left to the app: the owner's decision of 2026-09-25 is
+    that the rules are never dropped, whoever put a system message first.
+    When that happens, the rules block goes first, word for word
     (LANE_SYSTEM, which test_agent.py holds to the Modelfile): what Ollama
     would have put there. A list already starting with it, or with a user or
     assistant message, is returned as it is."""
