@@ -197,13 +197,16 @@ Decided 2026-09-25, after the competitiveness audit
   standby.** Standby switched on by hand stays on at the end of the hours.
 - **The morning briefing shows new emails' count AND senders by default**,
   with a setting in both apps to show the count only.
-- **Web search with a choice of four providers, SearXNG the default:**
-  SearXNG (self-hosted, in Docker, on this PC only), DuckDuckGo (the `ddgs`
-  library, DuckDuckGo backend only), Tavily and Brave (keys, rule 3). Each
-  has a short "why use this one" line in both apps, and Jarvis can explain
-  the choice. Whoogle is left out and the list says why (it stopped
-  returning results in 2025). No silent fallback: if the chosen provider is
-  down, Jarvis says so and offers to switch.
+- **Web search with a choice of four providers, SearXNG the default,** in
+  this order: SearXNG (self-hosted, in Docker, on this PC only), DuckDuckGo
+  (the `ddgs` library, DuckDuckGo backend only), Exa and Tavily (free keys,
+  no payment card; rule 3). Each has a short "why use this one" line in both
+  apps, and Jarvis can explain the choice. Left out, and the list says why:
+  Whoogle (it stopped returning results in 2025) and Brave (owner,
+  2026-09-25: "remove brave if it costs anything for the bare tier" - since
+  2026 it needs a payment card that is charged past the $5 monthly credit).
+  No silent fallback: if the chosen provider is down, Jarvis says so and
+  offers to switch.
 - **When a search asks first:** by default only when private things could
   slip in - a card showing the exact search words if the conversation has
   read email, files, notes or saved memories; no card for a search that
