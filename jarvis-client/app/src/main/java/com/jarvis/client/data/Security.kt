@@ -31,8 +31,10 @@ data class Security(
 ) {
     /**
      * True when the owner has asked for anything stricter than the defaults.
-     * Then a phone with no way to check refuses what needed the check,
-     * instead of letting it through the way the defaults always have.
+     * Then a phone with no way to check also keeps the app lock and hidden
+     * lists shut, and refuses every approval that needed the check. (A risky
+     * approval is refused on such a phone either way - the owner's "no lock,
+     * no risky approval", 2026-09-25.)
      */
     val anyLockOn: Boolean
         get() = appLock || approvals == ApprovalCheck.EVERY || privateLists ||
@@ -142,28 +144,82 @@ object SecurityRules {
     fun approvalNeedsCheck(s: Security, item: PendingItem): Boolean =
         riskyByToday(item) || s.approvals == ApprovalCheck.EVERY
 
-    /** What to do after a check. [Stop.say] is null when nothing needs saying. */
+    /**
+     * What to do after a check. [Stop.say] is null when nothing needs saying.
+     * [Stop.offerLockSettings]: the fix is in Android's own settings, so the
+     * message comes with a button that opens them ([OPEN_LOCK_SETTINGS]).
+     */
     sealed interface Verdict {
         data object Go : Verdict
-        data class Stop(val say: String?) : Verdict
+        data class Stop(val say: String?, val offerLockSettings: Boolean = false) : Verdict
     }
 
     /**
-     * After the check for an approval.
+     * After the check for an approval. Only a confirmed check lets it through.
      *
-     * UNAVAILABLE is the one that changed. With every setting at its default
-     * it still lets the approval through, exactly as before: refusing to let
-     * the owner answer their own PC because the phone has no fingerprint set
-     * up would be a lock on the wrong door. Once the owner has turned any
-     * lock on, it is refused, and the sentence says how to fix it.
+     * UNAVAILABLE - this phone has no way to check - refuses, whatever the
+     * settings say: the owner's "no lock, no risky approval" (2026-09-25).
+     * With no lock turned on only a risky approval comes here
+     * ([approvalNeedsCheck]), and it used to go through without a check; a
+     * phone anyone can pick up and unlock was a way round the one check that
+     * matters. The sentence says how to fix it, with a button that opens
+     * Android's settings. The PC says the same about Windows Hello
+     * (lock/rules.rs `NO_HELLO_NO_RISKY`, jarvis_owner_check.NOT_SET_UP).
      */
     fun afterApprovalCheck(s: Security, outcome: CheckOutcome): Verdict = when (outcome) {
         CheckOutcome.CONFIRMED -> Verdict.Go
         CheckOutcome.CANCELLED -> Verdict.Stop(null)
         CheckOutcome.FAILED -> Verdict.Stop(CHECK_NOT_SHOWN)
         CheckOutcome.UNAVAILABLE ->
-            if (s.anyLockOn) Verdict.Stop(noCheckSentence(s.method, "Nothing was approved.")) else Verdict.Go
+            if (s.anyLockOn) {
+                Verdict.Stop(noCheckSentence(s.method, APPROVAL_LEAD), offerLockSettings = true)
+            } else {
+                Verdict.Stop(NO_SCREEN_LOCK, offerLockSettings = true)
+            }
     }
+
+    /**
+     * True when [text] is one of [afterApprovalCheck]'s "this phone cannot
+     * check" sentences, so the notice that shows it offers
+     * [OPEN_LOCK_SETTINGS]. Matched on the whole sentence: nothing else the
+     * app says gets the button.
+     */
+    fun offersLockSettings(text: String?): Boolean =
+        text != null && (
+            text == NO_SCREEN_LOCK ||
+                CheckMethod.entries.any { text == noCheckSentence(it, APPROVAL_LEAD) }
+            )
+
+    /**
+     * The warning on the Security screen while this phone cannot check.
+     * [Security.anyLockOn] decides what it covers: with no lock on, only risky
+     * approvals are held.
+     */
+    fun noCheckWarning(s: Security): String =
+        if (s.anyLockOn) {
+            noCheckSentence(
+                s.method,
+                "Approvals that need the check are refused for now, and the app " +
+                    "lock and hidden lists stay shut.",
+            )
+        } else {
+            noCheckSentence(s.method, "Risky approvals are refused for now.")
+        }
+
+    private const val APPROVAL_LEAD = "Nothing was approved."
+
+    /**
+     * A risky approval on a phone with no screen lock and no lock turned on
+     * in Jarvis (the owner's decision, 2026-09-25). The PC's words for
+     * Windows Hello have the same shape.
+     */
+    const val NO_SCREEN_LOCK =
+        "Nothing was approved. This phone has no screen lock, so Jarvis cannot check it is you, " +
+            "and risky approvals are refused until it has one. Set a screen lock in Android's " +
+            "Settings (Security, Screen lock) to approve risky actions."
+
+    /** The button beside a "this phone cannot check" notice. */
+    const val OPEN_LOCK_SETTINGS = "Open screen-lock settings"
 
     /**
      * After the check asked for before a loosening, or before Show or

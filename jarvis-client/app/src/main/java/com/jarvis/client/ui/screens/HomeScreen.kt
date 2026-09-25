@@ -107,6 +107,7 @@ import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Face
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.data.FaceSize
+import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
@@ -395,6 +396,21 @@ data class HomeState(
     val showPrivateBusy: Boolean = false,
 )
 
+/**
+ * Home's notice: [Notice], plus "Open screen-lock settings" when the notice
+ * is a risky approval refused for want of a screen lock.
+ */
+@Composable
+private fun HomeNotice(text: String, actions: HomeActions) {
+    val offer = SecurityRules.offersLockSettings(text)
+    Notice(
+        text,
+        actions.onDismissNotice,
+        action = if (offer) SecurityRules.OPEN_LOCK_SETTINGS else null,
+        onAction = actions.onOpenLockSettings,
+    )
+}
+
 @Immutable
 data class HomeActions(
     val onDraftChange: (String) -> Unit,
@@ -468,6 +484,13 @@ data class HomeActions(
     val onDropShared: () -> Unit = {},
     /** Open the release page in the browser. Downloads nothing itself. */
     val onOpenUpdate: () -> Unit = {},
+    /**
+     * Open Android's own screen-lock settings - offered beside the notice
+     * that a risky approval was refused because this phone has no screen
+     * lock ([SecurityRules.offersLockSettings]; the owner's "no lock, no
+     * risky approval", 2026-09-25).
+     */
+    val onOpenLockSettings: () -> Unit = {},
     /**
      * Start or end a temporary chat - a new conversation either way
      * ([com.jarvis.client.JarvisRuntime.setTemporaryChat]).
@@ -887,7 +910,7 @@ private fun ConversationList(
         item(key = "quick-note") { QuickNotePlate(open = state.quickNoteOpen, actions = actions) }
 
         if (state.notice != null) {
-            item(key = "notice") { Notice(state.notice, actions.onDismissNotice) }
+            item(key = "notice") { HomeNotice(state.notice, actions) }
         }
 
         if (state.approvalsOff) {
@@ -2263,7 +2286,7 @@ private fun VoiceBar(
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         if (state.notice != null) {
-            Notice(state.notice, actions.onDismissNotice)
+            HomeNotice(state.notice, actions)
             Gap(8)
         }
         if (state.approvalsOff) {

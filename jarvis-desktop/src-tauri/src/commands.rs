@@ -1948,9 +1948,21 @@ async fn answer_approval(
     // A notification cannot approve at all, whatever it is asked to do -
     // docs/ARCHITECTURE.md §3: "Deny may be a notification action. Approve
     // may not."
+    //
+    // Since the approval gap's step 1 the backend may ask Windows Hello
+    // itself (lock::check_approval says when); then the request stays open
+    // while its prompt is up, so it waits for the card's time left, and the
+    // backend's prompt is let to the front first.
+    let mut wait = APPROVAL_TIMEOUT;
     if approved {
         match from {
-            AnsweredFrom::Window(window) => crate::lock::check_approval(&app, window, id).await?,
+            AnsweredFrom::Window(window) => {
+                let send = crate::lock::check_approval(&app, window, id, APPROVAL_TIMEOUT).await?;
+                if send.backend_may_ask {
+                    wait = send.wait;
+                    crate::lock::let_backend_prompt_forward();
+                }
+            }
             AnsweredFrom::Notification => {
                 return Err(
                     "a notification can deny, never approve - open Jarvis to approve".to_string(),
@@ -1970,7 +1982,7 @@ async fn answer_approval(
     }
 
     let endpoint = if approved { "approve" } else { "deny" };
-    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+    let response = jarvis_client(Some(wait))?
         .post(format!("{}/api/{endpoint}", jarvis_base(&app)))
         .headers(jarvis_headers(&app)?)
         .json(&serde_json::json!({ "id": id, "by": "desktop_spotlight" }))
@@ -1986,6 +1998,9 @@ async fn answer_approval(
 
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
+    if let Some(said) = owner_check_refusal(status.as_u16(), &body) {
+        return Err(said);
+    }
     if !status.is_success() {
         return Err(format!(
             "the server answered HTTP {} to /{endpoint}: {}",
@@ -2915,6 +2930,74 @@ pub(crate) fn temporary_chat_in_version(status: u16, body: &str) -> bool {
             .is_some_and(|v| capability_present(&v))
 }
 
+/// Whether `GET /api/version`'s answer says the backend asks Windows Hello
+/// itself for a risky approval made on its own PC: `capabilities.owner_check`
+/// is `"backend"` (owner-check.patch, docs/APPROVAL-GAP-DESIGN.md step 1).
+/// Anything else - an older backend, an unreadable answer, an error status -
+/// is "no", and this app keeps asking Windows Hello itself, as before.
+pub(crate) fn owner_check_in_version(status: u16, body: &str) -> bool {
+    (200..300).contains(&status)
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| {
+                v.get("capabilities")
+                    .and_then(|c| c.get("owner_check"))
+                    .and_then(|o| o.as_str().map(str::to_string))
+            })
+            .is_some_and(|o| o == "backend")
+}
+
+/// [`owner_check_in_version`], asked of the running backend. Never an error:
+/// a backend that cannot say is one that does not ask.
+pub(crate) async fn backend_owner_check(app: &AppHandle) -> bool {
+    let base = jarvis_base(app);
+    let Ok(client) = jarvis_client(Some(APPROVAL_TIMEOUT)) else {
+        return false;
+    };
+    let Ok(headers) = jarvis_headers(app) else {
+        return false;
+    };
+    match client
+        .get(format!("{base}/api/version"))
+        .headers(headers)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let body = response.text().await.unwrap_or_default();
+            owner_check_in_version(status, &body)
+        }
+        Err(_) => false,
+    }
+}
+
+/// Whether this app talks to the backend on this PC itself: the address in
+/// use is loopback (`localhost`, `127.x.x.x`, `::1`). The backend asks
+/// Windows Hello only for approvals that reach it from its own PC, so only
+/// then may this app leave the asking to it.
+pub(crate) fn base_is_this_pc(app: &AppHandle) -> bool {
+    base_is_loopback(&jarvis_base(app))
+}
+
+/// The backend's own sentence for an Approve it refused on the owner-check
+/// (owner-check.patch): a 403 or 503 whose body carries `owner_check` and an
+/// `error`. It is shown as it is - "Windows Hello is not set up on this PC,
+/// ..." - rather than inside "the server answered HTTP 403". A 409 keeps the
+/// usual form, which the windows read as "no longer waiting".
+pub(crate) fn owner_check_refusal(status: u16, body: &str) -> Option<String> {
+    if !matches!(status, 403 | 503) {
+        return None;
+    }
+    let v = serde_json::from_str::<serde_json::Value>(body).ok()?;
+    v.get("owner_check")?;
+    v.get("error")
+        .and_then(|e| e.as_str())
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .map(str::to_string)
+}
+
 async fn temporary_chat_supported(app: &AppHandle) -> Result<bool, String> {
     let base = jarvis_base(app);
     let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
@@ -2959,8 +3042,72 @@ pub async fn get_backend_capabilities(app: AppHandle) -> Result<serde_json::Valu
 
 #[cfg(test)]
 mod capabilities_tests {
-    use super::{capabilities_answer, capability_present};
+    use super::{
+        base_is_loopback, capabilities_answer, capability_present, owner_check_in_version,
+        owner_check_refusal,
+    };
     use serde_json::json;
+
+    #[test]
+    fn only_a_backend_that_says_backend_asks_windows_hello_itself() {
+        let say = |v: serde_json::Value| v.to_string();
+        let with = say(json!({"capabilities": {"owner_check": "backend"}}));
+        assert!(owner_check_in_version(200, &with));
+        // Anything else: this app keeps asking itself, as before.
+        assert!(!owner_check_in_version(500, &with));
+        assert!(!owner_check_in_version(
+            200,
+            &say(json!({"capabilities": {"owner_check": false}}))
+        ));
+        assert!(!owner_check_in_version(
+            200,
+            &say(json!({"capabilities": {"owner_check": true}}))
+        ));
+        assert!(!owner_check_in_version(
+            200,
+            &say(json!({"capabilities": {}}))
+        ));
+        assert!(!owner_check_in_version(200, "not json"));
+    }
+
+    #[test]
+    fn only_a_loopback_address_is_this_pc() {
+        for yes in [
+            "http://127.0.0.1:4719",
+            "http://localhost:4719",
+            "http://LOCALHOST:4719/",
+            "http://[::1]:4719",
+            "http://127.0.0.2:4719",
+        ] {
+            assert!(base_is_loopback(yes), "{yes}");
+        }
+        for no in [
+            "http://100.64.0.5:4719",
+            "http://my-pc.tail1234.ts.net:4719",
+            "http://192.168.1.20:4719",
+            "not a url",
+            "",
+        ] {
+            assert!(!base_is_loopback(no), "{no}");
+        }
+    }
+
+    #[test]
+    fn the_backends_own_refusal_is_shown_as_it_is() {
+        let body = json!({"ok": false, "owner_check": "not_set_up",
+                          "error": "Windows Hello is not set up on this PC"})
+        .to_string();
+        assert_eq!(
+            owner_check_refusal(403, &body).as_deref(),
+            Some("Windows Hello is not set up on this PC")
+        );
+        assert!(owner_check_refusal(503, &body).is_some());
+        // A 409 keeps "the server answered HTTP 409", which the windows read
+        // as "no longer waiting"; other bodies are the usual error.
+        assert!(owner_check_refusal(409, &body).is_none());
+        assert!(owner_check_refusal(403, &json!({"error": "bad token"}).to_string()).is_none());
+        assert!(owner_check_refusal(403, "not json").is_none());
+    }
 
     #[test]
     fn present_means_what_it_means_on_the_phone() {

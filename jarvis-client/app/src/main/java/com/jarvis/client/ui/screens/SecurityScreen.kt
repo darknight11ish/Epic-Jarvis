@@ -55,6 +55,8 @@ fun SecurityScreen(
     busy: Boolean = false,
     notice: String? = null,
     onDismissNotice: () -> Unit = {},
+    /** Open Android's own screen-lock settings. */
+    onOpenLockSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -71,24 +73,24 @@ fun SecurityScreen(
             }
 
             // The one warning that changes what the other settings do. Said
-            // here rather than discovered at the next approval.
-            if (security.anyLockOn && availability != CheckAvailability.READY &&
-                availability != CheckAvailability.NOT_NOW
-            ) {
+            // here rather than discovered at the next approval. Shown with
+            // every lock off too, since 2026-09-25: a phone with no screen
+            // lock refuses risky approvals whatever the settings say (the
+            // owner's "no lock, no risky approval").
+            if (availability != CheckAvailability.READY && availability != CheckAvailability.NOT_NOW) {
                 item(key = "no-check") {
                     // Not a Notice: that has a Dismiss, and this cannot be
                     // dismissed - it is true until the phone is set up.
                     Plate(tone = chrome.warnInk.copy(alpha = 0.10f), outline = chrome.warnInk.copy(alpha = 0.35f)) {
                         Text(
-                            SecurityRules.noCheckSentence(
-                                security.method,
-                                "Approvals that need the check are refused for now, and the app " +
-                                    "lock and hidden lists stay shut.",
-                            ),
+                            SecurityRules.noCheckWarning(security),
                             style = MaterialTheme.typography.bodyMedium,
                             color = chrome.warnInk,
                             modifier = Modifier.liveStatus(),
                         )
+                        if (availability == CheckAvailability.NOT_SET_UP) {
+                            Quiet(SecurityRules.OPEN_LOCK_SETTINGS, onClick = onOpenLockSettings)
+                        }
                     }
                 }
             }

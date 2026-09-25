@@ -1680,6 +1680,7 @@ class MainActivity : FragmentActivity() {
                             security = security,
                             availability = availability,
                             onChange = ::changeSecurity,
+                            onOpenLockSettings = ::openLockSettings,
                             onBack = {
                                 securityNotice.value = null
                                 nav.back()
@@ -2002,6 +2003,7 @@ class MainActivity : FragmentActivity() {
                                 onLoadNoteTargets = { JarvisRuntime.noteTargets() },
                                 onQuickNoteOpenChange = { open -> quickNoteOpen.value = open },
                                 onOpenUpdate = ::openReleasePage,
+                                onOpenLockSettings = ::openLockSettings,
                             )
                         },
                         modifier = root,
@@ -2092,13 +2094,12 @@ class MainActivity : FragmentActivity() {
      *
      * Which approvals ask, and what each outcome means, is
      * [SecurityRules.approvalNeedsCheck] and [SecurityRules.afterApprovalCheck],
-     * from the owner's Security settings. With those at their defaults it is
-     * exactly the old rule: an unavailable biometric is not a refusal
-     * (declining to let the owner answer their own desktop because no
-     * fingerprint is enrolled would be a lock on the wrong door), a
-     * *dismissed* prompt is, and a check that could not be shown just now
-     * holds the decision and says so. Once the owner turns any lock on, a
-     * phone that cannot check refuses instead, and says how to fix it.
+     * from the owner's Security settings. A *dismissed* prompt refuses, a
+     * check that could not be shown just now holds the decision and says so,
+     * and a phone that cannot check at all - no screen lock - refuses, with
+     * a notice that says how to fix it and a button that opens Android's
+     * screen-lock settings (the owner's "no lock, no risky approval",
+     * 2026-09-25; it used to let a risky approval through unchecked).
      */
     private suspend fun confirmed(item: PendingItem): Boolean {
         val s = currentSecurity()
@@ -2245,6 +2246,17 @@ class MainActivity : FragmentActivity() {
         if (JarvisRuntime.isPaired()) {
             // Cheap, and safe to call on resume — the doc says so explicitly.
             lifecycleScope.launch { JarvisRuntime.refreshStatus() }
+        }
+    }
+
+    /**
+     * Android's own screen-lock settings, from the notice that a risky
+     * approval was refused because this phone has no screen lock. The
+     * general Security page if this phone has no such screen.
+     */
+    private fun openLockSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }.onFailure {
+            runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
         }
     }
 

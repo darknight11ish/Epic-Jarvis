@@ -189,8 +189,9 @@ object BiometricGate {
                 prompt.authenticate(builder.build())
             }.onFailure {
                 // Not CANCELLED - the owner refused nothing - and not
-                // UNAVAILABLE either, which with every setting at its
-                // default lets the decision through with no check at all.
+                // UNAVAILABLE either, which says "set up a screen lock" to
+                // an owner who has one. (It once let the decision through
+                // with no check at all; since 2026-09-25 it refuses too.)
                 // Tried once more; if it fails again the decision is held
                 // with a plain message (MainActivity), and the card is still
                 // there to try again.
@@ -213,13 +214,12 @@ object BiometricGate {
      * be undone. "Fingerprint only" also drops the PIN.
      *
      * DEVICE_CREDENTIAL stays in by default, deliberately. Without it, a
-     * phone with no enrolled fingerprint reports the gate unavailable, and
-     * with every setting at its default an unavailable gate lets the
-     * decision through - so dropping the PIN in the name of strictness would
-     * wave through exactly the devices with the weakest possession factor.
-     * "Fingerprint only" is safe to offer because choosing it counts as
-     * turning a lock on, and then an unavailable gate refuses instead
-     * (`SecurityRules.afterApprovalCheck`).
+     * phone with a PIN but no enrolled fingerprint would report the gate
+     * unavailable - and an unavailable gate refuses every risky approval
+     * (`SecurityRules.afterApprovalCheck`; the owner's "no lock, no risky
+     * approval", 2026-09-25), so the owner could not approve at all. The PIN
+     * is a real check of who holds the phone. "Fingerprint only" drops it on
+     * purpose, and counts as turning a lock on.
      */
     private fun allowed(method: CheckMethod): Int = when (method) {
         CheckMethod.FINGERPRINT_OR_PIN ->

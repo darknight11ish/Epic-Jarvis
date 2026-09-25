@@ -172,10 +172,43 @@ That was wrong in two ways:
 
 A program written specifically to attack Jarvis, running as the owner, can
 also change Jarvis's own files. No fix inside the owner's Windows account
-can stop that. The design says what a fix can and cannot stop. The owner
-chose to close this by having the backend itself require the check for
-risky approvals. `docs/APPROVAL-GAP-DESIGN.md` is the plan, waiting on two
-answers from the owner. Until it is built, this paragraph is the record.
+can stop that. The design says what a fix can and cannot stop.
+
+**Step 1 is built (2026-09-25, the owner's decisions; `owner-check.patch`,
+`backend/jarvis_owner_check.py`, `backend/README.md` "The approval gap,
+step 1").** What it closes:
+- **A risky approval from this PC needs Windows Hello at the backend.**
+  `POST /api/approve` asks Windows Hello itself - the prompt shows the
+  card's own title - before it accepts a risky card (the phone's rule, one
+  definition in three places, `tools/gen_risky_approval_cases.py`) that
+  comes from this PC: loopback, the PC's own addresses, or anything that
+  cannot be placed. So reading the token and posting `/api/approve`, or
+  pretending to be the phone through the PC's own Tailscale address, meets
+  a prompt nobody asked for. A PC with no Windows Hello refuses risky
+  approvals ("no lock, no risky approval").
+- **An "approved" row counts only with the running backend's stamp.** The
+  gate believes "approved" only when this backend process accepted the
+  approval through its own `/api/approve` and stamped it with a secret kept
+  only in its memory. Writing "approved" into `approvals.db`, or calling
+  `jarvis_gate.decide()` from another program, is refused.
+- **The desktop asks once, not twice**: when `/api/version` says
+  `capabilities.owner_check: "backend"` and the desktop talks to the
+  backend on loopback, it leaves the risky cards to the backend's prompt.
+
+What is **still open**, said plainly:
+- A card that is **not risky** (local, undoable, not rushed) can still be
+  approved by a program holding the token - the "Risky only" rule.
+- **Another device** on the owner's Tailscale or Meshnet network holding a
+  stolen token is taken for the phone and not asked on the PC. Step 2 (a
+  phone key per risky approval, with "more devices") closes that.
+- **A program written to attack Jarvis** can still edit its files or take
+  over its running process (above). Nothing inside the owner's Windows
+  account can stop that.
+- The Windows side is **untested on Windows** until the half-day test in
+  `backend/README.md`: that the backend's prompt comes to the front, that
+  the PC calling its own Tailscale address counts as "this PC", and that
+  the gate's wait runs in the same process as the web server. Each fails
+  closed if wrong (risky approvals from the PC are refused).
 
 ### The notification contract — `notice`
 
@@ -714,6 +747,18 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   history" is on, Jarvis cannot be screenshotted, screen-recorded or cast
   (`FLAG_SECURE`, `SecurityRules.blockScreenCapture`). Phone only for now -
   see "One-sided on purpose" below.
+- **No lock, no risky approval (both apps, the owner's decision of
+  2026-09-25):** a risky approval is refused on a PC without Windows Hello
+  or a phone without a screen lock, whatever the lock settings say, with
+  the same words in both apps (`lock/rules.rs` `NO_HELLO_NO_RISKY`,
+  `SecurityRules.NO_SCREEN_LOCK`) and, on the phone, a button that opens
+  Android's screen-lock settings. It used to go through unchecked when no
+  lock was on. On the PC the backend refuses too (§3, "A known limit").
+- **Who asks on the PC:** since the approval gap's step 1, the backend
+  asks Windows Hello itself for a risky approval from the PC, and the
+  desktop does not ask as well (`lock::check_approval`,
+  `approval_needs_local_check`); "Every approval" still asks in the desktop
+  for the other cards. The phone still asks its own fingerprint.
 
 `jarvis-android/` is the older app, kept for reference only: it speaks a
 protocol the backend does not have, so it cannot talk to Jarvis. Its safe
@@ -825,6 +870,7 @@ backend routes, in both directions; the rest are listed here only.
 | A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). |
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily or Brave key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |
+| The backend's own Windows Hello check before a risky approval (`owner-check.patch`, the approval gap's step 1, 2026-09-25) | Written with the feature. It checks approvals that come FROM the PC, where the desktop is; the phone keeps checking its own fingerprint in the app, as before, and the backend lets a phone approval through without a PC prompt. The phone's half - a key in the phone's Keystore that needs a fresh fingerprint for every risky approval, checked by the backend - is step 2, built with "more devices" (`docs/APPROVAL-GAP-DESIGN.md`). Both apps share the stamp (every approval) and "no lock, no risky approval". |
 | **Update notice** | **Undecided - the owner's call.** The desktop checks GitHub for a newer version and says so in Settings (`update.rs`; it never installs on its own). The phone has no such notice: a new APK is published to the `client-latest` release and installed with adb. Whether the phone should say "a newer version exists" has not been decided. |
 
 **On the phone, kept off the desktop:**

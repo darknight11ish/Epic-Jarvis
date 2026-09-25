@@ -1,8 +1,19 @@
 # Closing the approval gap: a design
 
-> Written 2026-09-25. **Design only. Nothing about how approvals work has
-> been changed.** Two questions for the owner are at the end; building waits
-> for the answers. The gap itself is recorded in `ARCHITECTURE.md` §3, "A
+> Written 2026-09-25 as a design. **Step 1 was built the same day**, after
+> the owner answered both questions at the end ("yes, step 1 now" and
+> "refuse risky approvals until a PIN or screen lock is set up"; CLAUDE.md):
+> `backend/owner-check.patch`, `backend/jarvis_owner_check.py`, the
+> desktop's `lock.rs`/`lock/rules.rs`, and the phone's `SecurityRules`.
+> `backend/README.md`, "The approval gap, step 1", says what was built,
+> the half-day test, and **where the build differs from this design, and
+> why**: the stamp is kept in the backend's memory rather than written into
+> the row (the code that writes the row is not in this repository); the
+> "ask once" flag is on `/api/version` (`capabilities.owner_check`), not
+> `/api/status`; and Windows Hello is called through ctypes in a small
+> child process, not the `winrt` packages (they lack the "for a window"
+> form). Step 2 (the phone) is still to come, with "more devices". The gap
+> itself, and what is now closed, is recorded in `ARCHITECTURE.md` §3, "A
 > known limit: a program already on the PC".
 
 ## The short answer

@@ -86,8 +86,9 @@ export const SET_UP_HELLO =
 
 /**
  * What this PC's Windows Hello is, from get_security_settings' `hello`.
- * With no Windows Hello and no lock on, approvals work as on a phone with no
- * fingerprint set up: without a check. Once a lock is on, they are refused.
+ * With no Windows Hello, risky approvals are refused, lock or no lock (the
+ * owner's "no lock, no risky approval", 2026-09-25; lock/rules.rs
+ * NO_HELLO_NO_RISKY). They used to go through without a check.
  */
 export function helloLine(hello, settings) {
   const s = normalise(settings);
@@ -98,11 +99,11 @@ export function helloLine(hello, settings) {
       return anyLockOn(s)
         ? "Windows Hello is not set up on this PC, and a lock is on, so risky " +
           "approvals here are refused and locked windows will not open. " + SET_UP_HELLO
-        : "Windows Hello is not set up on this PC. Until it is, approvals here go " +
-          "through without a check, and no lock can be turned on. " + SET_UP_HELLO;
+        : "Windows Hello is not set up on this PC. Until it is, risky approvals " +
+          "here are refused, and no lock can be turned on. " + SET_UP_HELLO;
     case "blocked":
-      return "Windows Hello is switched off on this PC by a policy, so no lock can " +
-        "be turned on here.";
+      return "Windows Hello is switched off on this PC by a policy, so risky " +
+        "approvals here are refused and no lock can be turned on.";
     case "busy":
       return "Windows Hello did not answer just now. It is asked again when you " +
         "change something here.";
@@ -135,8 +136,11 @@ export function approvalsNote(where) {
   return `Risky only asks for ${RISKY_WORDS} - the same rule as the phone's ` +
     "fingerprint check. Every approval asks every time. There is nothing below " +
     `Risky only. Cards are still approved ${where}; on this PC, Windows Hello ` +
-    "checks it is you before an approval is sent. Deny never asks, and a " +
-    "notification can deny but never approve.";
+    "checks it is you before an approval counts. For a risky one, an " +
+    "up-to-date Jarvis backend asks itself, so you are asked once, and a " +
+    "program that goes around this app is asked too. With no Windows Hello set up, risky " +
+    "approvals are refused. Deny never asks, and a notification can deny but " +
+    "never approve.";
 }
 
 export function privateDetail() {

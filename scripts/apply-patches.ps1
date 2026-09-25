@@ -408,6 +408,15 @@ $PATCHES = @(
     # and schedule's GET /api/schedule line, so it goes after web-search.
     # Needs jarvis_reach.py copied in; without it the route answers 503.
     'reach.patch'
+    # The approval gap, step 1 (docs/APPROVAL-GAP-DESIGN.md, the owner's
+    # decision of 2026-09-25): POST /api/approve asks Windows Hello itself
+    # for a risky card approved from this PC, and the gate believes no
+    # "approved" that this running backend did not stamp. Its context is
+    # gate-outcome's approved branches in jarvis_gate.py and log-scrub's
+    # banner line in jarvis_hud.py, so it goes after both. Needs
+    # jarvis_owner_check.py copied in; without it EVERY approval is refused
+    # (the gate fails closed), and the start-up banner says so.
+    'owner-check.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -482,6 +491,7 @@ $SHIPPED = @(
     'jarvis_backoff.py'          # briefing.patch: offers nobody asked for - a few at most, not mid-chat, a "no" heard
     'jarvis_briefing.py'         # briefing.patch: the morning briefing, a kind of job on the one scheduler
     'jarvis_reach.py'            # reach.patch: "What Jarvis can reach", written from the settings, never by the model
+    'jarvis_owner_check.py'      # owner-check.patch: Windows Hello for risky approvals from this PC, and the approval stamp
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it
