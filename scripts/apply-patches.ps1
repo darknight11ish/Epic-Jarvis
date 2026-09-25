@@ -344,6 +344,15 @@ $PATCHES = @(
     # (used_view) and jarvis_chat_log.py (TEMPORARY_CHAT); with older copies
     # the route answers 501 and a temporary chat is not recorded at all.
     'temporary-chat.patch'
+    # Presets for any graphics cards (docs/HARDWARE-PROFILES.md): GET
+    # /api/hardware (the cards, what runs now, three setups) and POST
+    # /api/hardware/apply, /create (one approval card, models_create) and
+    # /measure. Two route blocks, each right after second-card's - their
+    # context is second-card's and wiki's blocks - and models_create's lines
+    # in jarvis_gate.py after auto-learn's. Last, like every new patch.
+    # Needs jarvis_hardware.py and jarvis_profiles.py copied in; without
+    # them the routes answer 503.
+    'hardware.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -408,6 +417,8 @@ $SHIPPED = @(
     'jarvis_auto_learn.py'       # auto-learn.patch: facts from the owner's own words saved without a card
     'jarvis_sensitive.py'        # the sensitive-topic check jarvis_auto_learn.py asks: word lists, shapes, the local model
     'jarvis_past.py'             # past-recall.patch: questions about the past also get retired facts, labelled
+    'jarvis_profiles.py'         # hardware.patch: the three setups' arithmetic, words and one-line command (no I/O)
+    'jarvis_hardware.py'         # hardware.patch: finding the cards, the steps, making a tuned model, measuring
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

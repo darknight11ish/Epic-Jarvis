@@ -3027,3 +3027,106 @@ wait for your yes, even with this on."
   loves Radiohead" is a card (the "they").
 - **Deleting a conversation from History does not forget facts learned from
   it** - use Forget in Saved automatically.
+
+---
+
+## 20. Graphics cards and the three setups (added 2026-09-25)
+
+`backend/hardware.patch`, `backend/jarvis_hardware.py` (finding the cards,
+the steps, making a model, measuring) and `backend/jarvis_profiles.py` (the
+arithmetic and the words, no I/O). The design is
+[`HARDWARE-PROFILES.md`](HARDWARE-PROFILES.md). **Both apps call all four
+routes.** The desktop: Settings, "Hardware and models" (`hardware-panel.js`,
+`hardware.rs`: `get_hardware`, `apply_hardware`, `hardware_step`,
+`measure_hardware`, settings window only). The phone: Mind, "Hardware"
+(`HardwarePlate.kt`, `net/Hardware.kt`). `tools/check_parity.py` records all
+four as `ported`.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/hardware` | - | 200 `status()` (below); 503 `{"available": false, "error"}` without `jarvis_hardware.py` | Token + origin. Reads only: loads, starts and changes nothing. Card names and hardware ids; never a token. |
+| `POST /api/hardware/apply` | `{"preset": "fast" \| "smart" \| "features" \| null}` | 200 `{"ok", "chosen", "message", "applying"}`; 400 an unknown setup or no `preset` field; 409 the setup does not fit these cards; 503 no card Ollama can use | Remembers the owner's choice (`hardware-choice.json` beside the other settings) and returns its steps. **It changes no model and no setting.** `null` forgets the choice. If the extra features move (to another card, or into the everyday Ollama), the main second-card switch goes OFF - the safe direction - and the `message` says so; its step asks again. |
+| `POST /api/hardware/create` | `{"name": "jarvis-chat" \| "jarvis-long" \| "jarvis-vision"}` | 200 `{"ok", "pending": true, "message"}` - a card is up, nothing made; 400 another name; 409 no setup chosen, the base model not downloaded, or a card already waits; 503 Ollama not answering, or `models_create` not tier `ask` | ONE approval card, action **`models_create`** (tier `ask`; the shipped toml has the line, and a toml without it asks too). The card shows the Modelfile word for word. On approval, Ollama on 127.0.0.1 makes the model from a base already downloaded (`POST /api/create` with `from`, `parameters`, `system`) - never a download. `jarvis-primary` is never made over. |
+| `POST /api/hardware/measure` | `{}` | 200 `{"ok", "running": true, "message"}`; 409 one is already running | Times each model of the chosen setup (or today's chat model) with `jarvis_speed.measure()`, reads how much is on the card (`/api/ps`) and llama.cpp's own count (`offloaded N/M layers`), and keeps the result in `hardware-measured.json`. It LOADS each model once. A model partly on the processor makes that setup use the next smaller size from then on - its "make" step opens again. |
+
+**Steps.** Choosing a setup lists, in order: one download per base model
+not on the PC (the existing `POST /api/models/install` card), one "make"
+per tuned model (`/api/hardware/create`), the switch (the existing
+`POST /api/models/switch` card), the second-card switches the setup uses
+(the existing `POST /api/second-card` cards, main switch first), and the
+one PowerShell line. Each step is `{"id", "kind", "title", "detail",
+"route", "body", "state", "done", "waiting"}`; `state` is `done`, `next`,
+`waiting` (its card is up) or `later`. **An app asks only for the step whose
+state is `next`, by posting that step's own `body` to that step's own
+`route`, read from a fresh `GET` - never a route or body of its own - and
+only to these four routes:** `/api/models/install`, `/api/models/switch`,
+`/api/hardware/create`, `/api/second-card` (`hardware.rs` `step_request`,
+`Hardware.stepRequest`). There is no request that asks for more than one
+step. A step asked for shows as waiting for 180 seconds even when the PC
+cannot see its card (a download's or switch's card is shaped by the owner's
+own `jarvis_gate`), so one tap is one card.
+
+**`status()`** - the real answers are in
+`jarvis-desktop/tests/fixtures/hardware-cases.json` (the phone's copy is
+byte for byte the same): `today_one_card`, `planned_pair`,
+`chosen_first_step`, `chosen_halfway`, `create_waiting`, `amd_vulkan`,
+`no_ollama_log`, `card_dropped`, and the POST answers `post_*`. Build
+against that file, not this summary.
+
+```
+{"available": true,
+ "found": str,                     every card, and which Ollama can use
+ "sources": {"ollama_log", "nvidia_smi", "registry"},
+ "cards": [{"key", "name", "total_gb", "free_gb", "vendor", "route", "generation",
+            "monitor": bool|null, "uuid", "used": bool, "why_unused": str|null,
+            "sources": [str], "desktop_share_gb", "desktop_share_how",
+            "conversation_format": "q8_0"|"f16"|null, "best_effort": str|null,
+            "chat_first": bool, "words": str}],
+ "chat_card_why": str|null,        why chat goes on the card it does (two cards)
+ "gap_gb": 0.75,                   the owner's decision 1
+ "now": {"preset", "label", "model", "context", "format", "on_card_percent",
+         "bar": {...}|null, "words"},
+ "presets": [{"id", "name", "summary", "chat": role|null, "long": role|{"same_as_chat",
+              "context", "words"}|null, "pictures": role|null, "off": [str], "notes": [str],
+              "best_effort": bool, "best_effort_why": [str], "ollamas": 1|2,
+              "bars": [{"card", "card_key", "models_gib", "fixed_gib", "used_gib",
+                        "total_gib", "blocks", "words"}],
+              "details": [str], "measured": bool, "measured_words": str,
+              "recommended": bool, "recommended_why": str|null,
+              "command": {"line", "undo", "settings"}}],
+ "recommended": id, "chosen": id|null, "chosen_stale": str|null,
+ "applying": {"preset", "name", "chosen_at", "steps": [step], "next", "done",
+              "restart_pending": bool|null, "undo"} | null,
+ "command": {"for", "line", "undo", "check", "restart_pending"},
+ "measure": {"state": "idle"|"running"|"done"|"failed", "why", "at", "last"},
+ "last": {"name", "outcome", "why", "at"} | null,     how the last "make" card ended
+ "pending": [tuned names with a card waiting],
+ "test_later": [{"model", "why"}]}
+role = {"model", "size", "context", "context_words", "format", "card", "card_key",
+        "mode": "own"|"beside"|"swap"|"turns", "need_gib", "creates", "words"}
+```
+
+**Not a model catalogue** (CLAUDE.md). The phone gets three setups worked
+out on the PC for the PC's own cards, as words. It shows no list of models
+that could be installed, no search and no picker, and it cannot compose a
+setup; the only model names it ever posts are the ones in the chosen
+setup's own steps.
+
+**The one line.** `command.line` is one PowerShell line (Windows PowerShell
+5.1-safe: only `[Environment]::SetEnvironmentVariable(..., 'User')` and one
+`Write-Host`, only `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_KEEP_ALIVE`,
+`CUDA_VISIBLE_DEVICES` (two cards only), `OLLAMA_VULKAN` (all-NVIDIA PCs
+only) and `LLAMA_ARG_FIT_TARGET` (768 MiB - the owner's 0.75 GB gap), each
+value checked against a fixed pattern). `undo` puts each back the way it was
+when the setup was chosen; `check` only prints. The desktop shows them with
+Copy; the phone shows them to read. `restart_pending: true` means the
+Windows user settings hold a value Ollama did not start with (its
+"server config" log line) - "restart Ollama".
+
+**Known gaps, said plainly.** Nothing here has run on a real graphics card
+or a real Ollama: Ollama's log lines, `nvidia-smi` and the registry were
+replayed in the shapes the design read from source, with made-up values.
+Whether `LLAMA_ARG_FIT_TARGET` reaches llama.cpp through Ollama as a single
+MiB number has not been checked; if it does not, models may fail to load
+until the undo line is run. Ollama's `/api/create` with `from` and
+`parameters` was not run either.

@@ -125,6 +125,18 @@ reads that setting, and asks `nvidia-smi` whether an Ollama it did not start
 is using the second card. Windows sometimes does not tell `nvidia-smi` which
 program uses which card, so a "yes" is a good sign, not a guarantee.
 
+**Since 2026-09-25 there is a fuller command.** Settings, "Hardware and
+models" (Mind, "Hardware" on the phone) offers three setups for your cards,
+and each comes with its own one-line command: the two settings above, plus
+the conversation format, keep-alive and the owner's 0.75 GB gap - and an
+undo line that puts back what was there before. **Once you choose a setup,
+use that command instead of this one.** This one keeps working as it does
+today. With a setup chosen, the switches below follow it: it can move the
+extra features to the other card (it turns the main switch off, so its card
+names the new place), and on one big card it runs them beside chat in your
+everyday Ollama, which the switches could not do before
+([HARDWARE-PROFILES.md](HARDWARE-PROFILES.md), section 7.1).
+
 ## Switching on
 
 1. Fit the card, run `nvidia-smi`, run the command above.

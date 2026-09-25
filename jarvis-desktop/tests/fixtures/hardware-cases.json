@@ -1,0 +1,2977 @@
+{
+ "_about": "Real output of backend/jarvis_hardware.py - GET /api/hardware (status()) and the POST answers - one per named case, made by tools/gen_hardware_cases.py. The Ollama log, nvidia-smi and registry lines behind them are made up, in the formats the design read from source; none was captured on the owner's PC. Do not edit by hand.",
+ "cases": {
+  "amd_vulkan": {
+   "applying": null,
+   "available": true,
+   "cards": [
+    {
+     "best_effort": "the AMD Radeon RX 6600 is an AMD card: Jarvis gives it safe settings, but it has not been tested",
+     "chat_first": true,
+     "conversation_format": "f16",
+     "desktop_share_gb": 0.9,
+     "desktop_share_how": "measured (measured when Ollama started)",
+     "free_gb": 7.1,
+     "generation": null,
+     "key": "0000:0a:00.0",
+     "monitor": null,
+     "name": "AMD Radeon RX 6600",
+     "route": "Vulkan",
+     "sources": [
+      "Ollama's log",
+      "the registry"
+     ],
+     "total_gb": 8.0,
+     "used": true,
+     "uuid": null,
+     "vendor": "amd",
+     "why_unused": null,
+     "words": "AMD Radeon RX 6600, 8 GB; used by Ollama through Vulkan. Best effort, not tested."
+    }
+   ],
+   "chat_card_why": null,
+   "chosen": null,
+   "chosen_stale": null,
+   "command": {
+    "check": "foreach ($n in 'OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE','CUDA_VISIBLE_DEVICES','OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET') { '{0} = {1}' -f $n, [Environment]::GetEnvironmentVariable($n, 'User') }",
+    "for": "smart",
+    "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'f16', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 3 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+    "restart_pending": null,
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 3 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "found": "Found 1 graphics card; Ollama can use 1: the AMD Radeon RX 6600.",
+   "gap_gb": 0.75,
+   "last": null,
+   "measure": {
+    "at": null,
+    "last": null,
+    "state": "idle",
+    "why": ""
+   },
+   "now": {
+    "bar": null,
+    "context": null,
+    "label": "Custom (your own setup)",
+    "model": null,
+    "on_card_percent": null,
+    "preset": null,
+    "words": "Jarvis could not tell which model everyday chat uses."
+   },
+   "ollama_version": "0.12.3",
+   "pending": [],
+   "presets": [
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "AMD Radeon RX 6600",
+       "card_key": "0000:0a:00.0",
+       "fixed_gib": 1.98,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.77,
+       "words": "4.79 + 1.98 = 6.77 of 8 GB"
+      }
+     ],
+     "best_effort": true,
+     "best_effort_why": [
+      "the AMD Radeon RX 6600 is an AMD card: Jarvis gives it safe settings, but it has not been tested"
+     ],
+     "chat": {
+      "card": "AMD Radeon RX 6600",
+      "card_key": "0000:0a:00.0",
+      "context": 16384,
+      "context_words": "remembers about 12 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79,
+      "size": "4B",
+      "words": "qwen3:4b, 16K, larger format (f16), on the AMD Radeon RX 6600"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'f16', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 3 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "f16"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 3 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the AMD Radeon RX 6600: 8.00 - 0.90 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 6.02 GB; 5.92 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.25 (conversation, 16,384 tokens, f16) + 0.25 (working space) = 4.79 GB. Ollama's own guess: 3.70 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "fast",
+     "long": {
+      "context": 16384,
+      "same_as_chat": true,
+      "words": "chat itself (16K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Fastest answers",
+     "notes": [
+      "The AMD Radeon RX 6600 is reached through Vulkan, where the compact conversation format (q8_0) is only safe on some drivers, so it gets the larger one (f16) until a measured test says otherwise."
+     ],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A smaller, quicker everyday model."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "AMD Radeon RX 6600",
+       "card_key": "0000:0a:00.0",
+       "fixed_gib": 1.98,
+       "models_gib": 5.82,
+       "total_gib": 8.0,
+       "used_gib": 7.8,
+       "words": "5.82 + 1.98 = 7.80 of 8 GB"
+      }
+     ],
+     "best_effort": true,
+     "best_effort_why": [
+      "the AMD Radeon RX 6600 is an AMD card: Jarvis gives it safe settings, but it has not been tested"
+     ],
+     "chat": {
+      "card": "AMD Radeon RX 6600",
+      "card_key": "0000:0a:00.0",
+      "context": 6144,
+      "context_words": "remembers about 4 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.82,
+      "size": "8B",
+      "words": "qwen3:8b, 6K, larger format (f16), on the AMD Radeon RX 6600"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'f16', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 3 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "f16"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 3 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the AMD Radeon RX 6600: 8.00 - 0.90 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 6.02 GB; 5.92 after the 0.10 rounding allowance.",
+      "Chat: qwen3:8b = 4.67 (weights) + 0.84 (conversation, 6,144 tokens, f16) + 0.30 (working space) = 5.82 GB. Ollama's own guess: 5.52 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "smart",
+     "long": null,
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Smartest answers",
+     "notes": [
+      "The AMD Radeon RX 6600 is reached through Vulkan, where the compact conversation format (q8_0) is only safe on some drivers, so it gets the larger one (f16) until a measured test says otherwise."
+     ],
+     "off": [
+      "Long conversations: no. Chat gets only 6,144 tokens (about 4 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": true,
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
+     "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "AMD Radeon RX 6600",
+       "card_key": "0000:0a:00.0",
+       "fixed_gib": 1.98,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.77,
+       "words": "4.79 + 1.98 = 6.77 of 8 GB"
+      }
+     ],
+     "best_effort": true,
+     "best_effort_why": [
+      "the AMD Radeon RX 6600 is an AMD card: Jarvis gives it safe settings, but it has not been tested"
+     ],
+     "chat": {
+      "card": "AMD Radeon RX 6600",
+      "card_key": "0000:0a:00.0",
+      "context": 16384,
+      "context_words": "remembers about 12 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79,
+      "size": "4B",
+      "words": "qwen3:4b, 16K, larger format (f16), on the AMD Radeon RX 6600"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'f16', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 3 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "f16"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 3 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the AMD Radeon RX 6600: 8.00 - 0.90 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 6.02 GB; 5.92 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.25 (conversation, 16,384 tokens, f16) + 0.25 (working space) = 4.79 GB. Ollama's own guess: 3.70 GB.",
+      "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.28 (conversation, 8,192 tokens, f16) + 0.25 (working space) + 0.25 (one picture) = 3.79 GB. Ollama's own guess: 3.29 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "features",
+     "long": {
+      "context": 16384,
+      "same_as_chat": true,
+      "words": "chat itself (16K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Most features",
+     "notes": [
+      "The AMD Radeon RX 6600 is reached through Vulkan, where the compact conversation format (q8_0) is only safe on some drivers, so it gets the larger one (f16) until a measured test says otherwise.",
+      "Chat is the 4B: the 8B would get only 6,144 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.79 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "ollamas": 1,
+     "pictures": {
+      "card": "AMD Radeon RX 6600",
+      "card_key": "0000:0a:00.0",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "f16",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.79,
+      "size": "3B",
+      "words": "qwen2.5vl:3b, 8K, larger format (f16), on the AMD Radeon RX 6600"
+     },
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A balanced everyday model, plus pictures and long conversations wherever there is room left over."
+    }
+   ],
+   "recommended": "smart",
+   "sources": {
+    "nvidia_smi": "not found",
+    "ollama_log": "used",
+    "registry": "used"
+   },
+   "test_later": [
+    {
+     "model": "Spark-X2.5-4B",
+     "why": "the owner's decision 4: tested once the second card is installed and measured, against the Qwen choice; not in any preset until then"
+    },
+    {
+     "model": "qwen3.5:4b / qwen3.5:9b",
+     "why": "Qwen 3.5 keeps conversation in far less memory (research 2026-09-24, second-hand model-card numbers); its tool use has not been measured, so it is a test for later, not a preset"
+    }
+   ]
+  },
+  "card_dropped": {
+   "applying": null,
+   "available": true,
+   "cards": [
+    {
+     "best_effort": null,
+     "chat_first": true,
+     "conversation_format": "q8_0",
+     "desktop_share_gb": 1.18,
+     "desktop_share_how": "measured (measured now, with no model loaded)",
+     "free_gb": 6.8,
+     "generation": "7.5",
+     "key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "monitor": true,
+     "name": "NVIDIA GeForce RTX 2080 SUPER",
+     "route": "CUDA",
+     "sources": [
+      "Ollama's log",
+      "nvidia-smi",
+      "the registry"
+     ],
+     "total_gb": 8.0,
+     "used": true,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia",
+     "why_unused": null,
+     "words": "NVIDIA GeForce RTX 2080 SUPER, 8 GB; used by Ollama through CUDA; a monitor is plugged into it."
+    },
+    {
+     "best_effort": null,
+     "chat_first": false,
+     "conversation_format": null,
+     "desktop_share_gb": null,
+     "desktop_share_how": null,
+     "free_gb": null,
+     "generation": null,
+     "key": "card1",
+     "monitor": null,
+     "name": "AMD Radeon RX 6600",
+     "route": null,
+     "sources": [
+      "the registry"
+     ],
+     "total_gb": 8.0,
+     "used": false,
+     "uuid": null,
+     "vendor": "amd",
+     "why_unused": "Ollama dropped it: its AMD (ROCm) build has no support for this card's chip",
+     "words": "AMD Radeon RX 6600, 8 GB. Not used: Ollama dropped it: its AMD (ROCm) build has no support for this card's chip."
+    },
+    {
+     "best_effort": null,
+     "chat_first": false,
+     "conversation_format": null,
+     "desktop_share_gb": null,
+     "desktop_share_how": null,
+     "free_gb": null,
+     "generation": null,
+     "key": "card2",
+     "monitor": null,
+     "name": "Intel(R) UHD Graphics 630",
+     "route": null,
+     "sources": [
+      "the registry"
+     ],
+     "total_gb": 1.0,
+     "used": false,
+     "uuid": null,
+     "vendor": "intel",
+     "why_unused": "Ollama does not use built-in (integrated) graphics unless told to (OLLAMA_IGPU_ENABLE=1)",
+     "words": "Intel(R) UHD Graphics 630, 1 GB. Not used: Ollama does not use built-in (integrated) graphics unless told to (OLLAMA_IGPU_ENABLE=1)."
+    }
+   ],
+   "chat_card_why": null,
+   "chosen": null,
+   "chosen_stale": null,
+   "command": {
+    "check": "foreach ($n in 'OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE','CUDA_VISIBLE_DEVICES','OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET') { '{0} = {1}' -f $n, [Environment]::GetEnvironmentVariable($n, 'User') }",
+    "for": "smart",
+    "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+    "restart_pending": false,
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "found": "Found 3 graphics cards; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "gap_gb": 0.75,
+   "last": null,
+   "measure": {
+    "at": null,
+    "last": null,
+    "state": "idle",
+    "why": ""
+   },
+   "now": {
+    "bar": {
+     "blocks": "████████████████",
+     "card": "NVIDIA GeForce RTX 2080 SUPER",
+     "total_gib": 8.0,
+     "used_gib": 8.68,
+     "words": "6.17 + 2.51 = 8.68 of 8 GB"
+    },
+    "context": 16384,
+    "format": "q8_0",
+    "label": "Custom (your own setup)",
+    "model": "jarvis-primary",
+    "on_card_percent": null,
+    "preset": null,
+    "words": "jarvis-primary is qwen3:8b with room for 16,384 tokens; calculated about 0.68 GB over the card, so part of it is probably on the processor. Press Measure to check."
+   },
+   "ollama_version": "0.12.3",
+   "pending": [],
+   "presets": [
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "fast",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Fastest answers",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A smaller, quicker everyday model."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.83,
+       "words": "5.57 + 2.26 = 7.83 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57,
+      "size": "8B",
+      "words": "qwen3:8b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "smart",
+     "long": null,
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Smartest answers",
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": true,
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
+     "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "features",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Most features",
+     "notes": [
+      "Chat is the 4B: the 8B would get only 8,192 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "ollamas": 1,
+     "pictures": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66,
+      "size": "3B",
+      "words": "qwen2.5vl:3b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A balanced everyday model, plus pictures and long conversations wherever there is room left over."
+    }
+   ],
+   "recommended": "smart",
+   "sources": {
+    "nvidia_smi": "used",
+    "ollama_log": "used",
+    "registry": "used"
+   },
+   "test_later": [
+    {
+     "model": "Spark-X2.5-4B",
+     "why": "the owner's decision 4: tested once the second card is installed and measured, against the Qwen choice; not in any preset until then"
+    },
+    {
+     "model": "qwen3.5:4b / qwen3.5:9b",
+     "why": "Qwen 3.5 keeps conversation in far less memory (research 2026-09-24, second-hand model-card numbers); its tool use has not been measured, so it is a test for later, not a preset"
+    }
+   ]
+  },
+  "chosen_first_step": {
+   "applying": {
+    "chosen_at": 0,
+    "done": false,
+    "name": "Fastest answers",
+    "next": "install:qwen3:4b",
+    "preset": "fast",
+    "restart_pending": false,
+    "steps": [
+     {
+      "body": {
+       "ref": "qwen3:4b"
+      },
+      "detail": "Raises the usual download card. Nothing downloads until you approve it.",
+      "done": false,
+      "id": "install:qwen3:4b",
+      "kind": "install",
+      "known": true,
+      "route": "/api/models/install",
+      "state": "next",
+      "title": "Download qwen3:4b (about 2.5 GB)",
+      "waiting": false
+     },
+     {
+      "body": {
+       "name": "jarvis-chat"
+      },
+      "detail": "Raises a card showing exactly what is made. It is made on this PC from the model you downloaded; nothing downloads.",
+      "done": false,
+      "id": "create:jarvis-chat",
+      "kind": "create",
+      "known": true,
+      "modelfile": "FROM qwen3:4b\nPARAMETER num_ctx 32768\nPARAMETER num_batch 512\nPARAMETER num_predict 1024\nPARAMETER temperature 0.7\nPARAMETER top_p 0.8\nPARAMETER top_k 20\nPARAMETER min_p 0.0\nPARAMETER repeat_penalty 1.05\nPARAMETER stop \"<|im_end|>\"\nPARAMETER stop \"<|im_start|>\"\nSYSTEM \"\"\"You are Jarvis, a private assistant running entirely on this machine.\n\nSay what is a guess and what is verified. If you are not sure, say you are not sure - a confident wrong answer costs more here than a hedged one.\n\nNever claim an action was taken that was not. You do not send email, edit files, or run commands yourself; you propose them and a person approves each one. If you have proposed something, say that you have proposed it, not that it is done.\n\nAnything recalled about the owner is private and stays on this machine. Do not repeat it back unless it is relevant to what was asked.\n\"\"\"\n",
+      "route": "/api/hardware/create",
+      "state": "later",
+      "title": "Make jarvis-chat: qwen3:4b with room for 32,768 tokens",
+      "waiting": false
+     },
+     {
+      "body": {
+       "ref": "jarvis-chat"
+      },
+      "detail": "Raises the usual model-switch card. jarvis-primary stays installed, so switching back is one more switch.",
+      "done": false,
+      "id": "switch:jarvis-chat",
+      "kind": "switch",
+      "known": true,
+      "route": "/api/models/switch",
+      "state": "later",
+      "title": "Switch everyday chat to jarvis-chat",
+      "waiting": false
+     },
+     {
+      "body": null,
+      "detail": "Ollama reads these settings only when it starts. The line is under \"The one command\"; nothing is written to a file.",
+      "done": false,
+      "id": "command",
+      "kind": "command",
+      "known": true,
+      "route": null,
+      "state": "later",
+      "title": "Run the one-line command, then restart Ollama",
+      "waiting": false
+     }
+    ],
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "available": true,
+   "cards": [
+    {
+     "best_effort": null,
+     "chat_first": true,
+     "conversation_format": "q8_0",
+     "desktop_share_gb": 1.18,
+     "desktop_share_how": "measured (measured now, with no model loaded)",
+     "free_gb": 6.8,
+     "generation": "7.5",
+     "key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "monitor": true,
+     "name": "NVIDIA GeForce RTX 2080 SUPER",
+     "route": "CUDA",
+     "sources": [
+      "Ollama's log",
+      "nvidia-smi",
+      "the registry"
+     ],
+     "total_gb": 8.0,
+     "used": true,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia",
+     "why_unused": null,
+     "words": "NVIDIA GeForce RTX 2080 SUPER, 8 GB; used by Ollama through CUDA; a monitor is plugged into it."
+    }
+   ],
+   "chat_card_why": null,
+   "chosen": "fast",
+   "chosen_stale": null,
+   "command": {
+    "check": "foreach ($n in 'OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE','CUDA_VISIBLE_DEVICES','OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET') { '{0} = {1}' -f $n, [Environment]::GetEnvironmentVariable($n, 'User') }",
+    "for": "fast",
+    "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+    "restart_pending": false,
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "gap_gb": 0.75,
+   "last": null,
+   "measure": {
+    "at": null,
+    "last": null,
+    "state": "idle",
+    "why": ""
+   },
+   "now": {
+    "bar": {
+     "blocks": "████████████████",
+     "card": "NVIDIA GeForce RTX 2080 SUPER",
+     "total_gib": 8.0,
+     "used_gib": 8.68,
+     "words": "6.17 + 2.51 = 8.68 of 8 GB"
+    },
+    "context": 16384,
+    "format": "q8_0",
+    "label": "Custom (your own setup)",
+    "model": "jarvis-primary",
+    "on_card_percent": null,
+    "preset": null,
+    "words": "jarvis-primary is qwen3:8b with room for 16,384 tokens; calculated about 0.68 GB over the card, so part of it is probably on the processor. Press Measure to check."
+   },
+   "ollama_version": "0.12.3",
+   "pending": [],
+   "presets": [
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "fast",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Fastest answers",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A smaller, quicker everyday model."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.83,
+       "words": "5.57 + 2.26 = 7.83 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57,
+      "size": "8B",
+      "words": "qwen3:8b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "smart",
+     "long": null,
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Smartest answers",
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": true,
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
+     "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "features",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Most features",
+     "notes": [
+      "Chat is the 4B: the 8B would get only 8,192 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "ollamas": 1,
+     "pictures": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66,
+      "size": "3B",
+      "words": "qwen2.5vl:3b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A balanced everyday model, plus pictures and long conversations wherever there is room left over."
+    }
+   ],
+   "recommended": "smart",
+   "sources": {
+    "nvidia_smi": "used",
+    "ollama_log": "used",
+    "registry": "used"
+   },
+   "test_later": [
+    {
+     "model": "Spark-X2.5-4B",
+     "why": "the owner's decision 4: tested once the second card is installed and measured, against the Qwen choice; not in any preset until then"
+    },
+    {
+     "model": "qwen3.5:4b / qwen3.5:9b",
+     "why": "Qwen 3.5 keeps conversation in far less memory (research 2026-09-24, second-hand model-card numbers); its tool use has not been measured, so it is a test for later, not a preset"
+    }
+   ]
+  },
+  "chosen_halfway": {
+   "applying": {
+    "chosen_at": 0,
+    "done": false,
+    "name": "Smartest answers",
+    "next": "switch:jarvis-chat",
+    "preset": "smart",
+    "restart_pending": false,
+    "steps": [
+     {
+      "body": {
+       "ref": "qwen3:8b"
+      },
+      "detail": "Raises the usual download card. Nothing downloads until you approve it.",
+      "done": true,
+      "id": "install:qwen3:8b",
+      "kind": "install",
+      "known": true,
+      "route": "/api/models/install",
+      "state": "done",
+      "title": "Download qwen3:8b (about 5.0 GB)",
+      "waiting": false
+     },
+     {
+      "body": {
+       "name": "jarvis-chat"
+      },
+      "detail": "Raises a card showing exactly what is made. It is made on this PC from the model you downloaded; nothing downloads.",
+      "done": true,
+      "id": "create:jarvis-chat",
+      "kind": "create",
+      "known": true,
+      "modelfile": "FROM qwen3:8b\nPARAMETER num_ctx 8192\nPARAMETER num_batch 512\nPARAMETER num_predict 1024\nPARAMETER temperature 0.7\nPARAMETER top_p 0.8\nPARAMETER top_k 20\nPARAMETER min_p 0.0\nPARAMETER repeat_penalty 1.05\nPARAMETER stop \"<|im_end|>\"\nPARAMETER stop \"<|im_start|>\"\nSYSTEM \"\"\"You are Jarvis, a private assistant running entirely on this machine.\n\nSay what is a guess and what is verified. If you are not sure, say you are not sure - a confident wrong answer costs more here than a hedged one.\n\nNever claim an action was taken that was not. You do not send email, edit files, or run commands yourself; you propose them and a person approves each one. If you have proposed something, say that you have proposed it, not that it is done.\n\nAnything recalled about the owner is private and stays on this machine. Do not repeat it back unless it is relevant to what was asked.\n\"\"\"\n",
+      "route": "/api/hardware/create",
+      "state": "done",
+      "title": "Make jarvis-chat: qwen3:8b with room for 8,192 tokens",
+      "waiting": false
+     },
+     {
+      "body": {
+       "ref": "jarvis-chat"
+      },
+      "detail": "Raises the usual model-switch card. jarvis-primary stays installed, so switching back is one more switch.",
+      "done": false,
+      "id": "switch:jarvis-chat",
+      "kind": "switch",
+      "known": true,
+      "route": "/api/models/switch",
+      "state": "next",
+      "title": "Switch everyday chat to jarvis-chat",
+      "waiting": false
+     },
+     {
+      "body": null,
+      "detail": "Ollama reads these settings only when it starts. The line is under \"The one command\"; nothing is written to a file.",
+      "done": false,
+      "id": "command",
+      "kind": "command",
+      "known": true,
+      "route": null,
+      "state": "later",
+      "title": "Run the one-line command, then restart Ollama",
+      "waiting": false
+     }
+    ],
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "available": true,
+   "cards": [
+    {
+     "best_effort": null,
+     "chat_first": true,
+     "conversation_format": "q8_0",
+     "desktop_share_gb": 1.18,
+     "desktop_share_how": "measured (measured now, with no model loaded)",
+     "free_gb": 6.8,
+     "generation": "7.5",
+     "key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "monitor": true,
+     "name": "NVIDIA GeForce RTX 2080 SUPER",
+     "route": "CUDA",
+     "sources": [
+      "Ollama's log",
+      "nvidia-smi",
+      "the registry"
+     ],
+     "total_gb": 8.0,
+     "used": true,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia",
+     "why_unused": null,
+     "words": "NVIDIA GeForce RTX 2080 SUPER, 8 GB; used by Ollama through CUDA; a monitor is plugged into it."
+    }
+   ],
+   "chat_card_why": null,
+   "chosen": "smart",
+   "chosen_stale": null,
+   "command": {
+    "check": "foreach ($n in 'OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE','CUDA_VISIBLE_DEVICES','OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET') { '{0} = {1}' -f $n, [Environment]::GetEnvironmentVariable($n, 'User') }",
+    "for": "smart",
+    "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+    "restart_pending": false,
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "gap_gb": 0.75,
+   "last": {
+    "at": 0,
+    "name": "jarvis-chat",
+    "outcome": "made",
+    "why": "jarvis-chat was made."
+   },
+   "measure": {
+    "at": null,
+    "last": null,
+    "state": "idle",
+    "why": ""
+   },
+   "now": {
+    "bar": {
+     "blocks": "████████████████",
+     "card": "NVIDIA GeForce RTX 2080 SUPER",
+     "total_gib": 8.0,
+     "used_gib": 8.68,
+     "words": "6.17 + 2.51 = 8.68 of 8 GB"
+    },
+    "context": 16384,
+    "format": "q8_0",
+    "label": "Custom (your own setup)",
+    "model": "jarvis-primary",
+    "on_card_percent": null,
+    "preset": null,
+    "words": "jarvis-primary is qwen3:8b with room for 16,384 tokens; calculated about 0.68 GB over the card, so part of it is probably on the processor. Press Measure to check."
+   },
+   "ollama_version": "0.12.3",
+   "pending": [],
+   "presets": [
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "fast",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Fastest answers",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A smaller, quicker everyday model."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.83,
+       "words": "5.57 + 2.26 = 7.83 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57,
+      "size": "8B",
+      "words": "qwen3:8b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "smart",
+     "long": null,
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Smartest answers",
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": true,
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
+     "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "features",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Most features",
+     "notes": [
+      "Chat is the 4B: the 8B would get only 8,192 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "ollamas": 1,
+     "pictures": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66,
+      "size": "3B",
+      "words": "qwen2.5vl:3b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A balanced everyday model, plus pictures and long conversations wherever there is room left over."
+    }
+   ],
+   "recommended": "smart",
+   "sources": {
+    "nvidia_smi": "used",
+    "ollama_log": "used",
+    "registry": "used"
+   },
+   "test_later": [
+    {
+     "model": "Spark-X2.5-4B",
+     "why": "the owner's decision 4: tested once the second card is installed and measured, against the Qwen choice; not in any preset until then"
+    },
+    {
+     "model": "qwen3.5:4b / qwen3.5:9b",
+     "why": "Qwen 3.5 keeps conversation in far less memory (research 2026-09-24, second-hand model-card numbers); its tool use has not been measured, so it is a test for later, not a preset"
+    }
+   ]
+  },
+  "create_waiting": {
+   "applying": {
+    "chosen_at": 0,
+    "done": false,
+    "name": "Smartest answers",
+    "next": "create:jarvis-chat",
+    "preset": "smart",
+    "restart_pending": false,
+    "steps": [
+     {
+      "body": {
+       "ref": "qwen3:8b"
+      },
+      "detail": "Raises the usual download card. Nothing downloads until you approve it.",
+      "done": true,
+      "id": "install:qwen3:8b",
+      "kind": "install",
+      "known": true,
+      "route": "/api/models/install",
+      "state": "done",
+      "title": "Download qwen3:8b (about 5.0 GB)",
+      "waiting": false
+     },
+     {
+      "body": {
+       "name": "jarvis-chat"
+      },
+      "detail": "Raises a card showing exactly what is made. It is made on this PC from the model you downloaded; nothing downloads.",
+      "done": false,
+      "id": "create:jarvis-chat",
+      "kind": "create",
+      "known": true,
+      "modelfile": "FROM qwen3:8b\nPARAMETER num_ctx 8192\nPARAMETER num_batch 512\nPARAMETER num_predict 1024\nPARAMETER temperature 0.7\nPARAMETER top_p 0.8\nPARAMETER top_k 20\nPARAMETER min_p 0.0\nPARAMETER repeat_penalty 1.05\nPARAMETER stop \"<|im_end|>\"\nPARAMETER stop \"<|im_start|>\"\nSYSTEM \"\"\"You are Jarvis, a private assistant running entirely on this machine.\n\nSay what is a guess and what is verified. If you are not sure, say you are not sure - a confident wrong answer costs more here than a hedged one.\n\nNever claim an action was taken that was not. You do not send email, edit files, or run commands yourself; you propose them and a person approves each one. If you have proposed something, say that you have proposed it, not that it is done.\n\nAnything recalled about the owner is private and stays on this machine. Do not repeat it back unless it is relevant to what was asked.\n\"\"\"\n",
+      "route": "/api/hardware/create",
+      "state": "waiting",
+      "title": "Make jarvis-chat: qwen3:8b with room for 8,192 tokens",
+      "waiting": true
+     },
+     {
+      "body": {
+       "ref": "jarvis-chat"
+      },
+      "detail": "Raises the usual model-switch card. jarvis-primary stays installed, so switching back is one more switch.",
+      "done": false,
+      "id": "switch:jarvis-chat",
+      "kind": "switch",
+      "known": true,
+      "route": "/api/models/switch",
+      "state": "later",
+      "title": "Switch everyday chat to jarvis-chat",
+      "waiting": false
+     },
+     {
+      "body": null,
+      "detail": "Ollama reads these settings only when it starts. The line is under \"The one command\"; nothing is written to a file.",
+      "done": false,
+      "id": "command",
+      "kind": "command",
+      "known": true,
+      "route": null,
+      "state": "later",
+      "title": "Run the one-line command, then restart Ollama",
+      "waiting": false
+     }
+    ],
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "available": true,
+   "cards": [
+    {
+     "best_effort": null,
+     "chat_first": true,
+     "conversation_format": "q8_0",
+     "desktop_share_gb": 1.18,
+     "desktop_share_how": "measured (measured now, with no model loaded)",
+     "free_gb": 6.8,
+     "generation": "7.5",
+     "key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "monitor": true,
+     "name": "NVIDIA GeForce RTX 2080 SUPER",
+     "route": "CUDA",
+     "sources": [
+      "Ollama's log",
+      "nvidia-smi",
+      "the registry"
+     ],
+     "total_gb": 8.0,
+     "used": true,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia",
+     "why_unused": null,
+     "words": "NVIDIA GeForce RTX 2080 SUPER, 8 GB; used by Ollama through CUDA; a monitor is plugged into it."
+    }
+   ],
+   "chat_card_why": null,
+   "chosen": "smart",
+   "chosen_stale": null,
+   "command": {
+    "check": "foreach ($n in 'OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE','CUDA_VISIBLE_DEVICES','OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET') { '{0} = {1}' -f $n, [Environment]::GetEnvironmentVariable($n, 'User') }",
+    "for": "smart",
+    "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+    "restart_pending": false,
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "gap_gb": 0.75,
+   "last": null,
+   "measure": {
+    "at": null,
+    "last": null,
+    "state": "idle",
+    "why": ""
+   },
+   "now": {
+    "bar": {
+     "blocks": "████████████████",
+     "card": "NVIDIA GeForce RTX 2080 SUPER",
+     "total_gib": 8.0,
+     "used_gib": 8.68,
+     "words": "6.17 + 2.51 = 8.68 of 8 GB"
+    },
+    "context": 16384,
+    "format": "q8_0",
+    "label": "Custom (your own setup)",
+    "model": "jarvis-primary",
+    "on_card_percent": null,
+    "preset": null,
+    "words": "jarvis-primary is qwen3:8b with room for 16,384 tokens; calculated about 0.68 GB over the card, so part of it is probably on the processor. Press Measure to check."
+   },
+   "ollama_version": "0.12.3",
+   "pending": [
+    "jarvis-chat"
+   ],
+   "presets": [
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "fast",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Fastest answers",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A smaller, quicker everyday model."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.83,
+       "words": "5.57 + 2.26 = 7.83 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57,
+      "size": "8B",
+      "words": "qwen3:8b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "smart",
+     "long": null,
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Smartest answers",
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": true,
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
+     "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "features",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Most features",
+     "notes": [
+      "Chat is the 4B: the 8B would get only 8,192 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "ollamas": 1,
+     "pictures": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66,
+      "size": "3B",
+      "words": "qwen2.5vl:3b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A balanced everyday model, plus pictures and long conversations wherever there is room left over."
+    }
+   ],
+   "recommended": "smart",
+   "sources": {
+    "nvidia_smi": "used",
+    "ollama_log": "used",
+    "registry": "used"
+   },
+   "test_later": [
+    {
+     "model": "Spark-X2.5-4B",
+     "why": "the owner's decision 4: tested once the second card is installed and measured, against the Qwen choice; not in any preset until then"
+    },
+    {
+     "model": "qwen3.5:4b / qwen3.5:9b",
+     "why": "Qwen 3.5 keeps conversation in far less memory (research 2026-09-24, second-hand model-card numbers); its tool use has not been measured, so it is a test for later, not a preset"
+    }
+   ]
+  },
+  "no_ollama_log": {
+   "applying": null,
+   "available": true,
+   "cards": [
+    {
+     "best_effort": null,
+     "chat_first": true,
+     "conversation_format": "q8_0",
+     "desktop_share_gb": 1.18,
+     "desktop_share_how": "measured (measured now, with no model loaded)",
+     "free_gb": 6.8,
+     "generation": "7.5",
+     "key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "monitor": true,
+     "name": "NVIDIA GeForce RTX 2080 SUPER",
+     "route": "CUDA",
+     "sources": [
+      "nvidia-smi"
+     ],
+     "total_gb": 8.0,
+     "used": true,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia",
+     "why_unused": null,
+     "words": "NVIDIA GeForce RTX 2080 SUPER, 8 GB; used by Ollama through CUDA; a monitor is plugged into it."
+    }
+   ],
+   "chat_card_why": null,
+   "chosen": null,
+   "chosen_stale": null,
+   "command": {
+    "check": "foreach ($n in 'OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE','CUDA_VISIBLE_DEVICES','OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET') { '{0} = {1}' -f $n, [Environment]::GetEnvironmentVariable($n, 'User') }",
+    "for": "smart",
+    "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+    "restart_pending": null,
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "found": "Found 1 graphics card; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER. Ollama's log was not found, so this is from nvidia-smi alone: which cards Ollama really uses is assumed, not read.",
+   "gap_gb": 0.75,
+   "last": null,
+   "measure": {
+    "at": null,
+    "last": null,
+    "state": "idle",
+    "why": ""
+   },
+   "now": {
+    "bar": {
+     "blocks": "████████████████",
+     "card": "NVIDIA GeForce RTX 2080 SUPER",
+     "total_gib": 8.0,
+     "used_gib": 9.74,
+     "words": "7.22 + 2.51 = 9.74 of 8 GB"
+    },
+    "context": 16384,
+    "format": null,
+    "label": "Custom (your own setup)",
+    "model": "jarvis-primary",
+    "on_card_percent": null,
+    "preset": null,
+    "words": "jarvis-primary is qwen3:8b with room for 16,384 tokens; calculated about 1.74 GB over the card, so part of it is probably on the processor. Press Measure to check. (Worked out for the larger conversation format, Ollama's own default: Jarvis could not see which one Ollama uses here.)"
+   },
+   "ollama_version": "0.12.3",
+   "pending": [],
+   "presets": [
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "fast",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Fastest answers",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A smaller, quicker everyday model."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.83,
+       "words": "5.57 + 2.26 = 7.83 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57,
+      "size": "8B",
+      "words": "qwen3:8b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "smart",
+     "long": null,
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Smartest answers",
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": true,
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
+     "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "features",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Most features",
+     "notes": [
+      "Chat is the 4B: the 8B would get only 8,192 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "ollamas": 1,
+     "pictures": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66,
+      "size": "3B",
+      "words": "qwen2.5vl:3b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A balanced everyday model, plus pictures and long conversations wherever there is room left over."
+    }
+   ],
+   "recommended": "smart",
+   "sources": {
+    "nvidia_smi": "used",
+    "ollama_log": "not found",
+    "registry": "not on Windows"
+   },
+   "test_later": [
+    {
+     "model": "Spark-X2.5-4B",
+     "why": "the owner's decision 4: tested once the second card is installed and measured, against the Qwen choice; not in any preset until then"
+    },
+    {
+     "model": "qwen3.5:4b / qwen3.5:9b",
+     "why": "Qwen 3.5 keeps conversation in far less memory (research 2026-09-24, second-hand model-card numbers); its tool use has not been measured, so it is a test for later, not a preset"
+    }
+   ]
+  },
+  "planned_pair": {
+   "applying": null,
+   "available": true,
+   "cards": [
+    {
+     "best_effort": null,
+     "chat_first": true,
+     "conversation_format": "q8_0",
+     "desktop_share_gb": 1.18,
+     "desktop_share_how": "measured (measured now, with no model loaded)",
+     "free_gb": 6.8,
+     "generation": "7.5",
+     "key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "monitor": true,
+     "name": "NVIDIA GeForce RTX 2080 SUPER",
+     "route": "CUDA",
+     "sources": [
+      "Ollama's log",
+      "nvidia-smi",
+      "the registry"
+     ],
+     "total_gb": 8.0,
+     "used": true,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia",
+     "why_unused": null,
+     "words": "NVIDIA GeForce RTX 2080 SUPER, 8 GB; used by Ollama through CUDA; a monitor is plugged into it."
+    },
+    {
+     "best_effort": null,
+     "chat_first": false,
+     "conversation_format": "q8_0",
+     "desktop_share_gb": 0.62,
+     "desktop_share_how": "measured (measured now, with no model loaded)",
+     "free_gb": 11.4,
+     "generation": "7.5",
+     "key": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+     "monitor": false,
+     "name": "NVIDIA GeForce RTX 2060",
+     "route": "CUDA",
+     "sources": [
+      "Ollama's log",
+      "nvidia-smi",
+      "the registry"
+     ],
+     "total_gb": 12.0,
+     "used": true,
+     "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+     "vendor": "nvidia",
+     "why_unused": null,
+     "words": "NVIDIA GeForce RTX 2060, 12 GB; used by Ollama through CUDA; no monitor."
+    }
+   ],
+   "chat_card_why": "its memory is faster (496 against 336 GB/s, the published figures)",
+   "chosen": null,
+   "chosen_stale": null,
+   "command": {
+    "check": "foreach ($n in 'OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE','CUDA_VISIBLE_DEVICES','OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET') { '{0} = {1}' -f $n, [Environment]::GetEnvironmentVariable($n, 'User') }",
+    "for": "features",
+    "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 5 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+    "restart_pending": false,
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "found": "Found 2 graphics cards; Ollama can use 2: the NVIDIA GeForce RTX 2080 SUPER and the NVIDIA GeForce RTX 2060.",
+   "gap_gb": 0.75,
+   "last": null,
+   "measure": {
+    "at": null,
+    "last": null,
+    "state": "idle",
+    "why": ""
+   },
+   "now": {
+    "bar": {
+     "blocks": "████████████████",
+     "card": "NVIDIA GeForce RTX 2080 SUPER",
+     "total_gib": 8.0,
+     "used_gib": 8.68,
+     "words": "6.17 + 2.51 = 8.68 of 8 GB"
+    },
+    "context": 16384,
+    "format": "q8_0",
+    "label": "Custom (your own setup)",
+    "model": "jarvis-primary",
+    "on_card_percent": null,
+    "preset": null,
+    "words": "jarvis-primary is qwen3:8b with room for 16,384 tokens; calculated about 0.68 GB over the card, so part of it is probably on the processor. Press Measure to check."
+   },
+   "ollama_version": "0.12.3",
+   "pending": [],
+   "presets": [
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      },
+      {
+       "blocks": "███████████░░░░░",
+       "card": "NVIDIA GeForce RTX 2060",
+       "card_key": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+       "fixed_gib": 1.7,
+       "models_gib": 6.39,
+       "total_gib": 12.0,
+       "used_gib": 8.09,
+       "words": "6.39 + 1.70 = 8.09 of 12 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 5 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "CUDA_VISIBLE_DEVICES",
+        "value": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Room on the NVIDIA GeForce RTX 2060: 12.00 - 0.62 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 10.30 GB; 10.20 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Pictures: qwen2.5vl:7b = 4.34 (weights) + 1.26 (picture reader) + 0.23 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) + 0.25 (one picture) = 6.39 GB. Ollama's own guess: 6.04 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "fast",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Fastest answers",
+     "notes": [
+      "Chat runs on the NVIDIA GeForce RTX 2080 SUPER (its memory is faster (496 against 336 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The NVIDIA GeForce RTX 2060 cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "ollamas": 2,
+     "pictures": {
+      "card": "NVIDIA GeForce RTX 2060",
+      "card_key": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39,
+      "size": "7B",
+      "words": "qwen2.5vl:7b, 8K, compact format, on the NVIDIA GeForce RTX 2060"
+     },
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A smaller, quicker everyday model."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.2,
+       "words": "4.94 + 2.26 = 7.20 of 8 GB"
+      },
+      {
+       "blocks": "████████████████",
+       "card": "NVIDIA GeForce RTX 2060",
+       "card_key": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+       "fixed_gib": 1.7,
+       "models_gib": 10.1,
+       "total_gib": 12.0,
+       "used_gib": 11.81,
+       "words": "10.10 + 1.70 = 11.81 of 12 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2060",
+      "card_key": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+      "context": 16384,
+      "context_words": "remembers about 12 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:14b",
+      "need_gib": 10.1,
+      "size": "14B",
+      "words": "qwen3:14b, 16K, compact format, on the NVIDIA GeForce RTX 2060"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 5 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "CUDA_VISIBLE_DEVICES",
+        "value": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Room on the NVIDIA GeForce RTX 2060: 12.00 - 0.62 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 10.30 GB; 10.20 after the 0.10 rounding allowance.",
+      "Chat: qwen3:14b = 8.42 (weights) + 1.33 (conversation, 16,384 tokens, q8_0) + 0.35 (working space) = 10.10 GB. Ollama's own guess: 10.92 GB.",
+      "Long: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "smart",
+     "long": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-long",
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Smartest answers",
+     "notes": [
+      "Chat runs on the NVIDIA GeForce RTX 2060, the slower card: the 14B gets more room there, and answers come out more slowly.",
+      "Long conversations and pictures take turns on the NVIDIA GeForce RTX 2080 SUPER: one model is loaded there at a time."
+     ],
+     "off": [],
+     "ollamas": 2,
+     "pictures": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66,
+      "size": "3B",
+      "words": "qwen2.5vl:3b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.26,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.83,
+       "words": "5.57 + 2.26 = 7.83 of 8 GB"
+      },
+      {
+       "blocks": "████████████████",
+       "card": "NVIDIA GeForce RTX 2060",
+       "card_key": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+       "fixed_gib": 1.7,
+       "models_gib": 10.1,
+       "total_gib": 12.0,
+       "used_gib": 11.81,
+       "words": "10.10 + 1.70 = 11.81 of 12 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57,
+      "size": "8B",
+      "words": "qwen3:8b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 5 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "CUDA_VISIBLE_DEVICES",
+        "value": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 5 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.18 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.74 GB; 5.64 after the 0.10 rounding allowance.",
+      "Room on the NVIDIA GeForce RTX 2060: 12.00 - 0.62 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 10.30 GB; 10.20 after the 0.10 rounding allowance.",
+      "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
+      "Long: qwen3:14b = 8.42 (weights) + 1.33 (conversation, 16,384 tokens, q8_0) + 0.35 (working space) = 10.10 GB. Ollama's own guess: 10.92 GB.",
+      "Pictures: qwen2.5vl:7b = 4.34 (weights) + 1.26 (picture reader) + 0.23 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) + 0.25 (one picture) = 6.39 GB. Ollama's own guess: 6.04 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "features",
+     "long": {
+      "card": "NVIDIA GeForce RTX 2060",
+      "card_key": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+      "context": 16384,
+      "context_words": "remembers about 12 pages of conversation (an estimate)",
+      "creates": "jarvis-long",
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:14b",
+      "need_gib": 10.1,
+      "size": "14B",
+      "words": "qwen3:14b, 16K, compact format, on the NVIDIA GeForce RTX 2060"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Most features",
+     "notes": [
+      "Chat runs on the NVIDIA GeForce RTX 2080 SUPER (its memory is faster (496 against 336 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the NVIDIA GeForce RTX 2060: one model is loaded there at a time."
+     ],
+     "off": [],
+     "ollamas": 2,
+     "pictures": {
+      "card": "NVIDIA GeForce RTX 2060",
+      "card_key": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39,
+      "size": "7B",
+      "words": "qwen2.5vl:7b, 8K, compact format, on the NVIDIA GeForce RTX 2060"
+     },
+     "recommended": true,
+     "recommended_why": "It keeps an 8B everyday model on the NVIDIA GeForce RTX 2080 SUPER and adds what fits beside it.",
+     "summary": "A balanced everyday model, plus pictures and long conversations wherever there is room left over."
+    }
+   ],
+   "recommended": "features",
+   "sources": {
+    "nvidia_smi": "used",
+    "ollama_log": "used",
+    "registry": "used"
+   },
+   "test_later": [
+    {
+     "model": "Spark-X2.5-4B",
+     "why": "the owner's decision 4: tested once the second card is installed and measured, against the Qwen choice; not in any preset until then"
+    },
+    {
+     "model": "qwen3.5:4b / qwen3.5:9b",
+     "why": "Qwen 3.5 keeps conversation in far less memory (research 2026-09-24, second-hand model-card numbers); its tool use has not been measured, so it is a test for later, not a preset"
+    }
+   ]
+  },
+  "post_apply_clear": {
+   "body": {
+    "chosen": null,
+    "message": "No setup is used now. Your models and settings are as they are; to go back to jarvis-primary, switch to it (Brain, Models).",
+    "ok": true
+   },
+   "status": 200
+  },
+  "post_apply_ok": {
+   "body": {
+    "applying": "(the same as GET /api/hardware's applying)",
+    "chosen": "features",
+    "message": "\"Most features\" chosen. Nothing has changed yet: each step below is its own approval card, in order.",
+    "ok": true
+   },
+   "status": 200
+  },
+  "post_apply_unknown": {
+   "body": {
+    "error": "there is no preset called 'turbo'; the presets are fast, smart, features"
+   },
+   "status": 400
+  },
+  "post_create_not_downloaded": {
+   "body": {
+    "error": "download qwen3:4b first (the step before this one); making jarvis-chat never downloads anything"
+   },
+   "status": 409
+  },
+  "post_create_pending": {
+   "body": {
+    "message": "Approve the card on your PC or phone to make it. Nothing is made until you do.",
+    "ok": true,
+    "pending": true
+   },
+   "status": 200
+  },
+  "post_measure_started": {
+   "body": {
+    "message": "Measuring. It loads each model once and takes about a minute.",
+    "ok": true,
+    "running": true
+   },
+   "status": 200
+  },
+  "today_one_card": {
+   "applying": null,
+   "available": true,
+   "cards": [
+    {
+     "best_effort": null,
+     "chat_first": true,
+     "conversation_format": "q8_0",
+     "desktop_share_gb": 1.1,
+     "desktop_share_how": "measured (measured when Ollama started)",
+     "free_gb": 6.8,
+     "generation": "7.5",
+     "key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "monitor": true,
+     "name": "NVIDIA GeForce RTX 2080 SUPER",
+     "route": "CUDA",
+     "sources": [
+      "Ollama's log",
+      "nvidia-smi",
+      "the registry"
+     ],
+     "total_gb": 8.0,
+     "used": true,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia",
+     "why_unused": null,
+     "words": "NVIDIA GeForce RTX 2080 SUPER, 8 GB; used by Ollama through CUDA; a monitor is plugged into it."
+    },
+    {
+     "best_effort": null,
+     "chat_first": false,
+     "conversation_format": null,
+     "desktop_share_gb": null,
+     "desktop_share_how": null,
+     "free_gb": null,
+     "generation": null,
+     "key": "card1",
+     "monitor": null,
+     "name": "Intel(R) UHD Graphics 630",
+     "route": null,
+     "sources": [
+      "the registry"
+     ],
+     "total_gb": 1.0,
+     "used": false,
+     "uuid": null,
+     "vendor": "intel",
+     "why_unused": "Ollama's log does not list it, so Ollama does not use it",
+     "words": "Intel(R) UHD Graphics 630, 1 GB. Not used: Ollama's log does not list it, so Ollama does not use it."
+    }
+   ],
+   "chat_card_why": null,
+   "chosen": null,
+   "chosen_stale": null,
+   "command": {
+    "check": "foreach ($n in 'OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE','CUDA_VISIBLE_DEVICES','OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET') { '{0} = {1}' -f $n, [Environment]::GetEnvironmentVariable($n, 'User') }",
+    "for": "smart",
+    "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+    "restart_pending": false,
+    "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+   },
+   "found": "Found 2 graphics cards; Ollama can use 1: the NVIDIA GeForce RTX 2080 SUPER.",
+   "gap_gb": 0.75,
+   "last": null,
+   "measure": {
+    "at": null,
+    "last": null,
+    "state": "idle",
+    "why": ""
+   },
+   "now": {
+    "bar": {
+     "blocks": "████████████████",
+     "card": "NVIDIA GeForce RTX 2080 SUPER",
+     "total_gib": 8.0,
+     "used_gib": 8.6,
+     "words": "6.17 + 2.43 = 8.60 of 8 GB"
+    },
+    "context": 16384,
+    "format": "q8_0",
+    "label": "Custom (your own setup)",
+    "model": "jarvis-primary",
+    "on_card_percent": 91,
+    "preset": null,
+    "words": "jarvis-primary is qwen3:8b with room for 16,384 tokens; calculated about 0.60 GB over the card, so part of it is probably on the processor. Press Measure to check. Measured now: only 91% of it is on the card; the rest runs on the processor, much more slowly."
+   },
+   "ollama_version": "0.12.3",
+   "pending": [],
+   "presets": [
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12,
+       "words": "4.94 + 2.18 = 7.12 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.10 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.82 GB; 5.72 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "fast",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Fastest answers",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A smaller, quicker everyday model."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75,
+       "words": "5.57 + 2.18 = 7.75 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57,
+      "size": "8B",
+      "words": "qwen3:8b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.10 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.82 GB; 5.72 after the 0.10 rounding allowance.",
+      "Chat: qwen3:8b = 4.67 (weights) + 0.60 (conversation, 8,192 tokens, q8_0) + 0.30 (working space) = 5.57 GB. Ollama's own guess: 5.80 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "smart",
+     "long": null,
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Smartest answers",
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "ollamas": 1,
+     "pictures": null,
+     "recommended": true,
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
+     "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
+    },
+    {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "NVIDIA GeForce RTX 2080 SUPER",
+       "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12,
+       "words": "4.94 + 2.18 = 7.12 of 8 GB"
+      }
+     ],
+     "best_effort": false,
+     "best_effort_why": [],
+     "chat": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 32768,
+      "context_words": "remembers about 24 pages of conversation (an estimate)",
+      "creates": "jarvis-chat",
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94,
+      "size": "4B",
+      "words": "qwen3:4b, 32K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "command": {
+      "line": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); Write-Host 'Saved 4 settings for your Windows user (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'",
+      "settings": [
+       {
+        "name": "OLLAMA_KV_CACHE_TYPE",
+        "value": "q8_0"
+       },
+       {
+        "name": "OLLAMA_KEEP_ALIVE",
+        "value": "-1"
+       },
+       {
+        "name": "OLLAMA_VULKAN",
+        "value": "0"
+       },
+       {
+        "name": "LLAMA_ARG_FIT_TARGET",
+        "value": "768"
+       }
+      ],
+      "undo": "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User'); [Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', $null, 'User'); Write-Host 'Put 4 settings back the way they were (nothing was written to a file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.'"
+     },
+     "details": [
+      "Room on the NVIDIA GeForce RTX 2080 SUPER: 8.00 - 1.10 (desktop, measured) - 0.33 (start-up, 1 model) - 0.75 (empty gap) = 5.82 GB; 5.72 after the 0.10 rounding allowance.",
+      "Chat: qwen3:4b = 2.29 (weights) + 2.39 (conversation, 32,768 tokens, q8_0) + 0.25 (working space) = 4.94 GB. Ollama's own guess: 5.11 GB.",
+      "Pictures: qwen2.5vl:3b = 1.76 (weights) + 1.25 (picture reader) + 0.15 (conversation, 8,192 tokens, q8_0) + 0.25 (working space) + 0.25 (one picture) = 3.66 GB. Ollama's own guess: 3.29 GB.",
+      "Everything above is calculated, not measured."
+     ],
+     "id": "features",
+     "long": {
+      "context": 32768,
+      "same_as_chat": true,
+      "words": "chat itself (32K)"
+     },
+     "measured": false,
+     "measured_words": "calculated, not measured",
+     "name": "Most features",
+     "notes": [
+      "Chat is the 4B: the 8B would get only 8,192 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "ollamas": 1,
+     "pictures": {
+      "card": "NVIDIA GeForce RTX 2080 SUPER",
+      "card_key": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+      "context": 8192,
+      "context_words": "remembers about 6 pages of conversation (an estimate)",
+      "creates": "jarvis-vision",
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66,
+      "size": "3B",
+      "words": "qwen2.5vl:3b, 8K, compact format, on the NVIDIA GeForce RTX 2080 SUPER"
+     },
+     "recommended": false,
+     "recommended_why": null,
+     "summary": "A balanced everyday model, plus pictures and long conversations wherever there is room left over."
+    }
+   ],
+   "recommended": "smart",
+   "sources": {
+    "nvidia_smi": "used",
+    "ollama_log": "used",
+    "registry": "used"
+   },
+   "test_later": [
+    {
+     "model": "Spark-X2.5-4B",
+     "why": "the owner's decision 4: tested once the second card is installed and measured, against the Qwen choice; not in any preset until then"
+    },
+    {
+     "model": "qwen3.5:4b / qwen3.5:9b",
+     "why": "Qwen 3.5 keeps conversation in far less memory (research 2026-09-24, second-hand model-card numbers); its tool use has not been measured, so it is a test for later, not a preset"
+    }
+   ]
+  }
+ }
+}

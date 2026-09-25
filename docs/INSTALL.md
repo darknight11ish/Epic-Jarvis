@@ -212,6 +212,14 @@ these numbers, and how to check it is really running on the graphics card
 and not spilling into system memory (which makes everything about five times
 slower with no warning).
 
+**Another graphics card, or a different one?** Once the desktop app is
+running (Part 2), open Settings, **Hardware and models**. It lists your
+cards and offers three setups worked out for them (fastest answers,
+smartest answers, most features), each with its own one-line command.
+Nothing changes until you pick one, and each step then asks you with its
+own approval card. Its **Measure** button checks that the model really is
+all on the graphics card.
+
 **Voice (optional).** Talking to Jarvis needs model files downloaded onto the
 PC as well. `backend\README.md`, section **"Voice that works"**, has the
 steps.

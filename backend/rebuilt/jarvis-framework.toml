@@ -136,6 +136,12 @@ browse_model_catalog      = "auto"
 download_model            = "ask"
 switch_model              = "ask"
 rollback_model            = "auto"
+# Making a tuned copy of a model you already downloaded (jarvis-chat,
+# jarvis-long, jarvis-vision), for one of the three setups in Settings,
+# Hardware and models (docs/HARDWARE-PROFILES.md). Ollama makes it on this
+# PC; nothing downloads. Must stay "ask": anything else and it refuses. A
+# file without this line asks too (unknown_action_tier).
+models_create             = "ask"
 
 # --- Power: turning the assistant down, at two depths --------------------
 # Putting Jarvis into quiet/standby, or waking it, is the safe direction

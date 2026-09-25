@@ -1,8 +1,11 @@
 # Hardware profiles: any 8 GB card, up to two cards and 24 GB
 
-**Status: a design. Nothing here is built, and nothing has been measured
-on a real PC.** Written 2026-09-24. Every memory figure is *calculated, not
-measured* until Jarvis's speed recorder has a row for it (section 4.7).
+**Status: built 2026-09-25 (section 7 says what, and where the build differs
+from this design); still nothing measured on a real PC.** Written
+2026-09-24. Every memory figure is *calculated, not measured* until the
+Hardware screen's Measure has a row for it (section 4.7). Nothing changes on
+the owner's PC until a setup is chosen there, and then only one approval
+card at a time.
 
 ---
 
@@ -851,6 +854,207 @@ So on 6 GB: one small model, 12K of conversation, no pictures, no lanes;
 learning and wiki share the chat model. Honest and usable, but the
 smallest of everything.
 
+#### The presets as built, at the owner's 0.75 GB gap
+
+*Added 2026-09-25, when the presets were built.* The tables above were
+worked out by hand at llama.cpp's default 1 GB gap, before the owner chose
+0.75 GB (decision 1). `backend/jarvis_profiles.py` reproduces every row
+above at 1 GB (`backend/test_profiles.py` checks each one), and the table
+below is its output at 0.75 GB, the gap the presets use. It is written by
+`tools/gen_hardware_cases.py` from `backend/fixtures/hardware_cases.json`,
+so it cannot drift from the code. The reasons ("off, and why") are in the
+fixture and on the Hardware screen, not repeated here.
+
+<!-- hardware-cases:begin (tools/gen_hardware_cases.py writes this; do not edit) -->
+
+Generated from `backend/fixtures/hardware_cases.json` - the planner's own output at the owner's 0.75 GB gap. Calculated, not measured. "(rec.)" marks the recommended preset.
+
+**10 GB** (`one_10gb`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (10 GB card) | chat itself | off | `███████████░░░░░` 4.94 + 2.18 = 7.12 / 10 |
+| Smartest answers | qwen3:8b, 32K - 7.36 (10 GB card) | chat itself | off | `███████████████░` 7.36 + 2.18 = 9.54 / 10 |
+| Most features (rec.) | qwen3:8b, 32K - 7.36 (10 GB card) | chat itself | qwen2.5vl:3b, 8K - 3.66 (10 GB card, by swapping with chat) | `███████████████░` 7.36 + 2.18 = 9.54 / 10 |
+
+**11 GB** (`one_11gb`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (11 GB card) | chat itself | off | `██████████░░░░░░` 4.94 + 2.18 = 7.12 / 11 |
+| Smartest answers | qwen3:8b, 32K - 7.36 (11 GB card) | chat itself | off | `██████████████░░` 7.36 + 2.18 = 9.54 / 11 |
+| Most features (rec.) | qwen3:8b, 32K - 7.36 (11 GB card) | chat itself | qwen2.5vl:3b, 8K - 3.66 (11 GB card, by swapping with chat) | `██████████████░░` 7.36 + 2.18 = 9.54 / 11 |
+
+**12 GB** (`one_12gb`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (12 GB card) | chat itself | off | `█████████░░░░░░░` 4.94 + 2.18 = 7.12 / 12 |
+| Smartest answers | qwen3:14b, 8K - 9.44 (12 GB card) | off | off | `███████████████░` 9.44 + 2.18 = 11.62 / 12 |
+| Most features (rec.) | qwen3:8b, 32K - 7.36 (12 GB card) | chat itself | qwen2.5vl:3b, 8K - 3.66 (12 GB card, by swapping with chat) | `█████████████░░░` 7.36 + 2.18 = 9.54 / 12 |
+
+**16 GB** (`one_16gb`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (16 GB card) | chat itself | off | `███████░░░░░░░░░` 4.94 + 2.18 = 7.12 / 16 |
+| Smartest answers | qwen3:14b, 32K - 11.43 (16 GB card) | chat itself | off | `██████████████░░` 11.43 + 2.18 = 13.61 / 16 |
+| Most features (rec.) | qwen3:8b, 32K - 7.36 (16 GB card) | chat itself | qwen2.5vl:3b, 8K - 3.66 (16 GB card, beside chat) | `██████████████░░` 11.02 + 2.51 = 13.53 / 16 |
+
+**24 GB** (`one_24gb`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (24 GB card) | chat itself | off | `█████░░░░░░░░░░░` 4.94 + 2.18 = 7.12 / 24 |
+| Smartest answers | qwen3:14b, 32K - 11.43 (24 GB card) | chat itself | off | `█████████░░░░░░░` 11.43 + 2.18 = 13.61 / 24 |
+| Most features (rec.) | qwen3:8b, 32K - 7.36 (24 GB card) | chat itself | qwen2.5vl:7b, 8K - 6.39 (24 GB card, beside chat) | `███████████░░░░░` 13.75 + 2.51 = 16.26 / 24 |
+
+**6 GB** (`one_6gb`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 12K - 3.44 (6 GB card) | chat itself | off | `███████████████░` 3.44 + 2.18 = 5.62 / 6 |
+| Smartest answers (rec.) | qwen3:4b, 12K - 3.44 (6 GB card) | chat itself | off | `███████████████░` 3.44 + 2.18 = 5.62 / 6 |
+| Most features | qwen3:4b, 12K - 3.44 (6 GB card) | chat itself | qwen2.5vl:3b, 8K - 3.66 (6 GB card, by swapping with chat) | `████████████████` 3.66 + 2.18 = 5.84 / 6 |
+
+**8 GB - the owner's PC today** (`one_8gb`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER) | chat itself | off | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 |
+| Smartest answers (rec.) | qwen3:8b, 8K - 5.57 (RTX 2080 SUPER) | off | off | `███████████████░` 5.57 + 2.18 = 7.75 / 8 |
+| Most features | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER) | chat itself | qwen2.5vl:3b, 8K - 3.66 (RTX 2080 SUPER, by swapping with chat) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 |
+
+**An older 8 GB NVIDIA card (Maxwell, before GTX 10)** (`one_8gb_maxwell`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 16K f16 - 4.79 (Quadro M5000) | chat itself | off | `██████████████░░` 4.79 + 2.18 = 6.97 / 8 |
+| Smartest answers (rec.) | qwen3:4b, 16K f16 - 4.79 (Quadro M5000) | chat itself | off | `██████████████░░` 4.79 + 2.18 = 6.97 / 8 |
+| Most features | qwen3:4b, 16K f16 - 4.79 (Quadro M5000) | chat itself | qwen2.5vl:3b, 8K f16 - 3.79 (Quadro M5000, by swapping with chat) | `██████████████░░` 4.79 + 2.18 = 6.97 / 8 |
+
+**GTX 1080, 8 GB (Pascal)** (`one_8gb_pascal`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (GTX 1080) | chat itself | off | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 |
+| Smartest answers (rec.) | qwen3:8b, 8K - 5.57 (GTX 1080) | off | off | `███████████████░` 5.57 + 2.18 = 7.75 / 8 |
+| Most features | qwen3:4b, 32K - 4.94 (GTX 1080) | chat itself | qwen2.5vl:3b, 8K - 3.66 (GTX 1080, by swapping with chat) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 |
+
+**RX 7600, 8 GB (ROCm)** (`one_8gb_rocm`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (RX 7600) | chat itself | off | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 |
+| Smartest answers (rec.) | qwen3:8b, 8K - 5.57 (RX 7600) | off | off | `███████████████░` 5.57 + 2.18 = 7.75 / 8 |
+| Most features | qwen3:4b, 32K - 4.94 (RX 7600) | chat itself | qwen2.5vl:3b, 8K - 3.66 (RX 7600, by swapping with chat) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 |
+
+**RX 6600, 8 GB (Vulkan)** (`one_8gb_vulkan_amd`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 16K f16 - 4.79 (RX 6600) | chat itself | off | `██████████████░░` 4.79 + 2.18 = 6.97 / 8 |
+| Smartest answers (rec.) | qwen3:4b, 16K f16 - 4.79 (RX 6600) | chat itself | off | `██████████████░░` 4.79 + 2.18 = 6.97 / 8 |
+| Most features | qwen3:4b, 16K f16 - 4.79 (RX 6600) | chat itself | qwen2.5vl:3b, 8K f16 - 3.79 (RX 6600, by swapping with chat) | `██████████████░░` 4.79 + 2.18 = 6.97 / 8 |
+
+**Intel Arc, 8 GB (Vulkan)** (`one_8gb_vulkan_intel`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 16K f16 - 4.79 (Arc A750) | chat itself | off | `██████████████░░` 4.79 + 2.18 = 6.97 / 8 |
+| Smartest answers (rec.) | qwen3:4b, 16K f16 - 4.79 (Arc A750) | chat itself | off | `██████████████░░` 4.79 + 2.18 = 6.97 / 8 |
+| Most features | qwen3:4b, 16K f16 - 4.79 (Arc A750) | chat itself | qwen2.5vl:3b, 8K f16 - 3.79 (Arc A750, by swapping with chat) | `██████████████░░` 4.79 + 2.18 = 6.97 / 8 |
+
+**12 + 12 GB, monitor on one of them** (`two_12_12`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (12 GB card A) | chat itself | qwen2.5vl:7b, 8K - 6.39 (12 GB card B) | `█████████░░░░░░░` 4.94 + 1.68 = 6.62 / 12 · `███████████░░░░░` 6.39 + 2.18 = 8.57 / 12 |
+| Smartest answers | qwen3:14b, 16K - 10.10 (12 GB card A) | qwen3:8b, 32K - 7.36 (12 GB card B, taking turns) | qwen2.5vl:7b, 8K - 6.39 (12 GB card B, taking turns) | `████████████████` 10.10 + 1.68 = 11.78 / 12 · `█████████████░░░` 7.36 + 2.18 = 9.54 / 12 |
+| Most features (rec.) | qwen3:8b, 32K - 7.36 (12 GB card A) | chat itself | qwen2.5vl:7b, 8K - 6.39 (12 GB card B) | `████████████░░░░` 7.36 + 1.68 = 9.04 / 12 · `███████████░░░░░` 6.39 + 2.18 = 8.57 / 12 |
+
+**RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2060** (`two_2080s_2060_mon12`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER) | chat itself | qwen2.5vl:7b, 8K - 6.39 (RTX 2060) | `█████████████░░░` 4.94 + 1.68 = 6.62 / 8 · `███████████░░░░░` 6.39 + 2.18 = 8.57 / 12 |
+| Smartest answers | qwen3:14b, 8K - 9.44 (RTX 2060) | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER, taking turns) | qwen2.5vl:3b, 8K - 3.66 (RTX 2080 SUPER, taking turns) | `█████████████░░░` 4.94 + 1.68 = 6.62 / 8 · `███████████████░` 9.44 + 2.18 = 11.62 / 12 |
+| Most features (rec.) | qwen3:8b, 16K - 6.17 (RTX 2080 SUPER) | qwen3:8b, 32K - 7.36 (RTX 2060, taking turns) | qwen2.5vl:7b, 8K - 6.39 (RTX 2060, taking turns) | `████████████████` 6.17 + 1.68 = 7.85 / 8 · `█████████████░░░` 7.36 + 2.18 = 9.54 / 12 |
+
+**RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - the planned pair** (`two_2080s_2060_mon8`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER) | chat itself | qwen2.5vl:7b, 8K - 6.39 (RTX 2060) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 · `███████████░░░░░` 6.39 + 1.68 = 8.07 / 12 |
+| Smartest answers | qwen3:14b, 16K - 10.10 (RTX 2060) | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER, taking turns) | qwen2.5vl:3b, 8K - 3.66 (RTX 2080 SUPER, taking turns) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 · `████████████████` 10.10 + 1.68 = 11.78 / 12 |
+| Most features (rec.) | qwen3:8b, 8K - 5.57 (RTX 2080 SUPER) | qwen3:14b, 16K - 10.10 (RTX 2060, taking turns) | qwen2.5vl:7b, 8K - 6.39 (RTX 2060, taking turns) | `███████████████░` 5.57 + 2.18 = 7.75 / 8 · `████████████████` 10.10 + 1.68 = 11.78 / 12 |
+
+**RTX 2080 SUPER + RTX 2080 Ti (11 GB, the faster), monitor on the 8** (`two_2080s_2080ti`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (RTX 2080 Ti) | chat itself | qwen2.5vl:3b, 8K - 3.66 (RTX 2080 SUPER) | `██████████░░░░░░` 4.94 + 1.68 = 6.62 / 11 · `████████████░░░░` 3.66 + 2.18 = 5.84 / 8 |
+| Smartest answers | qwen3:8b, 32K - 7.36 (RTX 2080 Ti) | chat itself | qwen2.5vl:3b, 8K - 3.66 (RTX 2080 SUPER) | `█████████████░░░` 7.36 + 1.68 = 9.04 / 11 · `████████████░░░░` 3.66 + 2.18 = 5.84 / 8 |
+| Most features (rec.) | qwen3:8b, 32K - 7.36 (RTX 2080 Ti) | chat itself | qwen2.5vl:3b, 8K - 3.66 (RTX 2080 SUPER) | `█████████████░░░` 7.36 + 1.68 = 9.04 / 11 · `████████████░░░░` 3.66 + 2.18 = 5.84 / 8 |
+
+**8 + 10 GB, monitor on the 10** (`two_8_10_mon10`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (8 GB card) | chat itself | qwen2.5vl:7b, 8K - 6.39 (10 GB card) | `█████████████░░░` 4.94 + 1.68 = 6.62 / 8 · `██████████████░░` 6.39 + 2.18 = 8.57 / 10 |
+| Smartest answers | qwen3:8b, 16K - 6.17 (8 GB card) | qwen3:8b, 32K - 7.36 (10 GB card, taking turns) | qwen2.5vl:7b, 8K - 6.39 (10 GB card, taking turns) | `████████████████` 6.17 + 1.68 = 7.85 / 8 · `███████████████░` 7.36 + 2.18 = 9.54 / 10 |
+| Most features (rec.) | qwen3:8b, 16K - 6.17 (8 GB card) | qwen3:8b, 32K - 7.36 (10 GB card, taking turns) | qwen2.5vl:7b, 8K - 6.39 (10 GB card, taking turns) | `████████████████` 6.17 + 1.68 = 7.85 / 8 · `███████████████░` 7.36 + 2.18 = 9.54 / 10 |
+
+**8 + 10 GB, monitor on the 8** (`two_8_10_mon8`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (8 GB card) | chat itself | qwen2.5vl:7b, 8K - 6.39 (10 GB card) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 · `█████████████░░░` 6.39 + 1.68 = 8.07 / 10 |
+| Smartest answers | qwen3:8b, 8K - 5.57 (8 GB card) | qwen3:8b, 32K - 7.36 (10 GB card, taking turns) | qwen2.5vl:7b, 8K - 6.39 (10 GB card, taking turns) | `███████████████░` 5.57 + 2.18 = 7.75 / 8 · `██████████████░░` 7.36 + 1.68 = 9.04 / 10 |
+| Most features (rec.) | qwen3:8b, 8K - 5.57 (8 GB card) | qwen3:8b, 32K - 7.36 (10 GB card, taking turns) | qwen2.5vl:7b, 8K - 6.39 (10 GB card, taking turns) | `███████████████░` 5.57 + 2.18 = 7.75 / 8 · `██████████████░░` 7.36 + 1.68 = 9.04 / 10 |
+
+**8 + 11 GB, monitor on the 8 (the 11 GB card slower)** (`two_8_11_mon8`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (8 GB card) | chat itself | qwen2.5vl:7b, 8K - 6.39 (11 GB card) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 · `████████████░░░░` 6.39 + 1.68 = 8.07 / 11 |
+| Smartest answers | qwen3:8b, 8K - 5.57 (8 GB card) | qwen3:8b, 32K - 7.36 (11 GB card, taking turns) | qwen2.5vl:7b, 8K - 6.39 (11 GB card, taking turns) | `███████████████░` 5.57 + 2.18 = 7.75 / 8 · `█████████████░░░` 7.36 + 1.68 = 9.04 / 11 |
+| Most features (rec.) | qwen3:8b, 8K - 5.57 (8 GB card) | qwen3:8b, 32K - 7.36 (11 GB card, taking turns) | qwen2.5vl:7b, 8K - 6.39 (11 GB card, taking turns) | `███████████████░` 5.57 + 2.18 = 7.75 / 8 · `█████████████░░░` 7.36 + 1.68 = 9.04 / 11 |
+
+**8 + 16 GB, monitor on the 16** (`two_8_16_mon16`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (8 GB card) | chat itself | qwen2.5vl:7b, 8K - 6.39 (16 GB card) | `█████████████░░░` 4.94 + 1.68 = 6.62 / 8 · `█████████░░░░░░░` 6.39 + 2.18 = 8.57 / 16 |
+| Smartest answers | qwen3:14b, 32K - 11.43 (16 GB card) | chat itself | qwen2.5vl:3b, 8K - 3.66 (8 GB card) | `███████████░░░░░` 3.66 + 1.68 = 5.34 / 8 · `██████████████░░` 11.43 + 2.18 = 13.61 / 16 |
+| Most features (rec.) | qwen3:8b, 16K - 6.17 (8 GB card) | qwen3:8b, 32K - 7.36 (16 GB card, taking turns) | qwen2.5vl:7b, 8K - 6.39 (16 GB card, taking turns) | `████████████████` 6.17 + 1.68 = 7.85 / 8 · `██████████░░░░░░` 7.36 + 2.18 = 9.54 / 16 |
+
+**8 + 16 GB, monitor on the 8** (`two_8_16_mon8`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (8 GB card) | chat itself | qwen2.5vl:7b, 8K - 6.39 (16 GB card) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 · `████████░░░░░░░░` 6.39 + 1.68 = 8.07 / 16 |
+| Smartest answers | qwen3:14b, 32K - 11.43 (16 GB card) | chat itself | qwen2.5vl:3b, 8K - 3.66 (8 GB card) | `████████████░░░░` 3.66 + 2.18 = 5.84 / 8 · `█████████████░░░` 11.43 + 1.68 = 13.11 / 16 |
+| Most features (rec.) | qwen3:8b, 8K - 5.57 (8 GB card) | qwen3:14b, 16K - 10.10 (16 GB card, taking turns) | qwen2.5vl:7b, 8K - 6.39 (16 GB card, taking turns) | `███████████████░` 5.57 + 2.18 = 7.75 / 8 · `████████████░░░░` 10.10 + 1.68 = 11.78 / 16 |
+
+**8 + 8 GB, monitor on one of them** (`two_8_8`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (8 GB card A) | chat itself | qwen2.5vl:3b, 8K - 3.66 (8 GB card B) | `█████████████░░░` 4.94 + 1.68 = 6.62 / 8 · `████████████░░░░` 3.66 + 2.18 = 5.84 / 8 |
+| Smartest answers | qwen3:8b, 16K - 6.17 (8 GB card A) | qwen3:4b, 32K - 4.94 (8 GB card B, taking turns) | qwen2.5vl:3b, 8K - 3.66 (8 GB card B, taking turns) | `████████████████` 6.17 + 1.68 = 7.85 / 8 · `██████████████░░` 4.94 + 2.18 = 7.12 / 8 |
+| Most features (rec.) | qwen3:8b, 16K - 6.17 (8 GB card A) | qwen3:4b, 32K - 4.94 (8 GB card B, taking turns) | qwen2.5vl:3b, 8K - 3.66 (8 GB card B, taking turns) | `████████████████` 6.17 + 1.68 = 7.85 / 8 · `██████████████░░` 4.94 + 2.18 = 7.12 / 8 |
+
+**RTX 2080 SUPER + RX 7600 (the second card not NVIDIA)** (`two_8_rx7600`)
+
+| Preset | Chat | Long context | Pictures | Memory |
+|---|---|---|---|---|
+| Fastest answers | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER) | chat itself | off | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 |
+| Smartest answers | qwen3:8b, 8K - 5.57 (RTX 2080 SUPER) | off | off | `███████████████░` 5.57 + 2.18 = 7.75 / 8 |
+| Most features (rec.) | qwen3:8b, 8K - 5.57 (RTX 2080 SUPER) | off | off | `███████████████░` 5.57 + 2.18 = 7.75 / 8 |
+
+<!-- hardware-cases:end -->
+
 ### 4.5 Applying a preset
 
 **Plain words:** you press **Use this**. Jarvis shows exactly what will
@@ -1133,6 +1337,66 @@ Order matters: the measurement first, because it may change the numbers.
 11. **Docs** - MODEL-TOPOLOGY.md's stale items (section 3) rewritten from
     the measured numbers; SECOND-CARD.md's one command replaced by the
     generated one; INSTALL.md 1.7 pointed at the Hardware screen.
+
+### 7.1 What was built (2026-09-25), and where it differs
+
+Built: steps 2-10, and 11 as far as it can go without a measurement. Step 1
+(the owner's two lines, section 4.7) has not been run, so nothing below is
+measured. Where the build differs from the design above, it says so here
+rather than quietly:
+
+- **Steps 2-6.** `backend/jarvis_hardware.py` (detection, the steps, making a
+  model, measuring) and `backend/jarvis_profiles.py` (the arithmetic, the
+  presets, the one line; no I/O). `backend/test_profiles.py` replays **every
+  row of section 4.4 at 1 GB** and gets it (model, context, card, lanes, how
+  they share, each card's bar within 0.01 GB); the golden file at the owner's
+  0.75 GB is `backend/fixtures/hardware_cases.json`, and the table in 4.4
+  ("The presets as built") is generated from it. PowerShell 7 parses every
+  generated line, with no PowerShell-7-only token in any (the sandbox let the
+  test suite start `/opt/pwsh/pwsh` this time).
+- **The planner's rules, read out of the 4.4 tables** (the throwaway script
+  that made them was not committed): chat contexts come from 4K, 6K, 8K,
+  12K, 16K and 32K; an 8B or 14B needs at least 6K, the 4B 8K; "long
+  conversations" means at least 12K; the long lane on another card tries
+  14B at 16K, 12K, 8K, then 8B and 4B at 32K, and must beat chat's context -
+  **so a 14B lane never gets more than 16K even where 32K would fit (8 + 16
+  GB)**, as the tables have it; Smartest keeps chat on the faster card when
+  the biggest model gets at least 8K there. The picture reader counts its
+  patch layer (the tables' 3.65 is 3.66 here - within the 0.01 the tests
+  allow).
+- **Detection.** `Win32_VideoController` (source 4) is not read: its memory
+  field stops at 4 GB and the registry already gives the names. The
+  "fastest card" is published speed where both are known (only the three
+  cards MODEL-TOPOLOGY.md gives figures for), then a card Jarvis's settings
+  are made for (NVIDIA, RTX 20 or newer) before a best-effort one, then the
+  newer generation, then more room. **The measured "same prompt on each card"
+  comparison is not built.** `jarvis_compute.primary()` (the monitor rule)
+  is unchanged: it still decides where the second card's lanes go when no
+  setup is chosen, so today's behaviour does not move.
+- **Applying (4.5).** The design has the PC start the steps. The download
+  and switch cards belong to the owner's own `jarvis_hud.py`, which this
+  repository cannot call into, so **each step is one button in the app that
+  posts that step's own route and body, read from the PC's answer** (the
+  Rust and the Kotlin refuse anything else). Only the next step has a
+  button; there is still no "approve all". The recommended setup is
+  "Most features" when its everyday model is the 8B or bigger, else
+  "Smartest answers" (the design did not say; the owner can ignore it).
+- **One card, lanes inside the everyday Ollama (4.3)**: built. With a setup
+  chosen, `jarvis_second_card.py` takes its lanes from the planner; with
+  none chosen it is exactly as before (its old tests pass unchanged).
+- **The contract files** are `jarvis-desktop/tests/fixtures/hardware-cases.json`
+  and the phone's byte-for-byte copy, as for the second card, not
+  `docs/reference/`. The phone reads them in the JVM test
+  `HardwareContractTest.kt`; the emulator's `ApiContractTest.kt` has four new
+  entries for the routes (headers, the choice's body, a refused route never
+  sent, a refusal's own sentence) - those run only in CI.
+- **The desktop's section** sits above "Second graphics card" rather than
+  swallowing it: the five switches keep their own section, named as before.
+- **Not built:** reading Ollama's version to warn about "calculated with
+  older rules" (the version is shown and keys the measurements, nothing
+  more); the measured desktop share for a non-NVIDIA card with nothing
+  loaded (Ollama's own start-up reading is used). Qwen 3.5 (research,
+  2026-09-24) is listed beside Spark-X2.5 as "test later", in no preset.
 
 ---
 

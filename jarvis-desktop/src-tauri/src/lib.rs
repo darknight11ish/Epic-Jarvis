@@ -22,6 +22,7 @@ pub mod attention;
 pub mod autostart;
 pub mod brain;
 pub mod commands;
+pub mod hardware;
 pub mod hotkeys;
 pub mod hud_proxy;
 pub mod lock;
@@ -756,6 +757,10 @@ pub fn run() {
             commands::get_backend_capabilities,
             commands::get_big_model,
             commands::set_big_model,
+            hardware::get_hardware,
+            hardware::apply_hardware,
+            hardware::hardware_step,
+            hardware::measure_hardware,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,

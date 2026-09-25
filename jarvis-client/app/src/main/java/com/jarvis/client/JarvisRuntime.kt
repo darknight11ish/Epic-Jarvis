@@ -25,6 +25,7 @@ import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.BigModel
+import com.jarvis.client.net.Hardware
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
@@ -378,6 +379,15 @@ object JarvisRuntime {
      */
     private val _deep = MutableStateFlow<BigModel.Read<BigModel.Deep>>(BigModel.Read.NotAsked)
     val deep: StateFlow<BigModel.Read<BigModel.Deep>> = _deep.asStateFlow()
+
+    /**
+     * `/api/hardware`: the PC's graphics cards and the three setups it worked
+     * out for them ([Hardware]). Read on the Mind screen, after every choice,
+     * step and measurement, and after an approval is decided while a step's
+     * card was waiting.
+     */
+    private val _hardware = MutableStateFlow<Hardware.Read>(Hardware.Read.NotAsked)
+    val hardware: StateFlow<Hardware.Read> = _hardware.asStateFlow()
 
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
@@ -979,6 +989,12 @@ object JarvisRuntime {
                 if (bm is BigModel.Read.Loaded<BigModel.Status> && bm.value.pending.isNotEmpty()) {
                     recheckBigModelAfterDecision(bm.value.pending)
                 }
+                // A setup's step whose card was up: a decided card is the
+                // moment it is done (or refused). There is no event for it.
+                val hw = _hardware.value
+                if (hw is Hardware.Read.Loaded && hw.status.applying != null) {
+                    scope.launch { refreshHardware() }
+                }
                 // And the voice cards: "hey Jarvis" ON and a voice training.
                 // Neither has an event of its own either, so without this the
                 // Checks screen said "Waiting" over a card already decided.
@@ -1354,6 +1370,59 @@ object JarvisRuntime {
         // Turning the deep-questions switch changes whether a question can be asked.
         refreshDeep()
         return BigModel.replyLine(result)
+    }
+
+    // --------------------------------------------------------- hardware ----
+
+    /** Re-reads `/api/hardware`. Reads only; a failed read is said in words. */
+    suspend fun refreshHardware() {
+        _hardware.value = Hardware.readOf(api.hardware())
+    }
+
+    /**
+     * Chooses a setup, or forgets the choice ([preset] null). Choosing changes
+     * no model and no setting on the PC: it lists the steps. Choosing is held
+     * on a stale link ([actionBlocker], rule 4); forgetting is not - it only
+     * narrows what runs.
+     */
+    suspend fun chooseHardware(preset: String?): String {
+        if (preset != null) actionBlocker()?.let { return it }
+        val result = api.hardwarePost(Hardware.APPLY_PATH, Hardware.applyBody(preset))
+        refreshHardware()
+        return Hardware.replyLine(result)
+    }
+
+    /**
+     * Asks for ONE step of the chosen setup, by its id. The route and body are
+     * read from a fresh `GET /api/hardware` ([Hardware.stepRequest]) - never
+     * made up here - and the PC raises that step's own approval card, decided
+     * on the PC or in this phone's approvals like any other. Only the next
+     * step can be asked for; nothing is approved in bulk.
+     */
+    suspend fun hardwareStep(stepId: String): String {
+        actionBlocker()?.let { return it }
+        refreshHardware()
+        val status = (_hardware.value as? Hardware.Read.Loaded)?.status
+            ?: return Hardware.readLine(_hardware.value) ?: Hardware.UPDATE
+        return when (val ask = Hardware.stepRequest(status, stepId)) {
+            is Hardware.StepAsk.No -> ask.reason
+            is Hardware.StepAsk.Post -> {
+                val result = api.hardwarePost(ask.route, ask.body)
+                // The card should appear in this phone's approvals too.
+                if (result is ApiResult.Ok) refreshPending()
+                if (ask.route == SecondCard.PATH) refreshSecondCard()
+                refreshHardware()
+                Hardware.replyLine(result)
+            }
+        }
+    }
+
+    /** Asks the PC to measure the setup's models (it loads each once). */
+    suspend fun measureHardware(): String {
+        actionBlocker()?.let { return it }
+        val result = api.hardwarePost(Hardware.MEASURE_PATH, "{}")
+        refreshHardware()
+        return Hardware.replyLine(result)
     }
 
     /** Re-reads `/api/deep`. Starts nothing on the PC. */
@@ -1946,6 +2015,7 @@ object JarvisRuntime {
                 val contentRisk = async { api.probe("/api/content-risk").asSection() }
                 val secondCardRead = async { refreshSecondCard() }
                 val bigModelRead = async { refreshBigModel() }
+                val hardwareRead = async { refreshHardware() }
                 val deepRead = async { refreshDeep() }
                 val (computeData, computeRead) = compute.await()
                 val (memoryData, memoryRead) = memory.await()
@@ -2000,6 +2070,7 @@ object JarvisRuntime {
                 models.await()
                 secondCardRead.await()
                 bigModelRead.await()
+                hardwareRead.await()
                 deepRead.await()
             }
         } finally {
