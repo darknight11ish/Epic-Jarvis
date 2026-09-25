@@ -535,6 +535,11 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     // Hidden, exactly as for a login start: fully built and warm, reachable
     // from the tray or the hotkey the moment the owner does want it.
     let hidden = at_login || launched_by_deny();
+    // App lock on: a restart starts locked (lock.rs), and the HUD is covered
+    // (apps security audit M3), so it is built hidden and shown through the
+    // lock below - Windows Hello first. Not at login or on a Deny launch,
+    // where it stays hidden anyway.
+    let lock_first = !hidden && lock::current(app).app_lock;
 
     tauri::WebviewWindowBuilder::new(
         app,
@@ -550,17 +555,25 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     .always_on_top(false)
     .skip_taskbar(false)
     .resizable(true)
-    .visible(!hidden)
-    .focused(!hidden)
+    .visible(!hidden && !lock_first)
+    .focused(!hidden && !lock_first)
     .shadow(true)
     .theme(Some(tauri::Theme::Dark))
     .initialization_script(&script)
     .build()
     .map_err(|e| format!("{e}"))?;
 
+    if lock_first {
+        if let Err(err) = windows::show_hud(app) {
+            eprintln!("[jarvis] the HUD could not be shown through the lock: {err}");
+        }
+    }
+
     logfile::log(&format!(
         "[jarvis] HUD window created for {base}{}",
-        if at_login {
+        if lock_first {
+            " (hidden until Windows Hello: App lock is on)"
+        } else if at_login {
             " (hidden: started at login)"
         } else if hidden {
             " (hidden: launched by a notification Deny, which must not open the app)"
@@ -602,10 +615,10 @@ pub fn run() {
                 return;
             }
             logfile::log("[jarvis] second launch folded into the running instance");
-            if let Some(hud) = app.get_webview_window(HUD_LABEL) {
-                let _ = hud.show();
-                let _ = hud.unminimize();
-                let _ = hud.set_focus();
+            // Through the app lock, like every other way to the HUD (apps
+            // security audit M3): with it on, Windows Hello is asked first.
+            if let Err(err) = windows::show_hud(app) {
+                eprintln!("[jarvis] second launch: HUD unavailable: {err}");
             }
         }));
     }
@@ -661,6 +674,9 @@ pub fn run() {
             commands::stream_chat,
             commands::cancel_chat,
             commands::decide_approval,
+            // App lock and the widget (apps security audit M3).
+            commands::get_app_lock,
+            commands::open_approval_in_quickbar,
             // The five `jarvis-link.js` has invoked since before they
             // existed. Without these lines every task-control button and the
             // approval note failed at the Tauri boundary, which reads to the

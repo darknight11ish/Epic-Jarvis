@@ -94,8 +94,12 @@ await check("what each lock covers is said plainly, gaps included", async () => 
   const page = await settingsPage();
   const s = await look(page);
   await page.close();
-  assert.match(s.appLockDetail, /Jarvis bar, the Brain or Settings/);
-  assert.match(s.appLockDetail, /widget and the HUD window are not locked/);
+  assert.match(s.appLockDetail, /Jarvis bar, the Brain, Settings or the HUD window needs Windows Hello/);
+  // The widget is not locked, and says what it does instead (audit M3).
+  assert.match(s.appLockDetail, /only a short title for an approval/);
+  assert.match(s.appLockDetail, /Approve opens the Jarvis bar/);
+  assert.match(s.appLockDetail, /Deny still works from the widget/);
+  assert.doesNotMatch(s.appLockDetail, /not locked/);
   assert.match(s.privateDetail, /memory lists/);
   assert.match(s.privateDetail, /Galaxy picture and answers in the Jarvis bar are not hidden/);
   // Named for what it hides (one wording, 2026-09-24), in its status lines too.
@@ -319,9 +323,9 @@ await check("CONTROL (Rust): a notification can deny and never approve", () => {
   assert.doesNotMatch(toast.replace(/\/\/.*$/gm, ""), /commands::decide_approval\(/);
 });
 
-await check("CONTROL (Rust): the Jarvis bar, the Brain and Settings ask before they open", () => {
+await check("CONTROL (Rust): the Jarvis bar, the Brain, Settings and the HUD ask before they open", () => {
   const src = read("src-tauri/src/windows.rs");
-  for (const [fn, covered] of [["show_quickbar", "Quickbar"], ["show_brain", "Brain"], ["show_settings", "Settings"]]) {
+  for (const [fn, covered] of [["show_quickbar", "Quickbar"], ["show_brain", "Brain"], ["show_settings", "Settings"], ["show_hud", "Hud"]]) {
     const body = fnBody(src, `pub fn ${fn}(app: &AppHandle)`);
     assert.match(body, new RegExp(`if !crate::lock::may_open\\(app, crate::lock::Covered::${covered}\\) \\{\\s*return Ok\\(\\(\\)\\);`),
       `${fn} opens without asking`);
@@ -429,6 +433,139 @@ await check("no page may connect to Ollama or LiteLLM directly (apps security au
   const csp = JSON.parse(read("src-tauri/tauri.conf.json")).app.security.csp;
   const connect = /connect-src ([^;]*)/.exec(csp)[1];
   assert.doesNotMatch(connect, /:11434|:4000\b|\*/, `connect-src allows too much: ${connect}`);
+});
+
+await check("App lock covers the HUD on every way it is shown (apps security audit M3)", () => {
+  const lock = read("src-tauri/src/lock.rs");
+  assert.match(lock, /crate::HUD_LABEL => Some\(Self::Hud\)/, "the lock does not know the HUD");
+  assert.match(lock, /Covered::Hud => crate::windows::show_hud_unlocked\(app\)/);
+  // The away-watch and the focus check reach every covered window.
+  assert.match(lock, /const ALL: \[Covered; 4\]/);
+  assert.match(fnBody(lock, "pub fn spawn_watch("), /for which in Covered::ALL/);
+  assert.match(fnBody(lock, "fn covered_focused("), /Covered::ALL/);
+  const win = read("src-tauri/src/windows.rs");
+  assert.match(fnBody(win, "pub fn toggle_hud("), /crate::lock::may_open\(app, crate::lock::Covered::Hud\)/,
+    "toggling the HUD on skips the lock");
+  // Only lock.rs shows it without asking.
+  const rust = readdirSync(join(HERE, "..", "src-tauri", "src"), { recursive: true })
+    .filter((f) => String(f).endsWith(".rs"));
+  for (const f of rust) {
+    const text = read(`src-tauri/src/${f}`).replace(/\/\/.*$/gm, "");
+    if (f !== "lock.rs" && f !== "windows.rs") {
+      assert.doesNotMatch(text, /show_hud_unlocked/, `${f} shows the HUD past the lock`);
+    }
+    assert.doesNotMatch(text, /get_webview_window\((crate::)?HUD_LABEL\)[^;]*\.show\(\)/, `${f} shows the HUD directly`);
+  }
+  // Second launch and a normal start go through the lock too.
+  const lib = read("src-tauri/src/lib.rs");
+  const single = lib.slice(lib.indexOf("tauri_plugin_single_instance::init"), lib.indexOf("tauri_plugin_clipboard_manager::init"));
+  assert.match(single, /windows::show_hud\(app\)/, "a second launch shows the HUD without the lock");
+  assert.doesNotMatch(single, /hud\.show\(\)/);
+  const build = fnBody(lib, "fn build_hud_window(");
+  assert.match(build, /let lock_first = !hidden && lock::current\(app\)\.app_lock;/);
+  assert.match(build, /\.visible\(!hidden && !lock_first\)/, "a normal start shows the HUD while locked");
+  assert.match(build, /if lock_first \{\s*if let Err\(err\) = windows::show_hud\(app\)/);
+  const tray = read("src-tauri/src/tray.rs");
+  assert.match(tray, /ID_SHOW_HUD => \{\s*if let Err\(err\) = windows::show_hud\(app\)/);
+});
+
+await check("App lock: the widget approves nothing, in Rust (apps security audit M3)", () => {
+  const cmd = read("src-tauri/src/commands.rs");
+  const answer = fnBody(cmd, "async fn answer_approval(");
+  const gate = answer.indexOf("window.label() == windows::WIDGET_LABEL && crate::lock::current(&app).app_lock");
+  assert.ok(gate > 0, "answer_approval does not refuse the widget's Approve under App lock");
+  assert.ok(gate < answer.indexOf("crate::lock::check_approval"), "the widget refusal comes after Windows Hello");
+  assert.ok(gate < answer.indexOf(".post("), "the widget refusal comes after the request");
+  assert.match(answer.slice(gate, gate + 400), /show_approval_in_quickbar\(&app\);\s*return Err\(crate::lock::WIDGET_APPROVES_IN_BAR/);
+  // Only Approve: Deny is not inside `if approved`.
+  assert.match(answer.slice(0, gate), /if approved \{\s*if let AnsweredFrom::Window\(window\) = &from \{\s*if\s*$/);
+  const rules = read("src-tauri/src/lock/rules.rs");
+  const said = /WIDGET_APPROVES_IN_BAR: &str = "([\s\S]*?)";/.exec(rules)[1];
+  // main.js and widget.js read "already" as "someone else answered it".
+  assert.doesNotMatch(said, /already/i);
+  // The two commands are the widget's, and read or decide nothing more.
+  const toml = read("src-tauri/permissions/surfaces.toml");
+  const set = toml.slice(toml.indexOf('identifier = "approvals"'));
+  const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1);
+  assert.match(perms, /"allow-get-app-lock"/);
+  assert.match(perms, /"allow-open-approval-in-quickbar"/);
+  assert.match(fnBody(cmd, "pub fn get_app_lock("), /^pub fn get_app_lock\(app: AppHandle\) -> bool \{\s*crate::lock::current\(&app\)\.app_lock\s*$/);
+});
+
+const LOCK_GATE = {
+  ...K.APPROVAL_RAISED,
+  notice: { title: "Send an email", body: "To supplier@example.com: Order 4471", weight: "heavy" },
+  options: [
+    { id: "o1", label: "Reply with the invoice attached", summary: "sends the invoice", weight: "heavy" },
+    { id: "o2", label: "Wait", summary: "nothing sent", weight: "normal" },
+  ],
+};
+const widgetCard = (page) => page.evaluate(() => {
+  const $ = (id) => document.getElementById(id);
+  const card = $("approval-card");
+  return {
+    shown: !card.hidden,
+    text: card.innerText,
+    action: $("appr-action").textContent,
+    detail: $("appr-detail").textContent,
+    approve: $("btn-appr-yes").textContent,
+    approveHidden: $("btn-appr-yes").hidden,
+    noteHidden: $("appr-note").closest(".appr-note-row").hidden,
+  };
+});
+
+await check("App lock: the widget shows the notice title only, and Approve opens the Jarvis bar (M3)", async () => {
+  const page = await K.open(browser, base, "widget.html", { pending: [LOCK_GATE], appLock: true }, { width: 320, height: 520 });
+  await page.waitForTimeout(400);
+  const w = await widgetCard(page);
+  assert.ok(w.shown, "no card");
+  assert.equal(w.action, "Send an email");
+  assert.equal(w.approve, "Approve in the Jarvis bar");
+  assert.equal(w.approveHidden, false, "the one Approve is hidden (options would hide it)");
+  assert.ok(w.noteHidden, "the note field is offered while locked");
+  for (const secret of ["supplier@example.com", "Order 4471", "send_email", "Send the reply", "invoice", "RAISED"]) {
+    assert.ok(!w.text.includes(secret), `the locked widget shows "${secret}": ${w.text}`);
+  }
+  const quote = K.APPROVAL_RAISED.raised && K.APPROVAL_RAISED.raised.quote;
+  if (quote) assert.ok(!w.text.includes(quote), "the rush quote is shown while locked");
+  await page.locator("#btn-appr-yes").click();
+  await page.waitForTimeout(250);
+  const after = await page.evaluate(() => ({ bar: window.__openedInBar || 0, decides: window.__decides || [] }));
+  assert.equal(after.bar, 1, "Approve did not open the Jarvis bar");
+  assert.equal(after.decides.length, 0, `the widget sent a decision while locked: ${JSON.stringify(after.decides)}`);
+  // Deny still decides from the widget, as on the phone.
+  await page.locator("#btn-appr-no").click();
+  await page.waitForTimeout(250);
+  const denied = await page.evaluate(() => window.__decides || []);
+  await page.close();
+  assert.deepEqual(denied.map((d) => d.approved), [false], "Deny does not work from the locked widget");
+});
+
+await check("App lock: a card with no notice gets a plain title, and turning the lock off shows it all (M3)", async () => {
+  const page = await K.open(browser, base, "widget.html", { pending: [K.APPROVAL_RAISED], appLock: true }, { width: 320, height: 520 });
+  await page.waitForTimeout(400);
+  const locked = await widgetCard(page);
+  assert.equal(locked.action, "Jarvis is waiting for your approval");
+  assert.ok(!locked.text.includes("supplier@example.com"));
+  await page.evaluate(() => window.__emit("security-changed",
+    { appLock: false, relockAfterSecs: 60, approvals: "risky", privateAnswers: false }));
+  await page.waitForTimeout(250);
+  const open = await widgetCard(page);
+  assert.equal(open.action, "send_email");
+  assert.equal(open.approve, "Approve");
+  assert.equal(open.noteHidden, false);
+  await page.locator("#btn-appr-yes").click();
+  await page.waitForTimeout(250);
+  const sent = await page.evaluate(() => ({ bar: window.__openedInBar || 0, decides: window.__decides || [] }));
+  // And back on: the card is cut down again at once.
+  await page.evaluate(() => window.__emit("security-changed",
+    { appLock: true, relockAfterSecs: 60, approvals: "risky", privateAnswers: false }));
+  await page.waitForTimeout(250);
+  const relocked = await widgetCard(page);
+  await page.close();
+  assert.equal(sent.bar, 0);
+  assert.deepEqual(sent.decides.map((d) => d.approved), [true], "CONTROL: an unlocked widget cannot approve");
+  assert.equal(relocked.action, "Jarvis is waiting for your approval");
 });
 
 await browser.close();

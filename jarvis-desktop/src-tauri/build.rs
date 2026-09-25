@@ -25,6 +25,10 @@ fn main() {
             "get_pending_approvals",
             "refresh_link",
             "decide_approval",
+            // App lock and the widget: is the lock on, and "Approve in the
+            // Jarvis bar" (apps security audit M3).
+            "get_app_lock",
+            "open_approval_in_quickbar",
             // A note on a proposal, and the controls for the turn already
             // running. `jarvis-link.js` invoked all five of these before any
             // of them existed, so every one of those buttons failed at the

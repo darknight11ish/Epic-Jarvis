@@ -1841,6 +1841,21 @@ async fn answer_approval(
         );
     }
 
+    // The widget approves nothing while App lock is on (apps security audit
+    // M3, the owner's decision 2026-09-25): it sits on the desktop outside
+    // the lock, so its Approve opens the Jarvis bar - which asks Windows
+    // Hello first - and the owner approves there. Deny still works from the
+    // widget, as it does from the phone's. Checked here, in the command,
+    // not only by the widget's button.
+    if approved {
+        if let AnsweredFrom::Window(window) = &from {
+            if window.label() == windows::WIDGET_LABEL && crate::lock::current(&app).app_lock {
+                show_approval_in_quickbar(&app);
+                return Err(crate::lock::WIDGET_APPROVES_IN_BAR.to_string());
+            }
+        }
+    }
+
     // Windows Hello, for an Approve (lock.rs): after the checks above, so
     // the owner is never asked to confirm something that would then be
     // refused anyway, and before the request is built. Deny is never held:
@@ -2344,6 +2359,35 @@ pub fn save_widget_position(app: AppHandle, x: Option<f64>, y: Option<f64>) -> R
 #[tauri::command]
 pub fn get_widget_prefs(app: AppHandle) -> windows::WidgetPrefs {
     app.state::<windows::WidgetState>().snapshot()
+}
+
+/// Whether App lock is on - all the widget needs to know to show an approval
+/// card's title only and turn its Approve into "Approve in the Jarvis bar"
+/// (apps security audit M3). A yes or no, nothing else from the settings.
+/// Changes arrive as the `security-changed` event every window hears.
+#[tauri::command]
+pub fn get_app_lock(app: AppHandle) -> bool {
+    crate::lock::current(&app).app_lock
+}
+
+/// The widget's Approve while App lock is on: opens the Jarvis bar on the
+/// waiting card. The bar is behind the lock, so Windows Hello is asked
+/// before it shows, and the approval is made there. Decides nothing.
+#[tauri::command]
+pub fn open_approval_in_quickbar(app: AppHandle) -> Result<(), String> {
+    windows::show_quickbar(&app)?;
+    crate::emit_quickbar(&app, crate::events::SHOW_APPROVAL, ());
+    Ok(())
+}
+
+/// [`open_approval_in_quickbar`] from inside `answer_approval`, where a
+/// failure to open is only logged: the refusal is what the caller needs.
+fn show_approval_in_quickbar(app: &AppHandle) {
+    if let Err(err) = windows::show_quickbar(app) {
+        eprintln!("[jarvis] could not open the Jarvis bar for an approval: {err}");
+        return;
+    }
+    crate::emit_quickbar(app, crate::events::SHOW_APPROVAL, ());
 }
 
 /// Summons the quickbar with a note prefix already armed.

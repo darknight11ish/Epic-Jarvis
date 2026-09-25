@@ -397,9 +397,11 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock }) {
   const listeners = {};
   window.__calls = [];
+  // App lock on or off, for get_app_lock (apps security audit M3).
+  window.__appLock = Boolean(appLock);
   const state = {
     connected: true, stale: false, base: "http://127.0.0.1:4719", last_id: 7,
     power: "active", power_set_by: null, activity: "idle",
@@ -438,6 +440,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_attention_muted": return { muted: args.muted };
           case "get_widget_prefs":
             return { expanded: true, always_on_top: true, x: null, y: null, ...prefs };
+          // commands.rs (apps security audit M3): whether App lock is on,
+          // and the widget's "Approve in the Jarvis bar". A scenario sets
+          // window.__appLock; unset, the lock is off.
+          case "get_app_lock": return Boolean(window.__appLock);
+          case "open_approval_in_quickbar":
+            window.__openedInBar = (window.__openedInBar || 0) + 1;
+            return null;
           case "check_server_health":
             return { services: [{ name: "ollama", online: true },
                                 { name: "litellm", online: false, optional: true }] };

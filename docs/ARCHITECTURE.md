@@ -486,6 +486,27 @@ Meshnet. It is a
 remote, not a second brain. It renders, it decides one thing at a time, it
 does not hold its own copy of state.
 
+### App lock: what it covers on each app
+
+Both apps have an App lock (off by default) that asks the owner's own check -
+Windows Hello on the PC, the fingerprint or phone PIN on the phone - before
+Jarvis opens, and again after "Lock again after". What it covers, since the
+apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
+
+- **Desktop:** the Jarvis bar, the Brain, Settings **and the HUD window**
+  (`lock.rs` `Covered`; every way the HUD is shown - the tray, a second
+  launch, a normal start - goes through `lock::may_open`). The widget stays
+  on the desktop, but while App lock is on its approval card shows only the
+  notice's title, and its Approve opens the Jarvis bar to approve there;
+  `decide_approval` refuses an Approve from the widget in Rust as well. Deny
+  works from the widget, as from the phone's.
+- **Phone:** the whole app. The home-screen widget only ever shows the
+  `notice` text and offers Deny only, lock or not.
+- **Screenshots (phone):** while App lock or "Hide memory lists and chat
+  history" is on, Jarvis cannot be screenshotted, screen-recorded or cast
+  (`FLAG_SECURE`, `SecurityRules.blockScreenCapture`). Phone only for now -
+  see "One-sided on purpose" below.
+
 `jarvis-android/` is the older app, kept for reference only: it speaks a
 protocol the backend does not have, so it cannot talk to Jarvis. Its safe
 parts (the approval widget, a quick-link widget) are already in
@@ -597,6 +618,7 @@ backend routes, in both directions; the rest are listed here only.
 | what | why |
 |---|---|
 | The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
+| **Blocking screenshots while a lock is on** (`FLAG_SECURE`, `SecurityRules.blockScreenCapture`) | **Undecided on the desktop - the owner's call.** The owner decided it for the phone (apps security audit L5, 2026-09-25), where screenshots, screen recording and casting are all a tap away. Windows could do the same for Jarvis's windows (Tauri's `set_content_protected`, which keeps a window out of screenshots, recordings and screen sharing), but it was not part of that decision and is not built. |
 
 **On the backend, in neither app yet, NOT on purpose** (2026-09-24, both
 apps should get it; the app side is tracked as a task): the voice flow (`docs/JARVIS-API.md` §17,

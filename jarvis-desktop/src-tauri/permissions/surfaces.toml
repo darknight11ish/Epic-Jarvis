@@ -50,6 +50,11 @@ permissions = [
   # so it rides with the windows that already render the gate rather than
   # earning a set of its own.
   "allow-amend-approval",
+  # App lock and the widget (apps security audit M3): whether the lock is on
+  # (a yes or no), and "Approve in the Jarvis bar", which only opens the bar
+  # - behind the lock - on the waiting card. Neither decides anything.
+  "allow-get-app-lock",
+  "allow-open-approval-in-quickbar",
 ]
 
 # Pause, resume or stop the turn Jarvis is running right now, and annotate it.
