@@ -402,6 +402,12 @@ $PATCHES = @(
     # Needs jarvis_search.py copied in; without it the routes answer 503 and
     # the model is never offered web_search's settings.
     'web-search.patch'
+    # "What Jarvis can reach" (the Muse audit, 2026-09-25): GET /api/reach,
+    # the list both apps show, written by jarvis_reach.py from the PC's own
+    # settings. Its context is the end of web-search's GET /api/search block
+    # and schedule's GET /api/schedule line, so it goes after web-search.
+    # Needs jarvis_reach.py copied in; without it the route answers 503.
+    'reach.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -475,6 +481,7 @@ $SHIPPED = @(
     'jarvis_standby_schedule.py' # the standby schedule ("standby from 01:00 to 07:00"): a kind of job on the one scheduler, no patch
     'jarvis_backoff.py'          # briefing.patch: offers nobody asked for - a few at most, not mid-chat, a "no" heard
     'jarvis_briefing.py'         # briefing.patch: the morning briefing, a kind of job on the one scheduler
+    'jarvis_reach.py'            # reach.patch: "What Jarvis can reach", written from the settings, never by the model
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

@@ -37,6 +37,14 @@ WHAT IS KEPT (precision - an ordinary number is not a secret)
     tracking, reference or account number, a phone number, and a date.
   * Ordinary links (a shop page, an article, a video).
 
+WHAT IT HIDES THAT IT NEED NOT
+  * A discount or error code right after the word "code" ("promo code
+    SAVE20", "error code E404"), and a number near "sign in" or "log in"
+    with no label ("log in to see 2345 new photos").
+  * Any link with a long random piece, a newsletter's tracking link
+    included. Hiding a harmless link costs a click in the mail app; showing
+    a sign-in link could cost the account.
+
 WHAT IT CANNOT CATCH - said plainly
   * A code with no code word anywhere near it and none in the subject
     ("482913" alone on a line under an unhelpful subject).

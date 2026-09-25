@@ -1451,6 +1451,14 @@ object JarvisRuntime {
     /** `GET /api/search`. A read: never held. */
     suspend fun webSearch(): ApiResult<JsonObject> = api.webSearch()
 
+    // ------------------------------------------------ what Jarvis can reach ----
+    // The Muse audit, 2026-09-25 - see [com.jarvis.client.net.Reach] and
+    // ui/screens/ReachPlate.kt. Every way Jarvis can reach something outside
+    // itself, written by the PC from its settings, never by the model.
+
+    /** `GET /api/reach`. A read: never held. */
+    suspend fun reach(): ApiResult<JsonObject> = api.reach()
+
     /**
      * ONE web search setting, with [body] from [com.jarvis.client.net.WebSearch]'s
      * providerBody / addressBody / askBody. Held on a stale link ([actionBlocker],

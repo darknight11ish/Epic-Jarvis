@@ -836,6 +836,13 @@ class JarvisApi(
      */
     suspend fun webSearch(): ApiResult<JsonObject> = probe(WebSearch.PATH)
 
+    /**
+     * `GET /api/reach` - "What Jarvis can reach": every way Jarvis can reach
+     * something outside itself, written by the PC from its settings
+     * ([Reach.parse]). A read. A 404 is an older backend ([Reach.missing]).
+     */
+    suspend fun reach(): ApiResult<JsonObject> = probe(Reach.PATH)
+
     /** A test search waits for the provider (up to 15 seconds on the PC). */
     private val webSearchTestCall: OkHttpClient by lazy {
         client.newBuilder()

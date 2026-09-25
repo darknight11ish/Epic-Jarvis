@@ -412,6 +412,16 @@ fun BrainScreen(
                 WebSearchSection(canAct = canAct)
             }
 
+            // "What Jarvis can reach" (the Muse audit, 2026-09-25): every way
+            // Jarvis can reach something outside itself, whether each is on,
+            // where it goes and whether it asks first - written by the PC
+            // from its settings, never by the model (ReachPlate.kt) - the
+            // desktop's Settings -> What Jarvis can reach. A read: nothing
+            // to hold on a stale link.
+            item(key = "reach") {
+                ReachSection()
+            }
+
             if (models != null) {
                 item(key = "models") {
                     Section("Model") {

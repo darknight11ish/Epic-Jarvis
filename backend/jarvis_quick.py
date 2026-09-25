@@ -29,6 +29,13 @@ answered from jarvis_search.py's own "why use this one" lines
 "switch web search to Exa" changes the provider at once, as a tap in
 either app's Settings does. Only the owner's own words, like everything here.
 
+"WHAT CAN YOU REACH?" (the Muse audit, 2026-09-25) is here too: "what can
+you reach?", "what can Jarvis access?", "what do you have access to?" and
+close phrasings are answered from jarvis_reach.py's list - the one both
+apps show under "What Jarvis can reach", built from the PC's settings - so
+the model never describes its own access. Reads only; host names, never an
+account name, a key or a link.
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
@@ -671,6 +678,10 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "what can you reach?" (jarvis_reach.py) -----------------------------------
+    if _REACH.fullmatch(s):
+        return Intent("reach_list")
+
     # --- reminders -----------------------------------------------------------------
     got = _reminder(s, now)
     if got is not None:
@@ -830,6 +841,38 @@ def _web_search(s: str) -> Optional[Intent]:
 SEARCH_MISSING = ("Your PC's Jarvis does not have web search yet - run apply-patches.ps1 "
                   "on the PC.")
 
+#: "What can you reach?" and close phrasings (the Muse audit, 2026-09-25):
+#: answered from jarvis_reach.py's list - the PC's settings, not the model.
+#: Whole sentences only: "what can you reach on the top shelf" goes to the
+#: model.
+_WHO = r"(?:you|jarvis)"
+_NOW = r"(?:\s+(?:right\s+)?now|\s+at\s+the\s+moment|\s+today|\s+on\s+this\s+pc)?"
+_REACH = re.compile(
+    r"(?:what|which\s+(?:things|services|accounts|apps|tools))\s+(?:can|could|do)\s+" + _WHO
+    + r"\s+(?:reach|access|connect\s+to|get\s+(?:to|into)|reach\s+or\s+access"
+    r"|access\s+or\s+reach|see\s+and\s+reach)" + _NOW
+    + r"|what\s+(?:do|does)\s+" + _WHO + r"\s+have\s+access\s+to" + _NOW
+    + r"|what\s+(?:have\s+you|has\s+jarvis)\s+got\s+access\s+to" + _NOW
+    + r"|what\s+(?:are\s+you|is\s+jarvis)\s+(?:connected|hooked\s+up)\s+to" + _NOW
+    + r"|what\s+(?:can|does)\s+" + _WHO + r"\s+(?:reach|access)\s+outside\s+(?:this\s+pc|"
+    r"itself|yourself)"
+    + r"|(?:show|list|tell)\s+(?:me\s+)?what\s+" + _WHO + r"\s+(?:can\s+(?:reach|access)|"
+    r"(?:has|have)\s+access\s+to)" + _NOW
+    + r"|(?:what\s+is\s+|what's\s+)?(?:everything\s+)?" + _WHO + r"(?:'s)?\s+access\s+list")
+
+REACH_MISSING = ("Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 "
+                 "on the PC.")
+
+
+def _run_reach(intent: Intent) -> Result:
+    """The list both apps show under "What Jarvis can reach", said in one
+    answer - written by jarvis_reach.py from the PC's settings. Reads only."""
+    try:
+        import jarvis_reach
+        return Result(jarvis_reach.sentence(), intent.name)
+    except Exception:
+        return Result(REACH_MISSING, intent.name)
+
 
 def _run_search(intent: Intent) -> Result:
     """Explained from jarvis_search's own words (the same both apps show),
@@ -918,6 +961,8 @@ def run(intent: Intent, sched, now: float) -> Optional[Result]:
         return _run_briefing(intent, sched, now)
     if n.startswith("search_"):
         return _run_search(intent)
+    if n == "reach_list":
+        return _run_reach(intent)
     if n == "timer_set":
         try:
             j = sched.add_timer(f["seconds"], f.get("label", ""), source="quick")

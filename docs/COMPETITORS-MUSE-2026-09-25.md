@@ -192,6 +192,11 @@ Add four small items near the top, because each closes a gap that Muse's failure
 3. **The back-off rule gains "never ask for more access or data"**, with a test (idea 4). **S.**
 4. **Write the local-program limit into ARCHITECTURE §2 or §3**, whatever the owner answers to question 2. **S.**
 
+> **Status, added later on 2026-09-25:** items 1-3 are built -
+> `backend/jarvis_reach.py` and `reach.patch` (JARVIS-API.md section 24),
+> `backend/jarvis_mail_mask.py` (section 25) and the back-off's rule 4
+> (section 22.6). Item 4 is in ARCHITECTURE §3, "A known limit".
+
 Then keep **email drafts (never sent)** as the next "doing" item, and park **Goals** just after it. Leave the any-GPU presets, Docker, model advice and mouse control where the owner put them: waiting.
 
 **One thing not to do:** do not swap in Muse Glimmer (Meta's open 30B model). Its 4-bit version is sized for 24-32 GB on one card [blog], and the owner will have 8 GB + 12 GB on two cards. That does not fit the one-model-per-card design (MODEL-TOPOLOGY.md). Qwen 3.5 9B for the 12 GB card stays the plan.

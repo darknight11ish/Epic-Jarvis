@@ -167,6 +167,10 @@ fn main() {
             "test_web_search",
             "save_search_key",
             "forget_search_key",
+            // Settings' "What Jarvis can reach" (backend/reach.patch): every
+            // way Jarvis can reach something outside itself, written by the
+            // PC from its settings. Read only. Settings window only.
+            "get_reach",
             // Settings' "Voice": what the PC's voice settings are (GET
             // /api/voice/status) - whether each microphone's voice print is
             // trained, the wake word, the stop word, Smart Turn. Read only.
