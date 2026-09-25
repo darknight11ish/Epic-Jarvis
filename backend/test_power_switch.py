@@ -373,6 +373,18 @@ def t_waking_loads_the_chat_model_again():
     code, out = S.set_mode("quiet", gate_check=_auto, ollama=o2, warm=lambda fn: fn())
     check("active -> quiet loads nothing (the model was never unloaded)",
           o2.loads == [] and "warm_up" not in out, repr(out))
+    reset()
+    S.set_mode("standby", gate_check=_auto, models=FakeModels(), ollama=FakeOllama(), others=[])
+    o3 = FakeOllama()
+    os.environ["JARVIS_MODEL"] = "jarvis-primary"
+    try:
+        code, out = S.set_mode("quiet", gate_check=_auto, ollama=o3, warm=lambda fn: fn())
+    finally:
+        os.environ.pop("JARVIS_MODEL", None)
+    check("standby -> quiet loads nothing: the apps let Quiet through on a stale link, "
+          "so it must not start loading models (only Active, which they hold, does)",
+          o3.loads == [] and "warm_up" not in out and P.current() == "quiet", repr(out))
+    reset()
 
 
 def t_the_warm_up_refuses_what_it_must():

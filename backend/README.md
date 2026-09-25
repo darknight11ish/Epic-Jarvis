@@ -8366,8 +8366,10 @@ buttons alike).**
   anything is still there. The second graphics card, the big model and the
   better voice were already stopped by Standby; with one card, that part
   finds nothing and says nothing.
-- **Waking loads the chat model again at once** (Active or Quiet after
-  Standby). Never a cloud model, and only Ollama on this PC.
+- **Waking loads the chat model again at once** (Active after Standby).
+  Never a cloud model, and only Ollama on this PC. Choosing Quiet after
+  Standby loads nothing, as before: both apps let Quiet through even when
+  their link to the PC is not up to date, so it must not start anything.
 
 **What is where.**
 - `jarvis_standby_schedule.py` (new, copied in by `apply-patches.ps1`): the

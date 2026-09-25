@@ -1304,8 +1304,10 @@ link and let going quieter through.
   `also` and `message`) what Ollama did not let go of. Loopback only
   (`OLLAMA_URL` must be this PC, else nothing is asked and `note` says so),
   through `jarvis_local_http` (no proxy); only model names are sent.
-- **Warm-up on waking.** Leaving standby (for `active` or `quiet`) loads
-  the chat model again at once, in the background: `jarvis_models.
+- **Warm-up on waking.** Leaving standby for `active` loads the chat
+  model again at once, in the background (not for `quiet`: the apps let
+  Quiet through on a stale link and hold only Active, so only Active may
+  start loading a model): `jarvis_models.
   current_model()` (else `JARVIS_MODEL`), `POST /api/generate {"model"}`
   with no prompt and no `keep_alive` (Ollama's own setting decides - `-1`
   on the owner's PC). `warm_up` names the model and `message` says it is

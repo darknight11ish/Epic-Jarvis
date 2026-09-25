@@ -35,9 +35,12 @@ This PC's Ollama only (OLLAMA_URL must be loopback), with no proxy
 (jarvis_local_http). Only model names are sent. With one graphics card the
 second card's step finds nothing and says nothing.
 
-WARM-UP ON WAKING (added 2026-09-25). Leaving standby (for Active or Quiet)
-loads the everyday chat model again straight away, in the background, so
-the first question after waking is not the slow one. It asks this PC's
+WARM-UP ON WAKING (added 2026-09-25). Leaving standby for Active loads the
+everyday chat model again straight away, in the background, so the first
+question after waking is not the slow one. Active only, not Quiet: waking
+is the direction both apps hold on a stale link (rule 4) and let Quiet
+through, so a Quiet chosen on a stale link must not start loading models.
+From standby to Quiet the first answer loads it, as before. It asks this PC's
 Ollama to load jarvis_models.current_model() with no prompt - nothing is
 generated - and leaves keep_alive to Ollama's own setting (-1, "keep it
 loaded", on the owner's PC). Refused, with the reason, for a cloud model
@@ -456,9 +459,10 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
             return
         power.set_mode(mode, why=why or f"the owner, from {by or 'an app'}")
         out = {"ok": True, "mode": mode, "changed": True, "message": _WORDS[mode]}
-        if current == "standby" and mode != "standby":
+        if current == "standby" and mode == "active":
             # Waking: load the chat model again now, not at the first
-            # question.
+            # question. Active only - the direction the apps hold on a
+            # stale link; Quiet is let through there and must load nothing.
             name = chat_model()
             (warm or _spawn_warm)(lambda: warm_up(power, ollama, name) and None)
             if name and not _is_cloud_model(name):
