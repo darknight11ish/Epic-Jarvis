@@ -29,6 +29,15 @@ answered from jarvis_search.py's own "why use this one" lines
 "switch web search to Exa" changes the provider at once, as a tap in
 either app's Settings does. Only the owner's own words, like everything here.
 
+FOCUS SESSIONS (2026-09-25, jarvis_focus.py) are here too: "focus for 30
+minutes (on the essay)", "lock on this", "snooze", "I'm doing research",
+"I need a minute", "pause / resume / stop focus", "extend by 10 minutes",
+"how am I doing?", "call me out every 30 seconds". The short ones ("pause",
+"snooze", "lock on this", "how am I doing?") are only ours WHILE a session
+runs - the one place this grammar reads anything: jarvis_focus.is_on(), a
+flag in memory. Otherwise they go on to the rest of the grammar, then the
+model, as before.
+
 "WHAT CAN YOU REACH?" (the Muse audit, 2026-09-25) is here too: "what can
 you reach?", "what can Jarvis access?", "what do you have access to?" and
 close phrasings are answered from jarvis_reach.py's list - the one both
@@ -571,6 +580,11 @@ def _match(text, now: float) -> Optional[Intent]:
                     r"|(?:clear|empty|delete)\s+(?:my|the)\s+todo\s+list", s):
         return Intent("bulk")
 
+    # --- focus sessions (jarvis_focus.py) --------------------------------------
+    got = _focus(s)
+    if got is not None:
+        return got
+
     # --- timers ----------------------------------------------------------------
     m = re.fullmatch(_SET + _ART + r"(.+?)\s+(?:long\s+)?timer(?:\s+(?:for|called|named)\s+"
                      r"(?:the\s+)?(" + _LABEL + r"))?", s)
@@ -715,6 +729,165 @@ def _match(text, now: float) -> Optional[Intent]:
     if m:
         return Intent("todo_remove", {"text": m.group(1).strip()})
     return None
+
+
+# --------------------------------------------------------------------------
+#   Focus sessions (jarvis_focus.py)
+# --------------------------------------------------------------------------
+
+_FOCUS_WORD = r"focus(?:ing)?(?:\s+(?:session|mode|block|time))?"
+_FOCUS_REF = r"(?:(?:the|my|this|a)\s+)?" + _FOCUS_WORD
+_THING = r"(?:tab|app|window|site|page|program|one)"
+
+
+def _focus_on() -> bool:
+    """Is a focus session running? A flag in memory - no file, no socket."""
+    try:
+        import jarvis_focus
+        return bool(jarvis_focus.is_on())
+    except Exception:
+        return False
+
+
+def _focus_minutes(d) -> Optional[float]:
+    """Minutes from "30 minutes", "half an hour", "an hour", or a bare "30"."""
+    if d is None:
+        return None
+    d = d.strip()
+    if re.fullmatch(r"\d{1,3}", d):
+        return float(d)
+    secs = parse_duration(d)
+    return None if secs is None else secs / 60.0
+
+
+_FOCUS_START = (
+    # "focus for 30 minutes (on the essay)", "start a focus session",
+    # "let's start focus mode for an hour"
+    r"(?P<lead>(?:let'?s\s+|lets\s+)?(?:start|begin|do)\s+)?(?:a\s+|my\s+)?focus"
+    r"(?P<word>\s+(?:session|mode|block))?(?:\s+(?:for|of)\s+(?P<d>.+?))?"
+    r"(?:\s+on\s+(?P<on>.+))?",
+    # "let's focus (for 20 minutes)"
+    r"(?P<lead>let'?s\s+|lets\s+)focus(?:\s+for\s+(?P<d>.+?))?(?:\s+on\s+(?P<on>.+))?",
+    # "a 45 minute focus session", "30 minutes of focus"
+    r"(?P<lead>(?:start|begin|do)\s+)?(?:a\s+|an\s+)?(?P<d>[a-z0-9 ]+?)\s+(?:of\s+)?focus"
+    r"(?P<word>\s+(?:session|mode|block))?(?:\s+on\s+(?P<on>.+))?",
+    # "start focusing (for 20 minutes)"
+    r"(?P<lead>(?:start|begin)\s+)focusing(?:\s+for\s+(?P<d>.+?))?(?:\s+on\s+(?P<on>.+))?",
+    # "help me focus for 30 minutes", "keep me focused for an hour"
+    r"(?P<lead>(?:help|keep)\s+me\s+)focus(?:ed)?(?:\s+for\s+(?P<d>.+?))?"
+    r"(?:\s+on\s+(?P<on>.+))?",
+    # "focus on the essay for 30 minutes"
+    r"focus\s+on\s+(?P<on>.+?)\s+for\s+(?P<d>.+)",
+)
+
+
+def _focus(s: str) -> Optional[Intent]:
+    """A focus-session command, or None. Explicit ones ("focus for 30
+    minutes", "stop focus") always; the short ones only while a session
+    runs."""
+    for pat in _FOCUS_START:
+        m = re.fullmatch(pat, s)
+        if not m:
+            continue
+        g = m.groupdict()
+        mins = _focus_minutes(g.get("d"))
+        if g.get("d") is not None and mins is None:
+            continue
+        if mins is None and not g.get("lead") and not g.get("word"):
+            continue        # "focus on the positives" is a sentence, not a command
+        return Intent("focus_start", {"minutes": mins, "text": (g.get("on") or "").strip()})
+    if re.fullmatch(r"(?:stop|end|cancel|finish|abort|quit|exit)\s+" + _FOCUS_REF
+                    + r"|i'?m\s+done\s+focusing|(?:i'?m\s+)?done\s+with\s+" + _FOCUS_REF, s):
+        return Intent("focus_stop")
+    if re.fullmatch(r"how'?s\s+" + _FOCUS_REF + r"\s+going|" + _FOCUS_REF + r"\s+status"
+                    r"|how\s+(?:long|much\s+time)\s+(?:is\s+)?left\s+(?:on|in|of)\s+"
+                    + _FOCUS_REF + r"|how\s+much\s+focus\s+(?:time\s+)?is\s+left", s):
+        return Intent("focus_status")
+    if re.fullmatch(r"pause\s+" + _FOCUS_REF, s):
+        return Intent("focus_pause")
+    if re.fullmatch(r"(?:resume|unpause|continue|restart)\s+" + _FOCUS_REF, s):
+        return Intent("focus_resume")
+    m = re.fullmatch(r"extend\s+" + _FOCUS_REF + r"(?:\s+by\s+(?P<d>.+))?"
+                     r"|add\s+(?P<d2>.+?)\s+to\s+" + _FOCUS_REF, s)
+    if m:
+        d = m.group("d") or m.group("d2")
+        mins = _focus_minutes(d)
+        if d and mins is None:
+            return None
+        return Intent("focus_extend", {"minutes": mins})
+    if not _focus_on():
+        return None
+    # -- only while a session runs --------------------------------------------
+    if s == "pause":
+        return Intent("focus_pause")
+    if re.fullmatch(r"resume|unpause|carry\s+on|i'?m\s+back", s):
+        return Intent("focus_resume")
+    m = re.fullmatch(r"extend(?:\s+it)?(?:\s+by\s+(?P<d>.+))?", s)
+    if m:
+        mins = _focus_minutes(m.group("d"))
+        if m.group("d") and mins is None:
+            return None
+        return Intent("focus_extend", {"minutes": mins})
+    if re.fullmatch(r"(?:(?:i|we)\s+need|(?:just\s+)?give\s+me)\s+a\s+(?:minute|moment|sec|second)"
+                    r"|(?:no[\s,]+)?(?:jarvis[\s,]+)?i\s+need\s+to\s+do\s+something"
+                    r"(?:\s+important)?|leave\s+me\s+alone(?:\s+for\s+a\s+(?:minute|bit))?", s):
+        return Intent("focus_relief")
+    m = re.fullmatch(r"snooze(?:\s+(?:the\s+)?(?:focus|callouts?|nudges?|it))?"
+                     r"(?:\s+for\s+(?P<d>.+))?|give\s+me\s+(?P<d2>.+)", s)
+    if m:
+        d = m.group("d") or m.group("d2")
+        mins = _focus_minutes(d)
+        if d and mins is None:
+            return None
+        return Intent("focus_snooze", {"minutes": mins})
+    if re.fullmatch(r"(?:it'?s\s+(?:ok|okay|fine|alright)[\s,]+)?(?:i'?m|i\s+am)\s+(?:doing\s+"
+                    r"(?:some\s+)?research|researching(?:\s+something)?)"
+                    r"(?:\s+for\s+(?:it|this|work))?"
+                    r"|(?:this|it)\s+is\s+(?:for\s+)?research|it'?s\s+(?:for\s+)?research"
+                    r"|this\s+is\s+for\s+(?:work|the\s+task|it)", s):
+        return Intent("focus_research")
+    if re.fullmatch(r"(?:ok(?:ay)?[\s,]+)?(?:(?:i'?m\s+)?(?:gonna|going\s+to)\s+need\s+you\s+to\s+)?"
+                    r"(?:lock\s+(?:on\s+)?(?:to\s+)?(?:this|here)(?:\s+" + _THING + r")?"
+                    r"|lock\s+on|keep\s+me\s+(?:in|on)\s+this(?:\s+" + _THING + r")?"
+                    r"|stay\s+(?:in|on)\s+this(?:\s+" + _THING + r")?"
+                    r"|this\s+is\s+the\s+" + _THING + r"(?:\s+i'?m\s+working\s+(?:in|on))?)", s):
+        return Intent("focus_lock")
+    if re.fullmatch(r"how\s+am\s+i\s+doing|how'?s\s+it\s+going", s):
+        return Intent("focus_status")
+    m = re.fullmatch(r"(?:call\s+me\s+out|nag\s+me|check\s+on\s+me|tell\s+me\s+off)"
+                     r"\s+every\s+(?P<d>.+)", s)
+    if m:
+        mins = _focus_minutes(m.group("d"))
+        if mins is not None:
+            return Intent("focus_nag", {"seconds": mins * 60.0})
+    return None
+
+
+FOCUS_MISSING = ("Your PC's Jarvis does not have focus sessions yet - run apply-patches.ps1 "
+                 "on the PC.")
+
+_FOCUS_DO = {"focus_stop": "stop", "focus_pause": "pause", "focus_resume": "resume",
+             "focus_extend": "extend", "focus_snooze": "snooze", "focus_research": "research",
+             "focus_relief": "relief", "focus_lock": "lock", "focus_nag": "nag"}
+
+
+def _run_focus(intent: Intent) -> Result:
+    """Focus-session commands, acted on at once by jarvis_focus's one
+    engine, in its own words. Nothing here reads the screen."""
+    n, f = intent.name, intent.f
+    try:
+        import jarvis_focus as F
+    except Exception:
+        return Result(FOCUS_MISSING, n)
+    e = F.ENGINE
+    if n == "focus_start":
+        code, out = e.start(f.get("minutes"), f.get("text") or "", by="a chat message")
+        return Result(str(out.get("said") or out.get("error") or ""), n)
+    if n == "focus_status":
+        return Result(F.spoken_status(e.status()), n)
+    arg = f.get("seconds") if n == "focus_nag" else f.get("minutes")
+    code, out = e.act(_FOCUS_DO[n], arg, by="a chat message")
+    return Result(str(out.get("said") or out.get("error") or ""), n)
 
 
 _REMIND = re.compile(r"(?:remind\s+me|set\s+(?:a|an)\s+reminder|make\s+(?:a|an)\s+reminder"
@@ -963,6 +1136,8 @@ def run(intent: Intent, sched, now: float) -> Optional[Result]:
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n.startswith("focus_"):
+        return _run_focus(intent)
     if n == "timer_set":
         try:
             j = sched.add_timer(f["seconds"], f.get("label", ""), source="quick")
@@ -974,6 +1149,9 @@ def run(intent: Intent, sched, now: float) -> Optional[Result]:
         timers = sched.timers()
         if n == "timer_status":
             if not timers:
+                if f.get("bare") and _focus_on():
+                    # "how long is left?" with no timer, in a focus session
+                    return _run_focus(Intent("focus_status"))
                 return None if f.get("bare") else Result("No timer is running.", n)
             if f.get("length") or f.get("label"):
                 t, why = _pick_timer(timers, f)

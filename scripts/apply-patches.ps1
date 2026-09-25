@@ -417,6 +417,12 @@ $PATCHES = @(
     # jarvis_owner_check.py copied in; without it EVERY approval is refused
     # (the gate fails closed), and the start-up banner says so.
     'owner-check.patch'
+    # Focus sessions (the owner's decision of 2026-09-25): GET /api/focus,
+    # /api/focus/diag and /api/focus/callout (this PC only), POST
+    # /api/focus/start and /api/focus/act. Its context is reach's GET block
+    # and power-mode's POST block, so it goes after both. Needs
+    # jarvis_focus.py copied in; without it the routes answer 503.
+    'focus.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -508,6 +514,8 @@ $SHIPPED = @(
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch
+    # --- focus sessions (focus.patch) ---
+    'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
 )
 
 # The settings file. Installed only where none exists; never overwritten.

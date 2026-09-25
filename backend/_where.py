@@ -140,6 +140,8 @@ SHIPPED = (
     "jarvis_mail_mask.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
+    # focus sessions (focus.patch): a kind of job on the one scheduler
+    "jarvis_focus.py",
 )
 
 
