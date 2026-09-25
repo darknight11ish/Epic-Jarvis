@@ -1,0 +1,424 @@
+{
+  "_about": "Which approvals are risky (need Windows Hello on the PC, the fingerprint or PIN on the phone), and what that check's prompt says. `risky` and `message` are backend/jarvis_owner_check.py's own answers for each /api/pending row; the desktop (lock/rules.rs) and the phone (SecurityRules) must agree. Made by tools/gen_risky_approval_cases.py. Do not edit by hand: re-run the tool.",
+  "cases": [
+    {
+      "message": "Jarvis wants to append logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
+      "name": "stays on this PC and can be undone",
+      "risky": false,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a1",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": true,
+          "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
+      "name": "stays on this PC and can be undone, no raised field at all",
+      "risky": false,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a2",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": true,
+          "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
+      "name": "stays on this PC and can be undone, raised is false",
+      "risky": false,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a3",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": false,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": true,
+          "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
+      "name": "rushed: raised is an object",
+      "risky": true,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a4",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "heavy"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": {
+          "code": "rushed",
+          "count_today": 1,
+          "quote": "approve now or lose it"
+        },
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": true,
+          "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
+      "name": "rushed: raised is true (the doorbell's boolean)",
+      "risky": true,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a5",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "heavy"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": true,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": true,
+          "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
+      "name": "rushed: raised is the JSON text of an object (how the database holds it)",
+      "risky": true,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a6",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "heavy"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": "{\"code\": \"rushed\", \"quote\": \"approve now or lose it\", \"count_today\": 1}",
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": true,
+          "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to some tool nobody classified\nnot classified, so treated as the worst case",
+      "name": "not in the gate's table: unclassified",
+      "risky": true,
+      "row": {
+        "action": "some_tool_nobody_classified",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a7",
+        "notice": {
+          "approve_ok": false,
+          "body": "not classified, so treated as the worst case. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to some tool nobody classified",
+          "weight": "heavy"
+        },
+        "prompt": "tool some_tool_nobody_classified {}",
+        "raised": null,
+        "risk": {
+          "classified": false,
+          "reach": "outbound",
+          "reversible": "no",
+          "swipe_ok": false,
+          "why": "not classified, so treated as the worst case"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nIt leaves this PC.",
+      "name": "classified, leaves this PC",
+      "risky": true,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a9",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "It leaves this PC."
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nIt cannot be undone.",
+      "name": "classified, stays on this PC, cannot be undone",
+      "risky": true,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a10",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "no",
+          "swipe_ok": false,
+          "why": "It cannot be undone."
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nUndoing it takes work.",
+      "name": "classified, stays on this PC, hard to undo (not risky: only \"no\" is)",
+      "risky": false,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a11",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "hard",
+          "swipe_ok": false,
+          "why": "Undoing it takes work."
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nx",
+      "name": "classified, but no reach: read as outbound",
+      "risky": true,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a12",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reversible": "yes",
+          "why": "x"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nx",
+      "name": "classified, but no reversible: read as cannot be undone",
+      "risky": true,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a13",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "why": "x"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nx",
+      "name": "classified is false, even for a local undoable action",
+      "risky": true,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a14",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": null,
+        "risk": {
+          "classified": false,
+          "reach": "local",
+          "reversible": "yes",
+          "why": "x"
+        },
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Jarvis wants to append logseq journal\nCheck the card before you confirm.",
+      "name": "no risk object at all",
+      "risky": true,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a15",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to append logseq journal",
+          "weight": "normal"
+        },
+        "prompt": "tool append_logseq_journal {}",
+        "raised": null,
+        "tier": "ask"
+      }
+    },
+    {
+      "message": "Approve: append_logseq_journal\nadds one entry to the end of today's Logseq journal on this PC; nothing already there is changed",
+      "name": "no notice: the prompt names the action instead",
+      "risky": false,
+      "row": {
+        "action": "append_logseq_journal",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a16",
+        "prompt": "tool append_logseq_journal {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "yes",
+          "swipe_ok": true,
+          "why": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"
+        },
+        "tier": "ask"
+      }
+    }
+  ]
+}

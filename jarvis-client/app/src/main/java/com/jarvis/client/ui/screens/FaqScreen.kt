@@ -163,14 +163,16 @@ private val FAQS = listOf(
     ),
     Faq(
         "My phone has no screen lock. Does the fingerprint check still work?",
-        "Not really, because there is nothing for Jarvis to check against. " +
-            "With every lock setting off, Jarvis still lets you approve, the " +
-            "same as always. Once you turn any of them on, approvals that need " +
-            "the check are refused, and the app lock and hidden lists stay " +
-            "shut, with a message saying to set a screen lock in Android's " +
-            "Settings (Security, Screen lock). Jarvis will not let you turn a " +
-            "lock on while the phone has no screen lock, so this only happens " +
-            "if the screen lock is removed later.",
+        "No, because there is nothing for Jarvis to check against. So risky " +
+            "approvals - anything that leaves your PC, cannot be undone, or " +
+            "that outside text tried to rush - are refused until the phone " +
+            "has a screen lock, with a message and a button that opens " +
+            "Android's screen-lock settings (Security, Screen lock). Other " +
+            "approvals still work. If you turn any Jarvis lock on, approvals " +
+            "that need the check are refused and the app lock and hidden " +
+            "lists stay shut too; Jarvis will not let you turn a lock on while " +
+            "the phone has no screen lock. The PC does the same without " +
+            "Windows Hello.",
     ),
     Faq(
         "What does a Jarvis notification show on my lock screen?",

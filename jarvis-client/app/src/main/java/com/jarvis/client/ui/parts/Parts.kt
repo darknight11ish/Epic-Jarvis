@@ -710,7 +710,17 @@ fun TextInput(
  * screen rendered one) or reinvented it.
  */
 @Composable
-fun Notice(text: String, onDismiss: () -> Unit) {
+fun Notice(
+    text: String,
+    onDismiss: () -> Unit,
+    /**
+     * A button beside Dismiss for a notice whose fix is one tap away - "Open
+     * screen-lock settings" after a risky approval was refused for want of a
+     * screen lock. Null: Dismiss only.
+     */
+    action: String? = null,
+    onAction: () -> Unit = {},
+) {
     val chrome = LocalChrome.current
     Plate(tone = chrome.warnInk.copy(alpha = 0.10f), outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -724,6 +734,11 @@ fun Notice(text: String, onDismiss: () -> Unit) {
             )
             Spacer(Modifier.width(8.dp))
             Quiet("Dismiss", onClick = onDismiss)
+        }
+        // Under the text rather than beside it: a second button in the row
+        // would squeeze the sentence into a narrow column.
+        if (action != null) {
+            Quiet(action, onClick = onAction)
         }
     }
 }

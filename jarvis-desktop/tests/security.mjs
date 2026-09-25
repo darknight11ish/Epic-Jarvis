@@ -158,7 +158,8 @@ await check("no Windows Hello: the line says what happens and what to do", async
   let s = await look(page);
   await page.close();
   assert.match(s.hello, /not set up on this PC/);
-  assert.match(s.hello, /approvals here go through without a check/);
+  // No lock, no risky approval (2026-09-25): refused even with no lock on.
+  assert.match(s.hello, /risky approvals here are refused, and no lock can be turned on/);
   assert.match(s.hello, /a PIN is enough/);
 
   page = await settingsPage({ hello: "not-set-up", settings: LOCKED });

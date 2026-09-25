@@ -283,6 +283,52 @@ Without the patch the field is absent and no countdown is shown.
 `jarvis-client/app/src/test/resources/contract/pending-rows.json`, which the
 phone's and the desktop's tests decode.
 
+### The PC's own check before an approval - `backend/owner-check.patch` (2026-09-25)
+
+The approval gap's step 1 (`docs/APPROVAL-GAP-DESIGN.md`, the owner's
+decisions of 2026-09-25; `backend/jarvis_owner_check.py`). What changed for
+a client:
+
+- **A risky `POST /api/approve` from the PC waits for Windows Hello.** Risky
+  is the phone's rule on the pending row (not classified, `reach`
+  outbound, `reversible` "no", or `raised` set), the same in all three
+  places: `tools/gen_risky_approval_cases.py` writes the shared cases
+  (`jarvis-desktop/tests/fixtures/risky-approval-cases.json` and the
+  phone's copy in `contract/`). "From the PC" is decided by the
+  connection: loopback, a sender address equal to the address it arrived at
+  (the PC calling its own Tailscale address), or one of the PC's own
+  addresses; anything that cannot be placed counts as the PC. The request
+  stays open while the prompt is up, at most the card's `expires_in`. A
+  phone approval, or a card that is not risky, is not held.
+- **The answers it can give instead of the owner's handler's:**
+
+  | Status | Body | Means |
+  |---|---|---|
+  | 403 | `{"ok": false, "owner_check": "not_set_up", "error": "Windows Hello is not set up on this PC, ..."}` | No Windows Hello on the PC: "no lock, no risky approval". |
+  | 403 | `{"ok": false, "owner_check": "cancelled", "error": "..."}` | The owner dismissed the prompt. |
+  | 403 | `{"ok": false, "owner_check": "failed", "error": "..."}` | The prompt could not be shown just now. |
+  | 409 | `{"ok": false, "owner_check": "gone", "error": "This request stopped waiting while Windows Hello was open ..."}` | It ran out of time or was answered while the prompt was open. Both apps read a 409 as "no longer waiting". |
+  | 503 | `{"ok": false, "owner_check": "unreadable", "error": "..."}` | The queue could not be read, so nothing was approved. |
+
+  The desktop shows a 403/503 `error` as it is (`owner_check_refusal`,
+  commands.rs); none of the sentences contains "already" or "409", which
+  the windows read as "answered elsewhere".
+- **`/api/deny` is unchanged** and never held.
+- **Every approval is stamped** in the backend's memory, and the gate
+  believes an "approved" row only with that stamp: "approved" written into
+  `approvals.db` directly, or a `jarvis_gate.decide()` from another program,
+  is refused (`Verdict.outcome` "refused", reason "it was marked approved,
+  but not through Jarvis's own approval check").
+- **`GET /api/version`'s `capabilities.owner_check`** is `"backend"` when
+  the running server has the check, else `false`. The desktop reads it at
+  each Approve (`backend_owner_check`); when it is `"backend"` and the
+  desktop's address is loopback, the desktop does not show its own Windows
+  Hello prompt for a risky card (`lock/rules.rs`
+  `approval_needs_local_check`) and waits up to the card's time left plus a
+  few seconds (`approval_wait`), after letting the backend's prompt come to
+  the front. The phone does not read it: its approvals are not checked on
+  the PC (step 2 is the phone's half).
+
 ---
 
 ## 4. Chat
@@ -877,7 +923,7 @@ path ever appears in it (`routes.rs:67-101`).
 
 | Endpoint | Method | Desktop | Android | Notes |
 |---|---|---|---|---|
-| `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. The desktop falls back to `/api/status` for anything an older server leaves out. |
+| `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. The desktop falls back to `/api/status` for anything an older server leaves out. |
 | `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Mind screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
 | `/api/graph` | GET | `routes.rs:15` | **no — by rule** | The memory graph stays off the phone. Gets its own longer timeout (`brain.rs:97`). |
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |

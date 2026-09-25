@@ -748,6 +748,13 @@ def _capability_probe() -> dict:
         # appearance: both apps refuse to offer it - rather than send the
         # flag to a PC that would ignore it - unless this is true.
         "temporary_chat": _hud_has("_temporary_chat"),
+        # "backend" when POST /api/approve on this PC asks Windows Hello
+        # itself for a risky approval from this PC (owner-check.patch,
+        # jarvis_owner_check.py; docs/APPROVAL-GAP-DESIGN.md step 1). The
+        # desktop then does not ask as well, so the owner is asked once. A
+        # string, not true, so a later kind of check can say what it is.
+        # False on an older backend: the desktop keeps asking itself.
+        "owner_check": _owner_check(),
         "connectors": {},
     }
 
@@ -779,6 +786,17 @@ def _capability_probe() -> dict:
         except Exception:
             caps["voice"] = False
     return caps
+
+
+def _owner_check():
+    """ "backend" once jarvis_owner_check has wrapped the running server's
+    POST handler (owner-check.patch), else False. Asked of the module that
+    did the wrapping, not of a file on disk: importable is not installed."""
+    try:
+        import jarvis_owner_check
+        return "backend" if jarvis_owner_check.armed() else False
+    except Exception:
+        return False
 
 
 def _hud_has(name: str) -> bool:

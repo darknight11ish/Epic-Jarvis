@@ -24,6 +24,11 @@
 //! * **Windows Hello for approvals** - "Risky only" (the default, and the
 //!   phone's rule: [`is_risky`]) or "Every approval". There is no third
 //!   value below "Risky only", so the type itself cannot express "never".
+//!   Since the approval gap's step 1 (docs/APPROVAL-GAP-DESIGN.md) an
+//!   up-to-date backend asks Windows Hello itself for a risky approval from
+//!   this PC, and this app then leaves those to it ([`check_approval`]), so
+//!   the owner is asked once. A PC with no Windows Hello refuses a risky
+//!   approval whatever the settings say ([`NO_HELLO_NO_RISKY`]).
 //! * **Windows Hello for memory lists and chat history** - off by default. On: the Brain's
 //!   memory lists come back from [`crate::brain::brain_read`] with the
 //!   entries taken out ([`redact_private`]) until Show passes Windows Hello,
@@ -409,25 +414,74 @@ mod hello {
 // Approvals
 // ---------------------------------------------------------------------------
 
+/// What `decide_approval` does next, once [`check_approval`] has passed.
+pub struct ApprovalSend {
+    /// The backend may show its own Windows Hello prompt for this one
+    /// (owner-check.patch), so the Approve may wait `wait` for its answer and
+    /// the backend's prompt should be let to the front.
+    pub backend_may_ask: bool,
+    /// How long the Approve request may take.
+    pub wait: Duration,
+}
+
 /// Holds an approval until Windows Hello says it is the owner, when the
 /// settings say this one needs it. Called by `decide_approval` after its own
 /// checks and before the request is built. Deny never comes here.
+///
+/// Since the approval gap's step 1 (docs/APPROVAL-GAP-DESIGN.md) the backend
+/// asks Windows Hello itself for a risky approval made on this PC, when its
+/// `/api/version` says `capabilities.owner_check: "backend"`. Then this app
+/// does not ask as well - the owner is asked once, by the backend, whose
+/// prompt names the card the same way - unless "Every approval" wants a
+/// card the backend will not ask about ([`approval_needs_local_check`]).
+/// Only when this app talks to the backend on this PC (loopback): the
+/// backend asks only for approvals that come from this PC, so a desktop
+/// pointed anywhere else keeps asking itself. An older backend: as before.
 pub async fn check_approval(
     app: &AppHandle,
     window: &WebviewWindow,
     id: &str,
-) -> Result<(), String> {
+    short: Duration,
+) -> Result<ApprovalSend, String> {
     let security = current(app);
     let item = app
         .state::<crate::stream::StreamState>()
         .pending()
         .into_iter()
         .find(|row| crate::stream::approval_id(row).as_deref() == Some(id));
-    if !approval_needs_check(security.approvals, item.as_ref()) {
-        return Ok(());
+    let backend_checks = crate::commands::backend_owner_check(app).await;
+    let backend_asks = backend_checks && crate::commands::base_is_this_pc(app);
+    if approval_needs_local_check(security.approvals, item.as_ref(), backend_asks) {
+        let outcome = ask(app, &Asker::window(window), approval_message(item.as_ref())).await;
+        approval_verdict(outcome, &security)?;
     }
-    let outcome = ask(app, &Asker::window(window), approval_message(item.as_ref())).await;
-    approval_verdict(outcome, &security)
+    // A backend with the check asks for a risky card whenever the request
+    // reaches it from this PC - also through this PC's own Tailscale
+    // address, where this app asked as well - so the wait grows whenever it
+    // might ask, not only when this app left the asking to it.
+    let backend_may_ask = backend_checks && item.as_ref().is_none_or(is_risky);
+    Ok(ApprovalSend {
+        backend_may_ask,
+        wait: approval_wait(short, backend_may_ask, item.as_ref()),
+    })
+}
+
+/// Lets the backend's Windows Hello prompt come to the front, just before an
+/// Approve it may ask about is sent. Windows gives the right to take the
+/// front only to the program the owner is using - this one, since they just
+/// pressed Approve - and this passes it on for the next window that asks. It
+/// lasts until the owner next clicks or types; it lets a window come
+/// forward, nothing more.
+pub fn let_backend_prompt_forward() {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{AllowSetForegroundWindow, ASFW_ANY};
+        // SAFETY: a plain Win32 call with a constant argument; it reads and
+        // writes nothing of ours.
+        unsafe {
+            AllowSetForegroundWindow(ASFW_ANY);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

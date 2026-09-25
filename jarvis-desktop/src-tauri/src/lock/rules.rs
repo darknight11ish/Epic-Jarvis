@@ -38,6 +38,14 @@ pub const COULD_NOT_SHOW: &str =
 pub const NOT_SET_UP: &str = "Windows Hello is not set up on this PC, and a lock is on in \
      Settings, so Jarvis cannot check it is you. Set up Windows Hello in Windows Settings, \
      Accounts, Sign-in options - a PIN is enough";
+/// A risky approval on a PC with no Windows Hello, whatever the settings
+/// say: the owner's "no lock, no risky approval" (2026-09-25). The backend
+/// says the same, word for word (`jarvis_owner_check.NOT_SET_UP`, checked by
+/// `backend/test_owner_check.py`), and the phone the same about its screen
+/// lock (`SecurityRules.NO_SCREEN_LOCK`).
+pub const NO_HELLO_NO_RISKY: &str = "Windows Hello is not set up on this PC, so Jarvis cannot \
+     check it is you, and risky approvals are refused until it is. Set up Windows Hello in \
+     Windows Settings (Accounts, Sign-in options) to approve risky actions - a PIN is enough";
 /// Turning a lock ON with nothing to check against would lock the owner out:
 /// loosening needs Windows Hello, so there would be no way back.
 pub const TURN_ON_NEEDS_HELLO: &str = "Windows Hello is not set up on this PC, so this lock \
@@ -97,10 +105,9 @@ impl Default for Security {
 }
 
 impl Security {
-    /// Anything beyond the defaults. The defaults are the phone's behaviour,
-    /// including its "no fingerprint set up at all: the decision proceeds";
-    /// once the owner has turned a lock on, a PC with no Windows Hello refuses
-    /// instead ([`approval_verdict`]).
+    /// Anything beyond the defaults. With none on, only risky approvals ask
+    /// ([`approval_needs_check`]); a PC with no Windows Hello refuses those
+    /// either way ([`approval_verdict`]).
     pub fn any_lock_on(&self) -> bool {
         self.app_lock || self.private_answers || self.approvals == ApprovalCheck::Every
     }
@@ -206,6 +213,63 @@ pub fn approval_needs_check(mode: ApprovalCheck, item: Option<&serde_json::Value
     }
 }
 
+/// Whether THIS app asks Windows Hello before sending an Approve, when
+/// `backend_asks` says the backend will ask it itself (owner-check.patch:
+/// `/api/version` says `capabilities.owner_check: "backend"`, and this app
+/// talks to it on this PC). The backend asks for every risky approval from
+/// this PC - by the same rule, [`is_risky`], shared through
+/// `tests/fixtures/risky-approval-cases.json` - so asking here as well would
+/// ask the owner twice. What stays here is the desktop's own extra: "Every
+/// approval" also asks for a card that is not risky, which the backend does
+/// not. A card this PC cannot find is asked about here under "Every
+/// approval" (it may not be risky), and left to the backend under "Risky
+/// only" (the backend reads its own queue). An older backend, without the
+/// check: exactly [`approval_needs_check`].
+pub fn approval_needs_local_check(
+    mode: ApprovalCheck,
+    item: Option<&serde_json::Value>,
+    backend_asks: bool,
+) -> bool {
+    if !backend_asks {
+        return approval_needs_check(mode, item);
+    }
+    match mode {
+        ApprovalCheck::Risky => false,
+        ApprovalCheck::Every => !item.is_some_and(is_risky),
+    }
+}
+
+/// A card's `expires_in` when the row does not say (the shipped
+/// `approval_timeout_seconds`).
+pub const DEFAULT_CARD_SECONDS: u64 = 180;
+/// The longest an Approve waits for the backend, whatever a row says.
+const LONGEST_APPROVAL_WAIT: Duration = Duration::from_secs(600);
+
+/// How long an Approve may wait for the backend's answer. Normally `short`
+/// (a small round trip); when the backend asks Windows Hello itself, the
+/// request stays open while the prompt is up, so it may wait for the card's
+/// own time left, plus a few seconds for the answer to come back. The row's
+/// `expires_in` is as it was when the queue was read, so this is an upper
+/// bound - waiting a little longer than needed costs nothing; the backend
+/// refuses a card that ran out meanwhile.
+pub fn approval_wait(
+    short: Duration,
+    backend_asks: bool,
+    item: Option<&serde_json::Value>,
+) -> Duration {
+    if !backend_asks {
+        return short;
+    }
+    let left = item
+        .and_then(|i| i["expires_in"].as_f64())
+        .filter(|s| s.is_finite() && *s >= 0.0)
+        .map_or(
+            Duration::from_secs(DEFAULT_CARD_SECONDS),
+            Duration::from_secs_f64,
+        );
+    (left + Duration::from_secs(5)).clamp(short, LONGEST_APPROVAL_WAIT)
+}
+
 // ---------------------------------------------------------------------------
 // The check's outcome
 // ---------------------------------------------------------------------------
@@ -256,14 +320,15 @@ pub(super) fn after_prompt(result: i32) -> Attempt {
     }
 }
 
-/// What happens to an approval after the check. The one place "Unavailable"
-/// splits: with no lock on, it is the phone's rule (a PC with no Windows
-/// Hello answers as before); with any lock on, the owner asked for checks,
-/// and a check that cannot happen refuses.
+/// What happens to an approval after the check. Only a confirmed check lets
+/// it through. A PC with no Windows Hello refuses: with no lock on, only a
+/// risky approval comes here, and the owner decided (2026-09-25) "no lock,
+/// no risky approval" - it used to go through without a check, the phone's
+/// old rule. With a lock on, the sentence says a lock is on.
 pub fn approval_verdict(outcome: Outcome, security: &Security) -> Result<(), String> {
     match outcome {
         Outcome::Confirmed => Ok(()),
-        Outcome::Unavailable if !security.any_lock_on() => Ok(()),
+        Outcome::Unavailable if !security.any_lock_on() => Err(NO_HELLO_NO_RISKY.to_string()),
         other => strict_verdict(other),
     }
 }
@@ -548,8 +613,12 @@ mod tests {
             approvals: ApprovalCheck::Every,
             ..defaults
         };
-        // No Windows Hello, no lock on: the phone's rule, the decision goes.
-        assert_eq!(approval_verdict(Outcome::Unavailable, &defaults), Ok(()));
+        // No Windows Hello, no lock on: a risky approval is refused all the
+        // same (the owner's "no lock, no risky approval", 2026-09-25), with
+        // the sentence that says how to set it up.
+        let refused = approval_verdict(Outcome::Unavailable, &defaults).unwrap_err();
+        assert_eq!(refused, NO_HELLO_NO_RISKY);
+        assert!(refused.contains("Sign-in options") && refused.contains("a PIN is enough"));
         // Any lock on: refused, with the sentence that says what to do.
         for s in [
             locked,
@@ -580,6 +649,7 @@ mod tests {
             NOT_CONFIRMED,
             COULD_NOT_SHOW,
             NOT_SET_UP,
+            NO_HELLO_NO_RISKY,
             TURN_ON_NEEDS_HELLO,
             WIDGET_APPROVES_IN_BAR,
         ] {
@@ -645,6 +715,100 @@ mod tests {
         assert_eq!(redact_private("memory", status.clone()), status);
         let failed = json!({ "available": false, "read": "failed", "error": "down" });
         assert_eq!(redact_private("memory_facts", failed.clone()), failed);
+    }
+
+    /// The one rule, three places: `risky` and `message` in each case are the
+    /// backend's own answers (`jarvis_owner_check.is_risky` and
+    /// `approval_message`, tools/gen_risky_approval_cases.py). Since the
+    /// backend asks Windows Hello itself for a risky approval from this PC,
+    /// and this app then does not, a row the two read differently would be
+    /// asked about by nobody - or twice.
+    #[test]
+    fn the_backend_and_this_app_agree_on_every_shared_case() {
+        const CASES: &str = include_str!("../../../tests/fixtures/risky-approval-cases.json");
+        let cases: serde_json::Value = serde_json::from_str(CASES).expect("the cases parse");
+        let cases = cases["cases"].as_array().expect("a list of cases");
+        assert!(cases.len() >= 10);
+        for case in cases {
+            let row = &case["row"];
+            let name = case["name"].as_str().unwrap_or("?");
+            assert_eq!(is_risky(row), case["risky"].as_bool().unwrap(), "{name}");
+            assert_eq!(
+                approval_message(Some(row)),
+                case["message"].as_str().unwrap(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn with_the_backend_asking_the_owner_is_asked_once() {
+        let safe = classified("local", "yes");
+        let risky = classified("outbound", "no");
+        // The backend asks for every risky approval: this app does not.
+        assert!(!approval_needs_local_check(
+            ApprovalCheck::Risky,
+            Some(&risky),
+            true
+        ));
+        assert!(!approval_needs_local_check(
+            ApprovalCheck::Risky,
+            Some(&safe),
+            true
+        ));
+        assert!(!approval_needs_local_check(
+            ApprovalCheck::Risky,
+            None,
+            true
+        ));
+        assert!(!approval_needs_local_check(
+            ApprovalCheck::Every,
+            Some(&risky),
+            true
+        ));
+        // "Every approval" is the desktop's own extra, on top.
+        assert!(approval_needs_local_check(
+            ApprovalCheck::Every,
+            Some(&safe),
+            true
+        ));
+        assert!(approval_needs_local_check(ApprovalCheck::Every, None, true));
+        // An older backend: exactly as before.
+        for mode in [ApprovalCheck::Risky, ApprovalCheck::Every] {
+            for item in [Some(&safe), Some(&risky), None] {
+                assert_eq!(
+                    approval_needs_local_check(mode, item, false),
+                    approval_needs_check(mode, item)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_approve_waits_for_the_cards_time_left_only_when_the_backend_asks() {
+        let short = Duration::from_secs(10);
+        let mut row = classified("outbound", "no");
+        row["expires_in"] = json!(150);
+        assert_eq!(approval_wait(short, false, Some(&row)), short);
+        assert_eq!(
+            approval_wait(short, true, Some(&row)),
+            Duration::from_secs(155)
+        );
+        // Unknown: the shipped 180 seconds.
+        assert_eq!(approval_wait(short, true, None), Duration::from_secs(185));
+        row["expires_in"] = json!("soon");
+        assert_eq!(
+            approval_wait(short, true, Some(&row)),
+            Duration::from_secs(185)
+        );
+        // Never below the normal wait, never above ten minutes.
+        row["expires_in"] = json!(0);
+        assert_eq!(approval_wait(short, true, Some(&row)), short);
+        row["expires_in"] = json!(86_400);
+        assert_eq!(
+            approval_wait(short, true, Some(&row)),
+            Duration::from_secs(600)
+        );
     }
 
     #[test]

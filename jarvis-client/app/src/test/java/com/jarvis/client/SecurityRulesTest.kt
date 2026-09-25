@@ -79,8 +79,28 @@ class SecurityRulesTest {
     // ------------------------------------------------- no screen lock ----
 
     @Test
-    fun `with nothing turned on, a phone that cannot check still lets the approval through`() {
-        assertEquals(Verdict.Go, SecurityRules.afterApprovalCheck(Security(), CheckOutcome.UNAVAILABLE))
+    fun `no lock, no risky approval - even with nothing turned on`() {
+        // The owner's decision of 2026-09-25. It used to go through unchecked.
+        val v = SecurityRules.afterApprovalCheck(Security(), CheckOutcome.UNAVAILABLE)
+        assertEquals(Verdict.Stop(SecurityRules.NO_SCREEN_LOCK, offerLockSettings = true), v)
+        val say = SecurityRules.NO_SCREEN_LOCK
+        assertTrue(say, say.startsWith("Nothing was approved."))
+        assertTrue(say, "risky approvals are refused until it has one" in say)
+        assertTrue(say, "Settings (Security, Screen lock)" in say)
+        // The notice that shows it offers the button; nothing else does.
+        assertTrue(SecurityRules.offersLockSettings(say))
+        assertFalse(SecurityRules.offersLockSettings(SecurityRules.CHECK_NOT_SHOWN))
+        assertFalse(SecurityRules.offersLockSettings(null))
+        assertFalse(SecurityRules.offersLockSettings("Nothing was approved."))
+    }
+
+    @Test
+    fun `the Security screen warns about a missing screen lock even with nothing turned on`() {
+        val none = SecurityRules.noCheckWarning(Security())
+        assertTrue(none, none.startsWith("Risky approvals are refused for now."))
+        assertTrue(none, "screen lock" in none)
+        val locked = SecurityRules.noCheckWarning(Security(appLock = true))
+        assertTrue(locked, locked.startsWith("Approvals that need the check are refused for now"))
     }
 
     @Test
@@ -94,7 +114,9 @@ class SecurityRulesTest {
         for (s in turnedOn) {
             val v = SecurityRules.afterApprovalCheck(s, CheckOutcome.UNAVAILABLE)
             assertTrue("$s", v is Verdict.Stop)
-            val say = (v as Verdict.Stop).say!!
+            assertTrue("$s", (v as Verdict.Stop).offerLockSettings)
+            assertTrue("$s", SecurityRules.offersLockSettings(v.say))
+            val say = v.say!!
             assertTrue(say, say.startsWith("Nothing was approved."))
             if (s.method == CheckMethod.FINGERPRINT_ONLY) {
                 assertTrue(say, "Add a fingerprint" in say)

@@ -118,6 +118,7 @@ on a throwaway copy instead.
 | `memory-entities.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **"Who is my sister?" - people and things** (memory wave 3, 2026-09-25). Adds `GET /api/memory/entities` (the people and things facts are linked to, for the desktop's "About <name>"), leaves the "are these the same?" card out of `/api/memory/pending` unless asked for with `?merge_cards=1`, and gives `jarvis_extract.py` `propose_merge()` and `_accept_merge()` - accepting that card joins two entries and adds no fact. The work is in the shipped `rebuilt/jarvis_memory.py` (and `jarvis_past.py`, whose recall uses it); with an older copy the route answers 501. Last in the list, after `temporary-chat.patch`, whose route lines are its context. See "Memory wave 3", at the very end. |
 | `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing`, `POST /api/briefing/now` and `POST /api/briefing/senders` ("Show who new emails are from": off at once, on through one approval card), makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
 | `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of five providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
+| `owner-check.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The approval gap, step 1** (docs/APPROVAL-GAP-DESIGN.md, the owner's decisions of 2026-09-25). `POST /api/approve` asks Windows Hello itself - showing the card's own title - before it accepts a RISKY approval that comes from this PC, refuses one on a PC with no Windows Hello, and stamps every approval it accepts; the gate believes no "approved" row this running backend did not stamp, so "approved" written straight into `approvals.db` is refused. Last in the list; its context is `gate-outcome.patch`'s approved branches and `log-scrub.patch`'s banner line. Needs `jarvis_owner_check.py` - without it EVERY approval is refused. See "The approval gap, step 1", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -9070,3 +9071,209 @@ the model; and the patch applied to what the earlier patches wrote.
 - The phone sees a change made on the desktop at its next read (Refresh).
 - The briefing's "weather and news: not available" line is unchanged -
   weather is a separate decision.
+
+---
+
+# The approval gap, step 1: `owner-check.patch`, `jarvis_owner_check.py` (2026-09-25)
+
+**What it is for, in one line:** a program already on your PC can no longer
+approve a risky Jarvis card by going around the desktop app. The backend
+itself now asks Windows Hello (your PIN, fingerprint or face) before it
+accepts one.
+
+Your decisions (CLAUDE.md, 2026-09-25): build step 1 of
+`docs/APPROVAL-GAP-DESIGN.md` now, and "no lock, no risky approval".
+
+## What changed
+
+- **`POST /api/approve` asks Windows Hello itself** for a risky card
+  approved from this PC. Risky means the phone's rule, the same in all three
+  places: the gate has not classified it, it leaves this PC, it cannot be
+  undone, or outside text tried to rush it. The prompt shows the card's own
+  title and why it matters, so a prompt you did not ask for names a card
+  you never pressed Approve on - that is your sign something else asked.
+- **No Windows Hello, no risky approval.** On a PC without Windows Hello set
+  up, a risky approval from the PC is refused with: "Windows Hello is not
+  set up on this PC, so Jarvis cannot check it is you, and risky approvals
+  are refused until it is. Set up Windows Hello in Windows Settings
+  (Accounts, Sign-in options) to approve risky actions - a PIN is enough".
+- **Every approval is stamped.** When `/api/approve` accepts an approval, the
+  running backend records a stamp made with a secret that exists only in its
+  memory (made fresh at every start, never written anywhere). The gate
+  believes an "approved" card only with that stamp. So "approved" written
+  straight into `approvals.db` - a normal file in your user folder - is
+  refused, and so is a "yes" from any other program that imports
+  `jarvis_gate` and calls `decide()` itself. Deny never needs a stamp.
+- **You are asked once.** `/api/version` now says
+  `capabilities.owner_check: "backend"`. The desktop app reads it, and when
+  it talks to the backend on this PC (the usual `127.0.0.1`) it stops
+  showing its own Windows Hello prompt for risky cards, and waits for the
+  card's time left instead of 10 seconds. "Every approval" still makes the
+  desktop ask for the other cards itself. With an older backend the desktop
+  asks exactly as before.
+- **The phone:** a phone with no screen lock now refuses a risky approval
+  too, with the same words about its screen lock and a button that opens
+  Android's screen-lock settings. It used to let it through unchecked.
+- Unchanged: Deny is never held up. A notification or a widget still cannot
+  approve. A card that stopped waiting while the prompt was open (it ran
+  out of time, or you denied it on the phone meanwhile) is refused, not
+  approved. One card, one prompt, one decision.
+
+## What it does NOT stop - said plainly
+
+- **A program written to attack Jarvis specifically** can still change
+  Jarvis's own files, or take over its running program. Windows does not
+  protect one of your programs from another one of yours. Nothing inside
+  your Windows account can.
+- **A card that is not risky** (stays on this PC, can be undone, nothing
+  rushed it) can still be approved by a program that has read the pairing
+  token. That is the "Risky only" rule.
+- **Approvals that come from another device** are not checked by the PC:
+  the phone checks its own fingerprint. So someone who stole the token and
+  uses it from another device on your Tailscale or Meshnet network can
+  still approve, until step 2 (a phone key per approval, with "more
+  devices").
+- **Approving from a terminal** with `jarvis_gate.py` itself, if you ever
+  did, no longer counts - it is another program, with no stamp. Approve in
+  the apps.
+
+## Where it differs from the design, and why
+
+- **The stamp is kept in the backend's memory, not written into the row.**
+  The design said "writes a stamp into the approval row". The code that
+  writes the row (`jarvis_gate.decide`) is yours and is not in this
+  repository, so changing it blind was not safe. Kept beside its secret in
+  the backend's memory, the stamp protects the same way: a program outside
+  the backend can reach neither.
+- **The "ask once" flag is on `/api/version`, not `/api/status`.** The
+  design said `/api/status`, "for example". `/api/status`'s answer is built
+  in your `jarvis_hud.py`; `/api/version`'s is built in the shipped
+  `jarvis_events.py`, which is where the desktop already reads what the
+  backend supports.
+- **Windows Hello through ctypes, not the `winrt` packages.** Nothing to
+  install. The `winrt` packages (3.2.1, checked in their own type files)
+  offer only the plain prompt, not the "for a window" form Microsoft says a
+  desktop program should use. `jarvis_owner_check.py` calls Windows' own
+  functions through ctypes (built into Python), in a separate small process,
+  so a mistake there can only end that process - read as "failed", so the
+  approval is refused - never the backend.
+- **Which requests are "from this PC":** loopback, or a connection whose
+  sender address is the address it arrived at (the PC calling its own
+  Tailscale address), or one of the PC's own addresses. Anything that cannot
+  be placed counts as this PC, so it asks.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies `jarvis_owner_check.py` and the
+updated `jarvis_events.py`, applies `owner-check.patch`; there is no package
+to install - it uses only what comes with Python), from this repository's
+folder. Then restart Jarvis, and install the new desktop app:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+## The half-day test on your PC
+
+The design asked for this before relying on it. Three things could not be
+checked from here: that the backend's prompt comes to the front, that your
+PC calling its own Tailscale address counts as "this PC", and that the
+gate's wait runs in the same program as the web server. Do these in order;
+each says what you should see. Tell me what happened at any step that
+differs.
+
+1. **The prompt itself, at the front.** This shows one Windows Hello prompt
+   saying "Jarvis test". Confirm it with your PIN or finger. You should see
+   the prompt in front of other windows, and then `{"outcome": "confirmed"}`
+   (or `"cancelled"` if you pressed Cancel):
+
+   ```powershell
+   cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; '{"message": "Jarvis test - approves nothing\nThis only checks the prompt", "timeout": 60}' | py -3 jarvis_owner_check.py --hello
+   ```
+
+2. **The backend switched it on.** After restarting Jarvis, this prints the
+   start-up line from the backend's log. You should see "approvals  risky
+   ones from this PC ask Windows Hello; each approval is stamped". "NOT
+   CHECKED" means the module is missing - run the owner step above again:
+
+   ```powershell
+   Get-ChildItem -Path "$env:LOCALAPPDATA\com.jarvis.desktop" -Recurse -Filter backend.log -ErrorAction SilentlyContinue | Select-String -Pattern 'approvals  ' | Select-Object -Last 2 | ForEach-Object { $_.Line }
+   ```
+
+   Also in the desktop app: Settings, "This backend supports" lists
+   `owner_check`.
+
+3. **A risky card, approved on the PC: asked once, at the front.** In the
+   desktop's Settings, Web search, turn on "Ask before every web search".
+   Ask Jarvis "search the web for the weather in Leeds". A card appears.
+   Press Approve in the Jarvis bar. You should get exactly ONE Windows Hello
+   prompt, in front, titled "Jarvis wants to search the web", and the
+   search runs after you confirm. This step also proves the third unknown:
+   if the gate's wait ran in another program, the card would be refused
+   with "it was marked approved, but not through Jarvis's own approval
+   check". Then try it once more and press Cancel on the prompt: the card
+   stays, with "Windows Hello did not confirm it was you, so nothing was
+   approved".
+
+4. **A card that is not risky asks nothing.** Turn "Ask before every web
+   search" off again. That raises a card too (it only changes a setting on
+   this PC). Approve it: with "Windows Hello for approvals" on "Risky only",
+   there should be no prompt at all.
+
+5. **The phone is not asked on the PC.** Make a risky card again (step 3)
+   and approve it on the phone. The phone asks your fingerprint; the PC
+   shows no prompt.
+
+6. **Your own Tailscale address counts as this PC.** This connects the PC
+   to its own Tailscale address and says how the backend would see it. You
+   should see "counted as this PC: True". (If you use NordVPN Meshnet
+   instead, replace `(tailscale ip -4 | Select-Object -First 1)` with your
+   Meshnet address in quotes, for example `"100.64.1.2"`.)
+
+   ```powershell
+   cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $ip = (tailscale ip -4 | Select-Object -First 1); py -3 -c "import socket, jarvis_owner_check as o; s = socket.socket(); s.bind(('$ip', 0)); s.listen(1); c = socket.create_connection(s.getsockname()); a, peer = s.accept(); print('arrives from', peer[0], '- counted as this PC:', o.from_this_pc(peer[0], a.getsockname()[0]))"
+   ```
+
+7. **The tests, against your real backend.** These use a temporary folder,
+   never your real approval queue. `test_gate_outcome.py` now includes "a
+   row written straight into the database is refused":
+
+   ```powershell
+   $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_owner_check.py; py -3 backend\test_gate_outcome.py
+   ```
+
+If the prompt in step 1 or 3 opens BEHIND other windows, or never shows:
+risky approvals on the PC are refused until that is fixed (the check fails
+closed), but you can still approve them from the phone. Tell me which step
+and what you saw; the design lists two other ways to show the prompt.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_owner_check.py
+```
+
+No network, no Windows needed: the risky rule against the cases the desktop
+and the phone also test (`tools/gen_risky_approval_cases.py`), telling this
+PC from another device, the stamp (once, per card, and worthless from
+another run), every Windows Hello outcome through a stand-in, a card that
+stopped waiting while the prompt was open, one prompt at a time, Deny never
+held, the wrapper round the web server, the patch in place on top of every
+earlier patch, `/api/version`'s flag, and that the Windows side fails closed
+off Windows.
+
+## Not checked, said plainly
+
+- **Nothing here has run on Windows.** The Windows Hello call
+  (`_hello_child`) was written from Microsoft's interface definitions and
+  the desktop app's own Rust version, and could not be run in the dev
+  container. The half-day test above is its first real run.
+- Whether Windows lets the backend's prompt come to the front. The desktop
+  app now hands over its right to come to the front just before it sends an
+  Approve the backend may ask about (`AllowSetForegroundWindow`), and the
+  backend's helper makes a tiny window of its own for the prompt to belong
+  to. Untested.
+- If the desktop app is pointed at the PC's own Tailscale address instead
+  of `127.0.0.1`, you are asked twice (once by the app, once by the
+  backend): the app leaves the asking to the backend only when it talks to
+  it on loopback.
