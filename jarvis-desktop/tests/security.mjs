@@ -542,7 +542,7 @@ await check("App lock: the widget shows the notice title only, and Approve opens
 });
 
 await check("App lock: a card with no notice gets a plain title, and turning the lock off shows it all (M3)", async () => {
-  const page = await K.open(browser, base, "widget.html", { pending: [K.APPROVAL_RAISED], appLock: true }, { width: 320, height: 520 });
+  const page = await K.open(browser, base, "widget.html", { pending: [{ ...K.APPROVAL_RAISED, notice: undefined }], appLock: true }, { width: 320, height: 520 });
   await page.waitForTimeout(400);
   const locked = await widgetCard(page);
   assert.equal(locked.action, "Jarvis is waiting for your approval");
@@ -551,7 +551,8 @@ await check("App lock: a card with no notice gets a plain title, and turning the
     { appLock: false, relockAfterSecs: 60, approvals: "risky", privateAnswers: false }));
   await page.waitForTimeout(250);
   const open = await widgetCard(page);
-  assert.equal(open.action, "send_email");
+  // Unlocked, a row with no notice gets the PC's own fallback (card-words.js), not the code name.
+  assert.equal(open.action, "Jarvis wants your OK for \"send email\"");
   assert.equal(open.approve, "Approve");
   assert.equal(open.noteHidden, false);
   await page.locator("#btn-appr-yes").click();

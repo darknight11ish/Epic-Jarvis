@@ -1537,3 +1537,5 @@ body {
 .card-link-more { opacity: 0.8; }
 .card-link-more[hidden] { display: none; }
 .card-link-said:empty { display: none; }
+/* In the Brain it sits under the top bar, lined up with its padding. */
+.main > .card-link { margin: 0 18px 10px; }

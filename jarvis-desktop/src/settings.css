@@ -874,3 +874,11 @@ select:focus-visible {
 .card-link-more { opacity: 0.8; }
 .card-link-more[hidden] { display: none; }
 .card-link-said:empty { display: none; }
+/* Settings is one long page: the line stays in view while it scrolls, so a
+   card raised by a button far down the page is still one click away. */
+.page > .card-link {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  background: linear-gradient(var(--warn-faint), var(--warn-faint)), var(--bg);
+}
