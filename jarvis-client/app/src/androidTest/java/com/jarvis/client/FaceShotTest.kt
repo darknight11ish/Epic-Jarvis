@@ -5,12 +5,16 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInWindow
@@ -27,9 +31,12 @@ import com.jarvis.client.face.Faces
 import com.jarvis.client.face.Spec
 import com.jarvis.client.face.gl.GL
 import com.jarvis.client.platform.CrashLog
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 import kotlin.math.min
@@ -45,12 +52,13 @@ import kotlin.math.roundToInt
  * without throwing, which says nothing about what it draws - a face that is
  * a quarter the size it should be, or hairline-thin, or blank, passes it.
  * This test is the missing half: it saves a PNG of each face, which the
- * smoke job pulls off the device and uploads as the
+ * `face-shots` CI job pulls off the device and uploads as the
  * `jarvis-client-face-shots` artifact on every run, red or green.
  *
- * **It gates nothing, on purpose.** It has no assertions, and every step that
- * can go wrong is caught and written into `manifest.txt` next to the pictures
- * instead of failing the run. Whether a face is RIGHT is a judgement made by
+ * **It gates nothing, on purpose.** Its only assertion is the stall check
+ * described at the end of this comment; every other step that can go wrong
+ * is caught and written into `manifest.txt` next to the pictures instead of
+ * failing the run. Whether a face is RIGHT is a judgement made by
  * looking, not a check a test can make, and a new way for the smoke job to go
  * red would change what publishes the APK - which this work was asked not to
  * do. The two things that SHOULD stop a release (a face that throws, a shader
@@ -91,6 +99,27 @@ import kotlin.math.roundToInt
  *
  * Not a Compose test rule, for the reason [LaunchTest] and [FaceRenderTest]
  * give: a face never goes idle, so the rule would wait forever.
+ *
+ * **Nothing here waits for the main thread to go idle, beyond the two waits
+ * `ActivityScenario` makes itself at the start and the one when it closes.**
+ * `Instrumentation.waitForIdleSync` has no time limit, and the test used to
+ * make five such waits per face (two of its own, and one each inside
+ * `ActivityScenario.launch`, `onActivity` and `close`) - a hundred a run. At
+ * phone size on the CI emulator's software GPU a face can keep the main
+ * thread busy enough that it never goes idle, and three runs in a row then
+ * sat silent after face 4, 6 and 14 until the job's time limit, with the
+ * emulator still alive and adb still answering. That is the likely reason,
+ * not a proven one. So now: ONE activity for every face, the face swapped in
+ * place; a poll for the face's layout instead of an idle wait; the screen
+ * read through `runOnMainSync`, which needs the main thread to answer, not to
+ * be idle; the face taken off the screen before the scenario closes; and a
+ * watchdog ([STALL_MS]) that stops the run and says where it stuck, rather
+ * than letting it hang until the job is cancelled. `manifest.txt` is saved
+ * after every face, so a run that dies still says how far it got.
+ *
+ * A stall FAILS the test, after the pictures and the manifest are saved.
+ * It runs in its own non-gating job, so red there means "not every face was
+ * photographed" and costs nothing else.
  */
 @RunWith(AndroidJUnit4::class)
 class FaceShotTest {
@@ -98,12 +127,42 @@ class FaceShotTest {
     private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
-    /** Everything that happened, written out as manifest.txt at the end. */
+    /** Everything that happened, written out as manifest.txt as it goes. */
     private val manifest = StringBuilder()
 
+    /**
+     * The one activity every face is shown in, once it is up. Held so that the
+     * watchdog can take the face off the screen when the run stalls.
+     */
+    @Volatile private var activity: MainActivity? = null
+
+    /** What the photographing thread is doing, and since when (for the watchdog). */
+    @Volatile private var step = "starting"
+    @Volatile private var stepSince = 0L
+
+    /** Set by the watchdog: the photographing thread takes no further face. */
+    @Volatile private var stopped = false
+
+    // Two threads write here (the photographing thread and the watchdog), so
+    // every read and write of the manifest holds the same lock.
+    @Synchronized
     private fun note(line: String) {
         manifest.append(line).append('\n')
         Log.i(TAG, line)
+    }
+
+    @Synchronized
+    private fun manifestText(): String = manifest.toString()
+
+    private fun at(what: String) {
+        step = what
+        stepSince = SystemClock.elapsedRealtime()
+    }
+
+    /** Written after every face, so a run that dies part way still says how far it got. */
+    private fun saveManifest() {
+        runCatching { writeViaShell("manifest.txt", manifestText().toByteArray()) }
+            .onFailure { Log.w(TAG, "manifest.txt could not be written", it) }
     }
 
     @Test
@@ -132,15 +191,39 @@ class FaceShotTest {
         // What the one-time GPU check saw (GpuProbe). A software renderer puts
         // Auto adjust at Low before the first face draws.
         note("gpu: ${com.jarvis.client.platform.GpuProbe.renderer ?: "(not known yet)"}")
-        note("each face: IDLE, ${SHOT_DP}dp square, ~${ANIMATE_MS}ms after it first drew")
+        note("each face: IDLE, ${SHOT_DP}dp square, ~${ANIMATE_MS}ms after it was laid out")
         note("capture: UiAutomation.takeScreenshot() (the composited display, GL layers included), cropped to the face")
 
         val overridden = emulatePhone()
         try {
-            Faces.all.forEachIndexed { i, face ->
-                val name = "%02d-%s.png".format(i + 1, face.id)
-                runCatching { photograph(face, name, keepWholeScreen = i == 0) }
-                    .onFailure { note("$name: NOT CAPTURED - ${it.javaClass.simpleName}: ${it.message}") }
+            // The photographs are taken on a thread of their own, so that this
+            // one can notice when they stop making progress. See the class
+            // comment: a wait inside ActivityScenario has no time limit.
+            at("launching MainActivity")
+            val finished = CountDownLatch(1)
+            Thread({
+                try {
+                    photographAll()
+                } catch (t: Throwable) {
+                    note("stopped: ${t.javaClass.simpleName}: ${t.message}")
+                } finally {
+                    finished.countDown()
+                }
+            }, "face-shots").apply {
+                isDaemon = true
+                start()
+            }
+            while (!finished.await(1, TimeUnit.SECONDS)) {
+                val quietMs = SystemClock.elapsedRealtime() - stepSince
+                if (quietMs > STALL_MS) {
+                    stopped = true
+                    note("STALLED: nothing happened for ${quietMs / 1000}s while $step; the faces after it were not photographed")
+                    // Take the face off the screen, which lets a wait for the
+                    // main thread to go idle return, so the stuck thread can
+                    // finish instead of holding the activity open.
+                    activity?.let { a -> runCatching { instrumentation.runOnMainSync { a.finish() } } }
+                    break
+                }
             }
         } finally {
             // Always, not only when emulatePhone said it worked: a size that
@@ -149,9 +232,10 @@ class FaceShotTest {
             shell("wm density reset")
             shell("wm size reset")
             if (overridden) note("display override removed")
-            runCatching { writeViaShell("manifest.txt", manifest.toString().toByteArray()) }
-                .onFailure { Log.w(TAG, "manifest.txt could not be written", it) }
+            saveManifest()
         }
+        // After the pictures and the manifest are saved, never before.
+        if (stopped) fail("FaceShotTest stalled while $step - see manifest.txt in the jarvis-client-face-shots artifact")
     }
 
     /**
@@ -166,7 +250,8 @@ class FaceShotTest {
         shell("wm size $PHONE_SIZE")
         shell("wm density $PHONE_DPI")
         // The launcher and system UI reconfigure for the new size; let that
-        // finish before the first activity of ours starts.
+        // finish before the first activity of ours starts. (No activity of
+        // ours is drawing yet, so this idle wait has nothing to starve it.)
         instrumentation.waitForIdleSync()
         Thread.sleep(1_500)
         note("display during: " + shell("wm size").oneLine() + " / " + shell("wm density").oneLine())
@@ -176,105 +261,163 @@ class FaceShotTest {
         false
     }
 
-    private fun photograph(face: Face, name: String, keepWholeScreen: Boolean) {
-        CrashLog.clear(context)
-        GL.lastBuildFailure = null
+    /**
+     * Every face, one after another, in ONE activity: the face on screen is
+     * swapped in place rather than a new activity being launched for each,
+     * because every launch and close waits for the main thread to go idle
+     * with no time limit (see the class comment).
+     */
+    private fun photographAll() {
+        // Which face was last laid out, and where, in window pixels. Set from
+        // the layout pass, polled from this thread.
+        val bounds = AtomicReference<Pair<String, Rect>?>(null)
+        // The face on screen. Written on the main thread only.
+        val shown = mutableStateOf<Face?>(null)
+
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            // Where the face ended up, in window pixels. Set from the layout
-            // pass, read back on this thread after the settle below.
-            val bounds = AtomicReference<Rect?>(null)
+            at("replacing the home screen")
             // Home is replaced wholesale by one face on the ground colour: no
             // status line, no chat, no overlay - nothing that differs between
             // runs except the face itself.
-            scenario.onActivity { activity ->
-                activity.setContent {
+            scenario.onActivity { a ->
+                activity = a
+                a.setContent {
+                    val f = shown.value
                     Box(
                         Modifier.fillMaxSize().background(Spec.BACKGROUND),
                         contentAlignment = Alignment.Center,
                     ) {
-                        FaceView(
-                            state = FaceState.IDLE,
-                            notches = 0,
-                            face = face,
-                            // requiredSize, not size: the same pixels whatever
-                            // constraints the window hands down.
-                            modifier = Modifier
-                                .requiredSize(SHOT_DP.dp)
-                                .onGloballyPositioned { c ->
-                                    val r = c.boundsInWindow()
-                                    bounds.set(
-                                        Rect(
-                                            r.left.roundToInt(), r.top.roundToInt(),
-                                            r.right.roundToInt(), r.bottom.roundToInt(),
-                                        ),
-                                    )
-                                },
-                        )
+                        if (f != null) {
+                            // key: each face starts from scratch, as it did
+                            // when every face had an activity of its own.
+                            key(f.id) {
+                                FaceView(
+                                    state = FaceState.IDLE,
+                                    notches = 0,
+                                    face = f,
+                                    // requiredSize, not size: the same pixels
+                                    // whatever constraints the window hands down.
+                                    modifier = Modifier
+                                        .requiredSize(SHOT_DP.dp)
+                                        .onGloballyPositioned { c ->
+                                            val r = c.boundsInWindow()
+                                            bounds.set(
+                                                f.id to Rect(
+                                                    r.left.roundToInt(), r.top.roundToInt(),
+                                                    r.right.roundToInt(), r.bottom.roundToInt(),
+                                                ),
+                                            )
+                                        },
+                                )
+                            }
+                        }
                     }
                 }
             }
-            instrumentation.waitForIdleSync()
-            Thread.sleep(ANIMATE_MS)
-            instrumentation.waitForIdleSync()
 
-            // Window -> screen offset, and the display's logical size, read on
-            // the main thread where the views live.
-            val offset = IntArray(2)
-            val display = AtomicReference<Rect?>(null)
-            // The ACTIVITY's density, not the application context's: it is
-            // the one the face was laid out with after the override.
-            val density = FloatArray(1)
-            scenario.onActivity { activity ->
-                activity.window.decorView.getLocationOnScreen(offset)
-                display.set(activity.windowManager.maximumWindowMetrics.bounds)
-                density[0] = activity.resources.displayMetrics.density
+            for ((i, face) in Faces.all.withIndex()) {
+                if (stopped) break
+                val name = "%02d-%s.png".format(i + 1, face.id)
+                at("photographing $name")
+                runCatching { photograph(face, name, keepWholeScreen = i == 0, shown = shown, bounds = bounds) }
+                    .onFailure { note("$name: NOT CAPTURED - ${it.javaClass.simpleName}: ${it.message}") }
+                saveManifest()
             }
 
-            val inWindow = bounds.get() ?: error("the face was never laid out")
-            val screen = instrumentation.uiAutomation.takeScreenshot()
-                ?: error("takeScreenshot returned nothing")
-            // Read back as an ordinary bitmap: a screenshot may come back
-            // GPU-backed, which cannot be cropped or compressed directly.
-            val shot = if (screen.config == Bitmap.Config.HARDWARE) {
-                screen.copy(Bitmap.Config.ARGB_8888, false)
-            } else {
-                screen
-            }
-
-            // If the capture came back at a different size from the logical
-            // display (a panel-sized capture of an overridden display), scale
-            // the crop to match rather than cutting the wrong square out.
-            val logical = display.get()
-            val sx = if (logical != null && logical.width() > 0) shot.width.toFloat() / logical.width() else 1f
-            val sy = if (logical != null && logical.height() > 0) shot.height.toFloat() / logical.height() else 1f
-            val left = ((inWindow.left + offset[0]) * sx).roundToInt().coerceIn(0, shot.width - 1)
-            val top = ((inWindow.top + offset[1]) * sy).roundToInt().coerceIn(0, shot.height - 1)
-            val right = ((inWindow.right + offset[0]) * sx).roundToInt().coerceIn(left + 1, shot.width)
-            val bottom = ((inWindow.bottom + offset[1]) * sy).roundToInt().coerceIn(top + 1, shot.height)
-            val crop = Bitmap.createBitmap(shot, left, top, right - left, bottom - top)
-
-            writeViaShell(name, crop.png())
-            if (keepWholeScreen) {
-                // One uncropped screen, so a wrong crop can be told apart from
-                // a wrong face without another CI run.
-                writeViaShell("00-whole-screen-${name.removePrefix("01-")}", shot.png())
-            }
-
-            val lit = litShare(crop)
-            note(
-                "$name: ${crop.width}x${crop.height}px (${SHOT_DP}dp at %.3fx), ".format(density[0]) +
-                    "screen ${shot.width}x${shot.height}, " +
-                    "%.1f%% of pixels brighter than the ground".format(lit * 100f) +
-                    // What Auto adjust was drawing at when the picture was
-                    // taken: on a software renderer (this emulator) it starts
-                    // at Low, so a picture is never mistaken for High.
-                    ", quality ${FaceQuality.current.tier.id} at up to ${FaceQuality.current.fps} fps" +
-                    (if (FaceQuality.softwareGpu) " (software GPU)" else "") +
-                    (if (lit < 0.005f) " - LOOKS BLANK" else "") +
-                    (CrashLog.read(context)?.let { " - CRASH LOG: ${it.lineSequence().firstOrNull()}" } ?: "") +
-                    (GL.lastBuildFailure?.let { " - GL BUILD FAILURE: $it" } ?: ""),
-            )
+            // Nothing left drawing, so the idle wait inside close() has
+            // nothing to starve it.
+            at("closing the activity")
+            if (!stopped) instrumentation.runOnMainSync { shown.value = null }
         }
+        at("done")
+    }
+
+    /**
+     * Where [id] was laid out, once it has been. A poll with a deadline,
+     * where this used to be `waitForIdleSync`, which has none.
+     */
+    private fun waitForLayout(id: String, bounds: AtomicReference<Pair<String, Rect>?>): Rect {
+        val deadline = SystemClock.elapsedRealtime() + LAYOUT_WAIT_MS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val placed = bounds.get()
+            if (placed != null && placed.first == id) return placed.second
+            Thread.sleep(50)
+        }
+        error("the face was never laid out (waited ${LAYOUT_WAIT_MS / 1000}s)")
+    }
+
+    private fun photograph(
+        face: Face,
+        name: String,
+        keepWholeScreen: Boolean,
+        shown: MutableState<Face?>,
+        bounds: AtomicReference<Pair<String, Rect>?>,
+    ) {
+        val a = activity ?: error("the activity never came up")
+        CrashLog.clear(context)
+        GL.lastBuildFailure = null
+        // runOnMainSync needs the main thread to ANSWER, not to be idle: it
+        // runs between two frames of a face that never stops drawing.
+        instrumentation.runOnMainSync { shown.value = face }
+        val inWindow = waitForLayout(face.id, bounds)
+        Thread.sleep(ANIMATE_MS)
+
+        // Window -> screen offset, and the display's logical size, read on
+        // the main thread where the views live.
+        val offset = IntArray(2)
+        val display = AtomicReference<Rect?>(null)
+        // The ACTIVITY's density, not the application context's: it is
+        // the one the face was laid out with after the override.
+        val density = FloatArray(1)
+        instrumentation.runOnMainSync {
+            a.window.decorView.getLocationOnScreen(offset)
+            display.set(a.windowManager.maximumWindowMetrics.bounds)
+            density[0] = a.resources.displayMetrics.density
+        }
+
+        val screen = instrumentation.uiAutomation.takeScreenshot()
+            ?: error("takeScreenshot returned nothing")
+        // Read back as an ordinary bitmap: a screenshot may come back
+        // GPU-backed, which cannot be cropped or compressed directly.
+        val shot = if (screen.config == Bitmap.Config.HARDWARE) {
+            screen.copy(Bitmap.Config.ARGB_8888, false)
+        } else {
+            screen
+        }
+
+        // If the capture came back at a different size from the logical
+        // display (a panel-sized capture of an overridden display), scale
+        // the crop to match rather than cutting the wrong square out.
+        val logical = display.get()
+        val sx = if (logical != null && logical.width() > 0) shot.width.toFloat() / logical.width() else 1f
+        val sy = if (logical != null && logical.height() > 0) shot.height.toFloat() / logical.height() else 1f
+        val left = ((inWindow.left + offset[0]) * sx).roundToInt().coerceIn(0, shot.width - 1)
+        val top = ((inWindow.top + offset[1]) * sy).roundToInt().coerceIn(0, shot.height - 1)
+        val right = ((inWindow.right + offset[0]) * sx).roundToInt().coerceIn(left + 1, shot.width)
+        val bottom = ((inWindow.bottom + offset[1]) * sy).roundToInt().coerceIn(top + 1, shot.height)
+        val crop = Bitmap.createBitmap(shot, left, top, right - left, bottom - top)
+
+        writeViaShell(name, crop.png())
+        if (keepWholeScreen) {
+            // One uncropped screen, so a wrong crop can be told apart from
+            // a wrong face without another CI run.
+            writeViaShell("00-whole-screen-${name.removePrefix("01-")}", shot.png())
+        }
+
+        val lit = litShare(crop)
+        note(
+            "$name: ${crop.width}x${crop.height}px (${SHOT_DP}dp at %.3fx), ".format(density[0]) +
+                "screen ${shot.width}x${shot.height}, " +
+                "%.1f%% of pixels brighter than the ground".format(lit * 100f) +
+                // What Auto adjust was drawing at when the picture was
+                // taken: on a software renderer (this emulator) it starts
+                // at Low, so a picture is never mistaken for High.
+                ", quality ${FaceQuality.current.tier.id} at up to ${FaceQuality.current.fps} fps" +
+                (if (FaceQuality.softwareGpu) " (software GPU)" else "") +
+                (if (lit < 0.005f) " - LOOKS BLANK" else "") +
+                (CrashLog.read(context)?.let { " - CRASH LOG: ${it.lineSequence().firstOrNull()}" } ?: "") +
+                (GL.lastBuildFailure?.let { " - GL BUILD FAILURE: $it" } ?: ""),
+        )
     }
 
     /**
@@ -357,6 +500,18 @@ class FaceShotTest {
 
         /** How long a face animates before it is photographed. */
         const val ANIMATE_MS = 1_200L
+
+        /** How long a face may take to be laid out after it is put on screen. */
+        const val LAYOUT_WAIT_MS = 20_000L
+
+        /**
+         * How long the photographing thread may go without moving to its next
+         * step before the run is called stalled. The one run that finished
+         * (36074481330) took about 18 s a face, five idle waits each included,
+         * so a minute and a half is several faces' worth of slack - and still
+         * well inside the workflow's 900 s limit on the whole Gradle run.
+         */
+        const val STALL_MS = 90_000L
 
         /**
          * A Pixel-class phone: 1080 px wide at 420 dpi is 2.625x and 411 dp,

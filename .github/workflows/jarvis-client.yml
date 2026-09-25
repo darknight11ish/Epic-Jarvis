@@ -923,6 +923,13 @@ jobs:
   # instead of a live resize under a running GL surface. Whether that is what
   # was crashing the emulator is not known; this job exists to find out
   # without costing a release, which is why it is continue-on-error.
+  #
+  # Runs 65-67 of this workflow then timed out here (Gradle killed at 900 s,
+  # exit 124) after 3, 5 and 13 faces, with the emulator still alive and adb
+  # still answering, and run 68 photographed all twenty. That is the test
+  # waiting forever, not the device dying: see FaceShotTest's class comment
+  # for the idle waits it no longer makes, and the watchdog that now stops
+  # it and names the step instead.
   face-shots:
     runs-on: ubuntu-latest
     needs: build
@@ -997,9 +1004,22 @@ jobs:
             if ! kill -0 "$EMU" 2>/dev/null; then
               echo "::warning::The emulator process died during the photographs."
             fi
+            # What the test itself wrote down, face by face. FaceShotTest
+            # saves it after every face, so a run that stalls still says
+            # which face and which step it was on.
+            echo "::group::manifest.txt"
+            cat "$RUNNER_TEMP/jarvis-face-shots/manifest.txt" 2>/dev/null || echo "(no manifest)"
+            echo "::endgroup::"
+            echo "::group::Device log: the test, the test runner and crashes (tail)"
+            { grep -E "FaceShotTest|TestRunner|AndroidRuntime|FATAL" "$RUNNER_TEMP/device.log" 2>/dev/null || true; } | tail -40
+            echo "::endgroup::"
+            # "Failed to find ColorBuffer" at the end of this log is NOT the
+            # failure: the one run that photographed all twenty faces
+            # (36074481330) printed it three times too.
             echo "::group::Emulator log (tail)"
             tail -30 "$RUNNER_TEMP/emulator.log" 2>/dev/null || true
             echo "::endgroup::"
+            kill "${LOGCAT:-}" 2>/dev/null || true
             kill "$EMU" 2>/dev/null || true
           }
           trap finish EXIT
@@ -1009,6 +1029,10 @@ jobs:
             || { echo "::error::the emulator never finished booting"; exit 1; }
           timeout 20 adb shell wm size || true
           timeout 20 adb shell wm density || true
+          # The device's log, kept on the RUNNER as the test runs (as the smoke
+          # job does), so it survives a device that stops answering.
+          adb logcat -v time >> "$RUNNER_TEMP/device.log" 2>/dev/null &
+          LOGCAT=$!
 
           # Bounded: at this size the eab1b9c run's emulator went "offline"
           # and Gradle waited on it until the job limit cancelled everything.
