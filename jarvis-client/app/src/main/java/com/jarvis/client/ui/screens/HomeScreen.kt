@@ -2265,7 +2265,10 @@ private fun VoiceStrips(state: HomeState, actions: HomeActions) {
             // BEFORE transcribing, so that a voice that is not his is never
             // turned into words at all.
             VoiceStrip("Checking it's you…")
-        VoiceSession.Phase.THINKING -> VoiceStrip("Thinking…")
+        // "Waking up the model…" (or "Waiting for your approval…") when the PC
+        // says so in the answer's stream - the chat's own wait words - rather
+        // than a bare "Thinking…" through a 10-20 second model load.
+        VoiceSession.Phase.THINKING -> VoiceStrip(state.chatWaiting ?: "Thinking…")
         VoiceSession.Phase.SPEAKING -> VoiceStrip("Speaking")
         VoiceSession.Phase.OFF -> Unit
     }

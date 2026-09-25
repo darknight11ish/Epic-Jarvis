@@ -760,7 +760,7 @@ function truncateForSummary(text, max = 80) {
 
 /** Renders a failure inside the card instead of silently doing nothing. */
 function showError(message) {
-  showProblem(shown("pc_said", message), "");
+  showProblem(shown("pc_said", message), "", "Error");
 }
 
 /**
@@ -768,9 +768,9 @@ function showError(message) {
  * ONE button for it, and the technical detail - scrubbed - behind
  * "Details" for a bug report. The same words as the phone's.
  */
-function showProblem(problem, details = problem.details || "") {
+function showProblem(problem, details = problem.details || "", status = "Not answered") {
   setPhase("error");
-  openCard("Not answered");
+  openCard(status);
   dom.cursor.hidden = true;
   state.buffer = problem.kind === "pc_said"
     ? `**Jarvis could not answer.**\n\n${problem.says}`
