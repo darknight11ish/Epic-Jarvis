@@ -40,6 +40,18 @@ import {
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import {
+  actionsOf,
+  anyTicking,
+  EMPTY_JOBS,
+  EMPTY_TODO,
+  labelOf,
+  metaOf,
+  readSchedule,
+  SCHEDULE_MISSING,
+  titleOf,
+  KIND_TAGS,
+} from "./coming-up.js";
+import {
   addPage,
   deleteQuestion,
   DENIED_REPLY,
@@ -143,7 +155,7 @@ const VIEWS = {
   memory: { title: "Memory", sub: "what Jarvis has learned about you" },
   history: { title: "History", sub: "your conversations, kept on this PC" },
   faculties: { title: "Faculties", sub: "models, compute, skills, memory" },
-  work: { title: "Work", sub: "jobs in flight and what can be put back" },
+  work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
   galaxy: { title: "Galaxy", sub: "what Jarvis knows" },
   live: { title: "Live", sub: "what Jarvis is doing" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
@@ -223,6 +235,11 @@ const dom = {
   memoryProfile: $("memory-profile"),
   jobs: $("jobs"),
   undo: $("undo"),
+  comingUp: $("coming-up"),
+  todoList: $("todo-list"),
+  todoForm: $("todo-form"),
+  todoText: $("todo-text"),
+  todoAdd: $("todo-add"),
   contentRisk: $("content-risk"),
   ledger: $("ledger"),
   watch: $("watch"),
@@ -582,6 +599,7 @@ function render(name) {
       renderHistory();
       break;
     case "work":
+      renderComingUp();
       renderJobs();
       renderUndo();
       break;
@@ -3214,6 +3232,182 @@ function whenNoticed(f) {
    Work
    ========================================================================== */
 
+/* ==========================================================================
+   Coming up - timers, alarms, reminders and the to-do list (the owner's
+   decisions of 2026-09-25; JARVIS-API.md section 21; coming-up.js).
+
+   Read through its own command (brain/schedule.rs), not brain_read: while
+   the private lists are hidden Rust takes the words out. Every change is
+   ONE job (Pause / Resume / Delete / Done) or one new to-do item, held on a
+   stale link, with no card - none of them can make Jarvis do more. There is
+   no "delete all". The `schedule` event (ids and the kind only) reads the
+   list again; a running timer counts down here once a second from what the
+   PC last said.
+   ========================================================================== */
+
+const upL = { view: null, error: "", loading: false, again: false, at: 0, readAt: 0 };
+const SCHEDULE_READ_MS = 15000;
+/** id -> {span, job} for the countdowns the ticker repaints. */
+const ticking = new Map();
+let tickTimer = null;
+
+async function loadComingUp() {
+  if (!IS_TAURI) return;
+  if (upL.loading) {
+    upL.again = true;
+    return;
+  }
+  upL.loading = true;
+  try {
+    upL.view = readSchedule(await invoke("brain_schedule"));
+    upL.error = "";
+    upL.readAt = Date.now();
+  } catch (error) {
+    upL.error = errorText(error);
+  } finally {
+    upL.loading = false;
+    upL.at = Date.now();
+  }
+  if (upL.again) {
+    upL.again = false;
+    await loadComingUp();
+    return;
+  }
+  if (state.view === "work") paintComingUp();
+}
+
+async function scheduleAct(job, action) {
+  try {
+    const out = await invoke("brain_schedule_act", { id: job.id, action });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else toast(String((out && out.said) || "Done."), "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadComingUp();
+}
+
+async function addTodo() {
+  const words = dom.todoText ? dom.todoText.value.trim() : "";
+  if (!words) return;
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_schedule_add_todo", { text: words });
+    if (out && out.ok === false) {
+      toast(String(out.error || "Refused."), "bad");
+    } else {
+      toast(out && out.job && out.job.already ? "That is already on your to-do list."
+        : "Added to your to-do list.", "ok");
+      dom.todoText.value = "";
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadComingUp();
+}
+
+function scheduleRow(job) {
+  const since = Date.now() - upL.readAt;
+  const item = row({
+    tag: job.repeats ? `${KIND_TAGS[job.kind] || job.kind}, repeats` : KIND_TAGS[job.kind] || job.kind,
+    state: job.state === "waiting" ? "warn" : job.state === "paused" ? "" : "ok",
+    title: titleOf(job),
+    meta: metaOf(job, since),
+    actions: actionsOf(job).map((a) =>
+      button(labelOf(a), () => scheduleAct(job, a), { live: true, danger: a === "delete" })),
+  });
+  item.dataset.id = job.id;
+  if (job.kind === "timer" && job.state === "active") {
+    const span = item.querySelector(".row-meta");
+    if (span) {
+      span.classList.add("countdown");
+      ticking.set(job.id, { span, job });
+    }
+  }
+  return item;
+}
+
+function tick() {
+  if (state.view !== "work" || !ticking.size) return;
+  const since = Date.now() - upL.readAt;
+  let finished = false;
+  for (const [id, { span, job }] of ticking) {
+    if (!span.isConnected) {
+      ticking.delete(id);
+      continue;
+    }
+    span.textContent = metaOf(job, since)[0] || "";
+    if (job.left !== null && job.left - since / 1000 <= 0) finished = true;
+  }
+  // The PC says when it went off; read again once the count reaches zero.
+  if (finished && !upL.loading && Date.now() - upL.at > 2000) loadComingUp();
+}
+
+function paintComingUp() {
+  const box = dom.comingUp;
+  if (!box) return;
+  ticking.clear();
+  const v = upL.view;
+  if (!v) {
+    const line = el("p", "empty", upL.error ? `Could not read Coming up: ${upL.error}` : "Reading…");
+    if (upL.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadComingUp));
+    }
+    box.replaceChildren(line);
+    if (dom.todoList) dom.todoList.replaceChildren();
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || SCHEDULE_MISSING));
+    if (dom.todoList) dom.todoList.replaceChildren();
+    if (dom.todoForm) dom.todoForm.hidden = true;
+    return;
+  }
+  if (dom.todoForm) dom.todoForm.hidden = false;
+  rows(box, v.jobs, scheduleRow, EMPTY_JOBS);
+  if (upL.error) box.prepend(el("p", "empty failed", `Could not read it again: ${upL.error}`));
+  if (dom.todoList) rows(dom.todoList, v.todo, scheduleRow, EMPTY_TODO);
+  if (v.hidden) {
+    box.append(hiddenNode(0, "words"));
+  }
+  if (anyTicking(v) && !tickTimer) tickTimer = setInterval(tick, 1000);
+  if (!anyTicking(v) && tickTimer) {
+    clearInterval(tickTimer);
+    tickTimer = null;
+  }
+}
+
+function renderComingUp() {
+  paintComingUp();
+  if (IS_TAURI && !upL.loading && Date.now() - upL.at > SCHEDULE_READ_MS) loadComingUp();
+}
+
+if (dom.todoForm) {
+  dom.todoForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    addTodo();
+  });
+}
+if (dom.todoAdd) {
+  liveButtons.add(dom.todoAdd);
+  syncLiveButton(dom.todoAdd);
+}
+
+// Private answers turned on or off, or a Show ran out: read it again - Rust
+// decides whether the words come back.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  const rereadSchedule = () => {
+    upL.at = 0;
+    if (state.view === "work") loadComingUp();
+  };
+  TAURI.event.listen("security-changed", rereadSchedule);
+  TAURI.event.listen("private-hidden", rereadSchedule);
+}
+
 function renderJobs() {
   const body = state.data.jobs || {};
   const why = unavailable("jobs");
@@ -4764,6 +4958,13 @@ onEvent((frame) => {
   // Automatic learning saved something (`{ids}` only, never the text): the
   // quiet line, and the list read again. Never a pop-up.
   if (kind === "memory_saved") noteMemorySaved(frame && frame.data);
+  // A timer, alarm or reminder went off, or Coming up changed (`{id, kind,
+  // state}` only - a doorbell): read the list again. The toast itself is
+  // Rust's (brain/schedule.rs toast_fired), so it shows with the Brain shut.
+  if (kind === "schedule") {
+    upL.at = 0;
+    if (state.view === "work") loadComingUp();
+  }
 
   const refreshes = {
     model: ["models"],

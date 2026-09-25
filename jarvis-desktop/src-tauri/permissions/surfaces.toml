@@ -525,6 +525,23 @@ permissions = [
   "allow-ask-deep",
 ]
 
+# "Coming up" (backend/schedule.patch; the owner's decisions of 2026-09-25):
+# the timers, alarms, reminders, repeating jobs and the to-do list. Reading
+# is a read - the words taken out in Rust while "Windows Hello for memory
+# lists and chat history" hides the private lists. A change names ONE job
+# (pause, resume, delete, done, add time) or adds ONE to-do item; none raises
+# a card, because none can make Jarvis do more - a repeating job's card is
+# raised on the PC when it is SET, by talking to Jarvis. Every change is held
+# while the event stream is stale. There is no "delete all".
+[[set]]
+identifier = "brain-schedule"
+description = "Read Coming up (timers, alarms, reminders, the to-do list), change ONE job at a time (pause, resume, delete, done, add time), and add one to-do item. No bulk form."
+permissions = [
+  "allow-brain-schedule",
+  "allow-brain-schedule-act",
+  "allow-brain-schedule-add-todo",
+]
+
 # ---------------------------------------------------------------------------
 # The faces window: read and write the appearance document.
 #

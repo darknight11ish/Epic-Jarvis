@@ -664,6 +664,22 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
         // out below as well, for a Brain that is open.
         "memory_saved" => crate::brain::auto_learn::note_saved(&event.data),
 
+        // A timer, an alarm or a reminder went off, or Coming up changed
+        // (backend/schedule.patch): `{"id", "kind", "state": "fired" |
+        // "changed", "late"?}` and never the words. On "fired" the words
+        // are read by id and a Windows toast is shown - on its own task, so
+        // a slow read never holds the stream up - with only the kind's
+        // lock-screen words while App lock is on or the private lists are
+        // hidden (brain/schedule.rs toast_fired). The frame is fanned out
+        // below as well; the Brain reads Coming up again on it.
+        "schedule" if event.data["state"].as_str() == Some("fired") => {
+            tauri::async_runtime::spawn(crate::brain::schedule::toast_fired(
+                app.clone(),
+                base.to_string(),
+                event.data.clone(),
+            ));
+        }
+
         // finding | persona | model | voice — nothing here consumes them, and
         // nothing here should: they are fanned out below like everything else,
         // and the surface that renders one owns what it means.
