@@ -659,6 +659,7 @@ pub fn run() {
             // benefit. The command bodies remain in commands.rs for the paths
             // that will want them; they are simply not exposed until then.
             commands::stream_chat,
+            commands::temporary_chat_available,
             commands::cancel_chat,
             commands::decide_approval,
             // The five `jarvis-link.js` has invoked since before they
@@ -699,6 +700,7 @@ pub fn run() {
             brain::auto_learn::brain_memory_saved_unseen,
             brain::profile::brain_memory_profile,
             brain::profile::brain_memory_pin,
+            brain::used::memory_used,
             brain::history::brain_history_list,
             brain::history::brain_history_open,
             brain::history::brain_history_delete,

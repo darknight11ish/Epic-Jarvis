@@ -53,6 +53,10 @@ Two ideas, both of which the patches explain in the original's own words:
      holds no words: the facts' own text is read, word for word, and a
      pinned fact that stops being current leaves the list by itself.
 
+     "USED IN THIS ANSWER" (2026-09-25) reads facts BY ID for the apps -
+     used_view(), GET /api/memory/used - because the chat reply's header
+     and the memory_saved event carry ids only, never words.
+
      This is the Graphiti idea done natively in the one SQLite file the
      project already uses, because Graphiti requires a graph database server -
      neo4j>=5.26 is not optional there - and the whole point here is one file,
@@ -1743,6 +1747,117 @@ def with_profile(st, hits, k: int) -> list:
     ids = {p["id"] for p in pins}
     return ([dict(p, pinned=True, current=True) for p in pins]
             + [h for h in hits if h.get("id") not in ids])
+
+
+# --------------------------------------------------------------------------
+#   "Used in this answer" (the owner's decision, 2026-09-25)
+# --------------------------------------------------------------------------
+#
+# The chat reply's X-Jarvis-Route header lists the facts an answer used by
+# id only (`injected_ids`, "mem:<id>"), and the `memory_saved` event lists
+# the facts automatic learning just saved by id only - both reach places a
+# fact's words must not (a phone's lock screen, a log). An app that wants to
+# SHOW those facts asks for their words here, behind the pairing token, the
+# same as every other memory read: GET /api/memory/used?ids=12,15.
+#
+# Read-only. One call reads a handful of facts the owner is looking at -
+# there is nothing here to act on, so no list form of any write follows
+# from it: Forget and Erase stay one fact per request.
+
+#: The most ids one read takes. An answer uses at most JARVIS_MEMORY_K
+#: searched facts, three past ones and the pinned list (1,200 characters -
+#: a few dozen short facts at the very most); one learning pass saves a few.
+USED_MAX = 100
+
+
+def parse_used_ids(raw) -> Optional[list]:
+    """The fact ids in `?ids=`, in the order given, each once - or None when
+    the value is not a comma-separated list of 1..USED_MAX whole numbers
+    above 0. "mem:12" (the header's own spelling) is read as 12; anything
+    else - "fact:3" (the old word list, which has no id), a name, a
+    negative, a fraction - makes the whole request a 400, rather than a
+    silently shorter list."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    out = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.startswith("mem:"):
+            part = part[4:]
+        # ASCII digits only: str.isdigit() would also take "١٢" and "²".
+        if not re.fullmatch(r"[0-9]{1,12}", part):
+            return None
+        n = int(part)
+        if n <= 0:
+            return None
+        if n not in out:
+            out.append(n)
+    if not out or len(out) > USED_MAX:
+        return None
+    return out
+
+
+def used_view(ids, st: Optional["MemoryStore"] = None,
+              now: Optional[float] = None) -> dict:
+    """GET /api/memory/used's answer for these fact ids:
+
+        {"facts": [{"id", "text", "current", "pinned", "created",
+                    "valid_to", "erased_at"}], "missing": [id, ...]}
+
+    In the order asked. `current` is the rule every reader uses (valid_to
+    empty or still ahead) and false for an erased fact; `pinned` is whether
+    it is on "Always keep in mind" now. A fact that is no longer current
+    still comes with its words - an answer may have used it (a question
+    about the past recalls retired facts, labelled), and Forget kept them -
+    so an app can say "no longer in use" beside them. An ERASED fact never
+    comes with words: `text` is "" (never the "[erased]" marker) and
+    `erased_at` says when. An id with no fact at all is in `missing`."""
+    st = st or store()
+    now = time.time() if now is None else float(now)
+    try:
+        pinned = {int(p["id"]) for p in st.profile()}
+    except Exception:
+        pinned = set()
+    facts, missing = [], []
+    for fid in ids:
+        row = st.get(fid)
+        if row is None:
+            missing.append(int(fid))
+            continue
+        erased = row.get("erased_at")
+        vt = row.get("valid_to")
+        current = erased is None and (vt is None or float(vt) > now)
+        facts.append({
+            "id": int(row["id"]),
+            "text": "" if erased is not None else str(row.get("text") or ""),
+            "current": bool(current),
+            "pinned": bool(current and int(row["id"]) in pinned),
+            "created": row.get("created"),
+            "valid_to": vt,
+            "erased_at": erased,
+        })
+    return {"facts": facts, "missing": missing}
+
+
+def handle_used_get(query: str) -> tuple:
+    """GET /api/memory/used?ids=<id>,<id>... -> (http status, reply).
+
+    temporary-chat.patch hands the route here after the same token and
+    origin checks as every other memory read. 400 for anything but 1 to
+    USED_MAX whole-number ids (see parse_used_ids)."""
+    try:
+        from urllib.parse import parse_qs
+        raw = (parse_qs(query or "", keep_blank_values=True).get("ids") or [""])[0]
+    except Exception:
+        raw = ""
+    ids = parse_used_ids(raw)
+    if ids is None:
+        return 400, {"error": f"need ?ids= with 1 to {USED_MAX} fact ids, "
+                              "separated by commas (for example ?ids=12,15)"}
+    try:
+        return 200, used_view(ids)
+    except Exception as exc:
+        return 500, {"error": type(exc).__name__}
 
 
 # --------------------------------------------------------------------------

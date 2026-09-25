@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-memory-used"
+description = "Enables the memory_used command without any pre-configured scope."
+commands.allow = ["memory_used"]
+
+[[permission]]
+identifier = "deny-memory-used"
+description = "Denies the memory_used command without any pre-configured scope."
+commands.deny = ["memory_used"]

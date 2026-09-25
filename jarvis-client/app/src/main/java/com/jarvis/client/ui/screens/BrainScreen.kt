@@ -448,6 +448,11 @@ fun BrainScreen(
                             .firstOrNull { it.key == "memory-counts" }?.index
                         if (here != null) listScope.launch { listState.animateScrollToItem(here + 1) }
                     },
+                    // "Jarvis remembered N things" opens those facts: a memory
+                    // list, hidden like the others.
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
                 )
             }
             // What Jarvis saved without a card (automatic learning,

@@ -320,6 +320,11 @@ def t_ordinary_questions_are_unchanged():
           == ["Owner lives in York"])
 
 
+# temporary-chat.patch (later in the order) adds a temporary-chat check to
+# these lines; an ordinary request is not one.
+_NOT_TEMPORARY = {"_temporary_chat": lambda body: False, "body": {}}
+
+
 def _patched_block():
     hud, log = _stack.stand_in("jarvis_hud.py")
     i = hud.find("# past-recall.patch")
@@ -341,19 +346,21 @@ def t_the_stacked_chat_turn_calls_it():
           and "_past.recall(jarvis_memory.store(), query, k=MEMORY_K)" in block, block)
     st = _moved()
     fake = types.SimpleNamespace(store=lambda: st)
-    ns = {"jarvis_memory": fake, "query": "Where did I live before?", "MEMORY_K": 5}
+    ns = {"jarvis_memory": fake, "query": "Where did I live before?", "MEMORY_K": 5,
+          **_NOT_TEMPORARY}
     exec(compile(block, "<past-recall block>", "exec"), ns)
     check("the stacked lines bring the old address back, labelled",
           any("Owner lives in Harrogate (no longer true since" in h["text"] for h in ns["hits"]),
           texts(ns["hits"]))
-    ns = {"jarvis_memory": fake, "query": "Where do I live?", "MEMORY_K": 5}
+    ns = {"jarvis_memory": fake, "query": "Where do I live?", "MEMORY_K": 5, **_NOT_TEMPORARY}
     exec(compile(block, "<past-recall block>", "exec"), ns)
     check("and an ordinary question gets exactly the old search",
           ns["hits"] == st.search("Where do I live?", k=5))
     real = sys.modules.get("jarvis_past")
     sys.modules["jarvis_past"] = None                      # the import fails
     try:
-        ns = {"jarvis_memory": fake, "query": "Where did I live before?", "MEMORY_K": 5}
+        ns = {"jarvis_memory": fake, "query": "Where did I live before?", "MEMORY_K": 5,
+          **_NOT_TEMPORARY}
         exec(compile(block, "<past-recall block>", "exec"), ns)
     finally:
         sys.modules["jarvis_past"] = real

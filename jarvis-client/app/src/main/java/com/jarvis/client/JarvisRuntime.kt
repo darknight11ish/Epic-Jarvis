@@ -503,7 +503,9 @@ object JarvisRuntime {
         val clientSettings = ClientSettings(app)
         val tokenStore = TokenStore(app)
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
-        val chatSession = ChatSession(jarvisApi)
+        // A temporary chat only on a PC that says it has one (docs/JARVIS-API.md
+        // section 18.1): read from the last handshake, when it is asked.
+        val chatSession = ChatSession(jarvisApi, canTemporary = { can(com.jarvis.client.net.TemporaryChat.CAPABILITY) })
         // The link check is a lambda, not a value: it is read at the moment
         // "hey Jarvis" ON is asked for, and `actionBlocker` reads the flows.
         val voiceSession = VoiceSession(
@@ -2666,9 +2668,19 @@ object JarvisRuntime {
     /** The ids already counted, so an event heard twice is not counted twice. */
     private var autoSeenIds: List<Long> = emptyList()
 
+    private val _autoRememberedIds = MutableStateFlow<List<Long>>(emptyList())
+
+    /**
+     * Which facts [autoRemembered] counts, by id - what the line opens
+     * (the owner's decision, 2026-09-25): their words are read from the PC
+     * only then ([memoryUsed]). Ids only, never the words.
+     */
+    val autoRememberedIds: StateFlow<List<Long>> = _autoRememberedIds.asStateFlow()
+
     /** The owner opened the list: the line has said its piece. */
     fun clearAutoRemembered() {
         _autoRemembered.value = 0
+        _autoRememberedIds.value = emptyList()
     }
 
     private fun onMemorySaved(data: kotlinx.serialization.json.JsonElement?) {
@@ -2678,9 +2690,41 @@ object JarvisRuntime {
             autoSeenIds = seen
             added
         }
-        if (fresh.isNotEmpty()) _autoRemembered.update { it + fresh.size }
+        if (fresh.isNotEmpty()) {
+            _autoRemembered.update { it + fresh.size }
+            _autoRememberedIds.update { (it + fresh).takeLast(com.jarvis.client.net.MemoryUsed.MAX) }
+        }
         _autoTick.update { it + 1 }
     }
+
+    // --------------------------------- "Used in this answer" (2026-09-25) ----
+    // See [com.jarvis.client.net.MemoryUsed]: the words of the few facts an
+    // answer used, or that were just saved, read by id when the owner opens
+    // the line. Forget beside each is [forgetAutoFact] - one fact, asked
+    // first, held on a stale link.
+
+    /** `GET /api/memory/used?ids=` - a read: never held. */
+    suspend fun memoryUsed(ids: List<Long>): com.jarvis.client.net.MemoryUsed.Read =
+        when (val r = api.memoryUsed(ids)) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryUsed.parse(r.value)
+                ?.let { com.jarvis.client.net.MemoryUsed.Read.Shown(it) }
+                ?: com.jarvis.client.net.MemoryUsed.Read.Failed(
+                    "The desktop sent something this app could not read.",
+                )
+            is ApiResult.Failed -> if (com.jarvis.client.net.MemoryUsed.missing(r.error)) {
+                com.jarvis.client.net.MemoryUsed.Read.Missing
+            } else {
+                com.jarvis.client.net.MemoryUsed.Read.Failed(describe(r.error))
+            }
+        }
+
+    /**
+     * Turns a temporary chat on or off on the chat both Home and the voice
+     * loop send through ([com.jarvis.client.net.ChatSession.setTemporary]).
+     * No card and no hold: it only ever makes Jarvis stricter. ON only when
+     * the PC says it has one. @return the sentence to show, or null.
+     */
+    fun setTemporaryChat(on: Boolean): String? = chat.setTemporary(on)
 
     /** `GET /api/memory/learning` - the two automatic-learning switches. A read: never held. */
     suspend fun autoLearnSettings(): ApiResult<JsonObject> = api.autoLearnSettings()
@@ -2729,7 +2773,10 @@ object JarvisRuntime {
     val autoWithdrawn: StateFlow<Set<String>> = _autoWithdrawn.asStateFlow()
 
     /**
-     * Forgets ONE automatically saved fact, after Mind's confirm. Held on a
+     * Forgets ONE automatically saved fact, after Mind's confirm - or, since
+     * 2026-09-25, one fact shown under "Used in this answer" or "Jarvis
+     * remembered N things" ([com.jarvis.client.net.MemoryUsed]), after the
+     * same confirm. Held on a
      * stale link (rule 4), the same as the desktop's Forget
      * (`brain_memory_forget` requires a live link): it cannot be undone, and
      * it acts on a list read over a link that cannot be confirmed live. No

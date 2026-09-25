@@ -375,6 +375,24 @@ data class HomeState(
      * Checks.
      */
     val updateLine: String? = null,
+    /**
+     * A temporary chat is on ([com.jarvis.client.net.TemporaryChat], the
+     * owner's decision of 2026-09-25): the marker above the chat box, and
+     * its one line while the chat is empty.
+     */
+    val temporary: Boolean = false,
+    /**
+     * The facts the answer on screen used, by id, for "Used 2 memories"
+     * under it ([com.jarvis.client.net.MemoryUsed]). Ids only.
+     */
+    val usedIds: List<Long> = emptyList(),
+    /**
+     * Security's "Hide memory lists and chat history" is hiding the memory
+     * lists now - the facts under "Used 2 memories" are one of them.
+     */
+    val memoryHidden: Boolean = false,
+    /** The Show under a hidden list is asking the phone's lock now. */
+    val showPrivateBusy: Boolean = false,
 )
 
 @Immutable
@@ -450,6 +468,18 @@ data class HomeActions(
     val onDropShared: () -> Unit = {},
     /** Open the release page in the browser. Downloads nothing itself. */
     val onOpenUpdate: () -> Unit = {},
+    /**
+     * Start or end a temporary chat - a new conversation either way
+     * ([com.jarvis.client.JarvisRuntime.setTemporaryChat]).
+     */
+    val onToggleTemporary: () -> Unit = {},
+    /** Read the words of these facts from the PC, by id ([com.jarvis.client.JarvisRuntime.memoryUsed]). */
+    val onLoadUsed: suspend (List<Long>) -> com.jarvis.client.net.MemoryUsed.Read =
+        { com.jarvis.client.net.MemoryUsed.Read.Missing },
+    /** Forget ONE fact, after the confirm ([com.jarvis.client.JarvisRuntime.forgetAutoFact]). */
+    val onForgetUsed: suspend (Long) -> Pair<Boolean, String> = { false to "" },
+    /** Show a hidden memory list, after the phone's lock says it is the owner. */
+    val onShowPrivate: () -> Unit = {},
 )
 
 @Composable
@@ -929,6 +959,15 @@ private fun ConversationList(
                 onNewConversation = actions.onNewConversation,
                 waiting = state.chatWaiting,
                 note = state.answerNote,
+                used = UsedAnswer(
+                    ids = state.usedIds,
+                    canAct = state.link == LinkState.CONNECTED && !state.stale,
+                    hidden = state.memoryHidden,
+                    showBusy = state.showPrivateBusy,
+                    onShow = actions.onShowPrivate,
+                    load = actions.onLoadUsed,
+                    forget = actions.onForgetUsed,
+                ),
             )
         }
     }
@@ -1778,6 +1817,7 @@ private fun Reply(
     onNewConversation: () -> Unit = {},
     waiting: String? = null,
     note: String? = null,
+    used: UsedAnswer? = null,
 ) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
@@ -1846,6 +1886,27 @@ private fun Reply(
                         color = chrome.textLo,
                     )
                 }
+                // "Used 2 memories": opens the facts this answer used, read
+                // from the PC by id only then (UsedMemoriesPlate.kt).
+                if (used != null && used.ids.isNotEmpty()) {
+                    var open by remember(used.ids) { mutableStateOf(false) }
+                    com.jarvis.client.net.MemoryUsed.usedLine(used.ids.size)?.let { line ->
+                        Gap(4)
+                        Quiet(line, color = chrome.textMid, onClick = { open = !open })
+                    }
+                    if (open) {
+                        UsedFactsList(
+                            title = com.jarvis.client.net.MemoryUsed.USED_TITLE,
+                            ids = used.ids,
+                            canAct = used.canAct,
+                            privateHidden = used.hidden,
+                            showPrivateBusy = used.showBusy,
+                            onShowPrivate = used.onShow,
+                            load = used.load,
+                            forget = used.forget,
+                        )
+                    }
+                }
                 Gap(8)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Quiet("Copy", color = chrome.textMid) {
@@ -1886,6 +1947,18 @@ private fun Reply(
         }
     }
 }
+
+/** What "Used 2 memories" under the answer needs - see [UsedFactsList]. */
+@Immutable
+internal data class UsedAnswer(
+    val ids: List<Long>,
+    val canAct: Boolean,
+    val hidden: Boolean,
+    val showBusy: Boolean,
+    val onShow: () -> Unit,
+    val load: suspend (List<Long>) -> com.jarvis.client.net.MemoryUsed.Read,
+    val forget: suspend (Long) -> Pair<Boolean, String>,
+)
 
 /**
  * "Was this answer right?" - one Right and one Wrong for the ONE answer on
@@ -2022,6 +2095,13 @@ private fun Composer(
             .background(chrome.surface1)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
+    // A temporary chat: the marker for the whole chat, and the way in and out.
+    TemporaryChatStrip(
+        on = state.temporary,
+        empty = state.lastUserText == null && state.conversationTurns == 0,
+        enabled = !state.streaming,
+        onToggle = actions.onToggleTemporary,
+    )
     VoiceStrips(state, actions)
     // A picture waiting to go with the next question. Dismiss drops it.
     if (state.pictureBusy) {

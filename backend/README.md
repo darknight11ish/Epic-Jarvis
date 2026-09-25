@@ -110,7 +110,8 @@ on a throwaway copy instead.
 | `auto-learn.patch` | `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py` | **Jarvis learns automatically, from your own words only** (the owner's decision, 2026-09-24). A proposal is saved without a card only when every check in `jarvis_auto_learn.py` passes; the rest stay cards, each saying why. Adds `GET /api/memory/learning`, `GET /api/memory/auto`, `POST /api/memory/learning/auto` and `/sensitive` (each ON is one approval card), `jarvis_extract.accept_auto()`, facts that keep their proposal's source, the learner's refusal of an Ollama cloud model, and quote marks round recalled facts. Last in the list, after `chat-history.patch`. Needs `jarvis_auto_learn.py` - see its own section, after chat-history. |
 | `memory-erase.patch` | `jarvis_hud.py` | **"Erase the words"** (the owner's decision, 2026-09-24). Adds `POST /api/memory/erase {"id"}`: ONE fact's words wiped for good - its text, its word-search entry, its meaning vector, the copies in the review queue, and the old bytes in `memory.db` and `memory.db-wal` - while its row and dates stay. Same checks as forget, no card. The work is in the shipped `rebuilt/jarvis_memory.py` (`erase()`, `handle_erase()`). See its own section. |
 | `past-recall.patch` | `jarvis_hud.py` | **Questions about the past get the old facts, labelled** (memory wave 1, 2026-09-24). "Where did I live before?" also recalls the matching retired facts, each ending "(no longer true since <date>)"; every other question gets exactly the search it got before. One line of the chat turn's recall. After `auto-learn.patch`. Needs `jarvis_past.py` - without it the old search runs. See "Memory wave 1", near the end. |
-| `memory-profile.patch` | `jarvis_hud.py` | **"Always keep in mind"** (memory wave 2, the owner's decision, 2026-09-24). A short list of facts the owner pins - at most 1,200 characters - is read with every local chat question, word for word, first in the recalled-facts block; a pinned fact the search also found is not repeated. Adds `GET` and `POST /api/memory/profile` (one fact per request, no card, like Forget). Last in the list, after `past-recall.patch`, whose search lines it extends. The work is in the shipped `rebuilt/jarvis_memory.py` - with an older copy the routes answer 501 and chat recalls exactly as before. See "Memory wave 2", at the very end. |
+| `memory-profile.patch` | `jarvis_hud.py` | **"Always keep in mind"** (memory wave 2, the owner's decision, 2026-09-24). A short list of facts the owner pins - at most 1,200 characters - is read with every local chat question, word for word, first in the recalled-facts block; a pinned fact the search also found is not repeated. Adds `GET` and `POST /api/memory/profile` (one fact per request, no card, like Forget). Last in the list, after `past-recall.patch`, whose search lines it extends. The work is in the shipped `rebuilt/jarvis_memory.py` - with an older copy the routes answer 501 and chat recalls exactly as before. See "Memory wave 2", near the end. |
+| `temporary-chat.patch` | `jarvis_hud.py` | **A temporary chat, and "Used in this answer"** (the owner's decisions, 2026-09-25). A chat request with `"temporary": true` recalls no facts (no pinned list either), learns nothing (no "Remember:" either) and is not kept in the chat history; `X-Jarvis-Route` says `"temporary": true` (and `"remember_off": true` for a "Remember:"). Adds `GET /api/memory/used?ids=`, the words of the facts an answer used, read by id. Last in the list, after `memory-profile.patch`, whose GET route and search lines it sits beside. The work is in the shipped `rebuilt/jarvis_memory.py` (`used_view`), `jarvis_chat_log.py` (`TEMPORARY_CHAT`) and `rebuilt/jarvis_events.py` (`capabilities.temporary_chat`). See "Temporary chat and Used in this answer", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -7413,3 +7414,111 @@ block exactly as before when nothing is pinned; on a first question the
 Jarvis rules still go first; the routes; no retire card for a pinned fact;
 and the patch applies forwards and backwards. Every check about pinning
 fails on the code before this change.
+
+---
+
+# Temporary chat and "Used in this answer" (2026-09-25)
+
+**What it does, in plain words.** Two things you asked for after comparing
+Jarvis with the big assistants.
+
+- **A temporary chat.** One tap - the ghost button in the quickbar on the
+  PC, or "Temporary chat" above the chat box on the phone. While it is on,
+  Jarvis does not use anything it remembers about you, does not learn
+  anything from what you say (not even "Remember: ..."), and the PC does not
+  keep the chat in its history. Tools and approval cards work exactly as
+  usual. The whole chat is marked, and the empty chat says: "Temporary chat:
+  Jarvis won't use or learn from your memory, and this chat isn't kept."
+  Turning it on or off needs no card (it only makes Jarvis stricter) and
+  starts a new conversation, so nothing from one kind of chat slips into the
+  other. If you type "Remember: ..." in one, the answer says "Remember: is
+  off in a temporary chat."
+- **"Used in this answer".** Under an answer that used things Jarvis
+  remembers, a quiet line says "Used 2 memories". Tap it to see those facts
+  (a pinned one says "pinned"), each with Forget - and on the PC, "Erase the
+  words" too. The same list opens from the Brain's (and Mind's) "Jarvis
+  remembered 2 things" line, for what was just saved automatically. The
+  lists are hidden like your other memory lists when Windows Hello / the
+  phone's "Hide memory lists and chat history" is on, and Forget waits while
+  the app cannot confirm its link to the PC is live.
+
+**Honest about older PCs.** Both apps offer a temporary chat only when the
+PC says it has one (`/api/version` -> `capabilities.temporary_chat`). If it
+does not, they say "Temporary chat isn't available on this PC's version of
+Jarvis, so nothing was sent. Run apply-patches.ps1 on the PC to update it."
+If an answer comes back without the PC confirming it was temporary, the app
+says so rather than pretending.
+
+## Owner steps (one line, in PowerShell)
+
+Put the new code on the PC (copies the new `jarvis_memory.py`,
+`jarvis_chat_log.py`, `jarvis_auto_learn.py` and `jarvis_events.py`, applies
+`temporary-chat.patch`), from this repository's folder, then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+## What the code does
+
+- `temporary-chat.patch` (`jarvis_hud.py`):
+  - `_temporary_chat(body)` - true only for JSON `true`; `"temporary"`
+    joins `_CHAT_CLIENT_FIELDS`, so it never reaches a model.
+  - Recall: no search and no pinned list for a temporary chat, and just
+    before the block is placed, whatever was found anyway (the older word
+    matcher over the jsonl included) is dropped and replaced by one fixed
+    line (`_TEMPORARY_NOTE`) telling the model it is a temporary chat.
+  - `X-Jarvis-Route`, after the degrade loop: `temporary: true`,
+    `injected_facts: 0`, `injected_ids: []`, `memory_side: "none"`, and
+    `remember_off: true` for a "Remember:" (`_temporary_remember`, the same
+    test as `jarvis_intake.remember_command`). `temporary` is left out when
+    memory is Jarvis's own upstream's (`memory_side: "jarvis"`), which this
+    PC cannot switch off.
+  - The `finally`: the learner is not offered a temporary turn;
+    `jarvis_chat_log.record_turn` is called only if the module has
+    `TEMPORARY_CHAT` (an older one would keep the chat).
+  - `GET /api/memory/used?ids=` beside `/api/memory/profile`, with the same
+    token and origin checks; 501 from an older `jarvis_memory.py`.
+- `jarvis_chat_log.py`: a temporary request writes nothing to
+  `chat-history.db`; its live message goes into the in-memory registry as a
+  hash under the provenance `"temporary"`, so a tool that read outside text
+  still marks the conversation (the note-write card) and automatic learning
+  makes a card of it if an app ever re-sent it ("said in a temporary chat,
+  which Jarvis never learns from", `jarvis_auto_learn.py`).
+- `rebuilt/jarvis_memory.py`: `parse_used_ids()`, `used_view()` (in the
+  order asked; `current`, `pinned`, `valid_to`, `erased_at`; an erased fact
+  never has words; unknown ids in `missing`) and `handle_used_get()`.
+- `rebuilt/jarvis_events.py`: `capabilities.temporary_chat`, asked of the
+  running server by name like `appearance`.
+
+## Not checked, said plainly
+
+- Like every patch here, `temporary-chat.patch` was checked against a
+  stand-in of your `jarvis_hud.py` built from the whole patch stack, not
+  against the real file. Between the recall search and the placement of the
+  recalled block there are a few lines of your file this repository has
+  never seen (the old word matcher over the jsonl); the patch does not rely
+  on them - it empties the block at the placement, after them.
+- If your PC lets Jarvis's own upstream server handle memory
+  (`memory_side: "jarvis"`), a temporary chat cannot switch that server's
+  memory off. The header then does not say `temporary`, and both apps say
+  the PC did not confirm the chat was temporary.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_temporary_chat.py
+```
+
+About 75 checks, no network, no model: the id list is read strictly (1 to
+100 whole numbers, "mem:12" allowed, nothing else); the view says current,
+pinned, no longer in use and erased correctly and never shows an erased
+fact's words; the route's token, origin, 400, 501 and 503; the chat turn's
+own lines lifted from the whole patch stack - a temporary chat reads no
+facts (the store is not even asked), puts only the fixed line before the
+question, and the header says `temporary` with nothing used, while an
+ordinary chat is unchanged; "Remember:" gives `remember_off`; the flag never
+reaches a model; the learner is not offered a temporary turn and an older
+chat log is not called; the real chat log keeps nothing on disk and holds a
+hash under "temporary"; the capability; and the patch applies forwards and
+backwards. Every check fails on the code before this change.

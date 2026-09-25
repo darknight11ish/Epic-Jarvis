@@ -37,7 +37,16 @@ import okhttp3.Response
  * also runs proactively once a line reports the stream is over, rather than
  * waiting for the socket to close on its own - see [ChatChunkParser.Result.Terminal].
  */
-class ChatSession(private val api: JarvisApi) {
+class ChatSession(
+    private val api: JarvisApi,
+    /**
+     * Whether the PC says it can hold a temporary chat
+     * (`capabilities.temporary_chat`, [TemporaryChat]). Read before turning
+     * it on and again before every temporary question: nothing is ever sent
+     * as temporary to a PC that would ignore the flag.
+     */
+    private val canTemporary: () -> Boolean = { false },
+) {
 
     private val _reply = MutableStateFlow("")
 
@@ -133,6 +142,40 @@ class ChatSession(private val api: JarvisApi) {
 
     @Volatile private var call: Call? = null
 
+    private val _temporary = MutableStateFlow(false)
+
+    /**
+     * A temporary chat is on (the owner's decision, 2026-09-25;
+     * [TemporaryChat]): every question - typed or spoken - goes with
+     * `"temporary": true`, so the PC uses and learns nothing from memory and
+     * keeps nothing of the chat. Memory only; off when the app starts.
+     */
+    val temporary: StateFlow<Boolean> = _temporary.asStateFlow()
+
+    private val _usedIds = MutableStateFlow<List<Long>>(emptyList())
+
+    /**
+     * The facts the answer on screen used, by id, from its `X-Jarvis-Route`
+     * ([MemoryUsed.idsFromRouteHeader]) - for "Used 2 memories" under it.
+     * Ids only: the words are read from the PC when the owner opens the
+     * list. Empty for a temporary answer, and cleared with the answer.
+     */
+    val usedIds: StateFlow<List<Long>> = _usedIds.asStateFlow()
+
+    /**
+     * Turns a temporary chat on or off, and starts a new conversation
+     * either way ([newConversation]) - so nothing said in one kind of chat
+     * is re-sent in the other. ON only when the PC says it has one.
+     * @return the sentence to show, or null when nothing changed.
+     */
+    fun setTemporary(on: Boolean): String? {
+        if (on == _temporary.value) return null
+        if (on && !canTemporary()) return TemporaryChat.UNAVAILABLE
+        newConversation()
+        _temporary.value = on
+        return if (on) TemporaryChat.STARTED else TemporaryChat.ENDED
+    }
+
     /**
      * Sends a turn and returns the reply **this** call produced, or null if it
      * did not finish.
@@ -192,13 +235,21 @@ class ChatSession(private val api: JarvisApi) {
         _turnId.value = null
         _waiting.value = null
         _answerNote.value = null
+        _usedIds.value = emptyList()
+        // A temporary question goes only to a PC that says it can hold one -
+        // asked again now, since the PC may have changed since it was turned on.
+        val asTemporary = _temporary.value
+        if (asTemporary && !canTemporary()) {
+            _error.value = TemporaryChat.UNAVAILABLE
+            return null
+        }
 
         // Captured before the request goes, and the same list that is sent:
         // what this question was asked in the light of.
         val earlier = _history.value
         val askedIn = conversation
         val asking = ChatHistory.asking(message, provenance, shared, picture = picture != null)
-        val c = api.chatCall(asking, earlier, picture, conversationId)
+        val c = api.chatCall(asking, earlier, picture, conversationId, asTemporary)
         if (c == null) {
             _error.value = "No desktop address set"
             return null
@@ -316,6 +367,13 @@ class ChatSession(private val api: JarvisApi) {
                     // header, second-card.patch): still this PC, but not the
                     // everyday model, so it gets a line of its own.
                     val secondCard = SecondCard.routeFromHeader(routeHeader)
+                    // The facts this answer used, by id, for "Used 2
+                    // memories" - none on a temporary one - and what the PC
+                    // said about a temporary question (TemporaryChat.notes).
+                    if (call === c) {
+                        _usedIds.value = if (asTemporary) emptyList() else MemoryUsed.idsFromRouteHeader(routeHeader)
+                    }
+                    val temporaryNotes = TemporaryChat.notes(asTemporary, routeHeader)
                     // Decoded as CHARACTERS, not as whatever bytes happened
                     // to be buffered.
                     //
@@ -473,7 +531,7 @@ class ChatSession(private val api: JarvisApi) {
                             },
                             if (cloud && !failed) "Answered by a cloud model, not on your PC." else null,
                             if (secondCard != null && !cloud && !failed) SecondCard.routeNote(secondCard) else null,
-                        ).joinToString(" ").ifEmpty { null }
+                        ).plus(temporaryNotes).joinToString(" ").ifEmpty { null }
                     }
                 }
             } catch (ce: CancellationException) {
@@ -547,6 +605,7 @@ class ChatSession(private val api: JarvisApi) {
         _error.value = null
         _waiting.value = null
         _answerNote.value = null
+        _usedIds.value = emptyList()
     }
 
     private companion object {

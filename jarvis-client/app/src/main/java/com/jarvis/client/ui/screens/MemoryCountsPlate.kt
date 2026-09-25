@@ -31,14 +31,23 @@ import kotlinx.coroutines.launch
  *
  * Under it, automatic learning's two switches ([AutoLearnSwitches],
  * docs/JARVIS-API.md section 19) - the same shape - and, after a
- * `memory_saved` event, a quiet "Jarvis remembered N things" line that
- * opens the "Saved automatically" list. A count only, never a fact's words.
+ * `memory_saved` event, a quiet "Jarvis remembered N things" line. A count
+ * only, never a fact's words - until it is tapped: since 2026-09-25 it opens
+ * the facts themselves, read from the PC by id, with Forget beside each
+ * ([UsedFactsList]), and "Show everything saved automatically" goes on to
+ * the whole list. Hidden like the other memory lists.
  *
  * @param canAct the link is up and fresh: turning a switch ON waits for it.
  * @param onOpenAutoList brings "Saved automatically" into view.
  */
 @Composable
-internal fun MemoryCountsSection(canAct: Boolean = false, onOpenAutoList: () -> Unit = {}) {
+internal fun MemoryCountsSection(
+    canAct: Boolean = false,
+    onOpenAutoList: () -> Unit = {},
+    privateHidden: Boolean = false,
+    showPrivateBusy: Boolean = false,
+    onShowPrivate: () -> Unit = {},
+) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var reads by remember { mutableIntStateOf(0) }
@@ -49,6 +58,8 @@ internal fun MemoryCountsSection(canAct: Boolean = false, onOpenAutoList: () -> 
     var busy by remember { mutableStateOf(false) }
     val queue by JarvisRuntime.pending.collectAsState()
     val remembered by JarvisRuntime.autoRemembered.collectAsState()
+    // The facts the line opened, by id, or null while it is closed.
+    var opened by remember { mutableStateOf<List<Long>?>(null) }
     val cardWaiting = MemoryCounts.learningCardWaiting(queue.map { it.action })
     // The card leaving the queue (approved, denied or expired) re-reads the
     // switch, so the line says what really happened.
@@ -114,9 +125,28 @@ internal fun MemoryCountsSection(canAct: Boolean = false, onOpenAutoList: () -> 
             com.jarvis.client.net.AutoLearn.rememberedLine(remembered)?.let { line ->
                 Gap(6)
                 Quiet(line, onClick = {
+                    opened = JarvisRuntime.autoRememberedIds.value.takeIf { it.isNotEmpty() }
                     JarvisRuntime.clearAutoRemembered()
+                    if (opened == null) onOpenAutoList()
+                })
+            }
+            opened?.let { ids ->
+                Gap(8)
+                UsedFactsList(
+                    title = com.jarvis.client.net.MemoryUsed.REMEMBERED_TITLE,
+                    ids = ids,
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                    load = { JarvisRuntime.memoryUsed(it) },
+                    forget = { JarvisRuntime.forgetAutoFact(it) },
+                )
+                Quiet(com.jarvis.client.net.MemoryUsed.SHOW_ALL, onClick = {
+                    opened = null
                     onOpenAutoList()
                 })
+                Quiet("Close", onClick = { opened = null })
             }
         }
     }

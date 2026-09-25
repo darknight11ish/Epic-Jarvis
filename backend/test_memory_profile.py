@@ -313,7 +313,10 @@ def _turn(hud, st, query, k=5):
     header = _fragment(hud, "# auto-learn.patch (the owner's decision, 2026-09-24): how many",
                        "if use_tools:")
     M._store = st
-    ns = {"jarvis_memory": M, "query": query, "MEMORY_K": k, "time": time}
+    ns = {"jarvis_memory": M, "query": query, "MEMORY_K": k, "time": time,
+          # temporary-chat.patch (later in the order) checks the request
+          # here; an ordinary request is not a temporary chat.
+          "_temporary_chat": lambda body: False, "body": {}}
     ns["_dated_fact"] = lambda f: "- " + str(f.get("text", ""))
     exec(compile(search, "<stacked search>", "exec"), ns)
     ns["chosen_facts"] = None
@@ -387,7 +390,7 @@ def t_the_stacked_chat_turn():
           and "Recalled for this question" not in body4, body4)
     old = types.SimpleNamespace(store=M.store)
     ns5 = {"jarvis_memory": old, "query": "What should I cook tonight?", "MEMORY_K": 5,
-           "time": time}
+           "time": time, "_temporary_chat": lambda body: False, "body": {}}
     exec(compile(_fragment(hud, "# past-recall.patch: a question about the past", "if hits:"),
                  "<stacked search, old store>", "exec"), ns5)
     check("an older jarvis_memory.py without the list: the search alone, no crash",
@@ -540,9 +543,8 @@ def t_the_routes():
 def t_listed_where_it_must_be():
     import _where
     names = [str(p).replace("\\", "/").split("/")[-1] for p in _stack.order()]
-    check("memory-profile.patch is LAST in apply-patches.ps1's order, after past-recall",
-          names[-1] == "memory-profile.patch"
-          and names.index("memory-profile.patch") > names.index("past-recall.patch"), names[-3:])
+    check("memory-profile.patch is after past-recall in apply-patches.ps1's order",
+          names.index("memory-profile.patch") > names.index("past-recall.patch"), names[-3:])
     check("the store that does the work is shipped whole",
           "rebuilt/jarvis_memory.py" in _where.SHIPPED)
 

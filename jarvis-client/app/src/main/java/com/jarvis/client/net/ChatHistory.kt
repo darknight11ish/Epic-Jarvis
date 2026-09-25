@@ -218,13 +218,16 @@ object ChatHistory {
      * field. `has_image` is true only when a [picture] rides in the newest
      * message - the PC routes on it and keeps the turn local. `auto` mirrors
      * the desktop's own `true`. `conversation_id` goes only when it is one
-     * the PC will accept; `device` always.
+     * the PC will accept; `device` always. `temporary: true` only for a
+     * temporary chat ([TemporaryChat], docs/JARVIS-API.md section 18.1) -
+     * never `false`, so an ordinary request is exactly what it was.
      */
     fun requestBody(
         window: List<Exchange>,
         asking: List<UserTurn>,
         picture: String? = null,
         conversationId: String? = null,
+        temporary: Boolean = false,
     ): String =
         buildJsonObject {
             put("messages", messages(window, asking, picture))
@@ -235,6 +238,7 @@ object ChatHistory {
                 put("conversation_id", conversationId)
             }
             put("device", DEVICE)
+            if (temporary) put(TemporaryChat.FIELD, true)
         }.toString()
 
     private fun userTurn(u: UserTurn): JsonObject = buildJsonObject {

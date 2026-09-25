@@ -560,6 +560,18 @@ class JarvisApi(
     suspend fun memoryProfile(): ApiResult<JsonObject> = probe(MemoryProfile.PATH)
 
     /**
+     * `GET /api/memory/used?ids=`: the words of the few facts an answer used
+     * (its `X-Jarvis-Route` names them by id only), or that automatic
+     * learning just saved (the `memory_saved` event's ids) - the owner's
+     * decision of 2026-09-25. [MemoryUsed.parse] reads it. A read.
+     */
+    suspend fun memoryUsed(ids: List<Long>): ApiResult<JsonObject> {
+        val path = MemoryUsed.path(ids)
+            ?: return ApiResult.Failed(ApiError.Malformed("no fact ids to read"))
+        return probe(path)
+    }
+
+    /**
      * `POST /api/memory/profile`: pin or unpin ONE fact (the owner's
      * decision, 2026-09-24). The status and body come back whole
      * ([MemoryProfile.Reply]), like [eraseFact]: a 404 that says "no such
@@ -1267,9 +1279,10 @@ class JarvisApi(
         history: List<ChatHistory.Exchange> = emptyList(),
         picture: String? = null,
         conversationId: String? = null,
+        temporary: Boolean = false,
     ): Call? {
         val target = url("/api/chat") ?: return null
-        val body = ChatHistory.requestBody(history, asking, picture, conversationId)
+        val body = ChatHistory.requestBody(history, asking, picture, conversationId, temporary)
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
         return client.newCall(req)

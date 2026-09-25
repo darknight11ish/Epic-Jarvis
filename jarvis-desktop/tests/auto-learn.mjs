@@ -13,7 +13,8 @@
  * - "Saved automatically": newest first, the fact, when, a "said aloud"
  *   mark for voice, Forget on each after a confirm, and "Load older";
  * - on `memory_saved` ({ids} only) a quiet line, "Jarvis remembered 2
- *   things", that opens the list - never the fact's words, never a pop-up;
+ *   things", that opens those facts, with Forget on each (2026-09-25) -
+ *   never the fact's words before it is opened, never a pop-up;
  * - a card that stayed a card says why, in the PC's words;
  * - "Windows Hello for memory lists and chat history" hides this list too.
  *
@@ -585,7 +586,14 @@ await check("memory_saved: a quiet line with the count, the list read again, no 
   const line2 = await page.locator("#memory-saved-line").innerText();
   await page.locator("#memory-saved-line button").click();
   await page.waitForTimeout(250);
-  const cleared = await page.locator("#memory-saved-line").innerText();
+  // Since 2026-09-25 the line opens the facts themselves (memory-used.js),
+  // read by id, with Forget beside each - and "Show everything saved
+  // automatically" still goes to the whole list.
+  const opened = await page.locator("#memory-saved-line").innerText();
+  const facts = await page.locator("#memory-saved-line .row-item").allInnerTexts();
+  const asked = await page.evaluate(() => window.__usedReads);
+  await page.locator("#memory-saved-line button", { hasText: "Show everything saved automatically" }).click();
+  await page.waitForTimeout(250);
   const focused = await page.evaluate(() => document.activeElement && document.activeElement.id);
   await page.close();
   assert.equal(line.trim(), "Jarvis remembered 2 things");
@@ -596,8 +604,12 @@ await check("memory_saved: a quiet line with the count, the list read again, no 
   assert.equal(toastShown, false, "a pop-up for a saved fact");
   assert.equal(popped, false);
   assert.equal(line2.trim(), "Jarvis remembered 3 things");
-  assert.equal(cleared.trim(), "", "opening the list left the line");
-  assert.equal(focused, "memory-auto-list", "the line did not open the list");
+  assert.doesNotMatch(opened, /Jarvis remembered/, "opening the facts left the line");
+  assert.deepEqual(asked, [[20, 21, 22]], "the three facts were not read by id");
+  assert.equal(facts.length, 2, `22 is not on the PC: ${facts}`);
+  assert.match(facts[0], /Has a dentist on Fridays[\s\S]*Forget[\s\S]*Erase the words/);
+  assert.match(opened, /1 of them is no longer on this PC/);
+  assert.equal(focused, "memory-auto-list", "Show everything did not open the list");
 });
 
 await check("a memory_saved on another tab waits for the Memory tab, and the list is read then", async () => {

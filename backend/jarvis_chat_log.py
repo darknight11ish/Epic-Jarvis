@@ -34,7 +34,10 @@ WHAT IS KEPT, per /api/chat request
   - when, which app (`device`, informational only), which model (`lane`),
     and the turn's number in the conversation.
   - A picture: its words only, as `picture_caption`. The picture never.
-Not kept: tool output, system or context messages, deep questions, wiki
+Not kept: anything from a TEMPORARY chat (`"temporary": true` on the
+request, 2026-09-25) - only the registry's hash of its live message, under
+the provenance "temporary", so automatic learning never saves from it.
+Also not kept: tool output, system or context messages, deep questions, wiki
 jobs, notes (#obs, #log), approval cards - none of them come through here.
 
 ENCRYPTION (CLAUDE.md rule 3)
@@ -117,6 +120,10 @@ KEEP_DAYS = (0, 30, 90, 365)
 VOICE_WINDOW = 600          # a transcript counts as voice for 10 minutes
 LIVE_MAX = 200              # the live-turn registry holds this many turns
 TITLE_CHARS = 80
+#: temporary-chat.patch looks for this before it hands this module a
+#: temporary chat: a jarvis_chat_log.py without it would keep one.
+TEMPORARY_CHAT = True
+TEMPORARY_WHY = "a temporary chat is never kept"
 LIST_DEFAULT, LIST_MAX = 30, 100
 _CID = re.compile(r"[A-Za-z0-9_-]{8,64}")   # used with fullmatch: no trailing newline
 _SWEEP_EVERY = 86400
@@ -586,10 +593,23 @@ class ChatLog:
         answer_kept = bool(turn and turn.get("finish_reason") and not turn.get("client_gone")
                            and isinstance(answer, str) and answer.strip())
         rows = self._live_rows(live)
+        temporary = body.get("temporary") is True
+        if temporary:
+            # temporary-chat.patch (the owner's decision, 2026-09-25): a
+            # temporary chat is never kept. Its turns still go in the
+            # live-turn registry below - a hash, never the words, in memory
+            # only - so a tool that read outside text still marks the rest of
+            # the conversation (the note-write card, jarvis_agent), but under
+            # the provenance "temporary": if an app ever re-sent one of them
+            # in a normal chat, automatic learning would make it a card
+            # ("said in a temporary chat"), never a saved fact.
+            rows = [(text, "temporary", None) for text, _prov, _vc in rows]
         # The live-turn registry is written for EVERY request, before the
         # switch is read: automatic learning trusts only turns this PC saw
         # arrive, whether or not history is kept (jarvis_auto_learn.py).
         self._note_live(cid, rows, device, read_outside, now)
+        if temporary:
+            return {"recorded": False, "why": TEMPORARY_WHY}
         aead, why = self._recording()
         if aead is None:
             return {"recorded": False, "why": why}

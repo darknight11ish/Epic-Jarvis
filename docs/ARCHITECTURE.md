@@ -328,6 +328,29 @@ profile     fact_id INTEGER PRIMARY KEY, added REAL, how TEXT ("tap")
   (docs/RESEARCH-2026-09-24.md §3 item 2), without their rewriting: no
   model can add to, merge or summarise the list.
 
+**A temporary chat uses and makes no memory** (the owner's decision,
+2026-09-25; `temporary-chat.patch`, docs/JARVIS-API.md §4 and §18.1). A
+request with `"temporary": true` recalls nothing - no search, no pinned
+list, not even the older word list; the FACTS block is replaced by one
+fixed line telling the model it is a temporary chat - is never offered to
+the learner (no proposal, no "Remember:", no automatic save), and is not
+kept in the chat history. Everything else about the turn is unchanged:
+tools, the gate and its cards, local-first routing. It needs no card, on or
+off, because it can only make a turn stricter; it is offered only when the
+running server says it has it (`capabilities.temporary_chat`), and
+`X-Jarvis-Route` says `"temporary": true` so an app never has to assume.
+Its live message still goes in the chat log's in-memory registry - a hash,
+never the words - so the "read outside text" mark keeps working, under the
+provenance `"temporary"`, which automatic learning always turns into a card.
+
+**"Used in this answer" reads facts by id, and only when asked** (2026-09-25,
+`GET /api/memory/used`, `rebuilt/jarvis_memory.py` `used_view()`). The
+route header and the `memory_saved` event stay ids only (§6: every event is
+a doorbell); an app reads the words of those few facts behind the pairing
+token when the owner opens "Used 2 memories" or "Jarvis remembered 2
+things", hidden like every memory list, with Forget (and on the desktop
+"Erase the words") one fact at a time.
+
 **"Current" is `valid_to IS NULL OR valid_to > now`, never `valid_to IS
 NULL`.** A lease that ends in December is true today. Three places computed
 this and one of them got it wrong, directly below a line that got it right.
@@ -415,6 +438,9 @@ reads from on its own. Three things about it are invariants:
 - **Turning it back on is a card; off is immediate. No delete-all.**
   One conversation per delete, and both apps hold deleting and shortening
   the keep period on a stale link.
+- **A temporary chat is never kept** (2026-09-25): nothing of it reaches
+  `chat-history.db`, whether history is on or off (§5, "A temporary chat
+  uses and makes no memory").
 
 ---
 
@@ -435,7 +461,9 @@ phone's `JarvisRuntime.onEvent` re-reads `/api/deep` and `/api/big-model`.
 Brain shows the quiet "Jarvis remembered N things" line and re-reads the
 auto list and `memory_facts` (`brain.js` `noteMemorySaved`), and the phone
 shows the same line on Mind and re-reads the list
-(`JarvisRuntime.onMemorySaved`) - never a notification. JARVIS-API §19.)
+(`JarvisRuntime.onMemorySaved`) - never a notification. Since 2026-09-25
+the line opens those facts, their words read by id from
+`/api/memory/used` only then. JARVIS-API §19.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. This bus reaches a phone that surfaces notifications with the
@@ -569,7 +597,8 @@ backend routes, in both directions; the rest are listed here only.
 | what | why |
 |---|---|
 | The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
-| Rewording a stored fact (`/api/memory/edit`), and forgetting one that was not saved automatically | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone calls it for facts in the "Saved automatically" list (JARVIS-API §19). |
+| Rewording a stored fact (`/api/memory/edit`), and forgetting one from a list of every fact | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone calls it for facts in the "Saved automatically" list (JARVIS-API §19), and since 2026-09-25 for a fact shown under "Used in this answer" or "Jarvis remembered N things" - one the owner just saw Jarvis use or save, not a browse of the whole store. |
+| "Erase the words" beside Forget under "Used in this answer" and "Jarvis remembered N things" | The phone offers Erase in one place only, Mind → Saved automatically, for facts saved automatically that are still in use (the row below). A fact an answer used may be any fact, forgotten ones included (a question about the past recalls them), and erasing any fact at all is deep memory editing. On the phone those two lists offer Forget; the desktop offers both, as it does on every fact. |
 | "Erase the words" (`/api/memory/erase`) on a fact that was already forgotten, or was never saved automatically | The same line as Forget, above: the phone lists only facts saved automatically that are still in use, and a list of every fact, forgotten ones included, is deep memory editing. The phone offers Erase wherever it offers Forget (Mind → Saved automatically), so the route itself is on both apps. |
 | Pinning a fact on "Always keep in mind" (`/api/memory/profile`) that was not saved automatically | The same line as Forget, above (2026-09-24): the phone's only list of current facts is "Saved automatically", so it pins from there, and a list of every fact is deep memory editing. The route and the "Always keep in mind" section - the pinned facts, "N of 1,200 characters used", Unpin on each - are on both apps, so a fact pinned on the desktop can be unpinned from the phone. |
 | Exporting all memory (`/api/memory/export`) | A copy of everything Jarvis knows does not belong on a phone that can be lost. |
@@ -582,6 +611,7 @@ backend routes, in both directions; the rest are listed here only.
 | The tray icon (`tray.rs`) | Part of Windows' taskbar. |
 | Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
 | The Faces window's "Portable output" (`faces.html`) | Code for building a client (the look spec as JSON, Kotlin, TypeScript). It is a developer's tool, and the phone already ships its own copy of the spec. |
+| A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). |
 | **Update notice** | **Undecided - the owner's call.** The desktop checks GitHub for a newer version and says so in Settings (`update.rs`; it never installs on its own). The phone has no such notice: a new APK is published to the `client-latest` release and installed with adb. Whether the phone should say "a newer version exists" has not been decided. |
 
 **On the phone, kept off the desktop:**
