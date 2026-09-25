@@ -38,6 +38,8 @@ CASES = [
     # home_control
     ("turn off the living room lights", "home_control", {"domain": str, "service": str, "entity_id": str}),
     ("set the bedroom light to half brightness", "home_control", {"domain": str, "service": str, "entity_id": str}),
+    # several devices, one card (2026-09-25): the whole set in entity_ids
+    ("turn off the kitchen, hall and bedroom lights", "home_control", {"domain": str, "service": str, "entity_ids": list}),
     # github_search
     ("is there already a library for parsing ical files in python", "github_search", {"idea": str}),
     ("before I build it, check github for an existing rust crate that does fuzzy search", "github_search", {"idea": str}),

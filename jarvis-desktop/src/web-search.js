@@ -43,7 +43,7 @@ export const DEFAULT_WHY =
   "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.";
 export const ASK_LABEL = "Ask before every web search";
 export const ASK_DETAIL =
-  "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.";
+  "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.";
 export const KEY_ENTRY =
   "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service.";
 export const KEY_WHERE = Object.freeze({

@@ -57,9 +57,10 @@ RULE 1 - email, files, credentials and memory stay on this PC. Two guards:
     looks_like_a_secret, and jarvis_scrub.find_secret, which also knows the
     secrets this PC holds by value) is REFUSED at plan() time, with the
     kind of secret named and never the value;
-  - after Jarvis has read email, files, notes, saved memories or other
-    outside text, the search waits for a card that shows its exact words
-    (jarvis_agent.py).
+  - after Jarvis has read email, files, notes or other outside text, when
+    the search words repeat a saved fact, or when a sensitive saved fact was
+    used, the search waits for a card that shows its exact words
+    (jarvis_agent.py; repeated_facts below).
 
 RULE 3 - the Exa, Tavily and Brave keys. Kept in Windows Credential Manager
 (KEY_TARGETS, the same store and format as the pairing token -
@@ -221,8 +222,9 @@ ACTION_SEARCH = "search_the_web"
 ASK_EVERY_TIME_LABEL = "Ask before every web search"
 ASK_EVERY_TIME_DETAIL = (
     "Off (the default): Jarvis asks first only when private things could slip "
-    "into a search - after it has read your email, files, notes, saved memories "
-    "or other outside text - and shows you the exact search words. On: it asks "
+    "into a search - after it has read your email, files, notes or other outside "
+    "text, when the search words repeat something you told it, or when it used a "
+    "sensitive saved fact - and shows you the exact search words. On: it asks "
     "before every search. Turning this on is immediate; turning it off asks you "
     "with an approval card.")
 
@@ -641,6 +643,220 @@ def describe(p: Plan) -> str:
               "", "If you say no: nothing is searched, and Jarvis answers from what it "
                   "already knows."]
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+#   Do the search words repeat a saved fact? (no model, no socket)
+# --------------------------------------------------------------------------
+#
+# The owner's decision of 2026-09-25, after the creativity audit: a search
+# asks first because of saved memories only when the search words would
+# REPEAT a saved fact, or a sensitive fact was used - no longer whenever any
+# fact (a pinned one, a recalled one) was part of the question. jarvis_agent
+# decides the card; the comparison lives here, beside the search it is about.
+#
+# How, in plain words: every fact that was in this turn's context is cut
+# into its distinctive pieces - words that are not everyday words, numbers
+# of three digits or more (not years), and the names and nicknames the
+# names layer has for the people and things it mentions. A piece counts only
+# when the owner has NOT said it themselves in this conversation: "vegan
+# restaurants in Leeds" typed by the owner is their own words, while "Leeds"
+# appearing in the search after "any good vegan places near me?" came from
+# the saved fact. Any such piece in the search words, and the search asks.
+#
+# The honest limit: a REWORDED fact is not caught ("vegetarian" in a fact,
+# "meat-free" in a search). Sensitive facts ask whatever the words say, so
+# health, money, other people and the rest are covered by that.
+
+#: Everyday words, never a sign that a fact is being repeated. Checked on the
+#: word as written and on its simple singular (_stem).
+_EVERYDAY = frozenset("""
+a about above after again against all almost also always am among an and any are
+aren around as at away back be because been before being below best better between
+big both but by came can cannot come could couldn did didn do does doesn doing don
+done down during each early either else even ever every few for from full further
+get gets getting give go goes going gone good got great had has hasn have having he
+her here hers herself him himself his how however i if in into is isn it its itself
+just keep kind last late later least less let like liked likes little ll long lot
+lots made make makes many may me might more most much must my myself near need
+needs never new next no nor not now of off often old on once one only onto or other
+others our ours out over own per quite rather re really right same see seen shall
+she should shouldn since so some something sometimes soon still such sure take than
+that the their theirs them then there these they thing things think this those
+though through to today together tomorrow too top toward under until up upon us use
+used uses using usually ve very via want wanted wants was wasn way we well went were
+weren what when where whether which while who whom whose why will with within
+without won would wouldn yes yet yesterday you your yours yourself
+owner owners user users jarvis told tell said says say know knows known remember
+called named name names call lives live living lived works work working worked job
+love loves loved prefer prefers preferred favourite favorite enjoy enjoys hate hates
+currently recently sometimes day days week weeks weekend month months year years time
+times morning evening night tonight am pm first second third two three four five six
+seven eight nine ten hundred thousand
+find search look looking show list info information about guide help how tips ideas
+review reviews price prices cheap buy online open opening hours near nearby latest
+news weather local best top free
+""".split())
+
+_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
+_NUMBER_RUN = re.compile(r"\d(?:[\d \t().\-/]*\d)?")
+_YEAR = re.compile(r"^(?:19|20)\d\d$")
+
+#: At most this many names or nicknames are taken from the names layer for
+#: one fact; at most this many facts are looked at. Bounded, like every read.
+_NAMES_PER_FACT = 40
+_MAX_FACTS_CHECKED = 60
+
+
+def _fold(text) -> str:
+    """Lower case, accents off: "Zoë" and "zoe" are the same word here."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(text or "")).casefold()
+    return "".join(c for c in t if not unicodedata.combining(c))
+
+
+def _stem(word: str) -> str:
+    """A very simple singular: "cafes" -> "cafe", "parties" -> "party"."""
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
+def _everyday(word: str) -> bool:
+    return word in _EVERYDAY or _stem(word) in _EVERYDAY
+
+
+def _numbers(text: str) -> list:
+    """(as written, digits only) for each number of 3+ digits that is not a
+    year. "07700 900123" is one number; "14 Elm Street" has none."""
+    out = []
+    for m in _NUMBER_RUN.finditer(str(text or "")):
+        digits = re.sub(r"\D", "", m.group(0))
+        if len(digits) >= 3 and not _YEAR.match(digits):
+            out.append((m.group(0).strip(), digits))
+    return out
+
+
+def _fact_words(fact: str) -> set:
+    """The distinctive words of one fact, as simple singulars."""
+    out = set()
+    for m in _TOKEN.finditer(str(fact or "")):
+        raw = m.group(0)
+        w = _fold(raw)
+        if w.isdigit() or _everyday(w):
+            continue            # numbers are compared whole (_numbers)
+        # Three letters or more; two only for a name written with a capital
+        # ("Jo", "Ed") - never a shouted word ("UK", "OK").
+        if len(w) >= 3 or (len(w) == 2 and raw[:1].isupper() and raw[1:].islower()):
+            out.add(_stem(w))
+    return out
+
+
+def _same_word(a: str, b: str) -> bool:
+    """Two simple singulars that are the same word: equal, or one a longer
+    form of the other when both are five letters or more ("vegetarian",
+    "vegetarianism")."""
+    if a == b:
+        return True
+    return min(len(a), len(b)) >= 5 and (a.startswith(b) or b.startswith(a))
+
+
+def _phrase_in(folded_text: str, folded_phrase: str) -> bool:
+    return bool(folded_phrase) and re.search(
+        r"(?<!\w)" + re.escape(folded_phrase) + r"(?!\w)", folded_text) is not None
+
+
+def repeated_facts(query, facts, *, owner_words: str = "", names=None) -> list:
+    """Which saved facts the search words repeat: [{"index", "fact", "words"}],
+    `words` the pieces of the SEARCH WORDS that match (never more of the
+    fact than the search itself holds). `facts` are the facts in this turn's
+    context, `owner_words` everything the owner typed or said in this
+    conversation, `names` {fact index: [names and nicknames]} from the names
+    layer (names_for_facts). No model, no socket."""
+    q = str(query or "")
+    q_fold = _fold(q)
+    q_tokens = [(m.group(0), _stem(_fold(m.group(0)))) for m in _TOKEN.finditer(q)]
+    q_numbers = _numbers(q)
+    own_fold = _fold(owner_words)
+    own_words = {_stem(_fold(m.group(0))) for m in _TOKEN.finditer(owner_words or "")}
+    own_digits = [d for _, d in _numbers(owner_words)]
+    out = []
+    for i, fact in enumerate(list(facts or [])[:_MAX_FACTS_CHECKED]):
+        found: list = []
+
+        def add(piece: str) -> None:
+            if piece and piece.lower() not in (f.lower() for f in found):
+                found.append(piece)
+
+        # A fact word the owner used themselves (or a longer or shorter form
+        # of it) is their own words, not the fact's.
+        words = {w for w in _fact_words(fact)
+                 if not any(_same_word(w, o) for o in own_words)}
+        for surface, qs in q_tokens:
+            if qs.isdigit() or _everyday(qs):
+                continue
+            if any(_same_word(qs, fw) for fw in words):
+                add(surface)
+        for surface, qd in q_numbers:
+            for _, fd in _numbers(fact):
+                if any(fd in od for od in own_digits):
+                    continue        # the owner said this whole number themselves
+                if fd in qd or (len(qd) >= 4 and qd in fd):
+                    add(surface)
+                    break
+        for phrase in list((names or {}).get(i) or [])[:_NAMES_PER_FACT]:
+            p = _fold(phrase).strip()
+            if not p or all(_everyday(t) for t in _TOKEN.findall(p)):
+                continue
+            if _phrase_in(own_fold, p):
+                continue            # the owner used this name themselves
+            if _phrase_in(q_fold, p):
+                add(str(phrase).strip())
+        if found:
+            out.append({"index": i, "fact": str(fact), "words": found})
+    return out
+
+
+def names_for_facts(facts) -> dict:
+    """{fact index: [names, other names and nicknames]} from the names layer
+    (jarvis_memory's entities: "Priya", also "Pri", alias "sister"), for each
+    fact that mentions one of the entity's names. Read on this PC only;
+    anything that goes wrong gives {} - the fact's own words are still
+    checked."""
+    try:
+        import jarvis_memory
+        view = jarvis_memory.store().entities_view(limit=500)
+        ents = view.get("entities") if isinstance(view, dict) else None
+    except Exception:
+        return {}
+    folded = [_fold(f) for f in list(facts or [])[:_MAX_FACTS_CHECKED]]
+    out: dict = {}
+    for e in ents or []:
+        if not isinstance(e, dict):
+            continue
+        own = [n for n in [e.get("name")] + list(e.get("also") or [])
+               if isinstance(n, str) and n.strip()]
+        extra = [a for a in e.get("aliases") or [] if isinstance(a, str) and a.strip()]
+        for i, ff in enumerate(folded):
+            if any(_phrase_in(ff, _fold(n).strip()) for n in own):
+                bucket = out.setdefault(i, [])
+                for n in own + extra:
+                    if n not in bucket and len(bucket) < _NAMES_PER_FACT:
+                        bucket.append(n)
+    return out
+
+
+def fact_topic(text) -> str:
+    """"" or the sensitive topic of one saved fact in plain words ("health",
+    "another person") - jarvis_sensitive's patterns, no model. Fails closed:
+    when the check cannot run, the fact counts as sensitive."""
+    try:
+        import jarvis_sensitive
+        return str(jarvis_sensitive.topic(str(text or "")) or "")
+    except Exception:
+        return "a topic Jarvis could not check"
 
 
 # --------------------------------------------------------------------------
@@ -1144,9 +1360,10 @@ CARD_TEXT = "\n".join([
     "Stop asking before every web search.",
     "",
     "Jarvis goes back to the default: a search that comes straight from your own "
-    "question, in a conversation where Jarvis has not read your email, files, notes, "
-    "saved memories or other outside text, runs without a card. Every other search "
-    "still shows you its exact words on a card first.",
+    "question runs without a card. A search still shows you its exact words on a "
+    "card first after Jarvis has read your email, files, notes or other outside "
+    "text in this conversation, when the search words repeat something you told "
+    "Jarvis, or when it used a sensitive saved fact.",
     "",
     "Nothing is searched by this change, and nothing leaves this PC. You can turn "
     "\"Ask before every web search\" back on at any time, and that is instant.",

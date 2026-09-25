@@ -335,7 +335,7 @@
   "type": "function",
   "function": {
    "name": "home_control",
-   "description": "Call one Home Assistant service on one entity, e.g. turn a light on or unlock a door. Changes something real. To only check a state, use home_read.",
+   "description": "Call a Home Assistant service on one entity, or up to 10 in entity_ids, e.g. lights off or unlock a door. Locks, alarms, doors, covers: one per call. Changes something real. To only check a state, use home_read.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -350,6 +350,12 @@
      "entity_id": {
       "type": "string"
      },
+     "entity_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
      "data": {
       "type": "object",
       "description": "e.g. {\"brightness\": 200}"
@@ -357,8 +363,7 @@
     },
     "required": [
      "domain",
-     "service",
-     "entity_id"
+     "service"
     ]
    }
   }

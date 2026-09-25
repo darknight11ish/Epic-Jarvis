@@ -425,14 +425,41 @@ def _run_home_read(args: dict, plan_obj, **_) -> dict:
     return HOME.run(plan_obj, approved=True)
 
 
+def home_targets(args: dict) -> list:
+    """The devices one home_control call names: `entity_id` first, then
+    `entity_ids`, each once, in the order given."""
+    out = []
+    one = args.get("entity_id")
+    many = args.get("entity_ids") if isinstance(args.get("entity_ids"), list) else []
+    for e in ([one] if one else []) + list(many):
+        e = str(e).strip()
+        if e and e not in out:
+            out.append(e)
+    return out
+
+
 def _prepare_home_control(args: dict):
+    """One home_control call: one device (plan_service), or several with the
+    same service on ONE card (plan_services; the owner's decision of
+    2026-09-25). A set that may not share a card - a lock, alarm, door or
+    cover among them, more than MAX_GROUP, no device at all - is refused
+    HERE, before any card, as wrong arguments the model can fix: nobody is
+    asked about a request that could not be approved as written."""
     try:
         import jarvis_home as HOME
     except Exception as exc:
         return None, f"Control Home Assistant: {json.dumps(args, ensure_ascii=False)} " \
                       f"(unavailable: {exc})"
-    p = HOME.plan_service(str(args.get("domain", "")), str(args.get("service", "")),
-                           str(args.get("entity_id", "")), args.get("data") or {})
+    domain, service = str(args.get("domain", "")), str(args.get("service", ""))
+    targets = home_targets(args)
+    data = args.get("data") or {}
+    if not targets:
+        raise ValueError("name the device in entity_id, or several devices in entity_ids")
+    if len(targets) > 1:
+        problem = HOME.group_problem(domain, service, targets, data)
+        if problem:
+            raise ValueError(problem)
+    p = HOME.plan_services(domain, service, targets, data)
     return p, HOME.describe(p)
 
 
@@ -728,16 +755,20 @@ TOOLS: dict = {
         lambda args, state, **_: _run_home_read(args, state),
         gate_lookup_name=lambda args: "jarvis_home_read_run",
         instead={"home_control": "To change something, use home_control."}),
+    # Several devices with the same service go on ONE card (entity_ids; the
+    # owner's decision of 2026-09-25) - jarvis_home.plan_services.
     "home_control": Tool(
         "home_control",
-        "Call one Home Assistant service on one entity, e.g. turn a light "
-        "on or unlock a door. Changes something real.",
+        "Call a Home Assistant service on one entity, or up to 10 in "
+        "entity_ids, e.g. lights off or unlock a door. Locks, alarms, doors, "
+        "covers: one per call. Changes something real.",
         {"type": "object", "properties": {
             "domain": {"type": "string", "description": "e.g. \"light\""},
             "service": {"type": "string", "description": "e.g. \"turn_on\""},
             "entity_id": {"type": "string"},
+            "entity_ids": {"type": "array", "items": {"type": "string"}},
             "data": {"type": "object", "description": "e.g. {\"brightness\": 200}"}},
-         "required": ["domain", "service", "entity_id"]},
+         "required": ["domain", "service"]},
         _prepare_home_control,
         lambda args, state, **_: _run_home_control(args, state),
         gate_lookup_name=lambda args: "jarvis_home_control_run",
@@ -1024,25 +1055,30 @@ NOTE_AFTER_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before writin
                         "to your notes.")
 
 
-#: Web search (jarvis_search.py). The owner's decision of 2026-09-25, "When
-#: a search asks first": by default ONLY when private things could slip into
-#: the search words - a card showing the exact words when the conversation
-#: has read email, files, notes, saved memories or other outside text; no
-#: card for a search that comes straight from the owner's own question in a
-#: conversation that has read nothing. "Ask before every web search" (a
-#: setting in both apps, jarvis_search.settings) makes every search ask.
+#: Web search (jarvis_search.py). The owner's decisions of 2026-09-25 - "When
+#: a search asks first", and after the creativity audit - by default ONLY
+#: when private things could slip into the search words: a card showing the
+#: exact words when the conversation has read email, files, notes or other
+#: outside text, when the search words REPEAT a saved fact, or when a
+#: sensitive saved fact was used; no card for a search that comes straight
+#: from the owner's own question otherwise - a pinned or recalled fact that
+#: is not sensitive and not in the search words no longer makes it ask.
+#: "Ask before every web search" (a setting in both apps,
+#: jarvis_search.settings) makes every search ask.
 #:
 #: What counts, in this loop's own terms (_TurnWatch): a reading tool ran
-#: this turn - an earlier web search included, its results are outside
-#: text; the conversation is tainted (an earlier turn read outside text);
-#: saved memories were recalled into this turn (the quoted FACTS block the
-#: chat route adds - pinned facts too - or memory_search ran); the newest
-#: message was not typed or said by the owner (pasted, shared, from the
-#: clipboard, a picture's caption, untagged); or the app sent text of its
-#: own. Any one of them, and the search is put to the gate as
-#: jarvis_search.ACTION_SEARCH ("search_the_web", tier "ask" as shipped) and
-#: runs only on a person's yes (_a_person_said_yes), like NEEDS_A_PERSON.
-#: A "never" tier switches web search off altogether, card or not.
+#: this turn - an earlier web search and memory_search included, their
+#: results are a tool's answer; the conversation is tainted (an earlier turn
+#: read outside text); a fact in the chat route's quoted FACTS block (pinned
+#: facts too) is sensitive (jarvis_search.fact_topic, failing closed), or
+#: the search words repeat one of those facts (jarvis_search.repeated_facts,
+#: with the names layer's names and nicknames) - or the facts could not be
+#: checked at all; the newest message was not typed or said by the owner
+#: (pasted, shared, from the clipboard, a picture's caption, untagged); or
+#: the app sent text of its own. Any one of them, and the search is put to
+#: the gate as jarvis_search.ACTION_SEARCH ("search_the_web", tier "ask" as
+#: shipped) and runs only on a person's yes (_a_person_said_yes), like
+#: NEEDS_A_PERSON. A "never" tier switches web search off altogether.
 #:
 #: Stricter still, and never a card: search words that look like a password
 #: or key are refused outright (jarvis_search.plan, rule 1).
@@ -1051,9 +1087,18 @@ WEB_SEARCH_EVERY = ("You chose \"Ask before every web search\", so Jarvis asks b
 WEB_SEARCH_READ = ("Jarvis read outside text in this conversation (an email, a file, a "
                    "note, a web page or another tool's answer), so it asks before "
                    "searching - something private could be in the search words.")
-WEB_SEARCH_MEMORY = ("Jarvis recalled saved memories about you for this question, so it "
-                     "asks before searching - something private could be in the search "
-                     "words.")
+WEB_SEARCH_SENSITIVE = ("Jarvis used a saved fact about {topics} for this question, so it "
+                        "asks before searching - something private could be in the "
+                        "search words.")
+WEB_SEARCH_REPEATS = ("The search words repeat something you told Jarvis ({words}), so it "
+                      "asks before searching. The saved fact: \u201c{fact}\u201d")
+WEB_SEARCH_REPEATS_SENSITIVE = ("The search words repeat something you told Jarvis "
+                                "({words}), so it asks before searching. It comes from a "
+                                "saved fact about {topic}, so that fact's own words are "
+                                "not shown here.")
+WEB_SEARCH_REPEATS_MORE = "The search words also repeat {n} more saved fact(s)."
+WEB_SEARCH_UNCHECKED = ("Jarvis recalled saved memories for this question and could not "
+                        "check them against the search words, so it asks before searching.")
 WEB_SEARCH_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before searching - "
                         "something private could be in the search words.")
 WEB_SEARCH_APP = ("The app sent extra text with your message (for example the "
@@ -1063,15 +1108,69 @@ WEB_SEARCH_OFF = ("refused: web search is switched off on this PC (search_the_we
                   "\"never\" in jarvis-framework.toml's [autonomy.tiers]). Nothing was "
                   "sent. Tell the owner.")
 
+#: At most this many "repeats a saved fact" lines on one card; the rest are
+#: counted in one line (WEB_SEARCH_REPEATS_MORE).
+_REPEAT_LINES = 3
+#: A saved fact is shown on the card up to this many characters.
+_FACT_SHOWN = 160
 
-def web_search_card_lines(watch: "_TurnWatch", ask_every_time: bool) -> list:
+
+def _quoted_list(words) -> str:
+    return ", ".join(f"\u201c{w}\u201d" for w in words)
+
+
+def web_search_memory_lines(facts, query, owner_words: str = "", *, names=None,
+                            topic=None) -> list:
+    """The card's lines about saved memories for one search, or [] when the
+    facts in this turn neither are sensitive nor appear in the search words.
+    `facts`: the facts in the turn's context (recalled_facts); `names`,
+    `topic`: the names layer and the sensitive check, injectable for the
+    tests. Anything that goes wrong asks (WEB_SEARCH_UNCHECKED)."""
+    try:
+        import jarvis_search as WS
+        facts = [str(f) for f in facts or [] if str(f).strip()]
+        if not facts or not isinstance(query, str):
+            return [WEB_SEARCH_UNCHECKED]
+        check = topic or WS.fact_topic
+        topics = [str(check(f) or "") for f in facts]
+        lines = []
+        seen = []
+        for t in topics:
+            if t and t not in seen:
+                seen.append(t)
+        if seen:
+            lines.append(WEB_SEARCH_SENSITIVE.format(
+                topics=", ".join(seen[:-1]) + " and " + seen[-1] if len(seen) > 1
+                else seen[0]))
+        if names is None:
+            names = WS.names_for_facts(facts)
+        hits = WS.repeated_facts(query, facts, owner_words=owner_words, names=names)
+        for h in hits[:_REPEAT_LINES]:
+            words = _quoted_list(h["words"][:5])
+            t = topics[h["index"]]
+            if t:
+                lines.append(WEB_SEARCH_REPEATS_SENSITIVE.format(words=words, topic=t))
+            else:
+                fact = h["fact"] if len(h["fact"]) <= _FACT_SHOWN else \
+                    h["fact"][:_FACT_SHOWN - 3] + "..."
+                lines.append(WEB_SEARCH_REPEATS.format(words=words, fact=fact))
+        if len(hits) > _REPEAT_LINES:
+            lines.append(WEB_SEARCH_REPEATS_MORE.format(n=len(hits) - _REPEAT_LINES))
+        return lines
+    except Exception:
+        return [WEB_SEARCH_UNCHECKED]
+
+
+def web_search_card_lines(watch: "_TurnWatch", ask_every_time: bool,
+                          query: Optional[str] = None) -> list:
     """The reasons this search asks first, in plain words; [] when it runs
-    without a card (see WEB_SEARCH_* above)."""
+    without a card (see WEB_SEARCH_* above). `query`: the search words -
+    without them, saved memories in the turn always ask."""
     lines = []
     if watch.read or watch.tainted:
         lines.append(WEB_SEARCH_READ)
     if watch.memory:
-        lines.append(WEB_SEARCH_MEMORY)
+        lines += web_search_memory_lines(watch.facts, query, watch.owner_words)
     if watch.provenance:
         lines.append(WEB_SEARCH_NOT_TYPED.format(how=_NOT_OWN_WORDS[watch.provenance]))
     if watch.app_context:
@@ -1087,23 +1186,52 @@ def web_search_card_lines(watch: "_TurnWatch", ask_every_time: bool) -> list:
 _FACTS_START = "---FACTS---"
 _FACTS_END = "---END FACTS---"
 
+#: The fixed heading lines memory-profile.patch puts inside the block - never
+#: a fact's own words.
+_FACTS_HEADINGS = ("Always keep in mind (the owner pinned these):",
+                   "Recalled for this question:")
+#: "- [2026-09-20] " before a fact (memory-noise.patch's _dated_fact).
+_FACT_STAMP = re.compile(r"^-\s*(?:\[\d{4}-\d{2}-\d{2}\]\s*)?")
 
-def recalled_memory(messages) -> bool:
-    """Did the chat route put saved memories into this turn? A system
-    message with a FACTS block that holds at least one line. A temporary
-    chat's fixed line has no block, so it counts as none."""
+
+def _facts_blocks(messages) -> list:
+    """The text inside every FACTS block the chat route put into this turn."""
+    out = []
     for m in messages or []:
         if not isinstance(m, dict) or m.get("role") != "system":
             continue
         text = _text_of(m.get("content"))
         i = text.find(_FACTS_START)
-        if i < 0:
-            continue
-        j = text.find(_FACTS_END, i + len(_FACTS_START))
-        block = text[i + len(_FACTS_START): j if j >= 0 else len(text)]
-        if block.strip():
-            return True
-    return False
+        while i >= 0:
+            j = text.find(_FACTS_END, i + len(_FACTS_START))
+            out.append(text[i + len(_FACTS_START): j if j >= 0 else len(text)])
+            if j < 0:
+                break
+            i = text.find(_FACTS_START, j + len(_FACTS_END))
+    return out
+
+
+def recalled_memory(messages) -> bool:
+    """Did the chat route put saved memories into this turn? A system
+    message with a FACTS block that holds at least one line. A temporary
+    chat's fixed line has no block, so it counts as none."""
+    return any(block.strip() for block in _facts_blocks(messages))
+
+
+def recalled_facts(messages) -> list:
+    """The saved facts in this turn's FACTS blocks, one per line, without
+    the "- [date] " in front or the fixed headings. A line that does not
+    look like a fact is kept whole - counted as a fact, never dropped."""
+    out = []
+    for block in _facts_blocks(messages):
+        for line in block.splitlines():
+            line = line.strip()
+            if not line or line in _FACTS_HEADINGS:
+                continue
+            fact = _FACT_STAMP.sub("", line).strip()
+            if fact:
+                out.append(fact)
+    return out
 
 
 #: jarvis_gate stores a card's `detail` as `json.dumps(detail)[:4000]`. A
@@ -1156,9 +1284,12 @@ def _a_person_said_yes(verdict) -> bool:
 #: owner starts pressing Approve without reading. Past the limit, a call that
 #: would ask is refused BEFORE any card is raised - a refusal, so it can never
 #: become a way round the gate - and the owner is told so in the answer.
-#: Five rather than the research's example of three: home_control takes one
-#: entity per call, so "turn off the kitchen, hall and bedroom lights" is
-#: already three cards. The owner confirmed five, 2026-09-25.
+#: Five rather than the research's example of three, when home_control took
+#: one entity per call and "turn off the kitchen, hall and bedroom lights" was
+#: three cards. Since the owner's decision of 2026-09-25 (after the creativity
+#: audit) that is ONE card listing all three (home_control's entity_ids), and
+#: it counts once here; locks, alarms, doors and covers still take a card
+#: each. The owner confirmed five, 2026-09-25.
 CARDS_PER_TURN = 5
 
 CARD_LIMIT_ERROR = ("refused: this answer has already asked the owner for approval "
@@ -2082,6 +2213,7 @@ class _TurnWatch:
         # `messages`, which carry the server's own system turns (the FACTS
         # block), not off the request as the app sent it.
         self.memory = recalled_memory(messages)
+        self.facts = recalled_facts(messages)   # the facts themselves (web search)
 
     # -- broken calls ------------------------------------------------------
     def broken(self, name: str) -> int:
@@ -3418,7 +3550,7 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         return reply(WS.tool_result(WS.run(p, approved=True)))
-    lines = web_search_card_lines(watch, bool(s.get("ask_every_time")))
+    lines = web_search_card_lines(watch, bool(s.get("ask_every_time")), p.query)
     step = {"tool": name, "ran": False, "ok": False, "outcome": "no card needed"}
     card_note = None
     if lines:

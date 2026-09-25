@@ -223,9 +223,10 @@ def reminder_card() -> Optional[dict]:
     """The daily offer to switch it on, or None.
 
     None in four cases: it is already on, reminders are off, one has
-    already been offered today, or the back-off says wait (the owner chatted
-    in the last two minutes, other offers are waiting, or a recent "not now"
-    still holds - jarvis_backoff.py). That is why this returns None rather
+    already been offered today, or the back-off says wait (Jarvis is in
+    Quiet or Standby, the owner chatted in the last two minutes, other
+    offers are waiting, or a recent "not now" still holds -
+    jarvis_backoff.py). That is why this returns None rather
     than an empty dict - the HUD tests the result for truthiness.
     """
     if enabled() or not remind():

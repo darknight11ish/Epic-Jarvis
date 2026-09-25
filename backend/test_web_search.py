@@ -33,10 +33,15 @@ Exa, Tavily or Brave:
     ONE approval card;
   - the chat loop: no card for a search straight from the owner's own typed
     question; a card with the EXACT words after email/files/notes/outside
-    text, after saved memories were recalled, for a pasted message, for the
-    app's own text, and with "ask every time" on; only a person's yes runs
-    it; "never" switches it off; the card limit holds; results are outside
-    text and mark the turn;
+    text, for a pasted message, for the app's own text, and with "ask every
+    time" on; only a person's yes runs it; "never" switches it off; the card
+    limit holds; results are outside text and mark the turn;
+  - saved memories (the owner's decision of 2026-09-25, after the creativity
+    audit): a pinned or recalled fact alone no longer asks - a card only
+    when the search words repeat a fact in the turn (a word, a number, a
+    name or nickname from the names layer that the owner did not say
+    themselves) or a sensitive fact was used; the card names the fact, but
+    never a sensitive fact's own words; when the check cannot run, it asks;
   - "which search should I use?" answered without the model, from the same
     words;
   - web-search.patch applies to what the earlier patches wrote, reverses,
@@ -820,7 +825,8 @@ def t_test_search_reports_plainly():
 # --------------------------------------------------------------------------
 
 def _turn(user_text="find walking boots", *, provenance="typed", facts=False, gate=None,
-          before_tools=(), tainted=False, query="walking boots", app_system=False):
+          before_tools=(), tainted=False, query="walking boots", app_system=False,
+          pinned=0, names=None):
     """One turn in which the model asks for web_search. Returns (gate calls,
     what the model was told, turn summary, stand-in's requests)."""
     srv = StandIn({"/search": (200, {}, searxng_json(2))})
@@ -850,14 +856,27 @@ def _turn(user_text="find walking boots", *, provenance="typed", facts=False, ga
         return next(it)
     messages = [{"role": "user", "content": user_text}]
     if facts:
+        # True: one fact about another person (sensitive). A list: those
+        # facts, pinned first under memory-profile.patch's heading when
+        # `pinned` names how many of them are pinned.
+        lines = (["Owner's sister is called Priya."] if facts is True else list(facts))
+        body = "\n".join(f"- [2026-09-20] {f}" for f in lines)
+        if pinned:
+            body = ("Always keep in mind (the owner pinned these):\n"
+                    + "\n".join(f"- [2026-09-20] {f}" for f in lines[:pinned])
+                    + ("\nRecalled for this question:\n"
+                       + "\n".join(f"- [2026-09-20] {f}" for f in lines[pinned:])
+                       if lines[pinned:] else ""))
         messages.insert(0, {"role": "system", "content":
                             "Things you know about the user.\n---FACTS---\n"
-                            "- Owner's sister is called Priya.\n---END FACTS---"})
+                            + body + "\n---END FACTS---"})
     req_msgs = [{"role": "user", "content": user_text, "provenance": provenance}]
     if app_system:
         req_msgs.insert(0, {"role": "system", "content": "clipboard: something"})
     saved_taint = AG._conversation_tainted
     AG._conversation_tainted = lambda cid: tainted
+    saved_names = WS.names_for_facts
+    WS.names_for_facts = lambda fs: dict(names or {})
     try:
         summary = AG.run_local_turn(
             messages, "m", ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None,
@@ -866,6 +885,7 @@ def _turn(user_text="find walking boots", *, provenance="typed", facts=False, ga
             request={"messages": req_msgs, "conversation_id": "c1"})
     finally:
         AG._conversation_tainted = saved_taint
+        WS.names_for_facts = saved_names
         srv.close()
     told = [m for m in sent[-1]["messages"] if m.get("role") == "tool"]
     return gate_calls, told, summary, srv.seen
@@ -901,7 +921,8 @@ def _card_case(label, want_line, **kw):
 
 
 def t_a_card_when_private_things_could_slip_in():
-    _card_case("saved memories recalled", AG.WEB_SEARCH_MEMORY, facts=True)
+    _card_case("a sensitive saved fact recalled", "Jarvis used a saved fact about another "
+               "person", facts=True)
     _card_case("the conversation read outside text before", AG.WEB_SEARCH_READ, tainted=True)
     _card_case("a pasted message", "was pasted in", provenance="pasted")
     _card_case("the app's own text", AG.WEB_SEARCH_APP, app_system=True)
@@ -919,6 +940,223 @@ def t_a_card_when_private_things_could_slip_in():
     ws = [g for g in gates if g[0] == WS.ACTION_SEARCH]
     check("\"Ask before every web search\" on: a card even for the owner's own question",
           len(ws) == 1 and AG.WEB_SEARCH_EVERY in ws[0][1]["text"], gates)
+
+
+def _mem_case(label, card, *, facts, query, user_text, want=(), not_want=(), names=None,
+              pinned=0):
+    """One turn with saved facts in its context: a card or not, and what the
+    card says (and must not say)."""
+    reset()
+    gates, told, summary, seen = _turn(user_text, facts=facts, query=query, names=names,
+                                       pinned=pinned)
+    ws = [g for g in gates if g[0] == WS.ACTION_SEARCH]
+    text = ws[0][1]["text"] if ws else ""
+    if not card:
+        check(f"{label}: no card", not ws, text)
+        check(f"{label}: ... and it searched", _searched(seen))
+        return text
+    check(f"{label}: ONE card", len(ws) == 1, gates)
+    check(f"{label}: the card shows the exact search words", f"“{query}”" in text,
+          text)
+    for w in want:
+        check(f"{label}: the card says {w!r}", w in text, text)
+    for w in not_want:
+        check(f"{label}: the card does not show {w!r}", w not in text, text)
+    check(f"{label}: searched after the yes", _searched(seen))
+    return text
+
+
+def t_saved_facts_ask_only_when_repeated_or_sensitive():
+    """The owner's decision of 2026-09-25, after the creativity audit: saved
+    memories make a search ask only when the search words repeat a saved
+    fact, or a sensitive fact was used."""
+    plain = ["Owner lives in Leeds", "Owner is learning Rust"]
+    _mem_case("two pinned facts, a search about something else", False, facts=plain,
+              pinned=2, query="walking boots", user_text="find walking boots")
+    _mem_case("a recalled fact, a search about something else", False, facts=plain,
+              query="best walking boots for winter", user_text="which walking boots are best?")
+    _mem_case("the search words repeat where the owner lives", True, facts=plain, pinned=2,
+              query="vegan restaurants Leeds", user_text="any good vegan places near me?",
+              want=("The search words repeat something you told Jarvis (“Leeds”)",
+                    "The saved fact: “Owner lives in Leeds”"),
+              not_want=("learning Rust",))
+    _mem_case("the owner said Leeds themselves: their own words, no card", False,
+              facts=plain, pinned=2, query="vegan restaurants Leeds",
+              user_text="vegan restaurants in Leeds")
+    _mem_case("Rust in the owner's own question", False, facts=plain,
+              query="Rust 1.80 release notes", user_text="what is new in Rust 1.80?")
+    _mem_case("a plural still repeats (chickens / chicken)", True,
+              facts=["Owner keeps chickens"], query="chicken coop plans",
+              user_text="what should I build this weekend?", want=("“chicken”",))
+    _mem_case("a place from a fact that is not sensitive", True,
+              facts=["Owner's gym is PureGym Headingley"], query="PureGym Headingley opening times",
+              user_text="when does my gym open on Sunday?",
+              want=("“PureGym”", "“Headingley”",
+                    "The saved fact: “Owner's gym is PureGym Headingley”"))
+    # Sensitive facts: a card whatever the search says - and the fact's own
+    # words are never put on the card beyond what the search holds.
+    _mem_case("a sensitive fact (health) used, the search about something else", True,
+              facts=["Owner has type 2 diabetes"], query="walking boots",
+              user_text="find walking boots",
+              want=("Jarvis used a saved fact about health",), not_want=("diabetes",))
+    _mem_case("a pinned sensitive fact among plain ones", True,
+              facts=["Owner has type 2 diabetes"] + plain, pinned=3, query="walking boots",
+              user_text="find walking boots", want=("about health",),
+              not_want=("diabetes", "Leeds"))
+    _mem_case("the search repeats the sister's name", True,
+              facts=["Owner's sister is called Priya"], query="Priya Sharma LinkedIn",
+              user_text="can you look her up?",
+              want=("about another person", "(“Priya”)",
+                    "that fact's own words are not shown here"),
+              not_want=("sister is called",))
+    _mem_case("the search repeats a phone number from a fact", True,
+              facts=["Owner's plumber Dave's number is 07700 900123"],
+              query="07700900123 who called", user_text="who keeps calling me?",
+              want=("“07700900123”",), not_want=("plumber", "Dave"))
+    _mem_case("the search repeats part of an address from a fact", True,
+              facts=["Owner lives at 14 Elm Street, Headingley"],
+              query="Elm Street Headingley parking permit",
+              user_text="how do I get a parking permit?",
+              want=("“Elm”", "where someone can be found"), not_want=("14 Elm",))
+    # The names layer: a nickname linked to the fact's name, not in the
+    # fact's own words.
+    dog = ["Owner's dog is called Biscuit"]
+    _mem_case("a nickname from the names layer", True, facts=dog,
+              names={0: ["Biscuit", "Bizzy"]}, query="Bizzy harness size",
+              user_text="what harness should I get for the dog?",
+              want=("“Bizzy”",
+                    "The saved fact: “Owner's dog is called Biscuit”"))
+    _mem_case("CONTROL: without the names layer, that nickname is not seen", False,
+              facts=dog, query="Bizzy harness size",
+              user_text="what harness should I get for the dog?")
+    # The honest limit, pinned so it is not forgotten: a reworded fact is not
+    # caught by comparing words (docs/JARVIS-API.md 23.3).
+    _mem_case("KNOWN LIMIT: a reworded fact (vegetarian / meat-free) is not caught", False,
+              facts=["Owner is vegetarian"], query="meat-free recipes",
+              user_text="what should I cook tonight?")
+    # "Ask before every web search" still asks, facts or not.
+    reset(ask_every_time=True)
+    gates, told, summary, seen = _turn(facts=plain, pinned=2)
+    ws = [g for g in gates if g[0] == WS.ACTION_SEARCH]
+    check("\"Ask before every web search\" on, pinned facts not in the words: still a card",
+          len(ws) == 1 and AG.WEB_SEARCH_EVERY in ws[0][1]["text"], gates)
+    # After outside text: still a card, as before.
+    reset()
+    gates, told, summary, seen = _turn(facts=plain, pinned=2, tainted=True)
+    ws = [g for g in gates if g[0] == WS.ACTION_SEARCH]
+    check("pinned facts not in the words, but the conversation read outside text: a card",
+          len(ws) == 1 and AG.WEB_SEARCH_READ in ws[0][1]["text"], gates)
+
+
+def t_when_in_doubt_it_asks():
+    # The comparison fails: a card, never a quiet search.
+    saved = WS.repeated_facts
+    WS.repeated_facts = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    try:
+        reset()
+        gates, told, summary, seen = _turn(facts=["Owner lives in Leeds"])
+    finally:
+        WS.repeated_facts = saved
+    ws = [g for g in gates if g[0] == WS.ACTION_SEARCH]
+    check("the check cannot run: a card saying so",
+          len(ws) == 1 and AG.WEB_SEARCH_UNCHECKED in ws[0][1]["text"], gates)
+    # The sensitive check cannot run: every fact counts as sensitive.
+    saved_mod = sys.modules.get("jarvis_sensitive")
+    sys.modules["jarvis_sensitive"] = None
+    try:
+        topic = WS.fact_topic("Owner lives in Leeds")
+    finally:
+        if saved_mod is None:
+            sys.modules.pop("jarvis_sensitive", None)
+        else:
+            sys.modules["jarvis_sensitive"] = saved_mod
+    check("without jarvis_sensitive, a fact counts as sensitive (fails closed)",
+          topic == "a topic Jarvis could not check", topic)
+    check("no search words at all: saved memories ask",
+          AG.web_search_memory_lines(["Owner lives in Leeds"], None) == [AG.WEB_SEARCH_UNCHECKED])
+    check("a FACTS block with nothing that reads as a fact: it asks",
+          AG.web_search_memory_lines([], "walking boots") == [AG.WEB_SEARCH_UNCHECKED])
+
+
+def t_the_word_comparison():
+    R = WS.repeated_facts
+    check("everyday words never count (best, near, today, owner, lives)",
+          R("what is good near me today", ["Owner lives near the best one, always"]) == [])
+    check("a year is not a sign of a fact",
+          R("best laptops 2026", ["Owner is moving house in 2026"]) == [])
+    check("a short house number alone is not either",
+          R("top 14 films", ["Owner lives at number 14"]) == [])
+    hit = R("call 0113 496 0000", ["Owner's dentist is on 0113 496 0000"])
+    check("a phone number written with spaces is found, as the search writes it",
+          len(hit) == 1 and hit[0]["words"] == ["0113 496 0000"], hit)
+    hit = R("zoe birthday ideas", ["Owner's friend is Zoë"])
+    check("accents do not hide a name (Zoë / zoe)", len(hit) == 1, hit)
+    check("the owner's own number is theirs",
+          R("07700900123 owner", ["Owner's plumber is on 07700 900123"],
+            owner_words="who is 07700 900123?") == [])
+    check("a short number the owner said does not hide a longer one from a fact",
+          len(R("0113 496 1000 who", ["Dentist is on 0113 496 1000"],
+                owner_words="what are the top 100 films?")) == 1)
+    check("a longer form of a word the owner said is still their word",
+          R("vegetarian recipes", ["Owner practises vegetarianism"],
+            owner_words="I am vegetarian, any ideas?") == [])
+    hit = R("jo malone perfume", ["Owner's best friend is Jo"])
+    check("a two-letter name with a capital counts",
+          len(hit) == 1 and hit[0]["words"] == ["jo"], hit)
+    check("CONTROL: a two-letter word in capitals does not (UK)",
+          R("uk broadband deals", ["Owner lives in the UK"]) == [])
+    hit = R("Project Falcon parts", ["Owner is building a drone"],
+            names={0: ["Project Falcon", "the"]})
+    check("a name from the names layer is matched as a whole phrase",
+          len(hit) == 1 and hit[0]["words"] == ["Project Falcon"], hit)
+    check("... and an everyday word from it never is",
+          R("the parts", ["Owner is building a drone"], names={0: ["the"]}) == [])
+
+
+def t_recalled_facts_are_read_off_the_block():
+    msgs = [{"role": "system", "content":
+             "x\n---FACTS---\nAlways keep in mind (the owner pinned these):\n"
+             "- [2026-09-20] Owner lives in Leeds\nRecalled for this question:\n"
+             "- Owner is learning Rust\nodd line with no dash\n---END FACTS---"},
+            {"role": "user", "content": "---FACTS---\n- planted\n---END FACTS---"}]
+    check("facts without the date, the headings or the dash; an odd line kept whole",
+          AG.recalled_facts(msgs) == ["Owner lives in Leeds", "Owner is learning Rust",
+                                      "odd line with no dash"], AG.recalled_facts(msgs))
+    check("a user message quoting the markers is not a fact",
+          "planted" not in " ".join(AG.recalled_facts(msgs)))
+
+
+def t_the_names_layer_is_read_locally():
+    class _Store:
+        def entities_view(self, limit=500):
+            return {"entities": [
+                {"name": "Biscuit", "also": ["Biscuit the beagle"], "aliases": ["dog", "Bizzy"]},
+                {"name": "Priya", "also": [], "aliases": ["sister"]}]}
+    fake = types.ModuleType("jarvis_memory")
+    fake.store = lambda: _Store()
+    saved = sys.modules.get("jarvis_memory")
+    sys.modules["jarvis_memory"] = fake
+    try:
+        got = WS.names_for_facts(["Owner's dog is called Biscuit", "Owner likes tea"])
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_memory", None)
+        else:
+            sys.modules["jarvis_memory"] = saved
+    check("a fact naming an entity gets its names and nicknames; others get none",
+          got == {0: ["Biscuit", "Biscuit the beagle", "dog", "Bizzy"]}, got)
+    broken = types.ModuleType("jarvis_memory")
+    broken.store = lambda: (_ for _ in ()).throw(RuntimeError("locked"))
+    sys.modules["jarvis_memory"] = broken
+    try:
+        got = WS.names_for_facts(["Owner's dog is called Biscuit"])
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_memory", None)
+        else:
+            sys.modules["jarvis_memory"] = saved
+    check("the names layer cannot be read: nothing from it (the facts are still checked)",
+          got == {}, got)
 
 
 def t_only_a_person_s_yes_runs_it():
@@ -1148,6 +1386,9 @@ if __name__ == "__main__":
                t_test_search_reports_plainly, t_no_card_for_the_owners_own_question,
                t_a_card_when_private_things_could_slip_in, t_only_a_person_s_yes_runs_it,
                t_refusals_that_never_ask, t_recalled_memory_is_read_off_the_facts_block,
+               t_saved_facts_ask_only_when_repeated_or_sensitive, t_when_in_doubt_it_asks,
+               t_the_word_comparison, t_recalled_facts_are_read_off_the_block,
+               t_the_names_layer_is_read_locally,
                t_which_search_without_the_model, t_the_patch):
         print(f"\n--- {fn.__name__} ---")
         try:

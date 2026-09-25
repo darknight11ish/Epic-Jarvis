@@ -682,7 +682,17 @@ def _on_fire(job_id: str, *, sched=None, deps: Optional[Deps] = None) -> None:
     try:
         sched = sched or S.get()
         view = sched.job(job_id) or {}
-        make(sched=sched, deps=deps, source="schedule", job=job_id,
+        # Built for the scheduler's own time (the same clock that decided it
+        # was due), not a second read of the wall clock. On the PC they are
+        # the same; in the tests the scheduler's clock is moved by hand, and
+        # the wall clock used here made "today" the real day - a test that
+        # failed once the real date passed 2026-09-25.
+        clock = getattr(sched, "now", None)
+        try:
+            now = float(clock()) if callable(clock) else None
+        except Exception:
+            now = None
+        make(sched=sched, now=now, deps=deps, source="schedule", job=job_id,
              missed=str(view.get("missed") or ""))
     finally:
         deps.publish("schedule", {"id": job_id, "kind": KIND, "state": "ready"})

@@ -15,7 +15,12 @@ off. Four rules, the same for every offer:
      answer at once. The next one waits its turn.
   2. Not while the owner is talking to Jarvis. No offer within
      QUIET_AFTER_CHAT seconds (two minutes) of the last chat message.
-  3. A "no" is heard. Each "no" to an offer keeps that SAME offer quiet for
+  3. Not in Quiet or Standby. Quiet means "answers, but starts nothing on
+     its own" (jarvis_power_switch), so an offer waits until Jarvis is
+     Active again - kept for later, never dropped and never counted as a
+     "no" (bug found by the creativity audit, 2026-09-25: this used to be
+     missing, so offers still turned up in Quiet mode).
+  4. A "no" is heard. Each "no" to an offer keeps that SAME offer quiet for
      1 day, then 7 days, then 30 days (SILENCE_DAYS; the 30 repeats). The
      offer is matched by a stable fingerprint of what it offers - never by
      its wording, so a reworded card is still the same offer. A "yes" wipes
@@ -110,7 +115,21 @@ REASONS = {
                      "to turn on a setting that shows or trusts more.",
     "not_declared": "This kind of offer is not on Jarvis's list of offers it may make, so "
                     "it is not made.",
+    "quiet": "Jarvis is in Quiet or Standby, so it keeps this for when it is Active "
+             "again.",
+    "mode_unknown": "Jarvis could not tell whether it is in Quiet mode, so it keeps "
+                    "this for later.",
 }
+
+#: The power modes in which no offer is made (jarvis_power's words).
+HOLDING_MODES = ("quiet", "standby")
+
+
+def power_mode() -> str:
+    """The power mode right now, from jarvis_power.current() - which applies
+    the quiet hours too. Raises when it cannot be read."""
+    import jarvis_power
+    return str(jarvis_power.current()).strip().lower()
 
 # --------------------------------------------------------------------------
 #   Rule 4: an offer never asks for more (the Muse audit, 2026-09-25)
@@ -214,9 +233,11 @@ class Unreadable(Exception):
 class Backoff:
     """The three rules. `clock` and `path` are replaceable for the tests."""
 
-    def __init__(self, path: Optional[Path] = None, *, clock: Callable[[], float] = time.time):
+    def __init__(self, path: Optional[Path] = None, *, clock: Callable[[], float] = time.time,
+                 mode: Optional[Callable[[], str]] = None):
         self._path = Path(path) if path is not None else None
         self.now = clock
+        self.mode = mode if mode is not None else power_mode
         self._lock = threading.RLock()
         self._last_chat: Optional[float] = None
         self._waiting: dict = {}          # fingerprint -> when it was handed out
@@ -292,12 +313,15 @@ class Backoff:
     def may_offer(self, fp: str, now: Optional[float] = None, *, kind=None,
                   asks=None) -> tuple:
         """(True, "") when this offer may be made now; (False, reason) when
-        not, with `reason` a key of REASONS. Asks nobody and changes nothing.
+        not, with `reason` a key of REASONS. Asks nobody and changes nothing:
+        an offer held back here is not a "no", and the caller keeps it for
+        later.
 
         `kind` is what is offered ("sleep_time_offer"). Every offer in the
         shipped code passes it, and it is checked FIRST, against rule 4
         (vet): a kind not in OFFERS, or one that asks for anything in
-        NEVER_ASKS, is refused - and the refusal is logged and counted."""
+        NEVER_ASKS, is refused - and the refusal is logged and counted.
+        Then Quiet and Standby hold every offer back."""
         now = self.now() if now is None else now
         if kind is not None or asks is not None:
             ok, why = vet(kind, asks)
@@ -307,6 +331,11 @@ class Backoff:
                     self._last_refused = {"kind": _norm_kind(kind)[:60], "why": why}
                 _log_refusal(kind, why)
                 return False, why
+        try:
+            if str(self.mode()).strip().lower() in HOLDING_MODES:
+                return False, "quiet"
+        except Exception:
+            return False, "mode_unknown"
         with self._lock:
             try:
                 offers = self._load()

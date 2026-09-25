@@ -69,6 +69,15 @@ decision. Approving eight enumerated, printed search queries for one audit is
 one decision. Approving "web access" as a standing setting is not — that is
 the thing this rule exists to prevent.
 
+The smart-home card is the same test, applied (the owner's decision of
+2026-09-25, after the creativity audit): "turn off the kitchen, hall and
+bedroom lights" is ONE card that lists every device and its exact request -
+at most ten, never cut - and a yes sends exactly those and nothing else
+(`jarvis_home.plan_services`; the plan carries a digest of its requests and
+`run()` sends nothing if they changed). It grants nothing for later. Locks,
+alarms, doors, covers and the other entities in `jarvis_home._stands_alone`
+are never part of such a set: each still gets a card of its own.
+
 It also means Jarvis never drives its own approval surfaces. "Control the
 computer" refuses every window of Jarvis's own, and "control the phone"
 stops before any tap while a Jarvis app is in front (security audit M3,
@@ -127,7 +136,7 @@ same card, one more line on it saying why. `backend/README.md`, "Outside
 text in the tool loop".
 
 One answer raises at most five cards (`jarvis_agent.CARDS_PER_TURN`; the owner confirmed five,
-2026-09-25). After that, a call that would ask is refused before it is
+2026-09-25). A card for several smart-home devices (section 2) counts once. After that, a call that would ask is refused before it is
 put to anyone, and the answer says so. A flood of cards is how a planted
 instruction tries to wear a person into pressing Approve without reading.
 The limit is a refusal, never a grant. `backend/README.md`, "The approval
@@ -291,7 +300,7 @@ These lanes leave the machine. Nothing else may.
 | **ntfy push** | text generated from our own tables, never payload, never while tainted | `notice_for` (`_safe_detail` where there is no action name) + `taint_active()` |
 | **research** | enumerated search terms, per approved plan | `jarvis_research.plan/run` |
 | **the owner's own accounts** - calendar, email, Home Assistant, each only when its settings are filled in on the PC | one request (or one small batch) per plan: to the calendar the owner set up - their CalDAV server with the time range, **or, since 2026-09-25, Google (`calendar.google.com`) through the calendar's private link**, which asks for the whole calendar and has the days picked out on the PC; to their IMAP server; to their Home Assistant. The password, token or private link goes only to the host it belongs to; the private link is also kept off every card, result, error and the log (`test_calendar_link.py`) | each module's `plan()`/`run()` through the gate (`jarvis_calendar`, `jarvis_email`, `jarvis_home`); `jarvis_local_http.plain_http_problem` (plain `http://` only inside the owner's own networks); each module's redirect handler (`_RefuseRedirect`, and for the private link `_FeedRedirect`: https on the same host or between Google's calendar hosts only) |
-| **web search** (2026-09-25) | ONE search's words (at most 300 characters), to the ONE provider the owner chose - SearXNG on the owner's own machine (which asks other engines), DuckDuckGo, Exa, Tavily or Brave - and, for the last three, the owner's key to that service only. Never words that look like a password or key. A card with the exact words whenever the conversation has read email, files, notes, saved memories or other outside text, or the owner chose "Ask before every web search" | `jarvis_search.plan/run` (no socket in `plan`, secret refusal, one provider, no fallback, redirects refused, answers capped) + `jarvis_agent._web_search_call` (when it asks; only a person's yes after that) |
+| **web search** (2026-09-25) | ONE search's words (at most 300 characters), to the ONE provider the owner chose - SearXNG on the owner's own machine (which asks other engines), DuckDuckGo, Exa, Tavily or Brave - and, for the last three, the owner's key to that service only. Never words that look like a password or key. A card with the exact words whenever the conversation has read email, files, notes or other outside text, the search words repeat a saved fact in the turn (`jarvis_search.repeated_facts`: its distinctive words, numbers and names that the owner did not say themselves), a sensitive saved fact was used, or the owner chose "Ask before every web search" | `jarvis_search.plan/run` (no socket in `plan`, secret refusal, one provider, no fallback, redirects refused, answers capped) + `jarvis_agent._web_search_call` (when it asks; only a person's yes after that) |
 
 The owner's-own-accounts row was not in this table until 2026-09-25, although those reads
 already left the machine; it was written down when the Google Calendar link
@@ -323,11 +332,17 @@ with no proxy; its address may only be this PC or the owner's own networks)
 - never to another one quietly: when the chosen one is down, the answer says
 so and offers to switch. When it asks: a search straight from the owner's
 own typed or said question, in a conversation that has read nothing from
-outside, runs without a card; any other search is a card showing its exact
-words (gate action `search_the_web`, `ask`), and the results themselves are
-outside text that marks the rest of the conversation. Rule 1 holds because
-private text can only reach the search words after it has been read - and
-from then on every search is a card.
+outside, runs without a card - and since the owner's decision after the
+creativity audit (2026-09-25) that is still true when a pinned or recalled
+saved fact is in the turn, unless the fact is sensitive or the search words
+repeat it; any other search is a card showing its exact words (gate action
+`search_the_web`, `ask`), and the results themselves are outside text that
+marks the rest of the conversation. Rule 1 holds because private text can
+only reach the search words after it has been read - from then on every
+search is a card - with one bounded exception the owner chose: a saved fact
+that is not sensitive reaches the words unasked only if it is REWORDED
+(its words, numbers and names are checked; "vegetarian" saved and
+"meat-free" searched is not caught). Sensitive facts always ask.
 
 The cloud filter deserves a note because it was broken in the least obvious
 way: it ran once, above the degrade loop, and the loop could go cloud → local
@@ -1102,9 +1117,11 @@ they landed):
 - **The back-off for offers** (added 2026-09-25, `jarvis_backoff.py`): at
   most three offers waiting, none within two minutes of a chat message, and
   each "no" quiet for 1, then 7, then 30 days by a fingerprint of what is
-  offered. Applied to the overnight-tidy card and the skill offer. It never
-  approves or acts, and nothing the owner asks for consults it. JARVIS-API
-  §22.6.
+  offered - and, since 2026-09-25 (a bug the creativity audit found), none
+  in Quiet or Standby: the offer is kept for when Jarvis is Active again,
+  never counted as a "no". Applied to the overnight-tidy card and the skill
+  offer. It never approves or acts, and nothing the owner asks for consults
+  it. JARVIS-API §22.6.
 
 - **Web search, with a choice of five providers** (added 2026-09-25, the
   owner's decisions of that day). `jarvis_search.py` (shipped whole):
@@ -1126,6 +1143,15 @@ they landed):
   Nothing has reached a real SearXNG, DuckDuckGo, Exa, Tavily or Brave yet: the
   tests use local stand-ins. The briefing's "weather and news: not
   available" line is unchanged - weather is a separate decision.
+  Since the creativity audit (2026-09-25), saved memories make a search ask
+  only when a fact in the turn is sensitive or the search words repeat one
+  (section 4; JARVIS-API §23.3).
+- **Several smart-home devices on one card** (added 2026-09-25, the
+  owner's decision after the creativity audit): `home_control`'s
+  `entity_ids`, `jarvis_home.plan_services` - at most ten devices, every one
+  listed with its exact request; never a lock, alarm, door, cover, camera,
+  script, scene or button (section 2). No app change: both apps show the
+  card's text as sent. Nothing has reached a real Home Assistant.
 
 **Still missing:**
 
@@ -1237,8 +1263,8 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    anything that repeats is set up by one card, like `schedule_repeat`.
    Does it OFFER something nobody asked for - a card, a suggestion, a nudge?
    Then it asks `jarvis_backoff.may_offer()` first and reports every "no"
-   with `declined()`: a few at most, never mid-conversation, and a "no" is
-   heard for 1, then 7, then 30 days. The back-off only decides whether to
+   with `declined()`: a few at most, never mid-conversation, never in Quiet
+   or Standby, and a "no" is heard for 1, then 7, then 30 days. The back-off only decides whether to
    ask; it never approves, and the owner's own requests never consult it.
    And an offer never asks for more (rule 4, the Muse audit, 2026-09-25):
    no offer Jarvis makes on its own may ask for more access, a new
