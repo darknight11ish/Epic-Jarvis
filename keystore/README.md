@@ -47,8 +47,28 @@ fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. To get past it:
    (or `py -3 jarvis_token_store.py show` in the backend folder).
 
 Uninstalling deletes the old pairing and anything still waiting in the
-phone's offline queue. Every build after that installs over the last one
-normally.
+phone's offline queue.
+
+## A mistake that made this happen again (fixed 2026-09-25)
+
+The paragraph above used to end "every build after that installs over the
+last one normally". **That was not true.** Only the `build` job put the key
+back; the `smoke` job, which is the one that publishes, rebuilt the APK on a
+machine with no key, so every build published from 19 Sep 2026 until this fix
+was signed with a different throwaway key (found by the apps security audit,
+finding H1). So you will need the uninstall and re-pair above **one more
+time**, for the first build published after the fix. After that:
+
+- the `smoke` job publishes the exact APK the `build` job signed, and never
+  rebuilds it;
+- a release build in CI without the key now fails instead of quietly using a
+  throwaway one (`jarvis-client/app/build.gradle.kts`,
+  `verifyReleaseSigningKey`);
+- CI compares the certificate inside the APK with this key before
+  publishing, and the release notes print its SHA-256 fingerprint.
+
+If a later build ever refuses to install over the one before, do not
+uninstall to get past it - that is a sign something is wrong with the build.
 
 ## What it is not
 
