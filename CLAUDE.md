@@ -217,6 +217,19 @@ Decided 2026-09-25, after the competitiveness audit
   kept as safely as a password (never logged, shown or sent anywhere but
   Google).
 
+Decided 2026-09-25, after the audit against Meta's Muse
+(`docs/COMPETITORS-MUSE-2026-09-25.md`):
+- **Jarvis may SEND email, one approval card per email**, the card showing
+  the exact recipients, subject and full text; never an "always allow", and
+  the card says plainly when the conversation has read outside text. Sending
+  is a new named way out of the PC (ARCHITECTURE section 4), like the others.
+- **Close the approval gap later:** today the Windows fingerprint/PIN check
+  for risky approvals lives in the desktop app, so a program already on the
+  PC could approve by calling the backend directly with the pairing token.
+  The owner chose to have the backend itself require that check for risky
+  approvals - a later piece of work; until then it is written down as a
+  known limit (ARCHITECTURE section 3).
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

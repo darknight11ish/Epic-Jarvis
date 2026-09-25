@@ -147,6 +147,19 @@ log and wrong for anything that leaves. A push to a public broker gets
 `_safe_detail` instead: keys only, unconditional. Do not reuse a redactor
 across destinations with different threat models.
 
+### A known limit: a program already on the PC
+
+Written down 2026-09-25 (the Muse audit, `docs/COMPETITORS-MUSE-2026-09-25.md`).
+The Windows Hello check before a risky approval ("Windows Hello for
+approvals", `jarvis-desktop/src-tauri/src/lock.rs`) is made by the desktop
+app. The backend's `POST /api/approve` asks only for the pairing token, and
+any program running as the owner can read that token from Credential
+Manager (`backend/README.md`, the token store). So a harmful program already
+on the PC could approve a card without meeting Windows Hello. The phone is
+not affected in the same way (its token is in the Android Keystore). The
+owner chose to close this later by having the backend itself require the
+check for risky approvals; until then this paragraph is the record.
+
 ### The notification contract — `notice`
 
 A waiting approval has to be readable on a phone without any of the payload
