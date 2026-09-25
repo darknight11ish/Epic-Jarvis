@@ -229,6 +229,18 @@ Decided 2026-09-25, after the audit against Meta's Muse
   The owner chose to have the backend itself require that check for risky
   approvals - a later piece of work; until then it is written down as a
   known limit (ARCHITECTURE section 3).
+- **Build step 1 of the approval-gap design now** (`docs/APPROVAL-GAP-DESIGN.md`,
+  owner 2026-09-25): the PC's backend itself asks Windows Hello before
+  accepting a risky approval that comes from the PC, stamps each real
+  approval so an "approved" written straight into the database does not
+  count, and the desktop stops asking separately so the owner is asked once.
+  It narrows the gap; a program written specifically to attack Jarvis can
+  still get around it, and the docs say so. The phone half (a Keystore key
+  that needs a fresh fingerprint per risky approval) comes with "more
+  devices".
+- **No lock, no risky approval:** on a PC without Windows Hello set up, or a
+  phone without a screen lock, a risky approval is refused until one is set
+  up, with a plain message saying how (owner, 2026-09-25).
 
 ## Every new feature gets its own audit, without being asked
 
