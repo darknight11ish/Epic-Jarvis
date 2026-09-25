@@ -824,9 +824,11 @@ drops the Jarvis rules:
 - **Trimming.** On a long conversation (a long tool turn, say)
   `jarvis_agent.fit_messages` drops the oldest user and assistant turns but
   never a system message, so it can leave the recalled facts first.
-- **An app's own system message.** The desktop app sends attached clipboard
-  text as a system message just before the question (`Context: ...`), which
-  on a first question is index 0 too.
+- **An app's own system message.** Any app that sends a system message
+  before the question puts it at index 0 on a first question. (The desktop
+  used to send attached clipboard text this way; since the PC-side security
+  fixes of 2026-09-25 it sends it as a user message tagged `clipboard`
+  instead, but the rule still covers any system message an app sends.)
 
 `jarvis_agent.keep_rules_first()` now runs on every request to the local
 model, last - after trimming and after the spoken-style note: if message 0

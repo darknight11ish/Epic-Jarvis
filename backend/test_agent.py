@@ -1057,9 +1057,10 @@ def t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note():
           got[:1] == [rules] and got[1:] == [recalled, long[-1]],
           [str(m.get("content"))[:30] for m in got])
 
-    # An app's own system message. The desktop app sends attached clipboard
-    # text as a system message just before the question (jarvis-desktop's
-    # main.js: `Context:\n...`), which on a first question is position 0.
+    # An app's own system message, which on a first question is position 0.
+    # (The desktop used to send clipboard text this way; since 2026-09-25 it
+    # sends a user message tagged "clipboard". Any app's system message is
+    # still covered.)
     # The owner's decision, 2026-09-25: the rules still go first.
     clip = [{"role": "system", "content": "Context:\nsome copied text"},
             {"role": "user", "content": "what does this say"}]
