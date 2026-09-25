@@ -65,6 +65,10 @@ wrong answers, outnumbering the right ones three to one, is "this keeps
 showing up when things go wrong", not proof. The card says the numbers and
 lets the owner judge.
 
+A fact the owner pinned ("Always keep in mind", memory-profile.patch) never
+gets the card: it is in every answer, so its counts only say how answers go
+in general.
+
 If the owner discards the card, it is not raised again for that fact until
 RETIRE_MIN_WRONG MORE wrong marks have arrived - "you already said keep it"
 is respected, but it is not a permanent mute on new evidence.
@@ -364,6 +368,13 @@ def _maybe_raise(fact_id: int, *, extract=None, memory=None) -> bool:
             if memory is None:
                 import jarvis_memory as memory  # noqa: F811
             if not _is_current(memory.store().get(int(fact_id))):
+                return False
+            # "Always keep in mind" (memory-profile.patch): a pinned fact is
+            # in EVERY answer, so its marks only count how the answers went
+            # overall - they say nothing about the fact. The owner pinned it
+            # on purpose; Unpin, Forget and Erase are all one tap away.
+            pinned = getattr(memory.store(), "is_pinned", None)
+            if pinned is not None and pinned(int(fact_id)):
                 return False
             if extract is None:
                 import jarvis_extract as extract  # noqa: F811

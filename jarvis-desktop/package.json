@@ -22,7 +22,7 @@
     "test": "cd src-tauri && cargo test",
     "notices": "cd src-tauri && cargo-license --avoid-dev-deps --filter-platform x86_64-pc-windows-msvc -d",
     "test:tokens": "python3 scripts/check-tokens.py && node tests/tokens.mjs",
-    "test:ui": "node tests/hud.mjs && node tests/blockers.mjs && node tests/decide.mjs && node tests/ia.mjs && node tests/hotkeys.mjs && node tests/updates.mjs && node tests/faces.mjs && node tests/memory.mjs && node tests/continuity.mjs && node tests/learning.mjs && node tests/chat-history.mjs && node tests/conversation.mjs && node tests/provenance.mjs && node tests/history.mjs && node tests/auto-learn.mjs && node tests/erase.mjs && node tests/picture.mjs && node tests/live.mjs && node tests/task-controls.mjs && node tests/notes.mjs && node tests/approvals-contract.mjs && node tests/chat-stream.mjs",
+    "test:ui": "node tests/hud.mjs && node tests/blockers.mjs && node tests/decide.mjs && node tests/ia.mjs && node tests/hotkeys.mjs && node tests/updates.mjs && node tests/faces.mjs && node tests/memory.mjs && node tests/continuity.mjs && node tests/learning.mjs && node tests/chat-history.mjs && node tests/conversation.mjs && node tests/provenance.mjs && node tests/history.mjs && node tests/auto-learn.mjs && node tests/erase.mjs && node tests/memory-profile.mjs && node tests/picture.mjs && node tests/live.mjs && node tests/task-controls.mjs && node tests/notes.mjs && node tests/approvals-contract.mjs && node tests/chat-stream.mjs",
     "test:themes": "node tests/themecheck.mjs && node tests/themes-all.mjs && node tests/distinct.mjs && node tests/contrast.mjs",
     "shots": "node tests/shots.mjs",
     "test:a11y": "node tests/a11y.mjs && node tests/disabled.mjs",

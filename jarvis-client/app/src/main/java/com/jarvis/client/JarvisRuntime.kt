@@ -2739,7 +2739,10 @@ object JarvisRuntime {
     suspend fun forgetAutoFact(id: Long): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         return when (val r = api.forgetFact(id)) {
-            is ApiResult.Ok -> com.jarvis.client.net.AutoLearn.forgetSaid(r.value)
+            is ApiResult.Ok -> com.jarvis.client.net.AutoLearn.forgetSaid(r.value).also { (gone, _) ->
+                // A forgotten fact leaves "Always keep in mind" too.
+                if (gone) _profileTick.update { it + 1 }
+            }
             is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
                 true to com.jarvis.client.net.AutoLearn.ALREADY_GONE
             } else {
@@ -2760,8 +2763,62 @@ object JarvisRuntime {
     suspend fun eraseAutoFact(id: Long): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         return when (val r = api.eraseFact(id)) {
-            is ApiResult.Ok -> com.jarvis.client.net.MemoryErase.said(r.value)
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryErase.said(r.value).also { (gone, _) ->
+                // An erased fact leaves "Always keep in mind" too.
+                if (gone) _profileTick.update { it + 1 }
+            }
             is ApiResult.Failed -> false to ("Not erased. " + describe(r.error))
+        }
+    }
+
+    // ------------------------------------------ "Always keep in mind" ----
+    // The owner's decision of 2026-09-24 - see
+    // [com.jarvis.client.net.MemoryProfile] and ui/screens/ProfilePlate.kt.
+
+    private val _profileTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one whenever the list may have changed from this phone - a
+     * pin, an unpin, a Forget or an erase - so Mind's "Always keep in mind"
+     * reads itself again. There is no event for it (Forget and Erase send
+     * none either): the desktop's change shows on the next read, Refresh.
+     */
+    val profileTick: StateFlow<Int> = _profileTick.asStateFlow()
+
+    private val _pinnedIds = MutableStateFlow<Set<Long>?>(null)
+
+    /**
+     * The ids on the list at the last read, or null before one (or on a PC
+     * without the list) - what "Saved automatically" reads to say Pin or
+     * Unpin. Ids only: the words stay on the PC and in the section drawing
+     * them.
+     */
+    val pinnedIds: StateFlow<Set<Long>?> = _pinnedIds.asStateFlow()
+
+    /** `GET /api/memory/profile`. A read: never held. Notes the ids ([pinnedIds]). */
+    suspend fun memoryProfile(): ApiResult<JsonObject> {
+        val r = api.memoryProfile()
+        _pinnedIds.value = when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryProfile.parse(r.value)?.ids
+            is ApiResult.Failed -> if (com.jarvis.client.net.MemoryProfile.missing(r.error)) null else _pinnedIds.value
+        }
+        return r
+    }
+
+    /**
+     * Pins (`pinned = true`) or unpins ONE fact on "Always keep in mind". No
+     * card and no confirm - the owner's own tap on a fact they can see - but
+     * held on a stale link (rule 4), exactly like [forgetAutoFact] and the
+     * desktop's `brain_memory_pin`. @return whether the list changed as
+     * asked, and the sentence to show.
+     */
+    suspend fun pinFact(id: Long, pinned: Boolean): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.pinFact(id, pinned)) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryProfile.said(r.value, pinned).also {
+                _profileTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
         }
     }
 

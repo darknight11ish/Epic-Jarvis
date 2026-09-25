@@ -397,7 +397,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -1044,6 +1044,33 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           // (`before` exclusive), with the two switches, emptied while
           // private answers are hidden; each switch's ON is a 202 card when
           // `waits` names it; every call recorded in `window.__auto`.
+          case "brain_memory_profile": {
+            const p = window.__profile;
+            if (!p) return null;
+            p.reads += 1;
+            const facts = JSON.parse(JSON.stringify(p.facts));
+            const out = { facts, chars: facts.reduce((n, f) => n + f.text.length, 0), limit: p.limit };
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              out.hidden = true;
+              out.hidden_count = out.facts.length;
+              out.facts = [];
+            }
+            return out;
+          }
+          case "brain_memory_pin": {
+            window.__memoryWrites.push({ cmd, ...args });
+            const p = window.__profile;
+            if (!p) throw new Error("HTTP 404");
+            if (args.pinned && p.refuse) throw new Error(String(p.refuse));
+            p.facts = p.facts.filter((f) => f.id !== args.id);
+            if (args.pinned) {
+              const known = [...window.__auto.facts, ...((window.__brain.memory_facts || {}).facts || [])]
+                .find((f) => f.id === args.id);
+              p.facts.push({ id: args.id, text: known ? known.text : `fact ${args.id}`, added: Date.now() / 1000 });
+            }
+            return { ok: true, id: args.id, pinned: args.pinned, changed: true };
+          }
           case "brain_memory_learning_status": {
             const a = window.__auto;
             a.statusReads += 1;
@@ -1287,6 +1314,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               sensitive_waiting: false, ...((auto && auto.status) || {}) },
   }));
   Object.assign(window.__auto, { reads: [], statusReads: 0, switches: [], unseenCalls: [] });
+  // "Always keep in mind" (brain/profile.rs). Unset, the command answers
+  // null - as before the list existed - so a scenario that does not name it
+  // draws no Pin buttons. `facts` is [{id, text, added}]; `refuse` is the
+  // PC's sentence for a refused pin (Rust hands it on as the error).
+  window.__profile = profile ? JSON.parse(JSON.stringify({
+    facts: [], limit: 1200, refuse: null, reads: 0, ...profile })) : null;
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;

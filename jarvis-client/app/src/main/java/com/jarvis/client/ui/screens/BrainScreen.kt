@@ -462,6 +462,19 @@ fun BrainScreen(
                     onShowPrivate = onShowPrivate,
                 )
             }
+            // "Always keep in mind" (the owner's decision, 2026-09-24): the
+            // facts Jarvis reads with every question, pinned from the list
+            // just above, each with an Unpin (ProfilePlate.kt). Right after
+            // that list, not before it: the line in "memory-counts" scrolls
+            // to the item after itself, which must stay "Saved automatically".
+            item(key = "memory-profile") {
+                AlwaysKeepInMindSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
             // Chat history on the PC: its own screen (HistoryScreen.kt), next
             // to Memory, as the desktop puts it in the Brain window.
             if (onOpenHistory != null) {

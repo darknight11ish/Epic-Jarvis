@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-memory-pin"
+description = "Enables the brain_memory_pin command without any pre-configured scope."
+commands.allow = ["brain_memory_pin"]
+
+[[permission]]
+identifier = "deny-brain-memory-pin"
+description = "Denies the brain_memory_pin command without any pre-configured scope."
+commands.deny = ["brain_memory_pin"]

@@ -23,6 +23,7 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.AutoLearn
 import com.jarvis.client.net.MemoryErase
+import com.jarvis.client.net.MemoryProfile
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
@@ -180,7 +181,11 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
  * 2026-09-24; [MemoryErase]): the fact's words wiped from the PC for good,
  * its dates kept - asked first in both apps' words, held the same way. One
  * line under the title says History's Delete does not forget a fact
- * ([AutoLearn.HISTORY_NOTE]).
+ * ([AutoLearn.HISTORY_NOTE]). First on each row, Pin or Unpin ("Always keep
+ * in mind", [MemoryProfile], 2026-09-24): no confirm - the owner's own tap,
+ * which Unpin takes back - held on a stale link like the other two, and
+ * shown only once the PC has said which facts are pinned
+ * ([JarvisRuntime.pinnedIds]).
  *
  * Read from the PC when Mind shows it, on Refresh, after a Forget, and on
  * every `memory_saved` event ([JarvisRuntime.autoTick]) - a read again keeps
@@ -214,12 +219,22 @@ internal fun SavedAutomaticallySection(
     var confirmId by remember { mutableStateOf<Long?>(null) }
     var confirmEraseId by remember { mutableStateOf<Long?>(null) }
     var busyId by remember { mutableStateOf<Long?>(null) }
-    // Which of the two the busy row is doing, for its label.
+    // Which of the three the busy row is doing, for its label.
     var erasing by remember { mutableStateOf(false) }
+    var pinning by remember { mutableStateOf(false) }
+    // "Always keep in mind": which facts are pinned, as the PC last said.
+    val pinned by JarvisRuntime.pinnedIds.collectAsState()
+    val profileTick by JarvisRuntime.profileTick.collectAsState()
     var said by remember { mutableStateOf<String?>(null) }
     // "Learn automatically", as the list's own answer says it: the empty
     // list says so when it is off.
     var autoOn by remember { mutableStateOf<Boolean?>(null) }
+
+    // Read here as well as in its own section: that one may be off screen
+    // (not composed), and these rows still need to say Pin or Unpin.
+    LaunchedEffect(reads, profileTick) {
+        JarvisRuntime.memoryProfile()
+    }
 
     LaunchedEffect(reads, tick) {
         when (val r = JarvisRuntime.autoFacts()) {
@@ -262,7 +277,7 @@ internal fun SavedAutomaticallySection(
             }
             if (!shown.isNullOrEmpty() && !canAct) {
                 Text(
-                    "Not connected to the desktop, so Forget and Erase wait until the link is back.",
+                    "Not connected to the desktop, so Pin, Forget and Erase wait until the link is back.",
                     style = MaterialTheme.typography.labelSmall,
                     color = chrome.textLo,
                 )
@@ -333,8 +348,35 @@ internal fun SavedAutomaticallySection(
                         }
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            pinned?.let { ids ->
+                                val on = fact.id in ids
+                                Quiet(
+                                    when {
+                                        busyId == fact.id && pinning ->
+                                            if (on) MemoryProfile.UNPINNING else MemoryProfile.PINNING
+                                        on -> MemoryProfile.UNPIN
+                                        else -> MemoryProfile.PIN
+                                    },
+                                    enabled = canAct && busyId == null,
+                                    onClick = {
+                                        confirmId = null
+                                        confirmEraseId = null
+                                        busyId = fact.id
+                                        pinning = true
+                                        said = null
+                                        scope.launch {
+                                            try {
+                                                said = JarvisRuntime.pinFact(fact.id, pinned = !on).second
+                                            } finally {
+                                                busyId = null
+                                                pinning = false
+                                            }
+                                        }
+                                    },
+                                )
+                            }
                             Quiet(
-                                if (busyId == fact.id && !erasing) "Forgetting…" else "Forget",
+                                if (busyId == fact.id && !erasing && !pinning) "Forgetting…" else "Forget",
                                 color = chrome.badInk,
                                 enabled = canAct && busyId == null,
                                 onClick = { confirmEraseId = null; confirmId = fact.id },

@@ -552,6 +552,42 @@ class JarvisApi(
         }
 
     /**
+     * `GET /api/memory/profile`: "Always keep in mind" - the facts the owner
+     * pinned, and how many of the list's characters they use
+     * ([MemoryProfile.parse]). A 404 or 501 is a PC without the list
+     * ([MemoryProfile.missing]).
+     */
+    suspend fun memoryProfile(): ApiResult<JsonObject> = probe(MemoryProfile.PATH)
+
+    /**
+     * `POST /api/memory/profile`: pin or unpin ONE fact (the owner's
+     * decision, 2026-09-24). The status and body come back whole
+     * ([MemoryProfile.Reply]), like [eraseFact]: a 404 that says "no such
+     * fact" and a 404 from a PC without the route must read differently, and
+     * a 409 carries the PC's own sentence. [MemoryProfile.said] reads it.
+     */
+    suspend fun pinFact(id: Long, pinned: Boolean): ApiResult<MemoryProfile.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(MemoryProfile.PATH) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = MemoryProfile.body(id, pinned).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(MemoryProfile.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
+    /**
      * A POST whose answer's shape is not written down - read by
      * [DesktopWrite.classify], which uses no field it has not seen the
      * server's other routes use.

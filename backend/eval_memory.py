@@ -48,6 +48,12 @@ WHAT IT MEASURES
                         it there is no meaning search to put a floor on
   speed and size        search time (p50 and p95), adding a fact, embedding
                         the backlog, and the database file with its WAL
+  "Always keep in mind" a pinned fact on a question that shares no words
+                        with it ("Owner is vegetarian" / "what should I
+                        cook tonight?"): is it among the five by search
+                        alone, and is it in the prompt with the pin
+                        (jarvis_memory.with_profile) - and what the pinned
+                        list costs in characters
 
 The embedder is the real one (fastembed) when this PC has it, and the
 words-only fallback otherwise; the output says which, on its first line.
@@ -87,6 +93,16 @@ FLOORS = [round(0.1 * i, 1) for i in range(0, 10)]
 DISTANCES = [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
 ANSWERABLE = {"single", "update", "date", "preference", "negation", "person",
               "paraphrase", "alias"}
+
+#: "Always keep in mind" (memory-profile.patch): a golden fact, and a
+#: question that needs it but shares none of its words. Search finds facts
+#: by words and meaning, so with words alone these are expected to be
+#: missed; a pinned fact is in every prompt whatever the question.
+PIN_CASES = [
+    ("f16", "what should I cook tonight?"),
+    ("f17", "can you suggest a snack for the train?"),
+    ("f15", "what should I order at the cafe this morning?"),
+]
 
 
 # ------------------------------------------------------------- the store --
@@ -388,6 +404,30 @@ def _timings(st, qs: list, reps: int = 3) -> dict:
             "search_p95_ms": round(lat[int(0.95 * (len(lat) - 1))], 2)}
 
 
+def _pin_effect(M, P, st, gid: dict, now: float) -> dict:
+    """PIN_CASES: is the fact among the K a chat turn gets by search alone,
+    and with it pinned (jarvis_memory.with_profile, as the chat turn calls
+    it)? The pins are taken off again, so nothing else measured here sees
+    them. {"available": False} on a jarvis_memory.py without the list."""
+    if not hasattr(M, "with_profile") or not hasattr(st, "pin"):
+        return {"available": False, "cases": []}
+    ids = {v: k for k, v in gid.items()}
+    cases = []
+    for fact, q in PIN_CASES:
+        fid = ids[fact]
+        alone = [r["id"] for r in P.recall(st, q, k=K, now=now)]
+        st.pin(fid)
+        try:
+            chosen = M.with_profile(st, P.recall(st, q, k=K, now=now), K)
+            chars = sum(len(p["text"]) for p in st.profile())
+        finally:
+            st.unpin(fid)
+        cases.append({"fact": fact, "question": q, "search_alone": fid in alone,
+                      "with_pin": fid in [r["id"] for r in chosen],
+                      "facts_in_prompt": len(chosen), "pinned_chars": chars})
+    return {"available": True, "cases": cases, "limit": M.PROFILE_LIMIT}
+
+
 def _db_bytes(path: Path) -> int:
     return sum(p.stat().st_size for p in path.parent.glob(path.name + "*") if p.is_file())
 
@@ -438,6 +478,7 @@ def run(sizes: list, words_only: bool, scratch: Path) -> dict:
             M._MIN_WORD_SHARE = configured_floor
             level.update(_timings(st, timed))
             level["db_bytes"] = _db_bytes(db)
+            level["pinned"] = _pin_effect(M, P, st, gid, now)
             out["levels"].append(level)
             # the word-floor sweep: every floor, both halves of the questions
             for floor in FLOORS:
@@ -563,6 +604,19 @@ def markdown(res: dict) -> str:
     else:
         lines.append("Distance floor sweep: skipped - there is no meaning search without "
                      "the real embedder.")
+    pin_rows = [(lv, c) for lv in res["levels"] for c in lv.get("pinned", {}).get("cases", [])]
+    if pin_rows:
+        lines += ["", "\"Always keep in mind\": a pinned fact on a question that shares no "
+                  "words with it. Found = among the facts the chat turn gets.", "",
+                  "| Filler | Facts | Fact | Question | Found by search alone | With the pin "
+                  "| Pinned characters |", "|---|---|---|---|---|---|---|"]
+        for lv, c in pin_rows:
+            lines.append(f"| {lv['filler'].replace('_', '-')} | {lv['facts']:,} | {c['fact']} "
+                         f"| {c['question']} | {'yes' if c['search_alone'] else 'no'} "
+                         f"| {'yes' if c['with_pin'] else 'no'} | {c['pinned_chars']} |")
+    else:
+        lines += ["", "\"Always keep in mind\": not measured - this jarvis_memory.py has "
+                  "no pinned list."]
     lines += ["", "Missed after the floor (question ids, golden_questions.jsonl): "
               + "; ".join(f"{lv['filler']} {lv['filler_facts']}: "
                           f"{', '.join(lv['misses_after']) or 'none'}"

@@ -289,6 +289,45 @@ searched on the *transaction* axis (`search(known_at=t)`, the same rule as
 that window). Every other question gets exactly the current-only search it
 always got. A bare month ("remind me in June") is not a past cue.
 
+**"Always keep in mind": a few pinned facts, read with every question**
+(the owner's decision, 2026-09-24; `memory-profile.patch`,
+`rebuilt/jarvis_memory.py` `pin()` / `profile()` / `with_profile()`,
+docs/JARVIS-API.md §4 and §6 `/api/memory/profile`). Search only finds facts
+that share words or meaning with the question, so "the owner is
+vegetarian" was missing from "what should I cook tonight?". The owner can
+pin facts; every local chat turn then starts the quoted FACTS block with
+them, under their own heading, before the searched facts, and a pinned fact
+the search also found is not repeated.
+
+```
+profile     fact_id INTEGER PRIMARY KEY, added REAL, how TEXT ("tap")
+            IDS ONLY. The words are read from `facts`, word for word -
+            never copied, summarised or rewritten (see the rule below
+            about compressing facts). Joined to the CURRENT facts, not
+            erased: a pinned fact that is forgotten, corrected, reworded
+            (which supersedes it), runs out or is erased leaves the list by
+            itself. Unpin deletes the pin row, never the fact.
+```
+
+- **A hard cap: the pinned facts' words may add up to 1,200 characters**
+  (`PROFILE_LIMIT`, about 300 tokens - some 7% of the 4,096-token context
+  the primary model runs with today, re-read every turn). A pin that would
+  pass it is refused in words: "That would make the list too long - unpin
+  something first". The check and the write are one transaction.
+- **Only the owner's own tap pins** - a fact they can see, no approval card
+  (like Forget), no confirm, held on a stale link in both apps. That is also
+  the only way a SENSITIVE fact gets on the list; nothing suggests or adds
+  one. Sensitive pinned facts still count in `injected_sensitive`, so the
+  answer stays on screen as for any other.
+- **Recall rules unchanged around it:** `JARVIS_MEMORY_K=0` is no memory at
+  all, pinned facts included; a turn that leaves the local lane drops the
+  whole block; `keep_rules_first` keeps the Jarvis rules at position 0 on a
+  first question. A pinned fact never gets a "retire this?" card from
+  answer marks - it is in every answer, so its marks say nothing about it.
+- The idea is Letta's, MIRIX's and MemoryOS's "core memory"
+  (docs/RESEARCH-2026-09-24.md §3 item 2), without their rewriting: no
+  model can add to, merge or summarise the list.
+
 **"Current" is `valid_to IS NULL OR valid_to > now`, never `valid_to IS
 NULL`.** A lease that ends in December is true today. Three places computed
 this and one of them got it wrong, directly below a line that got it right.
@@ -532,6 +571,7 @@ backend routes, in both directions; the rest are listed here only.
 | The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
 | Rewording a stored fact (`/api/memory/edit`), and forgetting one that was not saved automatically | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone calls it for facts in the "Saved automatically" list (JARVIS-API §19). |
 | "Erase the words" (`/api/memory/erase`) on a fact that was already forgotten, or was never saved automatically | The same line as Forget, above: the phone lists only facts saved automatically that are still in use, and a list of every fact, forgotten ones included, is deep memory editing. The phone offers Erase wherever it offers Forget (Mind → Saved automatically), so the route itself is on both apps. |
+| Pinning a fact on "Always keep in mind" (`/api/memory/profile`) that was not saved automatically | The same line as Forget, above (2026-09-24): the phone's only list of current facts is "Saved automatically", so it pins from there, and a list of every fact is deep memory editing. The route and the "Always keep in mind" section - the pinned facts, "N of 1,200 characters used", Unpin on each - are on both apps, so a fact pinned on the desktop can be unpinned from the phone. |
 | Exporting all memory (`/api/memory/export`) | A copy of everything Jarvis knows does not belong on a phone that can be lost. |
 | Shutting the backend down (`/api/shutdown`) | The phone would then have nothing to reach and no way to undo it. |
 | Deep config editing (`/api/config`) | Out of scope on the phone (`CLAUDE.md`). The desktop does not use it either today: it is only in the Brain window's read allow-list, and no window asks for it. |
@@ -581,8 +621,8 @@ That asymmetry is worth stating once: **this repo is version-controlled and the
 thing it patches is not.** A patch here can always be recovered. The file it
 edits cannot.
 
-Fifty-two patches (counted in `scripts/apply-patches.ps1`'s list on
-2026-09-24, after `chat-history.patch`, `auto-learn.patch`, `memory-erase.patch` and `past-recall.patch`), applied in that list's order. The order matters: many patches
+Fifty-three patches (counted in `scripts/apply-patches.ps1`'s list on
+2026-09-24, after `chat-history.patch`, `auto-learn.patch`, `memory-erase.patch`, `past-recall.patch` and `memory-profile.patch`), applied in that list's order. The order matters: many patches
 edit lines an earlier one wrote, and the list's comments say which. Above
 all, `memory-safety` must land first: without it the first accepted proposal
 retires a roughly-matching unrelated fact, permanently, and `retire()` has

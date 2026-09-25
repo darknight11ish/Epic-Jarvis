@@ -387,8 +387,11 @@ def t_the_patch_applies_forwards_and_backwards():
                            text=True)
         check(f"git apply {' '.join(extra) or '(forwards)'} past-recall.patch",
               r.returncode == 0, r.stderr.strip())
+    # The stack up to and including this patch: memory-profile.patch
+    # (2026-09-24) comes after it and edits two of its lines.
+    upto = _stack.stand_in("jarvis_hud.py", order[:order.index("past-recall.patch") + 1])[0]
     check("forwards gives the stack's own text",
-          (d / "jarvis_hud.py").read_text(encoding="utf-8") == full)
+          (d / "jarvis_hud.py").read_text(encoding="utf-8") == upto)
 
 
 # ============================================== 4. the self-test itself ==
@@ -472,7 +475,11 @@ def t_listed_where_it_must_be():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("jarvis_past.py is shipped by apply-patches.ps1 and in _where.SHIPPED",
           "'jarvis_past.py'" in ps1 and "jarvis_past.py" in _where.SHIPPED)
-    check("past-recall.patch is applied, last", _stack.order()[-1] == "past-recall.patch",
+    # Last when it was added; memory-profile.patch ("Always keep in mind",
+    # 2026-09-24) edits its search lines, so it comes after, and is the
+    # only one that does.
+    check("past-recall.patch is applied, and only memory-profile.patch after it",
+          _stack.order()[-2:] == ["past-recall.patch", "memory-profile.patch"],
           _stack.order()[-3:])
     notices = (REPO / "THIRD-PARTY-NOTICES.txt").read_text(encoding="utf-8")
     check("LongMemEval's scoring is credited", "LongMemEval" in notices

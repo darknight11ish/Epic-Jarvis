@@ -697,6 +697,8 @@ pub fn run() {
             brain::auto_learn::brain_memory_learning_auto,
             brain::auto_learn::brain_memory_learning_sensitive,
             brain::auto_learn::brain_memory_saved_unseen,
+            brain::profile::brain_memory_profile,
+            brain::profile::brain_memory_pin,
             brain::history::brain_history_list,
             brain::history::brain_history_open,
             brain::history::brain_history_delete,

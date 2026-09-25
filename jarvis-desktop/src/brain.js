@@ -95,6 +95,20 @@ import {
   VOICE_TITLE,
 } from "./auto-learn.js";
 import {
+  isPinned,
+  PIN_LABEL,
+  PIN_TITLE,
+  PINNED,
+  PROFILE_DETAIL,
+  PROFILE_EMPTY,
+  PROFILE_MISSING,
+  readProfile,
+  UNPIN_LABEL,
+  UNPIN_TITLE,
+  UNPINNED,
+  usedLine,
+} from "./memory-profile.js";
+import {
   askDeep,
   leadLine as deepLead,
   POLL_MS as DEEP_POLL_MS,
@@ -196,6 +210,7 @@ const dom = {
   memoryAuto: $("memory-auto"),
   memoryAutoList: $("memory-auto-list"),
   memorySavedLine: $("memory-saved-line"),
+  memoryProfile: $("memory-profile"),
   jobs: $("jobs"),
   undo: $("undo"),
   contentRisk: $("content-risk"),
@@ -546,6 +561,7 @@ function render(name) {
       break;
     case "memory":
       renderLearning();
+      renderProfile();
       renderAuto();
       renderProposals();
       renderFacts();
@@ -1363,7 +1379,7 @@ async function refreshMemory() {
   // The "Saved automatically" list is read through its own command
   // (brain/auto_learn.rs), next to the pane's sections: a Forget or a
   // decision changes it too.
-  await Promise.all([load(VIEW_SECTIONS.memory, { quiet: true }), loadAuto()]);
+  await Promise.all([load(VIEW_SECTIONS.memory, { quiet: true }), loadAuto(), loadProfile()]);
   render("memory");
 }
 
@@ -1847,6 +1863,12 @@ function renderFacts() {
             await memoryWrite("brain_memory_forget", args, FORGOTTEN);
           }, { danger: true, title: "Stop this being recalled. There is no undo." })
         );
+      }
+      // "Always keep in mind": Pin / Unpin on a fact still in use, first -
+      // before the buttons that cannot be undone, as in Saved automatically.
+      if (current && !past && erased === null) {
+        const pin = pinButton(f);
+        if (pin) actions.unshift(pin);
       }
       // Erase is offered on a forgotten fact too: forgetting kept its words,
       // and this is how they go. Never in the past view, like every write.
@@ -2879,6 +2901,7 @@ function paintAutoList() {
       meta: [factMeta(f)],
       // Nothing is changed while the pane shows a past moment (memoryWrite).
       actions: past ? [] : [
+        ...[pinButton(f)].filter(Boolean),
         button("Forget", () => forgetAuto(f),
           { danger: true, live: true, title: "Stop this being recalled. There is no undo." }),
         button(ERASE_LABEL, () => eraseFact(f),
@@ -2914,6 +2937,142 @@ function paintAuto() {
 function renderAuto() {
   paintAuto();
   if (IS_TAURI && !autoL.loading && Date.now() - autoL.at > AUTO_READ_MS) loadAuto();
+}
+
+/* ==========================================================================
+   "Always keep in mind" (the owner's decision, 2026-09-24; memory-profile.js)
+
+   A short list of facts the owner pins, which Jarvis reads with every
+   question, word for word. Its own section, with how many of the list's
+   1,200 characters are used and an Unpin on each; a Pin / Unpin on every
+   fact still in use in "Saved automatically" and "What Jarvis knows about
+   you". One fact per call (brain_memory_pin), no card - the owner's own
+   tap, like Forget - held on a stale link in Rust and greyed here. No
+   event: the list is read again after every memory write, and when the
+   Memory tab is shown.
+   ========================================================================== */
+
+const profileL = {
+  /** readProfile() of the last read, or null before the first. */
+  view: null,
+  error: "",
+  loading: false,
+  again: false,
+  at: 0,
+};
+const PROFILE_READ_MS = 15000;
+
+async function loadProfile() {
+  if (!IS_TAURI) return;
+  if (profileL.loading) {
+    profileL.again = true;
+    return;
+  }
+  profileL.loading = true;
+  try {
+    profileL.view = readProfile(await invoke("brain_memory_profile"));
+    profileL.error = "";
+  } catch (error) {
+    profileL.error = errorText(error);
+  } finally {
+    profileL.loading = false;
+    profileL.at = Date.now();
+  }
+  if (profileL.again) {
+    profileL.again = false;
+    await loadProfile();
+    return;
+  }
+  if (state.view === "memory") {
+    // The Pin / Unpin on the fact lists follow the list.
+    paintProfile();
+    paintAutoList();
+    renderFacts();
+  }
+}
+
+/** Pin or Unpin for one fact, by what the PC last said - or nothing while
+ *  that is not known (not read yet, an older PC, or the list hidden). */
+function pinButton(f) {
+  const v = profileL.view;
+  if (!v || !v.available || v.hidden || !Number.isInteger(Number(f.id))) return null;
+  const on = isPinned(v, f.id);
+  return button(on ? UNPIN_LABEL : PIN_LABEL, () => setPinned(f, !on),
+    { live: true, title: on ? UNPIN_TITLE : PIN_TITLE });
+}
+
+/** One fact on or off the list. memoryWrite shows the PC's refusal in its
+ *  own words ("That would make the list too long - unpin something first")
+ *  and reads the pane again, this list included. */
+async function setPinned(f, on) {
+  return memoryWrite("brain_memory_pin", { id: Number(f.id), pinned: on },
+    on ? PINNED : UNPINNED);
+}
+
+function paintProfile() {
+  const box = dom.memoryProfile;
+  if (!box) return;
+  box.replaceChildren();
+  const v = profileL.view;
+  if (!v) {
+    const line = el("p", "empty", profileL.error
+      ? `Could not read the list: ${profileL.error}` : "Reading…");
+    if (profileL.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadProfile));
+    }
+    box.append(line);
+    return;
+  }
+  if (!v.available) {
+    box.append(el("p", "empty", v.why || PROFILE_MISSING));
+    return;
+  }
+  if (v.hidden) {
+    box.append(hiddenNode(v.hiddenCount, "facts"));
+    return;
+  }
+  box.append(el("p", "hint profile-used", usedLine(v.chars, v.limit)));
+  if (profileL.error) {
+    box.append(el("p", "empty failed", `Could not read it again: ${profileL.error}`));
+  }
+  if (!v.facts.length) {
+    box.append(el("p", "empty", PROFILE_EMPTY));
+    return;
+  }
+  // Nothing is changed while the pane shows a past moment (memoryWrite).
+  const past = memoryAsOf !== null;
+  const list = el("div", "rows profile-rows");
+  for (const f of v.facts) {
+    const item = row({
+      tag: "pinned",
+      state: "ok",
+      title: f.text || "(no text)",
+      meta: [f.added ? `pinned ${ago(f.added)}` : ""],
+      actions: past ? [] : [
+        button(UNPIN_LABEL, () => setPinned(f, false), { live: true, title: UNPIN_TITLE }),
+      ],
+    });
+    item.dataset.id = String(f.id);
+    list.append(item);
+  }
+  box.append(list);
+}
+
+function renderProfile() {
+  paintProfile();
+  if (IS_TAURI && !profileL.loading && Date.now() - profileL.at > PROFILE_READ_MS) loadProfile();
+}
+
+// Private answers turned on or off, or a Show ran out: read it again - Rust
+// decides whether it comes back hidden.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  const rereadProfile = () => {
+    profileL.at = 0;
+    if (state.view === "memory") loadProfile();
+  };
+  TAURI.event.listen("security-changed", rereadProfile);
+  TAURI.event.listen("private-hidden", rereadProfile);
 }
 
 /** "learned 12d ago" only when that differs from when the fact became true.

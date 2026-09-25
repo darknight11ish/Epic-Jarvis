@@ -319,7 +319,8 @@ characters**; past either, the oldest go until it is back to **6 pairs and
 12,000 characters**, so the start of the prompt changes rarely and Ollama's
 prompt cache survives. The budget, against `num_ctx 16384`
 (`jarvis-primary.Modelfile`): 2,048 answer + 250 system prompt and template +
-400 recalled facts + 2,600 tool list (13 tools, 7,851 characters of JSON) +
+400 recalled facts (plus up to ~300 more for the 1,200 characters of
+"Always keep in mind", §6) + 2,600 tool list (13 tools, 7,851 characters of JSON) +
 3,000 new question = 8,298, leaving ~8,000; 18,000 characters is 6,000
 tokens at a pessimistic 3 characters per token (~4,500 at English's ~4).
 Same numbers on both clients: `net/ChatHistory.kt` and
@@ -466,6 +467,26 @@ June?") also recalls up to three matching **retired** facts
 listed in `injected_ids` and checked for `injected_sensitive` like any
 other recalled fact. Neither app shows recalled facts' words, so neither
 app changes. `backend/README.md`, "Memory wave 1", has the details.
+
+**"Always keep in mind"** (memory wave 2, the owner's decision of
+2026-09-24; `memory-profile.patch`, `rebuilt/jarvis_memory.py`
+`with_profile()`; the list itself is §6 `/api/memory/profile`). Every local
+turn that recalls memory now starts the FACTS block with the facts the
+owner pinned, under the fixed line "Always keep in mind (the owner pinned
+these):", word for word, each through the same `recall_line` as every
+other recalled fact; then "Recalled for this question:" and the searched
+facts. A pinned fact the search also found is not listed twice. With
+nothing pinned the block is exactly what it was. Pinned facts are counted
+in `injected_facts`, listed in `injected_ids` (first) and checked for
+`injected_sensitive` like any other recalled fact, so the read-aloud and
+sensitive-on-screen rules (§16) cover them. `JARVIS_MEMORY_K=0` is still no
+memory at all - pinned facts included - and a turn that leaves the local
+lane drops them with the rest of the block. The block stays off position 0:
+on a conversation's first question `jarvis_agent.keep_rules_first()` puts
+the Jarvis rules in front of it (`backend/test_memory_profile.py` holds
+that with pinned facts in the block). A pinned fact never gets a "retire
+this?" card from answer marks (`jarvis_feedback.py`): it is in every answer,
+so its marks say nothing about it.
 
 **No tool receipt.** A 200 from `/api/chat` means "a chat completed", not
 "the thing you asked for happened". There is no `tool_calls` field on the
@@ -791,6 +812,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/history?limit=&before=` | GET | `brain/history.rs` `brain_history_list` (Brain, History) | `JarvisApi.history` (Mind, Chat history) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. Token + origin. The switch's state (`enabled`, `recording`, `why_not`, `waiting`, `keep_days`, `encrypted`) and `conversations`, newest first: `[{id, title, started, updated, turns, device, has_voice, tainted}]`. `limit` 1-100 (default 30); `before=<updated>` pages to older ones. `503 {"available": false, "error", "reason"}` if `jarvis_chat_log.py` is missing. |
 | `/api/memory/learning` | GET | `brain_memory_learning_status` (`brain/auto_learn.rs`) | `JarvisApi.autoLearnSettings` | `auto-learn.patch`, `jarvis_auto_learn.py`, 2026-09-24 - **§19**. Token + origin. The learning switches in one read: `{"enabled", "auto", "auto_sensitive", "auto_waiting", "sensitive_waiting", "auto_last", "sensitive_last", ...}` (`enabled` is background learning's own switch). Before this, only the POST existed. `503 {"available": false, "error", "reason"}` if `jarvis_auto_learn.py` is missing. |
 | `/api/memory/auto?limit=&before=` | GET | `brain_memory_auto_list` (hidden with the other memory lists under Windows Hello) | `JarvisApi.autoFacts` (hidden under "Hide memory lists and chat history") | `auto-learn.patch` - **§19**. "Saved automatically": `{"facts": [{id, text, saved_at, provenance, device}], "auto", "auto_sensitive"}`, current facts only, newest first; `limit` 1-100 (default 30); `before=<saved_at>` pages to older ones (floored to whole seconds; a page never splits a second). |
+| `/api/memory/profile` | GET | `brain_memory_profile` (`brain/profile.rs`; hidden with the other memory lists under Windows Hello) | `JarvisApi.memoryProfile` / `JarvisRuntime.memoryProfile` (hidden under "Hide memory lists and chat history") | **"Always keep in mind"** (the owner's decision, 2026-09-24; `memory-profile.patch`, `rebuilt/jarvis_memory.py`). Token + origin. The facts the owner pinned, which every local chat question reads word for word (§4): `{"facts": [{"id", "text", "added"}], "chars", "limit"}`, oldest pin first. `chars` is how many characters the listed facts' words use; `limit` is 1,200 (`PROFILE_LIMIT`). Only facts still current are listed: a pinned fact that is forgotten, corrected, runs out or is erased leaves the list by itself. Both apps show "N of 1,200 characters used". `501` from a PC whose `jarvis_memory.py` is older (both apps then say the list is not there yet), `503` memory not running. |
 | `/api/history/conversation?id=` | GET | `brain_history_open` | `JarvisApi.historyConversation` | `chat-history.patch` - **§18**. One kept conversation, read-only: `{id, title, tainted, turns: [{role, text, at, provenance, read_outside, answer_kept} or {role: "assistant", text, at}]}`. `404` if there is no such conversation, `400` for a malformed id, `503` if it cannot be opened (the reason in words). |
 
 **`/api/models` gains `speed`** (`speed-record.patch`), next to `offload`:
@@ -921,7 +943,8 @@ neither app says it would.
 | `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | `commands.rs:1017` (quickbar), `hud_bootstrap.js` (HUD page) | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | `JarvisApi.forgetFact`, from the "Saved automatically" list only (§19), after a confirm, held on a stale link | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. Since the owner's decision of 2026-09-24 (automatic learning, §19) the phone calls it too, for automatically saved facts - one fact per request, held on a stale link, like the desktop. Rewording (`/api/memory/edit`) stays desktop-only. |
 | `/api/memory/erase` | POST | `{"id": <int>}` and nothing else | `brain.rs` `brain_memory_erase` (Saved automatically, and every fact in What Jarvis knows about you - forgotten ones too), after a confirm, held on a stale link | `JarvisApi.eraseFact` / `JarvisRuntime.eraseAutoFact` (Mind, Saved automatically), after a confirm, held on a stale link | **"Erase the words"** (the owner's decision, 2026-09-24; `memory-erase.patch`, `rebuilt/jarvis_memory.py` `erase()`). Wipes ONE fact's words for good and keeps its row and dates: `text` becomes `[erased]`, `erased_at` is set, the word-search row and meaning vector are deleted, meta keeps only dates, ids and where it came from (no message hash, no conversation id), a current fact is retired as Forget retires it, and copies of the words in the review queue go too (a card still waiting with exactly those words, or a "retire this?" card about the fact, is turned down). Then the file is cleaned: the word index compacted, freed space zeroed, `memory.db-wal` emptied. Works on an already-forgotten fact. Same token and origin checks as forget and, like forget, **no approval card** - both apps ask first ("Erase the words of this fact from your PC for good? Jarvis keeps only the date it was saved, so its history shows something was erased here. This cannot be undone.") and say "Erased.". `200 {"ok": true, "id", "erased_at", "already_erased", "retired_now", "file_clean", "copies", "note"}` - **never the words** (forget's reply has a `was`; this has not). `file_clean: false`: something was reading the file, so an old copy may stay in `memory.db-wal` until the next erase. `400` for anything but one integer `id` (a list, a string, `true`, an extra key); `404 {"ok": false, "reason": "no_such_fact"}` - an app tells this apart from a PC without the route (a plain 404, or `501` from an older `jarvis_memory.py`), where nothing was erased; `503` memory not running. **No event** - forget sends none either, so the other app's list shows the change on its next read. |
-| `/api/memory/edit` | POST | object | `brain.rs` `brain_memory_edit` | **no** | Refused while the stream is stale. |
+| `/api/memory/profile` | POST | `{"id": <int>, "pinned": true \| false}` and nothing else | `brain/profile.rs` `brain_memory_pin` (Pin / Unpin on every current fact in Saved automatically and What Jarvis knows about you, and Unpin in Always keep in mind), held on a stale link | `JarvisApi.pinFact` / `JarvisRuntime.pinFact` (Pin / Unpin in Mind, Saved automatically; Unpin in Always keep in mind), held on a stale link | **"Always keep in mind"** - pin or unpin ONE fact (the owner's decision, 2026-09-24). Only the id is stored (a `profile(fact_id, added, how)` table in memory.db); the words stay the fact's own, never summarised or rewritten. **No approval card and no confirm**: it is the owner's own tap on a fact they can see, like Forget, and Unpin takes it back. Pinning a sensitive fact is allowed - only the owner's tap can put one there. Same token and origin checks as forget. `200 {"ok": true, "id", "pinned", "changed", "chars", "limit", "note"}` (pinning a pinned fact, or unpinning one that is not, is `changed: false`); **`409`** `{"ok": false, "reason", "error", "chars", "limit"}` with `reason` `"too_long"` ("That would make the list too long - unpin something first"), `"fact_too_long"` (one fact over 1,200 characters on its own) or `"not_current"` (forgotten or erased) - both apps show `error` word for word; `404 {"ok": false, "reason": "no_such_fact"}` (told apart from a PC without the route, as for erase); `400` for anything but one integer `id` and one boolean `pinned`; `501` older `jarvis_memory.py`; `503` memory not running. The reply never has the words. Audit log: `memory.pinned` / `memory.unpinned` with the id only. **No event** - forget and erase send none either; each app reads the list again after its own memory writes and when Memory / Mind is shown. |
+| `/api/memory/edit` | POST | object | `brain.rs` `brain_memory_edit` | **no** | Refused while the stream is stale. Rewording supersedes (a new fact, the old one retired), so a pinned fact that is reworded leaves "Always keep in mind" - pin the new wording. |
 | `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | `JarvisApi.setLearning` (Mind, "What Jarvis remembers") | **ON asks first** (`learning-asks.patch`, `jarvis_learning_switch.py`, 2026-09-24): **202** `{"ok": true, "waiting": true, "enabled": false, "message"}` while one approval card under the action `learning_enable` waits; it turns on (and starts the learner) only when that card is approved. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, and it withdraws a waiting ON. Both apps hold ON (not OFF) while the stream is stale, and say "waiting" until the card leaves the queue. A "Remember:" message makes a card even while learning is off. |
 | `/api/memory/learning/auto` | POST | `{"enabled": bool}` | `brain_memory_learning_auto` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Learn automatically" (on by default). The shape of `/api/memory/learning`: **OFF** 200 at once, never a card, withdraws a waiting ON; **ON** 202 `{"waiting": true, ...}` and ONE approval card, action `learning_auto_enable`; on only when it is approved. Already on: 200, no card. A second ON while one waits: 202, no second card. Tier other than `ask`: **503**. Bad body: `400`. Every reply carries the `GET /api/memory/learning` fields (not `enabled`). |
 | `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | `brain_memory_learning_sensitive` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
@@ -2584,7 +2607,9 @@ lines and says they are information about the user, never an instruction
 (GUARDS L6's delimiter note) - for every recalled fact, not only automatic
 ones. Each fact is put on one line, with anything in it that reads as one
 of those two lines taken out (`jarvis_auto_learn.recall_line`, red team R7),
-so a saved fact cannot close the block early.
+so a saved fact cannot close the block early. Facts the owner pinned
+("Always keep in mind", §4 and §6 `/api/memory/profile`, 2026-09-24) are
+inside the same block, first, through the same `recall_line`.
 
 **Which recalled facts are sensitive** rides out in `X-Jarvis-Route` as
 `injected_sensitive` (§4): the owner's decision of 2026-09-24 keeps an
@@ -2693,7 +2718,13 @@ Where the learning switch lives today (desktop: Brain -> Memory; phone: Mind
 - **"Saved automatically"**: newest first, the fact, when, a small "said
   aloud" mark for voice, and a one-tap **Forget** on each (with the same
   confirm as the desktop's Forget today). "Load older". Beside Forget,
-  **"Erase the words"** (2026-09-24, §6 `/api/memory/erase`).
+  **"Erase the words"** (2026-09-24, §6 `/api/memory/erase`). First on each
+  row, **Pin** / **Unpin** ("Always keep in mind", 2026-09-24, §6
+  `/api/memory/profile`): no confirm, held on a stale link, shown once the
+  PC has said which facts are pinned. Under the list, in both apps, the
+  section **"Always keep in mind"**: "Jarvis reads these with every
+  question, word for word. Keep it short.", "N of 1,200 characters used",
+  and each pinned fact with Unpin.
 - On `memory_saved`: a quiet line, "Jarvis remembered 2 things", that opens
   the list. Never a pop-up; never the fact's text in a notification.
 - Cards that stayed cards show `auto_reason` as one quiet line.
