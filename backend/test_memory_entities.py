@@ -248,6 +248,16 @@ def t_forget_and_corrections_take_the_links():
     check("an edit in place relinks the new words",
           aliases(st) == [("partner", "Jonah", fid)] and "Jonas" not in entity_names(st),
           (aliases(st), entity_names(st)))
+    before = rows(st, "SELECT id FROM entities WHERE name='Jonah'")
+    st.edit(fid, "Owner's partner Jonah is a nurse")
+    check("...and a name both wordings say keeps its entry (its merges and cards with it)",
+          rows(st, "SELECT id FROM entities WHERE name='Jonah'") == before
+          and aliases(st) == [("partner", "Jonah", fid)], (before, aliases(st)))
+    long_q = " ".join(["word"] * 150) + " where is my partner working"
+    with closing(st._connect()) as c:
+        roots, names = st._entity_hits(c, long_q, time.time())
+    check("a long message is looked up in full, not just its first words", names == ["Jonah"],
+          names)
     st = fresh("lease")
     fid = st.add("Owner's landlord is called Ms Byrne")
     st.retire(fid, valid_to=time.time() + 86400 * 30)

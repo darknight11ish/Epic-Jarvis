@@ -122,14 +122,14 @@ await check("review cards say what their buttons do", async () => {
 
 await check("the Brain asks for retire cards, because it labels them", async () => {
   assert.match(read("src-tauri/src/brain/routes.rs"),
-    /"\/api\/memory\/pending\?retire_cards=1(&sleep_offer=1)?"/);
+    /"\/api\/memory\/pending\?retire_cards=1(&sleep_offer=1)?(&merge_cards=1)?"/);
 });
 
 await check("the Brain asks for the overnight-tidy card, because it shows it", async () => {
   // The server hands that card out once a day, to the first read that asks.
   // The HUD page never asks, so it no longer uses the day's card up.
   assert.match(read("src-tauri/src/brain/routes.rs"),
-    /"\/api\/memory\/pending\?retire_cards=1&sleep_offer=1"/);
+    /"\/api\/memory\/pending\?retire_cards=1&sleep_offer=1(&merge_cards=1)?"/);
 });
 
 await browser.close();

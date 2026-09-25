@@ -310,7 +310,13 @@ pub(super) fn approval_message(item: Option<&serde_json::Value>) -> String {
 }
 
 /// The Brain sections whose entries are private, and the key each list is in.
-const PRIVATE_LISTS: &[(&str, &str)] = &[("memory_facts", "facts"), ("memory_pending", "pending")];
+/// `memory_entities` (memory wave 3): the names of the people and things
+/// facts are linked to are memory too.
+const PRIVATE_LISTS: &[(&str, &str)] = &[
+    ("memory_facts", "facts"),
+    ("memory_pending", "pending"),
+    ("memory_entities", "entities"),
+];
 
 /// One Brain section with its private entries taken out: the list is
 /// emptied, and `hidden: true` plus `hidden_count` say how many there were,
@@ -624,6 +630,15 @@ mod tests {
         assert_eq!(out["pending"], json!([]));
         assert_eq!(out["hidden_count"], json!(1));
         assert_eq!(out["setup"], json!({ "offer": true }));
+
+        // The people and things facts are linked to: names are memory.
+        let ents = json!({ "entities": [{ "id": 3, "name": "Priya", "aliases": ["sister"],
+                                          "fact_ids": [1, 2] }], "count": 1 });
+        let out = redact_private("memory_entities", ents);
+        assert_eq!(out["entities"], json!([]));
+        assert_eq!(out["hidden_count"], json!(1));
+        assert!(!out.to_string().contains("Priya"));
+        assert!(!out.to_string().contains("sister"));
 
         // Other sections, and failures, pass through untouched.
         let status = json!({ "available": true, "current": 12 });

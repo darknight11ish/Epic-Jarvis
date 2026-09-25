@@ -34,13 +34,22 @@ const READ_ROUTES: &[(&str, &str)] = &[
     // asks for it. The server hands that card out once a day, to the first
     // read that asks - the HUD page does not ask, so it no longer uses the
     // day's card up (memory-pane.patch).
+    // `merge_cards=1`: the Brain labels memory-entities.patch's "are these
+    // the same?" cards with their own two answers ("Yes, the same" / "No,
+    // keep them apart"), so it asks for them. The phone does not: it shows
+    // no people-and-things layer (ARCHITECTURE.md section 8).
     (
         "memory_pending",
-        "/api/memory/pending?retire_cards=1&sleep_offer=1",
+        "/api/memory/pending?retire_cards=1&sleep_offer=1&merge_cards=1",
     ),
     // Every fact the store holds, retired ones included. A read: the pane
     // shows it, and each change is its own command below.
     ("memory_facts", "/api/memory/facts"),
+    // The people and things facts are linked to, and the ids of their
+    // facts - the names under each fact and "About <name>"
+    // (memory-entities.patch). A read; hidden with the other memory lists
+    // (lock/rules.rs PRIVATE_LISTS).
+    ("memory_entities", "/api/memory/entities"),
     ("initiative", "/api/initiative"),
     ("attention", "/api/attention"),
     ("digest", "/api/digest"),

@@ -882,9 +882,12 @@ class MemoryStore:
                         pass
                 self._embed_rows(c, [(int(fact_id), text)])
                 # New words, new links: the old wording's names and aliases
-                # go, and whatever the new wording names is linked instead.
-                self._unlink_safely(c, int(fact_id))
-                self._link_safely(c, int(fact_id), text)
+                # go, and whatever the new wording names is linked instead
+                # (first, so a name both wordings say keeps its entry).
+                try:
+                    self._unlink_fact(c, int(fact_id), new_text=text)
+                except Exception:
+                    self._entity_errors += 1
             c.commit()
             return cur.rowcount > 0
 
@@ -1683,16 +1686,20 @@ class MemoryStore:
             self._note_likely_same(c, eid, name, now)
         return out
 
-    def _unlink_fact(self, c, fid: int, now: Optional[float] = None) -> int:
+    def _unlink_fact(self, c, fid: int, now: Optional[float] = None,
+                     new_text: Optional[str] = None) -> int:
         """Take ONE fact out of the entity layer: its links, the aliases it
         taught, and every entry no fact links to any more - with the
         "are these the same?" cards that named one (their words wiped, a
         waiting one turned down). An alias another current fact ALSO
-        teaches is put back from that fact. Returns how many cards' words
-        were wiped."""
+        teaches is put back from that fact. `new_text`: the fact's new
+        wording (an edit in place), linked BEFORE the clean-up, so a name
+        both wordings say keeps its entry (and its merges and cards).
+        Returns how many cards' words were wiped."""
         c.execute("SAVEPOINT entity_unlink")
         try:
-            wiped = self._unlink_rows(c, int(fid), time.time() if now is None else now)
+            wiped = self._unlink_rows(c, int(fid), time.time() if now is None else now,
+                                      new_text)
         except Exception:
             c.execute("ROLLBACK TO entity_unlink")
             c.execute("RELEASE entity_unlink")
@@ -1700,24 +1707,33 @@ class MemoryStore:
         c.execute("RELEASE entity_unlink")
         return wiped
 
-    def _unlink_rows(self, c, fid: int, now: float) -> int:
-        affected = {r[0] for r in c.execute(
-            "SELECT entity_id FROM fact_entities WHERE fact_id=?"
-            " UNION SELECT entity_id FROM entity_aliases WHERE fact_id=?", (fid, fid))}
+    def _unlink_rows(self, c, fid: int, now: float, new_text: Optional[str] = None) -> int:
+        linked = {r[0] for r in c.execute(
+            "SELECT entity_id FROM fact_entities WHERE fact_id=?", (fid,))}
+        taught = {r[0] for r in c.execute(
+            "SELECT entity_id FROM entity_aliases WHERE fact_id=?", (fid,))}
+        affected = linked | taught
         c.execute("DELETE FROM fact_entities WHERE fact_id=?", (fid,))
         c.execute("DELETE FROM entity_aliases WHERE fact_id=?", (fid,))
+        if new_text is not None:
+            self._link_fact(c, fid, new_text)
         if not affected:
             return 0
-        marks = ",".join("?" * len(affected))
-        others = c.execute(
-            "SELECT DISTINCT f.id, f.text FROM fact_entities fe JOIN facts f ON f.id = fe.fact_id"
-            f" WHERE fe.entity_id IN ({marks}) AND f.id != ? AND f.erased_at IS NULL"
-            " AND (f.valid_to IS NULL OR f.valid_to > ?)",
-            (*affected, fid, now)).fetchall()
-        for ofid, otext in others:
-            # Idempotent: the same names map to the same entries, and only
-            # the aliases this fact also teaches come back.
-            self._link_fact(c, int(ofid), str(otext or ""))
+        if taught:
+            # Only aliases can need putting back - another fact's LINKS were
+            # never touched - so only the facts about the entries this one
+            # taught an alias for are read again. Idempotent: the same names
+            # map to the same entries, and only the aliases a fact itself
+            # teaches come back.
+            marks = ",".join("?" * len(taught))
+            others = c.execute(
+                "SELECT DISTINCT f.id, f.text FROM fact_entities fe"
+                " JOIN facts f ON f.id = fe.fact_id"
+                f" WHERE fe.entity_id IN ({marks}) AND f.id != ? AND f.erased_at IS NULL"
+                " AND (f.valid_to IS NULL OR f.valid_to > ?)",
+                (*taught, fid, now)).fetchall()
+            for ofid, otext in others:
+                self._link_fact(c, int(ofid), str(otext or ""))
         wiped = 0
         for eid in sorted(affected):
             if not c.execute("SELECT 1 FROM fact_entities WHERE entity_id=? LIMIT 1",
@@ -1763,15 +1779,11 @@ class MemoryStore:
         try:
             for fid, text in rows:
                 try:
+                    # _link_fact undoes its own half-written rows on failure.
                     self._link_fact(c, int(fid), str(text or ""))
                     n += 1
                 except Exception:
                     self._entity_errors += 1
-                    try:
-                        c.execute("ROLLBACK TO entity_link")
-                        c.execute("RELEASE entity_link")
-                    except sqlite3.Error:
-                        pass
             c.execute("COMMIT")
         except Exception:
             try:
@@ -2688,19 +2700,26 @@ def _query_grams(query: str) -> list:
     """The question's word runs of one to four words, in the order they
     appear, in the alias table's own form - only those with at least one
     word that is not a stop or framing word ("my" alone never matches)."""
-    toks = _key_tokens(query)
-    out = []
+    # A long message is looked at in full up to QUERY_TOKENS_MAX words, and
+    # the list stays under SQLite's oldest limit on "?" marks (999).
+    toks = _key_tokens(query)[:QUERY_TOKENS_MAX]
+    out, seen = [], set()
     for n in (1, 2, 3, 4):
         for i in range(len(toks) - n + 1):
             g = toks[i:i + n]
             if all(t in _STOP or t in _FRAME for t in g):
                 continue
             s = " ".join(g)
-            if s not in out:
+            if s not in seen:
+                seen.add(s)
                 out.append(s)
-            if len(out) >= 60:
+            if len(out) >= 800:
                 return out
     return out
+
+
+#: How many of a question's words the alias lookup reads.
+QUERY_TOKENS_MAX = 200
 
 
 def _clean_name(raw: str) -> str:

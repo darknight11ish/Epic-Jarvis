@@ -1408,6 +1408,18 @@ body {
   outline: none;
 }
 
+/* "About: Priya, Lisbon" under a fact (memory-entities.js): the names are
+   small buttons that open "About <name>", on one wrapping line. */
+.entity-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.about-line {
+  margin: 0 0 6px;
+}
+
 /* One conversation, read-only, under its row. The text is the owner's and
    the model's words, set as text (history-view.js), wrapped as written. */
 .history-transcript {

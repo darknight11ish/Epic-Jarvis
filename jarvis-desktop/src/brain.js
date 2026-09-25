@@ -119,6 +119,27 @@ import {
   SHOW_ALL,
 } from "./memory-used.js";
 import {
+  ABOUT_EMPTY,
+  ABOUT_MAX,
+  aboutTitle,
+  alsoLine,
+  calledLine,
+  entitiesFor,
+  entityById,
+  LINKED_LABEL,
+  MERGE_JOINED,
+  MERGE_KEPT,
+  MERGE_NO,
+  MERGE_NO_TITLE,
+  MERGE_NOTE,
+  MERGE_SOURCE,
+  MERGE_TAG,
+  MERGE_YES,
+  MERGE_YES_TITLE,
+  moreLine,
+  readEntities,
+} from "./memory-entities.js";
+import {
   askDeep,
   leadLine as deepLead,
   POLL_MS as DEEP_POLL_MS,
@@ -158,7 +179,9 @@ const VIEW_SECTIONS = {
   galaxy: ["graph"],
   live: ["attention", "status"],
   faculties: ["models", "compute", "skills", "memory", "memory_pending"],
-  memory: ["memory_facts", "memory_pending"],
+  // memory_entities: the names under each fact, for "About <name>"
+  // (memory-entities.js). Hidden with the other memory lists.
+  memory: ["memory_facts", "memory_pending", "memory_entities"],
   // Read through its own commands (brain/history.rs), not brain_read.
   history: [],
   work: ["jobs", "undo"],
@@ -221,6 +244,9 @@ const dom = {
   memoryAutoList: $("memory-auto-list"),
   memorySavedLine: $("memory-saved-line"),
   memoryProfile: $("memory-profile"),
+  memoryAboutCard: $("memory-about-card"),
+  memoryAboutTitle: $("memory-about-title"),
+  memoryAbout: $("memory-about"),
   jobs: $("jobs"),
   undo: $("undo"),
   contentRisk: $("content-risk"),
@@ -1718,6 +1744,9 @@ function renderProposals() {
  */
 function proposalRow(p) {
   const id = Number(p.id);
+  // memory-entities.js: "are these the same?" (memory wave 3). Its own two
+  // answers - never Keep / Discard, never "Both are true".
+  if (p.source === MERGE_SOURCE) return mergeRow(p, id);
   const flags = Array.isArray(p.flags) ? p.flags.filter((f) => f && typeof f === "object") : [];
   const retire = p.source === "feedback_retire";
   const meta = retire
@@ -1793,7 +1822,148 @@ function proposalRow(p) {
   return item;
 }
 
+/**
+ * An "are these the same?" card (memory-entities.patch): the PC saw a new
+ * name that is likely a typo of one it knows. Yes joins the two (a question
+ * about one then finds the other's facts); no keeps them apart, and the PC
+ * never asks about that pair again. One card, one decision - like every
+ * other card here - and no fact is added, changed or forgotten either way.
+ */
+function mergeRow(p, id) {
+  return row({
+    tag: MERGE_TAG,
+    state: "warn",
+    title: String(p.text || "(no text)"),
+    meta: [MERGE_NOTE, ago(p.created)],
+    actions: [
+      button(MERGE_YES, async () => {
+        await memoryWrite("brain_memory_decide", { id, accept: true }, MERGE_JOINED);
+      }, { title: MERGE_YES_TITLE, live: true }),
+      button(MERGE_NO, async () => {
+        await memoryWrite("brain_memory_decide", { id, accept: false }, MERGE_KEPT);
+      }, { title: MERGE_NO_TITLE, live: true }),
+    ],
+  });
+}
+
+/* ==========================================================================
+   "About <name>" (memory wave 3, 2026-09-25; memory-entities.js)
+
+   Under a fact still in use: the people and things the PC linked it to,
+   each a small button. It opens "About <name>": that entry's facts, word
+   for word, read by id (memory_used - hidden like every memory list), with
+   what the owner calls them. A read only; changes stay on the fact lists.
+   ========================================================================== */
+
+const aboutL = { id: null, view: null, error: "", loading: false };
+
+function entitiesView() {
+  return readEntities(state.data.memory_entities);
+}
+
+/** The "About: Priya, Lisbon" line under one fact, or null. */
+function linkedNode(f) {
+  const ents = entitiesFor(entitiesView(), f.id);
+  if (!ents.length) return null;
+  const line = el("span", "row-meta entity-links");
+  line.append(el("span", "", `${LINKED_LABEL} `));
+  for (const e of ents) {
+    const b = button(e.name, () => openAbout(e.id), { title: aboutTitle(e.name) });
+    b.classList.add("entity-link");
+    b.dataset.entity = String(e.id);
+    line.append(b, " ");
+  }
+  return line;
+}
+
+function withLinks(item, f) {
+  const links = linkedNode(f);
+  if (links) {
+    const main = item.querySelector(".row-main");
+    (main || item).append(links);
+  }
+  return item;
+}
+
+async function openAbout(entityId) {
+  aboutL.id = Number(entityId);
+  aboutL.view = null;
+  aboutL.error = "";
+  paintAbout();
+  if (dom.memoryAboutCard) dom.memoryAboutCard.scrollIntoView({ block: "nearest" });
+  const e = entityById(entitiesView(), aboutL.id);
+  if (!e || !e.factIds.length || !IS_TAURI) return paintAbout();
+  aboutL.loading = true;
+  try {
+    aboutL.view = readUsed(await invoke("memory_used", { ids: e.factIds.slice(0, ABOUT_MAX) }));
+  } catch (error) {
+    aboutL.error = errorText(error);
+  } finally {
+    aboutL.loading = false;
+  }
+  paintAbout();
+}
+
+function closeAbout() {
+  aboutL.id = null;
+  aboutL.view = null;
+  paintAbout();
+}
+
+function paintAbout() {
+  const card = dom.memoryAboutCard;
+  const box = dom.memoryAbout;
+  if (!card || !box) return;
+  const ents = entitiesView();
+  const e = aboutL.id === null ? null : entityById(ents, aboutL.id);
+  if (!e || ents.hidden) {
+    card.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  card.hidden = false;
+  if (dom.memoryAboutTitle) dom.memoryAboutTitle.textContent = aboutTitle(e.name);
+  box.replaceChildren();
+  for (const line of [calledLine(e.aliases), alsoLine(e.also)].filter(Boolean)) {
+    box.append(el("p", "about-line", line));
+  }
+  const v = aboutL.view;
+  if (!e.factIds.length) {
+    box.append(el("p", "empty", ABOUT_EMPTY));
+  } else if (!v) {
+    box.append(el("p", `empty${aboutL.error ? " failed" : ""}`, aboutL.error
+      ? `Could not read these facts: ${aboutL.error}` : "Reading…"));
+  } else if (!v.available) {
+    box.append(el("p", "empty", v.why));
+  } else if (v.hidden) {
+    box.append(hiddenNode(v.hiddenCount || e.factIds.length, "facts"));
+  } else {
+    const list = el("div", "rows about-rows");
+    for (const f of v.facts) {
+      const marks = [];
+      if (f.pinned) marks.push(PINNED_MARK);
+      if (!f.current && !f.erasedAt) marks.push(NOT_CURRENT_MARK);
+      const item = row({
+        tag: "fact",
+        state: f.current ? "ok" : "idle",
+        title: f.erasedAt ? erasedLine(f.erasedAt) : (f.text || "(no text)"),
+        meta: marks,
+        actions: [],
+      });
+      item.dataset.id = String(f.id);
+      list.append(item);
+    }
+    box.append(list);
+    const more = moreLine(e.factIds.length - Math.min(e.factIds.length, ABOUT_MAX));
+    if (more) box.append(el("p", "empty", more));
+  }
+  const foot = el("div", "row-actions");
+  foot.append(button("Close", closeAbout));
+  box.append(foot);
+}
+
 function renderFacts() {
+  paintAbout();
   const body = state.data.memory_facts || {};
   const why = unavailable("memory_facts");
   if (why) {
@@ -1887,7 +2057,7 @@ function renderFacts() {
         actions.push(button(ERASE_LABEL, () => eraseFact(f),
           { danger: true, live: true, title: ERASE_TITLE }));
       }
-      return row({
+      const item = row({
         tag: erased !== null ? "erased" : current ? "fact" : "retired",
         state: current && erased === null ? "ok" : undefined,
         title: erased !== null ? erasedLine(erased) : String(f.text || "(no text)"),
@@ -1911,6 +2081,9 @@ function renderFacts() {
         ],
         actions,
       });
+      // The names it is linked to, each opening "About <name>" - on a fact
+      // in use, in today's view only (the links are today's).
+      return current && !past && erased === null ? withLinks(item, f) : item;
     },
     past
       ? "Jarvis knew nothing on that date."
@@ -3016,6 +3189,7 @@ function paintAutoList() {
       ],
     });
     item.dataset.id = String(f.id);
+    if (!past) withLinks(item, f);
     if (f.provenance === "voice") {
       const marks = el("span", "history-marks");
       const mic = el("span", "history-mark history-mark-voice", VOICE_MARK);
