@@ -916,8 +916,11 @@ def t_the_routes_answer():
         check("GET ?id= for something gone: 404", S.handle_get("id=s0000000000")[0] == 404)
         check("act by id", S.handle_act({"id": tid, "do": "pause"})[0] == 200)
         check("a bad kind is 400", S.handle_add({"kind": "everything"})[0] == 400)
+        # The four built in; kinds added later (the standby schedule) have
+        # their own words and their own tests.
         check("the lock-screen words are the kind's, never the job's",
-              {k.name: k.lock_screen for k in S.KINDS.values()} == {
+              {k.name: k.lock_screen for k in S.KINDS.values()
+               if k.name in ("timer", "alarm", "reminder", "todo")} == {
                   "timer": "Jarvis: your timer is done.", "alarm": "Jarvis: alarm.",
                   "reminder": "Jarvis: a reminder is due.",
                   "todo": "Jarvis: a to-do item is due."})

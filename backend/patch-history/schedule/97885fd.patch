@@ -141,10 +141,10 @@
      # "unknown", and the notice would say it might leave the machine.
      "models_create": ("yes", "local", "makes a tuned copy of a model you already downloaded, with Ollama on this PC; nothing is downloaded or sent anywhere, and jarvis-primary is not changed"),
 +    # schedule.patch (jarvis_schedule.py). Setting up something that repeats
-+    # ("every weekday at 7", a standby schedule): it acts only on this PC,
-+    # and deleting it is immediate. Without this line the action would be
-+    # read as "unknown", and the notice would say it might leave the machine.
-+    "schedule_repeat": ("yes", "local", "sets up a reminder, an alarm or a standby schedule that repeats, on this PC; nothing is sent anywhere, and deleting it is immediate"),
++    # ("every weekday at 7"): it only rings on this PC and the apps, and
++    # deleting it is immediate. Without this line the action would be read
++    # as "unknown", and the notice would say it might leave the machine.
++    "schedule_repeat": ("yes", "local", "sets up a reminder or alarm that repeats, on this PC; nothing is sent anywhere, and deleting it is immediate"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",

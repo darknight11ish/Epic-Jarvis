@@ -330,7 +330,8 @@ fun BrainScreen(
                             }
                             Text(
                                 "Quiet still answers but starts nothing itself. Standby frees " +
-                                    "the graphics card; the next answer takes 5-15 seconds.",
+                                    "the graphics card; the next answer takes 5-15 seconds. " +
+                                    "To go on standby every night, see Standby schedule under Coming up.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = chrome.textLo,
                             )

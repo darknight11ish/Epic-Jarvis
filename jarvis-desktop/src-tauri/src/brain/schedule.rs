@@ -17,6 +17,13 @@
 //! * [`brain_schedule_add_todo`] - `POST /api/schedule/add {"kind": "todo",
 //!   "text"}`: one to-do item, in the owner's own words. Held on a stale link.
 //!   Timers and reminders are set by saying or typing them to Jarvis.
+//! * [`brain_schedule_add_standby`] - `POST /api/schedule/add {"kind":
+//!   "standby", "repeat": {"every": "day", "at", "until"}}`: the standby
+//!   schedule (backend `jarvis_standby_schedule.py`) - Standby, the same one
+//!   as the tray's Change power mode, on a timetable. It repeats, so the PC
+//!   raises ONE approval card (`schedule_repeat`) and sets nothing up until
+//!   it is approved. Held on a stale link. Turning it off is Delete on its
+//!   row, like any job.
 //!
 //! And one thing that is not a command: [`toast_fired`], which stream.rs
 //! calls when a `schedule` event says a job went off. The event carries the
@@ -173,6 +180,45 @@ pub(crate) fn todo_body(text: &str) -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({ "kind": "todo", "text": t }))
 }
 
+/// A time of day as the PC wants it: "HH:MM", 24-hour, tidied ("1:00" ->
+/// "01:00"). None when it is not one.
+fn hhmm(v: &str) -> Option<String> {
+    let (h, m) = v.trim().split_once(':')?;
+    if h.is_empty() || h.len() > 2 || m.len() != 2 {
+        return None;
+    }
+    if !h.chars().all(|c| c.is_ascii_digit()) || !m.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let (h, m): (u32, u32) = (h.parse().ok()?, m.parse().ok()?);
+    (h <= 23 && m <= 59).then(|| format!("{h:02}:{m:02}"))
+}
+
+/// Both apps' words for two times that cannot be a standby schedule.
+pub(crate) const STANDBY_BAD_TIMES: &str =
+    "Write each time as HH:MM, like 01:00, and pick two different times.";
+
+/// The body of a new standby schedule: every day, from `start` to `end`.
+/// The PC checks the same things and says so; this refuses early, in the
+/// words both apps use.
+pub(crate) fn standby_body(start: &str, end: &str) -> Result<serde_json::Value, String> {
+    match (hhmm(start), hhmm(end)) {
+        (Some(at), Some(until)) if at != until => Ok(serde_json::json!({
+            "kind": "standby",
+            "repeat": { "every": "day", "at": at, "until": until },
+        })),
+        _ => Err(STANDBY_BAD_TIMES.to_string()),
+    }
+}
+
+/// Whether a `schedule` event that went off should be shown at all. The PC
+/// says `"notify": false` for a kind that tells nobody - the standby
+/// schedule at 01:00 - and then there is no toast (the phone shows no
+/// notification either).
+pub(crate) fn wants_toast(data: &serde_json::Value) -> bool {
+    data.get("notify").and_then(|v| v.as_bool()) != Some(false)
+}
+
 /// The toast's title for a kind - both apps' words.
 pub(crate) fn toast_title(kind: &str) -> &'static str {
     match kind {
@@ -255,6 +301,9 @@ fn first_time(id: &str, fired_at: i64) -> bool {
 /// the event stream up. Nothing is shown for a job that went off more than a
 /// day ago (the PC keeps them that long) or one already shown.
 pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) {
+    if !wants_toast(&data) {
+        return;
+    }
     let Some(id) = data.get("id").and_then(|v| v.as_str()).map(str::to_string) else {
         return;
     };
@@ -341,6 +390,20 @@ pub async fn brain_schedule_add_todo(
 ) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
     let body = todo_body(&text)?;
+    post(&app, "/api/schedule/add", body).await
+}
+
+/// The standby schedule: every day from `start` to `end` ("HH:MM"). The PC
+/// raises one approval card; nothing is set up until it is approved. Held
+/// on a stale link.
+#[tauri::command]
+pub async fn brain_schedule_add_standby(
+    app: AppHandle,
+    start: String,
+    end: String,
+) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    let body = standby_body(&start, &end)?;
     post(&app, "/api/schedule/add", body).await
 }
 
@@ -468,6 +531,44 @@ mod tests {
             toast_words("timer", Some(&timer), false).1,
             "The pasta timer is done."
         );
+    }
+
+    #[test]
+    fn a_standby_schedule_is_two_times_and_nothing_else() {
+        assert_eq!(
+            standby_body("1:00", "07:00").unwrap(),
+            serde_json::json!({"kind": "standby",
+                               "repeat": {"every": "day", "at": "01:00", "until": "07:00"}})
+        );
+        assert_eq!(
+            standby_body(" 23:30 ", "06:05").unwrap()["repeat"]["at"],
+            "23:30"
+        );
+        for (a, b) in [
+            ("01:00", "01:00"),
+            ("24:00", "07:00"),
+            ("01:60", "07:00"),
+            ("1", "07:00"),
+            ("", ""),
+            ("01:00", "7:0"),
+            ("-1:00", "07:00"),
+        ] {
+            assert_eq!(
+                standby_body(a, b).unwrap_err(),
+                STANDBY_BAD_TIMES,
+                "{a} {b}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_kind_that_notifies_nobody_gets_no_toast() {
+        assert!(!wants_toast(&serde_json::json!(
+            {"id": "s0123456789", "kind": "standby", "state": "fired", "notify": false}
+        )));
+        assert!(wants_toast(&serde_json::json!(
+            {"id": "s0123456789", "kind": "timer", "state": "fired"}
+        )));
     }
 
     #[test]

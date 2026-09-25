@@ -1210,6 +1210,19 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { ok: true, id: args.id, said: { delete: "Deleted.", done: "Marked done.",
               pause: "Paused.", resume: "Resumed." }[args.action] };
           }
+          // The standby schedule: the PC raises one card and lists it as
+          // waiting (jarvis_schedule.handle_add, 202).
+          case "brain_schedule_add_standby": {
+            window.__scheduleCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const sc = window.__schedule;
+            const job = { id: "s" + (0xb000000000 + sc.jobs.length).toString(16), kind: "standby",
+                          text: "", state: "waiting", repeats: true,
+                          repeat: `every day from ${args.start} to ${args.end}` };
+            sc.jobs.push(job);
+            return { ok: true, waiting: true, job,
+                     said: "It repeats, so it waits for your yes on the card." };
+          }
           case "brain_schedule_add_todo": {
             window.__scheduleCalls.push({ cmd, ...args });
             const sc = window.__schedule;

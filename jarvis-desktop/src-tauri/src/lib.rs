@@ -733,6 +733,7 @@ pub fn run() {
             brain::schedule::brain_schedule,
             brain::schedule::brain_schedule_act,
             brain::schedule::brain_schedule_add_todo,
+            brain::schedule::brain_schedule_add_standby,
             brain::used::memory_used,
             brain::history::brain_history_list,
             brain::history::brain_history_open,

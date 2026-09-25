@@ -19,6 +19,11 @@
  * - CONTROL: the Rust toasts on `fired`, reads the words by id, and shows
  *   only the kind's lock-screen words while App lock or hiding is on; the
  *   phone says the same words.
+ * - the standby schedule (2026-09-25): two times and Set up, ONE
+ *   brain_schedule_add_standby (the PC raises one card), then its row in the
+ *   list and a pointer instead of the form; held on a stale link; its line
+ *   says how the last end went; no toast for a kind the PC says notifies
+ *   nobody; the phone says the same words.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -37,6 +42,15 @@ import {
   metaOf,
   readSchedule,
   SCHEDULE_MISSING,
+  STANDBY_ADD,
+  STANDBY_BAD_TIMES,
+  STANDBY_DETAIL,
+  STANDBY_END_LABEL,
+  STANDBY_IS_SET,
+  STANDBY_START_LABEL,
+  STANDBY_TITLE,
+  standbyOf,
+  standbyTimes,
   titleOf,
   TOAST_TITLES,
   TODO_TITLE,
@@ -123,6 +137,38 @@ await check("countdowns, lengths and each row's lines", async () => {
   }
   const bad = readSchedule({ jobs: [{ id: "all", kind: "timer" }, { id: "*" }], todo: [] });
   assert.equal(bad.jobs.length, 0, "a row without a real id was kept");
+});
+
+await check("the standby schedule's words, title, lines and times", async () => {
+  const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt")
+    .replace(/"\s*\+\s*\n?\s*"/g, "");
+  for (const words of [STANDBY_TITLE, STANDBY_DETAIL, STANDBY_START_LABEL, STANDBY_END_LABEL,
+    STANDBY_ADD, STANDBY_IS_SET, STANDBY_BAD_TIMES]) {
+    assert.ok(kt.includes(`"${words}"`), `the phone does not say: ${words}`);
+  }
+  const html = read("src/brain.html");
+  assert.ok(html.includes(`>${STANDBY_TITLE}</h3>`));
+  assert.ok(html.includes(`>${STANDBY_DETAIL}</p>`));
+  assert.ok(html.includes(`>${STANDBY_IS_SET}</p>`));
+  assert.ok(read("src-tauri/src/brain/schedule.rs").includes(`"${STANDBY_BAD_TIMES}"`));
+  const job = { id: "s00000000aa", kind: "standby", text: "", state: "active", due: NOW + 60,
+    when: "awake at 07:00 today", repeats: true, repeat: "every day from 01:00 to 07:00",
+    note: "Went on standby at 01:00." };
+  const v = readSchedule({ jobs: [job], todo: [] });
+  assert.equal(titleOf(v.jobs[0]), STANDBY_TITLE);
+  assert.equal(titleOf({ ...v.jobs[0], hidden: true }), STANDBY_TITLE, "hidden words hid the title");
+  assert.deepEqual(metaOf(v.jobs[0]), ["every day from 01:00 to 07:00",
+    "next: awake at 07:00 today", "Went on standby at 01:00."]);
+  assert.deepEqual(actionsOf(v.jobs[0]), ["pause", "delete"]);
+  assert.equal(standbyOf(v).id, "s00000000aa");
+  assert.equal(standbyOf(readSchedule({ jobs: JOBS, todo: [] })), null);
+  assert.deepEqual(standbyTimes("1:00", "07:00"), { at: "01:00", until: "07:00" });
+  for (const [a, b] of [["01:00", "01:00"], ["24:00", "07:00"], ["", "07:00"], ["7", "8"]]) {
+    assert.equal(standbyTimes(a, b), null, `${a} ${b}`);
+  }
+  // The PC's own words for the kind.
+  const py = readRepo("backend/jarvis_standby_schedule.py");
+  assert.ok(py.includes('"standby schedule"') && py.includes('edges=("on standby", "awake")'));
 });
 
 /* ── The Brain window ─────────────────────────────────────────────────── */
@@ -256,6 +302,55 @@ await check("a `schedule` event reads the list again", async () => {
   assert.ok(after > before, `${before} -> ${after}`);
 });
 
+await check("the standby schedule: two times, Set up, ONE request, then its row", async () => {
+  const page = await workTab({ schedule: { jobs: [JOBS[0]], todo: [] } });
+  const formShown = await page.locator("#standby-form").isVisible();
+  const setHidden = await page.locator("#standby-is-set").isHidden();
+  const start = await page.locator("#standby-start").inputValue();
+  const end = await page.locator("#standby-end").inputValue();
+  let asked = false;
+  page.on("dialog", (d) => { asked = true; d.dismiss(); });
+  await page.locator("#standby-start").fill("23:30");
+  await page.locator("#standby-end").fill("06:45");
+  await page.locator("#standby-add").click();
+  await page.waitForTimeout(600);
+  const sent = await page.evaluate(() => window.__scheduleCalls);
+  const rows = await page.locator("#coming-up .row-item").allInnerTexts();
+  const buttons = await page.locator("#coming-up .row-item").nth(1).locator("button").allInnerTexts();
+  const formAfter = await page.locator("#standby-form").isHidden();
+  const setAfter = await page.locator("#standby-is-set").isVisible();
+  await page.close();
+  assert.equal(formShown && setHidden, true, "the form was not offered");
+  assert.equal(start, "01:00");
+  assert.equal(end, "07:00");
+  assert.equal(asked, false, "Set up asked a question in the app - the card on the PC is the question");
+  assert.deepEqual(sent, [{ cmd: "brain_schedule_add_standby", start: "23:30", end: "06:45" }]);
+  assert.equal(rows.length, 2);
+  assert.match(rows[1], new RegExp(STANDBY_TITLE));
+  assert.match(rows[1], /every day from 23:30 to 06:45/);
+  assert.match(rows[1], new RegExp(WAITING.replace(/[.]/g, "\\.")));
+  assert.deepEqual(buttons, ["Delete"]);
+  assert.equal(formAfter && setAfter, true, "a second standby schedule was offered");
+});
+
+await check("the standby schedule is held on a stale link, and says how it last went", async () => {
+  const job = { id: "s00000000aa", kind: "standby", text: "", state: "active", due: NOW + 60,
+    left: 60, when: "awake at 07:00 today", repeats: true, repeat: "every day from 01:00 to 07:00",
+    note: "Skipped standby at 01:00: a task was running, and standby would unload the model it uses." };
+  const stale = await workTab({ schedule: { jobs: [], todo: [] }, link: { stale: true } });
+  const disabled = await stale.locator("#standby-add").isDisabled();
+  await stale.close();
+  assert.equal(disabled, true, "Set up was offered on a stale link");
+  const page = await workTab({ schedule: { jobs: [job], todo: [] }, security: { hidden: true } });
+  const text = await page.locator("#coming-up").innerText();
+  const buttons = await page.locator("#coming-up .row-item").first().locator("button").allInnerTexts();
+  await page.close();
+  assert.match(text, new RegExp(STANDBY_TITLE));
+  assert.match(text, /Skipped standby at 01:00/);
+  assert.match(text, /next: awake at 07:00 today/);
+  assert.deepEqual(buttons, ["Pause", "Delete"]);
+});
+
 await check("an answer made without the model shows the Done line", async () => {
   const route = (r) => "\u001fjarvis-route:" + JSON.stringify(r);
   const page = await K.open(browser, base, "index.html", {
@@ -285,9 +380,12 @@ await check("CONTROL: toasts on fired only, words by id, lock-screen words while
   const rs = read("src-tauri/src/brain/schedule.rs");
   const toast = rs.slice(rs.indexOf("pub async fn toast_fired("));
   const body = toast.slice(0, toast.indexOf("\n}\n"));
+  assert.ok(body.indexOf("wants_toast(&data)") >= 0
+    && body.indexOf("wants_toast(&data)") < body.indexOf("read_job("),
+    "a kind that notifies nobody (the standby schedule at 01:00) would still be toasted");
   assert.match(body, /security\.app_lock \|\| crate::lock::private_hidden/);
   assert.match(body, /first_time\(/, "a replayed event could toast twice");
-  for (const cmd of ["brain_schedule_act", "brain_schedule_add_todo"]) {
+  for (const cmd of ["brain_schedule_act", "brain_schedule_add_todo", "brain_schedule_add_standby"]) {
     const f = rs.slice(rs.indexOf(`pub async fn ${cmd}(`));
     const b = f.slice(0, f.indexOf("\n}\n"));
     assert.ok(b.indexOf("require_link_live") >= 0 && b.indexOf("require_link_live") < b.indexOf("post("),
@@ -295,7 +393,8 @@ await check("CONTROL: toasts on fired only, words by id, lock-screen words while
   }
   const list = rs.slice(rs.indexOf("pub async fn brain_schedule("));
   assert.match(list.slice(0, list.indexOf("\n}\n")), /private_hidden/);
-  for (const cmd of ["brain_schedule", "brain_schedule_act", "brain_schedule_add_todo"]) {
+  for (const cmd of ["brain_schedule", "brain_schedule_act", "brain_schedule_add_todo",
+    "brain_schedule_add_standby"]) {
     assert.match(read("src-tauri/build.rs"), new RegExp(`"${cmd}"`));
     assert.match(read("src-tauri/src/lib.rs"), new RegExp(`brain::schedule::${cmd},`));
     const sets = read("src-tauri/permissions/surfaces.toml").split("[[set]]").slice(1);

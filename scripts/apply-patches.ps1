@@ -454,6 +454,7 @@ $SHIPPED = @(
     'jarvis_scrub.py'            # log-scrub.patch: passwords, keys and the token kept out of backend.log
     'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
     'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
+    'jarvis_standby_schedule.py' # the standby schedule ("standby from 01:00 to 07:00"): a kind of job on the one scheduler, no patch
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

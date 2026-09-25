@@ -126,4 +126,57 @@ class ScheduleTest {
         assertFalse(Schedule.quickFromRouteHeader("not json"))
         assertEquals("Done - answered on this PC without the AI model.", Schedule.DONE_LINE)
     }
+
+    // The standby schedule (backend jarvis_standby_schedule.py, 2026-09-25):
+    // the desktop's coming-up.js says the same, and its tests/coming-up.mjs
+    // checks these words are in Schedule.kt.
+
+    @Test
+    fun theStandbyScheduleIsItsOwnRowWithHowItLastWent() {
+        val v = Schedule.parse(
+            obj(
+                """{"jobs":[{"id":"s00000000aa","kind":"standby","text":"","state":"active",
+                  "repeats":true,"repeat":"every day from 01:00 to 07:00",
+                  "when":"awake at 07:00 today","note":"Went on standby at 01:00.",
+                  "notify":false}],"todo":[]}""",
+            ),
+        )!!
+        val job = v.jobs.single()
+        assertEquals(Schedule.STANDBY_TITLE, Schedule.titleOf(job))
+        assertEquals(Schedule.STANDBY_TITLE, Schedule.titleOf(Schedule.hide(v).jobs.single()))
+        assertEquals(
+            listOf("every day from 01:00 to 07:00", "next: awake at 07:00 today", "Went on standby at 01:00."),
+            Schedule.metaOf(job),
+        )
+        assertEquals(listOf("pause", "delete"), Schedule.actionsOf(job))
+        assertEquals("s00000000aa", Schedule.standbyOf(v)?.id)
+        assertNull(Schedule.standbyOf(Schedule.parse(list)))
+    }
+
+    @Test
+    fun aStandbyScheduleIsTwoTimesAndNothingElse() {
+        assertEquals("01:00" to "07:00", Schedule.standbyTimes("1:00", "07:00"))
+        assertEquals("23:30" to "06:05", Schedule.standbyTimes(" 23:30 ", "06:05"))
+        for ((a, b) in listOf("01:00" to "01:00", "24:00" to "07:00", "01:60" to "07:00",
+            "1" to "07:00", "" to "", "01:00" to "7:0", "-1:00" to "07:00")) {
+            assertNull("$a $b", Schedule.standbyTimes(a, b))
+            assertNull("$a $b", Schedule.standbyBody(a, b))
+        }
+        val body = obj(Schedule.standbyBody("1:00", "07:00")!!)
+        assertEquals(
+            obj("""{"kind":"standby","repeat":{"every":"day","at":"01:00","until":"07:00"}}"""),
+            body,
+        )
+    }
+
+    @Test
+    fun aKindThatNotifiesNobodyShowsNoNotification() {
+        assertNull(
+            Schedule.firedFrom(obj("""{"id":"s00000000aa","kind":"standby","state":"fired","notify":false}""")),
+        )
+        assertEquals(
+            "s0000000001" to "timer",
+            Schedule.firedFrom(obj("""{"id":"s0000000001","kind":"timer","state":"fired","late":false}""")),
+        )
+    }
 }

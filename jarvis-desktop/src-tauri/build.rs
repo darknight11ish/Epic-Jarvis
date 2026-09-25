@@ -238,9 +238,11 @@ fn main() {
             // reminders and the to-do list - a read, ONE job per change
             // (pause, resume, delete, done, add time), and one new to-do
             // item. No card; every change held on a stale link. Brain only.
+            // And the standby schedule: one card on the PC (it repeats).
             "brain_schedule",
             "brain_schedule_act",
             "brain_schedule_add_todo",
+            "brain_schedule_add_standby",
             // Quickbar
             "hide_quickbar",
             "resize_quickbar",

@@ -77,6 +77,15 @@ job waits, doing nothing, until the card is approved. Denied, timed out or
 refused: the job is removed. Deleting it while the card waits withdraws it.
 Stopping or deleting any job is immediate - it only makes things quieter.
 
+KINDS THAT PLUG IN (register_kind)
+The first is the standby schedule (jarvis_standby_schedule.py, 2026-09-25):
+a WINDOW - {"every": "day", "at": "01:00", "until": "07:00"} - that goes
+off at both ends, one of its kind at a time, and notifies nobody (its event
+says "notify": false, so neither app shows a toast or a notification at
+01:00). It is set up by the same schedule_repeat card, listing the next
+three windows, and deleted like any job. KIND_MODULES below imports it
+before the loop first starts.
+
 NO BULK
 Every change names ONE job. There is no "delete all", no "clear the list",
 no "mark everything done" - here, in the routes, or in either app.
@@ -152,13 +161,34 @@ MONTHS = ("January", "February", "March", "April", "May", "June", "July", "Augus
 class Kind:
     def __init__(self, name: str, noun: str, lock_screen: str, *, has_text: bool,
                  on_fire: Optional[Callable[[str], None]] = None,
-                 owner_listed: bool = True):
+                 owner_listed: bool = True, notify: bool = True, window: bool = False,
+                 single: bool = False, edges: tuple = ("", ""), about: tuple = (),
+                 note: Optional[Callable[[str], str]] = None):
         self.name = name
         self.noun = noun                 # "timer", "reminder"
         self.lock_screen = lock_screen   # what a locked phone may show
         self.has_text = has_text
         self.on_fire = on_fire
         self.owner_listed = owner_listed
+        # False: going off is not something to tell the owner about (the
+        # standby schedule, at 01:00). The event then carries
+        # "notify": false and neither app shows a notification or a toast.
+        self.notify = notify
+        # True: a job of this kind is a WINDOW - {"every": "day", "at":
+        # "01:00", "until": "07:00"} - and goes off at both ends. on_fire
+        # reads in_window() to know which end it is, so a late start and a
+        # late end found together (the PC was off all night) agree.
+        self.window = window
+        # True: at most one job of this kind on the list at a time.
+        self.single = single
+        # The words for a window's two ends in the list: ("on standby",
+        # "awake") -> "next: awake at 07:00 tomorrow".
+        self.edges = edges
+        # Extra lines for the approval card, saying what it does.
+        self.about = tuple(about)
+        # note(job_id) -> one sentence about how it last went ("" for none),
+        # shown under the job in both apps. Never raises into the list.
+        self.note = note
 
 
 KINDS: dict = {}
@@ -166,15 +196,21 @@ KINDS: dict = {}
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,
                   on_fire: Optional[Callable[[str], None]] = None,
-                  owner_listed: bool = True) -> Kind:
+                  owner_listed: bool = True, notify: bool = True, window: bool = False,
+                  single: bool = False, edges: tuple = ("", ""), about: tuple = (),
+                  note: Optional[Callable[[str], str]] = None) -> Kind:
     """Add a kind of job. For the features still to come (briefing, tidy,
     sleep): their job goes off through the same loop, the same missed-while-
     off rule and the same event; `on_fire(job_id)` is called after the event,
-    on its own thread, and nothing it raises stops the loop."""
+    on its own thread, and nothing it raises stops the loop.
+
+    The standby schedule (jarvis_standby_schedule.py) is the first: a
+    window kind, single, that notifies nobody."""
     if not re.fullmatch(r"[a-z][a-z_]{1,23}", str(name or "")):
         raise ValueError("a kind is a short lower-case word")
     k = Kind(name, noun, lock_screen, has_text=has_text, on_fire=on_fire,
-             owner_listed=owner_listed)
+             owner_listed=owner_listed, notify=notify, window=window, single=single,
+             edges=edges, about=about, note=note)
     KINDS[name] = k
     return k
 
@@ -314,6 +350,8 @@ def next_at(hh: int, mm: int, after: float, days: Optional[set] = None) -> float
 #   {"every": "weekday", "at": "07:00"}                   Monday to Friday
 #   {"every": "week",    "at": "09:00", "days": [0, 3]}   0 = Monday
 #   {"every": "hours",   "hours": 2, "start": <epoch>}    every N hours from start
+# and, for a WINDOW kind only (Kind.window - the standby schedule):
+#   {"every": "day", "at": "01:00", "until": "07:00"}     goes off at both ends
 # Anything else is refused with the reason.
 
 def _hhmm(s) -> tuple:
@@ -326,11 +364,24 @@ def _hhmm(s) -> tuple:
     return hh, mm
 
 
-def check_rule(rule, now: Optional[float] = None) -> dict:
-    """The rule, tidied, or ValueError with a sentence."""
+def check_rule(rule, now: Optional[float] = None, *, window: bool = False) -> dict:
+    """The rule, tidied, or ValueError with a sentence. `window`: the rule
+    is for a window kind, and must be every day from one time to another."""
     if not isinstance(rule, dict):
         raise ValueError("a repeat is an object like {\"every\": \"day\", \"at\": \"07:00\"}")
     every = str(rule.get("every") or "").strip().lower()
+    if window:
+        # Every day only, for now: it is what the owner asked for ("sleep at
+        # 01:00, wake at 07:00, every day"), and the one both apps offer.
+        if every != "day":
+            raise ValueError("a standby schedule is every day, from one time to another")
+        hh, mm = _hhmm(rule.get("at"))
+        uh, um = _hhmm(rule.get("until"))
+        if (hh, mm) == (uh, um):
+            raise ValueError("the start and the end are the same time - pick two different times")
+        return {"every": "day", "at": f"{hh:02d}:{mm:02d}", "until": f"{uh:02d}:{um:02d}"}
+    if rule.get("until") is not None:
+        raise ValueError("only a standby schedule has an end time")
     if every in ("day", "weekday"):
         hh, mm = _hhmm(rule.get("at"))
         return {"every": every, "at": f"{hh:02d}:{mm:02d}"}
@@ -359,7 +410,12 @@ def check_rule(rule, now: Optional[float] = None) -> dict:
 
 
 def next_run(rule: dict, after: float) -> float:
-    """The first time the rule goes off strictly after `after`."""
+    """The first time the rule goes off strictly after `after`. A window
+    goes off at both ends: whichever comes first."""
+    if rule.get("until"):
+        hh, mm = _hhmm(rule["at"])
+        uh, um = _hhmm(rule["until"])
+        return min(next_at(hh, mm, after), next_at(uh, um, after))
     every = rule["every"]
     if every == "hours":
         step = rule["hours"] * 3600.0
@@ -382,6 +438,44 @@ def next_runs(rule: dict, after: float, n: int = NEXT_SHOWN) -> list:
     for _ in range(n):
         t = next_run(rule, t)
         out.append(t)
+    return out
+
+
+def last_at(hh: int, mm: int, at_or_before: float) -> float:
+    """The last time the clock read hh:mm at or before `at_or_before`.
+    Two days back is always far enough: every day has an hh:mm (a time the
+    clocks skip counts as the moment they jump - next_at)."""
+    t = next_at(hh, mm, at_or_before - 2 * 86400 - 7200)
+    prev = t
+    while t <= at_or_before:
+        prev = t
+        t = next_at(hh, mm, t)
+    return prev
+
+
+def in_window(rule: dict, now: float) -> bool:
+    """Is `now` inside a window rule - after its latest start, before the
+    end that follows it? False for a rule that is not a window.
+
+    Worked out from the clock, not from which end last went off, so two
+    ends found overdue together (the PC was off all night: 01:00 and 07:00
+    both missed) come to the same answer - awake - whichever runs first."""
+    if not rule or not rule.get("until"):
+        return False
+    hh, mm = _hhmm(rule["at"])
+    uh, um = _hhmm(rule["until"])
+    return last_at(hh, mm, now) > last_at(uh, um, now)
+
+
+def next_windows(rule: dict, after: float, n: int = NEXT_SHOWN) -> list:
+    """The next `n` windows that START after `after`: [(start, end), ...]."""
+    hh, mm = _hhmm(rule["at"])
+    uh, um = _hhmm(rule["until"])
+    out, t = [], after
+    for _ in range(n):
+        start = next_at(hh, mm, t)
+        out.append((start, next_at(uh, um, start)))
+        t = start
     return out
 
 
@@ -424,6 +518,16 @@ def long_date(t: float) -> str:
     return f"{WEEKDAYS[lt.tm_wday]} {lt.tm_mday} {MONTHS[lt.tm_mon - 1]} at {clock(t)}"
 
 
+def window_words(start: float, end: float) -> str:
+    """'Saturday 26 September, 01:00 to 07:00', or across midnight 'Friday
+    25 September at 23:00 to Saturday at 07:00' - for the card."""
+    a, b = time.localtime(start), time.localtime(end)
+    day = f"{WEEKDAYS[a.tm_wday]} {a.tm_mday} {MONTHS[a.tm_mon - 1]}"
+    if (a.tm_year, a.tm_mon, a.tm_mday) == (b.tm_year, b.tm_mon, b.tm_mday):
+        return f"{day}, {clock(start)} to {clock(end)}"
+    return f"{day} at {clock(start)} to {WEEKDAYS[b.tm_wday]} at {clock(end)}"
+
+
 def length_words(seconds: float) -> str:
     """'10 minutes', '1 hour 30 minutes', '45 seconds'."""
     s = int(round(max(0.0, float(seconds))))
@@ -443,6 +547,8 @@ def rule_words(rule: Optional[dict]) -> str:
     if not rule:
         return ""
     every = rule.get("every")
+    if rule.get("until"):
+        return f"every day from {rule['at']} to {rule['until']}"
     if every == "day":
         return f"every day at {rule['at']}"
     if every == "weekday":
@@ -647,13 +753,20 @@ class Scheduler:
 
     def add_repeat(self, kind: str, rule, text: str = "", source: str = "app") -> dict:
         """A repeating job. It WAITS until one approval card is approved."""
-        if kind not in ("alarm", "reminder"):
+        k = KINDS.get(kind)
+        window = bool(k is not None and k.window)
+        if kind not in ("alarm", "reminder") and not window:
             raise ValueError("only alarms and reminders can repeat")
         now = self.now()
-        rule = check_rule(rule, now)
-        text = self._clean_text(text, kind)
+        rule = check_rule(rule, now, window=window)
+        text = self._clean_text(text, kind) if k.has_text else ""
         with self._lock, self._db() as c:
             self._room(c, kind)
+            if k.single and c.execute(
+                    "SELECT 1 FROM jobs WHERE kind = ? AND state IN ('active','paused','waiting')",
+                    (kind,)).fetchone() is not None:
+                raise OverflowError(f"there is already a {k.noun} - delete it first to set "
+                                    f"a different one")
         jid = self._insert(kind, text=text, state="waiting", due=None, rule=rule,
                            duration=None, source=source)
         # Read BEFORE the card is raised: a card answered at once (or a
@@ -666,8 +779,11 @@ class Scheduler:
     # ---- the card ---------------------------------------------------------------
 
     def card_text(self, kind: str, rule: dict, text: str, now: float) -> str:
+        k = KINDS[kind]
+        if rule.get("until"):
+            return self._window_card(k, rule, now)
         runs = next_runs(rule, now)
-        what = KINDS[kind].noun
+        what = k.noun
         lines = [f"Set up a repeating {what}.", ""]
         if text:
             lines.append(f"What: {text}")
@@ -679,6 +795,26 @@ class Scheduler:
             "",
             "It runs on this PC, by this PC's clock. It goes off on both apps while "
             "they are connected. Nothing is sent anywhere.",
+            "Stopping or deleting it is immediate, from either app.",
+            "",
+            "If you say no: nothing is set up.",
+        ])
+        return "\n".join(lines)
+
+    @staticmethod
+    def _window_card(k: Kind, rule: dict, now: float) -> str:
+        """The card for a window kind (the standby schedule): what, when,
+        what it does at each end (the kind's own `about`), and the next
+        three windows in full."""
+        lines = [f"Set up a {k.noun}.", "", f"When: {rule_words(rule)}.", ""]
+        if k.about:
+            lines.extend(k.about)
+            lines.append("")
+        lines.append("The next three times:")
+        lines.extend(f"  - {window_words(a, b)}" for a, b in next_windows(rule, now))
+        lines.extend([
+            "",
+            "It runs on this PC, by this PC's clock. Nothing is sent anywhere.",
             "Stopping or deleting it is immediate, from either app.",
             "",
             "If you say no: nothing is set up.",
@@ -851,9 +987,13 @@ class Scheduler:
         for jid, kind, late in went:
             self.fired += 1
             _audit("schedule.fired", {"id": jid, "kind": kind, "late": late})
-            self._publish("schedule", {"id": jid, "kind": kind, "state": "fired",
-                                       "late": bool(late)})
             k = KINDS.get(kind)
+            data = {"id": jid, "kind": kind, "state": "fired", "late": bool(late)}
+            if k is not None and not k.notify:
+                # Nothing to tell the owner (the standby schedule at 01:00):
+                # both apps show no notification or toast for it.
+                data["notify"] = False
+            self._publish("schedule", data)
             if k is not None and k.on_fire is not None:
                 fn = k.on_fire
                 self._spawn(lambda fn=fn, jid=jid: _safe(fn, jid))
@@ -918,6 +1058,13 @@ class Scheduler:
             v["duration"] = row["duration"]
             if row["state"] == "paused":
                 v["left"] = float(row["left_s"] or 0.0)
+        k = KINDS.get(kind)
+        if rule and rule.get("until") and "when" in v and k is not None:
+            # A window's next end, said as which end it is: "awake at 07:00
+            # tomorrow", "on standby at 01:00 today".
+            edge = k.edges[1] if in_window(rule, now) else k.edges[0]
+            if edge:
+                v["when"] = f"{edge} at {v['when']}"
         if rule:
             v["rule"] = rule
             v["repeat"] = rule_words(rule)
@@ -934,8 +1081,16 @@ class Scheduler:
             v["late"] = bool(row["late"])
             if row["late"] and row["fired_due"] is not None:
                 v["missed"] = f"missed at {clock(float(row['fired_due']))}"
-        k = KINDS.get(kind)
         v["lock_screen"] = k.lock_screen if k else "Jarvis: something is due."
+        if k is not None and not k.notify:
+            v["notify"] = False
+        if k is not None and k.note is not None:
+            try:
+                said = str(k.note(row["id"]) or "")
+            except Exception:
+                said = ""
+            if said:
+                v["note"] = said
         return v
 
     def job(self, jid: str) -> Optional[dict]:
@@ -1017,6 +1172,21 @@ _SCHED: Optional[Scheduler] = None
 _SCHED_LOCK = threading.Lock()
 
 
+#: The modules that add kinds of their own with register_kind. Imported
+#: before the loop first starts, so a job of their kind found overdue at
+#: start-up already has its on_fire. A module that is not there is skipped:
+#: its jobs then only ring the doorbell.
+KIND_MODULES = ("jarvis_standby_schedule",)
+
+
+def _load_kind_modules() -> None:
+    for name in KIND_MODULES:
+        try:
+            __import__(name)
+        except Exception:
+            continue
+
+
 def get() -> Scheduler:
     """The scheduler, started. Every way in comes through here - the boot
     line in jarvis_hud.py, the routes, the fast path, the model's tools - so
@@ -1024,6 +1194,7 @@ def get() -> Scheduler:
     global _SCHED
     with _SCHED_LOCK:
         if _SCHED is None:
+            _load_kind_modules()
             _SCHED = Scheduler()
         s = _SCHED
     return s.start()
@@ -1102,8 +1273,19 @@ def handle_add(body: dict) -> tuple:
                 return 202, {"ok": True, "waiting": True, "job": job,
                              "said": "It repeats, so it waits for your yes on the card."}
             job = s.add_at(kind, _num(body.get("at")), body.get("text") or "", source="app")
+        elif kind in KINDS and KINDS[kind].window:
+            # The standby schedule: {"kind": "standby", "repeat": {"every":
+            # "day", "at": "01:00", "until": "07:00"}}. It repeats, so it is
+            # one card, like any repeat.
+            if not isinstance(body.get("repeat"), dict):
+                return 400, {"ok": False, "error": f"A {KINDS[kind].noun} needs its two times."}
+            job = s.add_repeat(kind, body.get("repeat"), "", source="app")
+            return 202, {"ok": True, "waiting": True, "job": job,
+                         "said": "It repeats, so it waits for your yes on the card."}
         else:
-            return 400, {"ok": False, "error": "kind is one of: todo, timer, alarm, reminder"}
+            names = ["todo", "timer", "alarm", "reminder"] + sorted(
+                n for n, k in KINDS.items() if k.window)
+            return 400, {"ok": False, "error": "kind is one of: " + ", ".join(names)}
     except OverflowError as exc:
         return 409, {"ok": False, "error": _sentence(exc)}
     except (ValueError, TypeError) as exc:

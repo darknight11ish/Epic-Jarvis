@@ -566,7 +566,9 @@ added 2026-09-25. Both apps handle it: the desktop's Rust reads the job by
 id and shows a Windows toast (`brain/schedule.rs` `toast_fired`) and the
 Brain reads Coming up again; the phone reads Coming up again and shows a
 notification (`JarvisRuntime.onScheduleEvent`). The words are read by id,
-never carried; a locked screen gets only the kind. JARVIS-API §21.)
+never carried; a locked screen gets only the kind. A kind that tells nobody
+- the standby schedule going off at 01:00 - adds `"notify": false`, and then
+neither app shows a toast or a notification. JARVIS-API §21.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. That includes `activity`'s sentence: while Jarvis drives a
@@ -749,6 +751,7 @@ backend routes, in both directions; the rest are listed here only.
 | On the Hardware screen: the memory bars, the "Details" arithmetic, Copy for the one PowerShell line, and the "exactly what is made" Modelfile (desktop Settings, Hardware and models) | The phone shows the cards (names and memory), what runs now, the three setups in the PC's words, their steps, Measure, and the line itself to read (Mind, Hardware - the design's section 4.6 asks for that much and no more). The line runs on the PC, so Copy belongs there; the bars and the arithmetic are the design's "Details", which a phone screen does not need to choose a setup. Every route is on both apps (JARVIS-API §20). |
 | The Faces window's "Portable output" (`faces.html`) | Code for building a client (the look spec as JSON, Kotlin, TypeScript). It is a developer's tool, and the phone already ships its own copy of the spec. |
 | A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). |
+| Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | **Update notice** | **Undecided - the owner's call.** The desktop checks GitHub for a newer version and says so in Settings (`update.rs`; it never installs on its own). The phone has no such notice: a new APK is published to the `client-latest` release and installed with adb. Whether the phone should say "a newer version exists" has not been decided. |
 
 **On the phone, kept off the desktop:**
@@ -914,8 +917,8 @@ they landed):
 - **Timers, alarms, reminders and the to-do list, with ONE scheduler**
   (added 2026-09-25, the owner's decisions of that day).
   `jarvis_schedule.py` is the one clock: jobs of a kind (timer, alarm,
-  reminder, to-do - and `register_kind` for the briefing, sleep mode and the
-  overnight tidy still to come) in `schedule.db`, the PC's local time with
+  reminder, to-do, the standby schedule below - and `register_kind` for the
+  briefing and the overnight tidy still to come) in `schedule.db`, the PC's local time with
   both clock changes handled, a job missed while the PC was off going off
   once, late. A one-off needs no card; anything that repeats is ONE card
   (`schedule_repeat`, the same four steps as section 3, listing the next
@@ -933,6 +936,26 @@ they landed):
   `[initiative] enabled = false`), so it is left as it was; the digest is in
   the owner's `jarvis_arbiter.py`, not here. Not run on the owner's PC.
   JARVIS-API §21.
+
+- **Sleep mode, as the standby schedule** (added 2026-09-25, task #55).
+  Not a second standby: Standby (`jarvis_power_switch.py`, both apps'
+  existing Standby control) on a timetable - "on standby from 01:00, awake
+  at 07:00, every day" - named after it so the owner sees one thing.
+  `jarvis_standby_schedule.py` registers kind `standby` on the one
+  scheduler: a window job that goes off at both ends, one at a time, set up
+  by ONE `schedule_repeat` card listing the next three nights; Pause and
+  Delete are immediate and do not wake Jarvis. Each end is
+  `jarvis_power_switch.set_mode` through `power_manage`, like the buttons;
+  which end it is comes from the clock, so a night the PC was off agrees. A
+  start is skipped while a task runs. Standby itself now unloads EVERY
+  model the everyday Ollama holds (asked directly, this PC only) and says
+  what is still loaded, and waking loads the chat model again at once
+  (never a cloud model). Timers and reminders still go off on standby; a
+  question is answered after the model loads, and Jarvis stays on standby.
+  Both apps: Coming up gets a "Standby schedule" part (the desktop's Brain
+  -> Work, the phone's Mind); its going-off shows no toast or notification
+  (`"notify": false`). No new route or patch. Not run on the owner's PC;
+  Ollama was a stand-in. JARVIS-API §11 and §21.8.
 
 **Still missing:**
 

@@ -51,6 +51,28 @@ export const HIDDEN_TEXT = "(hidden)";
 /** Under an answer made without the model (X-Jarvis-Route `quick`). */
 export const DONE_LINE = "Done - answered on this PC without the AI model.";
 
+/**
+ * The standby schedule (backend jarvis_standby_schedule.py): Standby - the
+ * same Standby as the tray's Change power mode - on a timetable, every day.
+ * Setting it up is one approval card on the PC (schedule_repeat); it then
+ * sits in the list above like any repeating job, where Pause skips it and
+ * Delete turns it off. Both apps' words.
+ */
+export const STANDBY_TITLE = "Standby schedule";
+export const STANDBY_DETAIL =
+  "Jarvis goes on standby at night and wakes in the morning. Standby unloads its models " +
+  "and frees the graphics card; waking loads the chat model again, so the first answer is " +
+  "quick. Timers and reminders still go off. Setting it up asks once with an approval card.";
+export const STANDBY_START_LABEL = "Standby at";
+export const STANDBY_END_LABEL = "Wake at";
+export const STANDBY_ADD = "Set up";
+export const STANDBY_IS_SET =
+  "Your standby schedule is in the list above. Pause skips it and Delete turns it off. " +
+  "Neither wakes Jarvis - choose Active for that.";
+export const STANDBY_BAD_TIMES = "Write each time as HH:MM, like 01:00, and pick two different times.";
+export const STANDBY_DEFAULT_START = "01:00";
+export const STANDBY_DEFAULT_END = "07:00";
+
 /** A notification's title, by kind (brain/schedule.rs toast_title). */
 export const TOAST_TITLES = Object.freeze({
   timer: "Timer done",
@@ -73,6 +95,7 @@ export const KIND_TAGS = Object.freeze({
   alarm: "alarm",
   reminder: "reminder",
   todo: "to-do",
+  standby: "standby",
 });
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -124,6 +147,7 @@ export function readSchedule(answer) {
     repeat: text(j.repeat),
     next: Array.isArray(j.next) ? j.next.filter((t) => num(t) !== null) : [],
     missed: text(j.missed),
+    note: text(j.note),
     hidden: j.hidden === true,
   });
   return {
@@ -144,6 +168,7 @@ export function leftNow(job, sinceMs) {
 
 /** A row's title: the owner's words, or what kind of thing it is. */
 export function titleOf(job) {
+  if (job.kind === "standby") return STANDBY_TITLE;
   const words = job.hidden ? HIDDEN_TEXT : job.text;
   if (job.kind === "timer") {
     return words ? `${words} timer` : `${lengthWords(job.duration || 0)} timer`;
@@ -169,7 +194,30 @@ export function metaOf(job, sinceMs = 0) {
   if (job.state === "paused") out.push("Paused");
   else if (job.when) out.push(job.repeats ? `next: ${job.when}` : job.when);
   if (job.missed) out.push(`Went off late (${job.missed}) - the PC was off or asleep.`);
+  if (job.note) out.push(job.note);
   return out;
+}
+
+/** The standby schedule on the list, or null. There is only ever one. */
+export function standbyOf(view) {
+  return (view && view.jobs.find((j) => j.kind === "standby")) || null;
+}
+
+const HHMM = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * The two times for a new standby schedule, tidied to HH:MM, or null when
+ * either is not a time of day or they are the same (the PC says the same).
+ */
+export function standbyTimes(start, end) {
+  const tidy = (v) => {
+    const m = HHMM.exec(String(v || "").trim());
+    return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
+  };
+  const at = tidy(start);
+  const until = tidy(end);
+  if (!at || !until || at === until) return null;
+  return { at, until };
 }
 
 /** The buttons one row offers, as action names, in order. Never "all". */
