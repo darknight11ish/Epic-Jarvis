@@ -628,6 +628,13 @@ def t_settings_and_the_card_to_ask_less():
           s["provider"] is None and s["ask_every_time"] is True and s["why"], s)
     p = WS.plan("x")
     check("... so nothing is searched, and it says why", p.state == "settings_damaged", p)
+    WS.handle_settings({"ask_every_time": True})
+    check("... and changing another setting does not quietly pick a provider",
+          WS.settings()["provider"] is None and WS.plan("x").state == "settings_damaged",
+          WS.settings())
+    code, out = WS.handle_settings({"provider": "duckduckgo"})
+    check("... choosing one rewrites it", code == 200 and WS.settings()["provider"] == "duckduckgo"
+          and WS.settings()["why"] == "")
     reset()
     code, out = WS.handle_settings({"provider": "brave", "ask_every_time": True})
     check("one change per request", code == 400)

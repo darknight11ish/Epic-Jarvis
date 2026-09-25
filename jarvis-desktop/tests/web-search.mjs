@@ -156,6 +156,7 @@ await check("Settings: four providers with the PC's lines, which is in use, Whoo
   for (const p of PROVIDERS) assert.ok(text.includes(CASES.why[p]), `missing the ${p} line`);
   assert.ok(text.includes(CASES.left_out[0].why), "Whoogle's reason");
   assert.match(text, /SearXNG is the default because/);
+  assert.match(text, /Search with/i, "the choice lost its label");
   assert.match(text, /In use\. Ready\./);
   assert.equal(checked, "searxng");
   assert.match(text, /No Tavily key is saved on this PC/);

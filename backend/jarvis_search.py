@@ -292,7 +292,9 @@ def settings() -> dict:
 def _save(**changes) -> dict:
     with _SETTINGS_LOCK:
         cur = settings()
-        new = {"provider": cur["provider"] or DEFAULT_PROVIDER,
+        # A damaged file's provider stays unknown (null) until the owner
+        # chooses one: changing another setting must not quietly pick one.
+        new = {"provider": cur["provider"],
                "searxng_url": cur["searxng_url"],
                "ask_every_time": cur["ask_every_time"]}
         new.update(changes)
