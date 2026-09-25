@@ -76,7 +76,13 @@ internal fun BriefingSection(
     var at by remember { mutableStateOf("07:00") }
     var days by remember { mutableStateOf(setOf(0, 1, 2, 3, 4)) }
 
-    LaunchedEffect(reads, tick) {
+    // A card answered or raised - on either app - may have changed "Show who
+    // new emails are from" (its ON waits for one), so the queue changing
+    // reads it again, as the desktop's Settings does (onQueue).
+    val queue by JarvisRuntime.pending.collectAsState()
+    val queueKey = queue.map { it.id }
+
+    LaunchedEffect(reads, tick, queueKey) {
         when (val r = JarvisRuntime.briefing()) {
             is ApiResult.Ok -> {
                 val v = Briefing.parse(r.value)
