@@ -542,7 +542,10 @@ await check("App lock: the widget shows the notice title only, and Approve opens
 });
 
 await check("App lock: a card with no notice gets a plain title, and turning the lock off shows it all (M3)", async () => {
-  const page = await K.open(browser, base, "widget.html", { pending: [K.APPROVAL_RAISED], appLock: true }, { width: 320, height: 520 });
+  // Not an email: an email's card is approved in the Jarvis bar lock or not
+  // (email-send.mjs), and this test is about the lock.
+  const card = { ...K.APPROVAL_RAISED, action: "run_shell_on_host" };
+  const page = await K.open(browser, base, "widget.html", { pending: [card], appLock: true }, { width: 320, height: 520 });
   await page.waitForTimeout(400);
   const locked = await widgetCard(page);
   assert.equal(locked.action, "Jarvis is waiting for your approval");
@@ -551,7 +554,7 @@ await check("App lock: a card with no notice gets a plain title, and turning the
     { appLock: false, relockAfterSecs: 60, approvals: "risky", privateAnswers: false }));
   await page.waitForTimeout(250);
   const open = await widgetCard(page);
-  assert.equal(open.action, "send_email");
+  assert.equal(open.action, "run_shell_on_host");
   assert.equal(open.approve, "Approve");
   assert.equal(open.noteHidden, false);
   await page.locator("#btn-appr-yes").click();
