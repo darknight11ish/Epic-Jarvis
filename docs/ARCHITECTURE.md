@@ -133,6 +133,17 @@ instruction tries to wear a person into pressing Approve without reading.
 The limit is a refusal, never a grant. `backend/README.md`, "The approval
 gate, tightened".
 
+**Stopping is never gated.** Stop, Pause and "Stop everything"
+(`/api/task/stop`, `/api/task/pause`, `/api/stop_all`) need no card and are
+never held on a stale event stream or by a waiting card: rule 4 blocks
+ACTING on a stale stream, and these only make Jarvis do less. The desktop's
+Stop everything hotkey also works while App lock is on.
+None of them approves, denies, resumes or starts anything - Resume is the
+one task control that raises a card. "Stop everything" also refuses every
+further tool call of the answer being written, even one whose card is
+approved after the press: a stop wins over an approval of the earlier
+question.
+
 ### Two rules that are easy to get wrong
 
 **`allowed` is not "a human decided".** `jarvis_gate.check()` returns
@@ -863,6 +874,7 @@ backend routes, in both directions; the rest are listed here only.
 | "Finished, or only paused?" (`/api/voice/turn`) | The phone runs the same Smart Turn model itself (`voice/SmartTurn.kt`), so its audio never leaves it just to ask. The desktop asks its own PC over loopback. |
 | Screen capture | Nothing earlier wrote a reason down; this one is written 2026-09-24 from the code. The phone attaches a picture through Android's photo picker (`MainActivity.kt`, `PickVisualMedia`), which already offers the phone's own screenshots - one picture, chosen by the owner. Capturing the screen live on Android needs a separate system permission every session and shows a "casting" icon, for no gain over the picker. |
 | Global hotkeys (`hotkeys.rs`) | Keyboard shortcuts for a PC. A phone has no equivalent. |
+| The "Stop everything" hotkey (Alt+Shift+X, `hotkeys.rs`) | Written with the feature, 2026-09-25. A key on a PC's keyboard; a phone has no global keys. The phone has the same control as a button - Home's "Stop everything", shown whenever Jarvis is busy - calling the same route (`/api/stop_all`, `ported` in `tools/check_parity.py`) with the same words. Each app stops only its OWN speech: pressing it on the phone does not silence the PC, or the other way round (JARVIS-API §26). |
 | The tray icon (`tray.rs`) | Part of Windows' taskbar. |
 | Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
 | On the Hardware screen: the memory bars, the "Details" arithmetic, Copy for the one PowerShell line, and the "exactly what is made" Modelfile (desktop Settings, Hardware and models) | The phone shows the cards (names and memory), what runs now, the three setups in the PC's words, their steps, Measure, and the line itself to read (Mind, Hardware - the design's section 4.6 asks for that much and no more). The line runs on the PC, so Copy belongs there; the bars and the arithmetic are the design's "Details", which a phone screen does not need to choose a setup. Every route is on both apps (JARVIS-API §20). |
@@ -1126,6 +1138,28 @@ they landed):
   Nothing has reached a real SearXNG, DuckDuckGo, Exa, Tavily or Brave yet: the
   tests use local stand-ins. The briefing's "weather and news: not
   available" line is unchanged - weather is a separate decision.
+
+- **Stop everything** (added 2026-09-25, the owner's decision after the
+  prompt-pack review). `POST /api/stop_all` (`jarvis_stop_all.py`, shipped
+  whole; `stop-all.patch` installs it round the server's POST handler):
+  the task Stop, then every tool call of the answer being written refused
+  before the gate (and one approved after the press not run), then every
+  stopper registered with `jarvis_stop_all.register()` - the hook focus
+  sessions will use. Never a card, never held on a stale link: stopping
+  only makes Jarvis do less (section 3). Desktop: the Alt+Shift+X hotkey,
+  which stops the desktop's speech first; phone: Home's "Stop everything"
+  button, which stops the phone's. A step already under way finishes; the
+  stop lands before the next one. JARVIS-API §26.
+
+- **A live preflight** (added 2026-09-25, the same review):
+  `selftest.py --preflight` asks the RUNNING Jarvis every question a live
+  chain depends on - token, handshake, model, a chat round trip, every
+  patch and shipped module really in place, the settings file kept off the
+  web, the gate, Stop everything, the scheduler, the event stream, voice,
+  calendar/email/search, Credential Manager - and prints PASS / FAIL / WARN
+  and "N pass, N fail, N warn". Read-only (it approves, sends, unloads and
+  changes nothing). One new check per real incident. `backend/README.md`,
+  "The preflight"; JARVIS-API §27.
 
 **Still missing:**
 

@@ -2129,6 +2129,66 @@ pub async fn stop_task(app: AppHandle) -> Result<serde_json::Value, String> {
     post_task_control(&app, "/api/task/stop", serde_json::json!({})).await
 }
 
+/// "Stop everything" (the owner's decision of 2026-09-25; the hotkey,
+/// `Alt+Shift+X` by default). Speech stops HERE first - every window that
+/// speaks is told at once, before the backend is asked, so a dead link never
+/// keeps Jarvis talking - then `POST /api/stop_all` stops the running task,
+/// the answer's remaining tools and every registered stopper
+/// (`backend/jarvis_stop_all.py`). A notification says what was stopped.
+///
+/// Never held: not on a stale stream (rule 4 blocks ACTING, and this is the
+/// opposite), not by App lock, not by a waiting card. It approves nothing
+/// and starts nothing; the route cannot either.
+pub fn stop_everything_now(app: &AppHandle) {
+    crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
+    // The HUD window is the backend's own page and speaks through the
+    // browser's speech engine; a fixed line, no payload.
+    if let Some(hud) = app.get_webview_window(crate::HUD_LABEL) {
+        if let Err(err) = hud
+            .eval("try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}")
+        {
+            eprintln!("[jarvis] could not stop the HUD's speech: {err}");
+        }
+    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let said = stop_everything_words(post_stop_all(&handle).await);
+        notify(&handle, STOP_EVERYTHING_TITLE, &said);
+    });
+}
+
+/// The notification's title, and the phone's button: the same words.
+pub const STOP_EVERYTHING_TITLE: &str = "Stop everything";
+
+async fn post_stop_all(app: &AppHandle) -> Result<serde_json::Value, String> {
+    post_task_control(app, "/api/stop_all", serde_json::json!({})).await
+}
+
+/// What the notification says: speech is always stopped (that happened
+/// here), then the PC's own sentence - or why the PC could not be asked.
+pub fn stop_everything_words(result: Result<serde_json::Value, String>) -> String {
+    match result {
+        Ok(v) => {
+            let said = v
+                .get("message")
+                .and_then(|m| m.as_str())
+                .map(str::trim)
+                .filter(|m| !m.is_empty())
+                .unwrap_or("Jarvis stopped what it was doing.");
+            format!("Stopped speaking. {said}")
+        }
+        Err(e) if e.contains("has no `/api/stop_all` route") => {
+            "Stopped speaking. This PC's Jarvis cannot stop anything else yet - run \
+             apply-patches.ps1 on the PC (stop-all.patch). The Stop button on a running \
+             task still works."
+                .to_string()
+        }
+        Err(e) => {
+            format!("Stopped speaking. Jarvis could not be reached to stop anything else: {e}")
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn inject_task_note(app: AppHandle, note: String) -> Result<serde_json::Value, String> {
     post_task_control(&app, "/api/task/note", serde_json::json!({ "note": note })).await
@@ -5185,5 +5245,45 @@ mod turn_tests {
             assert!(chat_extras(None, Some(bad)).is_empty(), "{bad:?}");
         }
         assert!(chat_extras(None, None).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod stop_everything_tests {
+    use super::*;
+
+    #[test]
+    fn the_pcs_own_sentence_follows_stopped_speaking() {
+        let said = stop_everything_words(Ok(serde_json::json!({
+            "ok": true,
+            "message": "Stopped everything. The paused task was forgotten."
+        })));
+        assert_eq!(
+            said,
+            "Stopped speaking. Stopped everything. The paused task was forgotten."
+        );
+    }
+
+    #[test]
+    fn an_older_backend_is_told_apart_from_a_dead_link() {
+        let old = stop_everything_words(Err(
+            "this Jarvis backend has no `/api/stop_all` route - apply the backend patches \
+             (task-control.patch) to turn it on"
+                .to_string(),
+        ));
+        assert!(old.contains("stop-all.patch"), "{old}");
+        assert!(old.starts_with("Stopped speaking."), "{old}");
+        let down = stop_everything_words(Err(
+            "could not reach the Jarvis server at http://127.0.0.1:4719".to_string(),
+        ));
+        assert!(down.contains("could not be reached"), "{down}");
+        assert!(down.starts_with("Stopped speaking."), "{down}");
+    }
+
+    #[test]
+    fn a_reply_without_words_still_says_something() {
+        let said = stop_everything_words(Ok(serde_json::json!({"ok": true})));
+        assert!(said.starts_with("Stopped speaking. "), "{said}");
+        assert!(said.len() > "Stopped speaking. ".len());
     }
 }

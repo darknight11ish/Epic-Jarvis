@@ -417,6 +417,13 @@ $PATCHES = @(
     # jarvis_owner_check.py copied in; without it EVERY approval is refused
     # (the gate fails closed), and the start-up banner says so.
     'owner-check.patch'
+    # "Stop everything" (the owner's decision of 2026-09-25): POST
+    # /api/stop_all halts a running task, the tools of the answer being
+    # written, and anything registered with jarvis_stop_all; it never
+    # approves or starts anything. Its context is owner-check's banner
+    # lines, so it goes after it. Needs jarvis_stop_all.py copied in;
+    # without it the route is not there and the banner says so.
+    'stop-all.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -508,6 +515,8 @@ $SHIPPED = @(
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch
+    # --- Stop everything (2026-09-25) ---
+    'jarvis_stop_all.py'         # stop-all.patch: POST /api/stop_all, and the hook other features register with
 )
 
 # The settings file. Installed only where none exists; never overwritten.

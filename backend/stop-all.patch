@@ -1,0 +1,22 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2422,6 +2422,19 @@
+     except Exception as exc:
+         print(f"  approvals  NOT CHECKED ({type(exc).__name__}) - every approval is refused")
+         print("             until jarvis_owner_check.py is back: run apply-patches.ps1 again")
++    # stop-all.patch ("Stop everything", the owner's decision of 2026-09-25):
++    # POST /api/stop_all halts whatever Jarvis is doing - a running task, the
++    # tools of the answer being written, and anything registered with
++    # jarvis_stop_all - and never approves or starts anything. Wrapped round
++    # Handler here, before anything listens, like owner-check above; the
++    # rules are all in jarvis_stop_all.py.
++    try:
++        import jarvis_stop_all
++        print(jarvis_stop_all.install(Handler, origin_ok=_origin_ok,
++                                      token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  stop       NOT ON ({type(exc).__name__}) - Stop everything cannot reach")
++        print("             this PC until jarvis_stop_all.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

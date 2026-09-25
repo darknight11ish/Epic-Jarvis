@@ -2,6 +2,7 @@
 """First-run self test: does this Jarvis backend actually work?
 
     python backend\\selftest.py
+    python backend\\selftest.py --preflight      the Jarvis that is RUNNING now
 
 WHY THIS EXISTS
 
@@ -30,11 +31,37 @@ WHAT TO DO WITH THE OUTPUT
 Paste the whole thing back. Every line is designed to be actionable on its own:
 a failure says which file, which symptom, and what it means. There is a summary
 at the end with a single verdict.
+
+TWO MODES
+
+With no option it is the first-run check above: it starts its own copy of
+the backend on a spare port, asks it questions, and stops it again.
+
+`--preflight` (added 2026-09-25, the owner's decision after the "Build Your
+Own Jarvis" prompt pack) asks the Jarvis that is already running - the one
+the apps talk to - every question a real chain depends on: is it up, does it
+accept the token, is the model there and answering, is every patch and
+module really the one in this repository, is the settings file kept off the
+web, is the gate on, does the scheduler run, does the event stream deliver.
+One line per check, PASS / FAIL / WARN, and "N pass, N fail, N warn" at the
+end; exit code 1 on any FAIL. Read-only - see "--preflight" further down.
+`--with-reads` also reads the calendar and email once; `--with-chat` sends
+the one test question through Jarvis's chat even when tools are on.
+
+It is a separate mode, not the default, because the two answer different
+questions: a fresh copy can pass everything while the long-running one is
+stuck or running an older file - and the first-run check must still work
+before Jarvis has ever started.
+
+ADD ONE CHECK PER REAL INCIDENT. When something breaks for real, add the
+preflight check that would have caught it: one function with
+@preflight_check, and a case in test_selftest_preflight.py.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -676,6 +703,981 @@ def stage_ollama() -> None:
 
 
 # ==========================================================================
+#   --preflight: the Jarvis that is RUNNING, every live chain
+# ==========================================================================
+#
+# Everything above tests a fresh copy of the backend, started on a spare
+# port and stopped again. That answers "does it work at all?". It cannot
+# answer "does the Jarvis I am using right now work?" - a long-running
+# server can be stuck, running an older copy of a file, or missing a patch
+# while a fresh one passes everything (the prompt pack's "Field Proof":
+# read it from the RUNNING server).
+#
+# So `--preflight` asks the running Jarvis itself, on 127.0.0.1, with the
+# pairing token, and prints one line per check: PASS, FAIL or WARN, one
+# plain sentence, and the fix. It ends "N pass, N fail, N warn" and exits
+# with 1 when anything failed.
+#
+# READ-ONLY. It never approves or denies anything, never sends an email,
+# never unloads a model, and never changes a setting. It searches the web
+# only when web search is switched on and a provider is chosen, and then
+# only through the Test search button's own route (one search for the word
+# "wikipedia"). It asks the model one fixed question ("Reply with the single
+# word: ready"), which may load the model - the same as asking Jarvis
+# anything. It sends that question through Jarvis's own chat only as a
+# temporary chat (nothing remembered, nothing kept) and only when no tool is
+# switched on - otherwise the model could choose one; `--with-chat` sends it
+# anyway. It reads the calendar and email only with `--with-reads`.
+#
+# ADD ONE CHECK PER REAL INCIDENT. When something breaks for real, write the
+# check that would have caught it: one function, decorated with
+# @preflight_check, returning rows. It runs in the order it is written.
+# Everything it touches goes through `live` (a Live), so its test can hand in
+# stand-ins and needs no network (test_selftest_preflight.py).
+
+#: The checks, in order: (key, title, function). Filled by @preflight_check.
+PREFLIGHT: list = []
+
+
+def preflight_check(key: str, title: str):
+    """Register one preflight check. `fn(live)` returns a list of
+    (status, what, detail) rows; `what` is one plain sentence and `detail`
+    says what to do about it."""
+    def deco(fn):
+        if any(k == key for k, _t, _f in PREFLIGHT):
+            raise ValueError(f"two preflight checks are called {key!r}")
+        PREFLIGHT.append((key, title, fn))
+        return fn
+    return deco
+
+
+#: The port jarvis_hud.py listens on unless JARVIS_HUD_PORT says otherwise
+#: (the desktop's DEFAULT_BASE, commands.rs, says the same).
+DEFAULT_PORT = 4719
+
+#: The API version both apps speak (jarvis_events.API_VERSION; the desktop's
+#: handshake and the phone read it).
+APPS_SPEAK_API = 1
+
+#: The one question the preflight asks the model. About nothing.
+READY_QUESTION = "Reply with the single word: ready"
+
+#: Paths that must never serve a file. Each is asked with no token and with
+#: the token; a 200 that holds the file's own text is a FAIL.
+PRIVATE_PROBES = (
+    "/jarvis-framework.toml", "/../jarvis-framework.toml",
+    "/%2e%2e/jarvis-framework.toml", "/..%2fjarvis-framework.toml",
+    "/static/../jarvis-framework.toml", "/config/jarvis-framework.toml",
+    "/.openjarvis/jarvis-framework.toml", "/jarvis_hud.py", "/jarvis_gate.py",
+    "/token", "/.env", "/approvals.db", "/memory.db", "/web-search.json",
+    "/backend.log",
+)
+
+#: Where the desktop app keeps its logs on Windows (Tauri's app_log_dir for
+#: the identifier in tauri.conf.json).
+DESKTOP_ID = "com.jarvis.desktop"
+
+
+def _no_proxy_open(req, timeout):
+    # Straight to 127.0.0.1, never through a proxy a variable points at.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    return opener.open(req, timeout=timeout)
+
+
+def _http(method: str, url: str, headers: dict, body, timeout: float) -> tuple:
+    """(status, headers with lower-case names, body bytes). A refused
+    connection raises; an HTTP error status is an answer, not a raise."""
+    req = urllib.request.Request(url, data=body, method=method, headers=headers)
+    try:
+        with _no_proxy_open(req, timeout) as r:
+            return r.status, {k.lower(): v for k, v in r.headers.items()}, r.read()
+    except urllib.error.HTTPError as e:
+        try:
+            raw = e.read()
+        except Exception:
+            raw = b""
+        return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, raw
+
+
+def _stream_head(url: str, headers: dict, timeout: float) -> str:
+    """The first five lines of an event stream, then let go (readline, not
+    read(n) - see stage_server)."""
+    req = urllib.request.Request(url, headers=headers)
+    with _no_proxy_open(req, timeout) as r:
+        return b"".join(r.readline() for _ in range(5)).decode("utf-8", "replace")
+
+
+def _token_sources(env, store_for=None) -> list:
+    """[(where, token)] - every place the running backend's token may be,
+    in the order the backend itself prefers them. Never printed: only
+    `where` ever reaches the output."""
+    out = []
+    t = (env.get("HUD_TOKEN") or "").strip()
+    if t:
+        out.append(("HUD_TOKEN in this window", t))
+    try:
+        import jarvis_token_store as TS
+    except Exception:
+        return out
+    make = store_for or (lambda target: TS.WindowsStore(target))
+    for target, where in ((TS.TARGET, "Windows Credential Manager (the backend's own)"),
+                          (TS.DESKTOP_TARGET, "Windows Credential Manager (typed into the "
+                                              "desktop app's Settings)")):
+        try:
+            t = make(target).read()
+        except Exception:
+            t = None
+        if t:
+            out.append((where, t))
+    try:
+        old = Path(os.path.expanduser("~")) / ".openjarvis" / "token"
+        t, _problem = TS._read_file(old)
+        if t:
+            out.append(("the old ~/.openjarvis/token file", t))
+    except Exception:
+        pass
+    return out
+
+
+def _json(raw):
+    try:
+        return json.loads((raw or b"").decode("utf-8", "replace"))
+    except (ValueError, AttributeError):
+        return None
+
+
+class Live:
+    """Everything a preflight check may touch, in one place, so a test can
+    hand in stand-ins: the HTTP calls, the event stream, Ollama, the token
+    sources, the folders, and the window's environment."""
+
+    def __init__(self, *, port=None, http=None, stream_head=None, ollama=None,
+                 ollama_post=None, ollama_base=None, tokens=None, backend=None, repo=None, env=None, with_reads=False,
+                 with_chat=False, log_dir=None, token_store=None, reads=None):
+        self.env = os.environ if env is None else env
+        p = port or (self.env.get("JARVIS_HUD_PORT") or "").strip() or DEFAULT_PORT
+        try:
+            self.port = int(p)
+        except ValueError:
+            self.port = DEFAULT_PORT
+        # 127.0.0.1 only: the token is sent, and this PC is the one place it
+        # belongs. A backend bound to a Tailscale address still answers here
+        # (loopback-too.patch).
+        self.base = f"http://127.0.0.1:{self.port}"
+        self.http = http or _http
+        self.stream_head = stream_head or _stream_head
+        self.ollama = ollama            # doctor()'s fetch, or None for the real one
+        self.ollama_post = ollama_post  # (url, body) -> parsed JSON, or None for the real one
+        self.ollama_base = ollama_base  # None: worked out as doctor() does
+        self._tokens = tokens           # [(where, token)] or None: look them up
+        self.backend = Path(backend) if backend is not None else BACKEND
+        self.repo = Path(repo) if repo is not None else HERE.parent
+        self.with_reads = bool(with_reads)
+        self.with_chat = bool(with_chat)
+        self.log_dir = log_dir
+        self.token_store = token_store  # target -> store, for the Credential Manager check
+        self.reads = reads              # {"email": fn, "calendar": fn} stand-ins
+        self.token = None
+        self.token_where = None
+        self.up = False
+        self.version = None
+        self.status = None
+        self.reach = None
+
+    # -- tokens ----------------------------------------------------------
+    def token_sources(self) -> list:
+        if self._tokens is None:
+            self._tokens = _token_sources(self.env)
+        return list(self._tokens)
+
+    # -- HTTP --------------------------------------------------------------
+    def _headers(self, token: bool) -> dict:
+        h = {"X-Jarvis-Client": "hud", "Origin": self.base}
+        if token and self.token:
+            h["X-Jarvis-Token"] = self.token
+        return h
+
+    def get(self, path: str, *, token=True, timeout=8.0, as_token=None) -> tuple:
+        """(status, parsed JSON or None, raw bytes, headers)."""
+        h = self._headers(token)
+        if as_token is not None:
+            h["X-Jarvis-Token"] = as_token
+        code, hdrs, raw = self.http("GET", self.base + path, h, None, timeout)
+        return code, _json(raw), raw, hdrs
+
+    def post(self, path: str, body: dict, *, timeout=30.0) -> tuple:
+        h = dict(self._headers(True), **{"Content-Type": "application/json"})
+        code, hdrs, raw = self.http("POST", self.base + path, h,
+                                    json.dumps(body).encode("utf-8"), timeout)
+        return code, _json(raw), raw, hdrs
+
+    def events_head(self, timeout=8.0) -> str:
+        return self.stream_head(self.base + "/api/events", self._headers(True), timeout)
+
+    # -- files -------------------------------------------------------------
+    def desktop_logs(self):
+        if self.log_dir is not None:
+            return Path(self.log_dir)
+        base = self.env.get("LOCALAPPDATA")
+        return Path(base) / DESKTOP_ID / "logs" if base else None
+
+
+def _on_path(folder: Path) -> None:
+    """Put the backend folder first on sys.path, once."""
+    f = str(folder)
+    if f in sys.path:
+        sys.path.remove(f)
+    sys.path.insert(0, f)
+
+
+def _needs_backend(live: Live, what: str):
+    """The row for a check that cannot run because Jarvis did not answer."""
+    return [(SKIP, f"{what}, because Jarvis is not answering (see the first check)")]
+
+
+def _sha(path: Path) -> str:
+    import hashlib
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def _repo_version(repo: Path):
+    try:
+        conf = json.loads((repo / "jarvis-desktop" / "src-tauri" / "tauri.conf.json")
+                          .read_text(encoding="utf-8"))
+        return str(conf.get("version") or "") or None
+    except Exception:
+        return None
+
+
+def _version_tuple(v: str) -> tuple:
+    out = []
+    for part in str(v).split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        out.append(int(digits) if digits else 0)
+    return tuple(out)
+
+
+# ---------------------------------------------------------------- checks
+
+@preflight_check("backend", "Is Jarvis running, and does it know its token?")
+def pf_backend(live: Live) -> list:
+    sources = live.token_sources()
+    if not sources:
+        return [(FAIL, "no pairing token was found on this PC",
+                 "Jarvis keeps it in Windows Credential Manager once it has started "
+                 "once. Start the desktop app (it starts Jarvis), then run this again. "
+                 "If you set HUD_TOKEN yourself, set it in this window too.")]
+    rows = []
+    refused = []
+    for where, tok in sources:
+        live.token = tok
+        try:
+            code, body, _raw, _h = live.get("/api/status")
+        except Exception as exc:
+            live.token = None
+            return [(FAIL, f"Jarvis is not answering at {live.base}",
+                     f"{type(exc).__name__}. Start the desktop app (it starts Jarvis), "
+                     f"or in the backend folder run: py -3 jarvis_hud.py. If Jarvis uses "
+                     f"another port, set JARVIS_HUD_PORT in this window first.")]
+        if code == 200:
+            live.token_where = where
+            live.up = True
+            live.status = body if isinstance(body, dict) else {}
+            rows.append((PASS, f"Jarvis is answering at {live.base}, and accepts the "
+                               f"pairing token from {where}"))
+            break
+        refused.append(f"{where}: {code}")
+    if not live.up:
+        live.token = None
+        return [(FAIL, "Jarvis is running but accepts none of the pairing tokens on this PC",
+                 "Tried (never shown): " + "; ".join(refused) + ". The running Jarvis "
+                 "was probably started with a different HUD_TOKEN. Restart it from the "
+                 "desktop app, or set HUD_TOKEN in this window to the one it uses.")]
+    try:
+        code, _b, _r, _h = live.get("/api/pending", token=False)
+        if code in (401, 403):
+            rows.append((PASS, f"a request with no token is refused ({code})"))
+        else:
+            rows.append((FAIL, f"a request with NO TOKEN got {code}",
+                         "Anything that can reach the port can read your approval "
+                         "queue. token-file.patch makes the token required; run "
+                         "apply-patches.ps1."))
+    except Exception as exc:
+        rows.append((WARN, "could not test a request with no token", type(exc).__name__))
+    return rows
+
+
+@preflight_check("handshake", "Does it say what it can do?")
+def pf_handshake(live: Live) -> list:
+    if not live.up:
+        return _needs_backend(live, "the handshake")
+    rows = []
+    try:
+        code, body, _r, _h = live.get("/api/version")
+    except Exception as exc:
+        return [(FAIL, "/api/version did not answer", type(exc).__name__)]
+    if code != 200 or not isinstance(body, dict):
+        return [(FAIL, f"/api/version answered {code}",
+                 "Both apps start by reading it. Restart Jarvis; if it stays, send "
+                 "this output back.")]
+    live.version = body
+    api = body.get("api")
+    if api == APPS_SPEAK_API:
+        rows.append((PASS, f"it speaks API version {api}, the one both apps speak"))
+    else:
+        rows.append((FAIL, f"it speaks API version {api!r}; both apps speak {APPS_SPEAK_API}",
+                     "The apps and the backend do not match. Run apply-patches.ps1 so "
+                     "the backend's files are this repository's."))
+    caps = body.get("capabilities")
+    if isinstance(caps, dict) and caps:
+        off = sorted(k for k, v in caps.items() if v is False)
+        rows.append((PASS, f"it lists {len(caps)} capabilities"
+                     + (f" ({', '.join(off)} off)" if off else "")))
+    else:
+        rows.append((FAIL, "its handshake lists no capabilities",
+                     "Both apps hide every feature they cannot see listed. The rebuilt "
+                     "jarvis_events.py sends them; run apply-patches.ps1."))
+    st = live.status or {}
+    missing = [k for k in ("lane", "model", "power", "activity") if k not in st]
+    if missing:
+        rows.append((WARN, f"/api/status leaves out {', '.join(missing)}",
+                     "The apps show those in the header; they fall back to blanks. Not "
+                     "broken by itself."))
+    else:
+        rows.append((PASS, f"/api/status says: model {st.get('model')}, power "
+                           f"{st.get('power')}, {st.get('activity')}"))
+    # The desktop app installed on this PC, from its own log.
+    ours = _repo_version(live.repo)
+    logs = live.desktop_logs()
+    seen = None
+    if logs is not None:
+        try:
+            text = (logs / "jarvis-desktop.log").read_text(encoding="utf-8", errors="replace")
+            found = re.findall(r"===== Jarvis Desktop (\S+) starting", text)
+            seen = found[-1] if found else None
+        except OSError:
+            seen = None
+    if seen is None:
+        rows.append((SKIP, "which desktop app version is installed",
+                     "No desktop app log was found on this PC, so it could not be "
+                     "told. That is normal if the desktop app has never run here."))
+    elif ours and _version_tuple(seen) < _version_tuple(ours):
+        rows.append((WARN, f"the desktop app last started here is version {seen}; this "
+                           f"repository is {ours}",
+                     "Buttons in the older app may call routes this backend changed. "
+                     "Build and install the new one (docs/INSTALL.md)."))
+    else:
+        rows.append((PASS, f"the desktop app last started here is version {seen}"
+                     + (f", the same as this repository" if seen == ours else "")))
+    return rows
+
+
+@preflight_check("model", "Is the model downloaded, loadable, and answering?")
+def pf_model(live: Live) -> list:
+    model = None
+    # The running Jarvis's own word for its model - but only for the local
+    # lane: a cloud lane's model is not an Ollama model.
+    if isinstance(live.status, dict) and str(live.status.get("lane") or "local") == "local":
+        m = live.status.get("model")
+        if isinstance(m, str) and m.strip() and m.strip().lower() not in ("none", "offline"):
+            model = m.strip()
+    model = model or _configured_model()
+    base = (live.ollama_base or _ollama_base()).rstrip("/")
+    rows = [r if len(r) == 3 else (r[0], r[1], "")
+            for r in doctor(fetch=live.ollama, base=base, model=model, env=live.env)]
+    if not model or not _is_loopback(base):
+        return rows
+    if any(r[0] == FAIL and "is not answering" in r[1] for r in rows):
+        return rows
+    # One fixed question, straight to Ollama: the model loads (if it was not
+    # loaded) and answers. No tools are offered and no size is sent, so
+    # nothing is reloaded; nothing is unloaded.
+    t0 = time.time()
+    try:
+        post = live.ollama_post
+        body = {"model": model, "stream": False,
+                "messages": [{"role": "user", "content": READY_QUESTION}],
+                "options": {"num_predict": 200}}
+        if post is not None:
+            got = post(f"{base}/api/chat", body)
+        else:
+            req = urllib.request.Request(f"{base}/api/chat", method="POST",
+                                         data=json.dumps(body).encode("utf-8"),
+                                         headers={"Content-Type": "application/json"})
+            with _no_proxy_open(req, 180) as r:
+                got = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as exc:
+        rows.append((FAIL, f"{model} did not answer a one-word question",
+                     f"{type(exc).__name__}. Jarvis cannot answer anything until it "
+                     f"does. Restart Ollama; if it keeps failing, the model may be too "
+                     f"big for the card (docs/MODEL-TOPOLOGY.md)."))
+        return rows
+    took = time.time() - t0
+    if isinstance(got, dict) and got.get("error"):
+        rows.append((FAIL, f"Ollama refused to run {model}",
+                     "Its own words: " + str(got.get("error"))[:200]))
+    elif isinstance(got, dict) and (got.get("done") or (got.get("message") or {}).get("content")):
+        rows.append((PASS, f"{model} loaded and answered a one-word question "
+                           f"in {took:.1f} seconds"))
+    else:
+        rows.append((FAIL, f"{model} gave an answer Jarvis could not read",
+                     "Restart Ollama and run this again."))
+    return rows
+
+
+@preflight_check("chat", "Does a question go all the way through Jarvis?")
+def pf_chat(live: Live) -> list:
+    if not live.up:
+        return _needs_backend(live, "the chat round trip")
+    caps = (live.version or {}).get("capabilities") or {}
+    temporary = caps.get("temporary_chat") is True
+    tools = None
+    try:
+        code, body, _r, _h = live.get("/api/reach")
+        if code == 200 and isinstance(body, dict):
+            live.reach = body
+            tools = [t.get("id") for t in body.get("tools") or [] if isinstance(t, dict)]
+    except Exception:
+        tools = None
+    if not live.with_chat:
+        if not temporary:
+            return [(SKIP, "a question through Jarvis's own chat",
+                     "This Jarvis cannot hold a temporary chat (temporary-chat.patch), "
+                     "so the question would be kept and learned from. Run with "
+                     "--with-chat to send it anyway.")]
+        if tools is None:
+            return [(SKIP, "a question through Jarvis's own chat",
+                     "Could not tell which tools are switched on (/api/reach), and the "
+                     "model could choose one. Run with --with-chat to send it anyway.")]
+        if tools:
+            return [(SKIP, "a question through Jarvis's own chat",
+                     f"Tools are switched on ({', '.join(str(t) for t in tools)}), so "
+                     "the model could choose one - which might raise a card or read "
+                     "your email. Run with --with-chat to send it anyway; deny any "
+                     "card it raises.")]
+    body = {"messages": [{"role": "user", "content": READY_QUESTION}], "stream": False}
+    if temporary:
+        body["temporary"] = True
+    t0 = time.time()
+    try:
+        code, got, raw, hdrs = live.post("/api/chat", body, timeout=180)
+    except Exception as exc:
+        return [(FAIL, "a question through Jarvis's own chat got no answer",
+                 f"{type(exc).__name__}. The model check above says whether Ollama "
+                 f"works; if it does, restart Jarvis.")]
+    took = time.time() - t0
+    if code != 200 or not isinstance(got, dict):
+        return [(FAIL, f"Jarvis's chat answered {code}",
+                 (raw or b"")[:200].decode("utf-8", "replace"))]
+    if got.get("error"):
+        return [(FAIL, "Jarvis's chat answered with an error",
+                 str(got.get("error"))[:300])]
+    try:
+        text = got["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        text = None
+    if not isinstance(text, str):
+        return [(FAIL, "Jarvis's chat answer is not in the shape the apps read",
+                 "Send this output back.")]
+    route = _json((hdrs.get("x-jarvis-route") or "").encode("utf-8")) or {}
+    where = route.get("where")
+    if where and where != "local":
+        return [(WARN, f"a question went through Jarvis's chat in {took:.1f} seconds, "
+                       f"but was answered by the {where} lane, not this PC",
+                 "Fine for a question about nothing, but check the lane settings if "
+                 "you meant everything to stay on this PC.")]
+    return [(PASS, f"a question went all the way through Jarvis's chat and back in "
+                   f"{took:.1f} seconds" + (" (a temporary chat: nothing kept)" if temporary
+                                            else ""))]
+
+
+def _patch_targets(text: str) -> list:
+    return sorted(set(re.findall(r"^\+\+\+ b/(\S+)", text, re.M)))
+
+
+def patch_states(backend: Path, *, order=None, read=None) -> list:
+    """[(patch, file, state, present, total)] - state is "applied",
+    "partly", "not applied", "no file" or "nothing to look for".
+
+    A patch counts as applied when most of the lines it adds are in the
+    file. Lines a LATER patch in the order takes out again are not counted,
+    and neither are lines the patch's own context already had."""
+    import _stack
+    names = order if order is not None else _stack.order()
+    texts = {n: (HERE / n).read_text(encoding="utf-8") for n in names}
+    read = read or (lambda f: (backend / f).read_text(encoding="utf-8", errors="replace"))
+    files: dict = {}
+    out = []
+    # How many patches add each line, per file: a line two patches both add
+    # (a shared "token_ok=_token_ok, read_body=_read_body))") proves neither.
+    shared: dict = {}
+    for name in names:
+        for f in _patch_targets(texts[name]):
+            seen = set()
+            for h, _p in _stack.hunks(texts[name], f):
+                seen |= {l[1:].strip() for l in h.splitlines()
+                         if l.startswith("+") and not l.startswith("+++")}
+            for line in seen:
+                shared[(f, line)] = shared.get((f, line), 0) + 1
+    for i, name in enumerate(names):
+        for f in _patch_targets(texts[name]):
+            if f not in files:
+                try:
+                    files[f] = {l.strip() for l in read(f).splitlines()}
+                except OSError:
+                    files[f] = None
+            if files[f] is None:
+                out.append((name, f, "no file", 0, 0))
+                continue
+            removed, pre = set(), set()
+            for later in names[i + 1:]:
+                for hunk, _p in _stack.hunks(texts[later], f):
+                    removed |= {l[1:].strip() for l in hunk.splitlines()
+                                if l.startswith("-") and not l.startswith("---")}
+            hunks = _stack.hunks(texts[name], f)
+            for _h, p in hunks:
+                pre |= {x.strip() for x in p}
+            adds = []
+            for h, _p in hunks:
+                for l in h.splitlines():
+                    s = l[1:].strip()
+                    if (l.startswith("+") and not l.startswith("+++") and len(s) >= 12
+                            and s not in removed and s not in pre
+                            and shared.get((f, s), 0) == 1):
+                        adds.append(s)
+            if not adds:
+                out.append((name, f, "nothing to look for", 0, 0))
+                continue
+            present = sum(1 for a in adds if a in files[f])
+            state = ("applied" if present >= 0.8 * len(adds)
+                     else "not applied" if present == 0 else "partly")
+            out.append((name, f, state, present, len(adds)))
+    return out
+
+
+@preflight_check("patches", "Is every patch really in your files?")
+def pf_patches(live: Live) -> list:
+    try:
+        states = patch_states(live.backend)
+    except Exception as exc:
+        return [(WARN, "could not read the patch list", f"{type(exc).__name__}: {exc}")]
+    rows = []
+    no_file = sorted({f for _n, f, s, _p, _t in states if s == "no file"})
+    for f in no_file:
+        rows.append((FAIL, f"{f} is not in {live.backend}",
+                     "The patches for it cannot be there. Set JARVIS_BACKEND to the folder "
+                     "holding jarvis_hud.py, or find the file (scripts/check-backend.ps1)."))
+    bad = [s for s in states if s[2] in ("not applied", "partly")]
+    for name, f, state, present, total in bad:
+        if state == "not applied":
+            rows.append((FAIL, f"{name} is not in {f}",
+                         "Its fix is not running. Run apply-patches.ps1 (backend/README.md, "
+                         "'Apply them'), then restart Jarvis."))
+        else:
+            rows.append((FAIL, f"only part of {name} is in {f} ({present} of {total} lines)",
+                         "An older version of it, or the file was edited by hand. "
+                         "apply-patches.ps1 replaces an older version; then restart Jarvis."))
+    names = {n for n, *_ in states}
+    broken = {n for n, _f, s, _p, _t in states if s not in ("applied", "nothing to look for")}
+    if names - broken:
+        rows.append((PASS, f"{len(names - broken)} of {len(names)} patches are in your files"))
+    return rows
+
+
+@preflight_check("modules", "Is the file Jarvis runs the file you think?")
+def pf_modules(live: Live) -> list:
+    try:
+        from _where import SHIPPED
+    except Exception as exc:
+        return [(WARN, "could not read the list of shipped modules", type(exc).__name__)]
+    rows = []
+    same = 0
+    newer_than_start = []
+    started = (live.version or {}).get("started")
+    for rel in SHIPPED:
+        leaf = rel.rsplit("/", 1)[-1]
+        theirs, ours = live.backend / leaf, HERE / rel
+        if not theirs.is_file():
+            rows.append((FAIL, f"{leaf} is not in the backend folder",
+                         "The feature it carries is switched off. Run apply-patches.ps1 "
+                         "(it copies every shipped module in), then restart Jarvis."))
+            continue
+        if not ours.is_file():
+            continue
+        a, b = _sha(theirs), _sha(ours)
+        if a != b:
+            rows.append((FAIL, f"{leaf} in the backend folder is not this repository's copy "
+                               f"({a[:8]} there, {b[:8]} here)",
+                         "Most likely an older one. Run apply-patches.ps1, then restart "
+                         "Jarvis."))
+            continue
+        same += 1
+        if isinstance(started, (int, float)) and not isinstance(started, bool):
+            try:
+                if theirs.stat().st_mtime > started + 2:
+                    newer_than_start.append(leaf)
+            except OSError:
+                pass
+    if same:
+        rows.append((PASS, f"{same} of {len(SHIPPED)} shipped modules are identical to "
+                           f"this repository's copies"))
+    if newer_than_start:
+        shown = ", ".join(newer_than_start[:6]) + (" and more" if len(newer_than_start) > 6
+                                                   else "")
+        rows.append((WARN, f"{len(newer_than_start)} module(s) changed after Jarvis started: "
+                           f"{shown}",
+                     "The running Jarvis may still use the old code for them. Restart "
+                     "Jarvis (quit the desktop app and open it again)."))
+    return rows
+
+
+def _settings_marker(backend: Path):
+    """(path, [lines]) - a few `key = value` lines of the owner's settings
+    file, which no web page would have. (Section headers like "[voice]" are
+    not used: jarvis_hud.html itself mentions some.)"""
+    try:
+        _on_path(backend)
+        import jarvis_framework as fw
+        path = fw.config_path()
+    except Exception:
+        path = None
+    if path is None:
+        for c in (backend / "jarvis-framework.toml", backend.parent / "jarvis-framework.toml"):
+            if c.is_file():
+                path = c
+                break
+    if path is None:
+        return None, []
+    try:
+        lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return path, []
+    out = []
+    for l in lines:
+        s = l.strip()
+        if "=" in s and not s.startswith("#") and len(s) >= 16:
+            out.append(s)
+        if len(out) >= 3:
+            break
+    return path, out
+
+
+@preflight_check("private_files", "Is the settings file kept off the web?")
+def pf_private_files(live: Live) -> list:
+    if not live.up:
+        return _needs_backend(live, "the settings-file check")
+    path, markers = _settings_marker(live.backend)
+    leaks = []
+    for probe in PRIVATE_PROBES:
+        for with_token in (False, True):
+            try:
+                code, _b, raw, _h = live.get(probe, token=with_token, timeout=5.0)
+            except Exception:
+                continue
+            if code != 200 or not raw:
+                continue
+            text = raw[:200_000].decode("utf-8", "replace")
+            if (any(m in text for m in markers) or "[autonomy." in text
+                    or raw.startswith(b"SQLite format 3")
+                    or ("def " in text and "jarvis" in text and "<html" not in text.lower())
+                    or (live.token and live.token in text)):
+                leaks.append(probe + (" (with the token)" if with_token else " (with NO token)"))
+    if leaks:
+        return [(FAIL, f"Jarvis SERVES A PRIVATE FILE over HTTP: {', '.join(leaks[:4])}",
+                 "Anything that can reach the port can read it - your settings, code or "
+                 "data. Stop Jarvis now and send this output back; do not use the phone "
+                 "until it is fixed.")]
+    said = f" (your settings are in {path})" if path else ""
+    return [(PASS, f"none of {len(PRIVATE_PROBES)} addresses serves the settings file or "
+                   f"another private file{said}")]
+
+
+def _banner_line(logs, prefix: str):
+    """The newest line of backend.log that starts with `prefix` (after the
+    two-space indent the banner uses), or None."""
+    if logs is None:
+        return None
+    try:
+        text = (logs / "backend.log").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    hits = [l.strip() for l in text.splitlines() if l.strip().startswith(prefix)]
+    return hits[-1] if hits else None
+
+
+@preflight_check("gate", "Does the approval gate stop what it should?")
+def pf_gate(live: Live) -> list:
+    rows = []
+    try:
+        _on_path(live.backend)
+        import jarvis_gate as G
+        v = G.check("post_to_external_service", {"probe": True}, timeout=0.1)
+        refused = not getattr(v, "allowed", True)
+        rows.append((PASS if refused else FAIL,
+                     "a 'never' action is refused" if refused
+                     else "a 'never' action was ALLOWED",
+                     "" if refused else "This is the control the whole project is built "
+                     "around. Send this output back before using Jarvis."))
+    except Exception as exc:
+        rows.append((FAIL, "the approval gate could not be asked", f"{type(exc).__name__}: "
+                     f"{exc}"))
+    # owner-check.patch: in the files, and switched on at start-up?
+    try:
+        gate_src = (live.backend / "jarvis_gate.py").read_text(encoding="utf-8",
+                                                                errors="replace")
+    except OSError:
+        gate_src = ""
+    if "_approval_stamped" in gate_src:
+        caps = (live.version or {}).get("capabilities") or {}
+        line = _banner_line(live.desktop_logs(), "approvals")
+        if live.version is not None and caps.get("owner_check") != "backend":
+            rows.append((FAIL, "owner-check.patch is in your files, but the running Jarvis "
+                               "did not switch it on",
+                         "Until it does, EVERY approval is refused. Check that "
+                         "jarvis_owner_check.py is in the backend folder (apply-patches.ps1 "
+                         "copies it), then restart Jarvis."
+                         + (f" Its start-up line said: {line}" if line else "")))
+        elif line and "NOT CHECKED" in line:
+            rows.append((FAIL, "the last start-up said approvals are NOT CHECKED",
+                         f"{line}. Run apply-patches.ps1, then restart Jarvis."))
+        elif live.version is not None:
+            rows.append((PASS, "the PC's own Windows Hello check for risky approvals is on"
+                         + (" (its start-up line is in backend.log)" if line else "")))
+    return rows
+
+
+@preflight_check("stop_all", "Does Stop everything reach the running Jarvis?")
+def pf_stop_all(live: Live) -> list:
+    if not live.up or live.version is None:
+        return _needs_backend(live, "Stop everything")
+    caps = live.version.get("capabilities") or {}
+    if caps.get("stop_all") is True:
+        return [(PASS, "Stop everything (the hotkey and the phone's button) reaches it")]
+    return [(WARN, "Stop everything cannot reach the running Jarvis yet",
+             "The hotkey and the phone's button still stop speech, and the task Stop "
+             "button still works. Run apply-patches.ps1 (stop-all.patch and "
+             "jarvis_stop_all.py), then restart Jarvis.")]
+
+
+@preflight_check("scheduler", "Is the scheduler running?")
+def pf_scheduler(live: Live) -> list:
+    if not live.up:
+        return _needs_backend(live, "the scheduler")
+    try:
+        code, body, _r, _h = live.get("/api/schedule")
+    except Exception as exc:
+        return [(FAIL, "/api/schedule did not answer", type(exc).__name__)]
+    if code == 404:
+        return [(WARN, "this Jarvis has no scheduler yet",
+                 "Timers, reminders and the briefing need schedule.patch. Run "
+                 "apply-patches.ps1.")]
+    if code == 503 or not isinstance(body, dict):
+        return [(WARN, "the scheduler is not installed",
+                 "Copy jarvis_schedule.py in (apply-patches.ps1 does), then restart Jarvis.")]
+    if body.get("running") is True:
+        n = len(body.get("jobs") or [])
+        return [(PASS, f"the scheduler is running ({n} timer(s), reminder(s) or "
+                       f"repeat(s) waiting)")]
+    return [(FAIL, "the scheduler's loop is NOT running",
+             "Timers, reminders and the morning briefing will not go off. Restart "
+             "Jarvis; if it stays, send backend.log back.")]
+
+
+@preflight_check("events", "Does the event stream deliver?")
+def pf_events(live: Live) -> list:
+    if not live.up:
+        return _needs_backend(live, "the event stream")
+    try:
+        head = live.events_head()
+    except Exception as exc:
+        return [(FAIL, "the event stream did not open", f"{type(exc).__name__}. Both apps "
+                 "hold approvals while it is down. Restart Jarvis.")]
+    if "retry:" in head and "hello" in head:
+        return [(PASS, "the event stream delivers (approvals and live status reach the apps)")]
+    return [(FAIL, "the event stream opened but sent no hello",
+             f"Got: {head[:120]!r}. Both apps will call the link stale. Restart Jarvis.")]
+
+
+@preflight_check("voice", "Are the voice models there?")
+def pf_voice(live: Live) -> list:
+    if not live.up:
+        return _needs_backend(live, "the voice models")
+    try:
+        code, body, _r, _h = live.get("/api/voice/status")
+    except Exception as exc:
+        return [(WARN, "/api/voice/status did not answer", type(exc).__name__)]
+    if code != 200 or not isinstance(body, dict):
+        return [(WARN, "voice is not installed on this PC",
+                 "Typing works without it. To talk to Jarvis, see backend/README.md, "
+                 "'Voice that works'.")]
+    rows = []
+    for key, name in (("stt", "speech-to-text (hearing you)"),
+                      ("tts", "the voice (Jarvis speaking)")):
+        part = body.get(key) if isinstance(body.get(key), dict) else {}
+        if part.get("available") is True:
+            rows.append((PASS, f"{name} is installed"))
+        else:
+            rows.append((WARN, f"{name} is not installed",
+                         (str(part.get("status") or "") + ". ").lstrip(". ")
+                         + "See backend/README.md, 'Voice that works'."))
+    return rows
+
+
+@preflight_check("reach", "Calendar, email and web search")
+def pf_reach(live: Live) -> list:
+    if not live.up:
+        return _needs_backend(live, "calendar, email and web search")
+    body = live.reach
+    if body is None:
+        try:
+            code, body, _r, _h = live.get("/api/reach")
+            body = body if code == 200 and isinstance(body, dict) else None
+        except Exception:
+            body = None
+    if body is None:
+        return [(WARN, "this Jarvis cannot list what it can reach yet",
+                 "reach.patch and jarvis_reach.py; run apply-patches.ps1.")]
+    rows = []
+    by_id = {r.get("id"): r for r in body.get("rows") or [] if isinstance(r, dict)}
+    for rid, name, kind in (("calendar", "Calendar reading", "calendar"),
+                            ("email_read", "Email reading", "email")):
+        row = by_id.get(rid)
+        state = (row or {}).get("state")
+        if state != "on":
+            rows.append((SKIP, f"{name} is not set up ({(row or {}).get('state_words') or 'off'})"))
+            continue
+        if not live.with_reads:
+            rows.append((PASS, f"{name} is set up (not read: add --with-reads to read it once)"))
+            continue
+        rows.append(_read_once(live, kind, name))
+    tools = [t.get("id") for t in body.get("tools") or [] if isinstance(t, dict)]
+    if "web_search" not in tools:
+        rows.append((SKIP, "web search is not switched on, so nothing was searched"))
+        return rows
+    try:
+        code, view, _r, _h = live.get("/api/search")
+    except Exception as exc:
+        rows.append((WARN, "/api/search did not answer", type(exc).__name__))
+        return rows
+    if code != 200 or not isinstance(view, dict) or not view.get("provider"):
+        why = (view or {}).get("why") if isinstance(view, dict) else ""
+        rows.append((SKIP, "no web search provider is chosen, so nothing was searched",
+                     str(why or "")))
+        return rows
+    try:
+        code, got, _r, _h = live.post("/api/search/test", {}, timeout=60)
+    except Exception as exc:
+        rows.append((FAIL, "Test search did not answer", type(exc).__name__))
+        return rows
+    got = got if isinstance(got, dict) else {}
+    said = str(got.get("said") or "")
+    if got.get("ok") is True or got.get("state") == "works":
+        rows.append((PASS, f"web search works through {view.get('provider')} "
+                           f"(one search for the word 'wikipedia')"))
+    else:
+        rows.append((FAIL, f"web search through {view.get('provider')} does not work",
+                     said or f"state: {got.get('state')}. Settings -> Web search says more."))
+    return rows
+
+
+def _read_once(live: Live, kind: str, name: str) -> tuple:
+    """One real read, asked for with --with-reads: a number, never a word of
+    what was read. Uses THIS window's settings, which may differ from the
+    running Jarvis's."""
+    fn = (live.reads or {}).get(kind)
+    try:
+        if fn is None:
+            if kind == "email":
+                import jarvis_email as M
+                got = M.count(M.plan(), approved=True)
+            else:
+                import jarvis_calendar as M
+                got = M.run(M.plan(days_ahead=1), approved=True)
+        else:
+            got = fn()
+    except Exception as exc:
+        return (FAIL, f"{name} failed", f"{type(exc).__name__}")
+    if isinstance(got, dict) and got.get("ok"):
+        if kind == "email":
+            return (PASS, f"{name} works ({got.get('count', '?')} unread)")
+        return (PASS, f"{name} works ({len(got.get('events') or [])} event(s) in the next day)")
+    reason = str((got or {}).get("reason") or "no reason given")[:200]
+    return (FAIL, f"{name} is set up but reading failed",
+            f"{reason}. This window's settings were used; if Jarvis's differ, check "
+            f"Settings -> What Jarvis can reach.")
+
+
+@preflight_check("credentials", "Is Windows Credential Manager reachable?")
+def pf_credentials(live: Live) -> list:
+    try:
+        import jarvis_token_store as TS
+    except Exception as exc:
+        return [(WARN, "jarvis_token_store.py is not in the backend folder",
+                 f"{type(exc).__name__}. Run apply-patches.ps1.")]
+    make = live.token_store or (lambda target: TS.WindowsStore(target))
+    try:
+        store = make(TS.TARGET)
+        store.read()           # found or not found: either way it answered
+    except TS.Unavailable:
+        return [(SKIP, "Credential Manager, because this is not Windows")]
+    except Exception as exc:
+        return [(FAIL, "Windows Credential Manager did not answer",
+                 f"{type(exc).__name__}. Jarvis keeps its pairing token and search keys "
+                 f"there; without it the phone needs pairing again after every restart. "
+                 f"Restart the PC; if it stays, send this output back.")]
+    return [(PASS, "Windows Credential Manager answers (the pairing token and keys are kept "
+                   "there)")]
+
+
+# ---------------------------------------------------------------- running
+
+_SHOW = {PASS: "PASS", FAIL: "FAIL", WARN: "WARN", SKIP: "skip"}
+
+
+def run_preflight(live: Live, *, only=None, out=print) -> tuple:
+    """Run every check (or only the keys in `only`), print each row, and
+    return (pass, fail, warn, skip, rows). A check that raises is a FAIL of
+    its own - it never stops the others."""
+    rows = []
+    for key, title, fn in PREFLIGHT:
+        if only and key not in only:
+            continue
+        out(f"\n{title}")
+        try:
+            got = fn(live) or []
+        except Exception as exc:
+            got = [(FAIL, f"the {key} check itself broke",
+                    f"{type(exc).__name__}: {exc}. Send this output back.")]
+        for r in got:
+            status, what = r[0], r[1]
+            detail = r[2] if len(r) > 2 else ""
+            rows.append((key, status, what, detail))
+            out(f"  {_SHOW.get(status, status)}  {what}")
+            for d in str(detail or "").rstrip().splitlines()[:6]:
+                out(f"          {d}")
+    n = {s: sum(1 for r in rows if r[1] == s) for s in (PASS, FAIL, WARN, SKIP)}
+    out("")
+    out(f"{n[PASS]} pass, {n[FAIL]} fail, {n[WARN]} warn"
+        + (f" ({n[SKIP]} skipped)" if n[SKIP] else ""))
+    return n[PASS], n[FAIL], n[WARN], n[SKIP], rows
+
+
+def preflight_main(argv) -> int:
+    print("Preflight: the Jarvis that is running now, every chain end to end.")
+    print("Read-only: it approves nothing, sends no email, unloads no model and")
+    print("changes no setting. The pairing token is used, never shown.")
+    print(f"\nbackend : {BACKEND}")
+    live = Live(with_reads="--with-reads" in argv, with_chat="--with-chat" in argv)
+    print(f"jarvis  : {live.base}")
+    _p, failed, _w, _s, _rows = run_preflight(live)
+    if failed:
+        print("VERDICT: something is broken. Each FAIL above says what to do.")
+        return 1
+    print("VERDICT: every chain that could be checked works.")
+    return 0
+
+
+# ==========================================================================
 
 def main() -> int:
     print(__doc__.split("WHY THIS EXISTS")[0].strip())
@@ -713,6 +1715,8 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
+        if "--preflight" in sys.argv[1:]:
+            sys.exit(preflight_main(sys.argv[1:]))
         sys.exit(main())
     except KeyboardInterrupt:
         print("\nstopped")

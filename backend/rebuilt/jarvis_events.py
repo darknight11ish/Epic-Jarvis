@@ -76,6 +76,10 @@ RETRY_MS = 3000
 #: The API version reported by hello(). JARVIS-API.md section 2: "api": 1.
 API_VERSION = 1
 
+#: When this process started, near enough: jarvis_hud.py imports this module
+#: at boot. Sent in /api/version as "started" (see hello()).
+_STARTED = time.time()
+
 
 # --------------------------------------------------------------------------
 #   An event
@@ -755,6 +759,13 @@ def _capability_probe() -> dict:
         # string, not true, so a later kind of check can say what it is.
         # False on an older backend: the desktop keeps asking itself.
         "owner_check": _owner_check(),
+        # "Stop everything" (stop-all.patch, jarvis_stop_all.py; the owner's
+        # decision of 2026-09-25): true once POST /api/stop_all is answered
+        # by the running server. Asked of the module that wrapped the
+        # handler, like owner_check. Both apps still try the route when it
+        # is false - stopping is never hidden - and say plainly if the PC
+        # cannot do it yet.
+        "stop_all": _stop_all(),
         "connectors": {},
     }
 
@@ -795,6 +806,16 @@ def _owner_check():
     try:
         import jarvis_owner_check
         return "backend" if jarvis_owner_check.armed() else False
+    except Exception:
+        return False
+
+
+def _stop_all() -> bool:
+    """True once jarvis_stop_all has wrapped the running server's POST
+    handler (stop-all.patch). Importable is not installed."""
+    try:
+        import jarvis_stop_all
+        return bool(jarvis_stop_all.armed())
     except Exception:
         return False
 
@@ -841,6 +862,12 @@ def hello(client: str = "") -> dict:
         # mid-turn showed "idle". The state word only; `detail` stays on the
         # activity event and /api/status, like every other doorbell field.
         "activity": str(_ACTIVITY.get("state") or "idle"),
+        # When this server process started (epoch seconds) - roughly when
+        # this module was first imported, which jarvis_hud.py does at boot.
+        # selftest.py --preflight compares it with each shipped module's
+        # file time: a module changed after the start may not be the code
+        # the running server uses until Jarvis is restarted.
+        "started": _STARTED,
         "capabilities": _capability_probe(),
     }
 

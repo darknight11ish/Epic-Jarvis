@@ -119,6 +119,7 @@ on a throwaway copy instead.
 | `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing`, `POST /api/briefing/now` and `POST /api/briefing/senders` ("Show who new emails are from": off at once, on through one approval card), makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
 | `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of five providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
 | `owner-check.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The approval gap, step 1** (docs/APPROVAL-GAP-DESIGN.md, the owner's decisions of 2026-09-25). `POST /api/approve` asks Windows Hello itself - showing the card's own title - before it accepts a RISKY approval that comes from this PC, refuses one on a PC with no Windows Hello, and stamps every approval it accepts; the gate believes no "approved" row this running backend did not stamp, so "approved" written straight into `approvals.db` is refused. Last in the list; its context is `gate-outcome.patch`'s approved branches and `log-scrub.patch`'s banner line. Needs `jarvis_owner_check.py` - without it EVERY approval is refused. See "The approval gap, step 1", at the very end. |
+| `stop-all.patch` | `jarvis_hud.py` | **Stop everything** (the owner's decision of 2026-09-25). `POST /api/stop_all` - the desktop's Alt+Shift+X and the phone's "Stop everything" button - stops a running task before its next step, makes the answer being written use no more tools, and tells every registered stopper (focus sessions) to stop; it never approves or starts anything and needs no card. Last in the list; its context is `owner-check.patch`'s banner lines. Needs `jarvis_stop_all.py` - see "Stop everything", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -9379,3 +9380,154 @@ off Windows.
   of `127.0.0.1`, you are asked twice (once by the app, once by the
   backend): the app leaves the asking to the backend only when it talks to
   it on loopback.
+
+---
+
+# The preflight: is the Jarvis that is running now really working?
+
+**What it is.** One command that asks the Jarvis you are using right now -
+the one the desktop app and the phone talk to - every question a real chain
+depends on, and prints one line for each: **PASS**, **FAIL** or **WARN**,
+with one plain sentence and what to do. The last line is "N pass, N fail,
+N warn". (The owner's decision of 2026-09-25, after the "Build Your Own
+Jarvis" prompt pack: "a live preflight check".)
+
+It is a second mode of `selftest.py`, not a new tool. Plain `selftest.py`
+starts its own copy of the backend and stops it again - that answers "does
+it work at all?". `--preflight` asks the copy that is ALREADY RUNNING,
+which can be stuck, missing a patch, or running an older file while a fresh
+copy passes everything.
+
+**Run it** from the folder this repository is cloned into, while Jarvis is
+running. The output shows in the window and is also saved to a file called
+`preflight.txt` on your Desktop:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:PYTHONIOENCODING = "utf-8"; py -3 backend\selftest.py --preflight | Tee-Object -FilePath "$env:USERPROFILE\Desktop\preflight.txt"; Write-Host "Saved to $env:USERPROFILE\Desktop\preflight.txt"
+```
+
+Add ` --with-reads` after `--preflight` to also read your calendar and
+email once (it prints only how many events and unread emails, never what
+they say), and ` --with-chat` to send the test question through Jarvis's
+chat even while tools are switched on.
+
+**What it checks, in order:**
+
+| check | FAIL (or WARN) when |
+|---|---|
+| Jarvis is running and accepts the pairing token | nothing answers on `127.0.0.1:4719` (or `JARVIS_HUD_PORT`); no token on this PC; none is accepted; a request with NO token is accepted. The token is read from `HUD_TOKEN`, then Credential Manager (the backend's own, then the one typed into the desktop app), then the old file - used, never shown |
+| the handshake | `/api/version` is not API 1 (what both apps speak), or lists no capabilities; `/api/status` leaves fields out (WARN); the desktop app last started on this PC is older than this repository (WARN, read from the desktop app's own log) |
+| the model | the three doctor checks (step 7 above), then ONE question straight to Ollama ("Reply with the single word: ready") - which loads the model if it was not loaded, like any question, and never unloads anything |
+| a question through Jarvis's own chat | the same question through `/api/chat`, as a **temporary chat** (nothing remembered, nothing kept). Skipped - and it says why - when this Jarvis cannot hold a temporary chat, or when any tool is switched on (the model could choose one; `--with-chat` sends it anyway). A cloud lane answering is a WARN |
+| every patch is in your files | a patch's lines are not in the file it changes ("not applied"), or only some are ("an older version, or edited by hand") |
+| the file Jarvis runs is the file you think | a shipped module is missing from the backend folder, or differs from this repository's copy (both short fingerprints shown); a WARN when a module's file changed after Jarvis started ("restart Jarvis") |
+| the settings file is kept off the web | fifteen addresses (`/jarvis-framework.toml`, `/../jarvis-framework.toml`, `/token`, `/memory.db`, ...) are asked with and without the token. Any that serves the settings file, a database, Python code or the token is a loud FAIL |
+| the approval gate | a "never" action is not refused; `owner-check.patch` is in your files but the running Jarvis did not switch it on, or its newest start-up line in `backend.log` says NOT CHECKED |
+| Stop everything | the running Jarvis cannot answer `POST /api/stop_all` (a WARN: the task Stop still works) |
+| the scheduler | its loop is not running (timers and reminders would not go off) |
+| the event stream | it does not open, or sends no hello |
+| the voice models | speech-to-text or the voice is not installed (a WARN only - typing works without them) |
+| calendar, email, web search | calendar and email: says whether each is set up, and reads nothing unless `--with-reads`. Web search: tested ONLY when it is switched on and a provider is chosen, and then through the Test search button's own route (one search for the word "wikipedia") |
+| Windows Credential Manager | it does not answer |
+
+**Read-only.** It never approves or denies a card, never sends an email,
+never unloads a model, never changes a setting, and never presses Stop
+everything. `test_selftest_preflight.py` checks that the only things it
+ever POSTs are the one chat question and Test search.
+
+**Add one check per real incident.** When something breaks for real, add
+the preflight check that would have caught it: one function in
+`selftest.py`, marked `@preflight_check("name", "the question it answers")`,
+returning its rows - and a case in `test_selftest_preflight.py`. A check
+list that grows by one for every real problem catches that problem the
+second time, before it bites.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_selftest_preflight.py
+```
+
+No network: a stand-in Jarvis and a stand-in Ollama, and a backend folder
+built from this repository (every shipped module, and your five files as
+the whole patch stack makes them). It prints an example of the whole
+output. It proves that a healthy Jarvis gives no FAIL, that every check
+fails on the thing it is for, that the token is never printed, and that
+nothing but the chat question and Test search is ever POSTed.
+
+## Not checked, said plainly
+
+- It has not run against the real Jarvis on your PC. The first real run is
+  the test.
+- "Is every patch in your files" compares lines: it cannot tell whether a
+  line that is there is the one Python actually runs.
+- Calendar and email with `--with-reads` are read with THIS window's
+  settings. If the running Jarvis was given different ones, the answers
+  can differ.
+
+---
+
+# Stop everything
+
+**What it is.** One key on the PC - **Alt+Shift+X** - and one button on
+the phone, "Stop everything", that halt whatever Jarvis is doing, at once,
+and ask nobody first. (The owner's decision of 2026-09-25.)
+
+One press:
+
+1. **stops Jarvis talking** - on the PC the desktop app stops its own
+   speech (the quickbar and the HUD window) before it even calls the
+   backend; on the phone, the phone's own speech;
+2. stops a **running task** - computer control, browser control, phone
+   control - before its next step, and forgets a paused one (the same Stop
+   the task buttons use);
+3. makes the **answer being written** use no more tools: every tool call
+   it asks for from then on is refused before it reaches the approval
+   gate, and one whose card you approve afterwards does not run either.
+   The next question works normally;
+4. tells everything that **registered** with it to stop (focus sessions
+   will: `jarvis_stop_all.register(name, fn)`).
+
+It says what it stopped, in plain sentences, or "Nothing was running, so
+there was nothing to stop."
+
+**It never** approves, denies or answers a card (a waiting card stays
+waiting), never starts or resumes anything, and is never held back by a
+stale link or a card: stopping only ever makes Jarvis do less. It needs the
+pairing token like every other route.
+
+**What it cannot do:** one step that has already started finishes - a
+click being made, a command already running, one page loading. The stop
+lands before the NEXT step. A timer or reminder still goes off later: it
+is not an action on the screen. Pressing it on the phone does not stop the
+PC's speech, or the other way round - each app stops its own.
+
+**Why Alt+Shift+X.** Jarvis's other keys are Alt+Space, Win+Shift+J,
+Alt+Shift+S, Alt+Shift+N and Alt+Shift+W, so it sits with them and is
+easy to find by feel. Windows itself has no Alt+Shift+letter shortcut
+(Alt+Shift alone switches the keyboard language). Escape was the obvious
+key and is taken: Ctrl+Shift+Esc opens Task Manager and Alt+Esc switches
+windows. One program shortcut it does take: in Microsoft Word, Alt+Shift+X
+marks an index entry, which Word will not see while Jarvis is running. It
+can be changed in the desktop app's Settings, Hotkeys, like the others.
+
+## Apply it
+
+`stop-all.patch` (on `jarvis_hud.py`, last in the list, after
+`owner-check.patch` - its context is owner-check's start-up lines) and
+`jarvis_stop_all.py` copied in: `apply-patches.ps1` does both. Restart
+Jarvis. The start-up banner then says `stop       Stop everything answers
+at POST /api/stop_all`, and `/api/version` lists `capabilities.stop_all:
+true`. Without the module the banner says "NOT ON", and both apps still
+stop their own speech and say the PC could not be reached.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_stop_all.py
+```
+
+On the PC, with Jarvis running: ask it something long with "Read aloud" on
+and press Alt+Shift+X while it talks. The speech stops at once, and a
+notification says what else was stopped. `selftest.py --preflight` checks
+that the running Jarvis answers the route.

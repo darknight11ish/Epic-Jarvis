@@ -43,9 +43,27 @@ await check("every bindable action is listed", async () => {
   const page = await open();
   const list = await rows(page);
   await page.close();
-  assert.equal(list.length, 5, `${list.length} rows, expected 5`);
+  assert.equal(list.length, 6, `${list.length} rows, expected 6`);
   assert.equal(list[0].name, "Summon Jarvis");
   assert.equal(list[0].key, "Alt + Space");
+  // "Stop everything" (2026-09-25): listed like the others, so it can be
+  // moved off Alt+Shift+X if something else on the PC needs that.
+  const stop = list.find((r) => r.name === "Stop everything");
+  assert.ok(stop, "Stop everything is not listed");
+  assert.equal(stop.key, "Alt + Shift + X");
+});
+
+await check("the Rust list and this stand-in agree", async () => {
+  // hotkeys.rs ACTIONS is the truth; the stand-in above is what every
+  // Settings test renders. A new action added to one and not the other
+  // would test a Settings page the app never shows.
+  const all = read("src-tauri/src/hotkeys.rs");
+  const at = all.indexOf("pub const ACTIONS");
+  const rs = all.slice(at, all.indexOf("\n];", at));
+  const ids = [...rs.matchAll(/\bid: "([a-z_]+)",/g)].map((m) => m[1]);
+  assert.deepEqual(ids, K.HOTKEYS.map((h) => h.id));
+  const defaults = [...rs.matchAll(/default: "([^"]+)",/g)].map((m) => m[1]);
+  assert.deepEqual(defaults, K.HOTKEYS.map((h) => h.default));
 });
 
 await check("Win is shown as Win, not Super", async () => {

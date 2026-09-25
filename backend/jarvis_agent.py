@@ -952,6 +952,58 @@ def _task_control():
         return None
 
 
+#: "Stop everything" (jarvis_stop_all.py, the owner's decision of 2026-09-25).
+#: Once it is pressed during an answer, every tool call that answer asks for
+#: is refused before the gate - reads too, since stopping means doing less -
+#: and one that was already put to a card is not run even if the card is
+#: approved afterwards. The next question is not affected.
+STOPPED_ERROR = ("refused: the owner pressed Stop everything while this answer was being "
+                 "written, so nothing more runs in it. Nothing was run and nobody was "
+                 "asked. Do not try again; tell the owner it was stopped.")
+STOPPED_LINE = ("(Stopped: you pressed Stop everything, so Jarvis did not use {tool} or "
+                "anything else in this answer.)")
+
+
+def _stop_all():
+    """jarvis_stop_all, or None when it is not installed."""
+    try:
+        import jarvis_stop_all
+        return jarvis_stop_all
+    except Exception:
+        return None
+
+
+def _stopped_since(mark) -> bool:
+    """Never raises. Without jarvis_stop_all.py nothing is ever "stopped"
+    here - the task Stop still reaches a running plan through its checkpoint."""
+    sa = _stop_all()
+    if sa is None or mark is None:
+        return False
+    try:
+        return bool(sa.stopped_since(mark))
+    except Exception:
+        return False
+
+
+def _refuse_stopped(name: str, call: dict, convo: list, steps: list, say_step,
+                    watch: "_TurnWatch", tell_owner, *, ran_step: Optional[dict] = None) -> None:
+    """The tool result for a call made after Stop everything. Said to the
+    owner once per answer."""
+    if ran_step is None:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+    else:
+        # "refused", not the gate's "approved": the skill log counts an
+        # approved step as one that ran (jarvis_skill_discovery.RAN_OUTCOMES).
+        ran_step["outcome"] = "refused"
+    say_step("tool_refused", name)
+    if "(stopped)" not in watch.told and tell_owner is not None:
+        watch.told.add("(stopped)")
+        label = name if isinstance(name, str) and name in TOOLS else "a tool"
+        tell_owner(STOPPED_LINE.format(tool=label))
+    convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                  "content": _tool_content({"ok": False, "error": STOPPED_ERROR})})
+
+
 def _github_search_action_name() -> str:
     try:
         import jarvis_research
@@ -2082,6 +2134,15 @@ class _TurnWatch:
         # `messages`, which carry the server's own system turns (the FACTS
         # block), not off the request as the app sent it.
         self.memory = recalled_memory(messages)
+        # "Stop everything" (jarvis_stop_all.py): the mark run_local_turn
+        # takes when the answer starts. None - a watch made outside a turn -
+        # is never stopped.
+        self.stop_mark = None
+
+    # -- Stop everything -----------------------------------------------------
+    def stopped(self) -> bool:
+        """True once the owner pressed Stop everything during this answer."""
+        return _stopped_since(self.stop_mark)
 
     # -- broken calls ------------------------------------------------------
     def broken(self, name: str) -> int:
@@ -3060,6 +3121,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         said["gap"] = True
         emit(line)
 
+    # "Stop everything" (jarvis_stop_all.py): this answer's mark. A press
+    # after it refuses every tool call the answer makes from then on.
+    sa = _stop_all()
+    if sa is not None:
+        try:
+            watch.stop_mark = sa.begin_turn()
+        except Exception:
+            sa = None
     try:
         # Security audit H1: nothing is sent to a "local" model that is not on
         # this PC - the everyday model, or the second card's lane if one was
@@ -3154,6 +3223,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     except UpstreamError as exc:
         fail(str(exc))
     finally:
+        if sa is not None:
+            try:
+                sa.end_turn()
+            except Exception:
+                pass
         stop_beat.set()
         beat.join(timeout=2)
         # After the answer, so counting can never delay it, and in a
@@ -3180,6 +3254,11 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     watch = watch if watch is not None else _TurnWatch()
     fn = (call.get("function") or {})
     name = fn.get("name", "")
+    if watch.stopped():
+        # Stop everything was pressed during this answer: nothing more runs
+        # in it, and nothing is put to anyone (jarvis_stop_all.py).
+        _refuse_stopped(name, call, convo, steps, say_step, watch, tell_owner)
+        return
     # Checked BEFORE prepare() and the gate: a call whose arguments are not
     # JSON, not an object, or wrong for the tool's own schema is never
     # prepared and never raises a card (see check_call). It used to become
@@ -3341,6 +3420,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             except Exception:
                 pass
         raise ClientGone()
+    elif watch.stopped():
+        # Allowed - but Stop everything was pressed while the card waited
+        # (or while the gate was deciding). The stop wins over an approval
+        # of the earlier question, as it does for a paused task's resume.
+        _refuse_stopped(name, call, convo, steps, say_step, watch, tell_owner,
+                        ran_step=step)
+        return
     else:
         say_step("tool_started", name)
         out.set_status("working")
@@ -3355,7 +3441,11 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         if tc is not None and name in _TASK_MODULES:
             task_id = getattr(verdict, "request_id", None) or tc.new_task_id()
             tc.begin(task_id, name)
-            kwargs["checkpoint"] = (lambda tid=task_id: tc.checkpoint(tid))
+            # Stop everything reaches a running plan two ways: the task Stop
+            # it sends, and - for a plan that began just after it looked for
+            # running tasks - this answer's own mark, read at every step.
+            kwargs["checkpoint"] = (lambda tid=task_id, w=watch:
+                                    "stop" if w.stopped() else tc.checkpoint(tid))
         step["ran"] = True
         try:
             result = tool.execute(args, state, **kwargs)
@@ -3475,6 +3565,11 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
         steps.append(step)
         say_step("tool_refused", name)
         raise ClientGone()
+    if watch.stopped():
+        # Stop everything while the search's card waited (jarvis_stop_all.py).
+        steps.append(step)
+        _refuse_stopped(name, call, convo, steps, say_step, watch, tell_owner, ran_step=step)
+        return
     steps.append(step)
     say_step("tool_started", name)
     out.set_status("working")
