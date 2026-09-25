@@ -221,6 +221,20 @@ class JarvisApi(
         // the tighter keepalive-based 90s, and [shortCall] overrides it too.
         .readTimeout(120, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        // Never follow a redirect (apps security audit L1). Every request
+        // here carries X-Jarvis-Token, and a followed redirect would carry it
+        // to wherever it pointed: OkHttp strips only Authorization when a
+        // redirect changes host. The desktop's clients refuse redirects too,
+        // and so does UpdateChecker. A 3xx from the PC now comes back as the
+        // failure it is. [streamClient] and [shortCall] inherit both.
+        .followRedirects(false)
+        .followSslRedirects(false)
+        // Straight to the PC, never through the phone's HTTP proxy (audit
+        // L2). The link is plain HTTP inside Tailscale or NordVPN Meshnet,
+        // so a proxy set in the Wi-Fi settings, or installed by a work
+        // profile, would see the token in the clear. The desktop's clients
+        // use no proxy either (`.no_proxy()`).
+        .proxy(java.net.Proxy.NO_PROXY)
         .build()
 
     /**
