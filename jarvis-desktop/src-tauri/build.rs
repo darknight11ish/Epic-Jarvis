@@ -128,6 +128,15 @@ fn main() {
             // or off. ON only raises an approval card. Settings window only.
             "get_big_model",
             "set_big_model",
+            // Settings' "Hardware and models" (backend/hardware.patch): the
+            // cards and the three setups; choose one (changes nothing by
+            // itself); ask for ONE step of it, read from the backend's own
+            // answer (each step is its own approval card); measure.
+            // Settings window only.
+            "get_hardware",
+            "apply_hardware",
+            "hardware_step",
+            "measure_hardware",
             // Settings' "Voice": what the PC's voice settings are (GET
             // /api/voice/status) - whether each microphone's voice print is
             // trained, the wake word, the stop word, Smart Turn. Read only.

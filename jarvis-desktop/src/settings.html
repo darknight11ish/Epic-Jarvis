@@ -545,6 +545,107 @@
         </div>
       </section>
 
+      <!-- ── Hardware and models ──────────────────────────────────────────
+           Read from GET /api/hardware (hardware-panel.js). The graphics
+           cards, what runs on them now, and three setups. Nothing changes
+           until the owner picks one; picking one lists its steps, and each
+           step is ONE button that raises that step's own approval card.
+           docs/HARDWARE-PROFILES.md is the design. -->
+      <section class="card" id="hardware">
+        <h2>Hardware and models</h2>
+        <p class="note">
+          Jarvis works out three setups for the graphics cards in this
+          computer: the fastest answers, the smartest answers, or the most
+          features. Nothing changes until you pick one. Picking one shows
+          its steps, and each step asks you with its own approval card, in
+          order. Every number is calculated, not measured, until you press
+          Measure.
+        </p>
+
+        <p class="state" id="hw-state" role="status">Checking your graphics cards…</p>
+
+        <div id="hw-body" hidden>
+          <h3 class="subhead">Your cards</h3>
+          <p class="note" id="hw-found"></p>
+          <ul class="sc-cards" id="hw-cards"></ul>
+
+          <h3 class="subhead">Now running</h3>
+          <p class="sc-line" id="hw-now"></p>
+          <div id="hw-now-bar"></div>
+
+          <h3 class="subhead">Three choices</h3>
+          <div id="hw-presets"></div>
+
+          <div id="hw-steps" hidden>
+            <h3 class="subhead" id="hw-steps-title">Steps</h3>
+            <ol class="hw-steps" id="hw-step-list"></ol>
+            <div class="row">
+              <button class="btn ghost small" id="hw-stop" type="button">Stop using this setup</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="status" id="hw-status" role="status"></span>
+          </div>
+
+          <div id="hw-command-box" hidden>
+            <h3 class="subhead">The one command</h3>
+            <p class="note">
+              Ollama reads a few settings only when it starts. This one line
+              saves them for your Windows user; nothing is written to a file.
+              To run it: press Copy, open PowerShell from the Start menu,
+              paste it in and press Enter. Then quit Ollama (right-click its
+              icon by the clock, then Quit Ollama) and start it again from
+              the Start menu.
+            </p>
+            <div class="row sc-command">
+              <input id="hw-command" type="text" readonly spellcheck="false" autocomplete="off"
+                     aria-label="The one PowerShell command for this setup" />
+              <button class="btn ghost small" id="hw-command-copy" type="button">Copy</button>
+            </div>
+            <p class="note">To put the settings back the way they were:</p>
+            <div class="row sc-command">
+              <input id="hw-undo" type="text" readonly spellcheck="false" autocomplete="off"
+                     aria-label="The PowerShell command that undoes it" />
+              <button class="btn ghost small" id="hw-undo-copy" type="button">Copy</button>
+            </div>
+            <p class="note">To see what is set now (it only prints):</p>
+            <div class="row sc-command">
+              <input id="hw-check" type="text" readonly spellcheck="false" autocomplete="off"
+                     aria-label="The PowerShell command that shows the settings" />
+              <button class="btn ghost small" id="hw-check-copy" type="button">Copy</button>
+            </div>
+            <p class="sc-line" id="hw-restart"></p>
+            <span class="status" id="hw-copy-status" role="status"></span>
+          </div>
+
+          <h3 class="subhead">Measure</h3>
+          <p class="note">
+            Runs one short question through each model of the setup on this
+            PC, and checks that all of it is on the graphics card. It loads
+            each model once; with one card, the picture model pushes chat off
+            the card until your next message.
+          </p>
+          <div class="row">
+            <button class="btn ghost small" id="hw-measure" type="button">Measure</button>
+          </div>
+          <p class="sc-line" id="hw-measured"></p>
+
+          <details class="more">
+            <summary><span class="more-title">Details</span>
+              <span class="more-detail">Every number, with its arithmetic.</span></summary>
+            <ul class="hw-details" id="hw-details-list"></ul>
+            <p class="note">To test later, not in any setup yet:</p>
+            <ul class="hw-details" id="hw-test-later"></ul>
+          </details>
+
+          <p class="note">
+            The extra features on a second graphics card (longer
+            conversations, pictures, learning, browser control, the wiki)
+            keep their own switches, in the next section.
+          </p>
+        </div>
+      </section>
+
       <!-- ── Second graphics card ─────────────────────────────────────────
            Read from GET /api/second-card (settings.js, second-card part).
            Every switch is OFF until the owner turns it on, and can only be
@@ -1003,5 +1104,6 @@
     </main>
 
     <script type="module" src="settings.js"></script>
+    <script type="module" src="hardware-panel.js"></script>
   </body>
 </html>

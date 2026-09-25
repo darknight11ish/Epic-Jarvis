@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-measure-hardware"
+description = "Enables the measure_hardware command without any pre-configured scope."
+commands.allow = ["measure_hardware"]
+
+[[permission]]
+identifier = "deny-measure-hardware"
+description = "Denies the measure_hardware command without any pre-configured scope."
+commands.deny = ["measure_hardware"]

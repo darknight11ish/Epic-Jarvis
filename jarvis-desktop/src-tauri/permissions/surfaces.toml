@@ -254,6 +254,16 @@ permissions = [
   # switch.
   "allow-get-big-model",
   "allow-set-big-model",
+  # "Hardware and models": the cards and the three setups for them. Choosing
+  # a setup changes nothing by itself; each of its steps is ONE request that
+  # raises its own existing approval card (model install, model switch, a
+  # second-card switch) or the new models_create card, read from the
+  # backend's own answer - never a route or a body from the page. Asking and
+  # measuring are held while the event stream is stale.
+  "allow-get-hardware",
+  "allow-apply-hardware",
+  "allow-hardware-step",
+  "allow-measure-hardware",
   # "Voice": what the PC says about listening to the owner - whether each
   # microphone's voice print is trained, which voice check is installed, the
   # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:

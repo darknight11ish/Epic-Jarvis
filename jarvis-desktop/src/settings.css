@@ -724,6 +724,58 @@ select:focus-visible {
 .sc-command .btn.small { margin-left: 0; flex: none; }
 
 /* --------------------------------------------------------------------------
+   Hardware and models. The second graphics card's pieces again (`.sc-gpu`,
+   `.sc-line`), plus one box per setup, the memory bars as text blocks, and
+   the numbered steps. A bar over the card and a step that waits get the
+   same edges and colours as everywhere else on the page.
+   -------------------------------------------------------------------------- */
+
+#hw-state[data-tone="bad"] { color: var(--bad-text); }
+
+.hw-preset {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+
+.hw-preset-name { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--text); }
+.hw-rec { color: var(--accent-text); }
+.hw-chosen { color: var(--ok-text); }
+
+.hw-bar {
+  margin: 2px 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.hw-blocks { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text); }
+.hw-bar[data-tone="bad"] .hw-blocks { color: var(--bad-text); }
+
+.hw-off-title { margin: 8px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--text); }
+.hw-off, .hw-details { margin: 0 0 8px; padding-left: 18px; font-size: 11.5px; color: var(--text-muted); }
+
+.hw-steps { margin: 0 0 10px; padding-left: 20px; }
+.hw-step { padding: 6px 0; border-top: 1px solid var(--line-soft); }
+.hw-step:first-child { border-top: none; }
+.hw-step-title { margin: 0 0 2px; font-size: 12.5px; color: var(--text); }
+.hw-step[data-state="later"] .hw-step-title { color: var(--text-muted); }
+.hw-step[data-state="waiting"] .sc-line { color: var(--accent-text); font-weight: 600; }
+
+.hw-modelfile {
+  margin: 4px 0;
+  padding: 8px;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------------------
    Big model (slow). The second graphics card's pieces, reused: `.sc-gpu`
    list entries for what was found, `.sc-switch` rows, `.sc-line` words. A
    model's `note` (for example a giant model on a SATA drive) is a warning,

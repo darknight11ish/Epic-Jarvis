@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-hardware"
+description = "Enables the get_hardware command without any pre-configured scope."
+commands.allow = ["get_hardware"]
+
+[[permission]]
+identifier = "deny-get-hardware"
+description = "Denies the get_hardware command without any pre-configured scope."
+commands.deny = ["get_hardware"]

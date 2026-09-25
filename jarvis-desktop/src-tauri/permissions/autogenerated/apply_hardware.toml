@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-apply-hardware"
+description = "Enables the apply_hardware command without any pre-configured scope."
+commands.allow = ["apply_hardware"]
+
+[[permission]]
+identifier = "deny-apply-hardware"
+description = "Denies the apply_hardware command without any pre-configured scope."
+commands.deny = ["apply_hardware"]

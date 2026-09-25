@@ -52,6 +52,16 @@ export const SECOND_CARD = JSON.parse(fsSync.readFileSync(path.join(
   "utf8")).cases;
 
 /**
+ * The backend's real `GET /api/hardware` answers and POST answers -
+ * jarvis_hardware.status() and friends, one per named case, written by
+ * tools/gen_hardware_cases.py. Never hand-made: pick a case by name, e.g.
+ * `HARDWARE.today_one_card`.
+ */
+export const HARDWARE = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "fixtures", "hardware-cases.json"),
+  "utf8")).cases;
+
+/**
  * The backend's real big-model answers - jarvis_big_model.status() (the
  * `status_*` cases), deep_status() (`deep_*`) and the POST answers
  * (`post_*`, `ask_*`, each `{status, body}`) - written by
@@ -397,7 +407,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, hardware }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -875,6 +885,42 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             st.wake.pending = false;
             return JSON.parse(JSON.stringify(vs.offAnswer));
           }
+          // hardware.rs. `status` is a real status() from HARDWARE; the
+          // Rust passes a 200 on as is. `unavailable` is its answer for a
+          // 404 or the 503 of a backend without jarvis_hardware.py. A step
+          // is only ever asked for by its id (the Rust reads its route from
+          // the backend), and the stub records exactly that.
+          case "get_hardware": {
+            const h = window.__hardware;
+            h.reads += 1;
+            if (h.getFails) throw new Error(h.getFails);
+            if (h.unavailable) {
+              return { available: false, why: "This PC's Jarvis does not have the hardware part yet. Update the backend by running apply-patches.ps1, then open this again." };
+            }
+            return JSON.parse(JSON.stringify(h.status));
+          }
+          case "apply_hardware": {
+            const h = window.__hardware;
+            h.applies.push(args.preset === undefined ? null : args.preset);
+            if (h.applyFails) throw new Error(h.applyFails);
+            if (h.afterApply) h.status = JSON.parse(JSON.stringify(h.afterApply));
+            return JSON.parse(JSON.stringify(h.applyAnswer || { ok: true, chosen: args.preset ?? null,
+              message: "Chosen. Nothing has changed yet: each step below is its own approval card, in order." }));
+          }
+          case "hardware_step": {
+            const h = window.__hardware;
+            h.steps.push(args.stepId);
+            if (h.stepFails) throw new Error(h.stepFails);
+            const st = h.status.applying && h.status.applying.steps.find((x) => x.id === args.stepId);
+            if (st) st.state = "waiting";
+            return { ok: true, pending: true, message: "Approve the card on your PC or phone to make it. Nothing is made until you do." };
+          }
+          case "measure_hardware": {
+            const h = window.__hardware;
+            h.measures += 1;
+            if (h.measureFails) throw new Error(h.measureFails);
+            return JSON.parse(JSON.stringify(h.measureAnswer));
+          }
           // commands.rs get_big_model / set_big_model. `status` is a real
           // status() from BIG_MODEL; the Rust passes a 200 on as is.
           // `unavailable` is its answer for a 404, or the 503 `{"available":
@@ -1231,6 +1277,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__secondCard = { reads: 0, changes: [], getFails: null, setFails: null,
                           unavailable: false, ...(secondCard || {}) };
   window.__secondCard.status = JSON.parse(JSON.stringify(window.__secondCard.status || null));
+  // Unset, the PC as it is today: one card, jarvis-primary, nothing chosen
+  // (the real `today_one_card`).
+  window.__hardware = { reads: 0, applies: [], steps: [], measures: 0, getFails: null,
+                        applyFails: null, stepFails: null, measureFails: null,
+                        unavailable: false, ...(hardware || {}) };
+  window.__hardware.status = JSON.parse(JSON.stringify(window.__hardware.status || null));
   // Unset, the PC as it is today: colibri not installed yet (the real
   // `status_not_installed`), and deep questions off (`deep_off`).
   window.__bigModel = { reads: 0, changes: [], getFails: null, setFails: null,
@@ -1373,6 +1425,8 @@ export async function open(browser, base, file, data, viewport) {
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
     ...data,
     // A scenario names only what it changes; the real POST answers stay.
+    hardware: { status: HARDWARE.today_one_card,
+                measureAnswer: HARDWARE.post_measure_started.body, ...(data && data.hardware) },
     bigModel: { status: BIG_MODEL.status_not_installed,
                 onAnswer: BIG_MODEL.post_master_on_pending.body, ...(data && data.bigModel) },
     deep: { status: BIG_MODEL.deep_off, askAnswers: [BIG_MODEL.ask_accepted.body],
