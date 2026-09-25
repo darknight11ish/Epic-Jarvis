@@ -472,8 +472,13 @@ def t_listed_where_it_must_be():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("jarvis_past.py is shipped by apply-patches.ps1 and in _where.SHIPPED",
           "'jarvis_past.py'" in ps1 and "jarvis_past.py" in _where.SHIPPED)
-    check("past-recall.patch is applied, last", _stack.order()[-1] == "past-recall.patch",
-          _stack.order()[-3:])
+    # Only the order that matters (its context is memory-prefix's search call
+    # and memory-noise's lines), so a new patch added last need not edit this.
+    o = [str(p).replace("\\", "/").split("/")[-1] for p in _stack.order()]
+    check("past-recall.patch is applied, after memory-prefix and memory-noise",
+          "past-recall.patch" in o
+          and o.index("past-recall.patch") > o.index("memory-prefix.patch")
+          and o.index("past-recall.patch") > o.index("memory-noise.patch"), o[-3:])
     notices = (REPO / "THIRD-PARTY-NOTICES.txt").read_text(encoding="utf-8")
     check("LongMemEval's scoring is credited", "LongMemEval" in notices
           and "eval_memory.py" in notices)
