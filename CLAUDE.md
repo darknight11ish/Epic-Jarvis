@@ -60,7 +60,8 @@ something is broken, uncertain, or was my mistake, say so directly and early.
 
 A local-first personal assistant. A Python backend on the owner's Windows 11
 desktop, an 8B model in Ollama on the same machine, a Tauri 2 desktop shell
-around it, and an Android companion reachable over Tailscale.
+around it, and an Android companion reachable over Tailscale or NordVPN
+Meshnet (both private device-to-device networks, never a public tunnel).
 
 Hardware: an RTX 2080 Super (8 GB) today. **The owner is adding an RTX 2060
 12 GB as a second card** - plan features with that second, larger-context
@@ -185,6 +186,13 @@ Decided 2026-09-25, after the competitiveness audit
   short title and its Approve opens the locked app; the HUD is locked too.
   On the phone, screenshots are blocked while App lock or "Hide memory lists
   and chat history" is on.
+- **Plain `http://` (unscrambled) to Home Assistant or the calendar is
+  allowed only inside the owner's own networks:** this PC, the home network
+  (private addresses such as 192.168.x.x and 10.x.x.x, and `.local` names),
+  Tailscale and NordVPN Meshnet (both encrypt the traffic themselves). It is
+  refused to anything on the open internet.
+- **The "I heard you" sound gets a switch in both apps, on by default**,
+  next to the "One moment" switch.
 
 ## Every new feature gets its own audit, without being asked
 
