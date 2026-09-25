@@ -116,7 +116,7 @@ on a throwaway copy instead.
 | `log-scrub.patch` | `jarvis_hud.py` | **Passwords, keys and the pairing token kept out of `backend.log`** (the extraction research's Module 1, 2026-09-25). Right after the token is worked out, `jarvis_scrub.install(HUD_TOKEN)` scrubs everything the backend prints or logs from then on, including loggers set up earlier; the banner says so in one line. Its context is loopback-too's and bind-wildcard's lines. Needs `jarvis_scrub.py` - see "The log scrubber", near the very end. |
 | `schedule.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Timers, alarms, reminders and the to-do list, with one scheduler** (the owner's decisions, 2026-09-25). Adds `GET /api/schedule` and `POST /api/schedule/add` and `/act`, starts the scheduler at boot, answers "set a timer for 10 minutes" and the like in `/api/chat` WITHOUT the model, and the approval notice's words for `schedule_repeat` (anything that repeats is one card). Needs `jarvis_schedule.py` and `jarvis_quick.py` - see "Timers, alarms, reminders and the to-do list", at the very end. |
 | `memory-entities.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **"Who is my sister?" - people and things** (memory wave 3, 2026-09-25). Adds `GET /api/memory/entities` (the people and things facts are linked to, for the desktop's "About <name>"), leaves the "are these the same?" card out of `/api/memory/pending` unless asked for with `?merge_cards=1`, and gives `jarvis_extract.py` `propose_merge()` and `_accept_merge()` - accepting that card joins two entries and adds no fact. The work is in the shipped `rebuilt/jarvis_memory.py` (and `jarvis_past.py`, whose recall uses it); with an older copy the route answers 501. Last in the list, after `temporary-chat.patch`, whose route lines are its context. See "Memory wave 3", at the very end. |
-| `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing` and `POST /api/briefing/now`, makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
+| `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing`, `POST /api/briefing/now` and `POST /api/briefing/senders` ("Show who new emails are from": off at once, on through one approval card), makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -8341,8 +8341,19 @@ opposite, and your `jarvis-framework.toml` warns about that name clash.
   If a multi-step task is running, that night is skipped (standby would
   unload the model the task is using), and the row in Coming up says so.
 - **07:00**: Jarvis wakes (Active) and **loads the chat model straight
-  away**, so your first question in the morning is not the slow one. If you
-  woke it by hand earlier, nothing happens.
+  away**, so your first question in the morning is not the slow one - **but
+  only if the schedule put it on standby** (your choice, 2026-09-25). If you
+  chose Standby yourself - before 01:00 or during the night - it stays on
+  standby until you choose Active, and the row in Coming up says so ("Left
+  on standby at 07:00: you chose Standby yourself, ..."). If you woke it by
+  hand earlier, nothing happens, and it is not put back on standby.
+- How it knows: Jarvis already records who last changed the power mode
+  (that is what the tray's "Power: standby · standby schedule" shows). At
+  07:00 it wakes Jarvis only if that still says "the standby schedule".
+  Pressing Standby while it is already on standby changes nothing, so it
+  does not count as choosing it yourself.
+- If the backend restarts during the night, Jarvis comes back awake (the
+  power mode is kept in memory only), and stays awake until the next night.
 - If the PC was off all night, nothing happens when it comes back after
   07:00 (it would already be time to be awake). If it comes on at 03:00,
   Jarvis goes on standby then, once.
@@ -8466,9 +8477,22 @@ asleep. It holds only what Jarvis can already read on this PC:
 - today's alarms, reminders and timers still to come, and your to-do list;
 - how many approval cards are waiting (a number - open Jarvis to answer them);
 - only if email is set up the same way (`JARVIS_IMAP_HOST`, `email_check`
-  in `[tools].enabled`): **how many** unread emails. The number only - no
-  sender, subject or text is fetched (`jarvis_email.count()` searches and
-  counts, and fetches no message);
+  in `[tools].enabled`): **how many** unread emails, **and who the newest
+  five are from** (your choice, 2026-09-25) - for example "3 unread
+  emails." and under it "From Alex, Your Bank and GitHub". To get the
+  names, Jarvis asks your mail server for the **From line only** of those
+  five emails - never the subject or any text - and asks in a way that
+  does not mark them as read (`BODY.PEEK`, with the mailbox opened
+  read-only). A sender with no name shows as the whole address
+  (`noreply@github.com`), because the part before the @ alone is often just
+  "noreply". A setting, **"Show who new emails are from"**, turns the names
+  off (then it is the number only, as before, and no email is opened at
+  all). It is on by default; turning it off is instant; turning it back on
+  shows you an approval card first. It is in the desktop's Settings
+  (Morning briefing) and the phone's Mind (Morning briefing). The names are
+  treated as outside text (anyone can put anything in a From line): they are
+  hidden with your memory lists and chat history, and a chat answer that
+  shows them counts as having read outside text, like calendar titles;
 - weather and news: a line saying they are **not available**, because no
   provider has been chosen. Nothing is fetched from the internet.
 
@@ -8522,14 +8546,20 @@ folder. The design is Leon's (leon-ai/leon, MIT) - see
   the scheduler first runs.
 - `jarvis_quick.py` - "brief me now", "brief me every weekday at 7", "stop
   my briefing", "when is my briefing".
-- `jarvis_email.py` - `count()`: the number of unread messages, nothing else.
+- `jarvis_email.py` - `count()`: the number of unread messages, nothing
+  else; `senders()`: the number, and the From line only of the newest five
+  (read with PEEK, nothing marked read), as tidy names. Still read-only:
+  nothing in the file can change a message.
 - `rebuilt/jarvis_sleep.py` - the overnight card follows the back-off, and
   `not_now()`.
 - `jarvis_skill_discovery.py` - the skill offer waits until you have stopped
   chatting for two minutes, and until few other offers wait.
-- `briefing.patch` - the routes, "not now" on `/api/memory/sleep_time`, the
-  conversation clock in `/api/chat`, and the notice's words. Last in
-  `$PATCHES`.
+- `briefing.patch` - the routes (and `POST /api/briefing/senders`, the
+  setting), "not now" on `/api/memory/sleep_time`, the conversation clock in
+  `/api/chat`, and the notice's words. Last in `$PATCHES`.
+- The setting is kept in `briefing.json` in the Jarvis settings folder
+  (true or false, and a date). No file means on. A damaged file means off
+  until you turn it on again.
 
 ## Owner steps (one line each, in PowerShell)
 
@@ -8543,7 +8573,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPat
 
 Then type "brief me now" in the Jarvis bar. The answer should start "Your
 briefing for" and end with the weather-and-news line, with "Done -
-answered on this PC without the AI model." under it.
+answered on this PC without the AI model." under it. If email is set up,
+the Email line should name who your newest unread emails are from - and
+those emails should still show as unread in your mail app afterwards.
 
 ## Test it
 
@@ -8551,12 +8583,14 @@ answered on this PC without the AI model." under it.
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_briefing.py
 ```
 
-About 145 checks, no model, no network (every socket is made to fail): the
+About 190 checks, no model, no network (every socket is made to fail): the
 briefing kind, its card and the refusal of the same repeat twice; a run
 going off, put together without the model, kept in memory only and rung
 "ready" after "fired"; the calendar lines in this PC's time, and every
 reason the calendar is left out (settings ask, not set up, the gate says
-no, too slow); email as a count only; the back-off's three rules, its file
+no, too slow); email as a count and the newest senders (decoded, tidied,
+each once; hostile names cleaned), or the count only with the setting off;
+the setting's card (on), instant off, and off while the card waits; the back-off's three rules, its file
 (hashes only), and that nothing the owner asks for consults it; the
 overnight card and the skill offer following it; the sentences and their
 near misses; and the patch applied to what the earlier patches wrote, run.
@@ -8565,7 +8599,11 @@ near misses; and the patch applied to what the earlier patches wrote, run.
 
 - Nothing has run on your PC. The toast and the phone's notification have
   not been seen on a real Windows PC or phone.
-- Not tried against a real calendar or mail server. The calendar reader
+- Not tried against a real calendar or mail server. The email senders
+  were read from a stand-in mail server that records every command
+  (`backend/test_email.py`): it proves Jarvis asks only for the From line,
+  with PEEK, read-only, and never changes a message - not how your
+  provider answers. The calendar reader
   does not work out repeating events: a repeating event is shown with the
   time of its first date, marked "(repeats)". An event kept in another time
   zone (not UTC) is shown as if it were in this PC's time zone.

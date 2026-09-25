@@ -951,7 +951,10 @@ they landed):
   Delete are immediate and do not wake Jarvis. Each end is
   `jarvis_power_switch.set_mode` through `power_manage`, like the buttons;
   which end it is comes from the clock, so a night the PC was off agrees. A
-  start is skipped while a task runs. Standby itself now unloads EVERY
+  start is skipped while a task runs. The end wakes Jarvis only if the
+  schedule put it on standby (the owner's decision of 2026-09-25): it reads
+  who set the mode from `jarvis_power`'s `why`, so a Standby chosen by hand
+  - before or during the hours - stays until the owner chooses Active. Standby itself now unloads EVERY
   model the everyday Ollama holds (asked directly, this PC only) and says
   what is still loaded, and waking loads the chat model again at once
   (never a cloud model). Timers and reminders still go off on standby; a
@@ -965,14 +968,22 @@ they landed):
   A short list of the day put together in code - no model sees it: today's
   calendar (only when set up, and only when its read runs without a card),
   today's alarms, reminders and timers, the to-do list, the approval count,
-  and the unread-email COUNT only (only when email is set up); weather and
-  news say they are not available. A repeat is the scheduler's own
+  and (only when email is set up) how many unread emails and who the newest
+  five are from - the From line only, read with `BODY.PEEK` so nothing is
+  marked read (the owner's decision of 2026-09-25). "Show who new emails are
+  from" is a setting on the PC, on by default, in both apps: off at once,
+  on through ONE `change_own_config` card, like the voice settings that show
+  more. The names are outside text: lines, hidden with the private lists,
+  and a chat answer that shows them marks the conversation as having read
+  outside text, as calendar titles do. Weather and news say they are not
+  available. A repeat is the scheduler's own
   `schedule_repeat` card, a one-off none; each run only reads, each read
   that leaves the PC going through the gate as its own action. Kept in
   memory only. Both apps: the desktop's Brain -> Work and Settings, the
   phone's Mind; the notification says only "Jarvis: your morning briefing
-  is ready." `GET /api/briefing`, `POST /api/briefing/now`
-  (`briefing.patch`). Not run on the owner's PC. JARVIS-API §22.
+  is ready." `GET /api/briefing`, `POST /api/briefing/now`,
+  `POST /api/briefing/senders` (`briefing.patch`). Not run on the owner's
+  PC. JARVIS-API §22.
 - **The back-off for offers** (added 2026-09-25, `jarvis_backoff.py`): at
   most three offers waiting, none within two minutes of a chat message, and
   each "no" quiet for 1, then 7, then 30 days by a fingerprint of what is

@@ -15,7 +15,11 @@ import kotlinx.serialization.json.doubleOrNull
  * A short list of the day, put together on the PC WITHOUT the AI model:
  * today's calendar (only when it is set up for Jarvis), today's alarms,
  * reminders and timers, the to-do list, how many approval cards wait, and -
- * only when email is set up - how many unread emails (the number only).
+ * only when email is set up - how many unread emails and who the newest are
+ * from (the owner's decision of 2026-09-25), or the number only when the
+ * owner turns "Show who new emails are from" off ([SENDERS_LABEL]: OFF at
+ * once, ON through ONE approval card on the PC, held on a stale link). The
+ * senders are LINES of the email section, so [hide] takes them out too.
  * Weather and news are not available: no provider has been chosen.
  *
  * It is a kind of job on the PC's one scheduler, so it also shows in Coming
@@ -41,6 +45,7 @@ import kotlinx.serialization.json.doubleOrNull
 object Briefing {
     const val PATH = "/api/briefing"
     const val NOW_PATH = "/api/briefing/now"
+    const val SENDERS_PATH = "/api/briefing/senders"
     const val KIND = "briefing"
 
     const val TITLE = "Morning briefing"
@@ -79,6 +84,16 @@ object Briefing {
         "It is read aloud only when you ask (\"read my briefing\"), and then only under your " +
             "private-answers setting, like a calendar answer."
 
+    /** "Show who new emails are from" - the desktop's Settings, Morning briefing. */
+    const val SENDERS_LABEL = "Show who new emails are from"
+    const val SENDERS_DETAIL =
+        "The briefing lists who your newest unread emails are from (up to 5), next to how many " +
+            "there are. Off: the number only. Turning it on shows you an approval card first; turning " +
+            "it off happens at once."
+    const val SENDERS_WAITING = "Waiting for your yes on the approval card, on your PC or phone."
+    const val SENDERS_MISSING =
+        "Your PC's Jarvis does not have this setting yet - run apply-patches.ps1 on the PC."
+
     /** The repeats a briefing can be set up with - the scheduler's own rules. */
     val EVERY = listOf(
         "weekday" to "Weekdays (Monday to Friday)",
@@ -113,11 +128,22 @@ object Briefing {
         val whenWords: String,
     )
 
+    /** The PC's `senders`: the setting, whether an ON card waits, how the last one ended. */
+    data class Senders(
+        val on: Boolean,
+        val waiting: Boolean,
+        val last: String,
+        val lastOutcome: String,
+        val why: String,
+    )
+
     data class View(
         val briefing: Brief?,
         val building: Boolean,
         val setups: List<Setup>,
         val sources: List<String>,
+        /** Null from a PC without the setting: the switch is not offered. */
+        val senders: Senders? = null,
     )
 
     private fun section(o: JsonObject) = Section(
@@ -166,7 +192,51 @@ object Briefing {
             building = body.flag("building") == true,
             setups = setups,
             sources = sources,
+            senders = (body["senders"] as? JsonObject)?.let(::senders),
         )
+    }
+
+    private fun senders(o: JsonObject): Senders? {
+        val on = o.flag("on") ?: return null
+        val last = o["last"] as? JsonObject
+        return Senders(
+            on = on,
+            waiting = o.flag("waiting") == true,
+            last = last?.text("message") ?: "",
+            lastOutcome = last?.text("outcome") ?: "",
+            why = o.text("why") ?: "",
+        )
+    }
+
+    /** What the switch shows - the desktop's `sendersView`, the same rule. */
+    data class SendersView(val show: Boolean, val checked: Boolean, val canChange: Boolean, val lines: List<String>)
+
+    /**
+     * Checked while on or while an ON card waits (so it can be turned OFF,
+     * which takes the request back). OFF is never held; ON is held on a
+     * stale link (rule 4).
+     */
+    fun sendersView(s: Senders?, live: Boolean): SendersView {
+        if (s == null) return SendersView(show = false, checked = false, canChange = false, lines = listOf(SENDERS_MISSING))
+        val lines = mutableListOf<String>()
+        if (s.waiting) {
+            lines += SENDERS_WAITING
+        } else if (s.last.isNotEmpty() && s.lastOutcome != "enabled") {
+            lines += s.last
+        }
+        if (s.why.isNotEmpty()) lines += s.why.replaceFirstChar { it.uppercase() } + "."
+        val checked = s.on || s.waiting
+        return SendersView(show = true, checked = checked, canChange = checked || live, lines = lines)
+    }
+
+    /** The body of `POST /api/briefing/senders`. */
+    fun sendersBody(on: Boolean): String = "{\"enabled\":$on}"
+
+    /** The sentence to show after a change, from the PC's own answer. */
+    fun sendersSaid(on: Boolean, outcome: DesktopWrite.Outcome): String = when (outcome) {
+        is DesktopWrite.Outcome.Done -> outcome.said ?: if (on) "Done." else "Done - the briefing shows the number only."
+        is DesktopWrite.Outcome.Waiting -> outcome.said ?: SENDERS_WAITING
+        is DesktopWrite.Outcome.Refused -> "Not changed. " + outcome.why
     }
 
     /** A read that failed because this PC has no briefing: a 404 or a 501. */

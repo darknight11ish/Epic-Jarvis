@@ -1328,7 +1328,13 @@ link and let going quieter through.
 - **`why`.** A change the standby schedule makes is recorded by
   `jarvis_power` as `"the standby schedule"`, not `"the owner, from ..."`,
   so the desktop's tray says "Power: standby · standby schedule" rather than
-  "set by hand" (`stream.rs power_set_by` -> `"standby_schedule"`).
+  "set by hand" (`stream.rs power_set_by` -> `"standby_schedule"`). Since
+  the owner's decision of 2026-09-25 the schedule also READS it: at the end
+  of its hours it wakes Jarvis only when `jarvis_power.status()["why"]` is
+  still `"the standby schedule"` (§21.8). `jarvis_power` changes `why` on a
+  change of mode and on nothing else, so a Standby chosen by hand, before
+  or during the hours, stays; and a tap on Standby while already on standby
+  (`"Already standby."`) records nothing.
 
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->
 
@@ -3450,7 +3456,7 @@ found together, going off ONCE late - agrees: it is after 07:00, so awake.
 |---|---|---|---|
 | `POST /api/schedule/add` | `{"kind": "standby", "repeat": {"every": "day", "at": "HH:MM", "until": "HH:MM"}}` | **202** `{"ok": true, "waiting": true, "job", "said"}`; 400 bad times or no `repeat`; **409** there is already one ("delete it first to set a different one") | ONE `schedule_repeat` card (21.3). Desktop: `brain_schedule_add_standby` (Brain window only, held on a stale link). Phone: `JarvisRuntime.addStandbySchedule` (held on a stale link). |
 | `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete"}` | as 21.2 | Pause skips it, Delete turns it off - immediate, no card. **Neither wakes Jarvis**; Active does that. |
-| `GET /api/schedule` | - | as 21.2 | Listed with the others: `repeat` "every day from 01:00 to 07:00", `when` "on standby at 01:00 tomorrow" or "awake at 07:00 today", `note` how the last end went, `notify: false`. |
+| `GET /api/schedule` | - | as 21.2 | Listed with the others: `repeat` "every day from 01:00 to 07:00", `when` "on standby at 01:00 tomorrow" or "awake at 07:00 today, if the schedule put it on standby", `note` how the last end went, `notify: false`. |
 
 The card (21.3's action and tier, its own words):
 
@@ -3460,7 +3466,7 @@ Set up a standby schedule.
 When: every day from 01:00 to 07:00.
 
 At the start, Jarvis goes on standby - the same as choosing Standby: it unloads its models and frees the graphics card(s).
-At the end, it wakes (Active) and loads the chat model again, so the first answer is not slow.
+At the end, if the schedule put it on standby, it wakes (Active) and loads the chat model again, so the first answer is not slow. If you chose Standby yourself, it stays on standby until you choose Active.
 Timers, alarms and reminders still go off while it is on standby. A question asked then is answered, but the first answer takes 5-15 seconds.
 Turning it off does not wake Jarvis if it is on standby at that moment - choose Active for that.
 
@@ -3483,11 +3489,28 @@ standby schedule":
 - start: on standby, unless it already is ("Already on standby at 01:00.").
   Refused while a task runs: that night is skipped ("Skipped standby at
   01:00: a task was running, ...").
-- end: Active, and the warm-up loads the chat model (§11) - if Jarvis is on
-  standby, whoever put it there; if it is already awake, nothing ("Already
+- end: Active, and the warm-up loads the chat model (§11) - **only if the
+  schedule put Jarvis on standby** (the owner's decision of 2026-09-25:
+  "Only if the schedule did it. If you switched Standby on yourself, it
+  stays on until you switch it off"). Who did is `jarvis_power.status()
+  ["why"]` (§11): `"the standby schedule"` wakes it; anything else - the
+  owner's tap in either app, or a power module that cannot say - leaves it
+  ("Left on standby at 07:00: you chose Standby yourself, so it stays on
+  until you choose Active."). If it is already awake, nothing ("Already
   awake at 07:00.").
 - a start found late inside the window (the PC came on at 03:00): standby
   then, once.
+
+The cases, as the tests run them (`backend/test_standby_schedule.py`):
+
+| What happened | 01:00 | 07:00 |
+|---|---|---|
+| Standby by hand at 23:00 | "Already on standby at 01:00 - you chose it, so the end of the schedule will leave it on." (it stays the owner's) | Left on standby |
+| The schedule's standby, woken by hand at 03:00 | "Went on standby at 01:00." | "Already awake at 07:00." - not put back on standby |
+| ... then Standby by hand again at 04:00 | | Left on standby (the owner's now) |
+| The schedule's standby, and a tap on Standby at 04:00 | | Wakes: the tap changed nothing, so it is still the schedule's |
+| 01:00 skipped (a task ran), then Standby by hand | "Skipped standby at 01:00: ..." | Left on standby |
+| The backend restarted at 03:00 | | "Already awake at 07:00." - the mode is in memory, so it came back Active, and nothing puts it back that night |
 
 The last end's sentence is the job's `note` (kept in memory; gone on a
 restart). The going-off event says `"notify": false`: no toast, no phone
@@ -3502,8 +3525,10 @@ Active.
 
 **Both apps**, in the same words (`coming-up.js`, `net/Schedule.kt`,
 checked against each other by `tests/coming-up.mjs`): under Coming up, a
-"Standby schedule" part with "Standby at" and "Wake at" (01:00 and 07:00
-to start with) and **Set up**; once one exists, its row sits in the list
+"Standby schedule" part - its line says it "wakes only if the schedule put
+it on standby: if you chose Standby yourself, it stays on until you choose
+Active" - with "Standby at" and "Wake at" (01:00 and 07:00 to start with)
+and **Set up**; once one exists, its row sits in the list
 ("standby, repeats", Pause, Delete, and its `note`) and the part says "Your
 standby schedule is in the list above. Pause skips it and Delete turns it
 off. Neither wakes Jarvis - choose Active for that." The desktop's tray
@@ -3512,7 +3537,11 @@ Power row says "· standby schedule" when the schedule set the mode.
 **Known gaps, said plainly.** Not run on the owner's PC; Ollama was a
 stand-in in every test. Every day only (no weekdays-only window yet). The
 power mode is kept in memory, so a backend restart inside the window comes
-back Active until the next start (the start already went off). With one
+back Active until the next start (the start already went off) - and, for the
+same reason, a Standby the owner chose by hand before a restart comes back
+Active too. Who chose Standby is known only from `jarvis_power`'s one
+`why`: a tap on Standby while the schedule's standby is on changes nothing,
+so the end still wakes it. With one
 graphics card, the second card's part of standby finds nothing and says
 nothing.
 
@@ -3545,15 +3574,18 @@ asleep. Only what Jarvis can already read on this PC, in this order:
 | Today (`today`) | Alarms, reminders and timers still to come today, with their words. | Never. |
 | To-do list (`todo`) | How many open items, and the first five. | Never. |
 | Approvals (`approvals`) | How many approval cards wait - "Open Jarvis to answer." Never an Approve. | Never. |
-| Email (`email`) | **How many** unread emails - the number only (`jarvis_email.count()`: one connection, SEARCH UNSEEN, no message fetched). | Not set up (`JARVIS_IMAP_HOST` unset, or `email_check` not in `[tools].enabled`) - then it is not mentioned at all; or `email_read` is not `auto`/`notify` - then it says why. |
+| Email (`email`) | **How many** unread emails, and **who the newest five are from** (the owner's decision of 2026-09-25): the summary "3 unread emails." and one line, "From Alex, Your Bank and GitHub" (or "The newest 5 are from ..." when there are more). `jarvis_email.senders()`: ONE connection, the mailbox opened read-only, SEARCH UNSEEN, then `FETCH <id> (BODY.PEEK[HEADER.FIELDS (FROM)])` for the newest five only - the From line, never a subject or any text, and PEEK so nothing is marked as read. Each name is decoded (RFC 2047), stripped of control and direction characters, capped at 60 characters, and listed once; a sender with no name shows the whole address (`noreply@github.com` - the part before the @ alone is "noreply" or "info" as often as not). With "Show who new emails are from" off (22.2): the number only, through `jarvis_email.count()` (no message fetched), as before. | Not set up (`JARVIS_IMAP_HOST` unset, or `email_check` not in `[tools].enabled`) - then it is not mentioned at all; or `email_read` is not `auto`/`notify` - then it says why. |
 
 Then always: "Weather and news: not available. No provider has been chosen,
 so Jarvis fetches nothing from the internet for this."
 
 Each read that leaves the PC (the calendar to the owner's CalDAV server, the
-count to the owner's IMAP server) goes through `jarvis_gate.check()` as its
-own action (`calendar_read`, `email_read`), exactly as the model's tools do,
-and runs only if the gate says `allowed`. Together they get 25 seconds
+count and senders to the owner's IMAP server) goes through
+`jarvis_gate.check()` as its own action (`calendar_read`, `email_read`),
+exactly as the model's tools do, and runs only if the gate says `allowed`.
+The senders are **outside text** - anyone can write anything in a From line
+- so, like calendar titles, they are lines (`items`), never a summary, and a
+briefing that shows them lists `email_check` in `read` (below). Together they get 25 seconds
 (`READ_DEADLINE`); a slow one is left out ("did not answer in time"). A
 failure says so without quoting the server.
 
@@ -3561,7 +3593,8 @@ failure says so without quoting the server.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `GET /api/briefing` | - | 200 `{"available": true, "briefing": briefing \| null, "building": bool, "setups": [job], "sources": {"calendar", "email", "weather": {"state", "said"}}, "title", "lock_screen", "empty"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_briefing.py` | Token + origin. `setups`: the briefing jobs (section 21's job shape). `sources`: what a briefing would include, worked out without reading anything - `state` is `on`, `off`, `asks` or `not_available`. |
+| `GET /api/briefing` | - | 200 `{"available": true, "briefing": briefing \| null, "building": bool, "setups": [job], "sources": {"calendar", "email", "weather": {"state", "said"}}, "senders": {"on", "waiting", "last", "why"}, "title", "lock_screen", "empty"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_briefing.py` | Token + origin. `setups`: the briefing jobs (section 21's job shape). `sources`: what a briefing would include, worked out without reading anything - `state` is `on`, `off`, `asks` or `not_available`; `email` also has `senders` (bool) and says "Included: how many unread emails you have, and who the newest 5 are from." or "... (the number only)." `senders`: the setting below - `last` is `{"outcome", "message", "why", "at"}` of the last ON card, or null. A PC from before it sends no `senders`, and both apps then offer no switch. |
+| `POST /api/briefing/senders` | `{"enabled": bool}` | 200 `{"ok": true, "waiting": false, "senders", "message"}` (OFF, done; or ON when it is already on); **202** `{"ok": true, "waiting": true, "senders", "message"}` (ON: ONE card is up; nothing has changed); 400 not true/false; **503** `change_own_config` is not tier `ask` (no card is raised - a config line is not a person's yes); 500 the setting could not be saved | "Show who new emails are from" (on by default). OFF is immediate, never a card, and withdraws a waiting ON card (approving it later changes nothing, `last.outcome` `"withdrawn"`). ON is ONE approval card, action `change_own_config` - the one the voice settings use to show or say more - and only tier `ask` with outcome `approved` turns it on; `last.outcome` becomes `enabled`, `denied`, `timed_out`, `refused`, `withdrawn` or `failed`, with a plain `message`. Kept on this PC in `briefing.json` in the settings folder (`{"senders": bool, "changed": epoch}`); no file reads as on, a damaged one as off (and `why` says so). Both apps hold ON on a stale link and let OFF through (desktop `set_briefing_senders`, Settings only; phone `JarvisRuntime.setBriefingSenders`). |
 | `POST /api/briefing/now` | `{}` | 200 `{"ok": true, "briefing"}`; 400 not an object; 500 `{"ok": false, "error": <exception name>}` | One put together now, and kept as the latest. It only READS, asks no card and changes nothing, so **neither app holds it on a stale link** (like every read). Up to about 25 seconds with a slow calendar or mail server. |
 
 Setting one up and stopping one are section 21's routes:
@@ -3584,7 +3617,7 @@ A `briefing`:
  "sections": [{"key", "title", "state": "ok" | "empty" | "failed" | "refused" | "slow",
                "summary": "2 events today.", "items": ["09:30 Dentist", ...]}],
  "not_included": ["Not included: your calendar is not set up for Jarvis on this PC."],
- "read": ["calendar_read"] | [],     outside text in the lines (below)
+ "read": ["calendar_read", "email_check"] | [],   outside text in the lines (below)
  "lock_screen": "Jarvis: your morning briefing is ready.",
  "text": the whole of it as plain lines (the chat answer)}
 ```
@@ -3597,9 +3630,9 @@ written to disk, never put on the event bus; gone when Jarvis restarts.
 A repeat is the scheduler's own `schedule_repeat` card (section 21.3): what,
 when, the next three times - and, in place of "Nothing is sent anywhere.",
 what each run reads: "Each time, Jarvis puts together a short list on this
-PC, without the AI model: ... how many unread emails you have (the number
-only), if email is set up ... It only reads. It changes nothing and approves
-nothing." and "Reading your calendar and email is a request to your own
+PC, without the AI model: ... how many unread emails you have and who the
+newest are from (the number only, if you turned that off), if email is set
+up ... It only reads. It changes nothing and approves nothing." and "Reading your calendar and email is a request to your own
 calendar and mail servers, the same as asking Jarvis to read them, under the
 same settings. Nothing else is sent anywhere, and nothing goes to the AI
 model."
@@ -3623,7 +3656,29 @@ so it is late.)".
   Jarvis restarts." While the private lists are hidden (the desktop's
   "Windows Hello for memory lists and chat history", taken out in Rust; the
   phone's "Hide memory lists and chat history") the lines go and the
-  summaries - counts only - stay.
+  summaries - counts only - stay. The email senders are lines, so they go
+  too ("3 unread emails." stays).
+- **"Show who new emails are from"** - the desktop's Settings -> Morning
+  briefing, the phone's Mind -> Morning briefing, in the same words
+  (`briefing.js`, `net/Briefing.kt`, checked by `tests/briefing.mjs`): "The
+  briefing lists who your newest unread emails are from (up to 5), next to
+  how many there are. Off: the number only. Turning it on shows you an
+  approval card first; turning it off happens at once." While the card
+  waits the switch reads on and says "Waiting for your yes on the approval
+  card, on your PC or phone." - and turning it off then takes the request
+  back. Held on a stale link when turning ON only. The card:
+
+  ```
+  Show who your new emails are from in the morning briefing?
+
+  The briefing will list the names your newest unread emails are from (up to 5), next to how many there are. To get them, Jarvis asks your mail server for each email's From line only - never its subject or text - and nothing is marked as read.
+
+  The names show only inside the Jarvis apps, and are hidden with your memory lists and chat history when those are hidden. The notification still says only "Jarvis: your morning briefing is ready." Nothing goes to the AI model.
+
+  If you did not just do this, say no.
+
+  If you say no: nothing changes - the briefing shows only how many new emails there are.
+  ```
 - **"Brief me now"**, and the setup: every day, weekdays, or chosen days,
   at a time; the setups with one Stop each. No "stop all".
 
@@ -3647,7 +3702,8 @@ calendar answer, unless the owner chose "voice check is enough". A typed
 answer quotes calendar titles (text from the calendar server), this PC's
 record of the turn says `calendar_read` ran, so the conversation counts as
 having read outside text (ARCHITECTURE section 3) exactly as when the
-calendar tool runs.
+calendar tool runs. The same for email senders (text from whoever sent the
+email): the record says `email_check` ran.
 
 ### 22.6 The back-off for offers (`jarvis_backoff.py`)
 
@@ -3694,5 +3750,12 @@ offer as a remembered preference; that part was not taken.
 - **One briefing is kept - the latest.** "Brief me now" on one app replaces
   it; the other app shows the new one at its next read (Refresh, or opening
   the section again) - there is no event for a briefing asked for by hand.
-- **Email senders are not shown** - only the count. Whether they should be
-  is the owner's call.
+- **The email senders have not met a real mail server.** The IMAP
+  conversation was run against a stand-in `imaplib` that records every
+  command (`backend/test_email.py`), which proves what is ASKED (read-only,
+  `BODY.PEEK`, the From line only, no STORE) but not how a given provider
+  answers. A server that ignores PEEK and marks messages read would be a
+  server bug; the mailbox is also opened read-only (EXAMINE), which by the
+  IMAP standard cannot change flags.
+- **Only the newest five senders**, and a name longer than 60 characters is
+  cut short with "...".

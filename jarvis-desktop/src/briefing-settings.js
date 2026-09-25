@@ -11,6 +11,10 @@
  *    here (greyed) and in Rust;
  *  - stop_briefing {id}: ONE briefing, at once, no card. Held on a stale
  *    link. There is no "stop all".
+ *  - set_briefing_senders {enabled}: "Show who new emails are from" (on by
+ *    default). OFF is immediate and never held; ON raises ONE approval card
+ *    on the PC (change_own_config) and is held on a stale link, here and in
+ *    Rust - the same shape as the other settings that show more.
  *
  * The phone's Mind -> Morning briefing does the same (BriefingPlate.kt), in
  * the same words (briefing.js, net/Briefing.kt).
@@ -24,6 +28,7 @@ import {
   DAY_NAMES,
   EVERY,
   readBriefing,
+  sendersView,
   SET_LABEL,
   SETUP_NONE,
   setupArgs,
@@ -54,6 +59,10 @@ const br = {
   status: $("br-status"),
   reads: $("br-reads"),
   spoken: $("br-spoken"),
+  senders: $("br-senders"),
+  sendersRow: $("br-senders-row"),
+  sendersLines: $("br-senders-lines"),
+  sendersStatus: $("br-senders-status"),
 };
 
 const STALE = "Waiting for the link to catch up. Nothing can be sent until it does.";
@@ -96,6 +105,43 @@ function syncButtons() {
     b.disabled = busy || !live;
     b.title = live ? "" : STALE;
   }
+  paintSenders();
+}
+
+/** "Show who new emails are from": ON held on a stale link, OFF never. */
+function paintSenders() {
+  if (!br.senders || !view || !view.available) return;
+  const v = sendersView(view.senders, canAct());
+  if (br.sendersRow) br.sendersRow.hidden = !v.show;
+  br.senders.checked = v.checked;
+  br.senders.disabled = sendersBusy || !v.canChange;
+  br.senders.title = v.canChange ? "" : STALE;
+  if (br.sendersLines) br.sendersLines.replaceChildren(...v.lines.map((l) => node("p", "sc-line", l)));
+}
+
+let sendersBusy = false;
+
+async function setSenders(on) {
+  if (sendersBusy) return;
+  if (on && !canAct()) {
+    say(br.sendersStatus, STALE, "bad");
+    paintSenders();
+    return;
+  }
+  sendersBusy = true;
+  paintSenders();
+  say(br.sendersStatus, on ? "Asking…" : "Turning it off…");
+  try {
+    const out = await invoke("set_briefing_senders", { enabled: on });
+    const words = String((out && (out.message || out.error)) || (on ? "Asked." : "Done."));
+    say(br.sendersStatus, words, out && out.ok === false ? "bad" : "ok");
+    announce(words);
+  } catch (error) {
+    say(br.sendersStatus, problemWords(error), "bad");
+  } finally {
+    sendersBusy = false;
+  }
+  await load();
 }
 
 function choiceButton(label, pressed, onClick) {
@@ -207,6 +253,7 @@ async function stopOne(job) {
 }
 
 if (br.set) br.set.addEventListener("click", setUp);
+if (br.senders) br.senders.addEventListener("change", (e) => setSenders(e.target.checked));
 onLink(() => syncButtons());
 // A card answered (or expired): the setup may have changed. onQueue also
 // delivers the current queue at once, which is the first read.

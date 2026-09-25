@@ -739,6 +739,7 @@ pub fn run() {
             brain::briefing::get_briefing_setup,
             brain::briefing::set_briefing,
             brain::briefing::stop_briefing,
+            brain::briefing::set_briefing_senders,
             brain::used::memory_used,
             brain::history::brain_history_list,
             brain::history::brain_history_open,

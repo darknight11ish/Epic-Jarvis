@@ -246,13 +246,15 @@ fn main() {
             // The morning briefing (backend/briefing.patch): read the latest
             // one and "Brief me now" (a read, not held on a stale link) -
             // Brain only; and its setup - read it, set one up that repeats
-            // (the scheduler's ONE card; held on a stale link), stop ONE -
-            // Settings only.
+            // (the scheduler's ONE card; held on a stale link), stop ONE,
+            // and "Show who new emails are from" (ON is ONE card on the PC,
+            // held on a stale link; OFF at once) - Settings only.
             "brain_briefing",
             "brain_briefing_now",
             "get_briefing_setup",
             "set_briefing",
             "stop_briefing",
+            "set_briefing_senders",
             // Quickbar
             "hide_quickbar",
             "resize_quickbar",

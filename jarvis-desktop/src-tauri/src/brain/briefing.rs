@@ -27,6 +27,12 @@
 //!   ONE briefing job, immediate, no card. Held on a stale link. The id must
 //!   be one of the briefing jobs the PC lists right now: this window cannot
 //!   delete any other job.
+//! * [`set_briefing_senders`] - `POST /api/briefing/senders {"enabled"}`:
+//!   "Show who new emails are from" (on by default, the owner's decision of
+//!   2026-09-25). OFF is immediate and never held - it only shows less. ON
+//!   raises ONE approval card on the PC and changes nothing until it is
+//!   approved, so it is held on a stale link - the shape of every setting
+//!   that shows more.
 //!
 //! And [`toast_ready`], which stream.rs calls when a `schedule` event says a
 //! briefing is ready: a Windows toast that says ONLY "Jarvis: your morning
@@ -43,6 +49,11 @@ use crate::commands;
 /// A PC without the briefing. The phone says the same (`Briefing.MISSING`).
 pub(crate) const BRIEFING_MISSING: &str =
     "Your PC's Jarvis does not have the morning briefing yet - run apply-patches.ps1 on the PC.";
+
+/// A PC whose briefing has no senders setting. The phone says the same
+/// (`Briefing.SENDERS_MISSING`).
+pub(crate) const SENDERS_MISSING: &str =
+    "Your PC's Jarvis does not have this setting yet - run apply-patches.ps1 on the PC.";
 
 /// All a toast ever says (jarvis_briefing.LOCK_SCREEN).
 pub(crate) const LOCK_SCREEN: &str = "Jarvis: your morning briefing is ready.";
@@ -149,6 +160,19 @@ pub(crate) fn repeat_body(every: &str, at: &str, days: &[u8]) -> Result<serde_js
     Ok(serde_json::json!({ "kind": "briefing", "repeat": rule }))
 }
 
+/// [`set_briefing_senders`]'s reading of the answer: the PC's own body on a
+/// 2xx (200 done, 202 a card is up), [`SENDERS_MISSING`] from a PC without
+/// the route, and the PC's refusal otherwise.
+pub(crate) fn senders_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return parsed(body).ok_or_else(|| UNREADABLE.to_string());
+    }
+    if status == 404 || status == 501 {
+        return Err(SENDERS_MISSING.to_string());
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
 /// Whether `id` is one of the briefing jobs in a `GET /api/briefing` answer.
 pub(crate) fn is_setup(answer: &serde_json::Value, id: &str) -> bool {
     answer
@@ -247,11 +271,39 @@ pub async fn stop_briefing(app: AppHandle, id: String) -> Result<serde_json::Val
     .await
 }
 
+/// Settings: "Show who new emails are from". OFF at once, never held; ON
+/// raises ONE approval card on the PC, so it is held on a stale link.
+#[tauri::command]
+pub async fn set_briefing_senders(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    if enabled {
+        require_link_live(&app)?;
+    }
+    let (status, text) = post_raw(
+        &app,
+        "/api/briefing/senders",
+        serde_json::json!({ "enabled": enabled }),
+    )
+    .await?;
+    senders_answer(status, &text)
+}
+
 async fn post(
     app: &AppHandle,
     path: &str,
     body: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    let (status, text) = post_raw(app, path, body).await?;
+    change_answer(status, &text)
+}
+
+async fn post_raw(
+    app: &AppHandle,
+    path: &str,
+    body: serde_json::Value,
+) -> Result<(u16, String), String> {
     let base = commands::jarvis_base(app);
     let response = commands::jarvis_client(Some(WRITE_TIMEOUT))?
         .post(format!("{base}{path}"))
@@ -262,7 +314,7 @@ async fn post(
         .map_err(|e| commands::backend_unreachable(&e, &base))?;
     let status = response.status().as_u16();
     let text = response.text().await.unwrap_or_default();
-    change_answer(status, &text)
+    Ok((status, text))
 }
 
 /// A `schedule` event said a briefing is ready: a toast with the fixed
@@ -361,6 +413,23 @@ mod tests {
         for bad in ["24:00", "7", "07:60", "", "07:00:00", "x:y"] {
             assert!(repeat_body("day", bad, &[]).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn the_senders_answer_is_the_pcs_own_and_an_older_pc_says_so() {
+        let on = senders_answer(
+            202,
+            r#"{"ok": true, "waiting": true, "message": "Waiting for your approval."}"#,
+        )
+        .unwrap();
+        assert_eq!(on["waiting"], true);
+        let off = senders_answer(200, r#"{"ok": true, "senders": {"on": false}}"#).unwrap();
+        assert_eq!(off["senders"]["on"], false);
+        for old in [404, 501] {
+            assert_eq!(senders_answer(old, "{}").unwrap_err(), SENDERS_MISSING);
+        }
+        assert!(senders_answer(200, "not json").is_err());
+        assert!(senders_answer(503, r#"{"ok": false, "error": "tier"}"#).is_err());
     }
 
     #[test]

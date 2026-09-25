@@ -1244,7 +1244,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (br.fails) throw new Error(br.fails);
             if (cmd === "brain_briefing_now") br.briefing = JSON.parse(JSON.stringify(br.now || br.briefing));
             const out = JSON.parse(JSON.stringify({ available: true, building: false,
-              briefing: br.briefing, setups: br.setups, sources: br.sources }));
+              briefing: br.briefing, setups: br.setups, sources: br.sources,
+              senders: br.senders }));
             if (cmd === "get_briefing_setup") out.briefing = null;
             const sec = window.__security;
             if (out.briefing && sec.hidden && !sec.revealed) {
@@ -1254,6 +1255,21 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               out.hidden = true;
             }
             return out;
+          }
+          // "Show who new emails are from": OFF at once; ON is a card on
+          // the PC (waiting), held on a stale link - as Rust holds it.
+          case "set_briefing_senders": {
+            window.__briefingCalls.push({ cmd, ...args });
+            const br = window.__briefing;
+            if (args.enabled && state.stale) throw new Error("the event stream is stale");
+            if (!args.enabled) {
+              br.senders = { on: false, waiting: false, last: null, why: "" };
+              return { ok: true, waiting: false, senders: br.senders,
+                       message: "Done - the briefing shows only how many new emails there are." };
+            }
+            br.senders = { ...(br.senders || {}), waiting: true };
+            return { ok: true, waiting: true, senders: br.senders,
+                     message: "Waiting for your approval. Names are shown only if you approve the card, on your PC or phone." };
           }
           case "set_briefing":
           case "stop_briefing": {

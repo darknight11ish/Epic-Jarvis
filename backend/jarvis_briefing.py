@@ -30,10 +30,20 @@ WHAT IS IN IT - only what Jarvis can already read on this PC
   * How many approval cards are waiting (jarvis_gate.pending()). A number,
     and "open Jarvis to answer" - never an Approve.
   * Only when email is set up the same way (JARVIS_IMAP_HOST, `email_check`
-    in [tools].enabled, `email_read` not "ask"): HOW MANY unread emails -
-    the number only (jarvis_email.count(): no sender, subject or text is
-    ever fetched). Whether senders should be shown is the owner's call and
-    is not built.
+    in [tools].enabled, `email_read` not "ask"): HOW MANY unread emails,
+    and WHO the newest five are from (the owner's decision of 2026-09-25:
+    "3 unread emails" and a line "From Alex, Your Bank and GitHub").
+    jarvis_email.senders(): one connection, the From line only, read with
+    BODY.PEEK so nothing is marked as read - never a subject or any text.
+    A setting on this PC ("Show who new emails are from", on by default)
+    turns the names off: then jarvis_email.count(), the number only, as
+    before. Turning it off is immediate; turning it back on raises ONE
+    approval card (change_own_config, like the voice settings that show
+    more) - see SENDERS below. The names are OUTSIDE text (anyone can put
+    anything in a From line), so a briefing that shows them says the email
+    was read (`read`), exactly as calendar titles do. They are lines
+    (`items`), never the summary, so "Hide memory lists and chat history"
+    and App lock hide them with the rest; the summary keeps the count.
   * Weather and news: NOT AVAILABLE. No provider has been chosen, so the
     briefing says so in a line of its own and fetches nothing from the
     internet.
@@ -98,7 +108,8 @@ CARD_NOTE = (
     "  - today's calendar events, if your calendar is set up for Jarvis",
     "  - today's alarms, reminders and timers, and your to-do list",
     "  - how many approval cards are waiting",
-    "  - how many unread emails you have (the number only), if email is set up",
+    "  - how many unread emails you have and who the newest are from (the number "
+    "only, if you turned that off), if email is set up",
     "Weather and news are not included: no provider has been chosen.",
     "It only reads. It changes nothing and approves nothing.",
     "",
@@ -109,6 +120,14 @@ CARD_NOTE = (
     "The apps say only \"" + LOCK_SCREEN + "\"; the briefing is in the app. It is "
     "read aloud only when you ask (\"read my briefing\").",
 )
+
+#: The email senders (the owner's decision of 2026-09-25): how many of the
+#: newest unread emails have their sender shown, and the words - both apps
+#: say the same (briefing.js, net/Briefing.kt; tests/briefing.mjs checks).
+SENDERS_MAX = 5
+SOURCE_SENDERS = ("Included: how many unread emails you have, and who the newest "
+                  f"{SENDERS_MAX} are from.")
+SOURCE_COUNT_ONLY = "Included: how many unread emails you have (the number only)."
 
 #: How long the calendar and email reads may take together, in seconds.
 READ_DEADLINE = 25.0
@@ -176,6 +195,8 @@ class Deps:
     pending_count: Callable[[], Optional[int]] = _pending_count
     calendar_fetch: Optional[Callable] = None     # jarvis_calendar.run's `fetch`
     email_search: Optional[Callable] = None       # jarvis_email.count's `search`
+    email_senders: Optional[Callable] = None      # jarvis_email.senders's `fetch`
+    senders_on: Callable[[], bool] = lambda: senders_setting()["on"]
     publish: Callable[[str, dict], None] = _publish
     deadline: float = READ_DEADLINE
 
@@ -251,10 +272,23 @@ def sources(deps: Optional[Deps] = None) -> dict:
 
     return {
         "calendar": one(CALENDAR_TOOL, CALENDAR_ACTION, "JARVIS_CALDAV_URL", "your calendar"),
-        "email": one(EMAIL_TOOL, EMAIL_ACTION, "JARVIS_IMAP_HOST",
-                     "how many unread emails you have"),
+        "email": _email_source(one(EMAIL_TOOL, EMAIL_ACTION, "JARVIS_IMAP_HOST",
+                                   "how many unread emails you have"), deps),
         "weather": {"state": "not_available", "said": OUTSIDE_LINE},
     }
+
+
+def _email_source(src: dict, deps: Deps) -> dict:
+    """The email line under "What it includes", saying whether the
+    senders are shown."""
+    if src.get("state") != "on":
+        return src
+    try:
+        on = bool(deps.senders_on())
+    except Exception:
+        on = False
+    return {"state": "on", "senders": on,
+            "said": (SOURCE_SENDERS if on else SOURCE_COUNT_ONLY)}
 
 
 # --------------------------------------------------------------------------
@@ -351,6 +385,17 @@ def _read_calendar(now: float, deps: Deps) -> dict:
     return _section("calendar", title, "ok", summary + ".", shown)
 
 
+def sender_line(names: list, count: int, looked_at: int) -> str:
+    """"From Alex, Your Bank and GitHub" - or, when there are more unread
+    emails than were looked at, "The newest 5 are from ...". "" for none."""
+    names = [n for n in (names or []) if n]
+    if not names:
+        return ""
+    if count > looked_at:
+        return f"The newest {looked_at} are from {_join(names)}"
+    return f"From {_join(names)}"
+
+
 def _read_email(deps: Deps) -> dict:
     title = "Email"
     import jarvis_email as MAIL
@@ -358,10 +403,19 @@ def _read_email(deps: Deps) -> dict:
     if not p.configured:
         return _section("email", title, "failed", "Not read: email's settings on this PC "
                                                   "need a look.")
-    text = ("Jarvis would like to count the unread messages in the \"" + p.mailbox
-            + "\" mailbox on " + p.host + ":" + str(p.port) + " for the morning briefing: "
-            "one connection, search UNSEEN, the number only - no sender, subject or text "
-            "is read.")
+    try:
+        with_senders = bool(deps.senders_on())
+    except Exception:
+        with_senders = False
+    where = ("the \"" + p.mailbox + "\" mailbox on " + p.host + ":" + str(p.port)
+             + " for the morning briefing: one connection, search UNSEEN")
+    if with_senders:
+        text = ("Jarvis would like to count the unread messages in " + where
+                + ", then read the From line only of the newest " + str(SENDERS_MAX)
+                + " (with PEEK, so nothing is marked as read) - no subject or text is read.")
+    else:
+        text = ("Jarvis would like to count the unread messages in " + where
+                + ", the number only - no sender, subject or text is read.")
     try:
         v = deps.gate(EMAIL_ACTION, {"text": text, "for": "the morning briefing"}, text)
     except Exception:
@@ -369,12 +423,24 @@ def _read_email(deps: Deps) -> dict:
     if getattr(v, "allowed", False) is not True:
         return _section("email", title, "refused",
                         "Not read: the approval gate did not let this read run.")
-    out = MAIL.count(p, search=deps.email_search, approved=True)
+    if with_senders:
+        out = MAIL.senders(p, fetch=deps.email_senders, approved=True, newest=SENDERS_MAX)
+    else:
+        out = MAIL.count(p, search=deps.email_search, approved=True)
     if not out.get("ok"):
         return _section("email", title, "failed", "Not read: the mail server did not answer.")
     n = int(out.get("count") or 0)
+    items = []
+    if with_senders and n > 0:
+        # Outside text: each name is tidied again here (control characters,
+        # length), on top of jarvis_email's own tidying.
+        names = [_clean(x, MAIL._MAX_SENDER_CHARS) for x in (out.get("senders") or [])
+                 if isinstance(x, str)]
+        line = sender_line(names, n, int(out.get("looked_at") or 0))
+        if line:
+            items.append(line)
     return _section("email", title, "ok",
-                    "No unread email." if n == 0 else _plural(n, "unread email") + ".")
+                    "No unread email." if n == 0 else _plural(n, "unread email") + ".", items)
 
 
 def _in_thread(fn, *args) -> tuple:
@@ -527,8 +593,11 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
         # Outside text in the lines (calendar titles come from the calendar
         # server): a chat answer that quotes them marks the conversation as
         # having read outside text, like the calendar tool would.
-        "read": [CALENDAR_ACTION] if any(s["key"] == "calendar" and s["items"]
-                                         for s in sections) else [],
+        # The same for the email senders (a From line says whatever its
+        # sender wrote), under the email tool's name.
+        "read": ([CALENDAR_ACTION] if any(s["key"] == "calendar" and s["items"]
+                                          for s in sections) else [])
+        + ([EMAIL_TOOL] if any(s["key"] == "email" and s["items"] for s in sections) else []),
         "lock_screen": LOCK_SCREEN,
     }
     b["text"] = render(b)
@@ -592,6 +661,290 @@ def _on_fire(job_id: str, *, sched=None, deps: Optional[Deps] = None) -> None:
 
 
 # --------------------------------------------------------------------------
+#   SENDERS - the setting "Show who new emails are from"
+# --------------------------------------------------------------------------
+#
+# On by default (the owner's choice, 2026-09-25). It lives on this PC,
+# because the briefing is put together here; both apps change it through
+# POST /api/briefing/senders {"enabled": bool}. The shape is the one every
+# setting that shows more already has (jarvis_auto_learn.py, the voice
+# settings in jarvis_voice_enroll.py):
+#   OFF  immediate, never a card - it only makes the briefing show less. It
+#        also withdraws a waiting ON card: approving that card later changes
+#        nothing.
+#   ON   ONE approval card, action `change_own_config` (tier "ask" in the
+#        shipped toml - the action the voice settings use to show or say
+#        more), and 202 {"waiting": true} at once. Only tier "ask" with
+#        outcome "approved" turns it on; a toml that makes the action "auto"
+#        is refused (503) rather than read as a person's yes.
+# The value is kept in `briefing.json` in the Jarvis settings folder:
+# {"senders": true|false, "changed": epoch}. No file: on (the default). A
+# file that cannot be read or holds anything else: OFF, and `why` says so -
+# fail towards showing less.
+
+SENDERS_ACTION = "change_own_config"
+
+SENDERS_CARD = "\n".join([
+    "Show who your new emails are from in the morning briefing?",
+    "",
+    f"The briefing will list the names your newest unread emails are from (up to "
+    f"{SENDERS_MAX}), next to how many there are. To get them, Jarvis asks your mail "
+    "server for each email's From line only - never its subject or text - and nothing "
+    "is marked as read.",
+    "",
+    "The names show only inside the Jarvis apps, and are hidden with your memory lists "
+    "and chat history when those are hidden. The notification still says only \""
+    + LOCK_SCREEN + "\" Nothing goes to the AI model.",
+    "",
+    "If you did not just do this, say no.",
+    "",
+    "If you say no: nothing changes - the briefing shows only how many new emails "
+    "there are.",
+])
+
+#: How the last ON card ended, in plain words for the apps.
+SENDERS_LAST_WORDS = {
+    "enabled": "You approved the card, so the briefing shows who new emails are from.",
+    "denied": "The card was turned down, so the briefing shows the number only.",
+    "timed_out": "Nobody answered the card in time, so the briefing shows the number only.",
+    "refused": "Your PC's settings do not let this be approved, so the briefing shows the "
+               "number only.",
+    "withdrawn": "You turned it off while the card waited, so approving it changed nothing.",
+    "failed": "It was approved, but the setting could not be saved, so the briefing shows "
+              "the number only.",
+}
+SENDERS_GATE_FAILED = ("The approval card could not be raised, so the briefing shows the "
+                       "number only.")
+
+_SENDERS_DAMAGED = ("the morning briefing's settings file is damaged, so it shows the "
+                    "number of new emails only. Turn \"Show who new emails are from\" on "
+                    "again to rewrite it")
+
+
+def _config_dir():
+    from pathlib import Path
+    import os
+    if fw is not None:
+        try:
+            return Path(fw.CONFIG_DIR)
+        except Exception:
+            pass
+    env = os.environ.get("OPENJARVIS_CONFIG_DIR")
+    if env:
+        return Path(os.path.expanduser(env))
+    return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+def settings_path():
+    """briefing.json in the Jarvis settings folder - the same folder
+    jarvis_auto_learn.py and jarvis_memory use."""
+    return _config_dir() / "briefing.json"
+
+
+_SETTINGS_LOCK = threading.Lock()
+
+
+def senders_setting() -> dict:
+    """{"on": bool, "why": str}. No file, or a file without "senders": on
+    (the owner's default). Unreadable, not JSON, or not true/false: off,
+    and `why` says so."""
+    import json
+    try:
+        raw = settings_path().read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {"on": True, "why": ""}
+    except OSError as exc:
+        return {"on": False, "why": f"the morning briefing's settings file could not be read "
+                                    f"({type(exc).__name__}), so it shows the number of new "
+                                    f"emails only"}
+    try:
+        doc = json.loads(raw)
+        if not isinstance(doc, dict):
+            raise ValueError
+    except Exception:
+        return {"on": False, "why": _SENDERS_DAMAGED}
+    on = doc.get("senders", True)
+    if not isinstance(on, bool):
+        return {"on": False, "why": _SENDERS_DAMAGED}
+    return {"on": on, "why": ""}
+
+
+def set_senders(on: bool) -> dict:
+    """Write the setting. Only request_senders() calls this with True, and
+    only on an approved card."""
+    import json
+    import os
+    with _SETTINGS_LOCK:
+        p = settings_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps({"senders": bool(on), "changed": time.time()}),
+                       encoding="utf-8")
+        os.replace(tmp, p)
+    return dict(senders_setting(), ok=True)
+
+
+_S_LOCK = threading.Lock()
+_S_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+#: Held from an approved card's "was it withdrawn?" check through writing
+#: the setting, and from OFF's withdrawing through writing "off" - so an OFF
+#: pressed in between is never overwritten by the card (jarvis_auto_learn's
+#: red team R5). Always taken BEFORE _S_LOCK.
+_S_SWITCH = threading.Lock()
+
+
+def _senders_gate(action: str, detail: dict, prompt: str):
+    import jarvis_gate
+    return jarvis_gate.check(action, detail, prompt=prompt)
+
+
+def _senders_tier(action: str) -> str:
+    try:
+        return str(fw.action_tier(action)) if fw is not None else "unreadable"
+    except Exception as exc:
+        return f"unreadable ({type(exc).__name__})"
+
+
+def _spawn(fn: Callable[[], None]) -> None:
+    threading.Thread(target=fn, name="jarvis-briefing-senders-card", daemon=True).start()
+
+
+def _audit(event: str, detail: dict) -> None:
+    try:
+        if fw is not None:
+            fw.audit_log(event, detail)
+    except Exception:
+        pass
+
+
+def _senders_finish(pid: str, outcome: str, why: str = "",
+                    message: Optional[str] = None) -> None:
+    s = _S_STATE
+    with _S_LOCK:
+        if s["pending"].get("id") == pid:
+            s["pending"].clear()
+        s["withdrawn"].discard(pid)
+        if s["latest"].get("id") not in (None, pid):
+            # An older, withdrawn card answered after a newer one was raised.
+            return
+        s["last"].clear()
+        s["last"].update(outcome=outcome, why=why, at=time.time(),
+                         message=message or SENDERS_LAST_WORDS.get(outcome, ""))
+    _audit("briefing.senders.card", {"outcome": outcome})
+
+
+def _senders_decide(pid: str, apply: Callable[[bool], dict], gate: Callable,
+                    tier_of: Callable[[str], str]) -> None:
+    detail = {"text": SENDERS_CARD, "what": "show who new emails are from in the morning "
+                                            "briefing", "setting": "briefing senders",
+              "to": True}
+    try:
+        v = gate(SENDERS_ACTION, detail, SENDERS_CARD)
+    except Exception as exc:
+        return _senders_finish(pid, "refused", f"the approval gate failed "
+                                               f"({type(exc).__name__})", SENDERS_GATE_FAILED)
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    if vtier != "ask" or tier_of(SENDERS_ACTION) != "ask":
+        return _senders_finish(pid, "refused", f"the gate answered at tier {vtier!r}, "
+                                               f"which is not a person saying yes")
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _senders_finish(pid, outcome)
+        return _senders_finish(pid, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _S_SWITCH:
+        with _S_LOCK:
+            withdrawn = pid in _S_STATE["withdrawn"]
+        if withdrawn:
+            return _senders_finish(pid, "withdrawn",
+                                   "you turned it off while the card was waiting")
+        try:
+            out = apply(True) or {}
+        except Exception as exc:
+            return _senders_finish(pid, "failed", type(exc).__name__)
+        if out.get("ok") is False or out.get("on") is not True:
+            return _senders_finish(pid, "failed", str(out.get("why") or ""))
+        _senders_finish(pid, "enabled")
+
+
+def senders_status() -> dict:
+    """The setting as the apps show it: {"on", "waiting", "last", "why"}.
+    `on` is what the next briefing does; `waiting` whether an ON card is up
+    (said by this PC - the apps do not have to guess from the queue)."""
+    st = senders_setting()
+    with _S_LOCK:
+        waiting = bool(_S_STATE["pending"])
+        last = dict(_S_STATE["last"]) or None
+    return {"on": st["on"], "waiting": waiting, "last": last, "why": st["why"]}
+
+
+def request_senders(enabled, *, gate: Optional[Callable] = None,
+                    tier_of: Optional[Callable[[str], str]] = None,
+                    spawn: Optional[Callable] = None,
+                    apply: Optional[Callable[[bool], dict]] = None) -> tuple:
+    """POST /api/briefing/senders {"enabled": bool}. Returns (code, body)."""
+    gate = gate or _senders_gate
+    tier_of = tier_of or _senders_tier
+    spawn = spawn or _spawn
+    apply = apply or set_senders
+    s = _S_STATE
+    if not isinstance(enabled, bool):
+        return 400, {"ok": False, "error": 'need {"enabled": true|false}'}
+    if not enabled:
+        with _S_SWITCH:
+            with _S_LOCK:
+                if s["pending"]:
+                    s["withdrawn"].add(s["pending"]["id"])
+                    s["pending"].clear()
+            try:
+                apply(False)
+            except Exception as exc:
+                return 500, {"ok": False,
+                             "error": f"could not save the setting ({type(exc).__name__})"}
+        _audit("briefing.senders.off", {})
+        return 200, dict(ok=True, senders=senders_status(), waiting=False,
+                         message="Done - the briefing shows only how many new emails there "
+                                 "are.")
+    with _S_LOCK:
+        waiting = bool(s["pending"])
+    if senders_setting()["on"] and not waiting:
+        return 200, dict(ok=True, senders=senders_status(), waiting=False,
+                         message="It already shows who new emails are from.")
+    tier = tier_of(SENDERS_ACTION)
+    if tier != "ask":
+        return 503, {"ok": False, "error": (
+            f"{SENDERS_ACTION} is tier {tier!r} in jarvis-framework.toml; showing who emails "
+            f"are from needs a person to say yes, so it must be 'ask'")}
+    with _S_LOCK:
+        pid = None if s["pending"] else uuid.uuid4().hex
+        if pid is not None:
+            s["pending"].update(id=pid, since=time.time())
+            s["latest"]["id"] = pid
+    if pid is None:
+        return 202, dict(ok=True, senders=senders_status(), waiting=True,
+                         message="A card to turn this on is already waiting for your "
+                                 "approval.")
+    try:
+        spawn(lambda: _senders_decide(pid, apply, gate, tier_of))
+    except Exception:
+        with _S_LOCK:
+            s["pending"].clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, dict(ok=True, senders=senders_status(), waiting=True,
+                     message="Waiting for your approval. Names are shown only if you approve "
+                             "the card, on your PC or phone.")
+
+
+def _senders_reset_for_tests() -> None:
+    with _S_LOCK:
+        for v in _S_STATE.values():
+            v.clear()
+
+
+# --------------------------------------------------------------------------
 #   Routes (briefing.patch hands the request here)
 # --------------------------------------------------------------------------
 
@@ -607,6 +960,7 @@ def handle_get(sched=None, deps: Optional[Deps] = None) -> tuple:
     Behind the token: the lines are the owner's own day."""
     return 200, {"available": True, "briefing": latest(), "building": building(),
                  "setups": setups(sched), "sources": sources(deps),
+                 "senders": senders_status(),
                  "title": TITLE, "lock_screen": LOCK_SCREEN, "empty": EMPTY}
 
 
@@ -622,3 +976,12 @@ def handle_now(body=None, sched=None, deps: Optional[Deps] = None) -> tuple:
     except Exception as exc:
         return 500, {"ok": False, "error": type(exc).__name__}
     return 200, {"ok": True, "briefing": b}
+
+
+def handle_senders(body) -> tuple:
+    """POST /api/briefing/senders {"enabled": bool} - "Show who new emails
+    are from". OFF at once; ON through ONE approval card (SENDERS above).
+    Both apps hold ON on a stale link, and let OFF through."""
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": 'need {"enabled": true|false}'}
+    return request_senders(body.get("enabled"))

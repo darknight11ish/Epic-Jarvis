@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.Briefing
+import com.jarvis.client.net.DesktopWrite
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.Schedule
 import kotlinx.serialization.json.JsonObject
@@ -101,6 +102,73 @@ class BriefingTest {
         assertFalse(Briefing.isAbout(obj("""{"id":"s00000000b1","kind":"timer","state":"fired"}""")))
         assertEquals("Jarvis: your morning briefing is ready.", Briefing.LOCK_SCREEN)
         assertTrue(Briefing.missing(ApiError.NotFound))
+    }
+
+    // "Show who new emails are from" (the owner's decision of 2026-09-25):
+    // on by default, OFF at once, ON through ONE approval card on the PC.
+
+    @Test
+    fun theSendersAreLinesSoHidingTakesThemOutAndTheCountStays() {
+        val v = Briefing.parse(
+            obj(
+                """{"available":true,"briefing":{"id":"b0123456789","heading":"h","sections":[
+                  {"key":"email","title":"Email","state":"ok","summary":"3 unread emails.",
+                   "items":["From Alex, Your Bank and GitHub"]}]},"setups":[],
+                  "senders":{"on":true,"waiting":false,"last":null,"why":""}}""",
+            ),
+        )!!
+        assertEquals(listOf("From Alex, Your Bank and GitHub"), v.briefing!!.sections[0].items)
+        val hidden = Briefing.hide(v).briefing!!
+        assertTrue(hidden.sections[0].items.isEmpty())
+        assertEquals("3 unread emails.", hidden.sections[0].summary)
+        assertFalse(hidden.toString().contains("Alex"))
+        assertTrue(v.senders!!.on)
+    }
+
+    @Test
+    fun theSendersSwitchHoldsOnOnAStaleLinkAndNeverOff() {
+        val on = Briefing.Senders(on = true, waiting = false, last = "", lastOutcome = "", why = "")
+        val off = on.copy(on = false)
+        assertTrue(Briefing.sendersView(on, live = false).canChange)
+        assertFalse(Briefing.sendersView(off, live = false).canChange)
+        assertTrue(Briefing.sendersView(off, live = true).canChange)
+        val waiting = Briefing.sendersView(off.copy(waiting = true), live = false)
+        assertTrue(waiting.checked)
+        assertTrue(waiting.canChange)
+        assertEquals(listOf(Briefing.SENDERS_WAITING), waiting.lines)
+        val denied = Briefing.sendersView(
+            off.copy(last = "The card was turned down, so the briefing shows the number only.", lastOutcome = "denied"),
+            live = true,
+        )
+        assertEquals(listOf("The card was turned down, so the briefing shows the number only."), denied.lines)
+        val approved = Briefing.sendersView(on.copy(last = "You approved the card.", lastOutcome = "enabled"), live = true)
+        assertTrue(approved.lines.isEmpty())
+        val older = Briefing.sendersView(null, live = true)
+        assertFalse(older.show)
+        assertEquals(listOf(Briefing.SENDERS_MISSING), older.lines)
+        assertNull(Briefing.parse(obj("""{"available":true,"briefing":null}"""))!!.senders)
+        assertNull(Briefing.parse(obj("""{"available":true,"briefing":null,"senders":{"on":"yes"}}"""))!!.senders)
+        val damaged = Briefing.parse(
+            obj("""{"available":true,"briefing":null,"senders":{"on":false,"waiting":false,"why":"the file is damaged"}}"""),
+        )!!.senders
+        assertEquals(listOf("The file is damaged."), Briefing.sendersView(damaged, live = true).lines)
+    }
+
+    @Test
+    fun theSendersBodyAndWhatIsSaidAfter() {
+        assertEquals("""{"enabled":true}""", Briefing.sendersBody(true))
+        assertEquals("""{"enabled":false}""", Briefing.sendersBody(false))
+        assertEquals(
+            "Waiting for your approval.",
+            Briefing.sendersSaid(true, DesktopWrite.Outcome.Waiting("Waiting for your approval.")),
+        )
+        assertEquals(Briefing.SENDERS_WAITING, Briefing.sendersSaid(true, DesktopWrite.Outcome.Waiting(null)))
+        assertEquals("Not changed. No.", Briefing.sendersSaid(true, DesktopWrite.Outcome.Refused("No.")))
+        assertEquals(
+            "Done - the briefing shows the number only.",
+            Briefing.sendersSaid(false, DesktopWrite.Outcome.Done(null)),
+        )
+        assertEquals("/api/briefing/senders", Briefing.SENDERS_PATH)
     }
 
     @Test

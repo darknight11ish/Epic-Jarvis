@@ -44,7 +44,9 @@ import kotlinx.coroutines.launch
  * setting one up that repeats - every day, every weekday, or chosen days, at
  * a time - which raises the PC's ONE approval card listing the next three
  * times ([JarvisRuntime.setBriefing], held on a stale link). There is no
- * "stop all".
+ * "stop all". And "Show who new emails are from" ([Briefing.SENDERS_LABEL],
+ * on by default): OFF at once, ON through ONE approval card on the PC, held
+ * on a stale link ([JarvisRuntime.setBriefingSenders]).
  *
  * Read when Mind shows it, on Refresh, after every change, and on every
  * `schedule` event about a briefing ([JarvisRuntime.briefingTick]). Nothing
@@ -68,6 +70,8 @@ internal fun BriefingSection(
     var asking by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    var sendersBusy by remember { mutableStateOf(false) }
+    var sendersSaid by remember { mutableStateOf<String?>(null) }
     var every by remember { mutableStateOf("weekday") }
     var at by remember { mutableStateOf("07:00") }
     var days by remember { mutableStateOf(setOf(0, 1, 2, 3, 4)) }
@@ -252,6 +256,38 @@ internal fun BriefingSection(
                         color = chrome.textMid)
                     shown.sources.forEach {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                    }
+                    // "Show who new emails are from": OFF at once, never held;
+                    // ON is ONE approval card on the PC, held on a stale link.
+                    val senders = Briefing.sendersView(shown.senders, canAct)
+                    if (senders.show) {
+                        Gap(6)
+                        SwitchRow(
+                            title = Briefing.SENDERS_LABEL,
+                            detail = Briefing.SENDERS_DETAIL,
+                            checked = senders.checked,
+                            enabled = !sendersBusy && senders.canChange,
+                            onChange = { want ->
+                                sendersBusy = true
+                                sendersSaid = null
+                                scope.launch {
+                                    try {
+                                        sendersSaid = JarvisRuntime.setBriefingSenders(want)
+                                    } finally {
+                                        sendersBusy = false
+                                        reads += 1
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    senders.lines.forEach {
+                        Text(it, style = MaterialTheme.typography.labelSmall,
+                            color = if (it == Briefing.SENDERS_WAITING) chrome.warnInk else chrome.textMid)
+                    }
+                    (if (sendersBusy) "Asking your PC…" else sendersSaid)?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                            modifier = Modifier.liveStatus())
                     }
                     Text(Briefing.SPOKEN, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                 }

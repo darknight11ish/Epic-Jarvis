@@ -24,15 +24,15 @@
          if path in ("/api/wiki", "/api/wiki/ingest"):
              # wiki.patch - the wiki builder (jarvis_wiki.py). GET /api/wiki:
              # whether it can run (it needs the second card's "wiki" lane),
-@@ -2083,6 +2100,28 @@
+@@ -2083,6 +2100,48 @@
                  code, out = jarvis_schedule.handle_act(body)
              return self._send(code, out)
  
 +        if route == "/api/briefing/now":
 +            # briefing.patch - "Brief me now": put one together and answer
 +            # with it (jarvis_briefing.py). It only READS - today's calendar
-+            # and the unread-email count as their own gate actions allow,
-+            # the scheduler's list, the approval count - and asks no card.
++            # and the unread emails (with senders, if on) as their own gate
++            # actions allow, the scheduler's list and the approval count; no card.
 +            # Setting one up to repeat is POST /api/schedule/add with kind
 +            # "briefing", which raises the scheduler's own card.
 +            if not _origin_ok(self):
@@ -50,10 +50,30 @@
 +            code, out = jarvis_briefing.handle_now(body)
 +            return self._send(code, out)
 +
++        if route == "/api/briefing/senders":
++            # briefing.patch - "Show who new emails are from" in the morning
++            # briefing (jarvis_briefing.py; on by default). OFF is immediate;
++            # ON raises ONE approval card (change_own_config) and answers 202
++            # at once - nothing changes until a person approves it.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_briefing
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++            code, out = jarvis_briefing.handle_senders(body)
++            return self._send(code, out)
++
          if route == "/api/wiki/ingest":
              # wiki.patch - "Add to wiki" for one document in Sources. The
              # second card's model reads it and proposes pages, then ONE
-@@ -2340,16 +2379,24 @@
+@@ -2340,16 +2399,24 @@
                  return self._send(code, out)
  
              if route == "/api/memory/sleep_time":
@@ -84,7 +104,7 @@
                  out = {}
                  if isinstance(sleep_enabled, bool):
                      out = jarvis_sleep.set_enabled(sleep_enabled)
-@@ -2891,6 +2938,14 @@
+@@ -2891,6 +2958,14 @@
          # before. The `finally` still runs: this PC's record of the turn
          # (not for a temporary chat) and the learner, which skips a command
          # like this one (jarvis_intake.owner_turns).
@@ -99,7 +119,7 @@
          try:
              import jarvis_quick
              _quick = jarvis_quick.answer_turn(body)
-@@ -2902,8 +2957,13 @@
+@@ -2902,8 +2977,13 @@
              if _temporary_chat(body) and route_header.get("memory_side") != "jarvis":
                  route_header["memory_side"] = "none"
                  route_header["temporary"] = True
