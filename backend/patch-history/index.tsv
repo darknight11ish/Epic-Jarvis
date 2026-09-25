@@ -46,6 +46,7 @@ second-card.patch	second-card/2a25605.patch	2a25605de02b58dfbe278a6043a478ac81ed
 second-card.patch	second-card/15a7f27.patch	15a7f27ebe5d5bb6bfad2f7cdd962f0c0aa1a7d6	2026-09-24T06:11:02+00:00	AP-9: Browser control's card no longer says "Nothing leaves this PC"
 second-card.patch	second-card/a0f23da.patch	a0f23dad6d3e20eee783f05a77ab4921da96818a	2026-09-24T02:37:56+00:00	Second graphics card: the switches, the second Ollama, and /api/second-card
 skill-notes.patch	skill-notes/2c4f24c.patch	2c4f24cd99c3400a83e45efb2d743e8b0c4bdd0b	2026-09-15T00:20:02+00:00	Three sentences that were not true, and an ungated insight pool
+temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a5039378a5264e50	2026-09-25T01:17:50+00:00	Temporary chat and "Used in this answer", in both apps and on the PC
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27+00:00	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47+00:00	backend: jarvis_agent.py - the model can finally use a tool, local lane only
 voice-503.patch	voice-503/8d2c6f6.patch	8d2c6f615e4db690c28465fc892805f3d74a70a0	2026-09-15T01:07:41+00:00	The voice routes were telling four different stories, and one was a leak
