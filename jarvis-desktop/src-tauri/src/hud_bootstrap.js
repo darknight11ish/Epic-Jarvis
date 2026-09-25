@@ -2,7 +2,16 @@
  *
  * `jarvis_hud.html` is vendored byte-identical from the backend folder, so it
  * is the browser's page first and the desktop's second. This script is how the
- * desktop shell adapts it without forking it. It does two things.
+ * desktop shell adapts it without forking it.
+ *
+ * THE PAGE HOLDS NO PAIRING TOKEN (apps security audit M2, 2026-09-25). It
+ * used to be given one, here and on every page load, so any script running in
+ * the page could read it and call the whole API - `POST /api/approve`
+ * included, past Windows Hello and the stale check. Now section 1 sets the
+ * page's token to empty, and section 2c sends every request the page makes to
+ * Jarvis through Rust (src-tauri/src/hud_proxy.rs), which adds the token
+ * itself and allows only the page's own reads, its chat, and the right/wrong
+ * mark. Approve and Deny are not answered in this window at all (section 5).
  *
  * ------------------------------------------------------------------------
  * 1. Configure JARVIS before the page's first fetch
@@ -18,16 +27,11 @@
  * "a copy in this page's localStorage would be a second, staler source of the
  * token that outlives the shell's own storage".
  *
- * Where the shell holds it, precisely (this comment once claimed "the OS
- * keystore" when it was a bare JSON string, and then had to be corrected):
- * a token typed into Settings is in Windows Credential Manager, which is
- * DPAPI-encrypted to the Windows user (token_store.rs, since 2026-09-23).
- * A token Credential Manager refuses is not saved at all (since 2026-09-24;
- * it used to fall back to plain JSON under %APPDATA%). A token nobody typed
- * is the backend's own, which the backend keeps in Credential Manager too
- * (token-store.patch) - or, on a backend not yet updated, in its old plain
- * file ~/.openjarvis/token, which Settings then names. Once injected, the
- * token is also in this page's memory, as below.
+ * Where the shell holds the token, precisely: a token typed into Settings is
+ * in Windows Credential Manager, which is DPAPI-encrypted to the Windows user
+ * (token_store.rs). A token nobody typed is the backend's own, which the
+ * backend keeps in Credential Manager too (token-store.patch). It is never in
+ * this page: the base is configured here, and the token is set to empty.
  *
  * So instead: intercept the assignment. The page does
  *
@@ -54,13 +58,12 @@
  *
  * A side effect worth naming: the page's `streamUrl()` puts the token in the
  * query string, because EventSource cannot set a header. Under the shim no
- * request is made at all, so on the desktop the token never reaches a URL.
+ * request is made at all - and the page has no token to put there anyway.
  */
 (function () {
   "use strict";
 
   var BASE = __JARVIS_BASE__;
-  var TOKEN = __JARVIS_TOKEN__;
 
   /* ---------------------------------------------------------------- *
    * 1. JARVIS configuration
@@ -72,9 +75,10 @@
       // Clear anything an earlier browser session against this same origin
       // left behind, so a stale token cannot shadow the real one.
       if (typeof api.forget === "function") api.forget();
-      // The third argument is persist=false: the shell re-injects on every
-      // load and the keystore is the single source.
-      api.set(BASE, TOKEN, false);
+      // An EMPTY token, on purpose (apps security audit M2): the page's
+      // requests go through Rust, which adds the token (section 2c). The
+      // third argument is persist=false, so nothing is left in localStorage.
+      api.set(BASE, "", false);
       console.info("[jarvis] shell configured the HUD for " + (BASE || "same origin"));
     } catch (err) {
       console.error("[jarvis] shell configuration failed", err);
@@ -250,8 +254,8 @@
     var link = lastLink;
     var root = document.documentElement;
     if (root) {
-      // Section 5's stylesheet greys the page's Approve and Deny with this,
-      // and the capture listener below refuses the click itself.
+      // Kept for the stylesheet (hud-link.css): the link line's colour.
+      // Approve and Deny are removed here whatever the link does (section 5).
       if (linkStale) root.classList.add("jarvis-stale");
       else root.classList.remove("jarvis-stale");
     }
@@ -291,18 +295,15 @@
 
   /* The feed.
    *
-   * Rust pushes into this by evaluating a call to it in this webview, rather
-   * than the page subscribing over Tauri's IPC — because it cannot. This page
-   * carries its own Content-Security-Policy meta tag, and its `connect-src`
-   * lists the backend's loopback origins and nothing else. Tauri's IPC on
-   * Windows is a fetch to http://ipc.localhost, so every `invoke` and every
-   * `listen` from this page is blocked by that policy before it leaves the
-   * webview. An eval from the host is not a fetch and is not subject to it.
-   *
-   * (That is worth fixing in the page itself — adding `ipc: http://ipc.localhost`
-   * to its connect-src costs nothing in a browser, where neither is reachable,
-   * and it is what any future button in this page that needs the shell will
-   * require. Until then, nothing here depends on IPC.)
+   * Rust pushes into this by evaluating a call to it in this webview. This
+   * comment used to say that was because Tauri's IPC cannot work from this
+   * page, whose own Content-Security-Policy does not list
+   * http://ipc.localhost. That was wrong (apps security audit M2): when that
+   * fetch is refused, Tauri falls back to `window.ipc.postMessage`, which no
+   * CSP governs, so `invoke` works here - the mic button (2d) and every
+   * request in 2c use it. What limits this page is capabilities/hud.json.
+   * The feed stays: it hands the shell's one event stream to the
+   * EventSource shim above without a second subscription.
    */
   window.__jarvisFeed = function (channel, payload) {
     try {
@@ -528,35 +529,32 @@
   );
 
   /* ---------------------------------------------------------------- *
-   * 2c. Approve/deny: route to the real backend, gated on the link
+   * 2c. Every request to Jarvis goes through Rust, which holds the token
    *
-   * jarvis_hud.html's apprDecide() is the one decision path in the file
-   * that does not go through the page's own jfetch() helper - it calls
-   * bare fetch("/api/approve" | "/api/deny", ...) with a relative URL and
-   * no JARVIS.headers(). Two consequences, both confirmed against that
-   * exact line rather than assumed:
+   * (apps security audit M2.) The page has no token (section 1), so a
+   * request it made itself would be refused. This replaces `window.fetch`
+   * for anything under /api/ and hands it to src-tauri/src/hud_proxy.rs:
    *
-   *   1. A relative fetch resolves against this webview's own origin,
-   *      http://tauri.localhost - not JARVIS.url()'s backend base. Nothing
-   *      proxies tauri.localhost to the backend, so today this request
-   *      never reaches Jarvis at all on the desktop build, and it carries
-   *      no X-Jarvis-Token either: the one unauthenticated call in the
-   *      page.
-   *   2. Even reaching the backend, nothing here checks whether the
-   *      shell's event stream is stale first - the exact gate
-   *      decide_approval (commands.rs) enforces for the Quickbar and the
-   *      Widget, quoting DESKTOP-BUILD's checklist: "disable approve/deny
-   *      while the stream is stale, because answering a queue you cannot
-   *      confirm is live is how you approve something twice."
+   *   - a GET goes to `hud_get`, which allows only the page's own reads
+   *     (/api/status, /graph, /pending, /initiative, /memory/pending and
+   *     /retrieve?q=) and refuses every other path before sending anything;
+   *   - POST /api/chat goes to `hud_chat`, streamed back over a channel and
+   *     rebuilt into a streaming Response, so the page reads the answer as
+   *     it always has. Its AbortController still stops it (`hud_chat_cancel`).
+   *   - /api/approve and /api/deny are refused here, stale link or not:
+   *     approvals are answered in the Jarvis bar or the widget, through
+   *     decide_approval, with Windows Hello and the stale check (section 5).
+   *   - memory writes are refused (the Brain decides memory);
+   *   - anything else under /api/ is refused.
    *
-   * Fixed the same way as window.JARVIS and window.EventSource above:
-   * intercepted here, not in jarvis_hud.html, so the next vendored drop
-   * of that file needs no re-patching. This does not reach into Tauri's
-   * IPC - the HUD's CSP and its empty capability grant (see hud.json)
-   * both stay exactly as they are; this only stops the page's own fetch
-   * from leaving through the wrong door.
+   * Everything that is not under /api/ (fonts, the stylesheet) is fetched
+   * as before. Outside the desktop (no __TAURI__) the page is not changed.
    * ---------------------------------------------------------------- */
   var realFetch = window.fetch ? window.fetch.bind(window) : null;
+  var tauriCore = window.__TAURI__ && window.__TAURI__.core;
+  var shellInvoke =
+    tauriCore && typeof tauriCore.invoke === "function" ? tauriCore.invoke.bind(tauriCore) : null;
+  var ShellChannel = tauriCore && tauriCore.Channel;
   // Memory is decided in the Brain window, and only there: its cards warn
   // about text that reads like a slipped-in instruction, offer "Both are
   // true", say "would replace" only when something really is replaced, and
@@ -569,52 +567,190 @@
   // its POST pins a fact, and this page never reads the list.
   var MEMORY_WRITE =
     /\/api\/memory\/(decide|keep_both|forget|erase|edit|learning|sleep_time|profile)(\?|$)/;
-  if (realFetch) {
-    window.fetch = function (input, init) {
-      var path = typeof input === "string" ? input : "";
-      // A Request or URL object too, not only a string, for the refusal.
-      var target = path || (input ? String(input.url || input) : "");
-      if (MEMORY_WRITE.test(target)) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              ok: false,
-              error:
-                "memory is decided in the Brain window's Memory tab, not here - " +
-                "nothing was sent",
-            }),
-            { status: 403, headers: { "Content-Type": "application/json" } }
-          )
-        );
+  var APPROVAL = /^\/api\/(approve|deny)(\?|$)/;
+
+  function jsonReply(status, body) {
+    return Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status: status,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+  }
+
+  /* The /api/... path and query of a request, or null for anything else. */
+  function apiPath(target) {
+    var url;
+    try {
+      url = new URL(String(target), window.location.href);
+    } catch (err) {
+      return null;
+    }
+    if (url.pathname.indexOf("/api/") !== 0) return null;
+    return url.pathname + url.search;
+  }
+
+  function abortReason(signal) {
+    return signal && signal.reason !== undefined
+      ? signal.reason
+      : new DOMException("The operation was aborted.", "AbortError");
+  }
+
+  function replyHeaders(contentType, route) {
+    var headers = new Headers();
+    if (contentType) headers.set("Content-Type", contentType);
+    if (route) {
+      try {
+        headers.set("X-Jarvis-Route", route);
+      } catch (err) {
+        /* not a valid header value: the page shows no route, as before */
       }
-      if (path === "/api/approve" || path === "/api/deny") {
-        if (linkStale) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                ok: false,
-                error:
-                  "the event stream is stale, so the approval queue cannot " +
-                  "be confirmed live - nothing can be answered until it reconnects",
-              }),
-              { status: 200, headers: { "Content-Type": "application/json" } }
-            )
+    }
+    return headers;
+  }
+
+  function okStatus(status) {
+    return status >= 200 && status <= 599 ? status : 502;
+  }
+
+  function shellGet(path) {
+    return shellInvoke("hud_get", { path: path }).then(
+      function (reply) {
+        var status = okStatus(reply && reply.status);
+        var empty = status === 204 || status === 205 || status === 304;
+        return new Response(empty ? null : String((reply && reply.body) || ""), {
+          status: status,
+          headers: replyHeaders(reply && reply.contentType, reply && reply.route),
+        });
+      },
+      function (err) {
+        // A fetch that could not reach the server rejects with a TypeError.
+        throw new TypeError(String((err && err.message) || err));
+      }
+    );
+  }
+
+  function shellChat(init) {
+    var body = null;
+    try {
+      body = JSON.parse(init && typeof init.body === "string" ? init.body : "null");
+    } catch (err) {
+      body = null;
+    }
+    var signal = init && init.signal;
+    return new Promise(function (resolve, reject) {
+      if (signal && signal.aborted) {
+        reject(abortReason(signal));
+        return;
+      }
+      var controller = null;
+      var stream = new ReadableStream({
+        start: function (c) {
+          controller = c;
+        },
+      });
+      var encoder = new TextEncoder();
+      var headed = false;
+      var over = false;
+      function finish() {
+        if (over) return;
+        over = true;
+        if (signal) signal.removeEventListener("abort", onAbort);
+      }
+      function fail(err) {
+        if (over) return;
+        finish();
+        if (!headed) reject(err);
+        else {
+          try {
+            controller.error(err);
+          } catch (e) {
+            /* already closed */
+          }
+        }
+      }
+      function onAbort() {
+        shellInvoke("hud_chat_cancel").catch(function () {});
+        fail(abortReason(signal));
+      }
+      if (signal) signal.addEventListener("abort", onAbort, { once: true });
+      var channel = new ShellChannel();
+      channel.onmessage = function (raw) {
+        if (over) return;
+        var frame = null;
+        try {
+          frame = JSON.parse(raw);
+        } catch (err) {
+          frame = null;
+        }
+        if (!frame) return;
+        if (frame.kind === "head" && !headed) {
+          headed = true;
+          resolve(
+            new Response(stream, {
+              status: okStatus(frame.status),
+              headers: replyHeaders(frame.contentType, frame.route),
+            })
           );
+        } else if (frame.kind === "data" && headed) {
+          controller.enqueue(encoder.encode(String(frame.text || "")));
+        } else if (frame.kind === "end" && headed) {
+          finish();
+          controller.close();
         }
-        var jarvis = window.JARVIS;
-        if (jarvis && typeof jarvis.url === "function") {
-          var merged = Object.assign({}, init);
-          merged.headers = jarvis.headers(init && init.headers);
-          return realFetch(jarvis.url(path), merged);
+      };
+      shellInvoke("hud_chat", { body: body, onEvent: channel }).then(
+        function () {
+          if (over) return;
+          if (!headed) {
+            fail(new TypeError("the Jarvis server sent no answer"));
+            return;
+          }
+          // The reply can arrive before the channel's last frames: give
+          // them a moment, then close whatever has come.
+          setTimeout(function () {
+            if (over) return;
+            finish();
+            controller.close();
+          }, 1500);
+        },
+        function (err) {
+          fail(new TypeError(String((err && err.message) || err)));
         }
+      );
+    });
+  }
+
+  if (realFetch && shellInvoke && ShellChannel) {
+    window.fetch = function (input, init) {
+      var isRequest = typeof Request !== "undefined" && input instanceof Request;
+      var target = isRequest ? input.url : input;
+      var path = apiPath(target);
+      if (path === null) return realFetch(input, init);
+      var method = String((init && init.method) || (isRequest && input.method) || "GET").toUpperCase();
+      if (MEMORY_WRITE.test(path)) {
+        return jsonReply(403, {
+          ok: false,
+          error:
+            "memory is decided in the Brain window's Memory tab, not here - " +
+            "nothing was sent",
+        });
       }
-      // The page's own chat request (jfetch("/api/chat") -> the backend's
-      // absolute URL). The answer's id rides in X-Jarvis-Route as
-      // `turn_id` (feedback.patch); section 6 puts a right/wrong mark on
-      // the answer it belongs to. Read-only: the response is passed back
-      // to the page untouched.
-      if (/\/api\/chat(\?|$)/.test(path)) {
-        return realFetch(input, init).then(function (res) {
+      if (APPROVAL.test(path)) {
+        return jsonReply(403, {
+          ok: false,
+          error:
+            "approvals are answered in the Jarvis bar or the widget, not in this " +
+            "window - nothing was sent",
+        });
+      }
+      if (method === "GET" && !isRequest) return shellGet(path);
+      if (method === "POST" && path === "/api/chat" && !isRequest) {
+        return shellChat(init).then(function (res) {
+          // The answer's id rides in X-Jarvis-Route as `turn_id`
+          // (feedback.patch); section 6 puts a right/wrong mark on the
+          // answer it belongs to. Read-only: the response goes to the page
+          // untouched.
           try {
             var raw = res.headers.get("X-Jarvis-Route");
             var route = raw ? JSON.parse(raw) : null;
@@ -626,7 +762,10 @@
           return res;
         });
       }
-      return realFetch(input, init);
+      return jsonReply(403, {
+        ok: false,
+        error: "the HUD window cannot send that - nothing was sent",
+      });
     };
   }
 
@@ -635,11 +774,11 @@
    *
    * Under the answer the id belongs to - the next "jarvis" message the page
    * adds to #log - two small buttons. One answer, one mark; pressing the
-   * one already on takes it back. Posted straight to the backend the page
-   * already talks to (window.JARVIS's own url and headers, token included),
-   * because this window has no app commands. A backend without the route
-   * answers 404/503 and the buttons remove themselves, quietly. A mark
-   * changes no memory; it only counts.
+   * one already on takes it back. Sent through Rust's `mark_answer` - the same
+   * command the Jarvis bar uses, which checks the id and the mark and adds
+   * the token (the page has none). A backend without the route answers
+   * 404/503, `mark_answer` says `available: false`, and the buttons remove
+   * themselves, quietly. A mark changes no memory; it only counts.
    * ---------------------------------------------------------------- */
   var awaitingTurn = null;
 
@@ -685,21 +824,15 @@
     }
     function send(mark) {
       var next = current === mark ? "none" : mark;
-      var api = window.JARVIS;
-      if (!api || typeof api.url !== "function") return;
+      if (!shellInvoke) return;
       right.disabled = wrong.disabled = true;
-      realFetch(api.url("/api/feedback/mark"), {
-        method: "POST",
-        cache: "no-store",
-        headers: api.headers({ "Content-Type": "application/json", "X-Jarvis-Client": "hud" }),
-        body: JSON.stringify({ turn_id: turnId, mark: next }),
-      })
-        .then(function (res) {
-          if (res.status === 404 || res.status === 501 || res.status === 503) {
+      shellInvoke("mark_answer", { turnId: turnId, mark: next })
+        .then(function (reply) {
+          if (reply && reply.available === false) {
             row.remove();
             return;
           }
-          if (res.ok) current = next;
+          current = next;
         })
         .catch(function () { /* leave it as it was */ })
         .then(function () {
@@ -768,17 +901,22 @@
   else document.addEventListener("DOMContentLoaded", localFonts, { once: true });
 
   /* ---------------------------------------------------------------- *
-   * 5. The approval cards, while the link is stale
+   * 5. The approval cards: shown here, answered elsewhere
    *
-   * The fetch intercept above already refuses approve/deny while stale -
-   * that is the real block and it stays. But the page then printed "This
-   * request is no longer waiting", which was false (it was still waiting),
-   * and removed the card, which stayed gone until the next poll. And the
-   * buttons looked live before the click. So: a stylesheet (a file, not an
-   * inline style, so neither CSP has anything to say about it) greys the
-   * buttons and says why under them while `jarvis-stale` is on the root,
-   * and a capture-phase listener stops the click before the page's own
-   * handler ever runs. It never decides anything; it only stops a click.
+   * (apps security audit M2, 2026-09-25.) The page draws each waiting
+   * approval with its own Approve and Deny. On the desktop they are
+   * removed: approvals are answered in the Jarvis bar or the widget, where
+   * `decide_approval` asks Windows Hello and refuses on a stale link. The
+   * page's own buttons posted to a relative /api/approve that never reached
+   * Jarvis, and a later "fix" pointing them at the backend would have been
+   * an approval path with neither check.
+   *
+   * Three layers, none of which decides anything: the stylesheet
+   * (hud-link.css, a file, so neither CSP objects) hides the buttons and
+   * says where to answer; a capture-phase listener stops any click on them
+   * before the page's own handler runs; and the fetch shim (2c) refuses
+   * /api/approve and /api/deny. The card itself - what is being asked,
+   * and how long is left - stays, so the owner sees it here too.
    * ---------------------------------------------------------------- */
   function staleSheet() {
     if (document.getElementById("jarvis-hud-link-css")) return;
@@ -794,7 +932,6 @@
   document.addEventListener(
     "click",
     function (event) {
-      if (!linkStale) return;
       var target = event.target;
       if (!target || !target.closest) return;
       if (!target.closest("#approvals .appr .btns button")) return;

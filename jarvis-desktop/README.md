@@ -18,41 +18,38 @@ driving a WebView2 frontend.
 ## Running against the backend — read this first
 
 The HUD window loads the bundled `jarvis_hud.html`, so its origin is
-`http://tauri.localhost`, not the server. Two things follow, and the first one
-is not optional:
+`http://tauri.localhost`, not the server. Two things follow:
 
-**1. The backend must be told this origin is legitimate.**
+**1. The backend no longer needs to be told about this origin.**
 
-If the desktop app starts the backend for you (Settings → Backend →
-Supervision), it does this itself - `sidecar.rs` sets `JARVIS_HUD_ORIGINS` on
-the backend it starts. If you start the backend yourself, in PowerShell, from
-the backend folder (one line):
+Until 2026-09-25 the HUD page called the backend straight from the webview,
+so the backend had to allow `http://tauri.localhost` (`JARVIS_HUD_ORIGINS`),
+and `sidecar.rs` set it on a backend it started. Now every request from the
+HUD page is made by Rust (`hud_proxy.rs`, see point 2), which sends no
+`Origin` - the backend's `_origin_ok()` then accepts the `X-Jarvis-Client: hud`
+header, as for every other window. So nothing needs setting, and the app no
+longer sets it. If you set `JARVIS_HUD_ORIGINS` yourself before, you can
+leave it out: it is harmless, and not needed.
 
-```powershell
-$env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"; py -3 jarvis_hud.py
-```
+**2. The base URL comes from the desktop shell, and the page never gets the token.**
 
-That is PowerShell syntax. The old line here, `set JARVIS_HUD_ORIGINS=...`,
-is the Command Prompt's: typed into PowerShell it sets nothing and prints
-nothing, and every request from the HUD window is then refused.
+The base URL lives in the settings store (`jarvis-desktop.json` in the app
+config dir), is read in Rust, and is pushed into the page as
+`JARVIS.set(base, "", false)` on page load - with an EMPTY token, and
+`persist = false`, so nothing is cached in `localStorage`. `JARVIS_HUD_BASE`
+is the environment fallback. Nothing hardcodes a port: `JARVIS_HUD_PORT`
+defaults to 4719 in `jarvis_hud.py` and `DEFAULT_BASE` in `commands.rs`
+matches it.
 
-Without it every call from the HUD page is **403**. `_origin_ok()` only falls
-back to the `X-Jarvis-Client: hud` header when a request carries *no* `Origin`,
-and a cross-origin `fetch` from the webview always sends one — so the header
-fallback the page relies on in a browser does nothing here.
-
-**2. The base URL and token come from the desktop shell, not the page.**
-
-They live in the settings store (`jarvis-desktop.json` in the app config dir),
-are read in Rust, and are pushed into the page as `JARVIS.set(base, token)` on
-page load. `JARVIS_HUD_BASE` and `JARVIS_TOKEN`/`HUD_TOKEN` are the environment
-fallbacks. Nothing hardcodes a port: `JARVIS_HUD_PORT` defaults to 4719 in
-`jarvis_hud.py` and `DEFAULT_BASE` in `commands.rs` matches it.
-
-One caveat worth knowing: the brief says to read these from the store "rather
-than `localStorage`", and the *source* is the store — but the shipped page's
-`JARVIS.set()` writes both to `localStorage` itself as it stores them. The
-shell controls where they come from; it cannot stop the page caching them.
+The page used to be given the token too, so any script running in it could
+call the whole API, `POST /api/approve` included (apps security audit M2,
+2026-09-25). Now every request the page makes to Jarvis goes through Rust
+(`src-tauri/src/hud_proxy.rs`), which adds the token itself: the page's own
+reads from a fixed list (`hud_get`), its chat (`hud_chat`, streamed back over
+a channel) and the right/wrong mark (`mark_answer`). `hud_bootstrap.js`
+section 2c routes them. Approve and Deny are not answered in the HUD at all:
+its buttons are removed, and approvals are answered in the Jarvis bar or the
+widget.
 
 ## Global hotkeys
 
@@ -305,18 +302,21 @@ Events emitted to the frontend: `focus-input`, `clipboard-inject`,
 
 ## Security posture
 
-`capabilities/default.json` grants only `core:default`, window drag and the
-devtools toggle. Everything privileged — capture, health probes, clipboard,
-notifications, window control — is an app-defined command in `commands.rs`,
-and app commands are not permission-gated, so the clipboard, notification and
-global-shortcut *plugin* permissions are simply not granted.
+Each window has its own capability file in `src-tauri/capabilities/`, and
+`build.rs` declares an app manifest, so every app command is permission-gated:
+a window can call only the sets its file grants (`permissions/surfaces.toml`).
+The core permissions are listed by hand in each file instead of
+`core:default`: app, path, webview and window defaults, and event
+`listen`/`unlisten` only - no `emit` or `emit_to`, so no page can send events
+that other windows trust (apps security audit M1). The clipboard,
+notification and global-shortcut *plugin* permissions are not granted to any
+window; Rust uses those plugins itself.
 
-There is deliberately no `remote` block. The HUD loads
-`http://127.0.0.1:4719` over plain HTTP; without a remote grant that origin
-gets no IPC at all, so an XSS in the HUD web app cannot reach the clipboard,
-the global shortcuts, or the window list. If the HUD ever needs IPC, add a
-*separate* capability file scoped to that one window and that one command —
-do not widen this one.
+There is deliberately no `remote` block: every window, the HUD included,
+loads a bundled page. The HUD page (vendored from the backend) holds no
+token and gets only `hud-voice` and `hud-link` (see "Running against the backend", point 2, above).
+Note that Tauri's IPC works from it despite its own CSP - Tauri falls back to
+`postMessage` - so its capability file, not its CSP, is what limits it.
 
 External links in the answer card are opened by `open_external_url`, which
 validates the URL and then spawns `rundll32 url.dll,FileProtocolHandler`. It

@@ -121,7 +121,7 @@ pub struct HealthReport {
 }
 
 /// Largest chat line accepted before the stream is treated as broken.
-const MAX_CHAT_LINE_BYTES: usize = 4 * 1024 * 1024;
+pub(crate) const MAX_CHAT_LINE_BYTES: usize = 4 * 1024 * 1024;
 
 /// Where the desktop shell keeps the API base URL and the bind address.
 ///

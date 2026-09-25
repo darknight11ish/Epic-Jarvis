@@ -2649,11 +2649,12 @@ refusing to boot over the desktop's half.
 
 Two things it does not change, both worth knowing:
 
-- **A backend started by hand still needs `JARVIS_HUD_ORIGINS`.** The HUD page
-  is served from `http://tauri.localhost`, which the server's allowlist cannot
-  guess. The desktop passes it when it starts the backend itself
-  (`sidecar.rs`); from a terminal, set
-  `$env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"` before `jarvis_hud.py`.
+- **`JARVIS_HUD_ORIGINS` is no longer needed** (since 2026-09-25, apps
+  security audit M2). The desktop's HUD page used to call the backend from
+  its webview, whose origin `http://tauri.localhost` had to be allowed. Its
+  requests are now made by the desktop app's Rust side (`hud_proxy.rs`),
+  which sends no `Origin`, like every other window's, so nothing needs
+  setting and `sidecar.rs` no longer sets it.
 - **`/api/shutdown` arriving on the loopback listener** may only stop that
   listener, depending on how `_install_shutdown` reaches the server. The
   desktop's supervised stop already kills the process tree when the backend

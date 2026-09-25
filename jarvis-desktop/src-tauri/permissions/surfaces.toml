@@ -105,6 +105,21 @@ permissions = [
   "allow-summon-push-to-talk",
 ]
 
+# The HUD page's requests to Jarvis, made in Rust with the token, so the page
+# never holds it (apps security audit M2; hud_proxy.rs). Its reads from a
+# fixed list, its chat, and the right/wrong mark on one answer - the same
+# `mark_answer` the quickbar uses. No approve or deny (they are answered in
+# the Jarvis bar or the widget), no memory writes (the Brain's), no settings.
+[[set]]
+identifier = "hud-link"
+description = "The HUD page's reads from a fixed list, its chat, and the right/wrong mark, sent by Rust. Decides nothing."
+permissions = [
+  "allow-hud-get",
+  "allow-hud-chat",
+  "allow-hud-chat-cancel",
+  "allow-mark-answer",
+]
+
 # The daily brief and the interruption budget. Granted to the quickbar alone,
 # because that is the only window that renders the panel — the HUD loads the
 # backend's own page and the widget is 320px wide.

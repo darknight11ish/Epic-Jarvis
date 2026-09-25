@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/windows-schema.json",
   "identifier": "hud",
-  "description": "The HUD window, which loads jarvis_hud.html \u2014 a page vendored from the backend folder and therefore not written against this app's IPC surface. It gets exactly ONE app command, `summon_push_to_talk` (the `hud-voice` set), for its mic button: it shows the quickbar with push-to-talk ready and records nothing, so the worst any drop of that page can do with it is open a window. It gets no recording, chat, approval or settings command. The shell otherwise talks to it one way, by evaluating a call to a feed the initialisation script defines. There is deliberately no `remote` block anywhere: every window loads a bundled page.",
+  "description": "The HUD window, which loads jarvis_hud.html \u2014 a page vendored from the backend folder and not written against this app. It holds NO pairing token (apps security audit M2): its requests to Jarvis go through Rust, which adds the token. `hud-link`: its reads, only from a fixed list (hud_proxy.rs `allowed_get`), its chat, and the right/wrong mark on one answer. `hud-voice`: `summon_push_to_talk`, which shows the quickbar with push-to-talk ready and records nothing. It has no approve, deny, memory-write, recording or settings command, and approvals are not answered here: the page's Approve and Deny are removed by the bootstrap. So the worst a script running in this page can do is read what the HUD already shows, send a chat message as the HUD (any action it leads to still raises an approval card, answered elsewhere), mark an answer, or open the quickbar. Tauri IPC does work from this page despite its own CSP (Tauri falls back to postMessage), which is why this file, not the CSP, is the limit. The shell also pushes the event stream to it by evaluating a call to a feed the initialisation script defines. There is deliberately no `remote` block anywhere: every window loads a bundled page.",
   "windows": [
     "hud"
   ],
@@ -13,6 +13,7 @@
     "core:webview:default",
     "core:window:default",
     "core:webview:allow-set-webview-zoom",
-    "hud-voice"
+    "hud-voice",
+    "hud-link"
   ]
 }

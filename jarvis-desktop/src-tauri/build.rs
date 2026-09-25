@@ -25,6 +25,11 @@ fn main() {
             "get_pending_approvals",
             "refresh_link",
             "decide_approval",
+            // The HUD page's requests, made in Rust so the page holds no
+            // token (apps security audit M2; hud_proxy.rs).
+            "hud_get",
+            "hud_chat",
+            "hud_chat_cancel",
             // App lock and the widget: is the lock on, and "Approve in the
             // Jarvis bar" (apps security audit M3).
             "get_app_lock",

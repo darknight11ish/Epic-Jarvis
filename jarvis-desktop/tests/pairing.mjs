@@ -287,10 +287,15 @@ await check("CONTROL: only the settings window can reveal the token", async () =
   }
 });
 
-await check("CONTROL: the HUD is re-given the token when it changes, not only when it has no base", async () => {
+await check("CONTROL: the HUD is re-configured on every link change, and never given the token (audit M2)", async () => {
   const lib = read("src-tauri/src/lib.rs");
   assert.doesNotMatch(lib, /&& !JARVIS\.base\)/, "back to re-sending only when the page has no base");
-  assert.match(lib, /JARVIS\.token !== \{token\}/, "configure_hud does not compare the token");
+  // An empty token, compared and set every time, so a token some earlier
+  // version left in the page is wiped; the real one stays in Rust.
+  const configure = lib.slice(lib.indexOf("pub fn configure_hud("), lib.indexOf("// Global hotkeys"));
+  assert.match(configure, /JARVIS\.token !== ''/, "configure_hud does not clear a token left in the page");
+  assert.match(configure, /JARVIS\.set\(\{base\}, '', false\)/);
+  assert.doesNotMatch(configure, /jarvis_token_for/, "configure_hud gives the page the token");
   const stream = read("src-tauri/src/stream.rs");
   const publish = stream.slice(stream.indexOf("pub(crate) fn publish_link"));
   assert.match(publish.slice(0, publish.indexOf("\n}\n")), /crate::configure_hud\(app\)/,

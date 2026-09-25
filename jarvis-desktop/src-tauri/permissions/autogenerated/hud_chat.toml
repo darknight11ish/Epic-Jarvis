@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-chat"
+description = "Enables the hud_chat command without any pre-configured scope."
+commands.allow = ["hud_chat"]
+
+[[permission]]
+identifier = "deny-hud-chat"
+description = "Denies the hud_chat command without any pre-configured scope."
+commands.deny = ["hud_chat"]

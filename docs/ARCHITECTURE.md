@@ -481,6 +481,13 @@ any window holding the capability can call them, so a check that lives only in
 the webview is not a check. `decide_approval` consults link staleness in Rust
 for exactly that reason.
 
+No desktop page holds the pairing token. The HUD page (vendored from the
+backend) used to be given it; since the apps security audit (M2,
+2026-09-25) its requests go through Rust (`hud_proxy.rs`: a fixed list of
+reads, its chat, the right/wrong mark), and approvals are not answered in
+the HUD at all - only in the Jarvis bar and the widget, through
+`decide_approval`. No window may `emit` events to the others either (M1).
+
 **Android** (`jarvis-client/`): Kotlin, native, over Tailscale or NordVPN
 Meshnet. It is a
 remote, not a second brain. It renders, it decides one thing at a time, it
