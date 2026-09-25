@@ -569,7 +569,11 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
     the calendar and email reads, and only as their own settings allow."""
     deps = deps or Deps()
     sched = sched or S.get()
-    now = time.time() if now is None else now
+    if now is None:
+        # The scheduler's own clock (the real time on the PC; a test's clock
+        # in the tests), so "today" is the day the briefing went off for.
+        clock = getattr(sched, "now", None)
+        now = clock() if callable(clock) else time.time()
     src = sources(deps)
     started = time.time()
     reads = {}
