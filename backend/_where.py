@@ -135,6 +135,7 @@ SHIPPED = (
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",
+    "jarvis_mail_mask.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
 )

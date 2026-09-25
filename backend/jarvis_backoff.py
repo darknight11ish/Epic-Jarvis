@@ -9,7 +9,7 @@ Jarvis sometimes offers things nobody asked for: the once-a-day "overnight
 memory tidying" card (rebuilt/jarvis_sleep.py) and the "save this routine as
 a skill?" card (jarvis_skill_discovery.py). An assistant that keeps asking
 the same question after being told no is a nag, and a nag gets switched
-off. Three rules, the same for every offer:
+off. Four rules, the same for every offer:
 
   1. A few at most. No more than MAX_WAITING offers may be waiting for an
      answer at once. The next one waits its turn.
@@ -20,6 +20,18 @@ off. Three rules, the same for every offer:
      offer is matched by a stable fingerprint of what it offers - never by
      its wording, so a reworded card is still the same offer. A "yes" wipes
      the count.
+
+  4. An offer never asks for more (the Muse audit, 2026-09-25). An offer
+     Jarvis makes on its own may never ask for more access, a new
+     connection, a key, a password, a payment method, an identity document,
+     or to turn on a setting that shows or trusts more. Enforced here, in
+     code, by what KIND of offer it is - not by reading its words: every
+     kind of offer is declared in OFFERS with what it asks for, and
+     may_offer(fp, kind=...) refuses a kind that is not declared, or one
+     that asks for anything in NEVER_ASKS, with the reason logged. Every
+     call site of may_offer() in the shipped code passes its kind
+     (test_backoff_rule.py reads them). No offer made today asks for any of
+     these - this rule guards the future ("connect your bank?").
 
 WHAT IT MUST NEVER DO
   * Approve, act, or change a tier. Nothing here calls the gate. It is
@@ -93,7 +105,80 @@ REASONS = {
     "waiting": "This one is already waiting for your answer.",
     "unreadable": "Jarvis could not read its own record of your answers, so it does "
                   "not offer anything until that file can be read.",
+    "asks_for_more": "An offer Jarvis makes on its own never asks for more access, a new "
+                     "connection, a key, a password, a way to pay, an identity document, or "
+                     "to turn on a setting that shows or trusts more.",
+    "not_declared": "This kind of offer is not on Jarvis's list of offers it may make, so "
+                    "it is not made.",
 }
+
+# --------------------------------------------------------------------------
+#   Rule 4: an offer never asks for more (the Muse audit, 2026-09-25)
+# --------------------------------------------------------------------------
+
+#: What an offer Jarvis makes ON ITS OWN may never ask for. Categories, not
+#: words: each kind of offer declares what it asks for (OFFERS), and the
+#: check is on that declaration - offers are made by code, so their kind is
+#: known exactly, where a word filter on their text would be a guess.
+NEVER_ASKS = {
+    "more_access": "more access to your things than Jarvis has now",
+    "new_connection": "a new connection to an account, a device or a service",
+    "key": "a key for a service",
+    "password": "a password, a PIN or a passcode",
+    "payment": "a payment card or another way to pay",
+    "identity_document": "an identity document, such as a passport, a driving licence "
+                         "or an ID number",
+    "show_or_trust_more": "turning on a setting that shows or trusts more",
+}
+
+#: What an offer may ask for, each said plainly.
+MAY_ASK = {
+    "record_a_wish": "to record that you want something - nothing runs, and nothing is "
+                     "shown or trusted more",
+    "save_a_routine": "to save a routine you already run as a skill - each of its steps "
+                      "still goes through its own approval card",
+}
+
+#: Every kind of offer Jarvis makes on its own, and what it asks for. A new
+#: kind of offer is added here, with what it asks for, or it is not made.
+OFFERS = {
+    # rebuilt/jarvis_sleep.py: "Overnight memory tidying - not built yet".
+    # Switching it on records a wish; nothing runs and no fact changes.
+    "sleep_time_offer": ("record_a_wish",),
+    # jarvis_skill_discovery.py: "save this routine as a skill?" - one
+    # SKILL.md from tool names; running it still asks step by step.
+    "skill_offer": ("save_a_routine",),
+}
+
+
+def _norm_kind(kind) -> str:
+    return " ".join(str(kind or "").lower().split())
+
+
+def vet(kind, asks=None) -> tuple:
+    """(True, "") when an offer of this KIND may be made at all; (False,
+    reason) when not, with `reason` a key of REASONS. `asks` is what this
+    particular offer asks for, when it says; it must be within what the kind
+    declared. Reads no file and changes nothing."""
+    declared = OFFERS.get(_norm_kind(kind))
+    if declared is None:
+        return False, "not_declared"
+    wanted = tuple(declared if asks is None else asks)
+    if any(a in NEVER_ASKS for a in wanted) or any(a in NEVER_ASKS for a in declared):
+        return False, "asks_for_more"
+    if any(a not in declared or a not in MAY_ASK for a in wanted):
+        return False, "not_declared"
+    return True, ""
+
+
+def _log_refusal(kind, why: str) -> None:
+    """Said in the backend's log - the kind and the reason, nothing else."""
+    try:
+        import logging
+        logging.getLogger("jarvis.backoff").warning(
+            "offer refused: kind %r - %s", _norm_kind(kind)[:60], REASONS.get(why, why))
+    except Exception:
+        pass
 
 
 def fingerprint(kind: str, subject: str = "") -> str:
@@ -135,6 +220,8 @@ class Backoff:
         self._lock = threading.RLock()
         self._last_chat: Optional[float] = None
         self._waiting: dict = {}          # fingerprint -> when it was handed out
+        self._refused = 0                 # offers refused by rule 4, since start
+        self._last_refused: Optional[dict] = None
 
     @property
     def path(self) -> Path:
@@ -202,10 +289,24 @@ class Backoff:
             if now - at >= WAITING_FOR:
                 self._waiting.pop(fp, None)
 
-    def may_offer(self, fp: str, now: Optional[float] = None) -> tuple:
+    def may_offer(self, fp: str, now: Optional[float] = None, *, kind=None,
+                  asks=None) -> tuple:
         """(True, "") when this offer may be made now; (False, reason) when
-        not, with `reason` a key of REASONS. Asks nobody and changes nothing."""
+        not, with `reason` a key of REASONS. Asks nobody and changes nothing.
+
+        `kind` is what is offered ("sleep_time_offer"). Every offer in the
+        shipped code passes it, and it is checked FIRST, against rule 4
+        (vet): a kind not in OFFERS, or one that asks for anything in
+        NEVER_ASKS, is refused - and the refusal is logged and counted."""
         now = self.now() if now is None else now
+        if kind is not None or asks is not None:
+            ok, why = vet(kind, asks)
+            if not ok:
+                with self._lock:
+                    self._refused += 1
+                    self._last_refused = {"kind": _norm_kind(kind)[:60], "why": why}
+                _log_refusal(kind, why)
+                return False, why
         with self._lock:
             try:
                 offers = self._load()
@@ -275,10 +376,14 @@ class Backoff:
                 readable = True
             except Unreadable:
                 offers, readable = {}, False
+        with self._lock:
+            refused, last = self._refused, dict(self._last_refused or {}) or None
         return {"readable": readable, "waiting": waiting, "max_waiting": MAX_WAITING,
                 "quiet_for": round(self.quiet_for(now), 1),
                 "silenced": sum(1 for r in offers.values() if r["until"] > now),
-                "silence_days": list(SILENCE_DAYS), "quiet_after_chat": QUIET_AFTER_CHAT}
+                "silence_days": list(SILENCE_DAYS), "quiet_after_chat": QUIET_AFTER_CHAT,
+                "refused_asking_for_more": refused, "last_refused": last,
+                "never_asks": dict(NEVER_ASKS)}
 
 
 # --------------------------------------------------------------------------

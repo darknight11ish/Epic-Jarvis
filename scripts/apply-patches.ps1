@@ -487,6 +487,7 @@ $SHIPPED = @(
     'jarvis_browser_control.py'  # tool "browser_control": a real browser, via Playwright
     'jarvis_calendar.py'         # tool "calendar_read"
     'jarvis_email.py'            # tool "email_check"
+    'jarvis_mail_mask.py'        # hides one-time codes and sign-in links in everything jarvis_email.py reads
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch

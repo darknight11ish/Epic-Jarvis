@@ -749,7 +749,9 @@ def maybe_offer_async(**kwargs) -> bool:
                 return
             fp = fpr("skill_offer", p.key) if bo is not None else None
             if bo is not None:
-                may, _why = bo.may_offer(fp)
+                # kind=: rule 4 - an offer never asks for more
+                # (jarvis_backoff.OFFERS).
+                may, _why = bo.may_offer(fp, kind="skill_offer")
                 if not may:
                     return
                 bo.opened(fp)
