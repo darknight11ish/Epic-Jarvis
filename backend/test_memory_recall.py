@@ -387,8 +387,11 @@ def t_the_patch_applies_forwards_and_backwards():
                            text=True)
         check(f"git apply {' '.join(extra) or '(forwards)'} past-recall.patch",
               r.returncode == 0, r.stderr.strip())
+    # The stack up to and including this patch: memory-profile.patch
+    # (2026-09-24) comes after it and edits two of its lines.
+    upto = _stack.stand_in("jarvis_hud.py", order[:order.index("past-recall.patch") + 1])[0]
     check("forwards gives the stack's own text",
-          (d / "jarvis_hud.py").read_text(encoding="utf-8") == full)
+          (d / "jarvis_hud.py").read_text(encoding="utf-8") == upto)
 
 
 # ============================================== 4. the self-test itself ==
@@ -479,6 +482,9 @@ def t_listed_where_it_must_be():
           "past-recall.patch" in o
           and o.index("past-recall.patch") > o.index("memory-prefix.patch")
           and o.index("past-recall.patch") > o.index("memory-noise.patch"), o[-3:])
+    check("memory-profile.patch (it edits past-recall's search lines) comes after it",
+          "memory-profile.patch" not in o
+          or o.index("memory-profile.patch") > o.index("past-recall.patch"), o[-3:])
     notices = (REPO / "THIRD-PARTY-NOTICES.txt").read_text(encoding="utf-8")
     check("LongMemEval's scoring is credited", "LongMemEval" in notices
           and "eval_memory.py" in notices)
