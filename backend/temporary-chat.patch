@@ -125,8 +125,8 @@
  # request the relay sends. `origin` is not touched: it has always gone to
  # the model, and the learner reads it. The request body itself is left as
  # it arrived, because the learner and the history record read it.
--_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device")
-+_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "temporary")
+-_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "interrupted")
++_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "interrupted", "temporary")
  
  _NO_CHAT_LOG = {
      "available": False,
