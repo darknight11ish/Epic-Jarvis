@@ -170,6 +170,22 @@ Also decided 2026-09-24, after the safety research
   Built together with per-device keys (task "more devices"), since both
   change how a device gets its key.
 
+Decided 2026-09-25, after the competitiveness audit
+(`docs/RESEARCH-2026-09-24.md` and the audit reports):
+- **Timers, reminders and one shared scheduler come first** in the queue.
+  The any-GPU presets, Docker, model advice and mouse control wait. Build
+  ONE scheduler (the initiative engine and digest) and reuse it for
+  briefings, sleep mode and the overnight tidy - not one per feature.
+- **A plain timer or a one-time reminder needs no approval card; anything
+  that repeats ("every weekday at 7") asks once with a card**, and that
+  card lists the next run times. Simple commands like timers are answered
+  without the AI model, so they keep working when the model is slow,
+  unloaded or asleep.
+- On the desktop, while App lock is on, the approval widget shows only a
+  short title and its Approve opens the locked app; the HUD is locked too.
+  On the phone, screenshots are blocked while App lock or "Hide memory lists
+  and chat history" is on.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
