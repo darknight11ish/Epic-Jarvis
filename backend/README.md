@@ -117,6 +117,7 @@ on a throwaway copy instead.
 | `schedule.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Timers, alarms, reminders and the to-do list, with one scheduler** (the owner's decisions, 2026-09-25). Adds `GET /api/schedule` and `POST /api/schedule/add` and `/act`, starts the scheduler at boot, answers "set a timer for 10 minutes" and the like in `/api/chat` WITHOUT the model, and the approval notice's words for `schedule_repeat` (anything that repeats is one card). Needs `jarvis_schedule.py` and `jarvis_quick.py` - see "Timers, alarms, reminders and the to-do list", at the very end. |
 | `memory-entities.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **"Who is my sister?" - people and things** (memory wave 3, 2026-09-25). Adds `GET /api/memory/entities` (the people and things facts are linked to, for the desktop's "About <name>"), leaves the "are these the same?" card out of `/api/memory/pending` unless asked for with `?merge_cards=1`, and gives `jarvis_extract.py` `propose_merge()` and `_accept_merge()` - accepting that card joins two entries and adds no fact. The work is in the shipped `rebuilt/jarvis_memory.py` (and `jarvis_past.py`, whose recall uses it); with an older copy the route answers 501. Last in the list, after `temporary-chat.patch`, whose route lines are its context. See "Memory wave 3", at the very end. |
 | `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing` and `POST /api/briefing/now`, makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
+| `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of four providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -8574,3 +8575,197 @@ near misses; and the patch applied to what the earlier patches wrote, run.
   the Brain's Work tab - open the Brain yourself. The phone's notification
   opens Mind.
 - English only, like the timers.
+
+---
+
+# Web search: `jarvis_search.py`, `web-search.patch` (2026-09-25)
+
+**What it is for.** Jarvis can look things up on the web. You choose where
+the search goes, from four (the owner's decisions of 2026-09-25):
+
+| search | why use this one |
+|---|---|
+| **SearXNG (on this PC)** - the default | Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on. |
+| **DuckDuckGo** | Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address. |
+| **Tavily** | Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key. |
+| **Brave Search** | Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key. |
+
+**Whoogle is left out:** its own README says it no longer returns results,
+since Google blocked searching without JavaScript in 2025.
+
+Those lines are the PC's own words; both apps show them (the desktop's
+Settings, "Web search"; the phone's Mind, "Web search"), and you can ask
+Jarvis "which search should I use?" or "why SearXNG?" - answered on the PC
+without the AI model. Say "use DuckDuckGo for web search" to switch.
+
+**If your chosen search is not working, Jarvis says so** - "SearXNG isn't
+running on this PC ... Switch web search to DuckDuckGo?" - and never quietly
+sends the search somewhere else.
+
+**When a search asks you first.** A search that comes straight from your own
+typed or spoken question, in a conversation where Jarvis has not read
+anything from outside, runs without a card. After Jarvis has read your
+email, files, notes, saved memories or any other outside text (a web page, a
+tool's answer) - or when your message was pasted or shared - the search
+shows you an approval card with the **exact search words** first, because
+something private could have slipped into them. Settings has **"Ask before
+every web search"** to make every search ask; turning it on is instant,
+turning it off asks you with a card. Search words that look like a password
+or a key are refused outright, and Jarvis says why.
+
+**What leaves the PC.** Only the search words, to the one search you chose -
+and for Tavily and Brave, your key, to that company only. SearXNG runs on
+your PC and asks other search engines itself; they see the words and your
+internet address. What comes back (five results at most: a title, a link, a
+snippet) is treated like a web page: outside text.
+
+**Your keys (Tavily, Brave).** Kept in Windows Credential Manager on this PC
+(`Jarvis Backend/Tavily key`, `Jarvis Backend/Brave Search key`), never in a
+file, never in a log, never sent anywhere but their own service. You enter
+them **on the PC only** - in the desktop app's Settings, Web search, or with
+the line below. The phone has no box for a key on purpose: typing one there
+would send it over the link to the PC first.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies `jarvis_search.py` and the updated
+`jarvis_agent.py` and `jarvis_quick.py`, applies `web-search.patch`, installs
+`ddgs`), from this repository's folder, then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Let the model use it.** Open your `jarvis-framework.toml` (in
+`C:\Users\pcadmin\.openjarvis\`, or beside `jarvis_hud.py`), find the
+`enabled = [...]` line under `[tools]`, and add `"web_search"` to the list,
+for example `enabled = ["calculator", "web_search"]`. If there is no
+`[tools]` section, add these two lines at the end of the file:
+`[tools]` and `enabled = ["web_search"]`. Restart Jarvis. (Until then, the
+settings and "which search should I use?" work, but the model is not offered
+the tool.) The line `apply-patches.ps1` prints about settings that differ
+also shows the two new approval lines, `search_the_web = "ask"` and
+`stop_asking_before_every_web_search = "ask"` - add both to
+`[autonomy.tiers]`; without them each asks anyway, which is the same thing.
+
+**3a. SearXNG (the default).** Install Docker Desktop first
+(https://www.docker.com/products/docker-desktop/ - it needs WSL 2, which its
+installer offers to set up). Then this line makes a folder for SearXNG's
+settings and starts it **on this PC only** - `127.0.0.1:8888` means nothing
+on your network or the internet can reach it (never change it to plain
+`8888:8080`, which would open it to your whole network). It restarts by
+itself with Docker:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\searxng" | Out-Null; docker run -d --name searxng --restart unless-stopped -p 127.0.0.1:8888:8080 -v "$env:USERPROFILE\searxng:/etc/searxng" docker.io/searxng/searxng:latest; Start-Sleep -Seconds 20; if (Test-Path "$env:USERPROFILE\searxng\settings.yml") { Write-Host "SearXNG is running on this PC only, at http://127.0.0.1:8888. Its settings file is $env:USERPROFILE\searxng\settings.yml" } else { Write-Host "SearXNG has not written its settings file yet - wait a minute and check again, or run: docker logs searxng" }
+```
+
+SearXNG's settings file ends up in `C:\Users\pcadmin\searxng\settings.yml`.
+**Its JSON output is off out of the box** (the file says `formats:` then
+`- html` only), and Jarvis needs it. This line adds `- json` under `- html`
+(only once, however often you run it) and restarts SearXNG:
+
+```powershell
+$f = "$env:USERPROFILE\searxng\settings.yml"; $t = [IO.File]::ReadAllText($f); if ($t -notmatch '(?m)^[ \t]+- json[ \t]*\r?$') { $t = $t -replace '(?m)^([ \t]+)- html([ \t]*)(\r?)$', "`$1- html`$2`$3`n`$1- json`$3"; [IO.File]::WriteAllText($f, $t) }; if ($t -match '(?m)^[ \t]+- json[ \t]*\r?$') { docker restart searxng; Write-Host "JSON output is switched on in $f, and SearXNG was restarted." } else { Write-Host "Could not find the '- html' line in $f. Open it in Notepad, find 'formats:', and add a line '    - json' under '    - html', then run: docker restart searxng" }
+```
+
+Then press **Test search** in Settings, Web search. It should say
+"SearXNG (on this PC) works: a test search for "wikipedia" found 5
+results." If it says JSON is off, the second line did not find the list; if
+it says SearXNG isn't running, open Docker Desktop and start the `searxng`
+container. If it says "too many searches (its limiter is on)", open the
+settings file, set `limiter: false` under `server:`, and run
+`docker restart searxng`.
+
+**3b. DuckDuckGo instead.** Step 1 installed `ddgs`. If it did not:
+
+```powershell
+py -3 -m pip install ddgs
+```
+
+Then choose DuckDuckGo in Settings, Web search, and press Test search.
+
+**3c. Tavily instead.** Make a free account at https://app.tavily.com, open
+API Keys and copy the key. Paste it in the desktop's Settings, Web search,
+"Tavily key", and press Save key - or, in PowerShell (it asks for the key and
+does not show it as you paste):
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_search.py key tavily
+```
+
+Then choose Tavily and press Test search (it uses one of your 1,000 monthly
+credits).
+
+**3d. Brave instead.** Sign up at https://api-dashboard.search.brave.com, add
+a payment card to verify the account, choose the free plan, open API Keys and
+copy the key. Paste it in Settings, "Brave Search key" - or:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_search.py key brave
+```
+
+To see what is set without showing any key:
+`py -3 jarvis_search.py status`. To remove a key:
+`py -3 jarvis_search.py forget-key tavily` (or `brave`), or Remove key in
+Settings.
+
+## What the code does
+
+- `jarvis_search.py` - the four providers behind one `plan()` (opens no
+  socket; refuses words holding a password or key) and `run()` (only the
+  chosen provider; results capped to 5, titles to 150 characters, snippets
+  to 300; answers capped at 1 MB; 15 seconds each; redirects refused;
+  SearXNG with no proxy; Tavily and Brave over https only, to a fixed
+  address; DuckDuckGo through `ddgs` with its DuckDuckGo engine only, at
+  most about one search a second, and refused if a `ddgs` version has no
+  DuckDuckGo engine, because `ddgs` would then quietly ask other engines).
+  The settings, the card for "Ask before every web search" off, the three
+  routes' answers, "which search should I use?", and the key command line.
+- `jarvis_agent.py` - the tool `web_search` and when it asks
+  (`_web_search_call`, `WEB_SEARCH_*`): a card after outside text, after
+  saved memories were recalled, for a pasted message, or with "ask every
+  time" on; only a person's yes runs it then.
+- `jarvis_quick.py` - "which search should I use?", "why SearXNG?", "use
+  DuckDuckGo for web search", without the model.
+- `web-search.patch` - the three routes and the approval notice's words.
+- The desktop writes a key straight into Credential Manager
+  (`token_store.rs`, `web_search.rs`); the backend has no route that takes
+  one.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_web_search.py
+```
+
+About 200 checks, with local stand-in servers on 127.0.0.1 and a stand-in
+`ddgs` - nothing reaches the internet: the four lines in the PC's, the
+desktop's and the phone's words; no socket in `plan()`; a key in the search
+words refused without echoing it; SearXNG through no proxy, redirects and
+oversized answers refused, "not running" and "JSON off" said plainly with an
+offer to switch and nothing sent elsewhere; the SearXNG address kept to your
+own networks; the Tavily and Brave keys only in their own header to their own
+address, never after a redirect, never in a card, an answer or the log;
+DuckDuckGo only, paced; the settings and the card to ask less; when a search
+asks and that only a person's yes runs it; the sentences answered without
+the model; and the patch applied to what the earlier patches wrote.
+
+## Not checked, said plainly
+
+- **Nothing has reached a real SearXNG, DuckDuckGo, Tavily or Brave.** The
+  answers were written from their documentation and read in the dev
+  container; the Docker and settings lines above have not been run on your
+  PC (the PowerShell here could not be run by this session either - its
+  checks blocked it - so read them once before pasting).
+- How Tavily and Brave say "your monthly credit is used up" (Tavily 432/433,
+  Brave 402 or 429) is from their documentation, not seen.
+- `ddgs` cannot tell "no results" from "DuckDuckGo is blocking you for a
+  while", so the answer says both. Whether its own web client uses the
+  Windows proxy is not checked.
+- "Saved memories were read" is judged on the current question. If an
+  earlier question in the same conversation recalled facts and nothing else
+  was read since, a later search runs without a card.
+- The phone sees a change made on the desktop at its next read (Refresh).
+- The briefing's "weather and news: not available" line is unchanged -
+  weather is a separate decision.
