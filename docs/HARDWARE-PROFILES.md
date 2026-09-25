@@ -1,8 +1,11 @@
 # Hardware profiles: any 8 GB card, up to two cards and 24 GB
 
-**Status: a design. Nothing here is built, and nothing has been measured
-on a real PC.** Written 2026-09-24. Every memory figure is *calculated, not
-measured* until Jarvis's speed recorder has a row for it (section 4.7).
+**Status: built 2026-09-25 (section 7 says what, and where the build differs
+from this design); still nothing measured on a real PC.** Written
+2026-09-24. Every memory figure is *calculated, not measured* until the
+Hardware screen's Measure has a row for it (section 4.7). Nothing changes on
+the owner's PC until a setup is chosen there, and then only one approval
+card at a time.
 
 ---
 
@@ -1334,6 +1337,66 @@ Order matters: the measurement first, because it may change the numbers.
 11. **Docs** - MODEL-TOPOLOGY.md's stale items (section 3) rewritten from
     the measured numbers; SECOND-CARD.md's one command replaced by the
     generated one; INSTALL.md 1.7 pointed at the Hardware screen.
+
+### 7.1 What was built (2026-09-25), and where it differs
+
+Built: steps 2-10, and 11 as far as it can go without a measurement. Step 1
+(the owner's two lines, section 4.7) has not been run, so nothing below is
+measured. Where the build differs from the design above, it says so here
+rather than quietly:
+
+- **Steps 2-6.** `backend/jarvis_hardware.py` (detection, the steps, making a
+  model, measuring) and `backend/jarvis_profiles.py` (the arithmetic, the
+  presets, the one line; no I/O). `backend/test_profiles.py` replays **every
+  row of section 4.4 at 1 GB** and gets it (model, context, card, lanes, how
+  they share, each card's bar within 0.01 GB); the golden file at the owner's
+  0.75 GB is `backend/fixtures/hardware_cases.json`, and the table in 4.4
+  ("The presets as built") is generated from it. PowerShell 7 parses every
+  generated line, with no PowerShell-7-only token in any (the sandbox let the
+  test suite start `/opt/pwsh/pwsh` this time).
+- **The planner's rules, read out of the 4.4 tables** (the throwaway script
+  that made them was not committed): chat contexts come from 4K, 6K, 8K,
+  12K, 16K and 32K; an 8B or 14B needs at least 6K, the 4B 8K; "long
+  conversations" means at least 12K; the long lane on another card tries
+  14B at 16K, 12K, 8K, then 8B and 4B at 32K, and must beat chat's context -
+  **so a 14B lane never gets more than 16K even where 32K would fit (8 + 16
+  GB)**, as the tables have it; Smartest keeps chat on the faster card when
+  the biggest model gets at least 8K there. The picture reader counts its
+  patch layer (the tables' 3.65 is 3.66 here - within the 0.01 the tests
+  allow).
+- **Detection.** `Win32_VideoController` (source 4) is not read: its memory
+  field stops at 4 GB and the registry already gives the names. The
+  "fastest card" is published speed where both are known (only the three
+  cards MODEL-TOPOLOGY.md gives figures for), then a card Jarvis's settings
+  are made for (NVIDIA, RTX 20 or newer) before a best-effort one, then the
+  newer generation, then more room. **The measured "same prompt on each card"
+  comparison is not built.** `jarvis_compute.primary()` (the monitor rule)
+  is unchanged: it still decides where the second card's lanes go when no
+  setup is chosen, so today's behaviour does not move.
+- **Applying (4.5).** The design has the PC start the steps. The download
+  and switch cards belong to the owner's own `jarvis_hud.py`, which this
+  repository cannot call into, so **each step is one button in the app that
+  posts that step's own route and body, read from the PC's answer** (the
+  Rust and the Kotlin refuse anything else). Only the next step has a
+  button; there is still no "approve all". The recommended setup is
+  "Most features" when its everyday model is the 8B or bigger, else
+  "Smartest answers" (the design did not say; the owner can ignore it).
+- **One card, lanes inside the everyday Ollama (4.3)**: built. With a setup
+  chosen, `jarvis_second_card.py` takes its lanes from the planner; with
+  none chosen it is exactly as before (its old tests pass unchanged).
+- **The contract files** are `jarvis-desktop/tests/fixtures/hardware-cases.json`
+  and the phone's byte-for-byte copy, as for the second card, not
+  `docs/reference/`. The phone reads them in the JVM test
+  `HardwareContractTest.kt`; the emulator's `ApiContractTest.kt` has four new
+  entries for the routes (headers, the choice's body, a refused route never
+  sent, a refusal's own sentence) - those run only in CI.
+- **The desktop's section** sits above "Second graphics card" rather than
+  swallowing it: the five switches keep their own section, named as before.
+- **Not built:** reading Ollama's version to warn about "calculated with
+  older rules" (the version is shown and keys the measurements, nothing
+  more); the measured desktop share for a non-NVIDIA card with nothing
+  loaded (Ollama's own start-up reading is used). Qwen 3.5 (research,
+  2026-09-24) is listed beside Spark-X2.5 as "test later", in no preset.
 
 ---
 

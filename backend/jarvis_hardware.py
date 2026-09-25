@@ -299,7 +299,24 @@ def _read_lane_log() -> Optional[str]:
     return _read_tail(_config_dir() / "second-card-ollama.log")
 
 
+_REG = {"at": -1e9, "text": None}
+_REG_SECONDS = 300.0
+
+
 def _reg_text() -> Optional[str]:
+    """`reg query` of the display-adapter class key, kept 5 minutes: the
+    cards in a PC do not change while it runs, and the apps re-read often."""
+    if os.name != "nt":
+        return None
+    now = time.monotonic()
+    if _REG["text"] is not None and now - _REG["at"] < _REG_SECONDS:
+        return _REG["text"]
+    text = _reg_query()
+    _REG.update(at=now, text=text)
+    return text
+
+
+def _reg_query() -> Optional[str]:
     if os.name != "nt":
         return None
     exe = shutil.which("reg")
@@ -817,6 +834,33 @@ def _preset_name(pid: Optional[str]) -> str:
 #   The steps (section 4.5)
 # --------------------------------------------------------------------------
 
+def _gate_waiting() -> list:
+    """[(action, detail as text)] for every approval card waiting now, from
+    jarvis_gate.pending() (the owner's file). Empty when it cannot be read -
+    a step then shows as "next", never as done."""
+    try:
+        import jarvis_gate
+        rows = jarvis_gate.pending() or []
+    except Exception:
+        return []
+    out = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        d = r.get("detail")
+        text = d if isinstance(d, str) else json.dumps(d, default=str)
+        out.append((str(r.get("action") or ""), text or ""))
+    return out
+
+
+def _card_up(waiting: list, action: str, ref: str) -> bool:
+    """Is a card for `action` about `ref` waiting? The model's name has to
+    be in the card's detail: the gate's detail for a download or switch is
+    the owner's file's to shape, so this only says yes when it can see it."""
+    pat = re.compile(r"(?<![\w.:-])" + re.escape(ref) + r"(?:[\s\"'},]|:latest|$)")
+    return any(a == action and pat.search(t) for a, t in waiting)
+
+
 def _switches() -> Optional[dict]:
     try:
         import jarvis_second_card as SC
@@ -829,8 +873,10 @@ def _switches() -> Optional[dict]:
 
 
 def _steps(lay: P.Layout, ch: dict, *, names: Optional[set], current: Optional[str],
-           sw: Optional[dict], settings: list, user: dict, pending_create: set) -> list:
+           sw: Optional[dict], settings: list, user: dict, pending_create: set,
+           gate_waiting: Optional[list] = None) -> list:
     steps = []
+    gate_waiting = gate_waiting or []
     if lay.chat is None:
         return steps
     for base in dict.fromkeys(r.model.ref for r in lay.roles):
@@ -841,7 +887,8 @@ def _steps(lay: P.Layout, ch: dict, *, names: Optional[set], current: Optional[s
                       "detail": ("Raises the usual download card. Nothing downloads until you "
                                  "approve it."),
                       "route": "/api/models/install", "body": {"ref": base},
-                      "done": have is True, "known": have is not None})
+                      "done": have is True, "known": have is not None,
+                      "waiting": _card_up(gate_waiting, "download_model", base)})
     for r in lay.roles:
         made = ch["created"].get(r.tuned) or {}
         exists = _has(names, r.tuned)
@@ -862,7 +909,8 @@ def _steps(lay: P.Layout, ch: dict, *, names: Optional[set], current: Optional[s
                              "installed, so switching back is one more switch."),
                   "route": "/api/models/switch", "body": {"ref": P.TUNED["chat"]},
                   "done": bool(current and _same(current, P.TUNED["chat"])),
-                  "known": current is not None})
+                  "known": current is not None,
+                  "waiting": _card_up(gate_waiting, "switch_model", P.TUNED["chat"])})
     lanes = []
     if lay.long is not None:
         lanes.append("long_context")
@@ -1110,7 +1158,8 @@ def _status() -> dict:
         lay = layouts[ch["preset"]]
         settings = P.settings_for(lay)
         steps = _steps(lay, ch, names=names, current=current, sw=_switches(),
-                       settings=settings, user=user, pending_create=pend_create)
+                       settings=settings, user=user, pending_create=pend_create,
+                       gate_waiting=_gate_waiting())
         all_done = bool(steps) and all(s["done"] for s in steps)
         nxt = next((s["id"] for s in steps if s["state"] in ("next", "waiting")), None)
         applying = {"preset": ch["preset"], "name": _preset_name(ch["preset"]),
@@ -1162,16 +1211,18 @@ def choose(preset) -> tuple:
     with _STATE_LOCK:
         ch = _choice()
         if preset is None:
+            old_lane = _lanes_now()
             ch.update(preset=None, fingerprint=None, at=int(time.time()))
             err = _write_json(_choice_path(), ch)
             if err:
                 return 500, {"error": err}
             _audit("hardware.cleared", {})
             _drop_cache()
+            note = _master_off_if_moved(old_lane, _lanes_now())
             return 200, {"ok": True, "chosen": None,
-                         "message": ("No preset is used now. Your models and settings are as "
+                         "message": ("No setup is used now. Your models and settings are as "
                                      "they are; to go back to jarvis-primary, switch to it "
-                                     "(Brain, Models).")}
+                                     "(Brain, Models)." + note)}
         det = detect(fresh=True)
         planned = det["planned"]
         if not planned:
@@ -1191,29 +1242,32 @@ def choose(preset) -> tuple:
             return 500, {"error": err}
     _audit("hardware.chosen", {"preset": preset})
     _drop_cache()
-    note = ""
-    new_lane = _lane_key(lay)
-    if new_lane is not None and old_lane != new_lane:
-        # The extra features move (to another card, or into the everyday
-        # Ollama): the main second-card switch goes OFF - the safe direction
-        # - so the card that turns it back on names where they run now
-        # (step "lane:master"). The owner's approval was for the old place.
-        sw = _switches()
-        if sw is not None and sw["master"]:
-            try:
-                import jarvis_second_card as SC
-                SC.request_change("master", False)
-                where = (f"the {lay.lane_card.name}" if lay.lane_card is not lay.chat.card
-                         else "the everyday copy of Ollama")
-                note = (" The second-card switch was turned off, because the extra features "
-                        f"move to {where}; its step asks you again.")
-            except Exception:
-                pass
+    note = _master_off_if_moved(old_lane, _lanes_now())
     st = status()
     return 200, {"ok": True, "chosen": preset,
                  "message": (f"\"{_preset_name(preset)}\" chosen. Nothing has changed yet: each "
                              f"step below is its own approval card, in order.{note}"),
                  "applying": st.get("applying")}
+
+
+def _master_off_if_moved(old: Optional[str], new: Optional[str]) -> str:
+    """When the extra features would now run somewhere else - another card,
+    the everyday Ollama, or back where they ran before any setup - the main
+    second-card switch goes OFF: the safe direction, and the owner's yes was
+    for the old place. Its card, asked again, names the new one. Returns the
+    sentence to add, or ""."""
+    if new is None or old == new:
+        return ""
+    sw = _switches()
+    if sw is None or not sw["master"]:
+        return ""
+    try:
+        import jarvis_second_card as SC
+        SC.request_change("master", False)
+    except Exception:
+        return ""
+    return (" The second-card switch was turned off, because the extra features would now "
+            "run somewhere else; turning it on again asks you with a card that says where.")
 
 
 def _lane_key(lay: P.Layout) -> Optional[str]:
@@ -1293,7 +1347,7 @@ def describe_create(r: P.Role, replacing: bool) -> str:
         f"What it is: {r.model.ref} (already downloaded) with room for {r.ctx:,} tokens of "
         f"conversation, about {r.need:.1f} GB of the {r.card.name}'s memory (calculated, not "
         f"measured).\n\n"
-        + (f"It replaces the {r.tuned} Jarvis made before.\n\n" if replacing else "")
+        + (f"It replaces the {r.tuned} that is on this PC now.\n\n" if replacing else "")
         + "It is made by Ollama on this PC from files you already have. Nothing is downloaded "
           "and nothing leaves this PC. jarvis-primary is not changed.\n\n"
           f"Exactly what is made (a Modelfile):\n\n{P.modelfile(r)}\n"
@@ -1437,6 +1491,14 @@ def _measure_view() -> dict:
     return view
 
 
+def _standby() -> bool:
+    try:
+        import jarvis_power
+        return str(jarvis_power.current()) == "standby"
+    except Exception:
+        return False
+
+
 def _speed_measure(model: str, base: str) -> dict:
     import jarvis_speed
     return jarvis_speed.measure(model, base=base)
@@ -1450,6 +1512,9 @@ def request_measure(*, spawn: Optional[Callable] = None,
     the next message - the apps say so on the button."""
     spawn = spawn or _spawn
     measure = measure or _speed_measure
+    if _standby():
+        return 409, {"error": ("Jarvis is on standby, which keeps the graphics card free; "
+                               "measuring would load models onto it. Wake Jarvis first")}
     with _MEASURE_LOCK:
         if _MEASURE["state"] == "running":
             return 409, {"error": "a measurement is already running; it takes about a minute"}

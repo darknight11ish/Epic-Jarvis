@@ -44,6 +44,7 @@ export const HW = {
   stepNext: "Next. It raises its own approval card.",
   stepLater: "Waits for the step before it.",
   stepCommand: "Run the one command below on your PC, then restart Ollama.",
+  asked: "Asked. Your PC raises its approval card; nothing changes until you approve it.",
   noLong: "Long conversations: no separate model.",
   noPictures: "Pictures: off.",
   restart: "Ollama has not picked these settings up yet. Quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu.",
@@ -54,6 +55,11 @@ export const HW = {
 const WAITING =
   `Waiting for your approval. Approve it ${APPROVE_WHERE} — nothing changes until you do.`;
 const POLL_MS = 5000;
+/** A step just asked for reads as waiting this long, even when the PC cannot
+ *  see its card (a download's or a switch's card is the owner's file's to
+ *  shape): the gate's own wait is 180 seconds. Its button stays hidden, so
+ *  one press is one card. */
+const ASKED_FOR_MS = 180 * 1000;
 const POLL_FOR_MS = 10 * 60 * 1000;
 
 const hw = {
@@ -87,6 +93,8 @@ let seq = 0;
 let busy = false;
 let pollTimer = null;
 let pollUntil = 0;
+/** Step id -> when it was asked for, on this page. */
+const asked = new Map();
 
 function node(tag, className, text) {
   const n = document.createElement(tag);
@@ -187,6 +195,9 @@ function presetCard(p, status) {
 }
 
 function stepItem(step) {
+  if (step.state === "next" && asked.has(step.id) && Date.now() - asked.get(step.id) < ASKED_FOR_MS) {
+    step = { ...step, state: "waiting" };
+  }
   const li = node("li", "hw-step");
   li.dataset.state = step.state;
   li.dataset.id = step.id;
@@ -283,7 +294,8 @@ function paint(status) {
   hw.details.replaceChildren(...((shown && shown.details) || []).map((d) => node("li", "", d)));
   hw.later.replaceChildren(...(status.test_later || []).map((t) => node("li", "", `${t.model}: ${t.why}.`)));
 
-  const waiting = applying && applying.steps.some((s) => s.state === "waiting");
+  const waiting = applying && applying.steps.some((s) => s.state === "waiting"
+    || (s.state === "next" && asked.has(s.id) && Date.now() - asked.get(s.id) < ASKED_FOR_MS));
   if (waiting || m.state === "running") startPoll();
   else if (!pollUntil || Date.now() > pollUntil) stopPoll();
 }
@@ -336,7 +348,7 @@ async function run(work, busyWords) {
     const out = await work();
     const words = out && out.pending === true ? WAITING
       : out && typeof out.message === "string" && out.message ? out.message
-      : "Done.";
+      : HW.asked;
     say(hw.status, words, "ok");
     announce(words);
   } catch (error) {
@@ -355,7 +367,11 @@ function choose(id, name) {
 }
 
 function askStep(step) {
-  return run(() => invoke("hardware_step", { stepId: step.id }), `Asking: ${step.title}…`);
+  return run(async () => {
+    const out = await invoke("hardware_step", { stepId: step.id });
+    asked.set(step.id, Date.now());
+    return out;
+  }, `Asking: ${step.title}…`);
 }
 
 function copyButton(buttonId, inputId) {

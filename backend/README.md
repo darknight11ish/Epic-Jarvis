@@ -110,6 +110,7 @@ on a throwaway copy instead.
 | `auto-learn.patch` | `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py` | **Jarvis learns automatically, from your own words only** (the owner's decision, 2026-09-24). A proposal is saved without a card only when every check in `jarvis_auto_learn.py` passes; the rest stay cards, each saying why. Adds `GET /api/memory/learning`, `GET /api/memory/auto`, `POST /api/memory/learning/auto` and `/sensitive` (each ON is one approval card), `jarvis_extract.accept_auto()`, facts that keep their proposal's source, the learner's refusal of an Ollama cloud model, and quote marks round recalled facts. Last in the list, after `chat-history.patch`. Needs `jarvis_auto_learn.py` - see its own section, after chat-history. |
 | `memory-erase.patch` | `jarvis_hud.py` | **"Erase the words"** (the owner's decision, 2026-09-24). Adds `POST /api/memory/erase {"id"}`: ONE fact's words wiped for good - its text, its word-search entry, its meaning vector, the copies in the review queue, and the old bytes in `memory.db` and `memory.db-wal` - while its row and dates stay. Same checks as forget, no card. The work is in the shipped `rebuilt/jarvis_memory.py` (`erase()`, `handle_erase()`). See its own section. |
 | `past-recall.patch` | `jarvis_hud.py` | **Questions about the past get the old facts, labelled** (memory wave 1, 2026-09-24). "Where did I live before?" also recalls the matching retired facts, each ending "(no longer true since <date>)"; every other question gets exactly the search it got before. One line of the chat turn's recall. Last in the list, after `auto-learn.patch`. Needs `jarvis_past.py` - without it the old search runs. See "Memory wave 1", at the very end. |
+| `hardware.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Setups for any graphics card** (docs/HARDWARE-PROFILES.md, 2026-09-25). Adds `GET /api/hardware` (the cards, what runs now, three setups) and `POST /api/hardware/apply` (choose one - changes nothing by itself), `/create` (make a tuned model: ONE approval card, `models_create`) and `/measure`, and the approval notice's words for `models_create`. Two route blocks, each right after second-card's. Last in the list. Needs `jarvis_hardware.py` and `jarvis_profiles.py` - see "Setups for any graphics card", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -7301,3 +7302,54 @@ got before; the stacked chat-turn lines run, with and without
 anything into the home folder's `.openjarvis`. Every check about the floor,
 `known_at` and the past fails on the code before this change; the checks
 marked "guard" pass on both, and must.
+
+# Setups for any graphics card: `hardware.patch`, `jarvis_hardware.py`, `jarvis_profiles.py`
+
+**What it is for.** Jarvis was hand-tuned for one card, the RTX 2080 Super.
+This works out a sensible setup for any single card of 6-24 GB, or any two
+cards, and offers three: Fastest answers, Smartest answers, Most features.
+The design, with every number and where it came from, is
+[`docs/HARDWARE-PROFILES.md`](../docs/HARDWARE-PROFILES.md).
+
+**Nothing changes until you choose one.** Choosing only lists the steps.
+Each step is one button in the app (Settings, Hardware and models, or the
+phone's Mind, Hardware), and each raises its own approval card: the usual
+model download and model switch, the usual second-card switches, or the new
+"make a model" card (`models_create`, tier `ask`), which shows the exact
+Modelfile. The settings Ollama reads when it starts are one PowerShell line
+you run yourself, with an undo line beside it.
+
+**What is where.**
+
+- `jarvis_profiles.py` - the arithmetic, the three setups, the words and the
+  one line. No files, no network. Its constants each name where they came
+  from; the gap is the owner's 0.75 GB (decision 1).
+- `jarvis_hardware.py` - finds the cards (Ollama's `server.log`, then
+  `nvidia-smi`, then the registry), keeps your choice in
+  `hardware-choice.json` and measurements in `hardware-measured.json`
+  beside your other settings, makes a tuned model after its card, and
+  measures.
+- `hardware.patch` - the four routes, and the approval notice's words for
+  `models_create`. Last in `$PATCHES`.
+- `jarvis_second_card.py` follows a chosen setup: on one big card the extra
+  features run beside chat in your everyday Ollama; on two, on the card the
+  setup says. With no setup chosen it is exactly as before.
+
+**Test it.**
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_profiles.py; py -3 backend\test_hardware.py
+```
+
+No graphics card, no Ollama, no network: the log, `nvidia-smi` and the
+registry are replayed with made-up values. `test_profiles.py` checks every
+row of the design's tables; `test_hardware.py` checks detection, the steps,
+the one card per step, measuring, the second card under a setup, and that
+the patch applies to what the earlier patches wrote.
+
+**Not checked, said plainly.** Nothing has run on a real card or a real
+Ollama. Whether `LLAMA_ARG_FIT_TARGET` (the 0.75 GB gap, in the one line)
+reaches llama.cpp through Ollama has not been checked - if models stop
+loading after running the line, run its undo line and restart Ollama. The
+first thing to do on the PC is the two read-only lines in the design's
+section 4.7, or the Measure button.

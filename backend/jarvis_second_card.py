@@ -1484,6 +1484,14 @@ def _main_pin(det: dict) -> tuple:
 #   status()
 # --------------------------------------------------------------------------
 
+def _what(f: dict, det: dict) -> str:
+    """A feature's "what", said right for where it runs: under a chosen setup
+    on one card, beside chat rather than on a second card."""
+    if det.get("_main"):
+        return f["what"].replace("on the second card", "beside chat, on the same card")
+    return f["what"]
+
+
 def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
                  pending: list) -> dict:
     fid = f["id"]
@@ -1530,7 +1538,7 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
     else:
         why = (f"Working: {model} on the {det['second']['name']}, with room for "
                f"{ctx:,} tokens of conversation.")
-    return {"id": fid, "name": f["name"], "what": f["what"], "enabled": enabled,
+    return {"id": fid, "name": f["name"], "what": _what(f, det), "enabled": enabled,
             "active": active, "available": available, "needs": list(f["needs"]),
             "model": model, "model_installed": installed,
             "memory_gib": gib, "why": why}
@@ -1697,6 +1705,10 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
     else:
         lane += " Nothing leaves this PC."
     lane += _shares_with_big_model()
+    head = "Let Jarvis use the second graphics card?"
+    if det.get("_main"):
+        head = (f"Let Jarvis run extra models beside chat on the {s['name']}, as the setup you "
+                f"chose says?")
     if feature == "master":
         back = _would_work("master", sw)
         if back:
@@ -1709,7 +1721,7 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
                    "Pictures, Learning in the background, Browser control, Wiki builder) has "
                    f"its own switch and its own card. Once one of them is on, {lane}")
         return (
-            "Let Jarvis use the second graphics card?\n\n"
+            f"{head}\n\n"
             f"Which card: {card}.\n\n"
             f"{yes}\n\n"
             "If you did not just ask for this, say no.\n\n"
@@ -1733,9 +1745,11 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
         inst += (f"\n\nAlso: {_names(also)} {'is' if one else 'are'} still switched on from "
                  f"before, so {'it starts' if one else 'they start'} working again too, "
                  f"at once.")
+    where = ("beside chat, on the same card" if det.get("_main")
+             else "on the second graphics card")
     return (
-        f"Turn on \"{f['name']}\" on the second graphics card?\n\n"
-        f"What it does: {f['what']}\n\n"
+        f"Turn on \"{f['name']}\" {where}?\n\n"
+        f"What it does: {_what(f, det)}\n\n"
         f"Which card: {card}.\n"
         f"Which model: {model}, with room for {ctx:,} tokens - {mem}.\n\n"
         f"{lane}{inst}\n\n"

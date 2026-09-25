@@ -164,6 +164,19 @@ await check("the steps: in order, only the next one has a button, and asking sen
   assert.doesNotMatch(all, /do them all|approve all/i);
 });
 
+await check("a step asked for stays 'waiting' with no second button, even when the PC cannot see its card", async () => {
+  const page = await open({ status: HW.chosen_first_step, keepState: true });
+  await settle(page);
+  await page.click("#hw-ask-install\\:qwen3\\:4b");
+  await page.waitForFunction(() => window.__hardware.steps.length === 1);
+  await page.waitForFunction(() => document.querySelector("#hw-step-list .hw-step").dataset.state === "waiting");
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.steps[0].buttons, 0, "the asked step can be asked for again");
+  assert.match(s.steps[0].text, /Waiting for your approval/);
+  assert.deepEqual(s.stepsAsked, ["install:qwen3:4b"]);
+});
+
 await check("a 'make a model' step shows exactly what is made, and a waiting one says so", async () => {
   const page = await open({ status: HW.create_waiting });
   await settle(page);

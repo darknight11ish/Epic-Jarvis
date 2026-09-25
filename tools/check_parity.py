@@ -99,6 +99,10 @@ ALLOWLISTS = {
 CLASSIFICATION = {
     "/api/appearance": ("ported", ""),
     "/api/big-model": ("ported", "The big model (slow) with colibri: what was found and its three switches, each ON an approval card (backend/big-model.patch, 2026-09-24). Desktop: Settings, Big model (slow) (get_big_model / set_big_model, settings window only). Phone: Mind, Big model (slow) (BigModelPlate.kt)."),
+    "/api/hardware": ("ported", "The graphics cards and the three setups for them (backend/hardware.patch, docs/HARDWARE-PROFILES.md, 2026-09-25). Desktop: Settings, Hardware and models (hardware.rs get_hardware, settings window only). Phone: Mind, Hardware (HardwarePlate.kt, net/Hardware.kt): names and memory, what runs now, the three setups as the PC's words - never a model list or a picker (CLAUDE.md)."),
+    "/api/hardware/apply": ("ported", "Choose a setup, or forget the choice. Changes no model and no setting by itself: it lists the steps. Both apps hold choosing on a stale link; forgetting is not held."),
+    "/api/hardware/create": ("ported", "One step of a chosen setup: make jarvis-chat / jarvis-long / jarvis-vision. ONE approval card (models_create, tier ask). Both apps post it only as a step read from the PC's own GET answer, and only the next step (hardware.rs step_request, Hardware.stepRequest)."),
+    "/api/hardware/measure": ("ported", "Time each model of the setup on this PC and check it is all on the card. Both apps: one button, held on a stale link."),
     "/api/deep": ("ported", "Deep questions and their answers, newest first (backend/big-model.patch). Desktop: the Brain's Memory tab, Deep questions (get_deep). Phone: Mind, Deep questions. Both read it again on the `deep` event."),
     "/api/deep/ask": ("ported", "Queue one deep question for the big model; no card per question, the switch was approved (backend/big-model.patch). Desktop: the Brain's \"Ask slowly\" (ask_deep). Phone: Mind's \"Ask slowly\". Both hold it on a stale link."),
     "/api/approve": ("ported", ""),

@@ -310,11 +310,40 @@ def t_two_cards_lane_steps_and_the_switch_going_off():
               f"'CUDA_VISIBLE_DEVICES', '{G.U_2060}'" in line)
     with G.World(smi=G.SMI_PAIR, log=LOG2, reg=G.reg_text([G.REG_2080S, G.REG_2060]),
                  user_env=G.TODAY_ENV) as w:
+        w.choose("smart")
+        w.switches(master=True, long_context=True)
+        code, out = H.choose(None)
+        sw = json.loads((w.dir / "second-card.json").read_text())
+        check("forgetting the setup moves the extra features back to where they ran before: "
+              "the main switch goes OFF too, never on without a card",
+              code == 200 and sw["master"] is False and "turned off" in out["message"], out)
+    with G.World(smi=G.SMI_PAIR, log=LOG2, reg=G.reg_text([G.REG_2080S, G.REG_2060]),
+                 user_env=G.TODAY_ENV) as w:
         w.switches(master=True, long_context=True)
         out = w.choose("features")
         sw = json.loads((w.dir / "second-card.json").read_text())
         check("Most features keeps the lanes on the 2060, where they already were: the main "
               "switch stays on", sw["master"] is True and "turned off" not in out["message"])
+
+
+def t_a_card_already_up_is_seen():
+    waiting = [("download_model", '{"ref": "qwen3:8b", "size": "5.0 GB"}'),
+               ("switch_model", "switch to jarvis-chat:latest"),
+               ("download_model", '{"ref": "qwen3:8b-instruct"}')]
+    check("a download card for the exact model is seen as waiting",
+          H._card_up(waiting, "download_model", "qwen3:8b"))
+    check("... but not one for a longer name that starts the same",
+          not H._card_up([waiting[2]], "download_model", "qwen3:8b"))
+    check("a switch card naming jarvis-chat(:latest) is seen",
+          H._card_up(waiting, "switch_model", "jarvis-chat"))
+    check("... and never a card for another action",
+          not H._card_up(waiting, "switch_model", "qwen3:8b"))
+    with G.World(smi=G.SMI_2080S, log=LOG1, reg=G.reg_text([G.REG_2080S]), user_env=G.TODAY_ENV,
+                 gate_waiting=waiting[:1]) as w:
+        w.choose("smart")
+        st = H.status()["applying"]["steps"]
+        check("the download step then says it waits for approval, so it is not asked twice",
+              st[0]["state"] == "waiting" and st[1]["state"] == "later", st[:2])
 
 
 # --------------------------------------------------------------------------
@@ -423,6 +452,15 @@ def t_measure():
         code, _ = H.request_measure(measure=fake, spawn=lambda fn: None)
         code2, out2 = H.request_measure(measure=fake)
         check("one measurement at a time (409)", code == 200 and code2 == 409)
+        saved = H._standby
+        H._standby = lambda: True
+        H._MEASURE.update(state="idle")
+        try:
+            code, out = H.request_measure(measure=fake)
+        finally:
+            H._standby = saved
+        check("on standby (the card is kept free): measuring is refused, in words",
+              code == 409 and "standby" in out["error"])
 
 
 # --------------------------------------------------------------------------
@@ -453,9 +491,14 @@ def t_second_card_one_big_card():
         code, out = SC.request_change("long_context", True, gate=gate, spawn=lambda fn: fn())
         check("... turning it on is refused with the reason (503)", code == 503
               and "chat itself" in out["error"], out)
+        check("the main switch's card says where, not \"the second graphics card\"",
+              seen and seen[0].startswith("Let Jarvis run extra models beside chat on the "
+                                          "NVIDIA RTX A4000"), seen[0][:200] if seen else seen)
         SC.request_change("vision", True, gate=gate, spawn=lambda fn: fn())
-        check("the Pictures card says no second copy of Ollama starts",
-              "no second copy is started" in seen[-1], seen[-1][:400])
+        check("the Pictures card says no second copy of Ollama starts, and where it runs",
+              "no second copy is started" in seen[-1]
+              and seen[-1].startswith('Turn on "Pictures" beside chat, on the same card?')
+              and "beside chat, on the same card, on this PC" in seen[-1], seen[-1][:400])
         lane = SC.lane_for("vision")
         check("lane_for(\"vision\"): the everyday Ollama, jarvis-vision, 8K",
               lane is not None and lane.url == "http://127.0.0.1:11434"
@@ -497,6 +540,38 @@ def t_second_card_env_under_a_preset():
         det = SC.detect()
         check("the second card's detection follows it", det["capable"] and
               det["second"]["uuid"] == G.U_2060 and det["_second"].uuid == G.U_2060)
+
+
+def t_both_apps_use_the_same_words():
+    js = (REPO / "jarvis-desktop" / "src" / "hardware-panel.js").read_text(encoding="utf-8")
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" / "client"
+          / "net" / "Hardware.kt").read_text(encoding="utf-8")
+    block = js[js.index("export const HW = {"):js.index("};", js.index("export const HW = {"))]
+    desk = {k: v.replace('\\"', '"') for k, v in re.findall(r'(\w+): "((?:[^"\\]|\\.)*)"', block)}
+    phone = {}
+    for name, rhs in re.findall(r'const val (\w+) = ((?:"(?:[^"\\]|\\.)*"\s*(?:\+\s*)?)+)', kt):
+        phone[name] = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', rhs)).replace('\\"', '"')
+    pairs = {"useThis": "USE_THIS", "recommended": "RECOMMENDED", "chosen": "CHOSEN", "stop": "STOP",
+             "ask": "ASK", "measure": "MEASURE", "stepDone": "STEP_DONE", "stepNext": "STEP_NEXT",
+             "stepLater": "STEP_LATER", "stepCommand": "STEP_COMMAND", "asked": "ASKED",
+             "noLong": "NO_LONG", "noPictures": "NO_PICTURES", "restart": "RESTART",
+             "update": "UPDATE"}
+    for js_key, kt_key in pairs.items():
+        check(f"the desktop's and the phone's words are the same: {js_key}",
+              desk.get(js_key) is not None and desk.get(js_key) == phone.get(kt_key),
+              f"desktop {desk.get(js_key)!r}\n        phone   {phone.get(kt_key)!r}")
+    check("both apps build a setup's lines the same way (the words for sharing a card)",
+          all(w in js and w in kt for w in (
+              " It stays loaded beside chat.",
+              " It takes turns with chat: a picture unloads chat for a moment.",
+              " It takes turns with the other extra model on that card.",
+              "What is off, and why:", "Best effort, not tested: ")))
+    check("both apps hide a step for 180 seconds after asking, so one tap is one card",
+          "180 * 1000" in js and "ASKED_FOR_MS = 180_000L" in kt)
+    check("both apps post a step only to the same four routes",
+          all(r in js or r in (REPO / "jarvis-desktop" / "src-tauri" / "src" / "hardware.rs")
+              .read_text(encoding="utf-8") for r in H.STEP_ROUTES)
+          and '"/api/models/install", "/api/models/switch", CREATE_PATH, SecondCard.PATH' in kt)
 
 
 def t_the_fixture():

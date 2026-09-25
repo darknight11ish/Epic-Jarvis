@@ -394,6 +394,14 @@ fun BrainScreen(
                 }
             }
 
+            // backend/hardware.patch (docs/HARDWARE-PROFILES.md 4.6, "Phone"):
+            // the cards and the three setups, above the second card's own
+            // switches. Reads and acts through JarvisRuntime directly
+            // (HardwarePlate.kt), so this is its only line.
+            item(key = "hardware") {
+                HardwareSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
+            }
+
             // backend/second-card.patch. Right under Model, because a feature
             // whose model is missing is installed with the box above.
             item(key = "second-card") {

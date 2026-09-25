@@ -306,13 +306,14 @@ class World:
 
     def __init__(self, *, smi="", log=None, reg=None, installed=("jarvis-primary",),
                  loaded=(), current="jarvis-primary", windows=True, user_env=None,
-                 shows=None, ollama_up=True, spawn_now=True):
+                 shows=None, ollama_up=True, spawn_now=True, gate_waiting=()):
         self.smi, self.log, self.reg = smi, log, reg
         self.installed, self.loaded = list(installed), [dict(x) for x in loaded]
         self.current, self.windows = current, windows
         self.user_env = dict(user_env or {})
         self.shows = dict(shows or {"jarvis-primary": PRIMARY_SHOW})
         self.ollama_up, self.spawn_now = ollama_up, spawn_now
+        self.gate_waiting = list(gate_waiting)
         self.created, self.http = [], []
         self.dir = Path(tempfile.mkdtemp(prefix="jarvis-hardware-"))
         self._saved = {}
@@ -362,6 +363,7 @@ class World:
             (H, "_current_model"): lambda: self.current,
             (H, "_config_dir"): lambda: self.dir,
             (H, "_primary_setting"): lambda: "",
+            (H, "_gate_waiting"): lambda: list(self.gate_waiting),
             (H, "_audit"): lambda event, detail: None,
             (H, "_tier"): lambda action: "ask",
             (H, "_main_url"): lambda: "http://127.0.0.1:11434",

@@ -731,8 +731,11 @@ def recommended(layouts: dict) -> tuple:
                             f"{feat.chat.card.name} and adds what fits beside it.")
     smart = layouts.get("smart")
     if smart is not None and smart.chat is not None:
-        return "smart", (f"It keeps the {smart.chat.model.size} everyday model; the other "
-                         f"choices would swap it for the smaller 4B to make room.")
+        if smart.chat.model.ref == "qwen3:4b":
+            return "smart", ("Only the small 4B model fits these cards, so the three choices "
+                             "differ only in what they add beside it.")
+        return "smart", (f"It keeps the {smart.chat.model.size} everyday model; Most features "
+                         f"would swap it for the smaller 4B to make room.")
     return "fast", "Only the small model fits on this PC."
 
 

@@ -8,6 +8,7 @@ import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatSession
+import com.jarvis.client.net.Hardware
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.SaidAloud
@@ -564,6 +565,61 @@ class ApiContractTest {
         val said = (api.say("hello") as ApiResult.Ok).value
         assertTrue(said is SaidAloud.NoEngine)
         assertFalse((said as SaidAloud.NoEngine).fallbackOk)
+    }
+
+    // ---------------------------------------------------------- hardware ---
+
+    /**
+     * `hardware.patch` (JARVIS-API §20): the GET carries the token and the
+     * client header like every other route, and its answer is read by the
+     * same parser the JVM test checks against the real fixture.
+     */
+    @Test
+    fun theHardwareReadCarriesTheHeadersAndParses() = runBlocking {
+        routes[Hardware.PATH] = ok(
+            """{"available":true,"found":"Found 1 graphics card.","cards":[],"presets":[],""" +
+                """"now":{"label":"Custom (your own setup)","words":""}}""",
+        )
+        val out = api.hardware()
+        assertTrue("read failed: $out", out is ApiResult.Ok)
+        assertNotNull(Hardware.parse((out as ApiResult.Ok).value))
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals(Hardware.PATH, req.path)
+        assertEquals(TOKEN, req.getHeader("X-Jarvis-Token"))
+        assertEquals("hud", req.getHeader("X-Jarvis-Client"))
+    }
+
+    /** Choosing a setup posts the setup's id and nothing else. */
+    @Test
+    fun choosingASetupPostsTheIdAlone() = runBlocking {
+        routes[Hardware.APPLY_PATH] = ok("""{"ok":true,"chosen":"smart","message":"chosen"}""")
+        val out = api.hardwarePost(Hardware.APPLY_PATH, Hardware.applyBody("smart"))
+        assertTrue(out is ApiResult.Ok)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("POST", req.method)
+        assertEquals("""{"preset":"smart"}""", req.body.readUtf8())
+    }
+
+    /**
+     * A step is posted only to one of the four routes a step may name; any
+     * other route is refused before a request is made.
+     */
+    @Test
+    fun aHardwarePostToAnyOtherRouteIsNeverSent() = runBlocking {
+        val out = api.hardwarePost("/api/shutdown", "{}")
+        assertTrue(out is ApiResult.Failed)
+        assertEquals("a request reached the server", 0, server.requestCount)
+    }
+
+    /** A refusal's own sentence comes back to be shown, not a failure wall. */
+    @Test
+    fun aRefusedMakeIsThePcsOwnSentence() = runBlocking {
+        routes[Hardware.CREATE_PATH] = MockResponse().setResponseCode(409)
+            .setHeader("Content-Type", "application/json")
+            .setBody("""{"error":"download qwen3:8b first"}""")
+        val out = api.hardwarePost(Hardware.CREATE_PATH, """{"name":"jarvis-chat"}""")
+        assertTrue(out is ApiResult.Ok)
+        assertEquals("Download qwen3:8b first.", Hardware.replyLine(out))
     }
 
     private companion object {

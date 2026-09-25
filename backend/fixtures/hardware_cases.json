@@ -967,7 +967,7 @@
     }
    },
    "recommended": "smart",
-   "recommended_why": "It keeps the 4B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "recommended_why": "Only the small 4B model fits these cards, so the three choices differ only in what they add beside it.",
    "title": "6 GB"
   },
   "one_8gb": {
@@ -1132,7 +1132,7 @@
     }
    },
    "recommended": "smart",
-   "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
    "title": "8 GB - the owner's PC today"
   },
   "one_8gb_maxwell": {
@@ -1300,7 +1300,7 @@
     }
    },
    "recommended": "smart",
-   "recommended_why": "It keeps the 4B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "recommended_why": "Only the small 4B model fits these cards, so the three choices differ only in what they add beside it.",
    "title": "An older 8 GB NVIDIA card (Maxwell, before GTX 10)"
   },
   "one_8gb_pascal": {
@@ -1465,7 +1465,7 @@
     }
    },
    "recommended": "smart",
-   "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
    "title": "GTX 1080, 8 GB (Pascal)"
   },
   "one_8gb_rocm": {
@@ -1618,7 +1618,7 @@
     }
    },
    "recommended": "smart",
-   "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
    "title": "RX 7600, 8 GB (ROCm)"
   },
   "one_8gb_vulkan_amd": {
@@ -1774,7 +1774,7 @@
     }
    },
    "recommended": "smart",
-   "recommended_why": "It keeps the 4B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "recommended_why": "Only the small 4B model fits these cards, so the three choices differ only in what they add beside it.",
    "title": "RX 6600, 8 GB (Vulkan)"
   },
   "one_8gb_vulkan_intel": {
@@ -1930,7 +1930,7 @@
     }
    },
    "recommended": "smart",
-   "recommended_why": "It keeps the 4B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "recommended_why": "Only the small 4B model fits these cards, so the three choices differ only in what they add beside it.",
    "title": "Intel Arc, 8 GB (Vulkan)"
   },
   "two_12_12": {

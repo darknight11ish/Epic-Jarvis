@@ -541,6 +541,7 @@ backend routes, in both directions; the rest are listed here only.
 | Global hotkeys (`hotkeys.rs`) | Keyboard shortcuts for a PC. A phone has no equivalent. |
 | The tray icon (`tray.rs`) | Part of Windows' taskbar. |
 | Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
+| On the Hardware screen: the memory bars, the "Details" arithmetic, Copy for the one PowerShell line, and the "exactly what is made" Modelfile (desktop Settings, Hardware and models) | The phone shows the cards (names and memory), what runs now, the three setups in the PC's words, their steps, Measure, and the line itself to read (Mind, Hardware - the design's section 4.6 asks for that much and no more). The line runs on the PC, so Copy belongs there; the bars and the arithmetic are the design's "Details", which a phone screen does not need to choose a setup. Every route is on both apps (JARVIS-API §20). |
 | The Faces window's "Portable output" (`faces.html`) | Code for building a client (the look spec as JSON, Kotlin, TypeScript). It is a developer's tool, and the phone already ships its own copy of the spec. |
 | **Update notice** | **Undecided - the owner's call.** The desktop checks GitHub for a newer version and says so in Settings (`update.rs`; it never installs on its own). The phone has no such notice: a new APK is published to the `client-latest` release and installed with adb. Whether the phone should say "a newer version exists" has not been decided. |
 
@@ -680,6 +681,21 @@ they landed):
   (`deep.js`) and the phone's Mind (`DeepQuestionsSection`, same file). Not
   run against a real colibri or on the owner's PC; none of colibri's speed
   claims checked there. [`BIG-MODEL.md`](BIG-MODEL.md) is the owner's guide.
+
+- **Presets for any graphics card** (added 2026-09-25). Jarvis finds the
+  cards (Ollama's log, `nvidia-smi`, the registry) and works out three
+  setups for them - Fastest answers, Smartest answers, Most features - with
+  the owner's 0.75 GB gap (`jarvis_hardware.py`, `jarvis_profiles.py`,
+  `hardware.patch`: `GET /api/hardware`, `POST /api/hardware/apply`,
+  `/create`, `/measure`). **Nothing changes until the owner chooses one**,
+  and choosing only lists the steps: each is its own existing approval card
+  (download, switch, the second-card switches) or the new one, `models_create`
+  (the same four steps as section 3), asked for one at a time from the app;
+  what Ollama reads at start-up is one PowerShell line the owner runs. With a
+  setup chosen, the second card's lanes follow it - on one big card, inside
+  the everyday Ollama. Both apps: the desktop's Settings ("Hardware and
+  models") and the phone's Mind ("Hardware"). Not run on a real card.
+  [`HARDWARE-PROFILES.md`](HARDWARE-PROFILES.md) is the design.
 
 **Still missing:**
 

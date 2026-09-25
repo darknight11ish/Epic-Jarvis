@@ -912,7 +912,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             h.steps.push(args.stepId);
             if (h.stepFails) throw new Error(h.stepFails);
             const st = h.status.applying && h.status.applying.steps.find((x) => x.id === args.stepId);
-            if (st) st.state = "waiting";
+            // keepState: a PC that cannot see the card (a download's card
+            // is the owner's file's to shape) still says "next".
+            if (st && !h.keepState) st.state = "waiting";
             return { ok: true, pending: true, message: "Approve the card on your PC or phone to make it. Nothing is made until you do." };
           }
           case "measure_hardware": {

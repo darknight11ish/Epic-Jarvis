@@ -202,7 +202,7 @@
      "ollamas": 1,
      "pictures": null,
      "recommended": true,
-     "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
      "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
     },
     {
@@ -564,7 +564,7 @@
      "ollamas": 1,
      "pictures": null,
      "recommended": true,
-     "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
      "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
     },
     {
@@ -948,7 +948,7 @@
      "ollamas": 1,
      "pictures": null,
      "recommended": true,
-     "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
      "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
     },
     {
@@ -1337,7 +1337,7 @@
      "ollamas": 1,
      "pictures": null,
      "recommended": true,
-     "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
      "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
     },
     {
@@ -1723,7 +1723,7 @@
      "ollamas": 1,
      "pictures": null,
      "recommended": true,
-     "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
      "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
     },
     {
@@ -2040,7 +2040,7 @@
      "ollamas": 1,
      "pictures": null,
      "recommended": true,
-     "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
      "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
     },
     {
@@ -2590,7 +2590,7 @@
   "post_apply_clear": {
    "body": {
     "chosen": null,
-    "message": "No preset is used now. Your models and settings are as they are; to go back to jarvis-primary, switch to it (Brain, Models).",
+    "message": "No setup is used now. Your models and settings are as they are; to go back to jarvis-primary, switch to it (Brain, Models).",
     "ok": true
    },
    "status": 200
@@ -2863,7 +2863,7 @@
      "ollamas": 1,
      "pictures": null,
      "recommended": true,
-     "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+     "recommended_why": "It keeps the 8B everyday model; Most features would swap it for the smaller 4B to make room.",
      "summary": "The biggest everyday model your cards can hold, even if that makes answers slower."
     },
     {

@@ -671,6 +671,45 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
         }
 
+    // --------------------------------------------------------- hardware ----
+
+    /**
+     * `GET /api/hardware` - the cards, what runs now, the three setups the PC
+     * worked out for its own cards ([Hardware.parse]). Reads only. A 404 is
+     * an older backend and a 503 a module that did not load.
+     */
+    suspend fun hardware(): ApiResult<JsonObject> = probe(Hardware.PATH)
+
+    /**
+     * One of the hardware POSTs: choosing a setup ([Hardware.APPLY_PATH]),
+     * measuring ([Hardware.MEASURE_PATH]), or ONE step of the chosen setup -
+     * a route read from the PC's own answer, one of [Hardware.STEP_ROUTES]
+     * ([Hardware.stepRequest]). Anything else is refused here, before
+     * anything is sent. Each step raises its own approval card on the PC; a
+     * success never means it is done - re-read [hardware] for that.
+     */
+    suspend fun hardwarePost(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            if (path != Hardware.APPLY_PATH && path != Hardware.MEASURE_PATH &&
+                path !in Hardware.STEP_ROUTES
+            ) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a hardware route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    Hardware.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
     // --------------------------------------------------------- big model ----
 
     /**
