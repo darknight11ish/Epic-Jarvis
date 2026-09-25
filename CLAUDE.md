@@ -242,6 +242,17 @@ Decided 2026-09-25, after the audit against Meta's Muse
   phone without a screen lock, a risky approval is refused until one is set
   up, with a plain message saying how (owner, 2026-09-25).
 
+Decided 2026-09-25, after the creativity audit
+(`docs/CREATIVITY-AUDIT-2026-09-25.md`):
+- **Web search asks first only when the search words would repeat a saved
+  fact, or a sensitive fact was used** - no longer whenever any memory
+  (a pinned fact, a recalled one) was part of the question. After outside
+  text, and with "Ask before every web search" on, it still asks as before.
+- **One smart-home card may cover several named devices**, every one listed
+  in full on the card (e.g. "turn off the kitchen, hall and bedroom
+  lights"). Locks, alarms, doors and covers always get a card of their own.
+  It is one decision about a fully listed set - never a standing permission.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
