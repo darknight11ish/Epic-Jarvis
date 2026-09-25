@@ -4758,7 +4758,7 @@ For a British male voice add `tts_speaker_id = 9` under `[voice]` in
 |---|---|---|
 | waiting for "hey Jarvis" (phone) | on the phone: openWakeWord's "hey jarvis" model through ONNX Runtime | **nothing**. The microphone is open; Android shows its microphone dot and a notification the whole time |
 | waiting for "hey Jarvis" (desktop) | the desktop app cuts the room's sound into sentences by loudness; the Jarvis server **on the same PC** runs the model on each | each sentence goes to the PC's own Jarvis over loopback (`127.0.0.1`) and is dropped there unless it holds "hey Jarvis" - not voice-checked, not transcribed, not kept. The desktop refuses to listen at all if its server address is not this PC |
-| it heard "hey Jarvis" | | the phone sends that sentence (from 2 s before the phrase to your pause) to your PC over Tailscale. **Never anywhere else** |
+| it heard "hey Jarvis" | | the phone sends that sentence (from 2 s before the phrase to your pause) to your PC over your private network (Tailscale or NordVPN Meshnet). **Never anywhere else** |
 | on the PC | `jarvis_speech.hear()`: Silero VAD -> "hey Jarvis" checked again -> your voice checked -> speech-to-text -> the sentence must start with "hey Jarvis" | the words go to Jarvis like typed text. "Hey Jarvis." on its own opens an 8-second window for the next sentence |
 
 No company's servers are involved at any point, and no API key is needed.

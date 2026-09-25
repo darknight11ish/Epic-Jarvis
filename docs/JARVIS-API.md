@@ -1098,7 +1098,7 @@ they explain why several obvious routes are missing rather than forgotten.
   There is still no scrollable, searchable list of what could be installed.
 - **A client must not do speech-to-text.** Hence one complete WAV per
   utterance, and no streaming audio.
-- **No public tunnel, ever.** Everything here is loopback or Tailscale.
+- **No public tunnel, ever.** Everything here is loopback, Tailscale or NordVPN Meshnet (both private device-to-device networks, never a public tunnel).
 
 ---
 
