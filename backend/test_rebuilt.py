@@ -1047,6 +1047,27 @@ class Router(unittest.TestCase):
         for plain in ("the sk-8 skateboard", "task-list-for-monday", "AIza is a prefix"):
             self.assertIsNone(RT.looks_like_a_secret(plain), plain)
 
+    def test_fine_grained_github_and_other_key_shapes_are_recognised(self):
+        """GitHub's fine-grained tokens (github_pat_, the default since 2023)
+        were missed - the extraction research, Module 1 - and so were AWS
+        temporary keys, GitLab tokens, Stripe secret keys and Google OAuth
+        tokens. jarvis_scrub.py uses this same table for backend.log."""
+        # Fake keys, split in two so GitHub's secret scanner does not block the push.
+        for key, kind in (
+                ("github_pat_11ABCDEFG0a1b2c3d4e5f6g7h8i9j0_k1l2m3n4o5p6q7r8s9t0u1v2w3x4",
+                 "GitHub"),
+                ("ASIAIOSFODNN7EXAMPLE", "AWS"),
+                ("glpat" + "-Ab1Cd2Ef3Gh4Ij5Kl6Mn", "GitLab"),
+                ("sk_" + "live_4eC39HqLyjWDarjtT1zdp7dc", "Stripe"),
+                ("ya29.a0AfH6SMBx1y2z3AbCdEfGhIjKlMn", "Google OAuth")):
+            found = RT.looks_like_a_secret(f"here is my config: {key} thanks")
+            self.assertIsNotNone(found, key[:12])
+            self.assertIn(kind, found)
+            self.assertNotIn(key, found, "the finding must not repeat the key")
+        for plain in ("github_pat is the name of the token type", "pk_live_ is public",
+                      "ya29 is a prefix"):
+            self.assertIsNone(RT.looks_like_a_secret(plain), plain)
+
     def test_taint_pins_the_turn_local(self):
         long_q = ("explain in detail and compare the trade-offs, step by step, "
                   "why this design was chosen " * 4)

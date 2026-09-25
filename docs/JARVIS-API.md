@@ -615,6 +615,16 @@ the PC, no app change needed:
   asked."). It used to turn such arguments into `{}` - a `shell_exec` card
   with an empty command. An unknown tool name is answered with the names of
   the tools that are on.
+- **At most five approval cards in one answer** (2026-09-25,
+  `jarvis_agent.CARDS_PER_TURN`; the extraction research's gate fixes).
+  A card counts when a person approved it, denied it or left it unanswered.
+  Past five, a call that would raise a card is refused before any card is
+  raised: nothing runs, the model is told, and the answer itself carries one
+  plain line, once ("(Jarvis wanted to ask for your approval more than 5
+  times in one answer, so it stopped asking. Nothing more was run. Ask again
+  in a new message to carry on.)"). A tool that asks nobody (tier `auto` or
+  `notify`) is not limited. A new message starts at zero. Both apps show the
+  line as part of the answer; neither needed a change.
 - **Ollama failing to read a tool call** (HTTP 500 before the answer, or
   `{"error": ...}` in the stream, with Ollama's "failed to parse JSON"-style
   wording) is asked again once, with a short note to the model. A second
@@ -640,7 +650,11 @@ the PC, no app change needed:
   ```
 
   Only the lines that apply. A value is named when it appears in what a tool
-  returned this turn and not in anything the owner typed or said. The plan
+  returned this turn and not in anything the owner typed or said. Since
+  2026-09-25, when something a tool returned looks like a password or key
+  (`jarvis_scrub.find_secret`), one more line names its kind, never its
+  value: "- Something Jarvis read holds what looks like a password or key (a
+  GitHub token). Check that this request does not send it anywhere." The plan
   that runs is not changed - only the words on the card. Both apps already
   show `detail.text` in full on the card (desktop `approvalPreview` in
   `main.js`; phone `normalisePendingRow` → the card's summary), so neither

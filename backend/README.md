@@ -113,6 +113,7 @@ on a throwaway copy instead.
 | `memory-profile.patch` | `jarvis_hud.py` | **"Always keep in mind"** (memory wave 2, the owner's decision, 2026-09-24). A short list of facts the owner pins - at most 1,200 characters - is read with every local chat question, word for word, first in the recalled-facts block; a pinned fact the search also found is not repeated. Adds `GET` and `POST /api/memory/profile` (one fact per request, no card, like Forget). Last in the list, after `past-recall.patch`, whose search lines it extends. The work is in the shipped `rebuilt/jarvis_memory.py` - with an older copy the routes answer 501 and chat recalls exactly as before. See "Memory wave 2", near the end. |
 | `temporary-chat.patch` | `jarvis_hud.py` | **A temporary chat, and "Used in this answer"** (the owner's decisions, 2026-09-25). A chat request with `"temporary": true` recalls no facts (no pinned list either), learns nothing (no "Remember:" either) and is not kept in the chat history; `X-Jarvis-Route` says `"temporary": true` (and `"remember_off": true` for a "Remember:"). Adds `GET /api/memory/used?ids=`, the words of the facts an answer used, read by id. Last in the list, after `memory-profile.patch`, whose GET route and search lines it sits beside. The work is in the shipped `rebuilt/jarvis_memory.py` (`used_view`), `jarvis_chat_log.py` (`TEMPORARY_CHAT`) and `rebuilt/jarvis_events.py` (`capabilities.temporary_chat`). See "Temporary chat and Used in this answer", at the very end. |
 | `hardware.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Setups for any graphics card** (docs/HARDWARE-PROFILES.md, 2026-09-25). Adds `GET /api/hardware` (the cards, what runs now, three setups) and `POST /api/hardware/apply` (choose one - changes nothing by itself), `/create` (make a tuned model: ONE approval card, `models_create`) and `/measure`, and the approval notice's words for `models_create`. Two route blocks, each right after second-card's. Last in the list. Needs `jarvis_hardware.py` and `jarvis_profiles.py` - see "Setups for any graphics card", at the very end. |
+| `log-scrub.patch` | `jarvis_hud.py` | **Passwords, keys and the pairing token kept out of `backend.log`** (the extraction research's Module 1, 2026-09-25). Right after the token is worked out, `jarvis_scrub.install(HUD_TOKEN)` scrubs everything the backend prints or logs from then on, including loggers set up earlier; the banner says so in one line. Last in the list; its context is loopback-too's and bind-wildcard's lines. Needs `jarvis_scrub.py` - see "The log scrubber", near the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -7835,3 +7836,180 @@ reaches llama.cpp through Ollama has not been checked - if models stop
 loading after running the line, run its undo line and restart Ollama. The
 first thing to do on the PC is the two read-only lines in the design's
 section 4.7, or the Measure button.
+
+# The log scrubber: `log-scrub.patch` and `jarvis_scrub.py` (2026-09-25)
+
+**What it is for.** The desktop app writes everything the backend prints
+into `backend.log`, a plain-text file you may paste into a bug report. From
+now on, passwords, keys and the pairing token are taken out before they get
+there. So are e-mail addresses, the user-name part of a home folder
+(`C:\Users\[redacted: user]\...`) and phone numbers written with a `+`. Each
+one becomes a marker that says what kind of thing was there, such as
+`[redacted: a GitHub token]` or `[redacted: HUD_TOKEN value]` - never the
+value, and never a piece of it. It is Module 1 of the extraction research
+(`docs/EXTRACTION-RESEARCH-2026-09-23.md`).
+
+**What it catches.**
+
+- **The pairing token, by its exact value.** It is 43 random characters, so
+  no pattern could spot it. `log-scrub.patch` hands it over right after
+  Jarvis works out the token, before the startup banner.
+- **Every setting whose name says it is a secret**, by its exact value:
+  `JARVIS_GITHUB_TOKEN`, `JARVIS_IMAP_PASSWORD`, `JARVIS_HOME_TOKEN`,
+  `OPENAI_API_KEY` and the rest. It is the same name rule that already
+  keeps these out of shell commands (`jarvis_child_env.py`).
+- **Keys by their shape**, using the router's own list - the list that keeps
+  a pasted key off the cloud (`jarvis_router._SECRET_PATTERNS`). There is
+  one list, so the two cannot drift apart. That list gained GitHub's
+  fine-grained tokens (`github_pat_...`), which it had missed, plus AWS
+  temporary keys, GitLab tokens, Stripe secret keys and Google sign-in
+  tokens. A key of any of those kinds pasted into a question now keeps that
+  question on this PC too.
+- **Log-only shapes:** a whole private-key block, the `X-Jarvis-Token` and
+  `Authorization` headers, cookies, a password inside a web address
+  (`https://user:password@host`), `?token=` and similar in a web address, and
+  lines like `password = ...`.
+
+**Where it applies.** Every `print`, every error report Python writes when
+something crashes, the web server's request lines, and every Python
+`logging` message. That includes loggers that were set up **before** the
+scrubber started. The research found that gap - such a logger still wrote a
+key in clear text - and `test_scrub.py` sets up a logger early on purpose,
+to prove the gap is closed.
+
+**Fixed from the research's design.** A private-key line with no end line
+used to hide every later line of the log. Now only lines that look like key
+material are hidden, and at most 240 of them.
+
+**What it does not do, said plainly.**
+
+- **It has no switch.** Nothing in the settings turns it off.
+- **It does not touch the audit log.** The research left that to you, because
+  `jarvis_gate._redact` already owns it.
+- **It is not a way to make text safe to send anywhere.** A pattern list
+  never recognises everything. The cloud lane, the phone push and the event
+  bus keep their own, stricter rules.
+- **It cannot reach output that bypasses Python's streams.** That means
+  programs Jarvis starts (the second Ollama, a shell command), which write
+  straight to the log file.
+
+**What you see.** One new line in the startup banner:
+`log        passwords, keys and the token are kept out of this log`. If
+`jarvis_scrub.py` is missing, the line is not printed, and the log is
+written as before.
+
+**Apply it** (it copies `jarvis_scrub.py` in, then applies the patch):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**Test it:**
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_scrub.py
+```
+
+No network. It checks every shape, the values, the early logger, a file
+logger, the unended key, that it never prints anything itself, and that the
+patch applies on top of every earlier patch.
+
+# The approval gate, tightened (2026-09-25)
+
+Module 4 of the extraction research (`docs/EXTRACTION-RESEARCH-2026-09-23.md`)
+listed six changes. All of them make things stricter; none adds a way to
+approve. I checked each one against the code as it is today. Two were
+already done by this week's security audit:
+
+| item | what it asked | state |
+|---|---|---|
+| 4a | Is OpenJarvis's own auto-approve code on your PC? | **New check in `selftest.py`** (below) |
+| 4b | An approved shell command must not see your keys | **Already done** by audit M2 (`jarvis_agent.shell_env`, `jarvis_child_env.py`) |
+| 4c | Check that a person actually said yes | **Already done** (`NEEDS_A_PERSON` and `_a_person_said_yes`; audit L1 for resume and wiki) |
+| nice | A tool's output can switch the "private" latch on | **Already covered, more broadly.** Any reading tool marks the turn and the conversation. **New:** the card also names a key it read (below) |
+| nice | An outside tool cannot borrow a built-in tool's name | **Not needed yet.** There are no outside tools until the MCP bridge (Module 3); it is on that module's must-do list |
+| nice | A limit on approval cards in one answer | **New** (below) |
+
+**Five cards per answer, at most.** A flood of cards is how a planted
+instruction wears a person down: one command after another, hoping you start
+pressing Approve without reading. After five cards in one answer, Jarvis
+stops asking. Nothing more runs, and the answer says so: "(Jarvis wanted to
+ask for your approval more than 5 times in one answer, so it stopped asking.
+Nothing more was run. Ask again in a new message to carry on.)" It is a
+refusal, so it can never become a way round the gate.
+
+- **What counts:** a card you approved, denied or left unanswered.
+- **What does not count:** a tool that asks nobody, such as the calculator,
+  or a read your settings allow. It still runs.
+- **Why five, not the research's example of three:** turning off three
+  lights is already three cards, because Home Assistant control takes one
+  device per card. The number is `CARDS_PER_TURN` in `jarvis_agent.py`.
+  Ask if you want a different one.
+
+**A key that was read is named on the next card.** Say Jarvis reads a file,
+and the file holds something that looks like a password or key. The next
+card then says so under "What shaped this request:": "Something Jarvis read
+holds what looks like a password or key (a GitHub token). Check that this
+request does not send it anywhere." It gives the kind only, never the value.
+What Jarvis reads is not changed.
+
+**4a: OpenJarvis's own auto-approve.** Jarvis's backend was built on
+OpenJarvis. Current OpenJarvis approves tools by itself in seven places.
+A tool call made through one of those never reaches Jarvis's approval gate.
+`selftest.py` now looks for them, in step 4, every time you run it.
+
+- It reads files only. It imports nothing from OpenJarvis.
+- **"FAIL ... approves tools by itself in N place(s)"** lists each file and
+  line. That does not prove Jarvis uses them. Send the output back so it can
+  be checked. Until then, use Jarvis through its own apps, not OpenJarvis's
+  own commands (such as `jarvis ask`).
+- **"skip"** means this Python has no OpenJarvis, so there is nothing to find.
+
+Against the OpenJarvis copy the research read, it finds all seven places.
+Run it from the repository folder:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\selftest.py
+```
+
+It prints to the window. Run it with the same Python that runs Jarvis. If
+Jarvis uses a virtual environment, turn that on first.
+
+**Test it:**
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_gate_fixes.py
+```
+
+# Shorter tool descriptions for the 8B model (2026-09-25)
+
+Every tool you turn on is described to the model in every round, and those
+descriptions take up the model's working memory. The 16 tools took about
+3,000 tokens (a token is roughly a short word). `browser_control` alone took
+about 850. Measured with `jarvis_agent.estimate_tokens`, the same count the
+chat loop budgets with:
+
+| | before | after |
+|---|---|---|
+| all 16 tools | 3,006 | 2,524 |
+| `browser_control` | 850 | 545 |
+| the 15 without `browser_control` | 2,156 | 1,979 |
+
+Every rule the model needs was kept. What went was text meant for people,
+such as "see jarvis_browser_control.py's docstring", and repeats.
+
+Each pair of tools the model mixes up now says which one to use. For
+example, `memory_search` says "For the owner's own notes, use
+notes_search.". The pairs are `memory_search`/`notes_search`,
+`home_read`/`home_control`, `calendar_read`/`email_check`, and
+`append_obsidian_daily`/`create_joplin_note`. That line is only added when
+the other tool is also on, so the model is never pointed at a tool it does
+not have.
+
+`test_tool_text.py` fails if the 16 tools grow past 2,600 tokens, or if any
+one tool passes 300 (600 for `browser_control`). A tool added later gets
+the 300 limit. The tool test in `tools/tool_eval` still reads the live
+list, and its saved backup copy was updated to match.
+
+Not measured: whether the model now picks tools better. Only the model on
+your PC can show that, using the line in `tools/tool_eval/README.md`.

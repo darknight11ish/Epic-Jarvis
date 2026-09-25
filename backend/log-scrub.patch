@@ -1,0 +1,31 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -241,7 +241,19 @@
+     return companion
+
+
+ HUD_TOKEN = _resolve_token()
++
++# Passwords, keys and the pairing token are taken out of everything this
++# process prints or logs from here on (jarvis_scrub.py): the desktop app
++# writes all of it to backend.log, which gets pasted into bug reports. Here,
++# right after the token exists and before the banner, and given the token
++# itself - it has no shape a pattern could find. Without the module the log
++# is written as it always was, and the banner does not claim otherwise.
++try:
++    import jarvis_scrub
++    _SCRUBBING_LOG = bool(jarvis_scrub.install(HUD_TOKEN))
++except Exception:
++    _SCRUBBING_LOG = False
+
+
+ def _read_body(handler) -> bytes:
+@@ -2396,6 +2408,8 @@
+         print(line)
+     # Before anything listens: every interface is not a private mesh.
+     _refuse_every_interface(bind)
++    if _SCRUBBING_LOG:
++        print("  log        passwords, keys and the token are kept out of this log")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

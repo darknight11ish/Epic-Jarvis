@@ -474,12 +474,18 @@ class Tool:
     runtime state (github_search: authenticated or not), which a static
     name cannot express. Omitted, `name` itself is used - correct for every
     tool here whose model-facing name already IS its jarvis_gate key.
+
+    `instead` is the "use this, not that" line for a tool the model mixes up
+    with another: {other tool's name: the clause}. The clause is added to the
+    description only when that other tool is offered in the same turn, so
+    the model is never pointed at a tool it does not have.
     """
 
     def __init__(self, name: str, description: str, parameters: dict,
                  prepare: Callable[[dict], tuple],
                  execute: Callable[..., dict], needs_announce: bool = False,
-                 gate_lookup_name: Optional[Callable[[dict], str]] = None):
+                 gate_lookup_name: Optional[Callable[[dict], str]] = None,
+                 instead: Optional[dict] = None):
         self.name = name
         self.description = description
         self.parameters = parameters
@@ -487,10 +493,18 @@ class Tool:
         self.execute = execute
         self.needs_announce = needs_announce
         self.gate_lookup_name = gate_lookup_name
+        self.instead = dict(instead or {})
 
-    def schema(self) -> dict:
+    def schema(self, offered=None) -> dict:
+        """The schema the model is sent. `offered` is the names offered in
+        this turn; None means every tool here."""
+        names = TOOLS if offered is None else offered
+        text = self.description
+        for other, clause in self.instead.items():
+            if other in names:
+                text = f"{text} {clause}"
         return {"type": "function", "function": {
-            "name": self.name, "description": self.description,
+            "name": self.name, "description": text,
             "parameters": self.parameters}}
 
 
@@ -505,13 +519,14 @@ TOOLS: dict = {
             "expression": {"type": "string"}}, "required": ["expression"]},
         _plain_prepare("Evaluate"), lambda args, state, **_: _run_calculator(args)),
     "memory_search": Tool(
-        "memory_search", "Search what Jarvis has been told and remembers.",
+        "memory_search", "Search the facts Jarvis has learned about the owner.",
         {"type": "object", "properties": {
             "query": {"type": "string"},
             "k": {"type": "integer", "description": "how many facts, default 5"}},
          "required": ["query"]},
         _plain_prepare("Search memory for"),
-        lambda args, state, **_: _run_memory_search(args)),
+        lambda args, state, **_: _run_memory_search(args),
+        instead={"notes_search": "For the owner's own notes, use notes_search."}),
     "file_read": Tool(
         "file_read", "Read a local text file.",
         {"type": "object", "properties": {
@@ -527,9 +542,8 @@ TOOLS: dict = {
         _run_shell_exec_tool),
     "control_computer": Tool(
         "control_computer",
-        "Click or type inside another Windows program, by naming its "
-        "on-screen controls. Reads the target window first; a control that "
-        "cannot be found is reported, not guessed at.",
+        "Click or type in another Windows program by naming its on-screen "
+        "controls. A control that cannot be found is reported, not guessed.",
         {"type": "object", "properties": {
             "goal": {"type": "string"},
             "window": {"type": "string", "description": "the exact window title"},
@@ -550,8 +564,8 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "jarvis_ui_control_run"),
     "control_phone": Tool(
         "control_phone",
-        "Tap, swipe, type, press a key, or take a screenshot on the "
-        "owner's own paired Android phone over adb.",
+        "Tap, swipe, type, press a key or take a screenshot on the owner's "
+        "paired Android phone.",
         {"type": "object", "properties": {
             "device": {"type": "string"},
             "goal": {"type": "string"},
@@ -573,48 +587,35 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "jarvis_android_control_run"),
     "browser_control": Tool(
         "browser_control",
-        "Drive one browser tab (navigate, click, type, select, read, "
-        "read_new, or read_page) by naming its on-screen elements. Reads the "
-        "current page first; an element that cannot be found - or that "
-        "matches more than one element - is reported, not guessed at (add "
-        "'within' with the name of the section it is in to say which). "
-        "read_new follows a chat conversation of any length - it takes "
-        "the transcript CONTAINER and a cursor, and returns only messages "
-        "since that cursor, so a long-running conversation never costs more "
-        "per turn than the newest messages in it. read_page returns the "
-        "page's main text in capped pieces. The run stops if the page leaves "
-        "the allowed sites, asks a question, opens a tab, or starts a "
-        "download. Only offered when the "
-        "owner has explicitly enabled it - see jarvis_browser_control.py's "
-        "own docstring for why it ships off.",
+        "Drive one browser tab by naming page elements (role and accessible "
+        "name). A missing or ambiguous element is reported, not guessed; "
+        "add 'within' to say which. read_new returns only a chat's messages "
+        "after a cursor; read_page returns the page's main text in pieces. "
+        "Stops if the page leaves the allowed sites, asks a question, opens "
+        "a tab or downloads.",
         {"type": "object", "properties": {
             "goal": {"type": "string"},
-            "session": {"type": "string", "description": "a label for which browser tab"},
+            "session": {"type": "string", "description": "a label for the tab"},
             "allowed_domains": {"type": "array", "items": {"type": "string"},
-                "description": "optional hostname allowlist - for navigate steps, and for "
-                    "anywhere a click or redirect takes the tab while the plan runs "
-                    "(omitted: only the sites the plan itself names)"},
+                "description": "hostnames the tab may visit (default: the sites the plan "
+                    "names)"},
             "requests": {"type": "array", "items": {"type": "object", "properties": {
                 "action": {"type": "string",
                     "enum": ["navigate", "click", "type", "select", "read", "read_new",
                              "read_page"]},
-                "role": {"type": "string", "description": "accessibility role, e.g. button, "
-                    "textbox - for read_new, the role of the message-list CONTAINER"},
-                "name": {"type": "string", "description": "the element's accessible name - "
-                    "for read_new, the container's accessible name"},
-                "within": {"type": "string", "description": "optional: the name of the "
-                    "section, dialog, row or list item the element is inside, when two "
-                    "elements share a role and name"},
-                "value": {"type": "string", "description": "URL for navigate, text for "
-                    "type/select (a type may write a saved secret as <secret>name</secret>; "
-                    "its real value is never shown to you), for read_new the highest "
-                    "message index already seen, for read_page the character offset to "
-                    "read from (omit or \"0\" to read from the start)"},
+                "role": {"type": "string", "description": "e.g. button, textbox; for "
+                    "read_new, the message list's role"},
+                "name": {"type": "string", "description": "accessible name; for read_new, "
+                    "the message list's"},
+                "within": {"type": "string", "description": "the section, dialog or row it "
+                    "is in, when two elements match"},
+                "value": {"type": "string", "description": "navigate: URL. type/select: "
+                    "text (a saved secret as <secret>name</secret>). read_new: the highest "
+                    "message index seen. read_page: character offset (\"0\" = start)"},
                 "why": {"type": "string"},
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean",
-                    "description": "true for nearly every step here - a browser step almost "
-                                    "always sends something to whoever is on the other end"},
+                    "description": "true for nearly every browser step"},
             }}}},
          "required": ["goal", "session", "requests"]},
         _prepare_browser_control,
@@ -627,9 +628,8 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "jarvis_browser_control_run"),
     "github_search": Tool(
         "github_search",
-        "Check whether a library or approach for a coding idea already "
-        "exists on GitHub, graded by maintenance and licence, before "
-        "building it from scratch.",
+        "Check GitHub for an existing library for a coding idea, graded by "
+        "maintenance and licence.",
         {"type": "object", "properties": {
             "idea": {"type": "string"},
             "capabilities": {"type": "array", "items": {"type": "string"}}},
@@ -643,68 +643,61 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: _github_search_action_name()),
     "calendar_read": Tool(
         "calendar_read",
-        "Read the owner's own calendar (CalDAV) for the next N days - "
-        "event titles, times, and locations. Read-only; never creates or "
-        "changes an event.",
+        "Read the owner's calendar events for the next N days. Read-only.",
         {"type": "object", "properties": {
-            "days_ahead": {"type": "integer",
-                "description": "how many days ahead to look, default 7, max 90"}}},
+            "days_ahead": {"type": "integer", "description": "default 7, max 90"}}},
         _prepare_calendar_read,
         lambda args, state, **_: _run_calendar_read(args, state),
-        gate_lookup_name=lambda args: "jarvis_calendar_read_run"),
+        gate_lookup_name=lambda args: "jarvis_calendar_read_run",
+        instead={"email_check": "For messages, use email_check."}),
     "email_check": Tool(
         "email_check",
-        "Check the owner's own IMAP inbox for recent messages - sender, "
-        "subject, date, and a short plain-text preview of each. Read-only; "
-        "never sends, replies to, deletes, or marks anything.",
+        "Read recent messages in the owner's inbox: sender, subject, date, "
+        "preview. Read-only; never sends.",
         {"type": "object", "properties": {
-            "limit": {"type": "integer",
-                "description": "how many messages, default 10, max 25"},
-            "unread_only": {"type": "boolean",
-                "description": "true (default) for unread mail only, false for all"}}},
+            "limit": {"type": "integer", "description": "default 10, max 25"},
+            "unread_only": {"type": "boolean", "description": "default true"}}},
         _prepare_email_check,
         lambda args, state, **_: _run_email_check(args, state),
-        gate_lookup_name=lambda args: "jarvis_email_read_run"),
+        gate_lookup_name=lambda args: "jarvis_email_read_run",
+        instead={"calendar_read": "For appointments and events, use calendar_read."}),
     "notes_search": Tool(
         "notes_search",
-        "Search the owner's own notes: the Obsidian vault folder on this PC, "
-        "or Joplin or Obsidian over each app's local REST API. Read-only; "
-        "never creates or edits a note.",
+        "Search the owner's own notes (Obsidian or Joplin). Read-only.",
         {"type": "object", "properties": {
             "query": {"type": "string"},
-            "limit": {"type": "integer",
-                "description": "how many results, default 10, max 20"}},
+            "limit": {"type": "integer", "description": "default 10, max 20"}},
          "required": ["query"]},
         _prepare_notes_search,
         lambda args, state, **_: _run_notes_search(args, state),
-        gate_lookup_name=lambda args: "jarvis_notes_search_run"),
+        gate_lookup_name=lambda args: "jarvis_notes_search_run",
+        instead={"memory_search": "For facts Jarvis remembers about the owner, "
+                                  "use memory_search."}),
     "home_read": Tool(
         "home_read",
-        "Read the current state of specific, named Home Assistant "
-        "entities - never the whole house at once. Read-only.",
+        "Read the state of named Home Assistant entities. Read-only.",
         {"type": "object", "properties": {
             "entity_ids": {"type": "array", "items": {"type": "string"},
-                "description": "e.g. [\"light.kitchen\", \"lock.front_door\"], max 20"}},
+                "description": "e.g. [\"light.kitchen\"], max 20"}},
          "required": ["entity_ids"]},
         _prepare_home_read,
         lambda args, state, **_: _run_home_read(args, state),
-        gate_lookup_name=lambda args: "jarvis_home_read_run"),
+        gate_lookup_name=lambda args: "jarvis_home_read_run",
+        instead={"home_control": "To change something, use home_control."}),
     "home_control": Tool(
         "home_control",
-        "Call one Home Assistant service on one named entity - turn a "
-        "light on, unlock a door, and so on. This changes something real, "
-        "not just data; a lock, alarm, or cover action is treated as "
-        "especially consequential.",
+        "Call one Home Assistant service on one entity, e.g. turn a light "
+        "on or unlock a door. Changes something real.",
         {"type": "object", "properties": {
-            "domain": {"type": "string", "description": "e.g. \"light\", \"lock\""},
-            "service": {"type": "string", "description": "e.g. \"turn_on\", \"unlock\""},
+            "domain": {"type": "string", "description": "e.g. \"light\""},
+            "service": {"type": "string", "description": "e.g. \"turn_on\""},
             "entity_id": {"type": "string"},
-            "data": {"type": "object",
-                "description": "extra service data, e.g. {\"brightness\": 200}"}},
+            "data": {"type": "object", "description": "e.g. {\"brightness\": 200}"}},
          "required": ["domain", "service", "entity_id"]},
         _prepare_home_control,
         lambda args, state, **_: _run_home_control(args, state),
-        gate_lookup_name=lambda args: "jarvis_home_control_run"),
+        gate_lookup_name=lambda args: "jarvis_home_control_run",
+        instead={"home_read": "To only check a state, use home_read."}),
     # The note WRITES (jarvis_note_capture.py). Their action names are the
     # ones the owner's jarvis-framework.toml has tiers for, so that file - not
     # this one - decides whether each asks first. Like every tool here they
@@ -713,34 +706,35 @@ TOOLS: dict = {
     # owner's own words to /api/notes/capture, with no model involved.
     "append_logseq_journal": Tool(
         "append_logseq_journal",
-        "Add one entry to the end of today's Logseq journal page on this PC. "
-        "Only ever adds; never changes or removes anything already written.",
+        "Add one entry to today's Logseq journal page. Only adds.",
         {"type": "object", "properties": {
-            "text": {"type": "string", "description": "the entry, in the owner's words"}},
+            "text": {"type": "string", "description": "in the owner's words"}},
          "required": ["text"]},
         _prepare_note("logseq"), _run_note,
         gate_lookup_name=lambda args: "append_logseq_journal"),
     "append_obsidian_daily": Tool(
         "append_obsidian_daily",
-        "Add one entry to the end of today's Obsidian daily note on this PC. "
-        "Only ever adds; never changes or removes anything already written.",
+        "Add one entry to today's Obsidian daily note. Only adds.",
         {"type": "object", "properties": {
-            "text": {"type": "string", "description": "the entry, in the owner's words"}},
+            "text": {"type": "string", "description": "in the owner's words"}},
          "required": ["text"]},
         _prepare_note("obsidian"), _run_note,
-        gate_lookup_name=lambda args: "append_obsidian_daily"),
+        gate_lookup_name=lambda args: "append_obsidian_daily",
+        instead={"create_joplin_note": "For a separate note with its own title, use "
+                                       "create_joplin_note."}),
     "create_joplin_note": Tool(
         "create_joplin_note",
-        "Create one NEW note in Joplin on this PC. Never edits an existing note "
-        "and never creates a notebook.",
+        "Create one new note in Joplin. Never edits a note or makes a notebook.",
         {"type": "object", "properties": {
             "title": {"type": "string"},
             "body": {"type": "string"},
             "notebook": {"type": "string",
-                "description": "an existing notebook's exact name; omit for Joplin's default"}},
+                "description": "an existing notebook's exact name (optional)"}},
          "required": ["title", "body"]},
         _prepare_note("joplin"), _run_note,
-        gate_lookup_name=lambda args: "create_joplin_note"),
+        gate_lookup_name=lambda args: "create_joplin_note",
+        instead={"append_obsidian_daily": "To add to today's daily note, use "
+                                          "append_obsidian_daily."}),
 }
 
 
@@ -878,6 +872,50 @@ def _a_person_said_yes(verdict) -> bool:
     if outcome is not None:
         return outcome == "approved"
     return getattr(verdict, "tier", None) == "ask"
+
+
+#: The most approval cards one answer may raise (gate fix 4, "a limit on how
+#: many approval cards one turn can raise", docs/EXTRACTION-RESEARCH-2026-09-23.md).
+#: A flood of cards is how approval fatigue is used against a person: text
+#: planted in an email can ask for one command after another, hoping the
+#: owner starts pressing Approve without reading. Past the limit, a call that
+#: would ask is refused BEFORE any card is raised - a refusal, so it can never
+#: become a way round the gate - and the owner is told so in the answer.
+#: Five rather than the research's example of three: home_control takes one
+#: entity per call, so "turn off the kitchen, hall and bedroom lights" is
+#: already three cards.
+CARDS_PER_TURN = 5
+
+CARD_LIMIT_ERROR = ("refused: this answer has already asked the owner for approval "
+                    "{n} times, the most one answer may ask. Nobody was asked and "
+                    "nothing ran. Stop here and tell the owner what is left to do; "
+                    "they can ask again in a new message.")
+CARD_LIMIT_LINE = ("(Jarvis wanted to ask for your approval more than {n} times in one "
+                   "answer, so it stopped asking. Nothing more was run. Ask again in a "
+                   "new message to carry on.)")
+
+
+def _would_ask(name: str, action: str) -> bool:
+    """Whether this call would be put in front of a person: its tier asks
+    (or cannot be read, which asks), or it is a tool that only ever runs on
+    a person's yes. A "never" tier is refused by the gate with no card."""
+    return name in NEEDS_A_PERSON or _tier_of(action) not in ("auto", "notify", "never")
+
+
+def _a_card_was_shown(verdict) -> bool:
+    """True when this verdict came from a card: a person approved, denied, or
+    did not answer. A gate from before gate-outcome.patch says only its tier."""
+    outcome = getattr(verdict, "outcome", None)
+    if outcome is not None:
+        return outcome in ("approved", "denied", "timed_out")
+    return getattr(verdict, "tier", None) == "ask"
+
+
+#: The card's line when something a tool returned holds what looks like a
+#: password or key (gate fix 4, "a tool's output can switch the private latch
+#: on"). The kind only - jarvis_scrub.find_secret never returns the value.
+SECRET_READ_LINE = ("Something Jarvis read holds what looks like a password or key "
+                    "({kinds}). Check that this request does not send it anywhere.")
 
 
 # --------------------------------------------------------------------------
@@ -1729,6 +1767,8 @@ class _TurnWatch:
         self.flags: dict = {}        # code -> why, over every result
         self.noted = False           # OUTSIDE_NOTE added to the turn
         self.reasked = False         # a round was asked again (Ollama)
+        self.cards = 0               # approval cards this turn (CARDS_PER_TURN)
+        self.secrets: list = []      # KINDS of password or key read, never values
         req = request if isinstance(request, dict) else {}
         # The apps' provenance comes off `messages` before this loop gets
         # them (chat-history.patch, _chat_client_fields_off); the request as
@@ -1787,9 +1827,24 @@ class _TurnWatch:
             for piece in pieces:
                 for code, why in outside_flags(piece).items():
                     self.flags.setdefault(code, why)
+            self._note_secrets(pieces)
         clean = _cleaned(result)
         clean.pop(OUTSIDE_FIELD, None)
         return {OUTSIDE_FIELD: OUTSIDE_LABEL, **clean}
+
+    def _note_secrets(self, pieces: list) -> None:
+        """Remember the KIND of any password or key in what a tool returned,
+        for the next card (SECRET_READ_LINE). Only ever adds; the result the
+        model reads is not changed. Without jarvis_scrub.py, nothing is noted
+        - the card still says what was read, as before."""
+        try:
+            import jarvis_scrub
+        except Exception:
+            return
+        for piece in pieces:
+            kind = jarvis_scrub.find_secret(piece)
+            if kind and kind not in self.secrets and len(self.secrets) < 3:
+                self.secrets.append(kind)
 
     # -- cards ---------------------------------------------------------------
     def _came_from_outside(self, args: dict) -> list:
@@ -1856,6 +1911,8 @@ class _TurnWatch:
         if self.flags:
             lines.append("Something Jarvis read may hold planted instructions: "
                          + " ".join(self.flags.values()))
+        if self.secrets:
+            lines.append(SECRET_READ_LINE.format(kinds="; ".join(self.secrets)))
         for v in self._came_from_outside(args):
             shown = v if len(v) <= 120 else v[:117] + "..."
             lines.append(f"“{shown}” came from what Jarvis read, not from you.")
@@ -2172,7 +2229,8 @@ def choose_lane(messages: list, model: str, *, ollama_url: str,
         mt = req.get("max_tokens")
         max_tokens = (int(mt) if isinstance(mt, int) and not isinstance(mt, bool) and mt > 0
                       else DEFAULT_MAX_TOKENS)
-        schemas = [TOOLS[n].schema() for n in offered_tools(enabled_tools)]
+        offered = offered_tools(enabled_tools)
+        schemas = [TOOLS[n].schema(offered) for n in offered]
         n_ctx = context_length or _context_length(ollama_url, model)
         budget = max(512, n_ctx - max_tokens - _TEMPLATE_TOKENS - estimate_tokens(schemas))
         if estimate_tokens(list(messages or [])) <= budget:
@@ -2559,7 +2617,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             except Exception:
                 pass
     names = [] if cur["feature"] == "vision" else offered_tools(enabled_tools)
-    tool_schemas = [TOOLS[n].schema() for n in names]
+    tool_schemas = [TOOLS[n].schema(names) for n in names]
     sink = on_step if on_step is not None else _publish_step
     req = request or {}
     opts: dict = {}
@@ -2915,12 +2973,25 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         return
+    if watch.cards >= CARDS_PER_TURN and _would_ask(name, action_name):
+        # Refused BEFORE a card is raised - see CARDS_PER_TURN.
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(
+                          {"ok": False, "error": CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN)})})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        if "(card limit)" not in watch.told and tell_owner is not None:
+            watch.told.add("(card limit)")
+            tell_owner(CARD_LIMIT_LINE.format(n=CARDS_PER_TURN))
+        return
     # The gate may wait minutes for a person. Say so to the app (after a
     # moment, so a tool the gate lets straight through never flashes it).
     out.set_status("approval")
     verdict = checker(action_name, {"text": plan_text},
                       f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
     out.set_status("thinking")
+    if _a_card_was_shown(verdict):
+        watch.cards += 1
     # What the GATE said, never what the model said: the outcome is read off
     # the verdict (gate-outcome.patch), and a verdict without one is recorded
     # as "unknown" rather than guessed at.
