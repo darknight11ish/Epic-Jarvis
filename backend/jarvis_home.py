@@ -29,6 +29,9 @@ separate entry points that must never be confused for each other:
                                           for why a pure read defaults there.
     plan_service(domain, service, ...)   ACT. One POST, to one named
                                           service, on one named entity.
+    plan_services(domain, service, ids)  ACT on several named entities with
+                                          the same service - ONE card for
+                                          the set (below).
                                           Ships tier `ask`, same as
                                           `jarvis_browser_control.py`'s
                                           "never auto" reasoning: this
@@ -42,6 +45,19 @@ separate entry points that must never be confused for each other:
                                           bigger consequence than "the
                                           kitchen light is now on", even
                                           though both are one API call.
+
+SEVERAL DEVICES ON ONE CARD (the owner's decision of 2026-09-25, after the
+creativity audit): "turn off the kitchen, hall and bedroom lights" is ONE
+card, not three. `plan_services()` takes the named entities (at most
+MAX_GROUP) and plans one POST per entity - the same service, the same data,
+each printed in full on the card - so the card is one decision about a
+fully listed set, which docs/ARCHITECTURE.md section 2 already allows ("one
+decision about one bounded set of things, every one of them shown in full")
+and never a standing permission. Locks, alarms, doors, covers and the other
+entities in `_stands_alone()` are never grouped: each gets a card of its
+own, as before. The plan carries a digest of exactly the requests the card
+listed, and `run()` refuses a plan whose requests no longer match it, so
+nothing can be added after the card was approved.
 
 Both still go through the same `describe()`/`run()` shape, and `run()` still
 refuses without `approved=True` - a module that can act on the physical
@@ -92,11 +108,32 @@ _MAX_ATTRIBUTES_CHARS = 500
 
 # A lock, an alarm panel, or a cover (garage doors and roller shutters are
 # both HA's "cover" domain) changes something with real physical or security
-# consequence. Everything else - lights, switches, climate, media players -
-# is still a real actuation and still tier `ask`, just not `heavy` on top of
-# it. This is a judgment call, stated as one: extend this set on the
-# owner's own machine if their home has a domain that belongs in it too.
-_HEAVY_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover"})
+# consequence - so do a valve (water or gas) and a siren, added 2026-09-25
+# with several-devices cards. Everything else - lights, switches, climate,
+# media players - is still a real actuation and still tier `ask`, just not
+# `heavy` on top of it. This is a judgment call, stated as one: extend this
+# set on the owner's own machine if their home has a domain that belongs in
+# it too.
+_HEAVY_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover", "valve", "siren"})
+
+# An entity whose own id says it is a door, a gate, a lock or an alarm is
+# treated as heavy too, whatever its domain: a garage opener is very often a
+# plain `switch.garage_door` or `button.open_gate`. Whole words of the id
+# only ("door" in `switch.front_door`, not in `light.outdoor`).
+_HEAVY_WORDS = frozenset({"door", "doors", "gate", "gates", "garage", "lock", "locks",
+                          "alarm", "alarms", "security", "safe", "siren", "valve"})
+
+# Never grouped with other devices, though not `heavy` on their own: a
+# camera (turning one off is a security matter), and the entities that run
+# other things - a script, a scene, an automation, a button - because Jarvis
+# cannot see what they would change, and one of them may well unlock a door.
+_ALONE_DOMAINS = frozenset({"camera", "script", "scene", "automation", "button",
+                            "input_button"})
+
+#: At most this many devices on one card (the owner's decision of
+#: 2026-09-25). A longer list is refused, never cut: every device on the card
+#: is exactly what runs.
+MAX_GROUP = 10
 
 
 def _configured() -> bool:
@@ -138,8 +175,31 @@ def _is_heavy_service(domain: str, entity_id: str = "") -> bool:
     """
     if domain.strip().lower() in _HEAVY_DOMAINS:
         return True
-    entity_domain = str(entity_id).strip().lower().split(".", 1)[0]
-    return bool(entity_domain) and entity_domain in _HEAVY_DOMAINS
+    entity_domain, _, object_id = str(entity_id).strip().lower().partition(".")
+    if entity_domain and entity_domain in _HEAVY_DOMAINS:
+        return True
+    return any(w in _HEAVY_WORDS for w in object_id.split("_"))
+
+
+def _stands_alone(domain: str, entity_id: str) -> bool:
+    """Whether this entity always gets an approval card of its own, and is
+    never one of several on a card: heavy (a lock, an alarm, a door, a
+    cover...), or a camera, script, scene, automation or button."""
+    if _is_heavy_service(domain, entity_id):
+        return True
+    if str(domain).strip().lower() in _ALONE_DOMAINS:
+        return True
+    return str(entity_id).strip().lower().split(".", 1)[0] in _ALONE_DOMAINS
+
+
+def _digest(queries) -> str:
+    """A fingerprint of exactly the requests a plan will send, taken when the
+    plan is made - the card shows those requests; run() checks the plan
+    still holds exactly them."""
+    import hashlib
+    rows = [[q.method, q.url, q.body] for q in queries]
+    return hashlib.sha256(json.dumps(rows, sort_keys=True, ensure_ascii=False)
+                          .encode("utf-8")).hexdigest()
 
 
 # --------------------------------------------------------------------------
@@ -166,6 +226,7 @@ class Plan:
     if_refused: str = ""
     authenticated: bool = False
     reason_empty: str = ""
+    digest: str = ""             # call_service: _digest of the requests planned
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -295,7 +356,90 @@ def plan_service(domain: str, service: str, entity_id: str,
         method="POST",
         why=f"call {domain}.{service} on {entity_id}", entity_id=entity_id, body=body)
     return Plan(kind="call_service", queries=[query], heavy=heavy,
-                if_refused=if_refused, authenticated=authenticated())
+                if_refused=if_refused, authenticated=authenticated(),
+                digest=_digest([query]))
+
+
+def _unique(ids) -> list:
+    out = []
+    for e in ids or []:
+        e = str(e).strip()
+        if e and e not in out:
+            out.append(e)
+    return out
+
+
+def group_problem(domain: str, service: str, entity_ids, data: Optional[dict] = None) -> str:
+    """"" when these entities may share ONE card, else why not, in words
+    the model can act on. Only for two or more entities - one is always
+    plan_service's business. Opens no socket and reads nothing."""
+    ids = _unique(entity_ids)
+    if len(ids) < 2:
+        return ""
+    if len(ids) > MAX_GROUP:
+        return (f"{len(ids)} devices is too many for one approval card - at most "
+                f"{MAX_GROUP}. Ask for them in smaller groups")
+    bad = [e for e in ids if not _is_valid_entity_id(e)]
+    if bad:
+        return ("these do not look like Home Assistant entity ids (domain.object_id): "
+                + ", ".join(repr(b) for b in bad))
+    extra = dict(data or {})
+    for key in ("entity_id", "area_id", "device_id"):
+        if key in extra:
+            return (f"'{key}' cannot go in data when several devices are named - list "
+                    f"every device in entity_ids instead")
+    alone = [e for e in ids if _stands_alone(domain, e)]
+    if alone:
+        return ("a lock, alarm, door, cover, camera, script, scene or button always gets "
+                "an approval card of its own, so it cannot be one of several: "
+                + ", ".join(alone) + ". Ask for "
+                + ("it" if len(alone) == 1 else "each of them")
+                + " in a call of its own, and the other devices together")
+    return ""
+
+
+def plan_services(domain: str, service: str, entity_ids,
+                  data: Optional[dict] = None) -> Plan:
+    """Work out the same service call on each of several named entities -
+    one POST each, all on ONE card (MAX_GROUP at most; nothing in
+    `_stands_alone` grouped). One entity is exactly plan_service. Opens no
+    socket."""
+    ids = _unique(entity_ids)
+    if len(ids) <= 1:
+        return plan_service(domain, service, ids[0] if ids else "", data)
+    domain = str(domain).strip()
+    service = str(service).strip()
+    if_refused = "nothing happens; every one of these devices is left exactly as it is"
+
+    def refused(why: str) -> Plan:
+        return Plan(kind="call_service", if_refused=if_refused,
+                    authenticated=authenticated(), reason_empty=why)
+
+    if not domain or not service:
+        return refused("domain and service are both required")
+    if not _SEGMENT_RE.match(domain) or not _SEGMENT_RE.match(service):
+        return refused(f"{domain!r}.{service!r} is not a Home Assistant domain and "
+                       "service, so nothing was sent")
+    problem = group_problem(domain, service, ids, data)
+    if problem:
+        return refused(problem)
+    base = os.environ.get(URL_ENV, "").strip()
+    if not base:
+        return refused(f"{URL_ENV} is not set - there is no Home Assistant to control")
+    insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")
+    if insecure:     # security audit L7
+        return refused(insecure)
+    quoted = urllib.parse.quote
+    url = (f"{base.rstrip('/')}/api/services/"
+           f"{quoted(domain, safe='')}/{quoted(service, safe='')}")
+    # entity_id written LAST in each body, as in plan_service; group_problem
+    # has already refused a `data` that names an entity, area or device.
+    queries = [Query(url=url, method="POST", why=f"call {domain}.{service} on {eid}",
+                     entity_id=eid, body={**dict(data or {}), "entity_id": eid})
+               for eid in ids]
+    return Plan(kind="call_service", queries=queries, heavy=False,
+                if_refused=if_refused, authenticated=authenticated(),
+                digest=_digest(queries))
 
 
 def describe(p: Plan) -> str:
@@ -321,12 +465,31 @@ def describe(p: Plan) -> str:
         ]
         for i, q in enumerate(p.queries, 1):
             lines += [f"  {i}. GET {q.url}", f"     why: {q.why}", ""]
+    elif len(p.queries) > 1:
+        n = len(p.queries)
+        action = p.queries[0].why.split(" on ", 1)[0].replace("call ", "", 1)
+        lines = [
+            f"Jarvis would like to call {action} on {n} Home Assistant devices: "
+            + ", ".join(q.entity_id for q in p.queries) + ".",
+            "",
+            f"One decision about exactly these {n} devices, each listed below with "
+            "its exact request. Nothing is added after you approve, and it gives "
+            "no permission for anything later.",
+            "",
+            auth_line,
+            "",
+        ]
+        for i, q in enumerate(p.queries, 1):
+            lines += [f"  {i}. {q.entity_id}: {action}",
+                      f"     POST {q.url}",
+                      f"     body: {json.dumps(q.body, ensure_ascii=False)}"]
+        lines.append("")
     else:
         q = p.queries[0]
         heavy_line = (
-            "This is marked HEAVY: it changes a lock, an alarm, or a cover, "
-            "which is a materially bigger consequence than most Home "
-            "Assistant actions." if p.heavy else ""
+            "This is marked HEAVY: it changes a lock, an alarm, a door, a "
+            "cover, a valve or a siren, which is a materially bigger "
+            "consequence than most Home Assistant actions." if p.heavy else ""
         )
         lines = [
             f"Jarvis would like to call the Home Assistant service on "
@@ -342,10 +505,14 @@ def describe(p: Plan) -> str:
             f"     body: {json.dumps(q.body, ensure_ascii=False)}",
             "",
         ]
+    several = p.kind == "call_service" and len(p.queries) > 1
     lines += [
-        "What leaves this machine: exactly the request(s) above, and the "
-        "access token if configured - both to that one Home Assistant "
-        "server. Nothing else.",
+        (f"What leaves this machine: exactly the {len(p.queries)} requests above, and "
+         "the access token if configured - all to that one Home Assistant server. "
+         "Nothing else." if several else
+         "What leaves this machine: exactly the request(s) above, and the "
+         "access token if configured - both to that one Home Assistant "
+         "server. Nothing else."),
         "",
         f"If you say no: {p.if_refused}",
     ]
@@ -444,11 +611,32 @@ def run(p: Plan, *, fetch: Optional[Callable[[Query], dict]] = None,
             })
         return {"ok": True, "states": states}
 
-    # call_service - exactly one query
-    q = p.queries[0]
-    try:
-        raw = getter(q)
-    except Exception as exc:
+    # call_service - exactly the requests the card listed, and nothing else.
+    if not p.queries or not p.digest or p.digest != _digest(p.queries):
         return {"ok": False,
-                "reason": f"the service call failed: {type(exc).__name__}: {exc}"}
-    return {"ok": True, "entity_id": q.entity_id, "response": raw}
+                "reason": "the plan's requests are not the ones it was made with, so "
+                          "nothing was sent"}
+    if len(p.queries) == 1:
+        q = p.queries[0]
+        try:
+            raw = getter(q)
+        except Exception as exc:
+            return {"ok": False,
+                    "reason": f"the service call failed: {type(exc).__name__}: {exc}"}
+        return {"ok": True, "entity_id": q.entity_id, "response": raw}
+    # Several devices, one at a time, in the card's order. A device that
+    # fails does not stop the others - each was approved, by name - and the
+    # answer says which worked.
+    results = []
+    for q in p.queries:
+        try:
+            results.append({"entity_id": q.entity_id, "ok": True, "response": getter(q)})
+        except Exception as exc:
+            results.append({"entity_id": q.entity_id, "ok": False,
+                            "reason": f"the service call failed: {type(exc).__name__}: {exc}"})
+    out = {"ok": all(r["ok"] for r in results), "results": results}
+    if not out["ok"]:
+        failed = [r["entity_id"] for r in results if not r["ok"]]
+        out["reason"] = (f"{len(failed)} of {len(results)} did not work: "
+                         + ", ".join(failed))
+    return out

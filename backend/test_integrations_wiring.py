@@ -99,8 +99,20 @@ for name, args, expect_fragment in CASES:
 # ── home_control's schema requires the fields the module needs to act ────
 
 home_control_schema = AG.TOOLS["home_control"].parameters
-check("home_control's schema requires domain, service, and entity_id",
-      set(home_control_schema.get("required", [])) == {"domain", "service", "entity_id"})
+# Since 2026-09-25 (several devices on one card) the device is named in
+# entity_id OR entity_ids, so neither is "required" in the schema; a call
+# naming neither is refused before any card (jarvis_agent._prepare_home_control).
+check("home_control's schema requires domain and service",
+      set(home_control_schema.get("required", [])) == {"domain", "service"})
+check("... and offers entity_id for one device, entity_ids for several",
+      home_control_schema["properties"]["entity_id"]["type"] == "string"
+      and home_control_schema["properties"]["entity_ids"]["type"] == "array")
+try:
+    AG.TOOLS["home_control"].prepare({"domain": "light", "service": "turn_on"})
+    refused = False
+except ValueError as exc:
+    refused = "entity_id" in str(exc)
+check("a call naming no device is refused before any card, saying what to add", refused)
 
 print()
 if FAILED:

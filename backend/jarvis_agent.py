@@ -425,14 +425,41 @@ def _run_home_read(args: dict, plan_obj, **_) -> dict:
     return HOME.run(plan_obj, approved=True)
 
 
+def home_targets(args: dict) -> list:
+    """The devices one home_control call names: `entity_id` first, then
+    `entity_ids`, each once, in the order given."""
+    out = []
+    one = args.get("entity_id")
+    many = args.get("entity_ids") if isinstance(args.get("entity_ids"), list) else []
+    for e in ([one] if one else []) + list(many):
+        e = str(e).strip()
+        if e and e not in out:
+            out.append(e)
+    return out
+
+
 def _prepare_home_control(args: dict):
+    """One home_control call: one device (plan_service), or several with the
+    same service on ONE card (plan_services; the owner's decision of
+    2026-09-25). A set that may not share a card - a lock, alarm, door or
+    cover among them, more than MAX_GROUP, no device at all - is refused
+    HERE, before any card, as wrong arguments the model can fix: nobody is
+    asked about a request that could not be approved as written."""
     try:
         import jarvis_home as HOME
     except Exception as exc:
         return None, f"Control Home Assistant: {json.dumps(args, ensure_ascii=False)} " \
                       f"(unavailable: {exc})"
-    p = HOME.plan_service(str(args.get("domain", "")), str(args.get("service", "")),
-                           str(args.get("entity_id", "")), args.get("data") or {})
+    domain, service = str(args.get("domain", "")), str(args.get("service", ""))
+    targets = home_targets(args)
+    data = args.get("data") or {}
+    if not targets:
+        raise ValueError("name the device in entity_id, or several devices in entity_ids")
+    if len(targets) > 1:
+        problem = HOME.group_problem(domain, service, targets, data)
+        if problem:
+            raise ValueError(problem)
+    p = HOME.plan_services(domain, service, targets, data)
     return p, HOME.describe(p)
 
 
@@ -728,16 +755,20 @@ TOOLS: dict = {
         lambda args, state, **_: _run_home_read(args, state),
         gate_lookup_name=lambda args: "jarvis_home_read_run",
         instead={"home_control": "To change something, use home_control."}),
+    # Several devices with the same service go on ONE card (entity_ids; the
+    # owner's decision of 2026-09-25) - jarvis_home.plan_services.
     "home_control": Tool(
         "home_control",
-        "Call one Home Assistant service on one entity, e.g. turn a light "
-        "on or unlock a door. Changes something real.",
+        "Call a Home Assistant service on one entity, or up to 10 in "
+        "entity_ids, e.g. lights off or unlock a door. Locks, alarms, doors, "
+        "covers: one per call. Changes something real.",
         {"type": "object", "properties": {
             "domain": {"type": "string", "description": "e.g. \"light\""},
             "service": {"type": "string", "description": "e.g. \"turn_on\""},
             "entity_id": {"type": "string"},
+            "entity_ids": {"type": "array", "items": {"type": "string"}},
             "data": {"type": "object", "description": "e.g. {\"brightness\": 200}"}},
-         "required": ["domain", "service", "entity_id"]},
+         "required": ["domain", "service"]},
         _prepare_home_control,
         lambda args, state, **_: _run_home_control(args, state),
         gate_lookup_name=lambda args: "jarvis_home_control_run",
@@ -1253,9 +1284,12 @@ def _a_person_said_yes(verdict) -> bool:
 #: owner starts pressing Approve without reading. Past the limit, a call that
 #: would ask is refused BEFORE any card is raised - a refusal, so it can never
 #: become a way round the gate - and the owner is told so in the answer.
-#: Five rather than the research's example of three: home_control takes one
-#: entity per call, so "turn off the kitchen, hall and bedroom lights" is
-#: already three cards. The owner confirmed five, 2026-09-25.
+#: Five rather than the research's example of three, when home_control took
+#: one entity per call and "turn off the kitchen, hall and bedroom lights" was
+#: three cards. Since the owner's decision of 2026-09-25 (after the creativity
+#: audit) that is ONE card listing all three (home_control's entity_ids), and
+#: it counts once here; locks, alarms, doors and covers still take a card
+#: each. The owner confirmed five, 2026-09-25.
 CARDS_PER_TURN = 5
 
 CARD_LIMIT_ERROR = ("refused: this answer has already asked the owner for approval "
