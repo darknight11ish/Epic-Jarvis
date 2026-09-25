@@ -425,6 +425,11 @@
             <div class="card card-wide" id="coming-up-card">
               <h2>Coming up</h2>
               <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. Anything that repeats waits for your yes on an approval card.</p>
+              <div id="went-off-part" hidden>
+                <h3 class="subhead">Just went off</h3>
+                <p class="note">In the last hour. Snooze sets it to go off again in 10 minutes - a repeating one keeps its usual times.</p>
+                <div id="went-off"></div>
+              </div>
               <div id="coming-up"></div>
               <h3 class="subhead">To-do list</h3>
               <div id="todo-list"></div>
@@ -433,6 +438,8 @@
                        placeholder="Add to the to-do list" aria-label="Add to the to-do list">
                 <button id="todo-add" class="btn small" type="submit">Add</button>
               </form>
+              <div id="named-lists"></div>
+              <p class="note" id="lists-note">To start another list, say or type "add milk to the shopping list".</p>
               <h3 class="subhead">Standby schedule</h3>
               <p class="note" id="standby-detail">Jarvis goes on standby at night and wakes in the morning - but it wakes only if the schedule put it on standby: if you chose Standby yourself, it stays on until you choose Active. Standby unloads its models and frees the graphics card; waking loads the chat model again, so the first answer is quick. Timers and reminders still go off. Setting it up asks once with an approval card.</p>
               <p class="note" id="standby-is-set" hidden>Your standby schedule is in the list above. Pause skips it and Delete turns it off. Neither wakes Jarvis - choose Active for that.</p>
@@ -452,6 +459,7 @@
               <div id="briefing"></div>
               <div class="row">
                 <button id="briefing-now" class="btn small" type="button">Brief me now</button>
+                <button id="briefing-missed" class="btn small" type="button">What did I miss?</button>
               </div>
               <p class="note">When it arrives each morning is in Settings, under Morning briefing.</p>
             </div>

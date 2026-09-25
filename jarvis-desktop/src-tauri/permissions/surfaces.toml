@@ -556,15 +556,19 @@ permissions = [
 # (pause, resume, delete, done, add time) or adds ONE to-do item; none raises
 # a card, because none can make Jarvis do more - a repeating job's card is
 # raised on the PC when it is SET, by talking to Jarvis. Every change is held
-# while the event stream is stale. There is no "delete all".
+# while the event stream is stale. There is no "delete all". Since 2026-09-25
+# a change may also be a Snooze (one job that went off, no card), and ONE
+# NAMED list ("shopping") may be cleared after the page's "are you sure?",
+# with the count it showed - never the to-do list itself.
 [[set]]
 identifier = "brain-schedule"
-description = "Read Coming up (timers, alarms, reminders, the to-do list), change ONE job at a time (pause, resume, delete, done, add time), add one to-do item, and ask for a standby schedule (the PC raises one approval card). No bulk form."
+description = "Read Coming up (timers, alarms, reminders, the to-do list and named lists), change ONE job at a time (pause, resume, delete, done, add time, snooze), add one to-do item, ask for a standby schedule (the PC raises one approval card), and clear ONE named list after the page's are-you-sure (never the to-do list)."
 permissions = [
   "allow-brain-schedule",
   "allow-brain-schedule-act",
   "allow-brain-schedule-add-todo",
   "allow-brain-schedule-add-standby",
+  "allow-brain-schedule-clear-list",
 ]
 
 # The morning briefing (backend/briefing.patch; the owner's decisions of

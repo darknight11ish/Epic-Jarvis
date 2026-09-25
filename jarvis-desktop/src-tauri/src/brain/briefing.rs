@@ -14,7 +14,9 @@
 //!   script cannot read round it; the counts stay.
 //! * [`brain_briefing_now`] - `POST /api/briefing/now`: "Brief me now". It
 //!   only READS, so like every read it is not held on a stale link. The same
-//!   hiding applies to its answer.
+//!   hiding applies to its answer. With `missed: true` (2026-09-25) it asks
+//!   "What did I miss?" instead - `{"missed": true}`, the same builder since
+//!   the owner last talked to Jarvis; also a read, also hidden the same way.
 //!
 //! Settings window ("Morning briefing"):
 //! * [`get_briefing_setup`] - the briefing jobs and what a briefing
@@ -214,15 +216,29 @@ pub async fn brain_briefing(app: AppHandle) -> Result<serde_json::Value, String>
     Ok(hide_if_needed(&app, answer))
 }
 
-/// "Brief me now": one put together now. It only reads, so it is not held
-/// on a stale link - like every read.
+/// The body of `POST /api/briefing/now`: `{}` for "Brief me now",
+/// `{"missed": true}` for "What did I miss?".
+pub(crate) fn now_body(missed: bool) -> serde_json::Value {
+    if missed {
+        serde_json::json!({ "missed": true })
+    } else {
+        serde_json::json!({})
+    }
+}
+
+/// "Brief me now": one put together now - or, with `missed`, "What did I
+/// miss?". Both only read, so neither is held on a stale link - like every
+/// read.
 #[tauri::command]
-pub async fn brain_briefing_now(app: AppHandle) -> Result<serde_json::Value, String> {
+pub async fn brain_briefing_now(
+    app: AppHandle,
+    missed: Option<bool>,
+) -> Result<serde_json::Value, String> {
     let base = commands::jarvis_base(&app);
     let response = commands::jarvis_client(Some(NOW_TIMEOUT))?
         .post(format!("{base}/api/briefing/now"))
         .headers(commands::jarvis_headers(&app)?)
-        .json(&serde_json::json!({}))
+        .json(&now_body(missed == Some(true)))
         .send()
         .await
         .map_err(|e| commands::backend_unreachable(&e, &base))?;
@@ -346,6 +362,12 @@ pub async fn toast_ready(app: AppHandle, base: String, data: serde_json::Value) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn what_did_i_miss_asks_with_one_field_and_brief_me_now_with_none() {
+        assert_eq!(now_body(false), serde_json::json!({}));
+        assert_eq!(now_body(true), serde_json::json!({ "missed": true }));
+    }
 
     const ANSWER: &str = r#"{"available": true, "building": false, "setups": [
         {"id": "s0123456789", "kind": "briefing", "repeat": "every weekday (Monday to Friday) at 07:00"}],

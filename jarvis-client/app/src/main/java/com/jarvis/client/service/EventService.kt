@@ -101,8 +101,34 @@ class EventService : Service() {
             // because the last onStartCommand happened to be a Deny tap.
             return START_STICKY
         }
+        if (intent?.action == ACTION_SNOOZE) {
+            // A notification's Snooze (ScheduleNotifier): the stream first,
+            // like Deny, then ONE snooze once the link is live.
+            JarvisRuntime.startStream()
+            snoozeFromNotification(intent.getStringExtra(ScheduleNotifier.EXTRA_JOB_ID))
+            return START_STICKY
+        }
         JarvisRuntime.startStream()
         return START_STICKY
+    }
+
+    /**
+     * The Snooze button on a timer's, alarm's or reminder's notification. It
+     * waits for the link like [denyFromNotification] - a change is refused on
+     * a stale link (rule 4), and a cold process starts stale - then sends ONE
+     * snooze through the same call as Coming up's button
+     * ([JarvisRuntime.scheduleAct], held on a stale link), and says how it
+     * went in a toast: the app is very likely not on screen. The
+     * notification goes only once the PC said yes.
+     */
+    private fun snoozeFromNotification(id: String?) {
+        if (id == null || !com.jarvis.client.net.Schedule.validId(id)) return
+        scope.launch {
+            awaitLive()
+            val (changed, said) = JarvisRuntime.scheduleAct(id, "snooze")
+            runCatching { Toast.makeText(this@EventService, said, Toast.LENGTH_LONG).show() }
+            if (changed) runCatching { ScheduleNotifier.cancel(this@EventService, id) }
+        }
     }
 
     /**
@@ -380,6 +406,7 @@ class EventService : Service() {
         private const val NOTIFICATION_ID = 0x4A56
         const val ACTION_STOP = "com.jarvis.client.STOP_LINK"
         const val ACTION_DENY = "com.jarvis.client.DENY_APPROVAL"
+        const val ACTION_SNOOZE = "com.jarvis.client.SNOOZE_JOB"
 
         /**
          * How long a Deny from outside the app waits for the link to come up

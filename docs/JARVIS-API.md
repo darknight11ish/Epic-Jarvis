@@ -3254,10 +3254,10 @@ repeating job then moves to its next time - never once per missed time.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items, oldest first. |
+| `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "went_off": [job], "lists": [{"name", "title", "open"}], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items of every list, oldest first (each with its `list`). Since 2026-09-25 (21.9): `went_off` - timers, alarms and reminders that went off in the last hour and are not snoozed, newest first, at most five; `lists` - the named lists with open items. An older PC sends neither. |
 | `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
-| `POST /api/schedule/add` | `{"kind": "todo", "text"}` · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}`; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat; 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once. A repeat raises ONE card and is set up only on its yes. Both apps add only a to-do item here, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
-| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time", "seconds"?}` | 200 `{"ok": true, "id", "said"}`; 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing); 400 anything else | ONE job, at once, no card - it only makes things quieter. **There is no list form and no "delete all"**: `id` must be one job id (`s` and ten hex digits). Both apps hold it on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. |
+| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}`; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat; 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once. A repeat raises ONE card and is set up only on its yes. Both apps add only a to-do item here, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
+| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. |
 
 A `job`:
 
@@ -3270,6 +3270,9 @@ A `job`:
  "rule": {...}, "repeat": "every weekday (Monday to Friday) at 07:00", "next": [3 epochs],
  "card": "Waiting for your yes on the approval card." (waiting),
  "fired_at", "late": bool, "missed": "missed at 07:00",
+ "went_off_at": "07:00",          when it last went off, by the PC's clock (21.9)
+ "list": "shopping",              a to-do item's named list; "" is the to-do list (21.9)
+ "snoozed": true,                 a snoozed copy of something that went off (21.9)
  "lock_screen": "Jarvis: a reminder is due.",   the kind's words, never the job's
  "notify": false,                 only for a kind that tells nobody (the standby schedule)
  "note": "Went on standby at 01:00.",   a kind's line about how it last went (21.8)
@@ -3357,7 +3360,11 @@ What it understands:
 | Alarms | "set an alarm for 7" (the next 7 o'clock), "alarm at 7:30am", "wake me up at 6", "set an alarm for tomorrow at 6" (an alarm on another day: the morning), "cancel my 7am alarm", "what alarms do I have" |
 | Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (a card), "remind me to stretch every 2 hours" (a card) |
 | To-do list | "add milk to my to-do list", "what's on my to-do list", "mark milk as done", "tick off milk", "remove milk from my to-do list" |
+| Named lists (21.9) | "add milk to the shopping list", "add milk, eggs and bread to the shopping list", "what's on my shopping list", "cross milk off the shopping list", "remove eggs from the shopping list", "what lists do I have", "clear the shopping list" (changes nothing: it points to the app) |
+| Snooze (21.9) | "snooze", "snooze 5 minutes", "snooze the alarm", "remind me again in 10 minutes" |
+| "Cancel that" (21.9) | "cancel that", "never mind", "undo", "delete that reminder", "no, cancel that alarm" |
 | Morning briefing | "brief me now", "brief me every weekday at 7", "stop my briefing" - section 22.5 |
+| "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
 
 "cancel all timers", "clear my to-do list" and the like are answered
 "Jarvis does not clear everything at once" and change nothing. Two timers
@@ -3416,6 +3423,10 @@ the times stay, so a timer still counts down.
 - **English only.** Other languages go to the model, whose tools can still
   set a timer when they are switched on.
 - **The phone hears of a job going off only while connected** (21.1).
+- **Snooze, "cancel that" and named lists (21.9)** were tested in the dev
+  container only. The Windows toast's Snooze button and the phone
+  notification's Snooze action have not been pressed on a real PC or phone;
+  the phone's screen code is compiled by CI only.
 - **The initiative engine and the digest are not hooked in.** The engine's
   30-minute heartbeat and in-memory findings could not host timers
   (`jarvis_schedule.py`'s header says why); the digest lives in the owner's
@@ -3424,6 +3435,103 @@ the times stay, so a timer still counts down.
   as new kinds (`register_kind`), not as schedulers of their own. Sleep mode
   now has, as the standby schedule (21.8), and so has the morning briefing
   (section 22).
+
+### 21.9 Snooze, "cancel that" and named lists (added 2026-09-25)
+
+The creativity audit's everyday quick wins (`docs/CREATIVITY-AUDIT-2026-09-25.md`
+item 6, `docs/creativity-2026-09-25/usefulness.md` idea 1). No new route, no
+new patch: `jarvis_schedule.py` and `jarvis_quick.py` only, and both apps.
+Nothing here needs a card: a snooze is a one-off, and the owner's rule is no
+card for a one-off.
+
+**Snooze.** A timer, alarm or reminder that WENT OFF (in the last day) can be
+snoozed: `POST /api/schedule/act {"id", "do": "snooze", "seconds"?}` (10
+minutes when not said; 1 minute to 24 hours). It makes a **new one-off copy**
+of the job (same kind, same words, `"snoozed": true`, `source` `"snooze"`),
+due after the snooze. A repeating job's own rule and next time are not
+touched, so only that one occurrence moves. Snoozing the same one again
+while its copy waits changes nothing (`"already": true`, "Already snoozed
+until 07:10."); when a repeat goes off again, it can be snoozed afresh. A to-do
+item, a briefing and the standby schedule cannot be snoozed (409).
+
+- **Both apps**, "Just went off" at the top of Coming up, in the same words
+  ("In the last hour. Snooze sets it to go off again in 10 minutes - a
+  repeating one keeps its usual times."): each thing that went off in the
+  last hour and is not snoozed, "Went off at 07:00", and **Snooze 10
+  minutes** - ONE job per tap, no question, held on a stale link. A snoozed
+  copy's tag reads "alarm, snoozed".
+- **The phone's notification** for a timer, alarm or reminder carries a
+  "Snooze 10 minutes" action (never Approve, never "all"). It goes to the
+  link service, which waits for the link like a notification's Deny and
+  then sends the one snooze (held on a stale link), and says how it went in
+  a toast. The locked screen's version has no action.
+- **The Windows toast** carries the same button (`winrt_toast.rs`
+  `notify_fired`, the same foreground activation as the approval toast's
+  Deny: the click relaunches Jarvis with `jarvis-snooze:<id>`, which is
+  answered without putting a window up). **Not watched on a real Windows
+  PC**, like the Deny button. If the toast cannot be built that way (an
+  uninstalled build, or any WinRT error) the plain toast is shown instead and
+  Snooze is in the Brain's Coming up.
+- **Said or typed**: "snooze" takes the most recent thing that went off in
+  the last hour; "snooze the alarm" the most recent alarm. "Snoozed the alarm
+  for 10 minutes - until 07:10."
+
+**"Cancel that".** "cancel that", "never mind", "undo", "delete that
+reminder" take back the LAST thing the fast path set **in this conversation**
+(the request's `conversation_id`, 18.1), within **two minutes**, once - and say
+what it was ("Cancelled: the 10 minute timer.", "Removed the 3 items just
+added to your shopping list.", "Cancelled: the repeating reminder (...). Its
+approval card will set nothing up."). It never takes back anything else:
+
+- only what the fast path itself made in that answer - not what the model's
+  tools set, not an item that was already on the list, not another
+  conversation's;
+- anything else said in between (another command, or a turn the model
+  answered) means "that" is no longer the thing set, so nothing is taken
+  back;
+- more than two minutes later: "That was more than 2 minutes ago, so nothing
+  was cancelled - delete it under Coming up.";
+- "delete that reminder" after an alarm: "The last thing set here was an
+  alarm, not a reminder, so nothing was cancelled.";
+- with nothing to take back, "never mind" and "cancel that" go to the model
+  as before, and "cancel that timer" / "... alarm" keep their old meaning
+  (the one running timer, the one alarm).
+
+What was set is kept in the scheduler's memory only (ids, a few words, the
+time) and forgotten on a restart. A snooze taken back frees its original, so
+it shows under "Just went off" again.
+
+**Named lists.** A to-do item may carry a list name - `"list": "shopping"`
+(`""` is the to-do list itself). A name is one to three plain words, kept in
+lower case without "list" ("Shopping list" -> `shopping`); up to 20 named
+lists, and the 300 open items are for all lists together. The same words
+twice on ONE list are one item.
+
+- Said or typed: "add milk to the shopping list" (with commas, several
+  items: "add milk, eggs and bread to the shopping list"; without a comma
+  "mac and cheese" stays one item), "what's on my shopping list" (private,
+  like the to-do list), "cross milk off the shopping list", "remove eggs from
+  the shopping list", "what lists do I have". "What's on my to-do list"
+  reads the to-do list only and names the other lists.
+- **Clearing a whole list** happens only in the apps: under each named list,
+  **Clear list** asks "Clear the shopping list? This deletes all 3 items on
+  it, and cannot be undone." (the desktop's own OK / Cancel; the phone's "Yes,
+  clear it" / "Keep it"), then sends `{"do": "clear_list", "list", "count"}`
+  with the number of items it showed. The PC clears nothing when that number
+  is no longer right ("The shopping list changed since you looked - ...").
+  The to-do list itself is never cleared at once (409), and "clear the
+  shopping list" said to Jarvis changes nothing and says where the button
+  is. This is the one bulk change in the scheduler, asked for by the owner's
+  plan; it deletes items the owner can see listed, never approves anything.
+- **Both apps**, under the to-do list: each named list under its own heading
+  with its items (Done / Delete), its own Add box ("Add to the shopping
+  list"), and Clear list; and a line "To start another list, say or type "add
+  milk to the shopping list"." While the private lists are hidden the list
+  names are hidden too (the desktop's Rust and the phone replace each with
+  "hidden-1", ... so the items still group under "(hidden) list"), and
+  neither Add nor Clear list is offered.
+- The morning briefing's to-do part counts each named list as one line
+  ("Shopping list: 2 items").
 
 ### 21.8 The standby schedule - "sleep mode" (added 2026-09-25)
 
@@ -3596,7 +3704,7 @@ failure says so without quoting the server.
 |---|---|---|---|
 | `GET /api/briefing` | - | 200 `{"available": true, "briefing": briefing \| null, "building": bool, "setups": [job], "sources": {"calendar", "email", "weather": {"state", "said"}}, "senders": {"on", "waiting", "last", "why"}, "title", "lock_screen", "empty"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_briefing.py` | Token + origin. `setups`: the briefing jobs (section 21's job shape). `sources`: what a briefing would include, worked out without reading anything - `state` is `on`, `off`, `asks` or `not_available`; `email` also has `senders` (bool) and says "Included: how many unread emails you have, and who the newest 5 are from." or "... (the number only)." `senders`: the setting below - `last` is `{"outcome", "message", "why", "at"}` of the last ON card, or null. A PC from before it sends no `senders`, and both apps then offer no switch. |
 | `POST /api/briefing/senders` | `{"enabled": bool}` | 200 `{"ok": true, "waiting": false, "senders", "message"}` (OFF, done; or ON when it is already on); **202** `{"ok": true, "waiting": true, "senders", "message"}` (ON: ONE card is up; nothing has changed); 400 not true/false; **503** `change_own_config` is not tier `ask` (no card is raised - a config line is not a person's yes); 500 the setting could not be saved | "Show who new emails are from" (on by default). OFF is immediate, never a card, and withdraws a waiting ON card (approving it later changes nothing, `last.outcome` `"withdrawn"`). ON is ONE approval card, action `change_own_config` - the one the voice settings use to show or say more - and only tier `ask` with outcome `approved` turns it on; `last.outcome` becomes `enabled`, `denied`, `timed_out`, `refused`, `withdrawn` or `failed`, with a plain `message`. Kept on this PC in `briefing.json` in the settings folder (`{"senders": bool, "changed": epoch}`); no file reads as on, a damaged one as off (and `why` says so). Both apps hold ON on a stale link and let OFF through (desktop `set_briefing_senders`, Settings only; phone `JarvisRuntime.setBriefingSenders`). |
-| `POST /api/briefing/now` | `{}` | 200 `{"ok": true, "briefing"}`; 400 not an object; 500 `{"ok": false, "error": <exception name>}` | One put together now, and kept as the latest. It only READS, asks no card and changes nothing, so **neither app holds it on a stale link** (like every read). Up to about 25 seconds with a slow calendar or mail server. |
+| `POST /api/briefing/now` | `{}` · `{"missed": true}` ("What did I miss?", 22.9) | 200 `{"ok": true, "briefing"}`; 400 not an object; 500 `{"ok": false, "error": <exception name>}` | One put together now, and kept as the latest. It only READS, asks no card and changes nothing, so **neither app holds it on a stale link** (like every read). Up to about 25 seconds with a slow calendar or mail server. |
 
 Setting one up and stopping one are section 21's routes:
 `POST /api/schedule/add {"kind": "briefing", "repeat": rule}` (202, ONE
@@ -3763,6 +3871,53 @@ offer as a remembered preference; that part was not taken.
   IMAP standard cannot change flags.
 - **Only the newest five senders**, and a name longer than 60 characters is
   cut short with "...".
+
+### 22.9 "What did I miss?" (added 2026-09-25)
+
+The creativity audit's item 7 (`docs/creativity-2026-09-25/usefulness.md`
+idea 2): **the briefing's builder, run for "since you last looked"**
+(`jarvis_briefing.build_missed`) - no second builder, no model.
+
+**"Since you last looked", defined simply**: the time of the owner's
+previous message to Jarvis, from **either app** (every `/api/chat` request
+counts, whoever's words it carries - `jarvis_quick.answer_turn` calls
+`jarvis_briefing.touch()`), or the last time "What did I miss?" was asked in
+an app. One time for the whole PC, in the backend's memory only (the time,
+never the words). The answer says it: "What you missed since 14:05 today,
+when you last talked to Jarvis." After a restart it does not know: "What you
+missed in the last 12 hours. Jarvis restarted since you last talked to it,
+so it does not know when that was." Never more than a day back (the
+scheduler keeps what went off for a day), and said so.
+
+What it lists, in this order, each a section in the briefing's own shape:
+
+| Section (`key`) | What |
+|---|---|
+| Went off (`went_off`) | Every timer, alarm, reminder, briefing and to-do due that went off since then (a repeating one: its latest time), "10:00 call the bank", "(late - the PC was off or asleep)". |
+| Approvals (`approvals`) | How many cards wait, and how many of them came up since then - "Open Jarvis to answer." Never an Approve. **Cards that expired while you were away are not listed**: the gate's record of past cards is in the owner's `jarvis_gate.py`, which this repository does not hold, so nothing reads it. |
+| Email (`email`) | Exactly as the briefing (22.1): unread count and the newest five senders, only when email is set up, through the same gate action and the same "Show who new emails are from" setting; `read` says email was read when senders are shown. |
+| Coming up (`next`) | The next three things on the list, "18:00 today: water the plants". |
+
+No calendar, and no weather line. `source` is `"missed"`, and `since` /
+`since_known` say what "since" was. It is **not kept** as the latest
+briefing.
+
+- **Said or typed** (`jarvis_quick.py`): "what did I miss", "did I miss
+  anything", "catch me up", "what's new", "what happened while I was away".
+  The answer is private (`"gate": "private"`), so a spoken question's answer
+  stays on screen under the apps' private-answer rule, like the briefing.
+- **Both apps**: "What did I miss?" next to "Brief me now" in the Morning
+  briefing part (desktop Brain -> Work, `brain_briefing_now {missed: true}`;
+  phone Mind, `JarvisRuntime.briefingMissed`) -> `POST /api/briefing/now
+  {"missed": true}` -> `{"ok": true, "briefing": <the answer>}`. A read, so not
+  held on a stale link. Shown in place of the briefing, with "Since you last
+  talked to Jarvis, on either app: ... Put together on your PC without the AI
+  model." under it, until the next read. The lines are hidden with the
+  private lists exactly as the briefing's are (the desktop's Rust, the
+  phone's `Briefing.hide`). A PC from before it ignores `missed` and sends an
+  ordinary briefing; both apps then say "Your PC's Jarvis does not have "What
+  did I miss?" yet - run apply-patches.ps1 on the PC." No notification is
+  ever made for it, so nothing of it reaches a lock screen.
 
 ### 22.8 The calendar's second source: a private calendar link (added 2026-09-25)
 

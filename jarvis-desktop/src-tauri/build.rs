@@ -254,6 +254,9 @@ fn main() {
             "brain_schedule_act",
             "brain_schedule_add_todo",
             "brain_schedule_add_standby",
+            // A NAMED list ("shopping") cleared after the page's "are you
+            // sure?", with the count it showed (2026-09-25).
+            "brain_schedule_clear_list",
             // The morning briefing (backend/briefing.patch): read the latest
             // one and "Brief me now" (a read, not held on a stale link) -
             // Brain only; and its setup - read it, set one up that repeats

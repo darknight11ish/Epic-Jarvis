@@ -617,12 +617,14 @@ class JarvisApi(
      * the answer). It only READS on the PC - no card, nothing changes - so
      * it is not held on a stale link, like every read.
      */
-    suspend fun briefingNow(): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
+    suspend fun briefingNow(missed: Boolean = false): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
         val target = url(Briefing.NOW_PATH) ?: return@withContext ApiResult.Failed(
             ApiError.Unreachable("No desktop address set"),
         )
+        // {"missed": true}: "What did I miss?" (2026-09-25) - the same route.
+        val body = if (missed) Briefing.MISSED_BODY else "{}"
         val req = Request.Builder().url(target)
-            .post("{}".toRequestBody("application/json".toMediaType())).authed().build()
+            .post(body.toRequestBody("application/json".toMediaType())).authed().build()
         runCatching {
             briefingCall.newCall(req).execute().use {
                 if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))

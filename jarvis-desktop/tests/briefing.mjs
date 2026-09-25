@@ -21,6 +21,11 @@
  *   on a stale link; ON is greyed on a stale link and otherwise asks the PC,
  *   which raises ONE approval card; the email senders are LINES of the
  *   briefing, so they are hidden with the private lists;
+ * - "What did I miss?" (2026-09-25): a read like "Brief me now" - offered on
+ *   a stale link, ONE brain_briefing_now {missed: true}; its answer is shown
+ *   with no weather line and its own note; its lines hidden with the private
+ *   lists; a PC from before it (an ordinary briefing back) is said plainly;
+ *   the phone and the PC say the same words;
  * - CONTROL: the toast says only the fixed words and only when the
  *   briefing is ready; setting up and stopping are held on a stale link in
  *   Rust, and so is turning the senders ON; the powers sit with the right
@@ -38,6 +43,10 @@ import {
   EMPTY,
   KEPT,
   LOCK_SCREEN,
+  MISSED_DETAIL,
+  MISSED_LABEL,
+  MISSED_MISSING,
+  readMissed,
   NOW_LABEL,
   OUTSIDE_LINE,
   readBriefing,
@@ -195,6 +204,70 @@ await check("Brief me now is a read: it works on a stale link too", async () => 
   assert.equal(disabled, false, "a read was greyed on a stale link");
   assert.ok(calls.includes("brain_briefing_now"), calls.join());
   assert.match(text, /made at 09:12/);
+});
+
+const MISSED = {
+  id: "b00000000m1", source: "missed", private: true, missed: "",
+  heading: "What you missed since 14:05 today, when you last talked to Jarvis.",
+  sections: [
+    { key: "went_off", title: "Went off", state: "ok", summary: "1 reminder went off.",
+      items: ["15:00 call the bank"] },
+    { key: "approvals", title: "Approvals", state: "empty", summary: "No approval cards waiting.", items: [] },
+    { key: "next", title: "Coming up", state: "ok", summary: "The next is at 18:00 today.",
+      items: ["18:00 today: water the plants"] },
+  ],
+  not_included: [],
+};
+
+await check("What did I miss?: the words are both apps' and the PC's", async () => {
+  const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Briefing.kt")
+    .replace(/"\s*\+\s*\n?\s*"/g, "");
+  for (const words of [MISSED_LABEL, MISSED_DETAIL, MISSED_MISSING]) {
+    assert.ok(kt.includes(`"${words.replace(/"/g, '\\"')}"`), `the phone does not say: ${words}`);
+  }
+  const py = readRepo("backend/jarvis_briefing.py").replace(/"\s*\n\s*"/g, "");
+  for (const words of [MISSED_LABEL, MISSED_DETAIL, MISSED_MISSING.replace(/"/g, '\\"')]) {
+    assert.ok(py.includes(words), `the PC does not say: ${words}`);
+  }
+  assert.ok(read("src/brain.html").includes(`>${MISSED_LABEL}</button>`));
+  assert.equal(readMissed({ briefing: { ...BRIEFING, source: "now" } }), null,
+    "an ordinary briefing was read as What did I miss?");
+  assert.equal(readMissed({ briefing: MISSED }).briefing.source, "missed");
+});
+
+await check("What did I miss? is a read: ONE request, on a stale link too, shown with its own note", async () => {
+  const page = await workTab({ briefing: { ...SCENARIO, missed: MISSED }, link: { stale: true } });
+  const disabled = await page.locator("#briefing-missed").isDisabled();
+  await page.locator("#briefing-missed").click();
+  await page.waitForTimeout(500);
+  const calls = await page.evaluate(() => window.__briefingCalls.filter((c) => c.cmd === "brain_briefing_now"));
+  const text = await page.locator("#briefing").innerText();
+  await page.close();
+  assert.equal(disabled, false, "a read was greyed on a stale link");
+  assert.deepEqual(calls, [{ cmd: "brain_briefing_now", missed: true }]);
+  assert.match(text, /What you missed since 14:05 today/);
+  assert.match(text, /15:00 call the bank/);
+  assert.ok(text.includes(MISSED_DETAIL));
+  assert.ok(!text.includes(OUTSIDE_LINE), "the weather line on What did I miss?");
+  assert.ok(!text.includes(KEPT), "What did I miss? said it is kept");
+});
+
+await check("What did I miss?: hidden lines stay hidden; an older PC is said plainly", async () => {
+  const page = await workTab({ briefing: { ...SCENARIO, missed: MISSED }, security: { hidden: true } });
+  await page.locator("#briefing-missed").click();
+  await page.waitForTimeout(500);
+  const text = await page.locator("#briefing-card").innerText();
+  await page.close();
+  assert.doesNotMatch(text, /bank|plants/);
+  assert.match(text, /1 reminder went off\./);
+  const old = await workTab({ briefing: SCENARIO });
+  await old.locator("#briefing-missed").click();
+  await old.waitForTimeout(500);
+  const toasts = await old.locator("body").innerText();
+  const heading = await old.locator("#briefing").innerText();
+  await old.close();
+  assert.ok(toasts.includes(MISSED_MISSING), "an older PC was not said plainly");
+  assert.match(heading, /Your briefing for Friday 25 September/);
 });
 
 await check("the lines are hidden with the private lists; the counts stay", async () => {

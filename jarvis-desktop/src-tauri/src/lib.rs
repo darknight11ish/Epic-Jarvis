@@ -483,7 +483,10 @@ const HUD_BOOTSTRAP: &str = include_str!("hud_bootstrap.js");
 #[cfg(windows)]
 fn launched_by_deny() -> bool {
     let argv: Vec<String> = std::env::args().collect();
+    // A Snooze on a timer's or reminder's toast (2026-09-25) is the same kind
+    // of launch: it answers from the toast and puts no window up.
     winrt_toast::deny_id_from_argv(&argv).is_some()
+        || winrt_toast::snooze_id_from_argv(&argv).is_some()
 }
 
 /// Always false off Windows: no toast, no Deny action, no such launch.
@@ -622,6 +625,17 @@ pub fn run() {
                 winrt_toast::decide_denied_detached(app, id);
                 return;
             }
+            // A Snooze on a toast for a timer, alarm or reminder that went
+            // off (brain/schedule.rs toast_fired): the same shape - answered
+            // from the toast, no window.
+            #[cfg(windows)]
+            if let Some(id) = winrt_toast::snooze_id_from_argv(&_argv) {
+                logfile::log(&format!(
+                    "[jarvis] Snooze reached from a notification relaunch: {id}"
+                ));
+                winrt_toast::snooze_detached(app, id);
+                return;
+            }
             logfile::log("[jarvis] second launch folded into the running instance");
             // Through the app lock, like every other way to the HUD (apps
             // security audit M3): with it on, Windows Hello is asked first.
@@ -735,6 +749,7 @@ pub fn run() {
             brain::schedule::brain_schedule_act,
             brain::schedule::brain_schedule_add_todo,
             brain::schedule::brain_schedule_add_standby,
+            brain::schedule::brain_schedule_clear_list,
             brain::briefing::brain_briefing,
             brain::briefing::brain_briefing_now,
             brain::briefing::get_briefing_setup,
@@ -1052,6 +1067,9 @@ pub fn run() {
             // that itself. See winrt_toast.rs.
             #[cfg(windows)]
             winrt_toast::decide_denied_at_startup(&handle);
+            // And a Snooze clicked while Jarvis was closed - the same wait.
+            #[cfg(windows)]
+            winrt_toast::snooze_at_startup(&handle);
 
             // One outbound GET, if the owner left it on, and nothing is
             // installed by it. Spawned and forgotten: a slow endpoint must not

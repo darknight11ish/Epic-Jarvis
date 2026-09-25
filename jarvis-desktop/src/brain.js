@@ -41,18 +41,26 @@ import {
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import {
   actionsOf,
+  addPlaceholder,
   anyTicking,
+  CLEAR_LIST_LABEL,
+  clearListQuestion,
   EMPTY_JOBS,
   EMPTY_TODO,
   labelOf,
   metaOf,
+  namedLists,
   readSchedule,
   SCHEDULE_MISSING,
+  SNOOZE_SECONDS,
   STANDBY_BAD_TIMES,
   standbyOf,
   standbyTimes,
+  tagOf,
   titleOf,
-  KIND_TAGS,
+  todoItems,
+  WENT_OFF_ACTIONS,
+  wentOffMeta,
 } from "./coming-up.js";
 import {
   BUILDING as BRIEFING_BUILDING,
@@ -62,7 +70,12 @@ import {
   NOW_BUSY as BRIEFING_NOW_BUSY,
   NOW_LABEL as BRIEFING_NOW_LABEL,
   OUTSIDE_LINE as BRIEFING_OUTSIDE,
+  MISSED_BUSY,
+  MISSED_DETAIL,
+  MISSED_LABEL,
+  MISSED_MISSING,
   readBriefing,
+  readMissed,
 } from "./briefing.js";
 import {
   addPage,
@@ -279,6 +292,10 @@ const dom = {
   todoForm: $("todo-form"),
   todoText: $("todo-text"),
   todoAdd: $("todo-add"),
+  wentOffPart: $("went-off-part"),
+  wentOff: $("went-off"),
+  namedLists: $("named-lists"),
+  listsNote: $("lists-note"),
   standbyForm: $("standby-form"),
   standbyStart: $("standby-start"),
   standbyEnd: $("standby-end"),
@@ -286,6 +303,7 @@ const dom = {
   standbyIsSet: $("standby-is-set"),
   briefing: $("briefing"),
   briefingNow: $("briefing-now"),
+  briefingMissed: $("briefing-missed"),
   contentRisk: $("content-risk"),
   ledger: $("ledger"),
   watch: $("watch"),
@@ -3484,7 +3502,10 @@ async function loadComingUp() {
 
 async function scheduleAct(job, action) {
   try {
-    const out = await invoke("brain_schedule_act", { id: job.id, action });
+    // Snooze says how long (10 minutes), so the PC and this button agree.
+    const args = action === "snooze" ? { id: job.id, action, seconds: SNOOZE_SECONDS }
+      : { id: job.id, action };
+    const out = await invoke("brain_schedule_act", args);
     if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
     else toast(String((out && out.said) || "Done."), "ok");
   } catch (error) {
@@ -3493,26 +3514,105 @@ async function scheduleAct(job, action) {
   await loadComingUp();
 }
 
-async function addTodo() {
-  const words = dom.todoText ? dom.todoText.value.trim() : "";
+/**
+ * One new item, on the to-do list or (with `list`) a named list - the
+ * list's own Add box. Held on a stale link.
+ */
+async function addTodo(input = dom.todoText, list = null, title = "To-do list") {
+  const words = input ? input.value.trim() : "";
   if (!words) return;
   if (!linkWords(currentLink()).canAct) {
     toast(STALE_TITLE, "bad");
     return;
   }
+  const where = title.charAt(0).toLowerCase() + title.slice(1);
   try {
-    const out = await invoke("brain_schedule_add_todo", { text: words });
+    const out = await invoke("brain_schedule_add_todo", list ? { text: words, list } : { text: words });
     if (out && out.ok === false) {
       toast(String(out.error || "Refused."), "bad");
     } else {
-      toast(out && out.job && out.job.already ? "That is already on your to-do list."
-        : "Added to your to-do list.", "ok");
-      dom.todoText.value = "";
+      toast(out && out.job && out.job.already ? `That is already on your ${where}.`
+        : `Added to your ${where}.`, "ok");
+      input.value = "";
     }
   } catch (error) {
     toast(errorText(error), "bad");
   }
   await loadComingUp();
+}
+
+/**
+ * "Clear list" under a NAMED list: "are you sure?" first, like Forget, then
+ * ONE request naming the list and how many items this page showed - the PC
+ * clears nothing if that number is no longer right. Held on a stale link.
+ */
+async function clearList(l) {
+  if (!window.confirm(clearListQuestion(l.title, l.items.length))) return;
+  try {
+    const out = await invoke("brain_schedule_clear_list", { list: l.name, count: l.items.length });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else toast(String((out && out.said) || "Cleared."), "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadComingUp();
+}
+
+/** Something that went off in the last hour: its words, when, and Snooze. */
+function wentOffRow(job) {
+  const item = row({
+    tag: tagOf(job),
+    state: "warn",
+    title: titleOf(job),
+    meta: wentOffMeta(job),
+    actions: WENT_OFF_ACTIONS.map((a) =>
+      button(labelOf(a), () => scheduleAct(job, a), { live: true })),
+  });
+  item.dataset.id = job.id;
+  return item;
+}
+
+/**
+ * The named lists, each under its own heading: its items (Done / Delete),
+ * an Add box, and Clear list. While the private lists are hidden the names
+ * and words are gone (Rust took them out) and nothing is offered but Show.
+ */
+function paintNamedLists(v) {
+  const box = dom.namedLists;
+  if (!box) return;
+  const out = [];
+  for (const l of namedLists(v)) {
+    const part = el("div", "named-list");
+    part.dataset.list = l.name;
+    part.append(el("h3", "subhead", l.title));
+    const list = el("div", "rows");
+    for (const j of l.items) list.append(scheduleRow(j));
+    part.append(list);
+    if (!v.hidden) {
+      const form = el("form", "todo-form");
+      form.autocomplete = "off";
+      const input = el("input", "field todo-text");
+      input.type = "text";
+      input.maxLength = 300;
+      input.placeholder = addPlaceholder(l.title);
+      input.setAttribute("aria-label", addPlaceholder(l.title));
+      const add = el("button", "btn small", "Add");
+      add.type = "submit";
+      liveButtons.add(add);
+      syncLiveButton(add);
+      form.append(input, add);
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        addTodo(input, l.name, l.title);
+      });
+      part.append(form);
+      const actions = el("div", "row");
+      actions.append(button(CLEAR_LIST_LABEL, () => clearList(l), { live: true, danger: true }));
+      part.append(actions);
+    }
+    out.push(part);
+  }
+  box.replaceChildren(...out);
 }
 
 /**
@@ -3544,7 +3644,7 @@ async function addStandby() {
 function scheduleRow(job) {
   const since = Date.now() - upL.readAt;
   const item = row({
-    tag: job.repeats ? `${KIND_TAGS[job.kind] || job.kind}, repeats` : KIND_TAGS[job.kind] || job.kind,
+    tag: tagOf(job),
     state: job.state === "waiting" ? "warn" : job.state === "paused" ? "" : "ok",
     title: titleOf(job),
     meta: metaOf(job, since),
@@ -3596,6 +3696,9 @@ function paintComingUp() {
   if (!v.available) {
     box.replaceChildren(el("p", "empty", v.why || SCHEDULE_MISSING));
     if (dom.todoList) dom.todoList.replaceChildren();
+    if (dom.namedLists) dom.namedLists.replaceChildren();
+    if (dom.wentOffPart) dom.wentOffPart.hidden = true;
+    if (dom.listsNote) dom.listsNote.hidden = true;
     if (dom.todoForm) dom.todoForm.hidden = true;
     if (dom.standbyForm) dom.standbyForm.hidden = true;
     if (dom.standbyIsSet) dom.standbyIsSet.hidden = true;
@@ -3609,7 +3712,13 @@ function paintComingUp() {
   if (dom.standbyIsSet) dom.standbyIsSet.hidden = !hasStandby;
   rows(box, v.jobs, scheduleRow, EMPTY_JOBS);
   if (upL.error) box.prepend(el("p", "empty failed", `Could not read it again: ${upL.error}`));
-  if (dom.todoList) rows(dom.todoList, v.todo, scheduleRow, EMPTY_TODO);
+  // Just went off (the last hour): Snooze, ONE job per tap.
+  if (dom.wentOffPart) dom.wentOffPart.hidden = !v.wentOff.length;
+  if (dom.wentOff) rows(dom.wentOff, v.wentOff, wentOffRow, "");
+  if (dom.todoList) rows(dom.todoList, todoItems(v), scheduleRow, EMPTY_TODO);
+  paintNamedLists(v);
+  // Its example says "milk": nothing of that shape shows while hidden.
+  if (dom.listsNote) dom.listsNote.hidden = v.hidden;
   if (v.hidden) {
     box.append(hiddenNode(0, "words"));
   }
@@ -3670,7 +3779,7 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
    toast is Rust's (toast_ready), with the fixed words only.
    ========================================================================== */
 
-const brief = { view: null, error: "", loading: false, at: 0, asking: false };
+const brief = { view: null, error: "", loading: false, at: 0, asking: false, missedAsking: false };
 const BRIEFING_READ_MS = 15000;
 
 async function loadBriefing() {
@@ -3686,6 +3795,34 @@ async function loadBriefing() {
     brief.at = Date.now();
   }
   if (state.view === "work") paintBriefing();
+}
+
+/**
+ * "What did I miss?": the briefing's builder since the owner last talked to
+ * Jarvis. A read, like "Brief me now" - not held on a stale link. Shown in
+ * place of the briefing until the next read; the PC keeps nothing of it.
+ */
+async function briefMissed() {
+  if (brief.asking) return;
+  brief.asking = true;
+  brief.missedAsking = true;
+  paintBriefing();
+  try {
+    const v = readMissed(await invoke("brain_briefing_now", { missed: true }));
+    if (v) {
+      brief.view = { ...(brief.view || v), ...v, setups: (brief.view && brief.view.setups) || v.setups };
+      brief.error = "";
+    } else {
+      toast(MISSED_MISSING, "bad");
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  } finally {
+    brief.asking = false;
+    brief.missedAsking = false;
+    brief.at = Date.now();
+  }
+  paintBriefing();
 }
 
 async function briefNow() {
@@ -3709,7 +3846,12 @@ function paintBriefing() {
   if (!box) return;
   if (dom.briefingNow) {
     dom.briefingNow.disabled = brief.asking;
-    dom.briefingNow.textContent = brief.asking ? BRIEFING_NOW_BUSY : BRIEFING_NOW_LABEL;
+    dom.briefingNow.textContent = brief.asking && !brief.missedAsking ? BRIEFING_NOW_BUSY
+      : BRIEFING_NOW_LABEL;
+  }
+  if (dom.briefingMissed) {
+    dom.briefingMissed.disabled = brief.asking;
+    dom.briefingMissed.textContent = brief.missedAsking ? MISSED_BUSY : MISSED_LABEL;
   }
   const v = brief.view;
   if (!v) {
@@ -3724,12 +3866,14 @@ function paintBriefing() {
   if (!v.available) {
     box.replaceChildren(el("p", "empty", v.why));
     if (dom.briefingNow) dom.briefingNow.hidden = true;
+    if (dom.briefingMissed) dom.briefingMissed.hidden = true;
     return;
   }
   if (dom.briefingNow) dom.briefingNow.hidden = false;
+  if (dom.briefingMissed) dom.briefingMissed.hidden = false;
   const b = v.briefing;
   const out = [];
-  if (v.building || brief.asking) out.push(el("p", "empty", BRIEFING_BUILDING));
+  if (v.building || (brief.asking && !brief.missedAsking)) out.push(el("p", "empty", BRIEFING_BUILDING));
   if (!b) {
     if (!v.building && !brief.asking) out.push(el("p", "empty", BRIEFING_EMPTY));
     box.replaceChildren(...out);
@@ -3748,10 +3892,12 @@ function paintBriefing() {
     }));
   }
   out.push(list);
-  out.push(el("p", "note", BRIEFING_OUTSIDE));
+  const missed = b.source === "missed";
+  // "What did I miss?" fetches nothing from the internet and is not kept.
+  if (!missed) out.push(el("p", "note", BRIEFING_OUTSIDE));
   for (const n of b.notIncluded) out.push(el("p", "note", n));
   if (b.hidden) out.push(hiddenNode(0, "lines"));
-  out.push(el("p", "note", BRIEFING_KEPT));
+  out.push(el("p", "note", missed ? MISSED_DETAIL : BRIEFING_KEPT));
   box.replaceChildren(...out);
 }
 
@@ -3761,6 +3907,7 @@ function renderBriefing() {
 }
 
 if (dom.briefingNow) dom.briefingNow.addEventListener("click", briefNow);
+if (dom.briefingMissed) dom.briefingMissed.addEventListener("click", briefMissed);
 
 // Hiding turned on or off, or a Show ran out: read it again - Rust decides
 // whether the lines come back.

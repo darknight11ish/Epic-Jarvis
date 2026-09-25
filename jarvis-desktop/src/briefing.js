@@ -41,6 +41,19 @@ export const BRIEFING_MISSING =
   "Your PC's Jarvis does not have the morning briefing yet - run apply-patches.ps1 on the PC.";
 export const KEPT = "Kept on your PC until Jarvis restarts. Nothing of it is written to disk.";
 
+/**
+ * "What did I miss?" (jarvis_briefing.build_missed, 2026-09-25): the same
+ * builder, since the owner last talked to Jarvis on either app. A read, so
+ * not held on a stale link, like "Brief me now". Not kept on the PC.
+ */
+export const MISSED_LABEL = "What did I miss?";
+export const MISSED_BUSY = "Looking…";
+export const MISSED_DETAIL =
+  "Since you last talked to Jarvis, on either app: what went off, approval cards waiting, " +
+  "unread email and what is next. Put together on your PC without the AI model.";
+export const MISSED_MISSING =
+  "Your PC's Jarvis does not have \"What did I miss?\" yet - run apply-patches.ps1 on the PC.";
+
 /** All a notification ever says (jarvis_briefing.LOCK_SCREEN). */
 export const LOCK_SCREEN = "Jarvis: your morning briefing is ready.";
 export const TOAST_TITLE = "Morning briefing";
@@ -119,6 +132,7 @@ export function readBriefing(answer) {
     hidden: available && (a.hidden === true || Boolean(b && b.hidden === true)),
     briefing: available && b ? {
       id: text(b.id),
+      source: text(b.source),
       heading: text(b.heading),
       made: num(b.made),
       missed: text(b.missed),
@@ -167,6 +181,17 @@ export function sendersView(senders, live) {
   if (senders.why) lines.push(senders.why.charAt(0).toUpperCase() + senders.why.slice(1) + ".");
   const checked = senders.on || senders.waiting;
   return { show: true, checked, canChange: checked || Boolean(live), lines };
+}
+
+/**
+ * `brain_briefing_now {missed: true}`'s answer: the view to show, or null
+ * when the PC answered with an ordinary briefing - a PC from before "What
+ * did I miss?" ignores the question (then MISSED_MISSING is said instead).
+ */
+export function readMissed(answer) {
+  const v = readBriefing(answer);
+  if (!v.available || !v.briefing || v.briefing.source !== "missed") return null;
+  return v;
 }
 
 /** "(Due at 07:00 - the PC was off or asleep, so it is late.)" */

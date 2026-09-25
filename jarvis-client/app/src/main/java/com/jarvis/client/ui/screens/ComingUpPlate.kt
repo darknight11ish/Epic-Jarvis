@@ -57,6 +57,14 @@ import kotlinx.coroutines.launch
  * reminder's and a to-do item's are the owner's own - but not the times, so
  * a timer still counts down; Show brings the words back.
  *
+ * Since 2026-09-25: "Just went off" at the top - a timer, alarm or reminder
+ * that went off in the last hour, with Snooze ([Schedule.SNOOZE], ONE job,
+ * no card, held on a stale link); and under the to-do list the NAMED lists
+ * ("shopping"), each with its items, an Add box, and "Clear list", which
+ * asks "are you sure?" right there first ([Schedule.clearListQuestion]) and
+ * sends how many items it showed ([JarvisRuntime.clearList], held on a stale
+ * link). The to-do list itself has no Clear. The desktop does the same.
+ *
  * Under the to-do list, the standby schedule ([Schedule.STANDBY_TITLE]):
  * Standby - the same one as the buttons under Doing - every day from one
  * time to another. Two times and Set up, which asks the PC; the PC raises
@@ -87,6 +95,11 @@ internal fun ComingUpSection(
     var standbyStart by remember { mutableStateOf(Schedule.STANDBY_DEFAULT_START) }
     var standbyEnd by remember { mutableStateOf(Schedule.STANDBY_DEFAULT_END) }
     var settingUp by remember { mutableStateOf(false) }
+    // A named list's Add box, by the list's name, and the list whose
+    // "Clear list" is waiting for "are you sure?".
+    var listText by remember { mutableStateOf(mapOf<String, String>()) }
+    var confirmClear by remember { mutableStateOf<Schedule.ListPart?>(null) }
+    var clearing by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(reads, tick) {
@@ -161,6 +174,17 @@ internal fun ComingUpSection(
                                 enabled = !showPrivateBusy, onClick = onShowPrivate)
                         }
                     }
+                    // Just went off (the last hour): Snooze, ONE job per tap.
+                    if (shown.wentOff.isNotEmpty()) {
+                        Text(Schedule.WENT_OFF_TITLE, style = MaterialTheme.typography.labelMedium,
+                            color = chrome.textMid)
+                        Text(Schedule.WENT_OFF_DETAIL, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo)
+                        shown.wentOff.forEach {
+                            WentOffRow(it, canAct && busyId == null) { a -> act(it, a) }
+                        }
+                        Gap(14)
+                    }
                     if (shown.jobs.isEmpty()) {
                         Gap(4)
                         Text(Schedule.EMPTY_JOBS, style = MaterialTheme.typography.bodySmall,
@@ -170,12 +194,13 @@ internal fun ComingUpSection(
                     Gap(14)
                     Text(Schedule.TODO_TITLE, style = MaterialTheme.typography.labelMedium,
                         color = chrome.textMid)
-                    if (shown.todo.isEmpty()) {
+                    val todoItems = Schedule.todoItems(shown)
+                    if (todoItems.isEmpty()) {
                         Gap(4)
                         Text(Schedule.EMPTY_TODO, style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid)
                     }
-                    shown.todo.forEach { ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) } }
+                    todoItems.forEach { ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) } }
                     Gap(8)
                     val add: () -> Unit = {
                         if (todoText.isNotBlank() && canAct && !adding) {
@@ -204,6 +229,86 @@ internal fun ComingUpSection(
                         enabled = canAct && !adding && todoText.isNotBlank(),
                         onClick = { add() },
                     )
+                    // The named lists ("shopping"), each with its items, an Add
+                    // box and Clear list. While the lists are hidden only the
+                    // rows show (no names, no words), and nothing is offered.
+                    Schedule.namedLists(shown).forEach { part ->
+                        Gap(14)
+                        Text(part.title, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+                        part.items.forEach {
+                            ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) }
+                        }
+                        if (!shown.hidden) {
+                            Gap(6)
+                            val words = listText[part.name] ?: ""
+                            val addHere: () -> Unit = {
+                                if (words.isNotBlank() && canAct && !adding) {
+                                    adding = true
+                                    said = null
+                                    scope.launch {
+                                        try {
+                                            val (changed, sentence) = JarvisRuntime.addTodo(words, part.name)
+                                            if (changed) listText = listText - part.name
+                                            said = sentence
+                                        } finally {
+                                            adding = false
+                                        }
+                                    }
+                                }
+                            }
+                            TextInput(
+                                value = words,
+                                onValueChange = { listText = listText + (part.name to it.take(Schedule.MAX_TEXT)) },
+                                placeholder = Schedule.addPlaceholder(part.title),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { addHere() }),
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Quiet(
+                                    if (adding) "Adding…" else Schedule.ADD,
+                                    enabled = canAct && !adding && words.isNotBlank(),
+                                    onClick = { addHere() },
+                                )
+                                Quiet(
+                                    Schedule.CLEAR_LIST,
+                                    color = chrome.badInk,
+                                    enabled = canAct && !clearing,
+                                    onClick = { confirmClear = part },
+                                )
+                            }
+                            // "Are you sure?" first, like Forget - right here.
+                            if (confirmClear?.name == part.name) {
+                                Text(
+                                    Schedule.clearListQuestion(part.title, part.items.size),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = chrome.warnInk,
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Quiet(Schedule.CLEAR_YES, color = chrome.badInk,
+                                        enabled = canAct && !clearing, onClick = {
+                                            confirmClear = null
+                                            clearing = true
+                                            said = null
+                                            scope.launch {
+                                                try {
+                                                    val (_, sentence) =
+                                                        JarvisRuntime.clearList(part.name, part.items.size)
+                                                    said = sentence
+                                                } finally {
+                                                    clearing = false
+                                                }
+                                            }
+                                        })
+                                    Quiet(Schedule.CLEAR_NO, onClick = { confirmClear = null })
+                                }
+                            }
+                        }
+                    }
+                    if (!shown.hidden) {
+                        Gap(6)
+                        Text(Schedule.LISTS_NOTE, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo)
+                    }
                     Gap(14)
                     Text(Schedule.STANDBY_TITLE, style = MaterialTheme.typography.labelMedium,
                         color = chrome.textMid)
@@ -272,6 +377,25 @@ internal fun ComingUpSection(
     }
 }
 
+/** Something that went off in the last hour: its words, when, and Snooze - ONE job per tap. */
+@Composable
+private fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> Unit) {
+    val chrome = LocalChrome.current
+    Gap(10)
+    Column(Modifier.fillMaxWidth()) {
+        Text(Schedule.tagOf(job), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Text(Schedule.titleOf(job), style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        Schedule.wentOffMeta(job).forEach {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Schedule.WENT_OFF_ACTIONS.forEach { action ->
+                Quiet(Schedule.labelOf(action), enabled = enabled, onClick = { onAct(action) })
+            }
+        }
+    }
+}
+
 /** One job: its kind, its title, its lines, and its own buttons - ONE job per tap. */
 @Composable
 private fun ScheduleRow(job: Schedule.Job, sinceMs: Long, enabled: Boolean, onAct: (String) -> Unit) {
@@ -279,7 +403,7 @@ private fun ScheduleRow(job: Schedule.Job, sinceMs: Long, enabled: Boolean, onAc
     Gap(10)
     Column(Modifier.fillMaxWidth()) {
         Text(
-            Schedule.tag(job.kind) + if (job.repeats) ", repeats" else "",
+            Schedule.tagOf(job),
             style = MaterialTheme.typography.labelSmall,
             color = chrome.textLo,
         )

@@ -173,6 +173,71 @@ class ScheduleTest {
         )
     }
 
+    // Snooze and named lists (2026-09-25): the desktop's coming-up.js says the
+    // same, and its tests/coming-up.mjs checks these words are in Schedule.kt.
+
+    private val quickWins = obj(
+        """{"jobs":[{"id":"s00000000c2","kind":"alarm","text":"","state":"active","snoozed":true,
+              "when":"07:10 today"}],
+            "todo":[{"id":"s00000000d1","kind":"todo","text":"milk","state":"active","list":"shopping"},
+                    {"id":"s00000000d2","kind":"todo","text":"eggs","state":"active","list":"shopping"},
+                    {"id":"s00000000d3","kind":"todo","text":"post the letter","state":"active","list":""}],
+            "went_off":[{"id":"s00000000c1","kind":"alarm","text":"","state":"fired","went_off_at":"07:00",
+                         "missed":"missed at 07:00","fired_at":1.0}],
+            "lists":[{"name":"shopping","title":"Shopping list","open":2},{"name":"empty","open":0}]}""",
+    )
+
+    @Test
+    fun whatWentOffAndTheNamedListsAreRead() {
+        val v = Schedule.parse(quickWins)!!
+        assertEquals(listOf("s00000000c1"), v.wentOff.map { it.id })
+        assertEquals(listOf("Went off at 07:00 (late - the PC was off or asleep)"), Schedule.wentOffMeta(v.wentOff[0]))
+        assertEquals("alarm, snoozed", Schedule.tagOf(v.jobs[0]))
+        assertEquals(listOf("post the letter"), Schedule.todoItems(v).map { it.text })
+        val lists = Schedule.namedLists(v)
+        assertEquals(1, lists.size)
+        assertEquals("Shopping list", lists[0].title)
+        assertEquals(listOf("milk", "eggs"), lists[0].items.map { it.text })
+        val old = Schedule.parse(list)!!
+        assertTrue(old.wentOff.isEmpty() && old.lists.isEmpty())
+    }
+
+    @Test
+    fun snoozeIsOneJobTenMinutesAndClearingNamesOneListAndItsCount() {
+        assertEquals("""{"id":"s0000000001","do":"snooze","seconds":600}""", Schedule.actBody("s0000000001", "snooze"))
+        assertNull(Schedule.actBody("all", "snooze"))
+        assertEquals(listOf("snooze"), Schedule.WENT_OFF_ACTIONS)
+        assertEquals("Snooze 10 minutes", Schedule.labelOf("snooze"))
+        assertEquals("""{"do":"clear_list","list":"shopping","count":3}""", Schedule.clearListBody("shopping", 3))
+        for (bad in listOf("", "*", "Shopping", "a b c d", "shop,ping")) {
+            assertNull(bad, Schedule.clearListBody(bad, 1))
+        }
+        assertNull(Schedule.clearListBody("shopping", 0))
+        assertEquals("""{"kind":"todo","text":"milk","list":"shopping"}""", Schedule.todoBody("milk", "shopping"))
+        assertNull(Schedule.todoBody("milk", "Shopping"))
+        assertEquals(
+            "Clear the shopping list? This deletes all 3 items on it, and cannot be undone.",
+            Schedule.clearListQuestion("Shopping list", 3),
+        )
+        assertEquals(
+            "Clear the packing list? This deletes all 1 item on it, and cannot be undone.",
+            Schedule.clearListQuestion("Packing list", 1),
+        )
+        assertEquals("Add to the shopping list", Schedule.addPlaceholder("Shopping list"))
+        assertEquals("Add to the to-do list", Schedule.addPlaceholder("To-do list"))
+    }
+
+    @Test
+    fun hiddenListsHideTheListNamesButKeepTheGrouping() {
+        val v = Schedule.hide(Schedule.parse(quickWins)!!)
+        val lists = Schedule.namedLists(v)
+        assertEquals(Schedule.HIDDEN_LIST_TITLE, lists.single().title)
+        assertEquals(2, lists.single().items.size)
+        assertTrue(v.todo.none { it.list == "shopping" })
+        assertTrue(v.lists.none { it.name == "shopping" || it.title.isNotEmpty() })
+        assertTrue(v.wentOff.all { it.text.isEmpty() })
+    }
+
     @Test
     fun aKindThatNotifiesNobodyShowsNoNotification() {
         assertNull(

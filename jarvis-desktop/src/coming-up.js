@@ -15,6 +15,15 @@
  * The phone says the same words (net/Schedule.kt); backend/test_schedule.py
  * and tests/coming-up.mjs check that they match.
  *
+ * Since 2026-09-25 (the creativity audit's everyday quick wins):
+ *  - "Just went off": a timer, alarm or reminder that went off in the last
+ *    hour, with Snooze (brain_schedule_act "snooze" - a one-off copy ten
+ *    minutes later; a repeating one keeps its usual times; no card);
+ *  - named lists ("shopping"), each under its own heading with its items,
+ *    an Add box, and "Clear list" - which asks "are you sure?" first, like
+ *    Forget, and sends how many items it showed (brain_schedule_clear_list),
+ *    so nothing added since is lost. The to-do list itself has no Clear.
+ *
  * @module coming-up
  */
 
@@ -44,6 +53,22 @@ export const ADD_PLACEHOLDER = "Add to the to-do list";
 
 /** A repeating job whose card has not been answered. */
 export const WAITING = "Waiting for your yes on the approval card.";
+
+/** "Just went off" and Snooze (jarvis_schedule.Scheduler.snooze). */
+export const WENT_OFF_TITLE = "Just went off";
+export const WENT_OFF_DETAIL =
+  "In the last hour. Snooze sets it to go off again in 10 minutes - a repeating one keeps its " +
+  "usual times.";
+export const SNOOZE_LABEL = "Snooze 10 minutes";
+/** How long Snooze sets (jarvis_schedule.SNOOZE_DEFAULT). */
+export const SNOOZE_SECONDS = 600;
+
+/** Named lists ("add milk to the shopping list"). */
+export const LISTS_NOTE =
+  "To start another list, say or type \"add milk to the shopping list\".";
+export const CLEAR_LIST_LABEL = "Clear list";
+/** A named list's title, while the private lists hide its name. */
+export const HIDDEN_LIST_TITLE = "(hidden) list";
 
 /** A word that stands in for words the private lists hide. */
 export const HIDDEN_TEXT = "(hidden)";
@@ -101,6 +126,9 @@ export const KIND_TAGS = Object.freeze({
   briefing: "briefing",
 });
 
+/** A snoozed copy's tag ends with this ("alarm, snoozed"). */
+export const SNOOZED_TAG = "snoozed";
+
 /** A morning briefing job's title (it has no words of its own; briefing.js). */
 export const BRIEFING_JOB_TITLE = "Morning briefing";
 
@@ -155,13 +183,22 @@ export function readSchedule(answer) {
     missed: text(j.missed),
     note: text(j.note),
     hidden: j.hidden === true,
+    list: text(j.list),
+    snoozed: j.snoozed === true,
+    wentOffAt: text(j.went_off_at),
   });
+  const lists = Array.isArray(a.lists) ? a.lists.filter((l) => l && typeof l === "object"
+    && typeof l.name === "string" && l.name && Number.isInteger(l.open) && l.open > 0)
+    .map((l) => ({ name: l.name, title: text(l.title) || l.name, open: l.open })) : [];
   return {
     available,
     why: available ? "" : text(a.why) || SCHEDULE_MISSING,
     hidden: available && a.hidden === true,
     jobs: available ? a.jobs.filter(ok).map(row) : [],
     todo: available ? a.todo.filter(ok).map(row) : [],
+    // An older PC sends neither: nothing went off, and no named lists.
+    wentOff: available && Array.isArray(a.went_off) ? a.went_off.filter(ok).map(row) : [],
+    lists: available ? lists : [],
   };
 }
 
@@ -170,6 +207,55 @@ export function leftNow(job, sinceMs) {
   if (job.left === null) return null;
   if (job.state !== "active") return job.left;
   return Math.max(0, job.left - Math.max(0, sinceMs) / 1000);
+}
+
+/** The to-do list's own items: those on no named list. */
+export function todoItems(view) {
+  return view ? view.todo.filter((j) => !j.list) : [];
+}
+
+/**
+ * The named lists with their items, in the PC's order: [{name, title, open,
+ * items}]. A list with no items left is not shown (it is gone on the PC too).
+ */
+export function namedLists(view) {
+  if (!view) return [];
+  return view.lists.map((l) => ({
+    ...l,
+    title: view.hidden ? HIDDEN_LIST_TITLE : l.title,
+    items: view.todo.filter((j) => j.list === l.name),
+  })).filter((l) => l.items.length);
+}
+
+/** "Add to the shopping list" - the Add box's words under each list. */
+export function addPlaceholder(title) {
+  const t = String(title || "To-do list");
+  return `Add to the ${t.charAt(0).toLowerCase()}${t.slice(1)}`;
+}
+
+/** The "are you sure?" before Clear list - both apps' words. */
+export function clearListQuestion(title, count) {
+  const t = String(title || "");
+  const n = Number(count) || 0;
+  return `Clear the ${t.charAt(0).toLowerCase()}${t.slice(1)}? This deletes all ${n} ` +
+    `item${n === 1 ? "" : "s"} on it, and cannot be undone.`;
+}
+
+/** The line under something that went off: "Went off at 07:00". */
+export function wentOffMeta(job) {
+  const out = [];
+  if (job.wentOffAt) {
+    out.push(`Went off at ${job.wentOffAt}` + (job.missed ? " (late - the PC was off or asleep)" : ""));
+  }
+  if (job.repeats && job.repeat) out.push(job.repeat);
+  return out;
+}
+
+/** A row's tag: "alarm", "reminder, repeats", "alarm, snoozed". */
+export function tagOf(job) {
+  const base = KIND_TAGS[job.kind] || job.kind;
+  if (job.snoozed) return `${base}, ${SNOOZED_TAG}`;
+  return job.repeats ? `${base}, repeats` : base;
 }
 
 /** A row's title: the owner's words, or what kind of thing it is. */
@@ -227,6 +313,9 @@ export function standbyTimes(start, end) {
   return { at, until };
 }
 
+/** Under "Just went off", one button: Snooze - ONE job per tap. */
+export const WENT_OFF_ACTIONS = Object.freeze(["snooze"]);
+
 /** The buttons one row offers, as action names, in order. Never "all". */
 export function actionsOf(job) {
   if (job.kind === "todo") return ["done", "delete"];
@@ -241,6 +330,7 @@ export function labelOf(action) {
     resume: RESUME_LABEL,
     delete: DELETE_LABEL,
     done: DONE_LABEL,
+    snooze: SNOOZE_LABEL,
   }[action] || action;
 }
 

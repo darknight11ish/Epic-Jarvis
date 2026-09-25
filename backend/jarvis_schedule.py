@@ -90,8 +90,25 @@ three windows, and deleted like any job. KIND_MODULES below imports it
 before the loop first starts.
 
 NO BULK
-Every change names ONE job. There is no "delete all", no "clear the list",
-no "mark everything done" - here, in the routes, or in either app.
+Every change names ONE job. There is no "delete all", no "mark everything
+done" - here, in the routes, or in either app. The one exception, asked for
+by the owner's plan of 2026-09-25 (docs/CREATIVITY-AUDIT-2026-09-25.md, item
+6): a NAMED list ("shopping") can be cleared in one go from the apps, after
+an "are you sure?" there, and only when the app names how many items it saw
+(clear_list below) - so nothing added since the owner looked is lost. The
+to-do list itself is never cleared at once, and nothing is cleared by voice.
+
+SNOOZE, "CANCEL THAT" AND NAMED LISTS (2026-09-25, the creativity audit's
+everyday quick wins)
+  * Snooze: a timer, alarm or reminder that went off can be snoozed. It
+    makes a NEW one-off copy of the job, due after the snooze (10 minutes
+    unless said otherwise); a repeating job's own times are not touched, so
+    only that one occurrence moves. No card - a one-off needs none.
+  * "Cancel that": the fast path (jarvis_quick.py) notes what it just set,
+    per conversation, in memory (note_set / take_set). Only that, only for
+    UNDO_WINDOW seconds, and only once.
+  * Named lists: a to-do item may carry a list name ("shopping"); none is
+    the to-do list. One limit (MAX_TODO) for every list together.
 """
 from __future__ import annotations
 
@@ -139,6 +156,28 @@ MAX_AHEAD = 366 * 24 * 3600.0
 #: nag, not a reminder.
 MIN_EVERY_HOURS = 1
 MAX_EVERY_HOURS = 24 * 7
+
+#: Snooze: how long, unless the owner says (10 minutes), and the shortest
+#: and longest. A snooze is a one-off, so it needs no card.
+SNOOZE_DEFAULT = 600.0
+SNOOZE_MIN = 60.0
+SNOOZE_MAX = MAX_TIMER
+#: The kinds that can be snoozed once they went off.
+SNOOZABLE = ("timer", "alarm", "reminder")
+#: Something that went off is shown under "Just went off" in both apps, and
+#: is what a spoken "snooze" means, for this long.
+WENT_OFF_SHOWN = 3600.0
+
+#: "Cancel that": how long after the fast path set something it may be
+#: taken back by saying so, and how long the note is kept to say "that was
+#: too long ago" instead of handing the sentence to the model.
+UNDO_WINDOW = 120.0
+UNDO_REMEMBER = 30 * 60.0
+
+#: Named lists ("shopping", "packing"). None is the to-do list itself.
+MAX_LISTS = 20
+MAX_LIST_NAME = 30
+DEFAULT_LIST_TITLE = "To-do list"
 
 #: The approval action for anything that repeats.
 ACTION = "schedule_repeat"
@@ -294,6 +333,13 @@ CREATE TABLE IF NOT EXISTS commands (
     at     REAL NOT NULL
 );
 """
+
+#: Columns added after the first release (2026-09-25): a file made before
+#: them gets them on open, empty. `list_name`: a to-do item's named list
+#: (NULL: the to-do list). `snooze_of`: a snoozed copy's original job.
+#: `snoozed_to`: the copy made from a job that went off (cleared when a
+#: repeating job goes off again).
+_ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "TEXT"))
 
 #: States. `active` and `paused` are on the list; `waiting` is a repeating
 #: job whose card has not been answered; `fired` is a one-off that went off
@@ -598,6 +644,47 @@ def _digest(text: str) -> str:
 
 
 # --------------------------------------------------------------------------
+#   Named lists
+# --------------------------------------------------------------------------
+
+_LIST_WORD = re.compile(r"[a-z][a-z'-]*")
+_NOT_A_LIST = frozenset("my the a an our to for of and or on in it this that these those all "
+                        "every any list lists todo todos timer timers alarm alarms reminder "
+                        "reminders".split())
+_THE_TODO_LIST = ("", "todo", "to-do", "to do", "todos", "to-dos", "to dos")
+
+
+def list_key(name) -> Optional[str]:
+    """A list's name as it is kept: lower case, with "list" taken off
+    ("Shopping list" -> "shopping"). None for the to-do list itself (no
+    name, "to-do", "todo"). ValueError, with a sentence, for a name that
+    cannot be one: one to three plain words."""
+    if name is None:
+        return None
+    t = " ".join(str(name).lower().replace("\u2019", "'").split())
+    t = re.sub(r"\s*\blist$", "", t).strip()
+    if t in _THE_TODO_LIST:
+        return None
+    words = t.split()
+    if (len(t) > MAX_LIST_NAME or not 1 <= len(words) <= 3
+            or not all(_LIST_WORD.fullmatch(w) for w in words)
+            or any(w in _NOT_A_LIST for w in words)):
+        raise ValueError("a list's name is one to three plain words, like \"shopping\"")
+    return t
+
+
+def list_title(key: Optional[str]) -> str:
+    """"Shopping list", or "To-do list" for the to-do list - both apps' words."""
+    if not key:
+        return DEFAULT_LIST_TITLE
+    return key[0].upper() + key[1:] + " list"
+
+
+def _lower_first(s: str) -> str:
+    return s[:1].lower() + s[1:]
+
+
+# --------------------------------------------------------------------------
 #   The gate (repeating jobs only)
 # --------------------------------------------------------------------------
 
@@ -671,8 +758,15 @@ class Scheduler:
         self.last_card: dict = {}      # job id -> outcome, for the list
         self.errors = 0
         self.fired = 0
+        # "Cancel that" (jarvis_quick.py): conversation id -> what the fast
+        # path last set there. In memory only - a restart forgets it.
+        self._recent: dict = {}
         with self._db() as c:
             c.executescript(_SCHEMA)
+            have = {r[1] for r in c.execute("PRAGMA table_info(jobs)").fetchall()}
+            for name, typ in _ADDED_COLUMNS:
+                if name not in have:
+                    c.execute(f"ALTER TABLE jobs ADD COLUMN {name} {typ}")
 
     # ---- storage ------------------------------------------------------------
 
@@ -694,14 +788,16 @@ class Scheduler:
         return int(c.execute(q).fetchone()[0])
 
     def _insert(self, kind: str, *, text: str, state: str, due, rule, duration,
-                source: str) -> str:
+                source: str, list_name: Optional[str] = None,
+                snooze_of: Optional[str] = None) -> str:
         jid = "s" + uuid.uuid4().hex[:10]
         now = self.now()
         with self._lock, self._db() as c:
             c.execute("INSERT INTO jobs (id, kind, text, state, due, rule, duration, created, "
-                      "changed, source) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      "changed, source, list_name, snooze_of) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                       (jid, kind, text, state, due,
-                       json.dumps(rule) if rule else None, duration, now, now, source))
+                       json.dumps(rule) if rule else None, duration, now, now, source,
+                       list_name, snooze_of))
         _audit("schedule.add", {"id": jid, "kind": kind, "repeats": bool(rule)})
         self._changed(jid, kind)
         return jid
@@ -768,16 +864,26 @@ class Scheduler:
                            duration=None, source=source)
         return self.job(jid)
 
-    def add_todo(self, text: str, source: str = "app") -> dict:
+    def add_todo(self, text: str, source: str = "app", list_name=None) -> dict:
+        """One to-do item - on the to-do list, or on a named list ("shopping").
+        The same words twice on one list are one item."""
+        key = list_key(list_name)
         text = self._clean_text(text, "todo")
         with self._lock, self._db() as c:
             self._room(c, "todo")
             dup = c.execute("SELECT id FROM jobs WHERE kind = 'todo' AND state = 'active' "
-                            "AND lower(text) = lower(?)", (text,)).fetchone()
+                            "AND lower(text) = lower(?) AND ifnull(list_name, '') = ?",
+                            (text, key or "")).fetchone()
+            if dup is None and key is not None:
+                names = {r[0] for r in c.execute(
+                    "SELECT DISTINCT list_name FROM jobs WHERE kind = 'todo' AND state IN "
+                    "('active','paused') AND list_name IS NOT NULL").fetchall()}
+                if key not in names and len(names) >= MAX_LISTS:
+                    raise OverflowError(f"there are already {MAX_LISTS} lists - finish one first")
         if dup is not None:
             return dict(self.job(dup["id"]), already=True)
         jid = self._insert("todo", text=text, state="active", due=None, rule=None,
-                           duration=None, source=source)
+                           duration=None, source=source, list_name=key)
         return self.job(jid)
 
     def add_repeat(self, kind: str, rule, text: str = "", source: str = "app") -> dict:
@@ -919,8 +1025,10 @@ class Scheduler:
     # ---- changing one job ---------------------------------------------------------
 
     def act(self, jid: str, do: str, seconds: Optional[float] = None) -> tuple:
-        """ONE job: pause, resume, delete, done, add_time. (code, answer)."""
+        """ONE job: pause, resume, delete, done, add_time, snooze. (code, answer)."""
         do = str(do or "").strip().lower()
+        if do == "snooze":
+            return self.snooze(jid, seconds)
         now = self.now()
         with self._lock, self._db() as c:
             row = self._row(c, jid)
@@ -987,10 +1095,197 @@ class Scheduler:
                 said = f"{length_words(left)} left."
             else:
                 return 400, {"ok": False, "error": "do is one of: pause, resume, delete, done, "
-                                                   "add_time"}
+                                                   "add_time, snooze"}
         _audit("schedule.act", {"id": jid, "kind": kind, "do": do})
         self._changed(jid, kind)
         return 200, {"ok": True, "id": jid, "said": said}
+
+    # ---- snooze -----------------------------------------------------------------------
+
+    def snooze(self, jid: str, seconds: Optional[float] = None) -> tuple:
+        """A timer, alarm or reminder that WENT OFF, again after `seconds`
+        (SNOOZE_DEFAULT when not said). A new one-off copy: a repeating
+        job's own times are not touched, so only that one occurrence moves.
+        No card - a one-off needs none. Snoozing the same one twice while
+        its copy waits changes nothing ("already")."""
+        now = self.now()
+        try:
+            length = SNOOZE_DEFAULT if seconds is None else float(seconds)
+        except (TypeError, ValueError):
+            length = float("nan")
+        if length != length or length < SNOOZE_MIN or length > SNOOZE_MAX:
+            return 400, {"ok": False, "error": "A snooze is from 1 minute to 24 hours."}
+        with self._lock:
+            with self._db() as c:
+                row = self._row(c, jid)
+                if row is None:
+                    return 404, {"ok": False, "reason": "no_such_job",
+                                 "error": "That is not on the list any more."}
+                if row["kind"] not in SNOOZABLE:
+                    return 409, {"ok": False,
+                                 "error": "Only a timer, an alarm or a reminder can be snoozed."}
+                fired = row["fired_at"]
+                if (fired is None or row["state"] not in ("fired", "active", "paused")
+                        or now - float(fired) > FIRED_KEEP):
+                    return 409, {"ok": False, "error": "It has not gone off, so there is nothing "
+                                                       "to snooze."}
+                if row["snoozed_to"]:
+                    copy = self._row(c, row["snoozed_to"])
+                    if copy is not None and copy["state"] in ("active", "paused") \
+                            and copy["due"] is not None:
+                        return 200, {"ok": True, "id": jid, "already": True,
+                                     "job": self._view(copy, now),
+                                     "said": f"Already snoozed until {clock(float(copy['due']))}."}
+                try:
+                    self._room(c, row["kind"])
+                except OverflowError as exc:
+                    return 409, {"ok": False, "error": _sentence(exc)}
+                kind, text = row["kind"], row["text"]
+            copy_id = self._insert(kind, text=text, state="active", due=now + length, rule=None,
+                                   duration=length if kind == "timer" else None,
+                                   source="snooze", snooze_of=jid)
+            with self._db() as c:
+                c.execute("UPDATE jobs SET snoozed_to = ?, changed = ? WHERE id = ?",
+                          (copy_id, now, jid))
+        _audit("schedule.snooze", {"id": jid, "kind": kind, "copy": copy_id})
+        self._changed(jid, kind)
+        return 200, {"ok": True, "id": jid, "job": self.job(copy_id),
+                     "said": f"Snoozed for {length_words(length)} - until {clock(now + length)}."}
+
+    def went_off(self, now: Optional[float] = None) -> list:
+        """What went off in the last WENT_OFF_SHOWN seconds and could be
+        snoozed - newest first, at most five. One already snoozed is left
+        out: its copy is on the list."""
+        now = self.now() if now is None else now
+        with self._lock, self._db() as c:
+            rows = c.execute("SELECT * FROM jobs WHERE fired_at IS NOT NULL AND fired_at >= ? "
+                             "AND kind IN ('timer','alarm','reminder') "
+                             "AND state IN ('fired','active','paused') AND snoozed_to IS NULL "
+                             "ORDER BY fired_at DESC LIMIT 5",
+                             (now - WENT_OFF_SHOWN,)).fetchall()
+        return [self._view(r, now) for r in rows]
+
+    def fired_since(self, since: float, now: Optional[float] = None) -> list:
+        """Everything that went off at or after `since`, oldest first, that
+        the owner is told about ("What did I miss?"). A repeating job shows
+        its latest time only; a one-off is kept FIRED_KEEP."""
+        now = self.now() if now is None else now
+        with self._lock, self._db() as c:
+            rows = c.execute("SELECT * FROM jobs WHERE fired_at IS NOT NULL AND fired_at >= ? "
+                             "AND fired_at <= ? ORDER BY fired_at", (since, now)).fetchall()
+        out = []
+        for r in rows:
+            k = KINDS.get(r["kind"])
+            if k is not None and (not k.notify or not k.owner_listed):
+                continue
+            if r["kind"] == "todo" and r["fired_due"] is None:
+                continue       # a to-do ticked off, not one that went off
+            out.append(self._view(r, now))
+        return out
+
+    # ---- named lists ------------------------------------------------------------------
+
+    def lists(self) -> list:
+        """The named lists with open items, oldest first:
+        [{"name": "shopping", "title": "Shopping list", "open": 3}]."""
+        with self._lock, self._db() as c:
+            rows = c.execute("SELECT list_name, COUNT(*) AS n, MIN(created) AS first FROM jobs "
+                             "WHERE kind = 'todo' AND state IN ('active','paused') "
+                             "AND list_name IS NOT NULL GROUP BY list_name "
+                             "ORDER BY first").fetchall()
+        return [{"name": r["list_name"], "title": list_title(r["list_name"]), "open": int(r["n"])}
+                for r in rows]
+
+    def clear_list(self, name, count) -> tuple:
+        """Every open item on ONE named list, deleted - only from the apps,
+        after their "are you sure?", and only when `count` is how many items
+        the app showed (so nothing added since is lost). Never the to-do
+        list itself."""
+        try:
+            key = list_key(name)
+        except ValueError as exc:
+            return 400, {"ok": False, "error": _sentence(exc)}
+        if key is None:
+            return 409, {"ok": False, "error": "The to-do list is not cleared all at once - mark "
+                                               "items done or delete them one at a time."}
+        if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+            return 400, {"ok": False, "error": "Say how many items you saw on the list."}
+        title = _lower_first(list_title(key))
+        with self._lock:
+            with self._db() as c:
+                ids = [r["id"] for r in c.execute(
+                    "SELECT id FROM jobs WHERE kind = 'todo' AND state IN ('active','paused') "
+                    "AND list_name = ?", (key,)).fetchall()]
+                if not ids:
+                    # 409, like a count that no longer fits: the list changed
+                    # since the app looked (a 404 would read as an older PC).
+                    return 409, {"ok": False, "error": f"There is nothing on the {title} any more."}
+                if len(ids) != count:
+                    return 409, {"ok": False, "error": (
+                        f"The {title} changed since you looked - it has {len(ids)} "
+                        f"item{'s' if len(ids) != 1 else ''} now. Look again before clearing it.")}
+                for jid in ids:
+                    c.execute("DELETE FROM jobs WHERE id = ?", (jid,))
+        _audit("schedule.clear_list", {"count": len(ids)})
+        self._changed(ids[0], "todo")
+        n = len(ids)
+        return 200, {"ok": True, "cleared": n,
+                     "said": f"Cleared your {title} ({n} item{'s' if n != 1 else ''})."}
+
+    # ---- "cancel that" ------------------------------------------------------------------
+
+    def note_set(self, conversation, ids, what: str, intent: str, nouns=()) -> None:
+        """The fast path just SET these jobs in this conversation (in memory
+        only). The next note replaces it: only the last thing can be taken
+        back."""
+        if not conversation or not ids:
+            return
+        with self._lock:
+            if len(self._recent) > 200:
+                oldest = min(self._recent, key=lambda k: self._recent[k]["at"])
+                self._recent.pop(oldest, None)
+            self._recent[str(conversation)] = {"ids": list(ids), "what": str(what),
+                                               "intent": str(intent), "nouns": list(nouns),
+                                               "at": self.now()}
+
+    def last_set(self, conversation, now: Optional[float] = None) -> Optional[dict]:
+        """What the fast path last set in this conversation, with its `age`
+        in seconds - or None (nothing, or more than UNDO_REMEMBER ago)."""
+        if not conversation:
+            return None
+        now = self.now() if now is None else now
+        with self._lock:
+            rec = self._recent.get(str(conversation))
+            if rec is None:
+                return None
+            if now - rec["at"] > UNDO_REMEMBER:
+                self._recent.pop(str(conversation), None)
+                return None
+            return dict(rec, ids=list(rec["ids"]), age=max(0.0, now - rec["at"]))
+
+    def forget_set(self, conversation) -> None:
+        with self._lock:
+            self._recent.pop(str(conversation or ""), None)
+
+    def take_back(self, ids) -> int:
+        """Delete the jobs the fast path just set ("cancel that"). Only jobs
+        still on the list; a snoozed copy also frees its original, so it can
+        be snoozed again. Returns how many were taken back."""
+        n = 0
+        with self._lock:
+            for jid in ids:
+                with self._db() as c:
+                    row = self._row(c, jid)
+                    if row is None or row["state"] not in ("active", "paused", "waiting"):
+                        continue
+                    c.execute("DELETE FROM jobs WHERE id = ?", (jid,))
+                    if row["snooze_of"]:
+                        c.execute("UPDATE jobs SET snoozed_to = NULL WHERE id = ? "
+                                  "AND snoozed_to = ?", (row["snooze_of"], jid))
+                n += 1
+                _audit("schedule.act", {"id": jid, "kind": row["kind"], "do": "take_back"})
+                self._changed(jid, row["kind"])
+        return n
 
     # ---- the loop -------------------------------------------------------------------
 
@@ -1011,8 +1306,10 @@ class Scheduler:
                         nxt = None
                     # Straight to the next time after NOW: a week of missed
                     # dailies goes off once, not seven times.
+                    # Going off again: an earlier snooze of it is its own job
+                    # now, so this time can be snoozed afresh.
                     c.execute("UPDATE jobs SET due = ?, fired_at = ?, fired_due = ?, late = ?, "
-                              "changed = ?, state = ? WHERE id = ?",
+                              "changed = ?, state = ?, snoozed_to = NULL WHERE id = ?",
                               (nxt, now, row["due"], int(late), now,
                                "active" if nxt is not None else "fired", row["id"]))
                 elif row["kind"] == "todo":
@@ -1129,8 +1426,14 @@ class Scheduler:
                 kind != "todo" or row["fired_due"] is not None):
             v["fired_at"] = row["fired_at"]
             v["late"] = bool(row["late"])
+            v["went_off_at"] = clock(float(row["fired_at"]))
             if row["late"] and row["fired_due"] is not None:
                 v["missed"] = f"missed at {clock(float(row['fired_due']))}"
+        if kind == "todo":
+            # "" is the to-do list itself; a name is a named list ("shopping").
+            v["list"] = row["list_name"] or ""
+        if row["snooze_of"]:
+            v["snoozed"] = True
         v["lock_screen"] = k.lock_screen if k else "Jarvis: something is due."
         if k is not None and not k.notify:
             v["notify"] = False
@@ -1178,9 +1481,13 @@ class Scheduler:
         now = self.now()
         return {"available": True, "now": now, "tz": _tz_name(now),
                 "jobs": self.listed(), "todo": self.todos(),
+                # 2026-09-25: what went off in the last hour (Snooze), and
+                # the named lists. An app from before them ignores both.
+                "went_off": self.went_off(now), "lists": self.lists(),
                 "running": self.running, "limits": {
                     "text": MAX_TEXT, "jobs": MAX_JOBS, "todo": MAX_TODO,
-                    "timer_seconds": MAX_TIMER, "min_every_hours": MIN_EVERY_HOURS}}
+                    "timer_seconds": MAX_TIMER, "min_every_hours": MIN_EVERY_HOURS,
+                    "lists": MAX_LISTS, "snooze_seconds": SNOOZE_DEFAULT}}
 
     # ---- "this sentence set a reminder" (for the learner) ------------------------------
 
@@ -1297,7 +1604,7 @@ def _num(v) -> Optional[float]:
 
 def handle_add(body: dict) -> tuple:
     """POST /api/schedule/add - one job.
-      {"kind": "todo", "text"}                     a to-do item
+      {"kind": "todo", "text", "list"?}            a to-do item (on a named list)
       {"kind": "timer", "seconds", "text"?}        a timer
       {"kind": "alarm"|"reminder", "at", "text"?}  once, at an epoch time
       {"kind": "alarm"|"reminder", "repeat": {...}, "text"?}   repeating: a card
@@ -1308,7 +1615,7 @@ def handle_add(body: dict) -> tuple:
     s = get()
     try:
         if kind == "todo":
-            job = s.add_todo(body.get("text"), source="app")
+            job = s.add_todo(body.get("text"), source="app", list_name=body.get("list"))
         elif kind == "timer":
             job = s.add_timer(_num(body.get("seconds")), body.get("text") or "", source="app")
         elif _repeatable(kind):
@@ -1341,10 +1648,17 @@ def handle_add(body: dict) -> tuple:
 
 
 def handle_act(body: dict) -> tuple:
-    """POST /api/schedule/act {"id", "do", "seconds"?} - ONE job. There is
-    no list form."""
+    """POST /api/schedule/act {"id", "do", "seconds"?} - ONE job; "snooze"
+    takes `seconds` (10 minutes when not said). The one other form:
+    {"do": "clear_list", "list", "count"} - one NAMED list, cleared after the
+    app's "are you sure?"."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "need a JSON object"}
+    if str(body.get("do") or "").strip().lower() == "clear_list":
+        # The one form that is not one job: every item on ONE named list,
+        # after the app's "are you sure?", and only when `count` matches what
+        # the app showed (Scheduler.clear_list). Never the to-do list.
+        return get().clear_list(body.get("list"), body.get("count"))
     jid = body.get("id")
     if not isinstance(jid, str) or not re.fullmatch(r"s[0-9a-f]{10}", jid):
         return 400, {"ok": False, "error": "need one job id"}

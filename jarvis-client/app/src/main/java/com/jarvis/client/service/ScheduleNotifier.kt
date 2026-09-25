@@ -29,6 +29,15 @@ import com.jarvis.client.R
  * chat history" is on, the notification itself says only the kind, too -
  * the caller decides that ([com.jarvis.client.net.Schedule.notification]).
  *
+ * SNOOZE (2026-09-25): a timer, alarm or reminder carries one action,
+ * "Snooze 10 minutes" ([com.jarvis.client.net.Schedule.SNOOZE]) - never
+ * Approve, never "all". It goes to [EventService] (ACTION_SNOOZE), which
+ * waits for the link like a notification's Deny and then sends ONE snooze,
+ * held on a stale link ([com.jarvis.client.JarvisRuntime.scheduleAct]). A
+ * snooze is not an approval: it only sets the same thing to go off once
+ * more, later, on the PC, and needs no card. The locked screen's version
+ * ([locked]) has no action at all.
+ *
  * Ids from 0x3100 to 0x31FF, round and round: below [ApprovalNotifier]'s
  * range, whose restore() cancels anything of ours it finds at or above
  * 0x4B00, and below the two services' own.
@@ -48,6 +57,18 @@ object ScheduleNotifier {
         assigned[jobId] = id
         if (assigned.size > SLOTS) assigned.remove(assigned.keys.first())
         return id
+    }
+
+    /** The kinds that carry a Snooze (jarvis_schedule.SNOOZABLE). */
+    private val SNOOZABLE = setOf("timer", "alarm", "reminder")
+
+    /** The job id a Snooze action carries. */
+    const val EXTRA_JOB_ID = "com.jarvis.client.extra.JOB_ID"
+
+    /** Takes one job's notification away (after a Snooze went through). */
+    fun cancel(context: Context, jobId: String) {
+        val id = synchronized(this) { assigned[jobId] } ?: return
+        runCatching { NotificationManagerCompat.from(context).cancel(id) }
     }
 
     private fun allowed(context: Context): Boolean =
@@ -87,6 +108,15 @@ object ScheduleNotifier {
             .setPublicVersion(locked(context, lockScreen))
             .setAutoCancel(true)
             .setContentIntent(open(context, notificationId, openBriefing))
+            .apply {
+                if (kind in SNOOZABLE && !openBriefing) {
+                    addAction(
+                        R.drawable.ic_notification,
+                        com.jarvis.client.net.Schedule.SNOOZE,
+                        snoozeIntent(context, jobId, notificationId),
+                    )
+                }
+            }
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(notificationId, n) }
             .onFailure { Log.w(TAG, "could not post a $kind that went off", it) }
@@ -99,6 +129,18 @@ object ScheduleNotifier {
             .setContentText(lockScreen)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
+
+    private fun snoozeIntent(context: Context, jobId: String, requestCode: Int): PendingIntent {
+        val intent = Intent(context, EventService::class.java)
+            .setAction(EventService.ACTION_SNOOZE)
+            .putExtra(EXTRA_JOB_ID, jobId)
+        return PendingIntent.getService(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
 
     private fun open(context: Context, requestCode: Int, openBriefing: Boolean): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)

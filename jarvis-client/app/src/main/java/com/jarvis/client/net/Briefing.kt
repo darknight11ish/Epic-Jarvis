@@ -60,6 +60,19 @@ object Briefing {
         "Your PC's Jarvis does not have the morning briefing yet - run apply-patches.ps1 on the PC."
     const val KEPT = "Kept on your PC until Jarvis restarts. Nothing of it is written to disk."
 
+    /**
+     * "What did I miss?" (jarvis_briefing.build_missed, 2026-09-25) - the
+     * desktop's briefing.js, word for word. A read, like "Brief me now".
+     */
+    const val MISSED_LABEL = "What did I miss?"
+    const val MISSED_BUSY = "Looking…"
+    const val MISSED_DETAIL =
+        "Since you last talked to Jarvis, on either app: what went off, approval cards waiting, " +
+            "unread email and what is next. Put together on your PC without the AI model."
+    const val MISSED_MISSING =
+        "Your PC's Jarvis does not have \"What did I miss?\" yet - run apply-patches.ps1 on the PC."
+    const val MISSED_BODY = "{\"missed\":true}"
+
     /** All a notification ever says (jarvis_briefing.LOCK_SCREEN). */
     const val LOCK_SCREEN = "Jarvis: your morning briefing is ready."
 
@@ -113,6 +126,8 @@ object Briefing {
     data class Brief(
         val id: String,
         val heading: String,
+        /** "schedule", "now", "chat" - or "missed" for "What did I miss?". */
+        val source: String = "",
         val made: Double?,
         val missed: String,
         val sections: List<Section>,
@@ -179,6 +194,7 @@ object Briefing {
                 Brief(
                     id = it.text("id") ?: "",
                     heading = it.text("heading") ?: "",
+                    source = it.text("source") ?: "",
                     made = it.num("made"),
                     missed = it.text("missed") ?: "",
                     sections = (it["sections"] as? JsonArray)?.mapNotNull { s -> (s as? JsonObject)?.let(::section) }
@@ -237,6 +253,16 @@ object Briefing {
         is DesktopWrite.Outcome.Done -> outcome.said ?: if (on) "Done." else "Done - the briefing shows the number only."
         is DesktopWrite.Outcome.Waiting -> outcome.said ?: SENDERS_WAITING
         is DesktopWrite.Outcome.Refused -> "Not changed. " + outcome.why
+    }
+
+    /**
+     * The answer to "What did I miss?", or null when the PC answered with an
+     * ordinary briefing - a PC from before it ignores the question, and then
+     * [MISSED_MISSING] is said instead.
+     */
+    fun readMissed(body: JsonObject): View? {
+        val v = parse(body) ?: return null
+        return if (v.briefing?.source == "missed") v else null
     }
 
     /** A read that failed because this PC has no briefing: a 404 or a 501. */
