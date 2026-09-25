@@ -1201,6 +1201,18 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.standby-form {
+  flex-wrap: wrap;
+}
+
+.standby-time {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .deep-label {
   display: block;
   margin: 0 0 4px;

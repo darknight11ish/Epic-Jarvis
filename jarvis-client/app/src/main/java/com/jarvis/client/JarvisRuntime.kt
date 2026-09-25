@@ -2967,6 +2967,25 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * The standby schedule: every day from [start] to [end] ("HH:MM"). The PC
+     * raises ONE approval card (it repeats) and sets nothing up until it is
+     * approved - the desktop's `brain_schedule_add_standby`. Held on a stale
+     * link, like every change. @return whether the PC took it, and the
+     * sentence to show.
+     */
+    suspend fun addStandbySchedule(start: String, end: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Schedule.standbyBody(start, end)
+            ?: return false to com.jarvis.client.net.Schedule.STANDBY_BAD_TIMES
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not set up. " + describe(r.error))
+        }
+    }
+
     private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?) {
         _scheduleTick.update { it + 1 }
         val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(data as? JsonObject) ?: return

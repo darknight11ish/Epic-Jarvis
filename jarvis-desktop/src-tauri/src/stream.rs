@@ -812,7 +812,8 @@ fn power_mode(value: &serde_json::Value) -> Option<String> {
 }
 
 /// Who put Jarvis in its current mode, in the words `tray.rs` understands:
-/// "override" (a person), "schedule" (quiet hours) or "idle" (the idle timer).
+/// "override" (a person), "schedule" (quiet hours), "idle" (the idle timer)
+/// or "standby_schedule" (the standby schedule, a job on the scheduler).
 ///
 /// `set_by` if the server sends it. `jarvis_power.status()` does not - it
 /// has `why`, a sentence ("the owner, from this PC", "startup", ...) - so the
@@ -824,6 +825,11 @@ fn power_set_by(value: &serde_json::Value) -> Option<String> {
         return Some(explicit.to_string());
     }
     let why = value["why"].as_str().unwrap_or("").to_ascii_lowercase();
+    // The standby schedule (backend jarvis_standby_schedule.py) records
+    // itself as "the standby schedule" - not a person, and not quiet hours.
+    if why == "the standby schedule" {
+        return Some("standby_schedule".to_string());
+    }
     if why.starts_with("the owner") {
         return Some("override".to_string());
     }
@@ -1164,6 +1170,11 @@ mod power_prime_tests {
         let caps = json!({"mode": "quiet", "why": "startup", "quiet_hours": true});
         assert_eq!(power_mode(&caps).as_deref(), Some("quiet"));
         assert_eq!(power_set_by(&caps).as_deref(), Some("schedule"));
+        let by_timetable = json!({"mode": "standby", "why": "the standby schedule"});
+        assert_eq!(
+            power_set_by(&by_timetable).as_deref(),
+            Some("standby_schedule")
+        );
     }
 
     /// The shape it used to send, and still does on an older server: a bare

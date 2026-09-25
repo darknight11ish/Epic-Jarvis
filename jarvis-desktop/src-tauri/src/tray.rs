@@ -819,6 +819,7 @@ fn power_label(link: &LinkState) -> String {
         Some("override") => " · set by hand",
         Some("schedule") => " · quiet hours",
         Some("idle") => " · idle timer",
+        Some("standby_schedule") => " · standby schedule",
         _ => "",
     };
     // The "· read-only" that used to end this row is gone: the submenu
@@ -1524,6 +1525,9 @@ mod tests {
         // No `· read-only` any more: the "Change power mode" submenu sets it
         // (backend/power-mode.patch). Who set it is still said.
         assert_eq!(power_label(&quiet), "Power: quiet · set by hand");
+        quiet.power = "standby".into();
+        quiet.power_set_by = Some("standby_schedule".into());
+        assert_eq!(power_label(&quiet), "Power: standby · standby schedule");
 
         // The mute row names its end date in both directions, because the API
         // has no mute without one.

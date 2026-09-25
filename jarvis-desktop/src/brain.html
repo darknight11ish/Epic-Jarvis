@@ -433,6 +433,18 @@
                        placeholder="Add to the to-do list" aria-label="Add to the to-do list">
                 <button id="todo-add" class="btn small" type="submit">Add</button>
               </form>
+              <h3 class="subhead">Standby schedule</h3>
+              <p class="note" id="standby-detail">Jarvis goes on standby at night and wakes in the morning. Standby unloads its models and frees the graphics card; waking loads the chat model again, so the first answer is quick. Timers and reminders still go off. Setting it up asks once with an approval card.</p>
+              <p class="note" id="standby-is-set" hidden>Your standby schedule is in the list above. Pause skips it and Delete turns it off. Neither wakes Jarvis - choose Active for that.</p>
+              <form id="standby-form" class="todo-form standby-form" autocomplete="off">
+                <label class="standby-time">Standby at
+                  <input id="standby-start" class="field" type="time" value="01:00" required>
+                </label>
+                <label class="standby-time">Wake at
+                  <input id="standby-end" class="field" type="time" value="07:00" required>
+                </label>
+                <button id="standby-add" class="btn small" type="submit">Set up</button>
+              </form>
             </div>
             <div class="card card-wide">
               <h2>Long Fuse jobs</h2>

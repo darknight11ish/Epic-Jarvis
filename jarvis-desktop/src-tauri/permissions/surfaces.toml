@@ -535,11 +535,12 @@ permissions = [
 # while the event stream is stale. There is no "delete all".
 [[set]]
 identifier = "brain-schedule"
-description = "Read Coming up (timers, alarms, reminders, the to-do list), change ONE job at a time (pause, resume, delete, done, add time), and add one to-do item. No bulk form."
+description = "Read Coming up (timers, alarms, reminders, the to-do list), change ONE job at a time (pause, resume, delete, done, add time), add one to-do item, and ask for a standby schedule (the PC raises one approval card). No bulk form."
 permissions = [
   "allow-brain-schedule",
   "allow-brain-schedule-act",
   "allow-brain-schedule-add-todo",
+  "allow-brain-schedule-add-standby",
 ]
 
 # ---------------------------------------------------------------------------

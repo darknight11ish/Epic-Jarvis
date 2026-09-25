@@ -37,6 +37,14 @@ import kotlinx.serialization.json.doubleOrNull
  * The desktop says the same words (jarvis-desktop/src/coming-up.js); its
  * tests/coming-up.mjs checks this file for them.
  *
+ * THE STANDBY SCHEDULE (backend `jarvis_standby_schedule.py`, 2026-09-25):
+ * Standby - the same Standby as the buttons under Doing - on a timetable,
+ * every day. Two times and Set up ([standbyBody]); the PC raises ONE
+ * approval card (it repeats) and sets nothing up until it is approved. It
+ * then sits in the list like any repeating job, kind "standby", where Pause
+ * skips it and Delete turns it off. Its going off tells nobody: the event
+ * says `"notify": false`, and [firedFrom] then shows no notification.
+ *
  * Pure Kotlin, no Android types, so `ScheduleTest` runs it on a plain JVM.
  */
 object Schedule {
@@ -96,6 +104,22 @@ object Schedule {
     /** The longest to-do item the PC keeps (jarvis_schedule.MAX_TEXT). */
     const val MAX_TEXT = 300
 
+    /** The standby schedule, both apps' words (coming-up.js). */
+    const val STANDBY_TITLE = "Standby schedule"
+    const val STANDBY_DETAIL =
+        "Jarvis goes on standby at night and wakes in the morning. Standby unloads its models " +
+            "and frees the graphics card; waking loads the chat model again, so the first answer is " +
+            "quick. Timers and reminders still go off. Setting it up asks once with an approval card."
+    const val STANDBY_START_LABEL = "Standby at"
+    const val STANDBY_END_LABEL = "Wake at"
+    const val STANDBY_ADD = "Set up"
+    const val STANDBY_IS_SET =
+        "Your standby schedule is in the list above. Pause skips it and Delete turns it off. " +
+            "Neither wakes Jarvis - choose Active for that."
+    const val STANDBY_BAD_TIMES = "Write each time as HH:MM, like 01:00, and pick two different times."
+    const val STANDBY_DEFAULT_START = "01:00"
+    const val STANDBY_DEFAULT_END = "07:00"
+
     /** A notification's title, by kind. The desktop's toast says the same. */
     fun title(kind: String): String = when (kind) {
         "timer" -> "Timer done"
@@ -140,6 +164,8 @@ object Schedule {
         val hidden: Boolean,
         val lockScreen: String,
         val firedAt: Double?,
+        /** How a kind's last run went, in the PC's words (the standby schedule's). */
+        val note: String = "",
     )
 
     data class View(val jobs: List<Job>, val todo: List<Job>, val hidden: Boolean)
@@ -163,6 +189,7 @@ object Schedule {
             hidden = o.flag("hidden") == true,
             lockScreen = o.text("lock_screen") ?: "",
             firedAt = o.num("fired_at"),
+            note = o.text("note") ?: "",
         )
     }
 
@@ -223,6 +250,7 @@ object Schedule {
 
     /** A row's title: the owner's words, or what kind of thing it is. */
     fun titleOf(job: Job): String {
+        if (job.kind == "standby") return STANDBY_TITLE
         val words = if (job.hidden) HIDDEN_TEXT else job.text
         if (job.kind == "timer") {
             return if (words.isNotEmpty()) "$words timer" else lengthWords(job.duration ?: 0.0) + " timer"
@@ -255,7 +283,34 @@ object Schedule {
             out += if (job.repeats) "next: ${job.whenWords}" else job.whenWords
         }
         if (job.missed.isNotEmpty()) out += "Went off late (${job.missed}) - the PC was off or asleep."
+        if (job.note.isNotEmpty()) out += job.note
         return out
+    }
+
+    /** The standby schedule on the list, or null. There is only ever one. */
+    fun standbyOf(v: View?): Job? = v?.jobs?.firstOrNull { it.kind == "standby" }
+
+    private val HHMM = Regex("([01]?\\d|2[0-3]):([0-5]\\d)")
+
+    /**
+     * The two times for a new standby schedule, tidied to HH:MM, or null when
+     * either is not a time of day or they are the same - coming-up.js
+     * standbyTimes, and the PC checks the same.
+     */
+    fun standbyTimes(start: String, end: String): Pair<String, String>? {
+        fun tidy(v: String): String? {
+            val m = HHMM.matchEntire(v.trim()) ?: return null
+            return m.groupValues[1].padStart(2, '0') + ":" + m.groupValues[2]
+        }
+        val at = tidy(start) ?: return null
+        val until = tidy(end) ?: return null
+        return if (at == until) null else at to until
+    }
+
+    /** The body of a new standby schedule, or null when the times cannot be one. */
+    fun standbyBody(start: String, end: String): String? {
+        val (at, until) = standbyTimes(start, end) ?: return null
+        return "{\"kind\":\"standby\",\"repeat\":{\"every\":\"day\",\"at\":\"$at\",\"until\":\"$until\"}}"
     }
 
     /** The buttons one row offers, as action names, in order. Never "all". */
@@ -336,9 +391,14 @@ object Schedule {
         return title to text
     }
 
-    /** From a `schedule` event: (id, kind) when a job went off, else null. */
+    /**
+     * From a `schedule` event: (id, kind) when a job went off that the owner
+     * should hear about, else null. `"notify": false` - the standby schedule
+     * at 01:00 - is nothing to show.
+     */
     fun firedFrom(data: JsonObject?): Pair<String, String>? {
         if (data == null || data.text("state") != "fired") return null
+        if (data.flag("notify") == false) return null
         val id = data.text("id")?.takeIf { validId(it) } ?: return null
         return id to (data.text("kind") ?: "")
     }

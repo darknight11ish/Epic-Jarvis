@@ -48,6 +48,9 @@ import {
   metaOf,
   readSchedule,
   SCHEDULE_MISSING,
+  STANDBY_BAD_TIMES,
+  standbyOf,
+  standbyTimes,
   titleOf,
   KIND_TAGS,
 } from "./coming-up.js";
@@ -266,6 +269,11 @@ const dom = {
   todoForm: $("todo-form"),
   todoText: $("todo-text"),
   todoAdd: $("todo-add"),
+  standbyForm: $("standby-form"),
+  standbyStart: $("standby-start"),
+  standbyEnd: $("standby-end"),
+  standbyAdd: $("standby-add"),
+  standbyIsSet: $("standby-is-set"),
   contentRisk: $("content-risk"),
   ledger: $("ledger"),
   watch: $("watch"),
@@ -3483,6 +3491,32 @@ async function addTodo() {
   await loadComingUp();
 }
 
+/**
+ * The standby schedule: two times, one card on the PC (schedule_repeat). It
+ * then sits in the list above like any repeating job. Held on a stale link,
+ * like every change here; Rust refuses it too.
+ */
+async function addStandby() {
+  const times = standbyTimes(dom.standbyStart && dom.standbyStart.value,
+    dom.standbyEnd && dom.standbyEnd.value);
+  if (!times) {
+    toast(STANDBY_BAD_TIMES, "bad");
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_schedule_add_standby", { start: times.at, end: times.until });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else toast(String((out && out.said) || "Waiting for your yes on the approval card."), "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadComingUp();
+}
+
 function scheduleRow(job) {
   const since = Date.now() - upL.readAt;
   const item = row({
@@ -3539,9 +3573,16 @@ function paintComingUp() {
     box.replaceChildren(el("p", "empty", v.why || SCHEDULE_MISSING));
     if (dom.todoList) dom.todoList.replaceChildren();
     if (dom.todoForm) dom.todoForm.hidden = true;
+    if (dom.standbyForm) dom.standbyForm.hidden = true;
+    if (dom.standbyIsSet) dom.standbyIsSet.hidden = true;
     return;
   }
   if (dom.todoForm) dom.todoForm.hidden = false;
+  // One standby schedule at most: the form while there is none, a pointer
+  // to its row while there is.
+  const hasStandby = Boolean(standbyOf(v));
+  if (dom.standbyForm) dom.standbyForm.hidden = hasStandby;
+  if (dom.standbyIsSet) dom.standbyIsSet.hidden = !hasStandby;
   rows(box, v.jobs, scheduleRow, EMPTY_JOBS);
   if (upL.error) box.prepend(el("p", "empty failed", `Could not read it again: ${upL.error}`));
   if (dom.todoList) rows(dom.todoList, v.todo, scheduleRow, EMPTY_TODO);
@@ -3569,6 +3610,16 @@ if (dom.todoForm) {
 if (dom.todoAdd) {
   liveButtons.add(dom.todoAdd);
   syncLiveButton(dom.todoAdd);
+}
+if (dom.standbyForm) {
+  dom.standbyForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    addStandby();
+  });
+}
+if (dom.standbyAdd) {
+  liveButtons.add(dom.standbyAdd);
+  syncLiveButton(dom.standbyAdd);
 }
 
 // Private answers turned on or off, or a Show ran out: read it again - Rust

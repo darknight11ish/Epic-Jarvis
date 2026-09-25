@@ -56,6 +56,14 @@ import kotlinx.coroutines.launch
  * "Hide memory lists and chat history" (Security) hides the words - a
  * reminder's and a to-do item's are the owner's own - but not the times, so
  * a timer still counts down; Show brings the words back.
+ *
+ * Under the to-do list, the standby schedule ([Schedule.STANDBY_TITLE]):
+ * Standby - the same one as the buttons under Doing - every day from one
+ * time to another. Two times and Set up, which asks the PC; the PC raises
+ * ONE approval card, because it repeats ([JarvisRuntime.addStandbySchedule],
+ * held on a stale link). Once there is one, it is a row in the list above
+ * (Pause, Delete) and the times are not offered again - the desktop's
+ * Brain -> Work -> Coming up does the same.
  */
 @Composable
 internal fun ComingUpSection(
@@ -76,6 +84,9 @@ internal fun ComingUpSection(
     var said by remember { mutableStateOf<String?>(null) }
     var todoText by remember { mutableStateOf("") }
     var adding by remember { mutableStateOf(false) }
+    var standbyStart by remember { mutableStateOf(Schedule.STANDBY_DEFAULT_START) }
+    var standbyEnd by remember { mutableStateOf(Schedule.STANDBY_DEFAULT_END) }
+    var settingUp by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(reads, tick) {
@@ -193,6 +204,57 @@ internal fun ComingUpSection(
                         enabled = canAct && !adding && todoText.isNotBlank(),
                         onClick = { add() },
                     )
+                    Gap(14)
+                    Text(Schedule.STANDBY_TITLE, style = MaterialTheme.typography.labelMedium,
+                        color = chrome.textMid)
+                    Text(Schedule.STANDBY_DETAIL, style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo)
+                    Gap(6)
+                    if (Schedule.standbyOf(shown) != null) {
+                        Text(Schedule.STANDBY_IS_SET, style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid)
+                    } else {
+                        val times = Schedule.standbyTimes(standbyStart, standbyEnd)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextInput(
+                                value = standbyStart,
+                                onValueChange = { standbyStart = it.take(5) },
+                                label = Schedule.STANDBY_START_LABEL,
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            )
+                            TextInput(
+                                value = standbyEnd,
+                                onValueChange = { standbyEnd = it.take(5) },
+                                label = Schedule.STANDBY_END_LABEL,
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            )
+                        }
+                        if (times == null) {
+                            Text(Schedule.STANDBY_BAD_TIMES, style = MaterialTheme.typography.labelSmall,
+                                color = chrome.warnInk)
+                        }
+                        Quiet(
+                            if (settingUp) "Asking…" else Schedule.STANDBY_ADD,
+                            enabled = canAct && !settingUp && times != null,
+                            onClick = {
+                                if (canAct && !settingUp && times != null) {
+                                    settingUp = true
+                                    said = null
+                                    scope.launch {
+                                        try {
+                                            val (_, sentence) =
+                                                JarvisRuntime.addStandbySchedule(standbyStart, standbyEnd)
+                                            said = sentence
+                                        } finally {
+                                            settingUp = false
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
             said?.let {
