@@ -300,7 +300,24 @@ These lanes leave the machine. Nothing else may.
 | **ntfy push** | text generated from our own tables, never payload, never while tainted | `notice_for` (`_safe_detail` where there is no action name) + `taint_active()` |
 | **research** | enumerated search terms, per approved plan | `jarvis_research.plan/run` |
 | **the owner's own accounts** - calendar, email, Home Assistant, each only when its settings are filled in on the PC | one request (or one small batch) per plan: to the calendar the owner set up - their CalDAV server with the time range, **or, since 2026-09-25, Google (`calendar.google.com`) through the calendar's private link**, which asks for the whole calendar and has the days picked out on the PC; to their IMAP server; to their Home Assistant. The password, token or private link goes only to the host it belongs to; the private link is also kept off every card, result, error and the log (`test_calendar_link.py`) | each module's `plan()`/`run()` through the gate (`jarvis_calendar`, `jarvis_email`, `jarvis_home`); `jarvis_local_http.plain_http_problem` (plain `http://` only inside the owner's own networks); each module's redirect handler (`_RefuseRedirect`, and for the private link `_FeedRedirect`: https on the same host or between Google's calendar hosts only) |
-| **web search** (2026-09-25) | ONE search's words (at most 300 characters), to the ONE provider the owner chose - SearXNG on the owner's own machine (which asks other engines), DuckDuckGo, Exa, Tavily or Brave - and, for the last three, the owner's key to that service only. Never words that look like a password or key. A card with the exact words whenever the conversation has read email, files, notes or other outside text, the search words repeat a saved fact in the turn (`jarvis_search.repeated_facts`: its distinctive words, numbers and names that the owner did not say themselves), a sensitive saved fact was used, or the owner chose "Ask before every web search" | `jarvis_search.plan/run` (no socket in `plan`, secret refusal, one provider, no fallback, redirects refused, answers capped) + `jarvis_agent._web_search_call` (when it asks; only a person's yes after that) |
+| **sending email** (2026-09-25, the owner's decision after the Muse audit) | ONE plain-text email per approval card, from the owner's own account (the address email reading uses), to at most 10 people in To and Cc (no Bcc), with the subject and text the card showed word for word - at most 2,500 characters, no attachments - and the owner's password, to their own sending server only (`smtp.X` for `imap.X`, e.g. `smtp.gmail.com`, or `JARVIS_SMTP_HOST`), inside SSL/TLS or STARTTLS with the certificate checked; unencrypted only to this PC or the owner's own networks. Written by the model on this PC only (rule 1) | `jarvis_email_send.plan/run` (no socket in `plan`; addresses, caps and invisible characters checked; a plan whose fingerprint or settings changed after its card is refused; never retried; the password never in a plan, card, result, error, event or the log) + `jarvis_agent._one_call` (`send_email` in `NEEDS_A_PERSON`: only a person's yes sends; no card unless the tier is `ask` and the turn's model is on this PC; the card says at the top when outside text shaped the turn; `CARDS_PER_TURN`) |
+| **web search** (2026-09-25) | ONE search's words (at most 300 characters), to the ONE provider the owner chose - SearXNG on the owner's own machine (which asks other engines), DuckDuckGo, Exa, Tavily or Brave - and, for the last three, the owner's key to that service only. Never words that look like a password or key. A card with the exact words whenever the conversation has read email, files, notes, saved memories or other outside text, or the owner chose "Ask before every web search" | `jarvis_search.plan/run` (no socket in `plan`, secret refusal, one provider, no fallback, redirects refused, answers capped) + `jarvis_agent._web_search_call` (when it asks; only a person's yes after that) |
+
+**Sending email, in one sentence each** (the owner's decision of 2026-09-25,
+`CLAUDE.md`; docs/JARVIS-API.md section 26). What it sends: one email, exactly
+as its card showed it - From, To, Cc, Subject and every word - and nothing
+else of the owner's. Where: to the owner's own sending server, logged in with
+the account email reading already uses. When it asks: always - every email is
+its own card under gate action `send_email` (tier `ask`, and nothing is sent
+on any other tier), there is no "always allow", and a card raised after
+outside text starts by saying so ("This conversation read outside text ...
+check that sending it was your idea"). Rule 1 holds because the email can
+only be written in a turn answered by the model on this PC: the tool is never
+offered to a cloud lane, and `_one_call` refuses it again, before any card,
+when the turn's model is not on this PC. The desktop's widget never approves
+an email - its Approve opens the Jarvis bar, where the whole email is shown
+word for word (never as Markdown) - and every lock screen, notification and
+the widget under App lock show only the notice, "Jarvis wants to send email".
 
 The owner's-own-accounts row was not in this table until 2026-09-25, although those reads
 already left the machine; it was written down when the Google Calendar link
@@ -755,7 +772,10 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   on the desktop, but while App lock is on its approval card shows only the
   notice's title, and its Approve opens the Jarvis bar to approve there;
   `decide_approval` refuses an Approve from the widget in Rust as well. Deny
-  works from the widget, as from the phone's.
+  works from the widget, as from the phone's. An email's card (`send_email`,
+  2026-09-25) is approved in the Jarvis bar only, lock or not: the widget
+  shows one line of a card, and an email is approved after reading all of it
+  (`commands.rs` `waiting_email`, `widget.js`).
 - **Phone:** the whole app. The home-screen widget only ever shows the
   `notice` text and offers Deny only, lock or not.
 - **Screenshots (phone):** while App lock or "Hide memory lists and chat

@@ -51,11 +51,11 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "line": "Set up on this PC, but the AI model is not offered it: \"send_email\" is not in [tools].enabled in jarvis-framework.toml.",
      "name": "Email (sending)",
      "on": false,
-     "state": "not_set_up",
-     "state_words": "Not set up",
+     "state": "off",
+     "state_words": "Off",
      "where": ""
     },
     {
@@ -245,7 +245,7 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "line": "No email account is set up on this PC for sending.",
      "name": "Email (sending)",
      "on": false,
      "state": "not_set_up",
@@ -435,11 +435,11 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "line": "Set up on this PC, but the AI model is not offered it: \"send_email\" is not in [tools].enabled in jarvis-framework.toml.",
      "name": "Email (sending)",
      "on": false,
-     "state": "not_set_up",
-     "state_words": "Not set up",
+     "state": "off",
+     "state_words": "Off",
      "where": ""
     },
     {
@@ -604,7 +604,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 16,
+   "on": 17,
    "rows": [
     {
      "asks": "Yes, every question",
@@ -647,14 +647,14 @@
      "where": "imap.example.com (as me@example.com)"
     },
     {
-     "asks": "-",
+     "asks": "Yes, every time",
      "id": "email_send",
-     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "line": "Sends one email at a time from your own account, only after you approve a card showing the recipients, the subject and every word. No attachments.",
      "name": "Email (sending)",
-     "on": false,
-     "state": "not_set_up",
-     "state_words": "Not set up",
-     "where": ""
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "smtp.example.com (as me@example.com)"
     },
     {
      "asks": "No",
@@ -820,6 +820,10 @@
      "name": "Reading your email"
     },
     {
+     "id": "send_email",
+     "name": "Send an email (one card each)"
+    },
+    {
      "id": "notes_search",
      "name": "Searching your notes"
     },
@@ -923,7 +927,7 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "line": "No email account is set up on this PC for sending.",
      "name": "Email (sending)",
      "on": false,
      "state": "not_set_up",

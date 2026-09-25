@@ -119,6 +119,7 @@ on a throwaway copy instead.
 | `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing`, `POST /api/briefing/now` and `POST /api/briefing/senders` ("Show who new emails are from": off at once, on through one approval card), makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
 | `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of five providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
 | `owner-check.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The approval gap, step 1** (docs/APPROVAL-GAP-DESIGN.md, the owner's decisions of 2026-09-25). `POST /api/approve` asks Windows Hello itself - showing the card's own title - before it accepts a RISKY approval that comes from this PC, refuses one on a PC with no Windows Hello, and stamps every approval it accepts; the gate believes no "approved" row this running backend did not stamp, so "approved" written straight into `approvals.db` is refused. Last in the list; its context is `gate-outcome.patch`'s approved branches and `log-scrub.patch`'s banner line. Needs `jarvis_owner_check.py` - without it EVERY approval is refused. See "The approval gap, step 1", at the very end. |
+| `email-send.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Sending email, one approval card per email** (the owner's decision, 2026-09-25, after the Muse audit). Adds `GET /api/email/sending` (whether sending is set up - the Settings line in both apps, never the password), and in the gate the notice's words for `send_email`, `send_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Its context is `web-search.patch`'s route block and gate lines and `note-capture.patch`'s `_TOOL_ACTIONS` lines. Needs `jarvis_email_send.py` - see "Sending email", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -9422,3 +9423,131 @@ off Windows.
   of `127.0.0.1`, you are asked twice (once by the app, once by the
   backend): the app leaves the asking to the backend only when it talks to
   it on loopback.
+
+# Sending email: `jarvis_email_send.py`, `email-send.patch` (2026-09-25)
+
+Jarvis can now **send an email for you** - one email per approval card, and
+only after you have read all of it and pressed Approve. This is the owner's
+decision after the Muse audit (`CLAUDE.md`): "one approval card per email,
+the card showing the exact recipients, subject and full text; never an
+'always allow'; the card says plainly when the conversation has read outside
+text".
+
+**What you see.** Ask "email Alex that I'll be ten minutes late". Jarvis
+writes the email with the model on this PC and shows you a card: From (your
+own address), To, Cc, Subject, and the whole email word for word, then which
+server it goes through. Nothing is sent until you approve. Two emails are two
+cards. If Jarvis had read something from outside first - an email in your
+inbox, a web page, a file - the card starts with: "This conversation read
+outside text ... before this email was written - check that sending it was
+your idea." On the desktop, the widget does not approve emails: its button
+opens the Jarvis bar, where the whole email is shown exactly as it will be
+sent. Lock screens and notifications only ever say "Jarvis wants to send
+email".
+
+**What leaves the PC.** That one email, to your own mail provider's sending
+server, logged in with the same account and password Jarvis already uses to
+read your email. The password goes to that server only, inside an encrypted
+connection, and is never written to a file, a log, a card or an answer.
+
+**What it does not do (yet).** No attachments, no Bcc, plain text only, at
+most 10 people, a subject of at most 200 characters, and at most 2,500
+characters of text (about 400 words) - a longer email would not fit on one
+card whole, and a card never shows less than everything it sends. It never
+retries: if the connection drops half way, it tells you to check your Sent
+folder. It cannot yet thread a reply onto an earlier email.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies `jarvis_email_send.py` and the
+updated `jarvis_agent.py`, applies `email-send.patch`), from this
+repository's folder, then quit Jarvis from the tray icon and start it again:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Gmail: nothing else to set up** if Jarvis already reads your Gmail
+("Gmail, for email", above). Sending uses the same address and the same app
+password, through `smtp.gmail.com` (worked out from `imap.gmail.com`).
+
+**2b. Another provider**, only if its sending server is not "smtp." plus the
+rest of its reading server's name (for example Outlook's
+`smtp.office365.com`, port 587). This saves the two settings for your
+Windows user:
+
+```powershell
+[Environment]::SetEnvironmentVariable('JARVIS_SMTP_HOST', 'smtp.office365.com', 'User'); [Environment]::SetEnvironmentVariable('JARVIS_SMTP_PORT', '587', 'User'); 'Saved for your Windows user. Quit Jarvis from the tray icon and start it again.'
+```
+
+**3. Let the model use it.** Open your `jarvis-framework.toml` (in
+`C:\Users\pcadmin\.openjarvis\`, or beside `jarvis_hud.py`), find the
+`enabled = [...]` line under `[tools]`, and add `"send_email"` to the list,
+for example `enabled = ["email_check", "web_search", "send_email"]`. In the
+same file, under `[autonomy.tiers]`, check there is a line
+`send_email = "ask"` (the shipped file has it; add it if yours does not).
+It must stay `"ask"`: on any other setting every email is refused, never sent
+unasked, and `"never"` switches sending off. Restart Jarvis.
+
+**4. Check it.** The desktop's Settings, "Sending email" (or the phone's
+Mind, "Sending email") should say "Ready: from <your address> through
+smtp.gmail.com, port 465, encrypted." Then ask Jarvis to send a short email
+**to yourself**, read the card, and approve it in the Jarvis bar.
+
+To stop Jarvis sending email: take `"send_email"` out of `[tools].enabled`
+(it is then not offered at all), or set `send_email = "never"`.
+
+## What the code does
+
+- `jarvis_email_send.py` - `plan()` (opens no socket; checks every address -
+  no names, commas or line breaks - the caps, and characters that would make
+  the card read differently from what is sent), `describe()` (the card),
+  `run()` (sends that plan once, over SSL on port 465 or STARTTLS on 587,
+  with the server's certificate checked; refuses a plan changed after its
+  card, or settings changed since; never retries), `view()` (the Settings
+  line). Plain unencrypted sending is allowed only to this PC or your own
+  networks (a local relay or a mail bridge, `JARVIS_SMTP_TLS=off`), never
+  across the internet - the same rule as plain `http://` to Home Assistant.
+- `jarvis_agent.py` - the tool `send_email` (offered only when
+  `[tools].enabled` names it), in `NEEDS_A_PERSON` (only a person's yes
+  sends); refused with no card when the turn's model is not on this PC
+  (rule 1), when `send_email` is not `"ask"`, or when the plan says why
+  nothing can be sent; the plain outside-text line at the top of the card.
+- `email-send.patch` - `GET /api/email/sending` and the gate's words.
+- The desktop shows an email's card word for word (never as Markdown, which
+  would hide where a link goes), and its widget sends an email's Approve to
+  the Jarvis bar (`main.js`, `widget.js`, `commands.rs`). The phone's card
+  already shows the whole text.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_email_send.py
+```
+
+About 175 checks, against a stand-in mail server on 127.0.0.1 written with
+Python's standard library - nothing reaches a real mail server: the card
+shows everything and what arrives is exactly that; nothing is sent after a
+no, a timeout, or a gate that lets it through without a person; a changed
+email or changed settings are refused; the card says when outside text came
+first; one card per email and the five-card limit; a cloud model refused;
+SSL and STARTTLS, a server that will not encrypt, an unchecked certificate,
+unencrypted only on your own network; and the password (a fake one) only at
+the stand-in server, inside TLS, and nowhere else - not in a card, the gate's
+prompt, what the model reads, the answer, an event, the audit log, the log
+output or a child program's environment. The TLS checks need the
+`cryptography` package (in `requirements.txt`) to make a test certificate;
+without it they say "SKIP".
+
+## Not checked, said plainly
+
+- **Nothing has reached a real mail server.** Gmail taking the same app
+  password for `smtp.gmail.com` is how Google's app passwords are generally
+  known to work, not checked against a real account here.
+- `email_check` does not return a message's id, so the model cannot thread
+  a reply yet (the module can). A reply goes as a new email.
+- Gmail keeps a copy in Sent by itself; other providers may not, and Jarvis
+  does not save one.
+- The "what can Jarvis reach" list (built separately, the same day) must say
+  that Jarvis can send email when `send_email` is on - check it after both
+  are merged.

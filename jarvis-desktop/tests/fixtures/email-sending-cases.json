@@ -1,0 +1,132 @@
+{
+ "cases": {
+  "not_set_up": {
+   "available": true,
+   "encryption": "ssl",
+   "from": "",
+   "limits": {
+    "attachments": false,
+    "body_chars": 2500,
+    "recipients": 10,
+    "subject_chars": 200
+   },
+   "password_set": false,
+   "port": 465,
+   "ready": false,
+   "said": "Not set up: JARVIS_IMAP_USER is not set - sending uses the same account as reading email, and there is none. The steps are in backend/README.md, \"Sending email\".",
+   "server": "",
+   "server_guessed": false,
+   "state": "not_set_up",
+   "tool_enabled": false
+  },
+  "ready": {
+   "available": true,
+   "encryption": "ssl",
+   "from": "owner@example.com",
+   "limits": {
+    "attachments": false,
+    "body_chars": 2500,
+    "recipients": 10,
+    "subject_chars": 200
+   },
+   "password_set": true,
+   "port": 465,
+   "ready": true,
+   "said": "Ready: from owner@example.com through smtp.gmail.com, port 465, encrypted. Every email is its own approval card showing all of it; there is no \"always allow\".",
+   "server": "smtp.gmail.com",
+   "server_guessed": true,
+   "state": "ready",
+   "tool_enabled": true
+  },
+  "refused_auto": {
+   "available": true,
+   "encryption": "ssl",
+   "from": "owner@example.com",
+   "limits": {
+    "attachments": false,
+    "body_chars": 2500,
+    "recipients": 10,
+    "subject_chars": 200
+   },
+   "password_set": true,
+   "port": 465,
+   "ready": false,
+   "said": "Set up (from owner@example.com through smtp.gmail.com, port 465, encrypted), but send_email is tier 'auto' in jarvis-framework.toml, which would send without asking anyone; every email needs the owner's yes on a card, so nothing is sent until it is \"ask\".",
+   "server": "smtp.gmail.com",
+   "server_guessed": true,
+   "state": "refused",
+   "tool_enabled": true
+  },
+  "starttls": {
+   "available": true,
+   "encryption": "starttls",
+   "from": "owner@example.com",
+   "limits": {
+    "attachments": false,
+    "body_chars": 2500,
+    "recipients": 10,
+    "subject_chars": 200
+   },
+   "password_set": true,
+   "port": 587,
+   "ready": true,
+   "said": "Ready: from owner@example.com through smtp.office365.com, port 587, encrypted. Every email is its own approval card showing all of it; there is no \"always allow\".",
+   "server": "smtp.office365.com",
+   "server_guessed": false,
+   "state": "ready",
+   "tool_enabled": true
+  },
+  "switched_off": {
+   "available": true,
+   "encryption": "ssl",
+   "from": "owner@example.com",
+   "limits": {
+    "attachments": false,
+    "body_chars": 2500,
+    "recipients": 10,
+    "subject_chars": 200
+   },
+   "password_set": true,
+   "port": 465,
+   "ready": false,
+   "said": "Set up (from owner@example.com through smtp.gmail.com, port 465, encrypted), but sending email is switched off on this PC (send_email is \"never\" in jarvis-framework.toml's [autonomy.tiers]).",
+   "server": "smtp.gmail.com",
+   "server_guessed": true,
+   "state": "off",
+   "tool_enabled": true
+  },
+  "tool_off": {
+   "available": true,
+   "encryption": "ssl",
+   "from": "owner@example.com",
+   "limits": {
+    "attachments": false,
+    "body_chars": 2500,
+    "recipients": 10,
+    "subject_chars": 200
+   },
+   "password_set": true,
+   "port": 465,
+   "ready": false,
+   "said": "Set up (from owner@example.com through smtp.gmail.com, port 465, encrypted). Jarvis does not offer to send until \"send_email\" is added to [tools].enabled in jarvis-framework.toml on the PC.",
+   "server": "smtp.gmail.com",
+   "server_guessed": true,
+   "state": "tool_off",
+   "tool_enabled": false
+  }
+ },
+ "example_body": "Hi Alex,\n\nFriday at 7 works for me. [the menu](https://example.com/menu)\n\n**See you there.**\n\nMario",
+ "example_card": "Send this email from your account? It goes only if you approve, exactly as shown - every word is below.\n\nFrom: owner@example.com\nTo: alex@example.com\nCc: sam@example.org\nSubject: Dinner on Friday\n\n---------- the whole email ----------\nHi Alex,\n\nFriday at 7 works for me. [the menu](https://example.com/menu)\n\n**See you there.**\n\nMario\n---------- end of the email ----------\n\nNo attachments, no hidden (Bcc) recipients.\nIt goes through smtp.office365.com, port 587, encrypted before logging in (STARTTLS - if the server will not encrypt, nothing is sent). Jarvis logs in there as owner@example.com; your password goes to that server and nowhere else.\nOnce sent, an email cannot be taken back.\n\nIf you say no: nothing is sent, and Jarvis tells you it was not sent.",
+ "limits": {
+  "body_chars": 2500,
+  "recipients": 10,
+  "subject_chars": 200
+ },
+ "missing": {
+  "body": {
+   "available": false,
+   "error": "ModuleNotFoundError"
+  },
+  "status": 503
+ }
+}

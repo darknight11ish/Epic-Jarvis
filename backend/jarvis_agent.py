@@ -35,7 +35,10 @@ choose_lane(), and run_local_turn's `lane_choice`. Docker-based execution and
 connectors remain excluded with the reasons README.md gives. General web
 search is here since 2026-09-25 (`web_search`, jarvis_search.py, the owner's
 choice of five providers) with its own rule for when it asks - see
-WEB_SEARCH_* below. A
+WEB_SEARCH_* below. Sending one email is here since 2026-09-25 too
+(`send_email`, jarvis_email_send.py, the owner's decision after the Muse
+audit): one card per email showing all of it, a person's yes only, the
+local model only - see SEND_EMAIL_* below. A
 memory_store tool that writes directly to `facts` was excluded on purpose
 because this project's memory system exists specifically so nothing reaches
 `facts` without a human accepting it through the review queue, and a
@@ -391,6 +394,29 @@ def _run_email_check(args: dict, plan_obj, **_) -> dict:
     return MAIL.run(plan_obj, approved=True)
 
 
+def _prepare_send_email(args: dict):
+    try:
+        import jarvis_email_send as SEND
+    except Exception as exc:
+        # No arguments on this line: they are the email itself. A plan that
+        # carries a `problem` never reaches a card (_one_call).
+        import types
+        why = f"sending email is not available here ({type(exc).__name__})"
+        return types.SimpleNamespace(problem=why), f"Send an email ({why})"
+    p = SEND.plan(args.get("to"), args.get("cc"), args.get("subject", ""),
+                  args.get("body", ""))
+    return p, SEND.describe(p)
+
+
+def _run_send_email(args: dict, plan_obj, **_) -> dict:
+    """Sends the plan the card showed - `plan_obj`, the SAME object, never a
+    new plan from `args` (jarvis_email_send.run checks its fingerprint)."""
+    if plan_obj is None or getattr(plan_obj, "problem", ""):
+        return {"ok": False, "sent": False, "error": "sending email is not available here"}
+    import jarvis_email_send as SEND
+    return SEND.run(plan_obj, approved=True)
+
+
 def _prepare_notes_search(args: dict):
     try:
         import jarvis_notes as NOTES
@@ -722,15 +748,35 @@ TOOLS: dict = {
         instead={"email_check": "For messages, use email_check."}),
     "email_check": Tool(
         "email_check",
-        "Read recent messages in the owner's inbox: sender, subject, date, "
-        "preview. Read-only; never sends.",
+        "Read recent inbox messages: sender, subject, date, preview. "
+        "Read-only.",
         {"type": "object", "properties": {
             "limit": {"type": "integer", "description": "default 10, max 25"},
             "unread_only": {"type": "boolean", "description": "default true"}}},
         _prepare_email_check,
         lambda args, state, **_: _run_email_check(args, state),
         gate_lookup_name=lambda args: "jarvis_email_read_run",
-        instead={"calendar_read": "For appointments and events, use calendar_read."}),
+        instead={"calendar_read": "For appointments and events, use calendar_read.",
+                 "send_email": "To send, use send_email."}),
+    # Sending one email (jarvis_email_send.py; the owner's decision of
+    # 2026-09-25): ONE approval card per email showing all of it, and only a
+    # person's yes sends it (NEEDS_A_PERSON). Never on a model that is not on
+    # this PC (rule 1) - see _one_call and SEND_EMAIL_*.
+    "send_email": Tool(
+        "send_email",
+        "Send one plain-text email from the owner's account. The owner sees all "
+        "of it on an approval card first; nothing is sent without their yes. "
+        "No attachments.",
+        {"type": "object", "properties": {
+            "to": {"type": "array", "items": {"type": "string"},
+                   "description": "email addresses, e.g. [\"alex@example.com\"]"},
+            "cc": {"type": "array", "items": {"type": "string"}},
+            "subject": {"type": "string"},
+            "body": {"type": "string", "description": "the whole email, as it will be sent"}},
+         "required": ["to", "subject", "body"]},
+        _prepare_send_email, _run_send_email,
+        gate_lookup_name=lambda args: "send_email",
+        instead={"email_check": "To read the inbox, use email_check."}),
     "notes_search": Tool(
         "notes_search",
         "Search the owner's own notes (Obsidian or Joplin). Read-only.",
@@ -1021,7 +1067,72 @@ NEEDS_A_PERSON = {
     "control_phone": "taps on the phone, which can send a message or pay for something",
     "shell_exec": "runs a command, which can do anything, including reach the internet",
     "home_control": "changes something real in the house",
+    "send_email": "sends an email in the owner's name, which cannot be taken back",
 }
+
+
+#: Sending one email (jarvis_email_send.py; the owner's decision of
+#: 2026-09-25, CLAUDE.md): one approval card per email, showing From, To, Cc,
+#: the subject and the WHOLE text; never an "always allow"; and the card
+#: says plainly when the conversation has read outside text. In _one_call,
+#: on top of the generic path (NEEDS_A_PERSON, the card limit, "What shaped
+#: this request:"):
+#:   - refused with no card unless the turn's model is on this PC (rule 1:
+#:     an email is written by the local model only - the same check,
+#:     local_model_refusal, that refuses the whole turn up front);
+#:   - refused with no card unless send_email is tier "ask" (a card that
+#:     could not end in a person deciding is never raised);
+#:   - refused with no card when the plan itself says why nothing could be
+#:     sent (a bad address, too long, not set up);
+#:   - put to the gate under jarvis_email_send.ACTION whatever the lookup
+#:     says, so its card, tier and notice are always send_email's;
+#:   - a card too long to show whole is refused, never cut (the gate keeps
+#:     4,000 characters) - in words about an email, not a plan.
+SEND_EMAIL_ACTION = "send_email"
+SEND_EMAIL_READ = ("This conversation read outside text (an email, a web page, a file or "
+                   "another tool's answer) before this email was written - check that "
+                   "sending it was your idea.")
+SEND_EMAIL_NOT_TYPED = ("Your newest message {how} - check that sending this email was "
+                        "your idea.")
+SEND_EMAIL_APP = ("The app sent extra text with your message (for example the clipboard) "
+                  "- check that sending this email was your idea.")
+SEND_EMAIL_NOT_LOCAL = ("refused: an email may only be written by the model on this PC "
+                        "(rule 1), and this turn's model is not on this PC. Nothing was "
+                        "sent and nobody was asked.")
+SEND_EMAIL_TOO_LONG = ("refused: this email's card would be too long to show in full, so "
+                       "nobody was asked and nothing was sent. Write it shorter, or tell "
+                       "the owner to send it from their own mail app.")
+
+
+def send_email_card_lines(watch: "_TurnWatch") -> list:
+    """The plain lines at the TOP of an email's card when outside text shaped
+    the turn - [] when the owner's own typed or said words did. The details
+    (which tools, which values came from outside) follow under "What shaped
+    this request:", as on every card."""
+    lines = []
+    if watch.read or watch.tainted:
+        lines.append(SEND_EMAIL_READ)
+    if watch.provenance:
+        lines.append(SEND_EMAIL_NOT_TYPED.format(how=_NOT_OWN_WORDS[watch.provenance]))
+    if watch.app_context:
+        lines.append(SEND_EMAIL_APP)
+    return lines
+
+
+def _send_email_refusal(watch: "_TurnWatch") -> str:
+    """Why this turn may not even ask about an email, or "". Fails closed: a
+    turn whose model is unknown is refused."""
+    lane = getattr(watch, "lane", None)
+    if not isinstance(lane, dict) or local_model_refusal(lane.get("url"), lane.get("model")):
+        return SEND_EMAIL_NOT_LOCAL
+    try:
+        import jarvis_email_send as SEND
+    except Exception as exc:
+        return f"refused: sending email is not available here ({type(exc).__name__})."
+    why = SEND.tier_problem(_tier_of)
+    if why:
+        return f"refused: {why}. Nobody was asked and nothing was sent. Tell the owner."
+    return ""
 
 
 #: The tools that write into the owner's notes.
@@ -2043,8 +2154,11 @@ def _provenance(m: dict) -> str:
     p = m.get("provenance")
     return p if isinstance(p, str) and (p in OWN_WORDS or p in _NOT_OWN_WORDS) else "unknown"
 
-#: The one tool whose result is not outside text: a number worked out here.
-_NOT_READING = {"calculator"}
+#: The tools whose result is not outside text: a number worked out here, and
+#: send_email's own confirmation ("Sent to ..."), built from the plan the
+#: owner approved - so a second email in the same answer is not marked as
+#: shaped by outside text just because the first one was sent.
+_NOT_READING = {"calculator", "send_email"}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -3027,6 +3141,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                          f"{lane_choice.why}")
             except Exception:
                 pass
+    # The model writing this turn, for a tool that must know (send_email:
+    # rule 1). The same dict object - `cur.update` below keeps it current.
+    watch.lane = cur
     names = [] if cur["feature"] == "vision" else offered_tools(enabled_tools)
     tool_schemas = [TOOLS[n].schema(names) for n in names]
     sink = on_step if on_step is not None else _publish_step
@@ -3345,6 +3462,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # here. See SCHEDULE_TOOLS for why.
         _schedule_call(name, args, call, convo, steps, say_step, watch)
         return
+    if name == "send_email":
+        # Refused before anything is planned or anyone asked - see SEND_EMAIL_*.
+        why = _send_email_refusal(watch)
+        if why:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "sent": False,
+                                                    "error": why})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
     lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
     action_name = lookup_name
     try:
@@ -3352,6 +3479,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
     except Exception:
         pass
+    if name == "send_email":
+        action_name = SEND_EMAIL_ACTION
     # A note write after outside text waits for a person (NOTE_WRITES): put
     # to the gate as NOTE_AFTER_OUTSIDE_ACTION when its own tier would not
     # ask. "never" stays "never", and "ask" asks anyway.
@@ -3373,6 +3502,25 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
         say_step("tool_finished", name, ok=False)
         return
+    if name == "send_email":
+        # A plan that says why nothing could be sent (a bad address, too
+        # long, not set up, the module missing): nothing to ask about, so no
+        # card. The model is told why, in the plan's own words.
+        problem = getattr(state, "problem", "")
+        if problem:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({
+                              "ok": False, "sent": False,
+                              "error": f"refused: {problem}. Nothing was sent and nobody "
+                                       f"was asked."})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
+        # The owner's decision: the card says PLAINLY, at the top, when
+        # outside text shaped this turn.
+        top = send_email_card_lines(watch)
+        if top:
+            plan_text = "\n".join(top) + "\n\n" + plan_text
     # What shaped this request, when anything from outside did: added to the
     # text the card shows (never to the plan that runs), and before the
     # length check below, so a card is never cut short by it.
@@ -3387,7 +3535,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                       "tool_call_id": call.get("id", ""),
                       "content": _tool_content(
                           {"ok": False,
-                           "error": (f"refused: the plan for {name} is too long "
+                           "error": SEND_EMAIL_TOO_LONG if name == "send_email" else
+                                    (f"refused: the plan for {name} is too long "
                                      f"to show in full on one approval card, so "
                                      f"nobody was asked and nothing ran. Make a "
                                      f"shorter plan - fewer steps, or split the "

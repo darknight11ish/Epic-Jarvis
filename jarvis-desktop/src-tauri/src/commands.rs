@@ -1940,6 +1940,21 @@ async fn answer_approval(
         }
     }
 
+    // An email is approved in the Jarvis bar only, lock or not (the owner's
+    // decision of 2026-09-25: the card shows the recipients, the subject
+    // and every word). The widget shows one line of a card, so its Approve
+    // for an email opens the Jarvis bar, where all of it can be read. Deny
+    // still works from the widget. Checked here, in the command, not only
+    // by the widget's button.
+    if approved {
+        if let AnsweredFrom::Window(window) = &from {
+            if window.label() == windows::WIDGET_LABEL && waiting_email(&app, id) {
+                show_approval_in_quickbar(&app);
+                return Err(crate::email_sending::EMAIL_APPROVES_IN_BAR.to_string());
+            }
+        }
+    }
+
     // Windows Hello, for an Approve (lock.rs): after the checks above, so
     // the owner is never asked to confirm something that would then be
     // refused anyway, and before the request is built. Deny is never held:
@@ -2469,14 +2484,27 @@ pub fn get_app_lock(app: AppHandle) -> bool {
     crate::lock::current(&app).app_lock
 }
 
-/// The widget's Approve while App lock is on: opens the Jarvis bar on the
-/// waiting card. The bar is behind the lock, so Windows Hello is asked
-/// before it shows, and the approval is made there. Decides nothing.
+/// The widget's Approve while App lock is on, or on an email: opens the
+/// Jarvis bar on the waiting card. The bar is behind the lock, so Windows
+/// Hello is asked before it shows, and the approval is made there - where an
+/// email can be read whole. Decides nothing.
 #[tauri::command]
 pub fn open_approval_in_quickbar(app: AppHandle) -> Result<(), String> {
     windows::show_quickbar(&app)?;
     crate::emit_quickbar(&app, crate::events::SHOW_APPROVAL, ());
     Ok(())
+}
+
+/// Whether the waiting approval `id` is an email (action `send_email`), as
+/// this process last read the queue.
+fn waiting_email(app: &AppHandle, id: &str) -> bool {
+    app.state::<crate::stream::StreamState>()
+        .pending()
+        .iter()
+        .any(|item| {
+            crate::stream::approval_id(item).as_deref() == Some(id)
+                && crate::email_sending::is_email(item)
+        })
 }
 
 /// [`open_approval_in_quickbar`] from inside `answer_approval`, where a

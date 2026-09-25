@@ -1460,6 +1460,14 @@ object JarvisRuntime {
     suspend fun reach(): ApiResult<JsonObject> = api.reach()
 
     /**
+     * `GET /api/email/sending` - Mind's "Sending email" line
+     * ([com.jarvis.client.net.EmailSending], ui/screens/EmailSendingPlate.kt).
+     * A read: never held. There is nothing to change from the phone: the
+     * account is set on the PC, and each email is its own approval card.
+     */
+    suspend fun emailSending(): ApiResult<JsonObject> = api.emailSending()
+
+    /**
      * ONE web search setting, with [body] from [com.jarvis.client.net.WebSearch]'s
      * providerBody / addressBody / askBody. Held on a stale link ([actionBlocker],
      * rule 4). Turning "Ask before every web search" off raises a card on the PC,

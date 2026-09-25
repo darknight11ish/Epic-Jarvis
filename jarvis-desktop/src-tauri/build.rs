@@ -171,6 +171,12 @@ fn main() {
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.
             "get_reach",
+            // Settings' "Sending email" (backend/email-send.patch): whether
+            // sending is set up - from which address, through which server -
+            // in the PC's own words. A read; never the password. Settings
+            // window only. Each email is its own approval card, answered
+            // through decide_approval like every other.
+            "get_email_sending",
             // Settings' "Voice": what the PC's voice settings are (GET
             // /api/voice/status) - whether each microphone's voice print is
             // trained, the wake word, the stop word, Smart Turn. Read only.

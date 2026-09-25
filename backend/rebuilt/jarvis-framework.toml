@@ -79,6 +79,11 @@ web_research              = "auto"
 read_calendar             = "auto"
 read_files_readonly       = "auto"
 draft_email               = "auto"
+# Sending one email (jarvis_email_send.py, the owner's decision of
+# 2026-09-25): ONE approval card per email, showing who it goes to, the
+# subject and every word. Must stay "ask": anything else and every email is
+# refused, never sent unasked; "never" switches sending off. The model is
+# offered the tool only once "send_email" is in [tools].enabled.
 send_email                = "ask"
 edit_calendar_event       = "ask"
 delete_calendar_event     = "ask"

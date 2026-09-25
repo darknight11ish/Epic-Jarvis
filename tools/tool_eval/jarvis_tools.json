@@ -271,7 +271,7 @@
   "type": "function",
   "function": {
    "name": "email_check",
-   "description": "Read recent messages in the owner's inbox: sender, subject, date, preview. Read-only; never sends. For appointments and events, use calendar_read.",
+   "description": "Read recent inbox messages: sender, subject, date, preview. Read-only. For appointments and events, use calendar_read. To send, use send_email.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -284,6 +284,43 @@
       "description": "default true"
      }
     }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "send_email",
+   "description": "Send one plain-text email from the owner's account. The owner sees all of it on an approval card first; nothing is sent without their yes. No attachments. To read the inbox, use email_check.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "email addresses, e.g. [\"alex@example.com\"]"
+     },
+     "cc": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "subject": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string",
+      "description": "the whole email, as it will be sent"
+     }
+    },
+    "required": [
+     "to",
+     "subject",
+     "body"
+    ]
    }
   }
  },

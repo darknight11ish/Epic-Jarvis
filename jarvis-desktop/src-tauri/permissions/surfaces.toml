@@ -341,6 +341,10 @@ permissions = [
   # asks first - written by the PC from its settings, never by the model.
   # A read: it changes nothing, and no key or private link is in it.
   "allow-get-reach",
+  # "Sending email": whether it is set up, from which address and through
+  # which server (GET /api/email/sending). A read: it sends nothing and
+  # never carries the password. Each email is its own approval card.
+  "allow-get-email-sending",
   # "Voice": what the PC says about listening to the owner - whether each
   # microphone's voice print is trained, which voice check is installed, the
   # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:

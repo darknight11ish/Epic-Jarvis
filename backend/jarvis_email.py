@@ -21,6 +21,7 @@ docstring makes the same point about a browser step: it "almost always sends
 something to whoever is on the other end") and would need its own plan,
 its own card, and its own explicit decision to build - not a quiet extension
 of a tool whose whole pitch was "read-only".
+(Built 2026-09-25 exactly that way, in jarvis_email_send.py; this module still sends nothing.)
 
 THE PERMISSION MODEL, WHICH IS THE POINT
     plan(limit, unread_only)   Works out the ONE connection this would make -

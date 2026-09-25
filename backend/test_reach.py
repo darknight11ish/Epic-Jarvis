@@ -281,8 +281,14 @@ def t_it_only_reads():
 
 def t_sending_email_is_one_entry():
     r = row(R.view(ctx()), "email_send")
-    check("sending email: its own row, not set up", r["state"] == "not_set_up"
-          and "cannot send email" in r["line"])
+    check("sending email: its own row, not set up without an email account",
+          r["state"] == "not_set_up" and "sending" in r["line"])
+    env = {"JARVIS_IMAP_HOST": "imap.example.com", "JARVIS_IMAP_USER": "me@example.com",
+           "JARVIS_IMAP_PASSWORD": "pw" + "-for-the-test"}
+    on = row(R.view(ctx({"send_email"}, env=lambda n: env.get(n, ""))), "email_send")
+    check("... and on, through smtp.example.com, when the account is set up and "
+          "send_email is offered", on["state"] == "on" and "smtp.example.com" in on["where"]
+          and ("pw" + "-for-the-test") not in json.dumps(on), on)
     saved = R.KINDS
     try:
         R.KINDS = tuple((k, (lambda c: R._row("email_send", "Email (sending)", "on",

@@ -926,6 +926,21 @@
         </div>
       </section>
 
+      <!-- ── Sending email ─────────────────────────────────────────────────
+           The owner's decision of 2026-09-25, after the Muse audit
+           (email-sending-settings.js; email_sending.rs get_email_sending).
+           One line in the PC's own words: whether sending is set up, from
+           which address, through which server - never the password. There
+           is nothing to change here: the account is the one email reading
+           uses, set on the PC, and each email is its own approval card.
+           The phone shows the same line (Mind, Sending email). -->
+      <section class="card" id="email-sending">
+        <h2 id="es-title">Sending email</h2>
+        <p class="note" id="es-note"></p>
+        <p class="state" id="es-state" role="status">Checking whether Jarvis can send email…</p>
+        <p class="sc-line" id="es-said" hidden></p>
+      </section>
+
       <section class="card">
         <h2>Frequently asked questions</h2>
         <p class="note">
@@ -956,7 +971,8 @@
               (<kbd>Alt</kbd>+<kbd>Space</kbd> opens the Jarvis bar). For
               anything important Windows also shows a notification. Press Approve or Deny on the card; the
               notification can only Deny. Nothing runs until you decide, one
-              thing at a time.
+              thing at a time. An email Jarvis wants to send is approved in
+              the Jarvis bar, where you can read all of it first.
             </p>
           </details>
 
@@ -1269,5 +1285,6 @@
     <script type="module" src="briefing-settings.js"></script>
     <script type="module" src="web-search-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>
+    <script type="module" src="email-sending-settings.js"></script>
   </body>
 </html>

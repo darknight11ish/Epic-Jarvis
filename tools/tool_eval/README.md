@@ -1,6 +1,6 @@
 # Tool test: how well a local model picks and fills Jarvis's tools
 
-`ollama_tool_eval.py` sends 55 made-up requests to a model in Ollama on this
+`ollama_tool_eval.py` sends 61 made-up requests to a model in Ollama on this
 PC, the same way Jarvis does, with Jarvis's real tool list (read from
 `backend/jarvis_agent.py`; `jarvis_tools.json` is a saved copy used only if
 that cannot be read). It scores whether the model picks the right tool,

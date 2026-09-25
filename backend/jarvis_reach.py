@@ -39,7 +39,7 @@ a part that cannot be read says so on its own line.
 
 ADDING A WAY OUT
 One entry in KINDS below: an id and a function that returns one row. (The
-email-sending work replaces `_email_send` with its real row.)
+email-sending row is `_email_send`.)
 
     python3 test_reach.py
 """
@@ -94,6 +94,7 @@ TOOL_NAMES = {
     "browser_control": "Browser control",
     "github_search": "GitHub research",
     "web_search": "Web search",
+    "send_email": "Send an email (one card each)",
     "calendar_read": "Reading your calendar",
     "email_check": "Reading your email",
     "notes_search": "Searching your notes",
@@ -447,10 +448,28 @@ def _email_read(ctx: Ctx) -> dict:
 
 
 def _email_send(ctx: Ctx) -> dict:
-    # The email-sending work replaces this with its real row: whether it is
-    # set up, the outgoing mail server's host, and "Yes, every email".
-    return _row("email_send", "Email (sending)", "not_set_up", "", ASK_NA,
-                "Jarvis cannot send email: nothing on this PC is set up for it.")
+    """Sending email (jarvis_email_send.py): the same account as reading, the
+    outgoing server named in JARVIS_SMTP_HOST or worked out from the reading
+    one (imap.X -> smtp.X), and one approval card per email."""
+    user = ctx.env("JARVIS_IMAP_USER")
+    configured = bool(user) and bool(ctx.env("JARVIS_IMAP_PASSWORD"))
+    host = ctx.env("JARVIS_SMTP_HOST").strip().lower().rstrip(".")
+    if not host:
+        try:
+            import jarvis_email_send as ES
+            host = ES._guess_smtp_host(ctx.env("JARVIS_IMAP_HOST"))
+        except Exception:
+            host = ""
+    where = where_words(host)
+    if where and user:
+        where = f"{where} (as {user})"
+    return _tool_row(
+        "email_send", "Email (sending)", "send_email", ctx, configured=configured and bool(host),
+        where=where,
+        on_line=("Sends one email at a time from your own account, only after you approve "
+                 "a card showing the recipients, the subject and every word. No attachments."),
+        not_set_up="No email account is set up on this PC for sending.",
+        off_line=_enable_line("send_email"))
 
 
 def _home_read(ctx: Ctx) -> dict:

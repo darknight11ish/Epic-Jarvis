@@ -29,6 +29,11 @@ CASES = [
     ("any new mail?", "email_check", {}),
     ("did anyone reply to me today", "email_check", {}),
     ("show me my last 5 unread messages in my inbox", "email_check", {}),
+    # send_email (2026-09-25): the owner sees the whole email on a card first
+    ("email alex@example.com to say I'll be ten minutes late", "send_email",
+     {"to": list, "subject": str, "body": str}),
+    ("send sam@example.org a short thank-you email for the birthday present", "send_email",
+     {"to": list, "subject": str, "body": str}),
     # notes_search
     ("search my notes for the wifi password of the cabin", "notes_search", {"query": str}),
     ("what did I write in Obsidian about the garden plan", "notes_search", {"query": str}),
@@ -77,6 +82,8 @@ HELD_OUT = [
     ("do I have anything booked on the 3rd", "calendar_read", {}),
     ("has the bank written back", "email_check", {}),
     ("anything important land in my messages overnight", "email_check", {}),
+    ("write an email to jo@example.net asking if Saturday still works", "send_email",
+     {"to": list, "subject": str, "body": str}),
     ("find where I jotted down the boiler model number", "notes_search", {"query": str}),
     ("is the garage open", "home_read", {"entity_ids": list}),
     ("what's the thermostat reading in the hall", "home_read", {"entity_ids": list}),
