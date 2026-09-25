@@ -216,9 +216,9 @@ class NoSockets:
 # --------------------------------------------------------------------------
 
 
-def fresh_backoff(t=1_000_000.0, name="bo"):
+def fresh_backoff(t=1_000_000.0, name="bo", mode=lambda: "active"):
     c = Clock(t)
-    return BO.Backoff(_TMP / f"{name}-{time.monotonic_ns()}.json", clock=c), c
+    return BO.Backoff(_TMP / f"{name}-{time.monotonic_ns()}.json", clock=c, mode=mode), c
 
 
 def t_fingerprints_are_stable():
@@ -251,6 +251,53 @@ def t_the_three_rules():
     c.t += BO.WAITING_FOR + 1
     check("an offer nobody answered stops holding the others back after a day",
           bo.status()["waiting"] == 0)
+
+
+def t_quiet_and_standby_hold_offers_for_later():
+    """Quiet means "answers, but starts nothing on its own" - the creativity
+    audit found offers still turned up in it (2026-09-25)."""
+    now = {"mode": "quiet"}
+    bo, c = fresh_backoff(name="quiet", mode=lambda: now["mode"])
+    fp = BO.fingerprint("sleep_time_offer")
+    check("Quiet: no offer, and it says why", bo.may_offer(fp) == (False, "quiet"))
+    check("... in plain words", "Quiet or Standby" in BO.REASONS["quiet"])
+    now["mode"] = "standby"
+    check("Standby: no offer either", bo.may_offer(fp) == (False, "quiet"))
+    check("held back is NOT a no: nothing is written, nothing waits",
+          not bo.path.exists() and bo.status()["waiting"] == 0 and bo.status()["silenced"] == 0)
+    now["mode"] = "active"
+    check("back to Active: the same offer may be made", bo.may_offer(fp) == (True, ""))
+    def broken():
+        raise RuntimeError("jarvis_power could not be read")
+    bo2, _ = fresh_backoff(name="unknown", mode=broken)
+    check("the mode cannot be read: the offer waits (fails quiet), and says why",
+          bo2.may_offer(fp) == (False, "mode_unknown"))
+    # The real reading: jarvis_power.current(), which applies quiet hours too.
+    import jarvis_power
+    saved = jarvis_power.current
+    try:
+        jarvis_power.current = lambda: "quiet"
+        bo3 = BO.Backoff(_TMP / f"real-{time.monotonic_ns()}.json", clock=c)
+        check("by default it reads jarvis_power.current()", bo3.may_offer(fp) == (False, "quiet"))
+    finally:
+        jarvis_power.current = saved
+    # The overnight-tidy card waits too, and is offered later the same day.
+    import jarvis_sleep as SL
+    now["mode"] = "quiet"
+    bo4, c4 = fresh_backoff(t=time.time(), name="sleepq", mode=lambda: now["mode"])
+    saved_one = BO._ONE
+    BO._ONE = bo4
+    SL._seen.clear()
+    try:
+        check("the overnight card in Quiet: not offered", SL.reminder_card() is None)
+        check("... and the day is NOT used up by that", SL._seen.get("day") is None)
+        now["mode"] = "active"
+        card = SL.reminder_card()
+        check("Active again: offered the same day",
+              card is not None and card["kind"] == "sleep_time_offer")
+    finally:
+        BO._ONE = saved_one
+        SL._seen.clear()
 
 
 def t_a_no_is_heard_for_1_then_7_then_30_days():
