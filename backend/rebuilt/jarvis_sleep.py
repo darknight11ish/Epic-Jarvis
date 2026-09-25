@@ -21,8 +21,10 @@ is exactly the thing that decision was about, so this module reports and
 offers; it does not consolidate. An INFERRED implementation of the pass itself
 would be a silent, unreviewed rewrite of the fact store.
 
-`set_enabled`/`set_remind` answer the card's own three actions ("enable",
-"not now", "stop asking") so a client can act on it, added when the card was
+`set_enabled`/`set_remind`/`not_now` answer the card's own three actions
+("enable", "not now", "stop asking") so a client can act on it - `not_now`
+added 2026-09-25 with jarvis_backoff.py, which keeps the offer quiet for 1
+day, then 7, then 30 after each "not now" - added when the card was
 first wired into the desktop and phone UIs rather than only ever printed to a
 console. Neither writes `jarvis-framework.toml` - that file is the owner's
 own, hand-edited, and this module was never going to start rewriting it from
@@ -116,12 +118,76 @@ def set_enabled(on: bool) -> dict:
     docstring. If it is ever built, it may only PROPOSE changes as review
     cards: nothing retires a stored fact without the owner's yes on that
     one fact."""
-    return _set("enabled", on)
+    out = _set("enabled", on)
+    if on and out.get("ok"):
+        _backoff_do("accepted")
+    return out
 
 
 def set_remind(on: bool) -> dict:
     """The card's "stop asking" action, sent as `set_remind(False)`."""
-    return _set("remind", on)
+    out = _set("remind", on)
+    if out.get("ok"):
+        _backoff_do("closed")
+    return out
+
+
+# --------------------------------------------------------------------------
+#   The back-off (jarvis_backoff.py, briefing.patch, 2026-09-25)
+# --------------------------------------------------------------------------
+#
+# This card is an OFFER nobody asked for, so it follows the three rules every
+# offer follows: it is not handed out while the owner is chatting (two
+# minutes), nor while too many other offers wait, and each "not now" keeps it
+# quiet for 1 day, then 7, then 30. "Stop asking" is still for good, and
+# switching it on is still the owner's own choice at any time - a "not now"
+# never stops that. Without jarvis_backoff.py the card behaves as it always
+# did: once a day.
+
+#: The offer's fingerprint: what it offers, not its words.
+OFFER = "sleep_time_offer"
+
+
+def _backoff():
+    try:
+        import jarvis_backoff
+        return jarvis_backoff.get(), jarvis_backoff.fingerprint(OFFER)
+    except Exception:
+        return None, None
+
+
+def _backoff_do(what: str) -> None:
+    bo, fp = _backoff()
+    if bo is None:
+        return
+    try:
+        getattr(bo, what)(fp)
+    except Exception:
+        pass
+
+
+def not_now() -> dict:
+    """The card's "not now" action: the owner said no, for now. Quiet for 1
+    day, then 7, then 30 (jarvis_backoff.SILENCE_DAYS). Changes no setting:
+    switching it on stays one tap away, and nothing here stops that."""
+    bo, fp = _backoff()
+    if bo is None:
+        return {"ok": True, "enabled": enabled(), "remind": remind(),
+                "quiet_until": None,
+                "said": "Not now. It may offer again tomorrow."}
+    try:
+        until = bo.declined(fp)
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__, "enabled": enabled(),
+                "remind": remind()}
+    try:
+        now = float(bo.now())
+    except Exception:
+        now = time.time()
+    days = max(1, round((until - now) / 86400))
+    return {"ok": True, "enabled": enabled(), "remind": remind(), "quiet_until": until,
+            "said": f"Not now. It will not offer this again for "
+                    f"{days} day{'s' if days != 1 else ''}."}
 
 
 def enabled() -> bool:
@@ -156,16 +222,33 @@ def hour() -> int:
 def reminder_card() -> Optional[dict]:
     """The daily offer to switch it on, or None.
 
-    None in three cases: it is already on, reminders are off, or one has
-    already been offered today. The last is why this returns None rather than
-    an empty dict - the HUD tests the result for truthiness.
+    None in four cases: it is already on, reminders are off, one has
+    already been offered today, or the back-off says wait (the owner chatted
+    in the last two minutes, other offers are waiting, or a recent "not now"
+    still holds - jarvis_backoff.py). That is why this returns None rather
+    than an empty dict - the HUD tests the result for truthiness.
     """
     if enabled() or not remind():
         return None
     today = time.strftime("%Y-%m-%d")
     if _seen.get("day") == today:
         return None
+    # The back-off: asked BEFORE the day is marked, so a card held back
+    # because the owner is chatting is offered later the same day.
+    bo, fp = _backoff()
+    if bo is not None:
+        try:
+            may, _why = bo.may_offer(fp)
+        except Exception:
+            may = False
+        if not may:
+            return None
     _seen["day"] = today
+    if bo is not None:
+        try:
+            bo.opened(fp)
+        except Exception:
+            pass
     # The words are the whole of this card, so they must be true. They used
     # to promise a pass that would "merge duplicates and retire facts that
     # newer ones replaced" - nothing does either (status() says

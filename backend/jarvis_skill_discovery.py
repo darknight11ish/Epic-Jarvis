@@ -684,6 +684,38 @@ def offer(p: Plan, *, gate: Optional[Callable] = None,
     return _decide("refused", reason=str(getattr(v, "reason", "refused"))[:200])
 
 
+#: The longest a skill offer waits for the owner to stop chatting. After
+#: that it gives up; the next tool-using turn may start another.
+QUIET_WAIT_MAX = 30 * 60.0
+
+
+def _backoff(kwargs: dict):
+    """(the back-off, its fingerprint function), or (None, None) without
+    jarvis_backoff.py - then offers work as they always did. A test passes
+    `backoff=None` to leave it out, or its own."""
+    try:
+        import jarvis_backoff
+    except Exception:
+        return None, None
+    bo = kwargs["backoff"] if "backoff" in kwargs else jarvis_backoff.get()
+    return (bo, jarvis_backoff.fingerprint) if bo is not None else (None, None)
+
+
+def _wait_for_quiet(bo, sleep) -> bool:
+    """Wait until the owner has not chatted for two minutes. False if that
+    did not happen within QUIET_WAIT_MAX."""
+    waited = 0.0
+    while True:
+        left = bo.quiet_for()
+        if left <= 0:
+            return True
+        if waited >= QUIET_WAIT_MAX:
+            return False
+        step = min(left + 1.0, 30.0)
+        sleep(step)
+        waited += step
+
+
 def maybe_offer_async(**kwargs) -> bool:
     """Called after each tool-using turn. If no card is already waiting,
     starts ONE background thread that plans and, if there is something to
@@ -699,11 +731,31 @@ def maybe_offer_async(**kwargs) -> bool:
             # the work.
             if (kwargs.get("tier_of") or _fw_tier)(ACTION) != "ask":
                 return
+            # The back-off (jarvis_backoff.py): this is an offer nobody asked
+            # for, and it is started at the END of a chat turn - so it waits
+            # until the owner has stopped chatting for two minutes, and asks
+            # only while few other offers wait. A "no" here is already for
+            # good (_FINAL, above), stricter than the back-off's 1/7/30 days,
+            # so nothing is written to its file for this offer.
+            bo, fpr = _backoff(kwargs)
+            if bo is not None and not _wait_for_quiet(bo, kwargs.get("sleep") or time.sleep):
+                return
             p = plan(**{k: v for k, v in kwargs.items()
                         if k in ("log_dir", "ledger", "skills_dir", "settings")})
-            if p is not None:
+            if p is None:
+                return
+            fp = fpr("skill_offer", p.key) if bo is not None else None
+            if bo is not None:
+                may, _why = bo.may_offer(fp)
+                if not may:
+                    return
+                bo.opened(fp)
+            try:
                 offer(p, **{k: v for k, v in kwargs.items()
                             if k in ("gate", "tier_of", "audit", "ledger")})
+            finally:
+                if bo is not None:
+                    bo.closed(fp)
         except Exception:
             pass
         finally:

@@ -384,6 +384,16 @@ $PATCHES = @(
     # shipped rebuilt\jarvis_memory.py (the entity layer; recall uses it
     # through jarvis_past.py); with an older copy the route answers 501.
     'memory-entities.patch'
+    # The morning briefing and the back-off for offers (2026-09-25): GET
+    # /api/briefing and POST /api/briefing/now, "not now" on the
+    # overnight-tidy card as a real answer (quiet for 1 day, then 7, then
+    # 30), the conversation clock and a briefing's calendar read in
+    # /api/chat, and the approval notice's words for schedule_repeat. Its
+    # context is schedule's route blocks, its /api/chat block and its gate
+    # line, and learning-asks' sleep_time lines - last, like every new
+    # patch. Needs jarvis_briefing.py and jarvis_backoff.py copied in;
+    # without them the routes answer 503 and chat works exactly as before.
+    'briefing.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -454,6 +464,8 @@ $SHIPPED = @(
     'jarvis_scrub.py'            # log-scrub.patch: passwords, keys and the token kept out of backend.log
     'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
     'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
+    'jarvis_backoff.py'          # briefing.patch: offers nobody asked for - a few at most, not mid-chat, a "no" heard
+    'jarvis_briefing.py'         # briefing.patch: the morning briefing, a kind of job on the one scheduler
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

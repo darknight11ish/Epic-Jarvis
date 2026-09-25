@@ -1,0 +1,127 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1549,6 +1549,23 @@
+                 # The exception's NAME only: its message could quote a row.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
++        if path == "/api/briefing":
++            # briefing.patch - the morning briefing (jarvis_briefing.py): the
++            # latest one (kept in memory only, never on disk), whether one is
++            # being put together, the briefing jobs, and what a briefing
++            # includes. Behind the token: its lines are the owner's own day.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_briefing
++                code, out = jarvis_briefing.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only, as for /api/schedule.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+         if path in ("/api/wiki", "/api/wiki/ingest"):
+             # wiki.patch - the wiki builder (jarvis_wiki.py). GET /api/wiki:
+             # whether it can run (it needs the second card's "wiki" lane),
+@@ -2083,6 +2100,28 @@
+                 code, out = jarvis_schedule.handle_act(body)
+             return self._send(code, out)
+ 
++        if route == "/api/briefing/now":
++            # briefing.patch - "Brief me now": put one together and answer
++            # with it (jarvis_briefing.py). It only READS - today's calendar
++            # and the unread-email count as their own gate actions allow,
++            # the scheduler's list, the approval count - and asks no card.
++            # Setting one up to repeat is POST /api/schedule/add with kind
++            # "briefing", which raises the scheduler's own card.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_briefing
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++            code, out = jarvis_briefing.handle_now(body)
++            return self._send(code, out)
++
+         if route == "/api/wiki/ingest":
+             # wiki.patch - "Add to wiki" for one document in Sources. The
+             # second card's model reads it and proposes pages, then ONE
+@@ -2340,16 +2379,24 @@
+                 return self._send(code, out)
+ 
+             if route == "/api/memory/sleep_time":
+-                # The daily card's own two backend-facing actions - "enable"
+-                # and "stop asking" - become one write each. "not now" needs
+-                # no call at all: the card already tracks "already offered
+-                # today" itself (jarvis_sleep.py's own `_seen`), so a dismiss
+-                # with no write still does not return until tomorrow.
++                # The daily card's own backend-facing actions - "enable" and
++                # "stop asking" - become one write each. "not now" is
++                # {"not_now": true} since briefing.patch: each one keeps the
++                # card quiet for 1 day, then 7, then 30 (jarvis_backoff.py),
++                # and changes no setting.
+                 sleep_enabled = body.get("enabled")
+                 sleep_remind = body.get("remind")
++                if body.get("not_now") is True and not isinstance(sleep_enabled, bool) \
++                        and not isinstance(sleep_remind, bool):
++                    not_now = getattr(jarvis_sleep, "not_now", None)
++                    if not_now is None:
++                        return self._send(200, {"ok": True, "said": "Not now."})
++                    out = not_now()
++                    return self._send(200 if out.get("ok") else 500, out)
+                 if not isinstance(sleep_enabled, bool) and not isinstance(sleep_remind, bool):
+                     return self._send(400, {
+-                        "error": 'need {"enabled": true|false} or {"remind": true|false}'})
++                        "error": 'need {"enabled": true|false}, {"remind": true|false} '
++                                 'or {"not_now": true}'})
+                 out = {}
+                 if isinstance(sleep_enabled, bool):
+                     out = jarvis_sleep.set_enabled(sleep_enabled)
+@@ -2891,6 +2938,14 @@
+         # before. The `finally` still runs: this PC's record of the turn
+         # (not for a temporary chat) and the learner, which skips a command
+         # like this one (jarvis_intake.owner_turns).
++        # briefing.patch: the owner is talking to Jarvis now, so no offer
++        # nobody asked for is put to them for two minutes (jarvis_backoff.py).
++        # The time only, in memory; never the words.
++        try:
++            import jarvis_backoff
++            jarvis_backoff.note_conversation()
++        except Exception:
++            pass
+         try:
+             import jarvis_quick
+             _quick = jarvis_quick.answer_turn(body)
+@@ -2902,8 +2957,13 @@
+             if _temporary_chat(body) and route_header.get("memory_side") != "jarvis":
+                 route_header["memory_side"] = "none"
+                 route_header["temporary"] = True
++            # briefing.patch: a briefing that quotes calendar titles read
++            # outside text, so this PC's record of the turn says the calendar
++            # was read - the conversation then counts as having read outside
++            # text, exactly as when the calendar tool runs.
+             _history["turn"] = {"answer": _quick.reply, "finish_reason": "stop",
+-                                "client_gone": False, "rounds": 0, "tools_ran": []}
++                                "client_gone": False, "rounds": 0,
++                                "tools_ran": list(getattr(_quick, "read", None) or [])}
+             self.send_response(200)
+             self.send_header("Content-Type", jarvis_quick.content_type(_qstream))
+             self.send_header("X-Jarvis-Route", json.dumps(route_header))
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -593,7 +593,7 @@
+     # ("every weekday at 7"): it only rings on this PC and the apps, and
+     # deleting it is immediate. Without this line the action would be read
+     # as "unknown", and the notice would say it might leave the machine.
+-    "schedule_repeat": ("yes", "local", "sets up a reminder or alarm that repeats, on this PC; nothing is sent anywhere, and deleting it is immediate"),
++    "schedule_repeat": ("yes", "local", "sets up something that repeats on this PC - a reminder, an alarm or a morning briefing; setting it up sends nothing anywhere, and deleting it is immediate"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
