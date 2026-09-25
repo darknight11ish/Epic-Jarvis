@@ -112,7 +112,7 @@
       "name": "local turn, Ollama not running",
       "producer": "jarvis_agent.run_local_turn",
       "content_type": "text/event-stream",
-      "body": "data: {\"error\":{\"message\":\"The local model is not running. Open Ollama on this PC (or run `ollama serve`), then try again.\",\"type\":\"jarvis\"}}\n\n",
+      "body": "data: {\"error\":{\"message\":\"The local model is not running. Open Ollama on this PC (or run `ollama serve`), then try again.\",\"type\":\"jarvis\",\"code\":\"model_not_running\"}}\n\n",
       "expect": {
         "text": "",
         "ended": false,
@@ -125,7 +125,7 @@
       "name": "local turn, model not installed",
       "producer": "jarvis_agent.run_local_turn",
       "content_type": "text/event-stream",
-      "body": "data: {\"error\":{\"message\":\"The model “qwen3:14b” is not installed on this PC. Install it from Models in the desktop app (or run `ollama pull qwen3:14b`), or switch to a model you have.\",\"type\":\"jarvis\"}}\n\n",
+      "body": "data: {\"error\":{\"message\":\"The model “qwen3:14b” is not installed on this PC. Install it from Models in the desktop app (or run `ollama pull qwen3:14b`), or switch to a model you have.\",\"type\":\"jarvis\",\"code\":\"model_missing\"}}\n\n",
       "expect": {
         "text": "",
         "ended": false,

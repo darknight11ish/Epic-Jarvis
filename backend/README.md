@@ -118,6 +118,7 @@ on a throwaway copy instead.
 | `memory-entities.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **"Who is my sister?" - people and things** (memory wave 3, 2026-09-25). Adds `GET /api/memory/entities` (the people and things facts are linked to, for the desktop's "About <name>"), leaves the "are these the same?" card out of `/api/memory/pending` unless asked for with `?merge_cards=1`, and gives `jarvis_extract.py` `propose_merge()` and `_accept_merge()` - accepting that card joins two entries and adds no fact. The work is in the shipped `rebuilt/jarvis_memory.py` (and `jarvis_past.py`, whose recall uses it); with an older copy the route answers 501. Last in the list, after `temporary-chat.patch`, whose route lines are its context. See "Memory wave 3", at the very end. |
 | `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing`, `POST /api/briefing/now` and `POST /api/briefing/senders` ("Show who new emails are from": off at once, on through one approval card), makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
 | `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of five providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
+| `manner.patch` | `jarvis_hud.py` | **How Jarvis talks: warm and brief, or plain** (the owner's decision, 2026-09-25). Adds `GET` and `POST /api/manner` - one change at a time, **no approval card either way** (it changes only how answers are worded). Its context is `web-search.patch`'s route blocks. Needs `jarvis_manner.py` - see "How Jarvis talks, and errors in plain words", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -9070,3 +9071,72 @@ the model; and the patch applied to what the earlier patches wrote.
 - The phone sees a change made on the desktop at its next read (Refresh).
 - The briefing's "weather and news: not available" line is unchanged -
   weather is a separate decision.
+
+---
+
+# How Jarvis talks, and errors in plain words: `jarvis_manner.py`, `manner.patch` (2026-09-25)
+
+**What it is for.** Two changes to the words you see and hear, nothing else.
+
+**1. Jarvis's manner: warm and brief (the default), or plain.** Your
+decision: "Manner never changes what Jarvis does, asks or remembers - only
+how it phrases things." Choose it in the desktop app's Settings, "How Jarvis
+talks", or on the phone in Mind, "How Jarvis talks". It changes at once, with
+no approval card, because it does not trust, show or send anything more.
+
+- *Warm and brief (default)*: friendly and short, like a helpful person. No
+  gushing, no filler, and no emoji unless you use them.
+- *Plain*: neutral and businesslike - just the answer.
+
+How it works: the local model gets one short extra line saying which manner
+to use, placed just before your question and **after** Jarvis's rules, and
+the line itself says it is about wording only and that every rule still
+applies (say what is a guess; never claim something was done when it was
+not). `test_manner.py` checks that the rules always stay first and that
+neither line can loosen a rule. The line is never sent to a cloud model.
+The short fixed answers (timers, reminders, the to-do list) have a warm
+wording too, with exactly the same facts - for example "Got it - timer set
+for 10 minutes." instead of "Timer set for 10 minutes.". Spoken answers keep
+their spoken-style rules either way.
+
+**2. Error messages in plain words, with the fix on the spot** (the
+creativity audit, item 5). When something goes wrong, both apps now say the
+same short sentence, then one thing to do, with one button - for example:
+
+| Before | After |
+|---|---|
+| Phone: "Cannot reach the desktop: failed to connect to /100.64.1.2 (port 8765) after 10000ms. Check your private network ..." | "Your PC isn't answering. It may be asleep or switched off, or Tailscale or NordVPN Meshnet may be off at one end. Wake the PC, check the private network on both, then try again." [Try again] |
+| Phone: "The desktop answered 503." | "That part of Jarvis isn't running on your PC right now. Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it." |
+| Desktop: "could not reach the Jarvis server at http://127.0.0.1:8765. Is it running?" | "Jarvis isn't running on your PC. The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start Jarvis), then try again." [Try again] |
+| Desktop answer card: "Streaming" and "42 chunks · 3.4s" | "Answering…", nothing in the corner |
+| "Thinking…" for 10-20 seconds after standby | "Waking up the model - the first answer after standby takes a little longer." |
+
+The technical detail is still there for a bug report, behind "Details", with
+tokens, keys, passwords, email addresses and your Windows user name taken
+out first. The words live in one list, `tools/gen_plain_error_cases.py`;
+both apps' tests fail if their words differ from it.
+
+## Owner steps (one line, in PowerShell)
+
+**Put the new code on the PC** (copies `jarvis_manner.py` and the updated
+`jarvis_agent.py` and `jarvis_quick.py`, applies `manner.patch`), from this
+repository's folder, then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+Then update the desktop app and the phone app as usual. The setting is kept
+in `manner.json` in `C:\Users\pcadmin\.openjarvis\`.
+
+## Not checked, said plainly
+
+- How much an 8B model's wording really changes with the line is not
+  measured; small models follow tone loosely.
+- A turn with tools switched off in `jarvis-framework.toml` goes to Ollama
+  without the manner line (the spoken-style line has the same gap). The big
+  model's deep questions and the wiki builder do not use it.
+- "Waking up the model" needs Ollama's `/api/ps` to answer within a second;
+  if it does not, the card says "Thinking…" as before.
+- The phone's Android code was not compiled here (only its plain Kotlin and
+  tests); GitHub Actions compiles it.

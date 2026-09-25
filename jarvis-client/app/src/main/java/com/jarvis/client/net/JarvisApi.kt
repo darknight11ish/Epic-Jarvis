@@ -25,8 +25,14 @@ import java.util.concurrent.TimeUnit
 
 /** What went wrong, in terms the UI can say out loud rather than a stack trace. */
 sealed interface ApiError {
-    /** No host, or nothing listening there. */
-    data class Unreachable(val detail: String) : ApiError
+    /**
+     * No host, or nothing listening there. [network] is the failure's kind
+     * in the plain-words contract's terms ("refused", "connect_timeout",
+     * "unknown_host", "read_timeout", ... - PlainErrors.networkKind), or
+     * "not_paired" when no address is saved; "" when [detail] is this app's
+     * own sentence (a blocker), shown as it is.
+     */
+    data class Unreachable(val detail: String, val network: String = "") : ApiError
 
     /** 401/403. The token is wrong or missing — the one failure worth naming precisely. */
     data object BadToken : ApiError
@@ -507,7 +513,7 @@ class JarvisApi(
      */
     private suspend fun probeKeeping503(path: String): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
         val target = url(path) ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
         )
         val req = Request.Builder().url(target).get().authed().build()
         runCatching {
@@ -524,7 +530,7 @@ class JarvisApi(
                     }
                 }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     /**
@@ -547,7 +553,7 @@ class JarvisApi(
     suspend fun eraseFact(id: Long): ApiResult<MemoryErase.Reply> =
         withContext(Dispatchers.IO) {
             val target = url(MemoryErase.PATH) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = MemoryErase.body(id).toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -562,7 +568,7 @@ class JarvisApi(
                         ApiResult.Ok(MemoryErase.Reply(resp.code, obj))
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     /**
@@ -619,7 +625,7 @@ class JarvisApi(
      */
     suspend fun briefingNow(): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
         val target = url(Briefing.NOW_PATH) ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
         )
         val req = Request.Builder().url(target)
             .post("{}".toRequestBody("application/json".toMediaType())).authed().build()
@@ -634,7 +640,7 @@ class JarvisApi(
                     }
                 }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     /**
@@ -649,7 +655,7 @@ class JarvisApi(
                 return@withContext ApiResult.Failed(ApiError.Malformed("not a schedule route"))
             }
             val target = url(path) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -664,7 +670,7 @@ class JarvisApi(
                         ApiResult.Ok(Schedule.Reply(resp.code, obj))
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     /**
@@ -689,7 +695,7 @@ class JarvisApi(
     suspend fun pinFact(id: Long, pinned: Boolean): ApiResult<MemoryProfile.Reply> =
         withContext(Dispatchers.IO) {
             val target = url(MemoryProfile.PATH) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = MemoryProfile.body(id, pinned).toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -704,7 +710,7 @@ class JarvisApi(
                         ApiResult.Ok(MemoryProfile.Reply(resp.code, obj))
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     /**
@@ -715,7 +721,7 @@ class JarvisApi(
     private suspend fun postWrite(path: String, json: String): ApiResult<DesktopWrite.Outcome> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -726,13 +732,13 @@ class JarvisApi(
                         .getOrNull()
                     DesktopWrite.classify(resp.code, obj)
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     private suspend fun postForJob(path: String, json: String): ApiResult<JsonObject> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -752,7 +758,7 @@ class JarvisApi(
                         else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     // ----------------------------------------------------- chat history ----
@@ -812,7 +818,7 @@ class JarvisApi(
     suspend fun setSecondCard(feature: String, enabled: Boolean): ApiResult<JsonObject> =
         withContext(Dispatchers.IO) {
             val target = url(SecondCard.PATH) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = SecondCard.postBody(feature, enabled)
                 .toRequestBody("application/json".toMediaType())
@@ -824,7 +830,7 @@ class JarvisApi(
                         .getOrNull()
                     SecondCard.classifyPost(resp.code, obj)
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     // --------------------------------------------------------- hardware ----
@@ -857,7 +863,7 @@ class JarvisApi(
                 return@withContext ApiResult.Failed(ApiError.Malformed("not a web search route"))
             }
             val target = url(path) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -869,7 +875,35 @@ class JarvisApi(
                         .getOrNull()
                     WebSearch.classifyPost(resp.code, obj)
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/manner` - "How Jarvis talks": warm and brief, or plain, with
+     * the PC's own words for both ([Manner.parse]). A read.
+     */
+    suspend fun manner(): ApiResult<JsonObject> = probe(Manner.PATH)
+
+    /**
+     * `POST /api/manner` with ONE change ([Manner.body]): at once, no card
+     * either way - it changes only how answers are worded. Nothing but a
+     * body [Manner.body] made is sent.
+     */
+    suspend fun mannerPost(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(Manner.PATH) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     /**
@@ -895,7 +929,7 @@ class JarvisApi(
                 return@withContext ApiResult.Failed(ApiError.Malformed("not a hardware route"))
             }
             val target = url(path) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -906,7 +940,7 @@ class JarvisApi(
                         .getOrNull()
                     Hardware.classifyPost(resp.code, obj)
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     // --------------------------------------------------------- big model ----
@@ -929,7 +963,7 @@ class JarvisApi(
     suspend fun setBigModel(switch: String, enabled: Boolean): ApiResult<JsonObject> =
         withContext(Dispatchers.IO) {
             val target = url(BigModel.PATH) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = BigModel.postBody(switch, enabled)
                 .toRequestBody("application/json".toMediaType())
@@ -941,7 +975,7 @@ class JarvisApi(
                         .getOrNull()
                     BigModel.classifyPost(resp.code, obj)
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     /** `GET /api/deep` - the deep questions and their answers, newest first ([BigModel.parseDeep]). */
@@ -1109,7 +1143,7 @@ class JarvisApi(
     private suspend fun postJson(path: String, json: String): ApiResult<Unit> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -1124,7 +1158,7 @@ class JarvisApi(
                         else -> ApiResult.Failed(errorFor(it))
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     /**
@@ -1143,7 +1177,7 @@ class JarvisApi(
      */
     suspend fun probe(path: String): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
         val target = url(path) ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
         )
         val req = Request.Builder().url(target).get().authed().build()
         runCatching {
@@ -1159,7 +1193,7 @@ class JarvisApi(
                     }
                 }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     // ------------------------------------------------------------ voice ----
@@ -1219,7 +1253,7 @@ class JarvisApi(
     private suspend fun postVoice(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -1236,7 +1270,7 @@ class JarvisApi(
                         else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     /**
@@ -1267,7 +1301,7 @@ class JarvisApi(
         // ignored by a PC without voice-flow.patch.
         val waited = waitedMs?.let { "&waited_ms=${it.coerceIn(0L, 60_000L)}" }.orEmpty()
         val target = url("/api/voice/utterance?source=$source&mic=$MIC_PHONE$waited") ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
         )
         val body = wav.toRequestBody("audio/wav".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
@@ -1281,7 +1315,7 @@ class JarvisApi(
                         { e -> ApiResult.Failed(ApiError.Malformed(e.message ?: "bad verdict")) },
                     )
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     /**
@@ -1319,7 +1353,7 @@ class JarvisApi(
      */
     suspend fun voiceMoment(): ApiResult<ByteArray> = withContext(Dispatchers.IO) {
         val target = url("/api/voice/moment") ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
         )
         val req = Request.Builder().url(target).get().authed().header("Accept", "audio/wav").build()
         runCatching {
@@ -1332,7 +1366,7 @@ class JarvisApi(
                     ApiResult.Ok(bytes)
                 }
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     /**
@@ -1345,7 +1379,7 @@ class JarvisApi(
      */
     suspend fun say(text: String): ApiResult<SaidAloud> = withContext(Dispatchers.IO) {
         val target = url("/api/voice/say") ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
         )
         val body = """{"text":${quote(text)}}""".toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed()
@@ -1383,7 +1417,7 @@ class JarvisApi(
                     else -> ApiResult.Failed(errorFor(it))
                 }
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     /**
@@ -1435,7 +1469,7 @@ class JarvisApi(
     suspend fun calibrateVoice(clips: List<ByteArray>, mic: String): ApiResult<VoiceCalibration> =
         withContext(Dispatchers.IO) {
             val target = url("/api/voice/enroll") ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = enrollRequestBody(clips, mic = mic, mode = "calibrate")
                 .toRequestBody("application/json".toMediaType())
@@ -1458,13 +1492,13 @@ class JarvisApi(
                         }
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     private suspend fun postTraining(json: String): ApiResult<VoiceTrainingReply> =
         withContext(Dispatchers.IO) {
             val target = url("/api/voice/enroll") ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -1488,7 +1522,7 @@ class JarvisApi(
                         }
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     // ------------------------------------------------------------- chat ----
@@ -1550,7 +1584,7 @@ class JarvisApi(
         unwrap: List<String> = emptyList(),
     ): ApiResult<T> = withContext(Dispatchers.IO) {
         val target = url(path) ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            ApiError.Unreachable("No desktop address set", PlainErrors.NOT_PAIRED),
         )
         val req = Request.Builder().url(target).get().authed().build()
         runCatching {
@@ -1559,7 +1593,7 @@ class JarvisApi(
                 val text = it.body?.string().orEmpty()
                 parse(text, serializer, unwrap)
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     private fun <T> parse(

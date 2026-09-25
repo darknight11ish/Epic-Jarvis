@@ -37,6 +37,9 @@ sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_agent.py", "jarvis_intake.py")
 import jarvis_agent as AG  # noqa: E402
+# The owner's manner line (jarvis_manner.py) has its own suite, test_manner.py;
+# this one checks the rest of the request word for word, so it is left out here.
+AG._manner_now = lambda: None
 import jarvis_intake  # noqa: E402
 import _ollama_wire as W  # noqa: E402
 # test_agent's own fakes: the scripted model, the no-network guard. Importing

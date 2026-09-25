@@ -393,6 +393,12 @@ data class HomeState(
     val memoryHidden: Boolean = false,
     /** The Show under a hidden list is asking the phone's lock now. */
     val showPrivateBusy: Boolean = false,
+    /**
+     * The failure [notice] says, in plain words: its ONE fix button and its
+     * scrubbed Details ([com.jarvis.client.net.PlainErrors]). Null when the
+     * notice is anything else.
+     */
+    val noticeProblem: com.jarvis.client.net.PlainErrors.Shown? = null,
 )
 
 @Immutable
@@ -480,7 +486,30 @@ data class HomeActions(
     val onForgetUsed: suspend (Long) -> Pair<Boolean, String> = { false to "" },
     /** Show a hidden memory list, after the phone's lock says it is the owner. */
     val onShowPrivate: () -> Unit = {},
+    /** "Try again" under a failed question: ask the same question again. */
+    val onRetryQuestion: () -> Unit = {},
 )
+
+/**
+ * What a failure notice's ONE fix button does, by the contract file's action
+ * ([com.jarvis.client.net.PlainErrors]): ask a failed question again or
+ * reconnect, open Checks (the connection settings) or Mind (the model).
+ * Null for no button.
+ */
+internal fun noticeAction(
+    problem: com.jarvis.client.net.PlainErrors.Shown?,
+    actions: HomeActions,
+): (() -> Unit)? {
+    val p = problem ?: return null
+    if (p.button.isEmpty()) return null
+    return when (p.action) {
+        com.jarvis.client.net.PlainErrors.RETRY -> if (p.chat) actions.onRetryQuestion else actions.onReconnect
+        com.jarvis.client.net.PlainErrors.RECONNECT -> actions.onReconnect
+        com.jarvis.client.net.PlainErrors.CONNECTION -> actions.onOpenChecks
+        com.jarvis.client.net.PlainErrors.MODELS -> actions.onOpenBrain
+        else -> null
+    }
+}
 
 @Composable
 fun HomeScreen(
@@ -887,7 +916,15 @@ private fun ConversationList(
         item(key = "quick-note") { QuickNotePlate(open = state.quickNoteOpen, actions = actions) }
 
         if (state.notice != null) {
-            item(key = "notice") { Notice(state.notice, actions.onDismissNotice) }
+            item(key = "notice") {
+                Notice(
+                    state.notice,
+                    actions.onDismissNotice,
+                    details = state.noticeProblem?.details,
+                    actionLabel = state.noticeProblem?.button,
+                    onAction = noticeAction(state.noticeProblem, actions),
+                )
+            }
         }
 
         if (state.approvalsOff) {
@@ -2263,7 +2300,13 @@ private fun VoiceBar(
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         if (state.notice != null) {
-            Notice(state.notice, actions.onDismissNotice)
+            Notice(
+                state.notice,
+                actions.onDismissNotice,
+                details = state.noticeProblem?.details,
+                actionLabel = state.noticeProblem?.button,
+                onAction = noticeAction(state.noticeProblem, actions),
+            )
             Gap(8)
         }
         if (state.approvalsOff) {

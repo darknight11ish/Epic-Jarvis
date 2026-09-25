@@ -710,8 +710,22 @@ fun TextInput(
  * screen rendered one) or reinvented it.
  */
 @Composable
-fun Notice(text: String, onDismiss: () -> Unit) {
+fun Notice(
+    text: String,
+    onDismiss: () -> Unit,
+    /**
+     * A failure's technical detail for a bug report, already scrubbed of
+     * tokens, keys, passwords, email addresses and user names
+     * ([com.jarvis.client.net.PlainErrors.scrubDetails]). Behind "Details",
+     * closed until tapped. Null or blank: no toggle.
+     */
+    details: String? = null,
+    /** The failure's ONE fix button ("Try again", "Check the connection settings"...). */
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
     val chrome = LocalChrome.current
+    var open by remember(text) { mutableStateOf(false) }
     Plate(tone = chrome.warnInk.copy(alpha = 0.10f), outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -724,6 +738,25 @@ fun Notice(text: String, onDismiss: () -> Unit) {
             )
             Spacer(Modifier.width(8.dp))
             Quiet("Dismiss", onClick = onDismiss)
+        }
+        val hasDetails = !details.isNullOrBlank()
+        if ((onAction != null && !actionLabel.isNullOrBlank()) || hasDetails) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onAction != null && !actionLabel.isNullOrBlank()) {
+                    Quiet(actionLabel, onClick = onAction)
+                    Spacer(Modifier.width(8.dp))
+                }
+                if (hasDetails) {
+                    Quiet(if (open) "Hide details" else "Details", onClick = { open = !open })
+                }
+            }
+        }
+        if (hasDetails && open) {
+            Text(
+                details.orEmpty(),
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
         }
     }
 }

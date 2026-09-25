@@ -383,6 +383,34 @@ nothing else to send, and `: jarvis-status approval` (or `working`) while an
 approval card for a tool waits. The apps show "Waiting for your approval…"
 for the second.
 
+**`: jarvis-status loading` (2026-09-25).** Said instead of `thinking` for the
+first wait of a turn when the model is not in memory yet - Ollama's
+`/api/ps` on this PC did not list it when the turn began (after standby, or
+the first question of the day). Like the other words it is said only once the
+wait has lasted 1.5 seconds. Both apps show "Waking up the model - the first
+answer after standby takes a little longer." An app that does not know the
+word ignores it and keeps its own "Thinking…".
+
+**When an answer fails (2026-09-25).** The PC's own failure sentence arrives
+as `{"error": {"message": "...", "type": "jarvis", "code": "..."}}`. `code` is
+new, and is there only for the PC's own failures (`jarvis_agent.ERROR_CODES`):
+`model_missing`, `model_not_running`, `model_stuck`, `model_stopped`,
+`model_error`. Both apps turn a failure - a code, an HTTP status, a network
+failure - into the SAME plain words: what happened, what to do, and ONE
+button ("Try again", "Reconnect", "Check the connection settings", "Choose a
+model"). The PC's sentence and any technical detail go behind a "Details"
+toggle, scrubbed first (no token, key, password, email address or user
+name). The words and the rules that pick them are one list,
+`tools/gen_plain_error_cases.py`, written to `plain-error-cases.json` for
+both apps' tests. A failure with no code shows the PC's sentence as before.
+The desktop's `stream_chat` now rejects with one tagged line of facts
+(`\u001fjarvis-error:{"network"|"http", "said", "detail"}`) that the page
+turns into those words, instead of an English sentence.
+
+"Streaming" and the "N chunks · 3.4s" count are gone from the desktop's
+answer card: it says "Answering…" once words arrive, and nothing in the
+corner.
+
 **Cancelling.** Android cancels the OkHttp `Call` (`ChatSession.cancel`); the
 desktop drops the request future (`commands.rs` `cancel_chat`). While words
 are streaming the PC sees the app go at its next write and stops Ollama. While
@@ -3965,3 +3993,58 @@ says only `key_saved: true|false`.
   `memory_search`); an earlier turn's recalled facts are not tracked, so a
   later search in the same conversation that has read nothing else runs
   without a card.
+
+---
+
+## 24. How Jarvis talks: warm and brief, or plain (added 2026-09-25)
+
+The owner's decision: "Jarvis's manner: warm and brief by default, with a
+'Plain' option in both apps' settings. Manner never changes what Jarvis does,
+asks or remembers - only how it phrases things." `backend/jarvis_manner.py`,
+`backend/manner.patch`.
+
+### 24.1 Routes
+
+| Route | What |
+|---|---|
+| `GET /api/manner` | `{"available": true, "manner": "warm"\|"plain", "default": "warm", "title", "detail", "spoken", "choices": [{"id", "label", "why"}]}` - the words both apps show. |
+| `POST /api/manner` | `{"manner": "warm"}` or `{"manner": "plain"}` - at once, 200 `{"ok": true, "said", ...view}`. **No approval card either way**: it does not trust, show or send anything more. Anything else is 400. Both apps hold it on a stale link like every change. |
+
+Without `jarvis_manner.py` the routes answer 503 `{"available": false}` and
+answers are worded as before.
+
+### 24.2 What it changes, and only this
+
+- **One short system line for THIS PC's model**, added by
+  `jarvis_agent.run_local_turn` just before the newest question - never first,
+  so the Jarvis rules block stays first (`keep_rules_first` runs after it), and
+  before the spoken-style note, so that one is nearest the question and wins on
+  length. Warm: friendly, brief, natural; no gushing, no filler such as "Great
+  question!", no emoji unless the owner uses them. Plain: neutral and
+  businesslike. Both lines say they are about wording only and that every rule
+  still applies ("still say what is a guess, and never claim an action was
+  taken when it was not"); `backend/test_manner.py` holds them to that.
+- **Never to the cloud.** The line is added to the request for this PC's
+  model only, never to the conversation the app sent, so the relay (which gives
+  a cloud lane the newest user turn and nothing else, `cloud-one-turn.patch`)
+  never sees it.
+- **The fast path's fixed answers** (`jarvis_quick.py`: timers, reminders, the
+  to-do list) have a warm wording for each short reply - "Got it - timer set
+  for 10 minutes." beside the plain "Timer set for 10 minutes." - with every
+  fact taken over word for word (checked). Lists read out, a briefing, the
+  repeating job's card line and errors are the same in both.
+
+### 24.3 In the apps
+
+Desktop: Settings, "How Jarvis talks" (two choices with the PC's words).
+Phone: Mind, "How Jarvis talks". The same words in both, checked against
+`plain-error-cases.json` (`manner`).
+
+### 24.4 Known gaps, said plainly
+
+- An 8B model follows a tone line loosely; nothing measures how warm or plain
+  its answers really are.
+- A turn with tools switched off in `jarvis-framework.toml` is relayed to
+  Ollama without `run_local_turn`, so it gets no manner line - the same gap the
+  spoken-style note has.
+- The big model's deep questions and the wiki builder do not use it.

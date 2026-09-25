@@ -402,6 +402,13 @@ $PATCHES = @(
     # Needs jarvis_search.py copied in; without it the routes answer 503 and
     # the model is never offered web_search's settings.
     'web-search.patch'
+    # How Jarvis words things - warm and brief (the default) or plain (the
+    # owner's decision of 2026-09-25): GET and POST /api/manner, no card
+    # either way. Its context is web-search's GET and POST route blocks, so
+    # it goes after web-search - last, like every new patch. Needs
+    # jarvis_manner.py copied in; without it the routes answer 503 and
+    # answers are worded as before.
+    'manner.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -475,6 +482,7 @@ $SHIPPED = @(
     'jarvis_standby_schedule.py' # the standby schedule ("standby from 01:00 to 07:00"): a kind of job on the one scheduler, no patch
     'jarvis_backoff.py'          # briefing.patch: offers nobody asked for - a few at most, not mid-chat, a "no" heard
     'jarvis_briefing.py'         # briefing.patch: the morning briefing, a kind of job on the one scheduler
+    'jarvis_manner.py'           # manner.patch: warm and brief, or plain - the wording of answers only
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

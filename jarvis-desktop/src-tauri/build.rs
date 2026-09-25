@@ -167,6 +167,15 @@ fn main() {
             "test_web_search",
             "save_search_key",
             "forget_search_key",
+            // Settings' "How Jarvis talks" (backend/manner.patch): warm and
+            // brief, or plain. One change at a time, no approval card either
+            // way (it changes wording only). Settings window only.
+            "get_manner",
+            "set_manner",
+            // The quickbar's error fix buttons ("Check the connection
+            // settings", "Choose a model"): open Settings or the Brain,
+            // nothing else (plain_errors.rs).
+            "open_fix_place",
             // Settings' "Voice": what the PC's voice settings are (GET
             // /api/voice/status) - whether each microphone's voice print is
             // trained, the wake word, the stop word, Smart Turn. Read only.

@@ -1,0 +1,512 @@
+{
+ "_about": "The plain words both apps show when something goes wrong, the waits, and \"How Jarvis talks\"; the rules that pick them; and the Details scrubber's cases. Made by tools/gen_plain_error_cases.py - do not edit by hand.",
+ "buttons": {
+  "connection": "Check the connection settings",
+  "models": "Choose a model",
+  "none": "",
+  "reconnect": "Reconnect",
+  "retry": "Try again"
+ },
+ "classify": [
+  {
+   "input": {
+    "network": "refused"
+   },
+   "kind": "jarvis_not_running",
+   "name": "nothing listening (connection refused)"
+  },
+  {
+   "input": {
+    "network": "connect_timeout"
+   },
+   "kind": "pc_unreachable",
+   "name": "no answer while connecting"
+  },
+  {
+   "input": {
+    "network": "no_route"
+   },
+   "kind": "pc_unreachable",
+   "name": "no route to the PC"
+  },
+  {
+   "input": {
+    "network": "unknown_host"
+   },
+   "kind": "name_not_found",
+   "name": "the PC's name is not found"
+  },
+  {
+   "input": {
+    "network": "no_network"
+   },
+   "kind": "device_offline",
+   "name": "this device has no network"
+  },
+  {
+   "input": {
+    "network": "read_timeout"
+   },
+   "kind": "timeout",
+   "name": "connected, then no answer in time"
+  },
+  {
+   "input": {
+    "network": "dropped"
+   },
+   "kind": "connection_dropped",
+   "name": "the connection broke"
+  },
+  {
+   "input": {
+    "not_paired": true
+   },
+   "kind": "not_paired",
+   "name": "no PC address saved"
+  },
+  {
+   "input": {
+    "stale": true
+   },
+   "kind": "link_stale",
+   "name": "the link is stale"
+  },
+  {
+   "input": {
+    "http": 401
+   },
+   "kind": "token_wrong",
+   "name": "401"
+  },
+  {
+   "input": {
+    "http": 403,
+    "said": "bad or missing X-Jarvis-Token"
+   },
+   "kind": "token_wrong",
+   "name": "403 with a sentence"
+  },
+  {
+   "input": {
+    "http": 404
+   },
+   "kind": "backend_too_old",
+   "name": "404, no sentence (no such route)"
+  },
+  {
+   "input": {
+    "http": 501
+   },
+   "kind": "backend_too_old",
+   "name": "501"
+  },
+  {
+   "input": {
+    "available": false,
+    "http": 503
+   },
+   "kind": "backend_too_old",
+   "name": "503 available false (the module is missing)"
+  },
+  {
+   "input": {
+    "http": 503
+   },
+   "kind": "feature_off",
+   "name": "503, no sentence"
+  },
+  {
+   "input": {
+    "http": 503,
+    "said": "the second card is not detected"
+   },
+   "kind": "pc_said",
+   "name": "503 with the PC's sentence"
+  },
+  {
+   "input": {
+    "http": 400,
+    "said": "send exactly one change"
+   },
+   "kind": "pc_said",
+   "name": "400 with the PC's sentence"
+  },
+  {
+   "input": {
+    "http": 404,
+    "said": "model \"qwen3:14b\" not found"
+   },
+   "kind": "pc_said",
+   "name": "404 with the PC's sentence (a model that is not installed)"
+  },
+  {
+   "input": {
+    "http": 500
+   },
+   "kind": "server_error",
+   "name": "500, no sentence"
+  },
+  {
+   "input": {
+    "http": 502
+   },
+   "kind": "server_error",
+   "name": "502, no sentence"
+  },
+  {
+   "input": {
+    "http": 418
+   },
+   "kind": "server_error",
+   "name": "418, no sentence"
+  },
+  {
+   "input": {
+    "malformed": true
+   },
+   "kind": "unreadable",
+   "name": "an answer that is not what was expected"
+  },
+  {
+   "input": {
+    "not_jarvis": true
+   },
+   "kind": "not_jarvis",
+   "name": "something that is not Jarvis"
+  },
+  {
+   "input": {
+    "key_store": true
+   },
+   "kind": "key_store_refused",
+   "name": "Credential Manager refused"
+  },
+  {
+   "input": {
+    "code": "something_new",
+    "said": "It broke."
+   },
+   "kind": "pc_said",
+   "name": "a stream error with an unknown code"
+  },
+  {
+   "input": {
+    "said": "The local model answered oddly."
+   },
+   "kind": "pc_said",
+   "name": "a stream error with no code"
+  },
+  {
+   "input": {
+    "code": "model_missing",
+    "said": "(the PC's sentence)"
+   },
+   "kind": "model_missing",
+   "name": "the stream's code model_missing"
+  },
+  {
+   "input": {
+    "code": "model_not_running",
+    "said": "(the PC's sentence)"
+   },
+   "kind": "model_not_running",
+   "name": "the stream's code model_not_running"
+  },
+  {
+   "input": {
+    "code": "model_stuck",
+    "said": "(the PC's sentence)"
+   },
+   "kind": "model_stuck",
+   "name": "the stream's code model_stuck"
+  },
+  {
+   "input": {
+    "code": "model_stopped",
+    "said": "(the PC's sentence)"
+   },
+   "kind": "model_stopped",
+   "name": "the stream's code model_stopped"
+  },
+  {
+   "input": {
+    "code": "model_error",
+    "said": "(the PC's sentence)"
+   },
+   "kind": "model_error",
+   "name": "the stream's code model_error"
+  }
+ ],
+ "codes": {
+  "model_error": "model_error",
+  "model_missing": "model_missing",
+  "model_not_running": "model_not_running",
+  "model_stopped": "model_stopped",
+  "model_stuck": "model_stuck"
+ },
+ "details_max": 600,
+ "kinds": {
+  "backend_too_old": {
+   "action": "none",
+   "button": "",
+   "fix": "Update it: on the PC, run apply-patches.ps1, then restart Jarvis.",
+   "says": "Your PC's Jarvis is too old for this."
+  },
+  "connection_dropped": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "Try again. If it keeps happening, check the private network is steady at both ends.",
+   "says": "The connection to your PC dropped."
+  },
+  "device_offline": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "Turn on Wi-Fi or mobile data, then try again.",
+   "says": "This device isn't connected to a network."
+  },
+  "feature_off": {
+   "action": "none",
+   "button": "",
+   "fix": "Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it.",
+   "says": "That part of Jarvis isn't running on your PC right now."
+  },
+  "jarvis_not_running": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start Jarvis), then try again.",
+   "says": "Jarvis isn't running on your PC."
+  },
+  "key_store_refused": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "Nothing was written anywhere else. Try again; if it keeps failing, restart the PC and try once more.",
+   "says": "Windows Credential Manager wouldn't save it."
+  },
+  "link_stale": {
+   "action": "reconnect",
+   "button": "Reconnect",
+   "fix": "Nothing can be sent until it does. Wait a moment, or reconnect.",
+   "says": "The connection to your PC is catching up."
+  },
+  "model_error": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "Try again. If it keeps happening, restart Ollama on the PC.",
+   "says": "The AI model reported a problem."
+  },
+  "model_missing": {
+   "action": "models",
+   "button": "Choose a model",
+   "fix": "Choose a model you have (Models, in the Brain on the PC or in Mind on the phone), or install this one.",
+   "says": "The AI model Jarvis uses isn't installed on your PC."
+  },
+  "model_not_running": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "Open Ollama on the PC (or restart Jarvis), then try again.",
+   "says": "The AI model isn't running on your PC."
+  },
+  "model_stopped": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "Try again. If it keeps happening, restart Ollama on the PC.",
+   "says": "The AI model stopped in the middle of the answer."
+  },
+  "model_stuck": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "Restart Ollama on the PC, then try again.",
+   "says": "The AI model stopped answering."
+  },
+  "name_not_found": {
+   "action": "connection",
+   "button": "Check the connection settings",
+   "fix": "Check that Tailscale or NordVPN Meshnet is on here, and that the PC's name in the connection settings is right.",
+   "says": "This device can't find your PC by its name."
+  },
+  "not_jarvis": {
+   "action": "connection",
+   "button": "Check the connection settings",
+   "fix": "Check the PC's name and port in the connection settings.",
+   "says": "Something answered at that address, but it isn't Jarvis."
+  },
+  "not_paired": {
+   "action": "connection",
+   "button": "Check the connection settings",
+   "fix": "Add your PC's name and pairing key in the connection settings.",
+   "says": "This app isn't connected to a PC yet."
+  },
+  "pc_said": {
+   "action": "none",
+   "button": "",
+   "fix": "",
+   "says": ""
+  },
+  "pc_unreachable": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "It may be asleep or switched off, or Tailscale or NordVPN Meshnet may be off at one end. Wake the PC, check the private network on both, then try again.",
+   "says": "Your PC isn't answering."
+  },
+  "server_error": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "Try again. If it keeps happening, restart Jarvis on the PC and send the Details with a bug report.",
+   "says": "Jarvis on your PC ran into a problem."
+  },
+  "timeout": {
+   "action": "retry",
+   "button": "Try again",
+   "fix": "Try again in a moment. If it keeps happening, restart Ollama on the PC.",
+   "says": "Jarvis took too long to answer."
+  },
+  "token_wrong": {
+   "action": "connection",
+   "button": "Check the connection settings",
+   "fix": "Enter the key again in the connection settings. The PC's desktop app shows it: Settings, \"Show the token for my phone\".",
+   "says": "Your PC didn't accept this app's pairing key."
+  },
+  "unreadable": {
+   "action": "none",
+   "button": "",
+   "fix": "Update both: run apply-patches.ps1 on the PC, and install the latest app.",
+   "says": "Your PC answered in a way this app can't read."
+  }
+ },
+ "manner": {
+  "available": true,
+  "choices": [
+   {
+    "id": "warm",
+    "label": "Warm and brief (default)",
+    "why": "Friendly and short, like a helpful person. No gushing, no filler and no emoji unless you use them."
+   },
+   {
+    "id": "plain",
+    "label": "Plain",
+    "why": "Neutral and businesslike: just the answer, with no small talk."
+   }
+  ],
+  "default": "warm",
+  "detail": "Changes only how Jarvis words its answers. It never changes what Jarvis does, what it asks you, or what it remembers.",
+  "said": {
+   "plain": "Jarvis will now answer plainly.",
+   "warm": "Jarvis will now answer warmly and briefly."
+  },
+  "spoken": "Spoken answers stay short and easy to listen to either way.",
+  "title": "How Jarvis talks"
+ },
+ "scrub": [
+  {
+   "gone": [
+    "Qx7k2mZr9Lw4Tn8Bv1Hs6Dj3Fp0Yc5Ge2Ua9Wq4Ri7"
+   ],
+   "input": "GET http://100.64.1.2:8765/api/version X-Jarvis-Token: Qx7k2mZr9Lw4Tn8Bv1Hs6Dj3Fp0Yc5Ge2Ua9Wq4Ri7 failed",
+   "kept": [
+    "100.64.1.2:8765",
+    "/api/version"
+   ]
+  },
+  {
+   "gone": [
+    "Qx7k2mZr9Lw4Tn8Bv1Hs6Dj3Fp0Yc5Ge2Ua9Wq4Ri7"
+   ],
+   "input": "failed to connect to /100.64.1.2 (port 8765) token=Qx7k2mZr9Lw4Tn8Bv1Hs6Dj3Fp0Yc5Ge2Ua9Wq4Ri7&x=1",
+   "kept": [
+    "100.64.1.2",
+    "8765"
+   ]
+  },
+  {
+   "gone": [
+    "sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2"
+   ],
+   "input": "Authorization: Bearer sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2",
+   "kept": [
+    "Authorization"
+   ]
+  },
+  {
+   "gone": [
+    "tvly-dev-abcdefghijklmnopqrstuvwx"
+   ],
+   "input": "Tavily said 401 for key tvly-dev-abcdefghijklmnopqrstuvwx",
+   "kept": [
+    "Tavily",
+    "401"
+   ]
+  },
+  {
+   "gone": [
+    "hunter2Secret99",
+    "ghp_abcdefghijklmnopqrstuvwxyz0123456789AB"
+   ],
+   "input": "clone https://owner:hunter2Secret99@github.com/x/y failed: ghp_abcdefghijklmnopqrstuvwxyz0123456789AB",
+   "kept": [
+    "github.com"
+   ]
+  },
+  {
+   "gone": [
+    "hunter2Secret99"
+   ],
+   "input": "password = hunter2Secret99",
+   "kept": [
+    "password"
+   ]
+  },
+  {
+   "gone": [
+    "JaneOwner"
+   ],
+   "input": "could not read C:\\Users\\JaneOwner\\.openjarvis\\manner.json",
+   "kept": [
+    "manner.json"
+   ]
+  },
+  {
+   "gone": [
+    "jane.owner@example.com"
+   ],
+   "input": "IMAP login for jane.owner@example.com refused",
+   "kept": [
+    "IMAP login"
+   ]
+  },
+  {
+   "gone": [],
+   "input": "HTTP 503: the model is still loading",
+   "kept": [
+    "HTTP 503",
+    "the model is still loading"
+   ]
+  },
+  {
+   "gone": [],
+   "input": "java.net.SocketTimeoutException: failed to connect to desktop.tail1234.ts.net/100.101.102.103 (port 8765) after 10000ms",
+   "kept": [
+    "SocketTimeoutException",
+    "100.101.102.103",
+    "8765",
+    "10000ms"
+   ]
+  }
+ ],
+ "scrub_known_token": {
+  "gone": [
+   "short-but-known"
+  ],
+  "input": "sent short-but-known to the PC",
+  "kept": [
+   "to the PC"
+  ],
+  "token": "short-but-known"
+ },
+ "statuses": {
+  "answering": "Answering…",
+  "approval": "Waiting for your approval…",
+  "loading": "Waking up the model - the first answer after standby takes a little longer.",
+  "thinking": "Thinking…",
+  "working": "Working…"
+ }
+}

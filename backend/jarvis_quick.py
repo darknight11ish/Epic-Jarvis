@@ -1160,6 +1160,69 @@ def answer(text, *, sched=None, now: Optional[float] = None) -> Optional[Result]
     return res
 
 # --------------------------------------------------------------------------
+#   Manner: warm or plain (2026-09-25)
+# --------------------------------------------------------------------------
+#
+# The owner's decision: warm and brief by default, with a "Plain" option;
+# manner changes only how Jarvis phrases things (jarvis_manner.py). The
+# sentences run() makes above ARE the plain wording. Each short one has a
+# warm wording here, matched on the whole plain sentence, with every part
+# that carries a fact (a length, a time, a name, "no", "already") taken over
+# word for word - test_manner.py checks both wordings of each carry the same
+# facts. Anything not listed (the to-do list read out, a briefing, a card's
+# "That repeats..." line, an error) is the same in both.
+
+_WARM = [(re.compile(rx), warm) for rx, warm in (
+    (r"No timer is running\.", "There's no timer running right now."),
+    (r"(?P<left>[^;:().,]+) left \(paused\)\.", "{left} to go - it's paused."),
+    (r"(?P<left>[^;:().,]+) left\.", "{left} to go."),
+    (r"(?P<name>.+ timer) cancelled\.", "Okay, {name_l} cancelled."),
+    (r"Paused, with (?P<left>.+) left\.", "Paused - {left} to go."),
+    (r"Resumed\.", "Okay, it's running again."),
+    (r"(?P<verb>Added|Took off) (?P<len>[^.]+)\. (?P<rest>.+)", "Okay - {verb_l} {len}. {rest}"),
+    (r"No alarm is set\.", "You don't have any alarms set."),
+    (r"There is no alarm like that set\.", "I can't find an alarm like that."),
+    (r"Alarm for (?P<when>.+) cancelled\.", "Okay, your alarm for {when} is cancelled."),
+    (r"One alarm: (?P<when>.+)\.", "You have one alarm: {when}."),
+    (r"That is already on your to-do list\.", "That's already on your to-do list."),
+    (r"Added to your to-do list\.", "Got it - it's on your to-do list."),
+    (r"Your to-do list is empty\.", "Nothing on your to-do list right now."),
+    (r"Marked done\.", "Okay, marked done."),
+    (r"Removed from your to-do list\.", "Okay, removed from your to-do list."),
+    (r"(?P<when>[^.]+) has already passed\. Say another time\.",
+     "{when} has already passed - what other time would you like?"),
+    (r"No briefing is set up\.", "You don't have a briefing set up."),
+    (r"Stopped your briefing \((?P<when>.+)\)\.", "Okay, I've stopped your briefing ({when})."),
+    (r"(?P<what>Timer|[^.]+ timer|Alarm|Reminder|Briefing) set for (?P<when>[^;]+)\.",
+     "Got it - {what_l} set for {when}."),
+)]
+
+
+def _lower_first(text: str) -> str:
+    return text[:1].lower() + text[1:] if text else text
+
+
+def in_manner(reply: str, manner: Optional[str] = None) -> str:
+    """`reply` in the owner's manner: the warm wording when there is one and
+    the manner is warm, else `reply` as it is. `manner` None reads the
+    setting (jarvis_manner.py); a backend without it keeps the plain words."""
+    if manner is None:
+        try:
+            import jarvis_manner
+            manner = jarvis_manner.current()
+        except Exception:
+            return reply
+    if manner != "warm" or not isinstance(reply, str):
+        return reply
+    for rx, warm in _WARM:
+        m = rx.fullmatch(reply)
+        if m:
+            g = m.groupdict()
+            g.update({f"{k}_l": _lower_first(v) for k, v in list(g.items())})
+            return warm.format(**g)
+    return reply
+
+# --------------------------------------------------------------------------
 #   /api/chat
 # --------------------------------------------------------------------------
 
@@ -1203,7 +1266,11 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None) -> Optional[Re
     text = newest_own_words(body)
     if text is None:
         return None
-    return answer(text, sched=sched, now=now)
+    res = answer(text, sched=sched, now=now)
+    if res is not None:
+        # Wording only (jarvis_manner.py): the same facts, the owner's manner.
+        res.reply = in_manner(res.reply)
+    return res
 
 
 def route_fields(res: Result) -> dict:

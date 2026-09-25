@@ -90,8 +90,13 @@ object ChatChunkParser {
          */
         data object Terminal : Result
 
-        /** The chunk itself reported failure - `{"error": …}`. */
-        data class Failed(val message: String) : Result
+        /**
+         * The chunk itself reported failure - `{"error": …}`. [code] is the
+         * PC's short name for one of its own failures (`error.code`, e.g.
+         * "model_missing" - jarvis_agent.ERROR_CODES), which PlainErrors
+         * turns into the shared plain words; null when there is none.
+         */
+        data class Failed(val message: String, val code: String? = null) : Result
     }
 
     private val FIELD_ONLY = Regex("^(event|id|retry):", RegexOption.IGNORE_CASE)
@@ -180,7 +185,11 @@ object ChatChunkParser {
             return Result.Ignored
         }
 
-        errorMessage(chunk)?.let { return Result.Failed(it) }
+        errorMessage(chunk)?.let {
+            val code = ((chunk["error"] as? JsonObject)?.get("code") as? JsonPrimitive)
+                ?.takeIf { c -> c.isString }?.contentOrNull
+            return Result.Failed(it, code)
+        }
 
         val choice = (chunk["choices"] as? JsonArray)?.firstOrNull() as? JsonObject
         val delta = deltaText(chunk, choice)

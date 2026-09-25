@@ -22,6 +22,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_agent.py")
 import jarvis_agent as AG
+# The owner's manner line (jarvis_manner.py) has its own suite, test_manner.py;
+# this one checks the rest of the request word for word, so it is left out here.
+AG._manner_now = lambda: None
 import _ollama_wire as W  # noqa: E402
 
 # Every turn in this file would otherwise reach the default end-of-turn

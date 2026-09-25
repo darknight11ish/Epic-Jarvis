@@ -199,6 +199,9 @@ permissions = [
   # GET /api/version's capabilities. A read; stream_chat checks again before
   # it sends a temporary question.
   "allow-temporary-chat-available",
+  # An error's fix button (plain_errors.rs): opens Settings or the Brain, and
+  # nothing else - the app lock still applies. It changes no setting.
+  "allow-open-fix-place",
 ]
 
 # "Used in this answer" under the quickbar's answer, and "Jarvis remembered N
@@ -336,6 +339,10 @@ permissions = [
   "allow-test-web-search",
   "allow-save-search-key",
   "allow-forget-search-key",
+  # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain.
+  # Wording only; no card either way; held on a stale link in Rust.
+  "allow-get-manner",
+  "allow-set-manner",
   # "Voice": what the PC says about listening to the owner - whether each
   # microphone's voice print is trained, which voice check is installed, the
   # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:

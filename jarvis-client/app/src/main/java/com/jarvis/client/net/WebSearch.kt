@@ -219,9 +219,8 @@ object WebSearch {
         is ApiResult.Ok -> result.value.text("error") ?: result.value.text("said") ?: "Done."
         is ApiResult.Failed -> when (val e = result.error) {
             ApiError.NotFound, ApiError.NotAvailable -> MISSING
-            ApiError.BadToken -> "Nothing changed. Your PC refused this phone's token. Pair the phone again."
-            is ApiError.Unreachable -> "Nothing changed. Could not reach your PC: ${e.detail}."
-            else -> "Nothing changed. Your PC answered in a way this screen cannot read."
+            // The plain words both apps use (PlainErrors), never the raw error.
+            else -> "Nothing changed. " + PlainErrors.forApiError(e).text
         }
     }
 

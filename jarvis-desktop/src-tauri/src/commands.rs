@@ -1726,11 +1726,17 @@ async fn pump_chat(
         .send()
         .await
         .map_err(|e| {
-            if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}. Is it running?")
-            } else {
-                format!("chat request failed: {e}")
-            }
+            // Facts, not words: the page picks the plain words and keeps
+            // this detail (scrubbed) behind "Details" (plain-errors.js).
+            crate::plain_errors::chat_failure(
+                Some(crate::plain_errors::network_kind(
+                    e.is_connect(),
+                    e.is_timeout(),
+                )),
+                None,
+                None,
+                &format!("POST {base}/api/chat: {e}"),
+            )
         })?;
 
     let status = response.status();
@@ -1745,12 +1751,16 @@ async fn pump_chat(
         // The server's own sentence when it sent one (`{"error": "..."}`, or
         // `{"error": {"message": ...}}`), not the whole JSON body - which
         // used to put the route dictionary, reasons and ids and all, on the
-        // card under "Jarvis could not answer".
-        return Err(match error_text_from_body(body) {
-            Some(said) => said,
-            None if body.is_empty() => format!("the server answered HTTP {}", status.as_u16()),
-            None => format!("the server answered HTTP {}: {body}", status.as_u16()),
-        });
+        // card under "Jarvis could not answer". The page picks the plain
+        // words from the status and the sentence; the body goes behind
+        // "Details", scrubbed there.
+        let said = error_text_from_body(body);
+        return Err(crate::plain_errors::chat_failure(
+            None,
+            Some(status.as_u16()),
+            said.as_deref(),
+            &format!("HTTP {} from {base}/api/chat: {body}", status.as_u16()),
+        ));
     }
 
     // Which lane answered and whether it is this PC, for the Local/Cloud
@@ -1782,11 +1792,14 @@ async fn pump_chat(
     // network chunks is never decoded half-way.
     let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
 
-    while let Some(bytes) = response
-        .chunk()
-        .await
-        .map_err(|e| format!("the stream broke: {e}"))?
-    {
+    while let Some(bytes) = response.chunk().await.map_err(|e| {
+        crate::plain_errors::chat_failure(
+            Some(crate::plain_errors::network_kind(false, e.is_timeout())),
+            None,
+            None,
+            &format!("the stream broke: {e}"),
+        )
+    })? {
         buffer.extend_from_slice(&bytes);
         // Bounded for the same reason the event stream's is: a body with no
         // newline would grow this until the process dies.
@@ -2650,14 +2663,10 @@ pub(crate) const SECOND_CARD_UPDATE: &str =
 
 /// A transport failure in plain words. Never the request, never a header:
 /// the only thing named is the address the owner typed in Settings.
-fn second_card_unreachable(err: &reqwest::Error, base: &str) -> String {
-    if err.is_connect() {
-        format!("Jarvis is not answering at {base}. Is it running?")
-    } else if err.is_timeout() {
-        "Jarvis took too long to answer. Try again in a moment.".to_string()
-    } else {
-        "The request to Jarvis did not finish. Try again in a moment.".to_string()
-    }
+fn second_card_unreachable(err: &reqwest::Error, _base: &str) -> String {
+    // The plain words both apps use (plain_errors.rs, from the one list in
+    // tools/gen_plain_error_cases.py): what happened, then what to do.
+    crate::plain_errors::unreachable_words(err.is_connect(), err.is_timeout())
 }
 
 /// The backend's own sentence (`{"error": "..."}`), first letter raised,

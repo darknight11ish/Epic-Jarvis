@@ -1390,6 +1390,17 @@ html[data-state="error"] .pulse {
 }
 .answer-memory-note[data-tone="warn"] { color: var(--warn); }
 .answer-used { margin-top: 8px; font-size: 11.5px; color: var(--text-muted); }
+/* A failed answer's fix button and "Details" (plain-errors.js). */
+.answer-problem { margin-top: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.problem-details { font-size: 11.5px; color: var(--text-muted); }
+.problem-details summary { cursor: pointer; }
+.problem-details-text {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  color: var(--text-muted);
+}
 .answer-used-line { color: var(--text-muted); }
 .answer-used-list { margin-top: 6px; }
 .answer-used-title { margin: 0 0 4px; font-weight: 650; color: var(--text-muted); }

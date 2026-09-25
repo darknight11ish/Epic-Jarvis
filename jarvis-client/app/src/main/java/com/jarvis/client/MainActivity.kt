@@ -667,6 +667,10 @@ class MainActivity : FragmentActivity() {
         val deciding by JarvisRuntime.deciding.collectAsState()
         val attention by JarvisRuntime.attention.collectAsState()
         val notice by JarvisRuntime.notice.collectAsState()
+        // The failure behind the notice, in plain words, with its fix button
+        // and scrubbed Details - only while the notice on screen IS it.
+        val noticeProblem by JarvisRuntime.problem.collectAsState()
+        val shownProblem = noticeProblem?.takeIf { notice != null && it.text == notice }
         val digest by JarvisRuntime.digest.collectAsState()
         val undo by JarvisRuntime.undo.collectAsState()
         val jobs by JarvisRuntime.jobs.collectAsState()
@@ -742,7 +746,13 @@ class MainActivity : FragmentActivity() {
         // collected, so a send that failed looked exactly like a send that was
         // still thinking — for ever.
         LaunchedEffect(chat) {
-            chat.error.collectLatest { if (it != null) JarvisRuntime.setNotice(it) }
+            chat.error.collectLatest {
+                if (it == null) return@collectLatest
+                // In plain words, with its fix button and Details, when the
+                // chat put it that way (it always does now); else as it is.
+                val p = chat.problem.value
+                if (p != null && p.text == it) JarvisRuntime.setProblem(p) else JarvisRuntime.setNotice(it)
+            }
         }
 
         // The panel is asked for its fastest rate only while the face is on
@@ -1825,6 +1835,7 @@ class MainActivity : FragmentActivity() {
                             usedIds = usedIds,
                             memoryHidden = privateHidden,
                             showPrivateBusy = ownerCheckBusy.value,
+                            noticeProblem = shownProblem,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1968,6 +1979,12 @@ class MainActivity : FragmentActivity() {
                                 onOpenBrain = { nav.go(Screen.BRAIN) },
                                 onOpenAppearance = { nav.go(Screen.APPEARANCE) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
+                                // "Try again" under a failed question: the same
+                                // words, tag and shared text, asked again.
+                                onRetryQuestion = {
+                                    JarvisRuntime.clearNotice()
+                                    scope.launch { chat.retryLast() }
+                                },
                                 blockerFor = { item: PendingItem ->
                                     JarvisRuntime.decisionBlocker(item)
                                 },

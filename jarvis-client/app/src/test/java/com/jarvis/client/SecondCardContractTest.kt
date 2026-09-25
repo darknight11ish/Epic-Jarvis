@@ -3,6 +3,7 @@ package com.jarvis.client
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.net.PlainErrors
 import com.jarvis.client.net.SecondCard
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -242,8 +243,9 @@ class SecondCardContractTest {
         val missing = SecondCard.readOf(ApiResult.Failed(ApiError.NotAvailable))
         assertEquals(SecondCard.Read.NotInstalled, missing)
         assertTrue(SecondCard.readLine(missing)!!.contains("jarvis_second_card.py"))
-        val net = SecondCard.readOf(ApiResult.Failed(ApiError.Unreachable("timeout")))
-        assertTrue(SecondCard.readLine(net)!!.startsWith("Could not reach your PC: timeout."))
+        val net = SecondCard.readOf(ApiResult.Failed(ApiError.Unreachable("timeout", "read_timeout")))
+        // The plain words both apps use (PlainErrors), never the raw "timeout".
+        assertEquals(PlainErrors.shown("timeout").text, SecondCard.readLine(net))
         // A 200 that is not status() is a failed read, never "no second card".
         val odd = SecondCard.readOf(ApiResult.Ok(JarvisJson.parseToJsonElement("{\"ok\":true}") as JsonObject))
         assertTrue(odd is SecondCard.Read.Failed)
@@ -295,6 +297,6 @@ class SecondCardContractTest {
         assertEquals(ApiResult.Failed(ApiError.NotAvailable), missing)
         assertEquals(ApiResult.Failed(ApiError.BadToken), SecondCard.classifyPost(401, null))
         val down = SecondCard.replyLine(ApiResult.Failed(ApiError.Unreachable("no route")))!!
-        assertTrue(down, down.startsWith("Nothing changed. Could not reach your PC"))
+        assertTrue(down, down.startsWith("Nothing changed. "))
     }
 }
