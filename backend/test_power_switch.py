@@ -12,6 +12,13 @@ repository (backend/rebuilt/) unless the backend has its own. Pinned:
    it is refused while a multi-step task is running.
 3. Nothing but the three modes is accepted.
 4. The patch applies after note-capture.patch, and reverts.
+5. (2026-09-25, with the standby schedule) Standby unloads EVERY model the
+   everyday Ollama holds, not only the ones jarvis_models names, and says
+   plainly what is still loaded; this PC's Ollama only. Leaving standby
+   loads the chat model again (the warm-up) - never a cloud model, never
+   another machine's Ollama, and unloaded again if Jarvis went back on
+   standby meanwhile. The answer comes when the mode has changed, not
+   after every card is freed.
 """
 import sys
 import tempfile
@@ -39,6 +46,36 @@ import jarvis_task_control as TC  # noqa: E402
 FAILED, PASSED = [], []
 
 
+class FakeOllama:
+    """The everyday Ollama: what /api/ps lists, and what was asked."""
+
+    def __init__(self, loaded=(), stubborn=(), url="http://127.0.0.1:11434", slow=0.0):
+        self.loaded = list(loaded)
+        self.stubborn = set(stubborn)   # never let go
+        self.url = url
+        self.unloads, self.loads = [], []
+        self.slow = slow
+
+    def ps(self):
+        return list(self.loaded)
+
+    def unload(self, name):
+        if self.slow:
+            __import__("time").sleep(self.slow)
+        self.unloads.append(name)
+        if name not in self.stubborn:
+            self.loaded = [n for n in self.loaded if n != name]
+
+    def load(self, name):
+        self.loads.append(name)
+        if name not in self.loaded:
+            self.loaded.append(name)
+
+
+# No test here may reach a real Ollama: the default is an empty fake.
+S.everyday_ollama = lambda: FakeOllama()
+
+
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
@@ -61,6 +98,10 @@ class FakeModels:
 
 
 def reset():
+    for _ in range(300):                 # a change still finishing behind its answer
+        if not getattr(S, "_PENDING", None):
+            break
+        __import__("time").sleep(0.02)
     P.set_mode("active", "test")
 
 
@@ -246,6 +287,156 @@ def t_standby_rechecks_tasks_after_the_card():
     check("approved after a task started: nothing unloaded, mode unchanged, 409 with why",
           m.unloaded == [] and P.current() == "active" and code == 409
           and "task started while the card waited" in out["message"], repr((code, out)))
+
+
+def _auto(*a):
+    return Verdict(True, "auto")
+
+
+def _settled():
+    for _ in range(300):
+        if not S._PENDING:
+            return
+        __import__("time").sleep(0.02)
+
+
+def t_standby_unloads_every_model_ollama_holds():
+    reset()
+    m = FakeModels()                                  # jarvis_models names only this one
+    o = FakeOllama(["jarvis-primary:8b", "qwen2.5vl:7b", "nomic-embed-text:latest"])
+    code, out = S.set_mode("standby", gate_check=_auto, models=m, ollama=o, others=[])
+    check("every model /api/ps listed is asked to unload, not only jarvis_models' one",
+          set(o.unloads) >= {"qwen2.5vl:7b", "nomic-embed-text:latest"} and o.loaded == [],
+          repr((o.unloads, o.loaded)))
+    check("... and all of them are said as unloaded, once each",
+          sorted(out["unloaded"]) == ["jarvis-primary:8b", "nomic-embed-text:latest",
+                                      "qwen2.5vl:7b"], repr(out))
+    check("nothing still loaded: no 'still' sentence", "still_loaded" not in out
+          and "Still loaded" not in out["message"], repr(out))
+
+    reset()
+    o = FakeOllama(["jarvis-primary:8b", "stuck:1b"], stubborn={"stuck:1b"})
+    code, out = S.set_mode("standby", gate_check=_auto, models=FakeModels(), ollama=o,
+                           others=[], wait_s=10)
+    check("a model Ollama will not let go of is said plainly, and not claimed as unloaded",
+          out.get("still_loaded") == ["stuck:1b"] and "stuck:1b" not in out["unloaded"]
+          and "Still loaded after asking Ollama to unload it: stuck:1b." in out["message"],
+          repr(out))
+
+    reset()
+
+    class NoUnload:
+        def resident_models(self):
+            return ["jarvis-primary:8b"]
+    o = FakeOllama(["jarvis-primary:8b"])
+    code, out = S.set_mode("standby", gate_check=_auto, models=NoUnload(), ollama=o, others=[])
+    check("a jarvis_models without unload(): Ollama is asked directly, and it is freed",
+          o.loaded == [] and out["unloaded"] == ["jarvis-primary:8b"] and "note" not in out,
+          repr(out))
+
+
+def t_only_this_pcs_ollama():
+    for url, ok in (("http://127.0.0.1:11434", True), ("http://localhost:11434", True),
+                    ("127.0.0.1:11434", True), ("http://0.0.0.0:11434", True),
+                    ("http://10.0.0.5:11434", False), ("http://gpu-box.ts.net:11434", False),
+                    ("https://ollama.com", False)):
+        check(f"OLLAMA_URL {url}: {'this PC' if ok else 'refused'}",
+              (S.EverydayOllama(url).url is not None) is ok)
+    reset()
+    o = FakeOllama(["jarvis-primary:8b"], url=None)
+    code, out = S.set_mode("standby", gate_check=_auto, models=types.SimpleNamespace(),
+                           ollama=o, others=[])
+    check("another machine's Ollama is asked nothing, and that is said",
+          o.unloads == [] and "OLLAMA_URL is not this PC" in out.get("note", ""), repr(out))
+    src = (HERE / "jarvis_power_switch.py").read_text(encoding="utf-8")
+    body = src[src.index("class EverydayOllama"):src.index("def everyday_ollama")]
+    check("every call goes through jarvis_local_http (no proxy), never a bare urlopen",
+          body.count("jarvis_local_http.urlopen(") == 2
+          and "urllib.request.urlopen(" not in body)
+
+
+def t_waking_loads_the_chat_model_again():
+    import os
+    reset()
+    S.set_mode("standby", gate_check=_auto, models=FakeModels(), ollama=FakeOllama(), others=[])
+    o = FakeOllama()
+    os.environ["JARVIS_MODEL"] = "jarvis-primary"
+    try:
+        code, out = S.set_mode("active", gate_check=_auto, ollama=o, warm=lambda fn: fn())
+    finally:
+        os.environ.pop("JARVIS_MODEL", None)
+    check("waking from standby loads the chat model at once",
+          o.loads == ["jarvis-primary"] and S.warm_status()["state"] == "ready", repr(o.loads))
+    check("... and says so, naming it", out["warm_up"] == "jarvis-primary"
+          and "Loading the chat model (jarvis-primary) again now" in out["message"], repr(out))
+    o2 = FakeOllama()
+    code, out = S.set_mode("quiet", gate_check=_auto, ollama=o2, warm=lambda fn: fn())
+    check("active -> quiet loads nothing (the model was never unloaded)",
+          o2.loads == [] and "warm_up" not in out, repr(out))
+
+
+def t_the_warm_up_refuses_what_it_must():
+    reset()
+    o = FakeOllama()
+    st = S.warm_up(P, o, "gpt-oss:120b-cloud")
+    check("a cloud model is never loaded", o.loads == [] and st["state"] == "skipped"
+          and "ollama.com" in st["why"], repr(st))
+    st = S.warm_up(P, FakeOllama(url=None), "jarvis-primary")
+    check("another machine's Ollama is never asked", st["state"] == "skipped"
+          and "not this PC" in st["why"], repr(st))
+    st = S.warm_up(P, o, None)
+    check("no model known: nothing loaded, and the first answer's wait is said",
+          st["state"] == "skipped" and "5-15 seconds" in st["why"], repr(st))
+
+    class Boom(FakeOllama):
+        def load(self, name):
+            raise OSError("refused")
+    st = S.warm_up(P, Boom(), "jarvis-primary")
+    check("Ollama failing to load it is said, not raised", st["state"] == "failed", repr(st))
+
+    class BackToSleep(FakeOllama):
+        def load(self, name):
+            super().load(name)
+            P.set_mode("standby", "test")      # the owner chose Standby meanwhile
+    o = BackToSleep()
+    reset()
+    st = S.warm_up(P, o, "jarvis-primary")
+    check("back on standby while it loaded: unloaded again, standby's promise kept",
+          o.loaded == [] and o.unloads == ["jarvis-primary"] and st["state"] == "skipped",
+          repr((o.loaded, st)))
+    reset()
+
+
+def t_the_answer_comes_when_the_mode_has_changed():
+    # Freeing the cards can take seconds. Waiting for it used to make the
+    # answer "Waiting for your approval" when no card was up at all.
+    reset()
+    o = FakeOllama(["jarvis-primary:8b"], slow=0.5)
+    code, out = S.set_mode("standby", gate_check=_auto, models=types.SimpleNamespace(),
+                           ollama=o, others=[], wait_s=0.2)
+    check("a slow unload: 200, changed, 'freeing the graphics card now' - not 202 waiting",
+          code == 200 and out["changed"] is True and out.get("waiting") is None
+          and "Freeing the graphics card now." in out["message"]
+          and "approval" not in out["message"], repr((code, out)))
+    check("... and the mode is already standby", P.current() == "standby")
+    for _ in range(100):
+        if not S._PENDING:
+            break
+        __import__("time").sleep(0.02)
+    check("... and the unloading finishes behind it", o.loaded == [], repr(o.loaded))
+    reset()
+
+
+def t_why_is_the_callers_own():
+    reset()
+    S.set_mode("quiet", gate_check=_auto, by="the standby schedule", why="the standby schedule")
+    check("the standby schedule is recorded as itself, not as 'the owner' (the tray would "
+          "say 'set by hand')", P.status()["why"] == "the standby schedule", P.status())
+    reset()
+    S.set_mode("quiet", gate_check=_auto, by="phone")
+    check("a tap in an app is still 'the owner, from ...'",
+          P.status()["why"] == "the owner, from phone", P.status())
+    reset()
 
 
 def t_the_patch():
