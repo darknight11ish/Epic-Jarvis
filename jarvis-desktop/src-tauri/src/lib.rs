@@ -28,6 +28,7 @@ pub mod hud_proxy;
 pub mod lock;
 pub mod logfile;
 pub mod proctree;
+pub mod reach;
 pub mod sidecar;
 pub mod spec;
 pub mod spec_drift;
@@ -777,6 +778,7 @@ pub fn run() {
             web_search::test_web_search,
             web_search::save_search_key,
             web_search::forget_search_key,
+            reach::get_reach,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,

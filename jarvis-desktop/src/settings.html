@@ -900,6 +900,32 @@
         </div>
       </section>
 
+      <!-- ── What Jarvis can reach ─────────────────────────────────────────
+           The Muse audit, 2026-09-25 (reach-settings.js; reach.rs get_reach;
+           backend jarvis_reach.py). Every way Jarvis can reach something
+           outside itself, whether each is on, where it goes (a host only)
+           and whether it asks first - written by the PC from its settings,
+           never by the AI model. Read only: nothing here changes anything,
+           so nothing is held on a stale link. The phone's Mind shows the
+           same list in the same words. -->
+      <section class="card" id="reach">
+        <h2>What Jarvis can reach</h2>
+        <p class="note">Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.</p>
+
+        <p class="state" id="reach-state" role="status">Asking Jarvis…</p>
+
+        <div id="reach-body" hidden>
+          <ul class="sc-cards" id="reach-rows"></ul>
+          <h3 class="subhead" id="reach-tools-title">Tools the AI model is offered</h3>
+          <ul class="caps" id="reach-tools" aria-labelledby="reach-tools-title"></ul>
+          <p class="note" id="reach-tools-none" hidden></p>
+          <p class="note" id="reach-rest"></p>
+          <div class="row">
+            <button class="btn small" id="reach-refresh" type="button">Refresh</button>
+          </div>
+        </div>
+      </section>
+
       <section class="card">
         <h2>Frequently asked questions</h2>
         <p class="note">
@@ -1242,5 +1268,6 @@
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="briefing-settings.js"></script>
     <script type="module" src="web-search-settings.js"></script>
+    <script type="module" src="reach-settings.js"></script>
   </body>
 </html>

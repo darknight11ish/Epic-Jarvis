@@ -9070,3 +9070,105 @@ the model; and the patch applied to what the earlier patches wrote.
 - The phone sees a change made on the desktop at its next read (Refresh).
 - The briefing's "weather and news: not available" line is unchanged -
   weather is a separate decision.
+
+---
+
+# Three small safety items from the Muse audit: `jarvis_reach.py`, `reach.patch`, `jarvis_mail_mask.py`, and the back-off's rule 4 (2026-09-25)
+
+`docs/COMPETITORS-MUSE-2026-09-25.md` (ideas 1, 2 and 4) found three places
+where Meta's Muse went wrong that Jarvis could close cheaply. All three are
+built:
+
+1. **"What Jarvis can reach"** - a plain list, written by code from the
+   PC's real settings (never by the AI model), of every way Jarvis can reach
+   something outside itself: the cloud model, web search, calendar, email
+   (reading, and sending - "not set up"), Home Assistant, notes, GitHub, the
+   phone notifications (ntfy), computer / browser / phone control, commands,
+   the second graphics card and the big model. For each: on or off, where it
+   goes (a host name only - never a password, key or private link), whether
+   it asks you first, and one plain sentence. Then the tools the AI model is
+   offered. Both apps show it (desktop: Settings, "What Jarvis can reach";
+   phone: Mind, same name), and "what can you reach?" / "what can Jarvis
+   access?" is answered from it without the model.
+2. **One-time codes and sign-in links hidden in email.** "Your code is
+   482913" reaches the model, the apps and the briefing as "Your code is
+   [a one-time code, hidden]"; a password-reset or magic sign-in link as
+   "[a sign-in link, hidden]".
+3. **An offer never asks for more.** Anything Jarvis offers on its own
+   (today: the overnight-tidy card and "save this routine as a skill?") may
+   never ask for more access, a new connection, a key, a password, a payment
+   method, an identity document, or to turn on a setting that shows or
+   trusts more. No offer does today; the rule is there so none ever can.
+
+## Owner steps (one line each, in PowerShell)
+
+Put the new code on the PC (copies `jarvis_reach.py`, `jarvis_mail_mask.py`
+and the updated `jarvis_email.py`, `jarvis_quick.py`, `jarvis_backoff.py`,
+`jarvis_skill_discovery.py` and `jarvis_sleep.py`, applies `reach.patch`),
+from this repository's folder, then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+Then type "what can you reach?" in the Jarvis bar. The answer should start
+"Right now Jarvis can reach:" with "Done - answered on this PC without the
+AI model." under it, and match Settings, "What Jarvis can reach". Nothing
+needs switching on: all three are on by themselves.
+
+## What the code does
+
+- `jarvis_reach.py` (new, shipped) - the list. `KINDS` has one entry per way
+  out; the email-sending work adds its row there. It reads `[tools].enabled`
+  and the tiers from `jarvis-framework.toml`, the same environment
+  variables each module reads, the web search settings, the chat route's own
+  cloud lane list, and the second card's and big model's switch files. It
+  opens no socket, wakes nothing and writes nothing.
+- `reach.patch` - `GET /api/reach` in `jarvis_hud.py`, behind the token.
+  After `web-search.patch` (its context lines are that patch's).
+- `jarvis_quick.py` - "what can you reach?" and close phrasings.
+- `jarvis_mail_mask.py` (new, shipped) and `jarvis_email.py` - every
+  subject, preview and sender name goes through `hide()`. Without the mask
+  module the text is withheld, not shown as it is.
+- `jarvis_backoff.py` - rule 4: `OFFERS` (each kind of offer and what it
+  asks for), `NEVER_ASKS`, `MAY_ASK`, `vet()`, and `may_offer(fp,
+  kind=...)` refusing, logging and counting an offer that asks for more.
+  `jarvis_sleep.py` and `jarvis_skill_discovery.py` pass their kind.
+- The desktop: `reach.rs` (`get_reach`, Settings window only),
+  `reach.js`, `reach-settings.js`. The phone: `net/Reach.kt`,
+  `ReachPlate.kt`, on Mind. Both read `reach-cases.json`, written by
+  `tools/gen_reach_cases.py` from the real code.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_reach.py; py -3 backend\test_mail_mask.py; py -3 backend\test_backoff_rule.py
+```
+
+About 220 checks, no model, no network. `test_reach.py`: every row, in
+order; fake passwords, keys, tokens, a private calendar link and an ntfy
+topic set, and none of them in the list, the answer or the route; "asks
+first" following the real rules; the tools list being the tool loop's own;
+no socket, no file, nothing woken; the sentences and their near misses; the
+patch applied to what the earlier patches wrote. `test_mail_mask.py`: 27
+codes and links hidden, 26 ordinary texts kept, AgentDojo's 180 everyday
+texts unchanged except the three real codes and reset links, and every
+email path using it. `test_backoff_rule.py`: an offer that asks for more is
+refused, logged and counted; today's two offers pass; every `may_offer()`
+call in the shipped code passes its kind.
+
+## Not checked, said plainly
+
+- **Nothing here ran on your PC.** `jarvis_gate.py` is not in this
+  repository, so which gate action each tool maps to is read from it when it
+  is there, and otherwise from the names this README lists. The tiers are
+  always your own `jarvis-framework.toml`'s.
+- "On" means switched on and set up, not "has worked": nothing is tried. An
+  email row is on even while the password is wrong.
+- **The code-hiding is a pattern list and misses things**: a code with no
+  code word near it and none in the subject, codes written in words or in
+  pictures, code words in other languages, links without `http://` or
+  `www.`, and anything past the first 1,600 characters of the text.
+- The phone's Mind screen has not been seen running: there is no Android
+  build here (`CLAUDE.md`), so it is checked by CI. Its pure part
+  (`Reach.kt`) was compiled and tested on a plain JVM here.

@@ -3574,7 +3574,7 @@ asleep. Only what Jarvis can already read on this PC, in this order:
 | Today (`today`) | Alarms, reminders and timers still to come today, with their words. | Never. |
 | To-do list (`todo`) | How many open items, and the first five. | Never. |
 | Approvals (`approvals`) | How many approval cards wait - "Open Jarvis to answer." Never an Approve. | Never. |
-| Email (`email`) | **How many** unread emails, and **who the newest five are from** (the owner's decision of 2026-09-25): the summary "3 unread emails." and one line, "From Alex, Your Bank and GitHub" (or "The newest 5 are from ..." when there are more). `jarvis_email.senders()`: ONE connection, the mailbox opened read-only, SEARCH UNSEEN, then `FETCH <id> (BODY.PEEK[HEADER.FIELDS (FROM)])` for the newest five only - the From line, never a subject or any text, and PEEK so nothing is marked as read. Each name is decoded (RFC 2047), stripped of control and direction characters, capped at 60 characters, and listed once; a sender with no name shows the whole address (`noreply@github.com` - the part before the @ alone is "noreply" or "info" as often as not). With "Show who new emails are from" off (22.2): the number only, through `jarvis_email.count()` (no message fetched), as before. | Not set up (`JARVIS_IMAP_HOST` unset, or `email_check` not in `[tools].enabled`) - then it is not mentioned at all; or `email_read` is not `auto`/`notify` - then it says why. |
+| Email (`email`) | **How many** unread emails, and **who the newest five are from** (the owner's decision of 2026-09-25): the summary "3 unread emails." and one line, "From Alex, Your Bank and GitHub" (or "The newest 5 are from ..." when there are more). `jarvis_email.senders()`: ONE connection, the mailbox opened read-only, SEARCH UNSEEN, then `FETCH <id> (BODY.PEEK[HEADER.FIELDS (FROM)])` for the newest five only - the From line, never a subject or any text, and PEEK so nothing is marked as read. Each name is decoded (RFC 2047), stripped of control and direction characters, capped at 60 characters, with any one-time code or sign-in link hidden (section 25), and listed once; a sender with no name shows the whole address (`noreply@github.com` - the part before the @ alone is "noreply" or "info" as often as not). With "Show who new emails are from" off (22.2): the number only, through `jarvis_email.count()` (no message fetched), as before. | Not set up (`JARVIS_IMAP_HOST` unset, or `email_check` not in `[tools].enabled`) - then it is not mentioned at all; or `email_read` is not `auto`/`notify` - then it says why. |
 
 Then always: "Weather and news: not available. No provider has been chosen,
 so Jarvis fetches nothing from the internet for this."
@@ -3710,7 +3710,7 @@ email): the record says `email_check` ran.
 
 Jarvis's offers nobody asked for - today the overnight-tidy card
 (`setup.sleep_time_offer`) and the "save this routine as a skill?" card
-(`jarvis_skill_discovery.py`) - follow three rules:
+(`jarvis_skill_discovery.py`) - follow four rules:
 
 1. **At most three offers waiting** for an answer at once.
 2. **None within two minutes** of the last chat message (`/api/chat` notes
@@ -3720,6 +3720,22 @@ Jarvis's offers nobody asked for - today the overnight-tidy card
 3. **Each "no" is heard**: the same offer - matched by a sha256 fingerprint
    of what is offered, never its wording - is quiet for 1 day, then 7, then
    30 (and 30 after that). A "yes" clears the count.
+4. **An offer never asks for more** (the Muse audit, 2026-09-25). An
+   offer Jarvis makes on its own may never ask for more access, a new
+   connection, a key, a password, a payment method, an identity document,
+   or to turn on a setting that shows or trusts more. Checked in code by
+   the offer's KIND, not its words: every kind is declared in
+   `jarvis_backoff.OFFERS` with what it asks for (`MAY_ASK`), and
+   `may_offer(fp, kind=...)` refuses a kind that is not declared or asks
+   for anything in `NEVER_ASKS`, logs why ("offer refused: kind ... - ...")
+   and counts it (`status()`: `refused_asking_for_more`, `last_refused`).
+   Both offers made today pass their kind and ask only to record a wish
+   (the overnight tidy) or to save a routine as a skill; none breaks the
+   rule - it guards the future. `backend/test_backoff_rule.py` fails if any
+   `may_offer()` call in the shipped code leaves out `kind=`. Offers made
+   inside an answer to the owner's own request (switching web search when
+   it is down, the cloud lane for one question) are not offers "on its
+   own"; the web search one never names a provider that needs a key.
 
 It keeps only fingerprints, counts and dates, in `backoff.json` in the Jarvis
 settings folder (a file it cannot read makes every offer wait, and says so).
@@ -3965,3 +3981,139 @@ says only `key_saved: true|false`.
   `memory_search`); an earlier turn's recalled facts are not tracked, so a
   later search in the same conversation that has read nothing else runs
   without a card.
+
+## 24. What Jarvis can reach (added 2026-09-25)
+
+The Muse audit (`docs/COMPETITORS-MUSE-2026-09-25.md`, idea 1): Meta's
+Muse described its own access wrongly. This list is written by **code**
+from the PC's own settings, never by the model. `backend/jarvis_reach.py`
+(shipped whole) and `backend/reach.patch` (the route). **Both apps show
+it**: the desktop's Settings, "What Jarvis can reach" (`reach.rs`
+`get_reach`, Settings window only; `reach-settings.js`, `reach.js`), and the
+phone's Mind, "What Jarvis can reach" (`ReachPlate.kt`, `net/Reach.kt`).
+`ported` in `tools/check_parity.py`. The contract file both apps build
+against is `tests/fixtures/reach-cases.json` /
+`contract/reach-cases.json`, written by `tools/gen_reach_cases.py` from the
+real code.
+
+### 24.1 The route
+
+`GET /api/reach` - behind the origin check and `X-Jarvis-Token`, like every
+other read. **A read**: it changes nothing, opens no socket, starts or wakes
+nothing (not the second card, not the big model), writes no file - so
+neither app holds it on a stale event stream. An older PC answers 404; a PC
+without `jarvis_reach.py` answers 503 `{"available": false}`, and both apps
+then say "Your PC's Jarvis cannot list what it can reach yet - run
+apply-patches.ps1 on the PC."
+
+```
+{"available": true, "written_by": "code",
+ "title", "detail", "tools_title", "tools_none", "everything_else",
+ "where_label": "Goes to", "asks_label": "Asks you first",
+ "on": 4,                                   how many rows are on
+ "rows": [{"id", "name", "state": "on"|"off"|"not_set_up"|"blocked",
+           "on": bool, "state_words": "On", "where": "imap.example.com",
+           "asks": "Yes, every time", "line": "one plain sentence"}, ...],
+ "tools": [{"id": "web_search", "name": "Web search"}, ...]}
+```
+
+The rows, in this order (`jarvis_reach.KINDS`): the cloud model; web search;
+calendar (reading); email (reading); email (sending - "not set up" until
+sending is built; adding it is one `KINDS` entry); Home Assistant (reading);
+Home Assistant (changing things); notes (searching); notes (writing); GitHub
+research; phone notifications (ntfy); computer control; browser control;
+phone control; commands on this PC; the second graphics card; the big model.
+`tools` is the list the chat's tool loop offers the model
+(`jarvis_agent.offered_tools()` of `[tools].enabled`), in plain names.
+
+Both apps show a row as "`name` - `state_words`", then, only when it is on,
+"Goes to: `where`" and "Asks you first: `asks`" (not when `asks` is "-"),
+then `line`. The words are the PC's; the apps add none.
+
+### 24.2 Where each part comes from
+
+- **On or off**: the tool's name in `[tools].enabled` (read the way the
+  morning briefing reads it) AND its account set up - the same environment
+  variables each module reads (`JARVIS_IMAP_HOST`, `JARVIS_CALDAV_URL` or
+  `JARVIS_CALENDAR_ICS_SECRET_URL`, `JARVIS_HOME_URL`, the notes settings,
+  `JARVIS_NTFY_TOPIC`). Browser control also needs the second card's
+  "Browser control" switch on (its switch file; nothing is probed, so it
+  says "switched on", not "working").
+- **Asks first**: the tool's gate action (jarvis_gate's own
+  `action_for_tool` when it is there, else the names `backend/README.md`
+  lists) and that action's tier in `[autonomy.tiers]`. The six tools the
+  loop only ever runs on a person's yes (`NEEDS_A_PERSON`: GitHub, browser,
+  computer, phone, commands, Home Assistant changes) say "Yes, every time"
+  whatever the tier; tier `never` is "blocked"; note writes say they ask
+  after outside text; web search says when it asks (23.3).
+- **The cloud model**: the chat route's own `_lane_names()` when the list is
+  made inside the server; otherwise the same file it reads
+  (`litellm-proxy.yaml`: lane names and the provider part of `model:`
+  lines only).
+- **Web search**: `jarvis_search.settings()`, and whether a key is saved
+  (yes or no).
+
+### 24.3 What is never in it
+
+No password, key, token, private calendar link, ntfy topic or full address.
+"Where it goes" is a **host name** (`imap.example.com`,
+`calendar.google.com`, "this PC"); the email row adds the account's user
+name ("imap.example.com (as me@example.com)"). `backend/test_reach.py` sets
+fake secrets (built by concatenation) for every one and checks none reaches
+the list, the spoken answer or the route.
+
+### 24.4 "What can you reach?" without the model
+
+`jarvis_quick.py` answers "what can you reach?", "what can Jarvis access?",
+"what do you have access to?", "what are you connected to?" and close
+phrasings (whole sentences only, the owner's own typed or said words) from
+`jarvis_reach.sentence()` - the same list, in one answer, host names only
+(no account name). A near miss ("what can you reach on the top shelf") goes
+to the model, as does pasted text.
+
+### 24.5 Known gaps, said plainly
+
+- The gate on the owner's PC (`jarvis_gate.py`) is not in this repository.
+  When it cannot be asked, the tool's action comes from the names
+  `backend/README.md` lists; the tiers themselves are always read from the
+  owner's `jarvis-framework.toml`.
+- "On" means switched on and set up, not "has worked": nothing is tried.
+  An email row can be on while the password is wrong.
+- The phone and the desktop learn of a change at their next read (Refresh,
+  opening the screen, or an answered card on the desktop) - there is no
+  event for it.
+
+## 25. One-time codes and sign-in links hidden in email (added 2026-09-25)
+
+The Muse audit (idea 2). Every subject, preview and sender name
+`jarvis_email.py` reads goes through `jarvis_mail_mask.hide()` (shipped
+whole) before anything else sees it - so the model (`email_check`), both
+apps, the morning briefing's sender names and anything written to a log only
+get the hidden version. "Your code is 482913" becomes "Your code is [a
+one-time code, hidden]"; a password-reset, magic sign-in, verify or confirm
+link becomes "[a sign-in link, hidden]"; a link carrying a long
+random-looking piece becomes "[a link with a private code, hidden]". The
+preview is hidden first and cut at 400 characters after, never leaving half
+a marker. Without `jarvis_mail_mask.py` the text is withheld ("[not shown:
+jarvis_mail_mask.py is missing on this PC]"), never shown as it is.
+
+What counts as a code: 4 to 8 digits, "123-456", "G-482913", or capitals
+and digits ("X7K9P2", only right after "code"), near a code word (code, OTP,
+passcode, verification, one-time, 2FA, two-step, security code, PIN, sign
+in, log in) - or anywhere in a message whose subject says so ("Your
+verification code"). Kept: prices, percentages, years, order / invoice /
+booking / tracking / account numbers, phone numbers, dates and ordinary
+links. `backend/test_mail_mask.py`: 27 cases hidden, 26 kept, and of
+AgentDojo's 180 ordinary texts only the three that really are a code or a
+reset link change. It also hides some things it need not: a discount or
+error code right after "code" ("promo code SAVE20"), an unlabelled number
+near "sign in" or "log in", and any link with a long random piece (a
+newsletter's tracking link included).
+
+**What it cannot catch**: a code with no code word near it and none in the
+subject; a code written in words, split oddly, in a picture, or in an
+HTML-only email (those have no preview at all); code words in other
+languages; a link without `http://` or `www.`; a sign-in link with neither a
+telling word nor a long random piece; anything past the first 1,600
+characters. It lowers the risk; it does not make an email safe to send
+anywhere.

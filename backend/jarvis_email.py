@@ -61,6 +61,13 @@ at `_MAX_PREVIEW_CHARS` - short enough to say "here is roughly what this
 is about", never long enough to be the whole message. Providers text the
 model reads should say what a message needs, not reproduce it.
 
+ONE-TIME CODES AND SIGN-IN LINKS ARE HIDDEN (the Muse audit, 2026-09-25).
+Every subject, preview and sender name read here goes through `_hide`
+(jarvis_mail_mask.py) first: "Your code is 482913" becomes "Your code is
+[a one-time code, hidden]", and a password-reset or magic sign-in link
+becomes "[a sign-in link, hidden]". What it cannot catch is listed in that
+module. Without it, the text is withheld rather than shown as it is.
+
 TESTING WITHOUT A REAL IMAP SERVER
 `run()` takes an injectable `fetch_messages`, exactly the same shape as
 `jarvis_calendar.run()`'s `fetch` - it returns a list of raw RFC 822 byte
@@ -268,14 +275,37 @@ def _preview(msg: "email.message.Message") -> str:
     except Exception:
         return ""
     text = re.sub(r"\s+", " ", text).strip()
-    return text[:_MAX_PREVIEW_CHARS]
+    # Codes and sign-in links hidden BEFORE the cut, so a link the cut would
+    # have split is still recognised; the subject tells it whether the
+    # message carries a code.
+    return _hide(text, _decode(msg.get("Subject")), cap=_MAX_PREVIEW_CHARS)
+
+
+#: What stands in for email text when jarvis_mail_mask.py is missing.
+_MASK_MISSING = "[not shown: jarvis_mail_mask.py is missing on this PC]"
+
+
+def _hide(text: str, subject: str = "", *, cap: int = _MAX_HEADER_CHARS) -> str:
+    """One-time codes and password-reset / sign-in links replaced by plain
+    markers (jarvis_mail_mask.py; the Muse audit, 2026-09-25), then cut to
+    `cap`. Every subject, preview and sender name this module reads goes
+    through here, so the model, both apps, the briefing and any log only
+    ever see the hidden version. Without that module the text is WITHHELD,
+    never shown as it is."""
+    if not text:
+        return ""
+    try:
+        import jarvis_mail_mask as MASK
+    except Exception:
+        return _MASK_MISSING
+    return MASK.cap(MASK.hide(text, subject=subject), cap)
 
 
 def _parse_message(raw: bytes) -> dict:
     msg = email.message_from_bytes(raw)
     return {
-        "from": _decode(msg.get("From"))[:_MAX_HEADER_CHARS],
-        "subject": _decode(msg.get("Subject"))[:_MAX_HEADER_CHARS],
+        "from": _hide(_decode(msg.get("From"))),
+        "subject": _hide(_decode(msg.get("Subject"))),
         "date": _decode(msg.get("Date"))[:_MAX_HEADER_CHARS],
         "preview": _preview(msg),
     }
@@ -442,7 +472,7 @@ def sender_name(raw_header) -> str:
         shown = _tidy(_decode(addr)) if addr else ""
     if not shown and not pairs:
         shown = _tidy(_decode(value))
-    return shown
+    return _hide(shown, cap=_MAX_SENDER_CHARS)
 
 
 def senders(p: Plan, *, fetch: Optional[Callable[[Plan, int], tuple]] = None,

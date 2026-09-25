@@ -1,0 +1,28 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1548,6 +1548,25 @@
+                 # The exception's NAME only: its message could quote a setting.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
++        if path == "/api/reach":
++            # reach.patch - "What Jarvis can reach" (jarvis_reach.py; the Muse
++            # audit, 2026-09-25): every way Jarvis can reach something outside
++            # itself and whether each is on, written by the PC from its own
++            # settings - never by the model. Both apps show it. Host names
++            # only: never a password, key, private link or ntfy topic. Reads
++            # only, so it is not held on a stale link.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_reach
++                code, out = jarvis_reach.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote a setting.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+         if path == "/api/schedule":
+             # schedule.patch - "Coming up": the timers, alarms, reminders and
+             # repeating jobs, and the to-do list (jarvis_schedule.py).

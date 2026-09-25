@@ -336,6 +336,11 @@ permissions = [
   "allow-test-web-search",
   "allow-save-search-key",
   "allow-forget-search-key",
+  # "What Jarvis can reach": every way Jarvis can reach something outside
+  # itself, whether each is on, where it goes (a host only) and whether it
+  # asks first - written by the PC from its settings, never by the model.
+  # A read: it changes nothing, and no key or private link is in it.
+  "allow-get-reach",
   # "Voice": what the PC says about listening to the owner - whether each
   # microphone's voice print is trained, which voice check is installed, the
   # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:

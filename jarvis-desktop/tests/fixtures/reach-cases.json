@@ -1,0 +1,1094 @@
+{
+ "asks_label": "Asks you first",
+ "cases": {
+  "blocked_and_no_key": {
+   "asks_label": "Asks you first",
+   "available": true,
+   "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "everything_else": "Anything not on this list stays on this PC.",
+   "on": 2,
+   "rows": [
+    {
+     "asks": "-",
+     "id": "cloud_model",
+     "line": "No cloud model is set up, so every answer is written on this PC.",
+     "name": "Cloud model",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "Only when private things could slip in - after Jarvis has read email, files, notes, saved memories or other outside text",
+     "id": "web_search",
+     "line": "Searches with Exa. Only the search words are sent, and never to another search quietly. No key is saved yet, so searches fail until one is.",
+     "name": "Web search",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "api.exa.ai"
+    },
+    {
+     "asks": "-",
+     "id": "calendar",
+     "line": "Set up on this PC, but the AI model is not offered it: \"calendar_read\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Calendar (reading)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "Never allowed (your settings say never)",
+     "id": "email_read",
+     "line": "Set up and switched on, but your settings say never, so it never runs.",
+     "name": "Email (reading)",
+     "on": false,
+     "state": "blocked",
+     "state_words": "Blocked by your settings",
+     "where": "imap.example.com (as me@example.com)"
+    },
+    {
+     "asks": "-",
+     "id": "email_send",
+     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "name": "Email (sending)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "home_read",
+     "line": "Home Assistant is not set up on this PC.",
+     "name": "Home Assistant (reading)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "home_control",
+     "line": "Home Assistant is not set up on this PC.",
+     "name": "Home Assistant (changing things)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "notes_read",
+     "line": "No notes are set up on this PC (Obsidian, Logseq or Joplin).",
+     "name": "Notes (searching)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "notes_write",
+     "line": "The AI model is not offered any way to write notes.",
+     "name": "Notes (writing)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "github",
+     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "GitHub research",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "phone_push",
+     "line": "When a card waits, it pushes \"Jarvis wants to ...\" to your phone - never the details, and never while the conversation holds private text.",
+     "name": "Phone notifications (ntfy)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "ntfy.sh"
+    },
+    {
+     "asks": "-",
+     "id": "computer",
+     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Computer control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "browser",
+     "line": "Off: it also needs the second graphics card's \"Browser control\" switch, which is off.",
+     "name": "Browser control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "phone_control",
+     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Phone control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "shell",
+     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Commands on this PC",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "second_card",
+     "line": "Off. Switching it on asks you with an approval card.",
+     "name": "Second graphics card",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "big_model",
+     "line": "Off. Switching it on asks you with an approval card.",
+     "name": "Big model (slow)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    }
+   ],
+   "title": "What Jarvis can reach",
+   "tools": [
+    {
+     "id": "web_search",
+     "name": "Web search"
+    },
+    {
+     "id": "email_check",
+     "name": "Reading your email"
+    }
+   ],
+   "tools_none": "None: the AI model is offered no tools, so it can only write answers.",
+   "tools_title": "Tools the AI model is offered",
+   "where_label": "Goes to",
+   "written_by": "code"
+  },
+  "damaged_search": {
+   "asks_label": "Asks you first",
+   "available": true,
+   "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "everything_else": "Anything not on this list stays on this PC.",
+   "on": 0,
+   "rows": [
+    {
+     "asks": "-",
+     "id": "cloud_model",
+     "line": "No cloud model is set up, so every answer is written on this PC.",
+     "name": "Cloud model",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "web_search",
+     "line": "Its settings file is damaged, so Jarvis searches nothing until it is fixed in Settings, Web search.",
+     "name": "Web search",
+     "on": false,
+     "state": "blocked",
+     "state_words": "Blocked by your settings",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "calendar",
+     "line": "No calendar is set up on this PC.",
+     "name": "Calendar (reading)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "email_read",
+     "line": "No email account is set up on this PC.",
+     "name": "Email (reading)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "email_send",
+     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "name": "Email (sending)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "home_read",
+     "line": "Home Assistant is not set up on this PC.",
+     "name": "Home Assistant (reading)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "home_control",
+     "line": "Home Assistant is not set up on this PC.",
+     "name": "Home Assistant (changing things)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "notes_read",
+     "line": "No notes are set up on this PC (Obsidian, Logseq or Joplin).",
+     "name": "Notes (searching)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "notes_write",
+     "line": "The AI model is not offered any way to write notes.",
+     "name": "Notes (writing)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "github",
+     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "GitHub research",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "phone_push",
+     "line": "Not set up: no ntfy topic is set, so nothing is pushed.",
+     "name": "Phone notifications (ntfy)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "computer",
+     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Computer control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "browser",
+     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Browser control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "phone_control",
+     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Phone control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "shell",
+     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Commands on this PC",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "second_card",
+     "line": "Off. Switching it on asks you with an approval card.",
+     "name": "Second graphics card",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "big_model",
+     "line": "Off. Switching it on asks you with an approval card.",
+     "name": "Big model (slow)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    }
+   ],
+   "title": "What Jarvis can reach",
+   "tools": [
+    {
+     "id": "web_search",
+     "name": "Web search"
+    }
+   ],
+   "tools_none": "None: the AI model is offered no tools, so it can only write answers.",
+   "tools_title": "Tools the AI model is offered",
+   "where_label": "Goes to",
+   "written_by": "code"
+  },
+  "everyday": {
+   "asks_label": "Asks you first",
+   "available": true,
+   "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "everything_else": "Anything not on this list stays on this PC.",
+   "on": 6,
+   "rows": [
+    {
+     "asks": "-",
+     "id": "cloud_model",
+     "line": "No cloud model is set up, so every answer is written on this PC.",
+     "name": "Cloud model",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "Only when private things could slip in - after Jarvis has read email, files, notes, saved memories or other outside text",
+     "id": "web_search",
+     "line": "Searches with SearXNG (on this PC). Only the search words are sent, and never to another search quietly.",
+     "name": "Web search",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "this PC (SearXNG, which asks other search engines)"
+    },
+    {
+     "asks": "No",
+     "id": "calendar",
+     "line": "Reads your Google Calendar through its private link: events in the days asked for. It never changes an event. The morning briefing reads it too, when one is set up.",
+     "name": "Calendar (reading)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "calendar.google.com"
+    },
+    {
+     "asks": "No",
+     "id": "email_read",
+     "line": "Reads the sender, subject, date and a short preview of recent emails, with one-time codes and sign-in links hidden. It never marks anything as read, moves, deletes or sends anything. The morning briefing reads the count and senders too, when one is set up.",
+     "name": "Email (reading)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "imap.example.com (as me@example.com)"
+    },
+    {
+     "asks": "-",
+     "id": "email_send",
+     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "name": "Email (sending)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "home_read",
+     "line": "Home Assistant is not set up on this PC.",
+     "name": "Home Assistant (reading)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "home_control",
+     "line": "Home Assistant is not set up on this PC.",
+     "name": "Home Assistant (changing things)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "notes_read",
+     "line": "No notes are set up on this PC (Obsidian, Logseq or Joplin).",
+     "name": "Notes (searching)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "No - but yes after Jarvis has read an email, a web page, a file or other outside text",
+     "id": "notes_write",
+     "line": "Can write to your Obsidian daily note.",
+     "name": "Notes (writing)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "this PC (your notes apps)"
+    },
+    {
+     "asks": "-",
+     "id": "github",
+     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "GitHub research",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "phone_push",
+     "line": "When a card waits, it pushes \"Jarvis wants to ...\" to your phone - never the details, and never while the conversation holds private text.",
+     "name": "Phone notifications (ntfy)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "ntfy.sh"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "computer",
+     "line": "Can click and type in other programs on this PC, one approved plan at a time. It never touches Jarvis's own windows.",
+     "name": "Computer control",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "other programs on this PC"
+    },
+    {
+     "asks": "-",
+     "id": "browser",
+     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Browser control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "phone_control",
+     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Phone control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "shell",
+     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Commands on this PC",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "second_card",
+     "line": "Off. Switching it on asks you with an approval card.",
+     "name": "Second graphics card",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "big_model",
+     "line": "Off. Switching it on asks you with an approval card.",
+     "name": "Big model (slow)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    }
+   ],
+   "title": "What Jarvis can reach",
+   "tools": [
+    {
+     "id": "calculator",
+     "name": "Calculator"
+    },
+    {
+     "id": "memory_search",
+     "name": "Searching what it has learned about you"
+    },
+    {
+     "id": "control_computer",
+     "name": "Computer control"
+    },
+    {
+     "id": "web_search",
+     "name": "Web search"
+    },
+    {
+     "id": "calendar_read",
+     "name": "Reading your calendar"
+    },
+    {
+     "id": "email_check",
+     "name": "Reading your email"
+    },
+    {
+     "id": "append_obsidian_daily",
+     "name": "Adding to your Obsidian daily note"
+    }
+   ],
+   "tools_none": "None: the AI model is offered no tools, so it can only write answers.",
+   "tools_title": "Tools the AI model is offered",
+   "where_label": "Goes to",
+   "written_by": "code"
+  },
+  "everything_on": {
+   "asks_label": "Asks you first",
+   "available": true,
+   "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "everything_else": "Anything not on this list stays on this PC.",
+   "on": 16,
+   "rows": [
+    {
+     "asks": "Yes, every question",
+     "id": "cloud_model",
+     "line": "Jarvis may offer to send one question to a cloud model (jarvis-escalate). It goes only if you say yes to that one question, and never with your memory, a picture, or a conversation that has read private or outside text.",
+     "name": "Cloud model",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "openrouter"
+    },
+    {
+     "asks": "Yes, every search (you chose \"Ask before every web search\")",
+     "id": "web_search",
+     "line": "Searches with Tavily. Only the search words are sent, and never to another search quietly. A key is saved on this PC.",
+     "name": "Web search",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "api.tavily.com"
+    },
+    {
+     "asks": "No",
+     "id": "calendar",
+     "line": "Reads your Google Calendar through its private link: events in the days asked for. It never changes an event. The morning briefing reads it too, when one is set up.",
+     "name": "Calendar (reading)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "calendar.google.com"
+    },
+    {
+     "asks": "No",
+     "id": "email_read",
+     "line": "Reads the sender, subject, date and a short preview of recent emails, with one-time codes and sign-in links hidden. It never marks anything as read, moves, deletes or sends anything. The morning briefing reads the count and senders too, when one is set up.",
+     "name": "Email (reading)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "imap.example.com (as me@example.com)"
+    },
+    {
+     "asks": "-",
+     "id": "email_send",
+     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "name": "Email (sending)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "No",
+     "id": "home_read",
+     "line": "Reads the state of things in your home (lights, sensors, locks). Changes nothing.",
+     "name": "Home Assistant (reading)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "homeassistant.local"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "home_control",
+     "line": "Can switch lights, locks and other things in your home - each change only after you say yes to it.",
+     "name": "Home Assistant (changing things)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "homeassistant.local"
+    },
+    {
+     "asks": "No",
+     "id": "notes_read",
+     "line": "Searches your own notes (Obsidian, Logseq or Joplin) and reads short pieces of the ones it finds.",
+     "name": "Notes (searching)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "this PC (Joplin)"
+    },
+    {
+     "asks": "No - but yes after Jarvis has read an email, a web page, a file or other outside text",
+     "id": "notes_write",
+     "line": "Can write to your Obsidian daily note, your Logseq journal and new Joplin notes.",
+     "name": "Notes (writing)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "this PC (your notes apps)"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "github",
+     "line": "Searches GitHub for existing code libraries, with the search words shown on the card. A GitHub token is saved on this PC.",
+     "name": "GitHub research",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "api.github.com"
+    },
+    {
+     "asks": "-",
+     "id": "phone_push",
+     "line": "When a card waits, it pushes \"Jarvis wants to ...\" to your phone - never the details, and never while the conversation holds private text.",
+     "name": "Phone notifications (ntfy)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "ntfy.example.net"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "computer",
+     "line": "Can click and type in other programs on this PC, one approved plan at a time. It never touches Jarvis's own windows.",
+     "name": "Computer control",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "other programs on this PC"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "browser",
+     "line": "Can work a web page in a browser, one approved step at a time - only while the second graphics card is working. What it types there reaches that website.",
+     "name": "Browser control",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "the websites on each approved plan"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "phone_control",
+     "line": "Can tap and type on your phone plugged into this PC, one approved plan at a time. It stops while a Jarvis app is in front.",
+     "name": "Phone control",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "your phone, over adb"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "shell",
+     "line": "Can run a command on this PC after you say yes to that exact command.",
+     "name": "Commands on this PC",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "this PC (a command can reach the internet)"
+    },
+    {
+     "asks": "-",
+     "id": "second_card",
+     "line": "Switched on for: Longer conversations, Browser control, Pictures. It is a second model on this PC: nothing it handles leaves the PC.",
+     "name": "Second graphics card",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "this PC (a second copy of Ollama)"
+    },
+    {
+     "asks": "-",
+     "id": "big_model",
+     "line": "Switched on for: the wiki builder. It runs on this PC: nothing it handles leaves the PC.",
+     "name": "Big model (slow)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "this PC (colibri)"
+    }
+   ],
+   "title": "What Jarvis can reach",
+   "tools": [
+    {
+     "id": "calculator",
+     "name": "Calculator"
+    },
+    {
+     "id": "memory_search",
+     "name": "Searching what it has learned about you"
+    },
+    {
+     "id": "file_read",
+     "name": "Reading files on this PC"
+    },
+    {
+     "id": "shell_exec",
+     "name": "Running commands on this PC"
+    },
+    {
+     "id": "control_computer",
+     "name": "Computer control"
+    },
+    {
+     "id": "control_phone",
+     "name": "Phone control"
+    },
+    {
+     "id": "github_search",
+     "name": "GitHub research"
+    },
+    {
+     "id": "web_search",
+     "name": "Web search"
+    },
+    {
+     "id": "calendar_read",
+     "name": "Reading your calendar"
+    },
+    {
+     "id": "email_check",
+     "name": "Reading your email"
+    },
+    {
+     "id": "notes_search",
+     "name": "Searching your notes"
+    },
+    {
+     "id": "home_read",
+     "name": "Reading Home Assistant"
+    },
+    {
+     "id": "home_control",
+     "name": "Changing things in Home Assistant"
+    },
+    {
+     "id": "append_logseq_journal",
+     "name": "Adding to your Logseq journal"
+    },
+    {
+     "id": "append_obsidian_daily",
+     "name": "Adding to your Obsidian daily note"
+    },
+    {
+     "id": "create_joplin_note",
+     "name": "Making a Joplin note"
+    },
+    {
+     "id": "set_timer",
+     "name": "Timers"
+    },
+    {
+     "id": "set_reminder",
+     "name": "Reminders"
+    },
+    {
+     "id": "todo_add",
+     "name": "Adding to the to-do list"
+    },
+    {
+     "id": "todo_done",
+     "name": "Ticking off the to-do list"
+    },
+    {
+     "id": "coming_up",
+     "name": "Coming up (timers, alarms, reminders)"
+    },
+    {
+     "id": "browser_control",
+     "name": "Browser control"
+    }
+   ],
+   "tools_none": "None: the AI model is offered no tools, so it can only write answers.",
+   "tools_title": "Tools the AI model is offered",
+   "where_label": "Goes to",
+   "written_by": "code"
+  },
+  "nothing_set_up": {
+   "asks_label": "Asks you first",
+   "available": true,
+   "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "everything_else": "Anything not on this list stays on this PC.",
+   "on": 0,
+   "rows": [
+    {
+     "asks": "-",
+     "id": "cloud_model",
+     "line": "No cloud model is set up, so every answer is written on this PC.",
+     "name": "Cloud model",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "web_search",
+     "line": "Off: \"web_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Web search",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "calendar",
+     "line": "No calendar is set up on this PC.",
+     "name": "Calendar (reading)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "email_read",
+     "line": "No email account is set up on this PC.",
+     "name": "Email (reading)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "email_send",
+     "line": "Jarvis cannot send email: nothing on this PC is set up for it.",
+     "name": "Email (sending)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "home_read",
+     "line": "Home Assistant is not set up on this PC.",
+     "name": "Home Assistant (reading)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "home_control",
+     "line": "Home Assistant is not set up on this PC.",
+     "name": "Home Assistant (changing things)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "notes_read",
+     "line": "No notes are set up on this PC (Obsidian, Logseq or Joplin).",
+     "name": "Notes (searching)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "notes_write",
+     "line": "The AI model is not offered any way to write notes.",
+     "name": "Notes (writing)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "github",
+     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "GitHub research",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "phone_push",
+     "line": "Not set up: no ntfy topic is set, so nothing is pushed.",
+     "name": "Phone notifications (ntfy)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "computer",
+     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Computer control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "browser",
+     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Browser control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "phone_control",
+     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Phone control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "shell",
+     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml.",
+     "name": "Commands on this PC",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "second_card",
+     "line": "Off. Switching it on asks you with an approval card.",
+     "name": "Second graphics card",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "big_model",
+     "line": "Off. Switching it on asks you with an approval card.",
+     "name": "Big model (slow)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    }
+   ],
+   "title": "What Jarvis can reach",
+   "tools": [],
+   "tools_none": "None: the AI model is offered no tools, so it can only write answers.",
+   "tools_title": "Tools the AI model is offered",
+   "where_label": "Goes to",
+   "written_by": "code"
+  }
+ },
+ "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+ "everything_else": "Anything not on this list stays on this PC.",
+ "ids": [
+  "cloud_model",
+  "web_search",
+  "calendar",
+  "email_read",
+  "email_send",
+  "home_read",
+  "home_control",
+  "notes_read",
+  "notes_write",
+  "github",
+  "phone_push",
+  "computer",
+  "browser",
+  "phone_control",
+  "shell",
+  "second_card",
+  "big_model"
+ ],
+ "missing": "Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 on the PC.",
+ "states": {
+  "blocked": "Blocked by your settings",
+  "not_set_up": "Not set up",
+  "off": "Off",
+  "on": "On"
+ },
+ "title": "What Jarvis can reach",
+ "tools_none": "None: the AI model is offered no tools, so it can only write answers.",
+ "tools_title": "Tools the AI model is offered",
+ "where_label": "Goes to"
+}

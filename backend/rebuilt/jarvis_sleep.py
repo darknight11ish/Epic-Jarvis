@@ -242,7 +242,8 @@ def reminder_card() -> Optional[dict]:
             # day's card still counted as waiting is replaced by this one,
             # not left to hold it back.
             bo.closed(fp)
-            may, _why = bo.may_offer(fp)
+            # kind=: rule 4 - an offer never asks for more (jarvis_backoff.OFFERS).
+            may, _why = bo.may_offer(fp, kind=OFFER)
         except Exception:
             may = False
         if not may:

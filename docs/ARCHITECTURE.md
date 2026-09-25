@@ -268,6 +268,20 @@ purpose (2026-09-25): a link typed on the phone would be one more place to
 keep a password safe. Only the morning briefing's settings line says which
 calendar is read ("your Google Calendar (private link)"), in both apps.
 
+**Which of these lanes is on right now is listed by code, in both apps**
+(the Muse audit, 2026-09-25): "What Jarvis can reach" (`GET /api/reach`,
+`backend/jarvis_reach.py`, JARVIS-API.md section 24) is written from the
+same settings this table's code reads - `[tools].enabled`, the tiers, the
+accounts' environment variables, the web search settings, the cloud lanes -
+never by the model, and names hosts only, never a key or a link. "What can
+you reach?" is answered from it without the model (`jarvis_quick.py`).
+
+**Email text has its one-time codes and sign-in links hidden** before the
+model, the apps, the briefing or a log see it (`backend/jarvis_mail_mask.py`,
+JARVIS-API.md section 25): the most valuable thing a planted instruction
+could try to get into a web search's words. A pattern list, so not
+everything is caught; what it misses is written down there.
+
 **Web search, in one sentence each** (the owner's decisions of 2026-09-25,
 `CLAUDE.md`; docs/JARVIS-API.md section 23). What it sends: the search words
 the model chose, and nothing else of the owner's. Where: to the provider
@@ -1180,6 +1194,19 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    with `declined()`: a few at most, never mid-conversation, and a "no" is
    heard for 1, then 7, then 30 days. The back-off only decides whether to
    ask; it never approves, and the owner's own requests never consult it.
+   And an offer never asks for more (rule 4, the Muse audit, 2026-09-25):
+   no offer Jarvis makes on its own may ask for more access, a new
+   connection, a key, a password, a payment method, an identity document,
+   or to turn on a setting that shows or trusts more. That is checked by the
+   offer's KIND, in code: declare the new kind in `jarvis_backoff.OFFERS`
+   with what it asks for, and pass `kind=` to `may_offer()` - a kind that is
+   not declared, or asks for anything in `NEVER_ASKS`, is refused and the
+   refusal logged (`backend/test_backoff_rule.py` fails on a `may_offer()`
+   call without `kind=`).
+   Does it reach something outside Jarvis? Then it gets a row in
+   `jarvis_reach.KINDS` ("What Jarvis can reach", JARVIS-API.md section 24),
+   so both apps and "what can you reach?" say so - from the settings, never
+   from the model.
 4. Can you state, in one sentence, what it sends and where? If not, you do not
    know yet.
 5. Does it need a test that fails on the unpatched tree? Yes. Every patch here
