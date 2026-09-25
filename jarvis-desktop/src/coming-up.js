@@ -96,7 +96,11 @@ export const KIND_TAGS = Object.freeze({
   reminder: "reminder",
   todo: "to-do",
   standby: "standby",
+  briefing: "briefing",
 });
+
+/** A morning briefing job's title (it has no words of its own; briefing.js). */
+export const BRIEFING_JOB_TITLE = "Morning briefing";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const text = (v) => (typeof v === "string" ? v : "");
@@ -173,6 +177,7 @@ export function titleOf(job) {
   if (job.kind === "timer") {
     return words ? `${words} timer` : `${lengthWords(job.duration || 0)} timer`;
   }
+  if (job.kind === "briefing") return BRIEFING_JOB_TITLE;
   if (words) return words;
   return job.kind === "alarm" ? "Alarm" : job.kind === "todo" ? "To-do" : "Reminder";
 }

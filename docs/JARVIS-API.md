@@ -180,7 +180,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
 | `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on Mind; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
-| `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on); the Brain reads Coming up again (`brain.js`) | Mind's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`) |
+| `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed" \| "ready", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on) - except for a briefing, whose toast comes on `ready` (`brain/briefing.rs` `toast_ready`, always only "Jarvis: your morning briefing is ready.", section 22); the Brain reads Coming up again, and the briefing too for kind `briefing` (`brain.js`) | Mind's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`). For kind `briefing`: Mind's Morning briefing reads itself again, and on `ready` (not `fired`) a notification with only the fixed words, which opens Mind (`JarvisRuntime.onBriefingReady`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
@@ -1028,7 +1028,11 @@ the day's offer as made the moment it is called, so the route calls it only
 for a client that shows the card - the Brain window and the phone. Without
 the flag the field is `null`. (The HUD page reads this route often and never
 showed the card, and used to use up the day's offer that way.) The card says
-the feature is not built, and carries `"implemented": false`.
+the feature is not built, and carries `"implemented": false`. Since
+2026-09-25 it is also an offer under the back-off (section 22.6): it is not
+handed out within two minutes of a chat message or while three other offers
+wait (the day is not used up then - a later read that day gets it), and
+"Not now" keeps it quiet for 1 day, then 7, then 30.
 
 **Which card says "would replace".** Only a row with a non-null
 `replaces_id` replaces anything: `jarvis_extract._accept()` retires by that
@@ -1062,7 +1066,7 @@ neither app says it would.
 | `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | `brain_memory_learning_sensitive` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted. Anything else: `400`. Every reply carries the `/api/history` status fields. |
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. |
-| `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}` | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.kt:447` | The overnight tidy is **not built**: `enabled` only records the wish, and nothing runs. "Not now" sends nothing at all — the card tracks "already offered today" itself. |
+| `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}`, or `{"not_now": true}` alone | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.setSleepTime` | The overnight tidy is **not built**: `enabled` only records the wish, and nothing runs. "Not now" sends `{"not_now": true}` since 2026-09-25 (`briefing.patch`): the PC keeps the offer quiet for 1 day, then 7, then 30 (`jarvis_backoff.py`, section 22.6), and answers `{"ok", "said", "quiet_until"}`; it changes no setting and is not held on a stale link in either app (it only makes Jarvis quieter). An older PC answers 400 and the card simply returns tomorrow. `not_now` beside `enabled` or `remind` is ignored. |
 | `/api/attention/mute` | POST | `{}` | `attention.rs:119` | `JarvisApi.kt:469` | **Until tomorrow only.** There is no "mute forever". |
 | `/api/attention/unmute` | POST | `{}` | `attention.rs:121` | `JarvisApi.kt:471` | Response is `budget()`, not `status()`, so the desktop re-reads rather than applying half an update. |
 | `/api/digest/seen` | POST | `{}` = all, or `{"ids": [...]}` | `attention.rs:102` | `JarvisApi.kt:481` | **Marking read is not approving.** Both clients say so in the same words. |
@@ -3246,7 +3250,7 @@ repeating job then moves to its next time - never once per missed time.
 |---|---|---|---|
 | `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items, oldest first. |
 | `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
-| `POST /api/schedule/add` | `{"kind": "todo", "text"}` · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}`; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat; 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once. A repeat raises ONE card and is set up only on its yes. Both apps add only a to-do item here; timers and reminders are said or typed to Jarvis. |
+| `POST /api/schedule/add` | `{"kind": "todo", "text"}` · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}`; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat; 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once. A repeat raises ONE card and is set up only on its yes. Both apps add only a to-do item here, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
 | `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time", "seconds"?}` | 200 `{"ok": true, "id", "said"}`; 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing); 400 anything else | ONE job, at once, no card - it only makes things quieter. **There is no list form and no "delete all"**: `id` must be one job id (`s` and ten hex digits). Both apps hold it on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. |
 
 A `job`:
@@ -3298,9 +3302,14 @@ If you say no: nothing is set up.
 ```
 
 Its notice (the lock screen's words) comes from `jarvis_gate`'s table like
-every other card: "sets up a reminder, an alarm or a standby schedule that
-repeats, on this PC; nothing is sent anywhere, and deleting it is
-immediate" (the standby schedule's words added 2026-09-25). Denied, timed out
+every other card: "sets up something that repeats on this PC - a reminder,
+an alarm, a morning briefing or a standby schedule; setting it up sends
+nothing anywhere, and deleting it is immediate" (`briefing.patch`,
+2026-09-25; `schedule.patch` alone says "sets up a reminder, an alarm or a
+standby schedule that repeats, on this PC; nothing is sent anywhere, and
+deleting it is immediate"). A briefing's card replaces the "It runs on this
+PC... Nothing is sent anywhere." paragraph with its own lines on what each
+run reads (section 22.3). Denied, timed out
 or refused: the job is removed, and a `schedule` event says the list
 changed. A "no" to it proposes no standing rule (`_NO_RULE_FROM_DENIAL`):
 the owner asked for it.
@@ -3342,6 +3351,7 @@ What it understands:
 | Alarms | "set an alarm for 7" (the next 7 o'clock), "alarm at 7:30am", "wake me up at 6", "set an alarm for tomorrow at 6" (an alarm on another day: the morning), "cancel my 7am alarm", "what alarms do I have" |
 | Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (a card), "remind me to stretch every 2 hours" (a card) |
 | To-do list | "add milk to my to-do list", "what's on my to-do list", "mark milk as done", "tick off milk", "remove milk from my to-do list" |
+| Morning briefing | "brief me now", "brief me every weekday at 7", "stop my briefing" - section 22.5 |
 
 "cancel all timers", "clear my to-do list" and the like are answered
 "Jarvis does not clear everything at once" and change nothing. Two timers
@@ -3404,9 +3414,10 @@ the times stay, so a timer still counts down.
   30-minute heartbeat and in-memory findings could not host timers
   (`jarvis_schedule.py`'s header says why); the digest lives in the owner's
   `jarvis_arbiter.py`, which this repository does not hold. The scheduler is
-  the one clock; briefings and the overnight tidy are to plug in as new
-  kinds (`register_kind`), not as schedulers of their own - as sleep mode
-  now has (21.8).
+  the one clock; briefings, sleep mode and the overnight tidy are to plug in
+  as new kinds (`register_kind`), not as schedulers of their own. Sleep mode
+  now has, as the standby schedule (21.8), and so has the morning briefing
+  (section 22).
 
 ### 21.8 The standby schedule - "sleep mode" (added 2026-09-25)
 
@@ -3504,3 +3515,184 @@ power mode is kept in memory, so a backend restart inside the window comes
 back Active until the next start (the start already went off). With one
 graphics card, the second card's part of standby finds nothing and says
 nothing.
+
+## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
+
+The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for
+briefings; anything that repeats asks once with a card listing the next run
+times, a one-off needs none; simple commands are answered without the AI
+model. And rule 1: email, files, credentials and memory stay on this PC.
+
+`backend/briefing.patch`, `backend/jarvis_briefing.py` and
+`backend/jarvis_backoff.py`. **Both apps call both routes.** The desktop:
+the Brain's Work tab, "Morning briefing" (`brain/briefing.rs`
+`brain_briefing`, `brain_briefing_now`, Brain only) and Settings, "Morning
+briefing" (`get_briefing_setup`, `set_briefing`, `stop_briefing`, Settings
+only); a Windows toast when one is ready (`stream.rs` -> `toast_ready`). The
+phone: Mind, "Morning briefing" (`BriefingPlate.kt`, `net/Briefing.kt`) -
+on the phone, settings for a PC feature live on Mind, like the second
+card's switches; a notification when one is ready, which opens Mind.
+
+### 22.1 What it is
+
+A short list of the day, **put together in code on the PC - no model, local
+or cloud, ever sees it**, so it works while the model is slow, unloaded or
+asleep. Only what Jarvis can already read on this PC, in this order:
+
+| Section (`key`) | What | When it is left out |
+|---|---|---|
+| Calendar (`calendar`) | Today's events: all-day first, then by this PC's time. A repeating event (RRULE) shows the time of its first date and "(repeats)"; one that began earlier "(continues from an earlier day)". | Not set up (`JARVIS_CALDAV_URL` unset, or `calendar_read` not in `[tools].enabled`); or `calendar_read` is not tier `auto`/`notify` - then it is not read and **no card is raised**, and the briefing says why. |
+| Today (`today`) | Alarms, reminders and timers still to come today, with their words. | Never. |
+| To-do list (`todo`) | How many open items, and the first five. | Never. |
+| Approvals (`approvals`) | How many approval cards wait - "Open Jarvis to answer." Never an Approve. | Never. |
+| Email (`email`) | **How many** unread emails - the number only (`jarvis_email.count()`: one connection, SEARCH UNSEEN, no message fetched). | Not set up (`JARVIS_IMAP_HOST` unset, or `email_check` not in `[tools].enabled`) - then it is not mentioned at all; or `email_read` is not `auto`/`notify` - then it says why. |
+
+Then always: "Weather and news: not available. No provider has been chosen,
+so Jarvis fetches nothing from the internet for this."
+
+Each read that leaves the PC (the calendar to the owner's CalDAV server, the
+count to the owner's IMAP server) goes through `jarvis_gate.check()` as its
+own action (`calendar_read`, `email_read`), exactly as the model's tools do,
+and runs only if the gate says `allowed`. Together they get 25 seconds
+(`READ_DEADLINE`); a slow one is left out ("did not answer in time"). A
+failure says so without quoting the server.
+
+### 22.2 Routes
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/briefing` | - | 200 `{"available": true, "briefing": briefing \| null, "building": bool, "setups": [job], "sources": {"calendar", "email", "weather": {"state", "said"}}, "title", "lock_screen", "empty"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_briefing.py` | Token + origin. `setups`: the briefing jobs (section 21's job shape). `sources`: what a briefing would include, worked out without reading anything - `state` is `on`, `off`, `asks` or `not_available`. |
+| `POST /api/briefing/now` | `{}` | 200 `{"ok": true, "briefing"}`; 400 not an object; 500 `{"ok": false, "error": <exception name>}` | One put together now, and kept as the latest. It only READS, asks no card and changes nothing, so **neither app holds it on a stale link** (like every read). Up to about 25 seconds with a slow calendar or mail server. |
+
+Setting one up and stopping one are section 21's routes:
+`POST /api/schedule/add {"kind": "briefing", "repeat": rule}` (202, ONE
+card; `rule` is `every` `day`, `weekday` or `week` with `days` - the apps
+offer no "every N hours") or `{"kind": "briefing", "at": <epoch>}` (once, no
+card); `POST /api/schedule/act {"id", "do": "delete"}`. Both held on a
+stale link in both apps. The same repeat set up twice is refused ("a
+morning briefing every weekday ... at 07:00 is already set up"). A
+`briefing` job has no words of its own; Coming up calls it "Morning
+briefing" in both apps.
+
+A `briefing`:
+
+```
+{"id": "b0123456789", "made": epoch, "date": "Friday 25 September",
+ "heading": "Your briefing for Friday 25 September, made at 07:00.",
+ "source": "schedule" | "now" | "chat", "job": job id | null,
+ "missed": "missed at 07:00" | "", "late": bool, "private": true,
+ "sections": [{"key", "title", "state": "ok" | "empty" | "failed" | "refused" | "slow",
+               "summary": "2 events today.", "items": ["09:30 Dentist", ...]}],
+ "not_included": ["Not included: your calendar is not set up for Jarvis on this PC."],
+ "read": ["calendar_read"] | [],     outside text in the lines (below)
+ "lock_screen": "Jarvis: your morning briefing is ready.",
+ "text": the whole of it as plain lines (the chat answer)}
+```
+
+**Kept in memory only** - the latest one, in the backend process. Never
+written to disk, never put on the event bus; gone when Jarvis restarts.
+
+### 22.3 The card, and when it goes off
+
+A repeat is the scheduler's own `schedule_repeat` card (section 21.3): what,
+when, the next three times - and, in place of "Nothing is sent anywhere.",
+what each run reads: "Each time, Jarvis puts together a short list on this
+PC, without the AI model: ... how many unread emails you have (the number
+only), if email is set up ... It only reads. It changes nothing and approves
+nothing." and "Reading your calendar and email is a request to your own
+calendar and mail servers, the same as asking Jarvis to read them, under the
+same settings. Nothing else is sent anywhere, and nothing goes to the AI
+model."
+
+When its time comes the scheduler rings `schedule` `fired` as for any job,
+then the briefing is put together on its own thread, then `schedule`
+`{"id", "kind": "briefing", "state": "ready"}` - always, even when a part
+could not be read. **Both apps notify on `ready`, not `fired`**, so the
+notification is never ahead of the briefing. Missed while the PC was off:
+it goes off once, late, and says "(Due at 07:00 - the PC was off or asleep,
+so it is late.)".
+
+### 22.4 What the apps show
+
+- **The notification and the Windows toast say only "Jarvis: your morning
+  briefing is ready."** (title "Morning briefing") - on the lock screen and
+  inside it, whatever App lock or the privacy settings say. The words of the
+  briefing are read in the app, behind the token.
+- **The briefing**: the heading, each section's summary and its lines, the
+  weather-and-news line, what was left out, and "Kept on your PC until
+  Jarvis restarts." While the private lists are hidden (the desktop's
+  "Windows Hello for memory lists and chat history", taken out in Rust; the
+  phone's "Hide memory lists and chat history") the lines go and the
+  summaries - counts only - stay.
+- **"Brief me now"**, and the setup: every day, weekdays, or chosen days,
+  at a time; the setups with one Stop each. No "stop all".
+
+### 22.5 Said or typed - without the model
+
+`jarvis_quick.py` (section 21.5), English only, whole sentences:
+
+| | Examples |
+|---|---|
+| Now | "brief me", "brief me now", "read my briefing", "what's my briefing", "give me my morning briefing", "morning briefing" |
+| Set up | "brief me every weekday at 7" (a card), "brief me every day at 6:30am", "set up a morning briefing every weekday morning at 7", "brief me on mondays and fridays at 8", "brief me tomorrow at 7" (once, no card) |
+| Stop | "stop my briefing" (with two set up it asks which and deletes nothing); "cancel all my briefings" is refused like every bulk change |
+| When | "when is my briefing" |
+
+"Brief me on the project" and the like go to the model. The answer to "brief
+me now" is the briefing itself, with `X-Jarvis-Route` `"quick":
+"briefing_now"` and `"gate": "private"` - so a spoken question's answer
+**stays on screen under the apps' private-answer rule** (section 16), like a
+calendar answer, unless the owner chose "voice check is enough". A typed
+"read my briefing" follows the same rule as any typed answer. When the
+answer quotes calendar titles (text from the calendar server), this PC's
+record of the turn says `calendar_read` ran, so the conversation counts as
+having read outside text (ARCHITECTURE section 3) exactly as when the
+calendar tool runs.
+
+### 22.6 The back-off for offers (`jarvis_backoff.py`)
+
+Jarvis's offers nobody asked for - today the overnight-tidy card
+(`setup.sleep_time_offer`) and the "save this routine as a skill?" card
+(`jarvis_skill_discovery.py`) - follow three rules:
+
+1. **At most three offers waiting** for an answer at once.
+2. **None within two minutes** of the last chat message (`/api/chat` notes
+   the time of every message, in memory, never the words). The skill offer,
+   which starts at the end of a chat turn, waits until the owner has been
+   quiet for two minutes (up to 30 minutes, then gives up).
+3. **Each "no" is heard**: the same offer - matched by a sha256 fingerprint
+   of what is offered, never its wording - is quiet for 1 day, then 7, then
+   30 (and 30 after that). A "yes" clears the count.
+
+It keeps only fingerprints, counts and dates, in `backoff.json` in the Jarvis
+settings folder (a file it cannot read makes every offer wait, and says so).
+It **never approves or acts** and calls no gate; **the owner's own requests
+never consult it** - switching the overnight tidy on, or asking for a
+routine, works whatever was declined - and a "no" never becomes a memory
+rule or a setting. A skill offer's own "no" is already for good (its
+ledger), so nothing is written for it here. The briefing makes no offers.
+The initiative engine has no checks registered (section 21.7), so it makes
+none either.
+
+Design from Leon (leon-ai/leon, MIT, `server/src/core/pulse-manager.ts`:
+`MAX_PENDING_MATTERS`, `ACTIVE_CONVERSATION_GRACE_MS`,
+`PULSE_DECLINE_COOLDOWN_MS`); no code copied. Leon can also save a declined
+offer as a remembered preference; that part was not taken.
+
+### 22.7 Known gaps, said plainly
+
+- **Not run on the owner's PC**, nor against a real calendar or mail
+  server. The toast and the notification have not been seen on a real
+  Windows PC or phone.
+- **Repeating calendar events are not worked out**: shown with their first
+  date's time, marked "(repeats)". An event kept in a time zone other than
+  UTC (a `TZID`) is shown as if it were in this PC's time zone.
+- **The desktop toast does not open the briefing**: it is the same plain
+  toast the timers use; the briefing is on the Brain's Work tab. The
+  phone's notification opens Mind.
+- **English only**, like the timers.
+- **One briefing is kept - the latest.** "Brief me now" on one app replaces
+  it; the other app shows the new one at its next read (Refresh, or opening
+  the section again) - there is no event for a briefing asked for by hand.
+- **Email senders are not shown** - only the count. Whether they should be
+  is the owner's call.

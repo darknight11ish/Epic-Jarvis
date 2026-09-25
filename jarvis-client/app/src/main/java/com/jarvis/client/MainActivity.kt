@@ -145,6 +145,9 @@ class MainActivity : FragmentActivity() {
     /** The quick-note field on Home is open - see [readQuickNoteIntent]. */
     private val quickNoteOpen = mutableStateOf(false)
 
+    /** The briefing notification was tapped - see [readBriefingIntent]. Consumed once. */
+    private val openBriefingRequested = mutableStateOf(false)
+
     /** Set when the runtime itself failed to start. Shown instead of the app. */
     private val startupError = mutableStateOf<String?>(null)
 
@@ -314,6 +317,7 @@ class MainActivity : FragmentActivity() {
         readShareIntent(intent)
         readVoiceIntent(intent)
         readQuickNoteIntent(intent)
+        readBriefingIntent(intent)
 
         setContent { App() }
 
@@ -338,6 +342,16 @@ class MainActivity : FragmentActivity() {
         readShareIntent(intent)
         readVoiceIntent(intent)
         readQuickNoteIntent(intent)
+        readBriefingIntent(intent)
+    }
+
+    /**
+     * The "your morning briefing is ready" notification: open Mind, where the
+     * briefing is. `singleTask`, so the `onNewIntent` half is needed too.
+     */
+    private fun readBriefingIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_BRIEFING) return
+        openBriefingRequested.value = true
     }
 
     /**
@@ -934,6 +948,15 @@ class MainActivity : FragmentActivity() {
             if (quickNoteOpen.value) nav.resetTo(Screen.HOME)
         }
 
+        // The briefing notification: Mind, where the briefing is (Back goes
+        // Home). Behind the app lock the lock screen still comes first.
+        LaunchedEffect(openBriefingRequested.value) {
+            if (!openBriefingRequested.value) return@LaunchedEffect
+            openBriefingRequested.value = false
+            nav.resetTo(Screen.HOME)
+            nav.go(Screen.BRAIN)
+        }
+
         JarvisTheme(
             chrome = chrome,
             idleColor = idleColour,
@@ -1524,6 +1547,11 @@ class MainActivity : FragmentActivity() {
                             onDismissSleepOffer = {
                                 cachedSleepOffer = null
                                 sleepOfferDismissedOn = todayLocal()
+                                // A real answer since 2026-09-25: the PC keeps
+                                // the offer quiet for a day, then a week, then
+                                // a month (jarvis_backoff.py). Dismissed here
+                                // whether or not that reaches the PC.
+                                scope.launch { JarvisRuntime.sleepNotNow() }
                             },
                             notice = notice,
                             onDismissNotice = { JarvisRuntime.clearNotice() },
@@ -2266,6 +2294,9 @@ class MainActivity : FragmentActivity() {
 
         /** Fired by [com.jarvis.client.widget.QuickLinkWidget]'s Note action. */
         const val ACTION_QUICK_NOTE = "com.jarvis.client.action.QUICK_NOTE"
+
+        /** Fired by the "your morning briefing is ready" notification ([com.jarvis.client.service.ScheduleNotifier]). */
+        const val ACTION_OPEN_BRIEFING = "com.jarvis.client.action.OPEN_BRIEFING"
     }
 }
 

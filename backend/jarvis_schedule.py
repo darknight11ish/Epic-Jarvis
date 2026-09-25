@@ -6,7 +6,10 @@ NEW MODULE, shipped whole (schedule.patch adds the routes and starts it).
 THE OWNER'S DECISIONS (2026-09-25, CLAUDE.md)
   * Timers, reminders and ONE shared scheduler come first. Briefings, sleep
     mode and the overnight tidy will be new KINDS of job on this scheduler,
-    not a scheduler each (register_kind below is how they plug in).
+    not a scheduler each (register_kind below is how they plug in). The
+    morning briefing is the first (jarvis_briefing.py, loaded by get()
+    through KIND_MODULES): a kind may repeat through the same one card
+    (`repeatable`) and put its own lines on it (`card_note`).
   * A plain timer or a one-time reminder needs no approval card. Anything
     that repeats asks once, with a card that lists the next run times.
   * Simple commands like timers are answered without the AI model
@@ -163,7 +166,8 @@ class Kind:
                  on_fire: Optional[Callable[[str], None]] = None,
                  owner_listed: bool = True, notify: bool = True, window: bool = False,
                  single: bool = False, edges: tuple = ("", ""), about: tuple = (),
-                 note: Optional[Callable[[str], str]] = None):
+                 note: Optional[Callable[[str], str]] = None, repeatable: bool = False,
+                 card_note: tuple = ()):
         self.name = name
         self.noun = noun                 # "timer", "reminder"
         self.lock_screen = lock_screen   # what a locked phone may show
@@ -189,30 +193,51 @@ class Kind:
         # note(job_id) -> one sentence about how it last went ("" for none),
         # shown under the job in both apps. Never raises into the list.
         self.note = note
+        # A later kind that may repeat (the morning briefing) - through the
+        # same ONE schedule_repeat card as an alarm or a reminder.
+        self.repeatable = repeatable
+        # Its card's own lines about what each run does and what it reads,
+        # in place of the plain "nothing is sent anywhere" paragraph.
+        self.card_note = tuple(card_note)
 
 
 KINDS: dict = {}
+
+#: Modules that add a kind of their own (register_kind, on import). get()
+#: imports each one before the loop first runs, so a job of that kind that
+#: is already due - missed while the PC was off - finds its on_fire there.
+#: A module that is missing is skipped: its jobs still go off, as a doorbell.
+KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,
                   on_fire: Optional[Callable[[str], None]] = None,
                   owner_listed: bool = True, notify: bool = True, window: bool = False,
                   single: bool = False, edges: tuple = ("", ""), about: tuple = (),
-                  note: Optional[Callable[[str], str]] = None) -> Kind:
+                  note: Optional[Callable[[str], str]] = None, repeatable: bool = False,
+                  card_note: tuple = ()) -> Kind:
     """Add a kind of job. For the features still to come (briefing, tidy,
     sleep): their job goes off through the same loop, the same missed-while-
     off rule and the same event; `on_fire(job_id)` is called after the event,
     on its own thread, and nothing it raises stops the loop.
 
-    The standby schedule (jarvis_standby_schedule.py) is the first: a
-    window kind, single, that notifies nobody."""
+    The standby schedule (jarvis_standby_schedule.py) is a window kind,
+    single, that notifies nobody. `repeatable` (the morning briefing): it may
+    be set up to repeat, which asks ONCE with the schedule_repeat card, like
+    a repeating reminder."""
     if not re.fullmatch(r"[a-z][a-z_]{1,23}", str(name or "")):
         raise ValueError("a kind is a short lower-case word")
     k = Kind(name, noun, lock_screen, has_text=has_text, on_fire=on_fire,
              owner_listed=owner_listed, notify=notify, window=window, single=single,
-             edges=edges, about=about, note=note)
+             edges=edges, about=about, note=note, repeatable=repeatable,
+             card_note=card_note)
     KINDS[name] = k
     return k
+
+
+def _repeatable(kind: str) -> bool:
+    k = KINDS.get(kind)
+    return kind in ("alarm", "reminder") or bool(k is not None and k.repeatable)
 
 
 register_kind("timer", "timer", "Jarvis: your timer is done.", has_text=True)
@@ -732,7 +757,7 @@ class Scheduler:
             raise ValueError("that time has already passed")
         if at - now > MAX_AHEAD:
             raise ValueError("that is more than a year away")
-        text = self._clean_text(text, kind)
+        text = self._clean_text(text, kind) if KINDS[kind].has_text else ""
         with self._lock, self._db() as c:
             self._room(c, kind)
         jid = self._insert(kind, text=text, state="active", due=at, rule=None,
@@ -755,11 +780,11 @@ class Scheduler:
         """A repeating job. It WAITS until one approval card is approved."""
         k = KINDS.get(kind)
         window = bool(k is not None and k.window)
-        if kind not in ("alarm", "reminder") and not window:
-            raise ValueError("only alarms and reminders can repeat")
+        if not _repeatable(kind) and not window:
+            raise ValueError("only alarms, reminders and briefings can repeat")
         now = self.now()
         rule = check_rule(rule, now, window=window)
-        text = self._clean_text(text, kind) if k.has_text else ""
+        text = self._clean_text(text, kind) if (k is None or k.has_text) else ""
         with self._lock, self._db() as c:
             self._room(c, kind)
             if k.single and c.execute(
@@ -767,6 +792,18 @@ class Scheduler:
                     (kind,)).fetchone() is not None:
                 raise OverflowError(f"there is already a {k.noun} - delete it first to set "
                                     f"a different one")
+            if not k.has_text and not window and rule["every"] != "hours":
+                # A kind with no words of its own (a briefing): the same
+                # repeat twice would only go off twice, so it is refused.
+                for r in c.execute("SELECT rule FROM jobs WHERE kind = ? AND rule IS NOT NULL "
+                                   "AND state IN ('active','paused','waiting')",
+                                   (kind,)).fetchall():
+                    try:
+                        same = check_rule(json.loads(r["rule"]), now) == rule
+                    except Exception:
+                        same = False
+                    if same:
+                        raise ValueError(f"a {k.noun} {rule_words(rule)} is already set up")
         jid = self._insert(kind, text=text, state="waiting", due=None, rule=rule,
                            duration=None, source=source)
         # Read BEFORE the card is raised: a card answered at once (or a
@@ -791,10 +828,17 @@ class Scheduler:
         lines.append("")
         lines.append("The next three times it will go off:")
         lines.extend(f"  - {long_date(t)}" for t in runs)
+        note = KINDS[kind].card_note
+        if note:
+            lines.append("")
+            lines.extend(note)
+        else:
+            lines.extend([
+                "",
+                "It runs on this PC, by this PC's clock. It goes off on both apps while "
+                "they are connected. Nothing is sent anywhere.",
+            ])
         lines.extend([
-            "",
-            "It runs on this PC, by this PC's clock. It goes off on both apps while "
-            "they are connected. Nothing is sent anywhere.",
             "Stopping or deleting it is immediate, from either app.",
             "",
             "If you say no: nothing is set up.",
@@ -1172,20 +1216,6 @@ _SCHED: Optional[Scheduler] = None
 _SCHED_LOCK = threading.Lock()
 
 
-#: The modules that add kinds of their own with register_kind. Imported
-#: before the loop first starts, so a job of their kind found overdue at
-#: start-up already has its on_fire. A module that is not there is skipped:
-#: its jobs then only ring the doorbell.
-KIND_MODULES = ("jarvis_standby_schedule",)
-
-
-def _load_kind_modules() -> None:
-    for name in KIND_MODULES:
-        try:
-            __import__(name)
-        except Exception:
-            continue
-
 
 def get() -> Scheduler:
     """The scheduler, started. Every way in comes through here - the boot
@@ -1198,6 +1228,15 @@ def get() -> Scheduler:
             _SCHED = Scheduler()
         s = _SCHED
     return s.start()
+
+
+def _load_kind_modules() -> None:
+    import importlib
+    for name in KIND_MODULES:
+        try:
+            importlib.import_module(name)
+        except Exception:
+            pass
 
 
 def start() -> Scheduler:
@@ -1266,7 +1305,9 @@ def handle_add(body: dict) -> tuple:
             job = s.add_todo(body.get("text"), source="app")
         elif kind == "timer":
             job = s.add_timer(_num(body.get("seconds")), body.get("text") or "", source="app")
-        elif kind in ("alarm", "reminder"):
+        elif _repeatable(kind):
+            # An alarm, a reminder, or a later kind that may repeat (the
+            # morning briefing, from its settings in either app).
             if body.get("repeat") is not None:
                 job = s.add_repeat(kind, body.get("repeat"), body.get("text") or "",
                                    source="app")
@@ -1284,7 +1325,7 @@ def handle_add(body: dict) -> tuple:
                          "said": "It repeats, so it waits for your yes on the card."}
         else:
             names = ["todo", "timer", "alarm", "reminder"] + sorted(
-                n for n, k in KINDS.items() if k.window)
+                n for n, k in KINDS.items() if k.window or k.repeatable)
             return 400, {"ok": False, "error": "kind is one of: " + ", ".join(names)}
     except OverflowError as exc:
         return 409, {"ok": False, "error": _sentence(exc)}

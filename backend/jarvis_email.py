@@ -274,6 +274,61 @@ def _parse_message(raw: bytes) -> dict:
     }
 
 
+#: How long the count's connection may take, in seconds. The preview's own
+#: connection above sets none, which is the owner's existing behaviour and is
+#: left alone here.
+_COUNT_TIMEOUT = 20.0
+
+
+def _default_count(p: Plan) -> int:
+    """How many messages match - the NUMBER only. Logs in, opens the mailbox
+    read-only, searches, and disconnects. Fetches no message: no sender, no
+    subject, no body is ever read by this function."""
+    import imaplib
+
+    user = os.environ.get(USER_ENV, "")
+    password = os.environ.get(PASSWORD_ENV, "")
+    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_COUNT_TIMEOUT)
+    try:
+        conn.login(user, password)
+        conn.select(p.mailbox, readonly=True)
+        status, data = conn.search(None, p.criterion)
+        if status != "OK":
+            raise RuntimeError(f"SEARCH failed: {status}")
+        return len((data[0] or b"").split())
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        try:
+            conn.logout()
+        except Exception:
+            pass
+
+
+def count(p: Plan, *, search: Optional[Callable[[Plan], int]] = None,
+          approved: bool = False) -> dict:
+    """How many messages match the plan's search (unread, for the morning
+    briefing) - a number, and nothing about any message. The same one
+    connection `describe()` shows, gated the same way by the caller;
+    `approved` has no default of True. `search` is injectable, like
+    `run()`'s `fetch_messages`, so this is provable with no socket.
+
+    The reason on a failure is the exception's NAME only: its message could
+    quote the server's reply."""
+    if not approved:
+        return {"ok": False, "reason": "not approved; nothing was read"}
+    if not p.configured:
+        return {"ok": False, "reason": p.reason_empty}
+    getter = search or _default_count
+    try:
+        n = int(getter(p))
+    except Exception as exc:
+        return {"ok": False, "reason": f"the connection failed ({type(exc).__name__})"}
+    return {"ok": True, "count": max(0, n), "mailbox": p.mailbox, "criterion": p.criterion}
+
+
 def run(p: Plan, *, fetch_messages: Optional[Callable[[Plan], list]] = None,
         approved: bool = False) -> dict:
     """Execute an approved plan. `approved` has no default of True.

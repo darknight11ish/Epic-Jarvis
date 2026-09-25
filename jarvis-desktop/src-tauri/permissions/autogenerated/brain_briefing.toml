@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-briefing"
+description = "Enables the brain_briefing command without any pre-configured scope."
+commands.allow = ["brain_briefing"]
+
+[[permission]]
+identifier = "deny-brain-briefing"
+description = "Denies the brain_briefing command without any pre-configured scope."
+commands.deny = ["brain_briefing"]

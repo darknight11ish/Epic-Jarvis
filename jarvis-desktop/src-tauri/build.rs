@@ -243,6 +243,16 @@ fn main() {
             "brain_schedule_act",
             "brain_schedule_add_todo",
             "brain_schedule_add_standby",
+            // The morning briefing (backend/briefing.patch): read the latest
+            // one and "Brief me now" (a read, not held on a stale link) -
+            // Brain only; and its setup - read it, set one up that repeats
+            // (the scheduler's ONE card; held on a stale link), stop ONE -
+            // Settings only.
+            "brain_briefing",
+            "brain_briefing_now",
+            "get_briefing_setup",
+            "set_briefing",
+            "stop_briefing",
             // Quickbar
             "hide_quickbar",
             "resize_quickbar",

@@ -391,6 +391,18 @@ fun BrainScreen(
                 )
             }
 
+            // "Morning briefing" (the owner's decisions of 2026-09-25): the
+            // latest one, "Brief me now", and when it arrives
+            // (BriefingPlate.kt) - the desktop's Brain -> Work and Settings.
+            item(key = "briefing") {
+                BriefingSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
             if (models != null) {
                 item(key = "models") {
                     Section("Model") {
@@ -1438,9 +1450,10 @@ private fun SleepOfferCard(
 ) {
     val chrome = LocalChrome.current
     // Enable and Stop asking are writes to the desktop, so they dim with the
-    // link. Not now stays live: it only hides this card on this phone for
-    // today and sends nothing, so refusing it on a stale link would guard
-    // nothing.
+    // link. Not now stays live: it hides this card on this phone for today
+    // and tells the PC, which then keeps the offer quiet for a day, then a
+    // week, then a month (JarvisRuntime.sleepNotNow) - it only makes Jarvis
+    // quieter, so refusing it on a stale link would guard nothing.
     val canWrite = !busy && canAct
     Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Text(

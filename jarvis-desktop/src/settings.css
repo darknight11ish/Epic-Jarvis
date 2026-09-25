@@ -844,3 +844,13 @@ select:focus-visible {
 .cv-voice .cv-text { display: flex; flex-direction: column; min-width: 0; }
 #voices textarea, #voices input[type="text"] { width: 100%; }
 #voice .sc-gpu[data-tone="ok"] .sc-gpu-role { color: var(--ok-text); }
+
+/* Morning briefing (briefing-settings.js): the set-up form. */
+.br-form {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0 12px;
+}
+.br-form legend { font-size: 12px; color: var(--text-muted); padding: 0 4px; }
+.br-form input[type="time"] { font: inherit; margin-left: 8px; }

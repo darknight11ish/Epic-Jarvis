@@ -2988,7 +2988,15 @@ object JarvisRuntime {
 
     private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?) {
         _scheduleTick.update { it + 1 }
-        val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(data as? JsonObject) ?: return
+        val obj = data as? JsonObject
+        if (com.jarvis.client.net.Briefing.isAbout(obj)) {
+            _briefingTick.update { it + 1 }
+            // A briefing is announced when it is READY, never when its time
+            // comes: it takes a moment to put together.
+            com.jarvis.client.net.Briefing.readyFrom(obj)?.let { onBriefingReady(it) }
+            return
+        }
+        val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(obj) ?: return
         val context = appContext ?: return
         scope.launch {
             val job = when (val r = api.scheduleJob(id)) {
@@ -3012,6 +3020,95 @@ object JarvisRuntime {
                 ?: com.jarvis.client.net.Schedule.lockScreen(kind)
             com.jarvis.client.service.ScheduleNotifier.post(context, id, kind, title, text, lockScreen)
         }
+    }
+
+    // ------------------------------------------------ Morning briefing ----
+    // The owner's decisions of 2026-09-25 - see [com.jarvis.client.net.Briefing]
+    // and ui/screens/BriefingPlate.kt. Put together on the PC without the AI
+    // model; this phone shows it, asks for one now, and sets one up.
+
+    private val _briefingTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one on every `schedule` event about a briefing and after
+     * every change made from this phone, so Mind's "Morning briefing" reads
+     * itself again.
+     */
+    val briefingTick: StateFlow<Int> = _briefingTick.asStateFlow()
+
+    /** The briefing runs already announced, by id and when they went off. */
+    private val briefingShown = LinkedHashSet<String>()
+
+    /** `GET /api/briefing`. A read: never held. */
+    suspend fun briefing(): ApiResult<JsonObject> = api.briefing()
+
+    /**
+     * "Brief me now": one put together on the PC now. It only reads - no
+     * card, nothing changes - so, like every read, it is not held on a stale
+     * link (the desktop's `brain_briefing_now` is not either).
+     */
+    suspend fun briefingNow(): ApiResult<JsonObject> = api.briefingNow()
+
+    /**
+     * Set up ONE briefing that repeats. It approves nothing: the PC raises
+     * the scheduler's ONE approval card listing the next three times, and
+     * nothing is set up before a yes. Held on a stale link (rule 4), like the
+     * desktop's `set_briefing`. @return whether it was asked, and the
+     * sentence to show.
+     */
+    suspend fun setBriefing(every: String, at: String, days: Collection<Int>): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Briefing.setupBody(every, at, days)
+            ?: return false to (if (every == "week") "Pick at least one day and a time." else "Pick a time.")
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> {
+                _briefingTick.update { n -> n + 1 }
+                _scheduleTick.update { n -> n + 1 }
+                val (asked, said) = com.jarvis.client.net.Schedule.said(r.value)
+                asked to (if (asked) com.jarvis.client.net.Briefing.ASKED else said)
+            }
+            is ApiResult.Failed -> false to ("Not set up. " + describe(r.error))
+        }
+    }
+
+    /** Stop ONE briefing, at once, no card. Held on a stale link, like every change. */
+    suspend fun stopBriefing(id: String): Pair<Boolean, String> =
+        scheduleAct(id, "delete").also { _briefingTick.update { n -> n + 1 } }
+
+    private fun onBriefingReady(id: String) {
+        val context = appContext ?: return
+        scope.launch {
+            val job = when (val r = api.scheduleJob(id)) {
+                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+                is ApiResult.Failed -> null
+            }
+            // Once per run: a replayed event after a reconnect must not ring twice.
+            val key = id + "@" + (job?.firedAt?.toLong() ?: 0L)
+            val fresh = synchronized(briefingShown) {
+                if (briefingShown.size > 200) briefingShown.clear()
+                briefingShown.add(key)
+            }
+            if (!fresh) return@launch
+            // The fixed words only - on the lock screen AND inside it, whatever
+            // the privacy settings: the briefing itself is read in the app.
+            val words = com.jarvis.client.net.Briefing.LOCK_SCREEN
+            com.jarvis.client.service.ScheduleNotifier.post(
+                context, id, com.jarvis.client.net.Briefing.KIND,
+                com.jarvis.client.net.Briefing.TITLE, words, words, openBriefing = true,
+            )
+        }
+    }
+
+    /**
+     * The overnight-tidy card's "Not now" (since 2026-09-25): tell the PC,
+     * which keeps the offer quiet for a day, then a week, then a month
+     * (jarvis_backoff.py). Not held on a stale link - it only makes Jarvis
+     * quieter - and nothing is shown if it fails: the card is dismissed here
+     * either way and may simply come back tomorrow, as it did before.
+     */
+    suspend fun sleepNotNow() {
+        if (_link.value != LinkState.CONNECTED) return
+        api.setSleepTime(notNow = true)
     }
 
     // ------------------------------------------ "Always keep in mind" ----

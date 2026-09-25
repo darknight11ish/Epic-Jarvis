@@ -16,6 +16,12 @@ take to boil an egg" or "remind me who wrote Dune" never land here.
 LANGUAGES: English only. A sentence in any other language goes to the model,
 which may still set a timer through its tools (jarvis_agent.py).
 
+THE MORNING BRIEFING (briefing.patch, 2026-09-25) is here too: "brief me
+now" (put together by jarvis_briefing.py, no model; the answer is private,
+and marks the calendar as read when it quotes it), "brief me every weekday
+at 7" (the scheduler's ONE card), "stop my briefing" (one, at once) and
+"when is my briefing".
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
@@ -648,6 +654,11 @@ def _match(text, now: float) -> Optional[Intent]:
                     r"|what\s+time\s+is\s+my\s+alarm(?:\s+set\s+for)?|any\s+alarms(?:\s+set)?", s):
         return Intent("alarm_list", {})
 
+    # --- the morning briefing (jarvis_briefing.py) ------------------------------
+    got = _briefing(s, now)
+    if got is not None:
+        return got
+
     # --- reminders -----------------------------------------------------------------
     got = _reminder(s, now)
     if got is not None:
@@ -720,6 +731,42 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
     return None
 
 
+#: "the briefing", "my morning briefing", "today's briefing", "briefing".
+_BRIEF = r"(?:(?:my|the|a|today'?s|this\s+morning'?s)\s+)?(?:morning\s+|daily\s+)?briefing"
+
+
+def _briefing(s: str, now: float) -> Optional[Intent]:
+    """The morning briefing (jarvis_briefing.py): now, set up, stop, when."""
+    # Now - "brief me", "brief me now", "read my briefing", "what's my
+    # briefing", "give me my morning briefing", "morning briefing".
+    if re.fullmatch(r"brief\s+me(?:\s+(?:now|up))?"
+                    r"|(?:give|read|tell)\s+me\s+" + _BRIEF + r"(?:\s+now)?"
+                    r"|(?:read|play|say|do|run)\s+(?:out\s+)?" + _BRIEF
+                    + r"(?:\s+(?:now|aloud|out\s+loud|out))?"
+                    r"|(?:what's|what\s+is|whats)\s+(?:in\s+)?" + _BRIEF
+                    + r"|" + _BRIEF + r"(?:\s+now|\s+please)?", s):
+        return Intent("briefing_now")
+    # Stop - one at a time; "all" is refused like every other bulk change.
+    m = re.fullmatch(r"(?:stop|cancel|delete|remove|turn\s+off|switch\s+off|end)\s+(all\s+(?:of\s+)?)?"
+                     r"(?:(?:my|the)\s+)?(?:morning\s+|daily\s+)?briefings?", s)
+    if m:
+        return Intent("bulk" if m.group(1) else "briefing_cancel")
+    # When - "when is my briefing", "is my briefing set up".
+    if re.fullmatch(r"(?:when\s+is|what\s+time\s+is|is)\s+" + _BRIEF
+                    + r"(?:\s+(?:set\s+up|on|set))?", s):
+        return Intent("briefing_list")
+    # Set up - "brief me every weekday at 7", "brief me tomorrow at 6:30",
+    # "set up a morning briefing every day at 7". An alarm's reading of the
+    # time: a bare hour on another day is the morning.
+    m = re.fullmatch(r"(?:brief\s+me|(?:set\s+up|schedule|start|give\s+me)\s+" + _BRIEF
+                     + r")\s+(?:for\s+)?(.+)", s)
+    if m:
+        when = parse_when(m.group(1), now, "alarm")
+        if when is not None:
+            return Intent("briefing_set", {"when": when})
+    return None
+
+
 def is_command(text) -> bool:
     """Does this sentence fit the grammar? For jarvis_intake.owner_turns:
     a command to set a timer or a reminder is not a fact to learn. Reads no
@@ -739,6 +786,11 @@ class Result:
     intent: str
     ids: list = field(default_factory=list)
     private: bool = False       # the reply quotes the owner's list
+    # Reads whose outside text is IN the reply (a briefing quoting calendar
+    # titles: ["calendar_read"]). briefing.patch hands it to this PC's record
+    # of the turn as `tools_ran`, so the conversation counts as having read
+    # outside text - exactly as when the calendar tool runs.
+    read: list = field(default_factory=list)
 
 
 def _join(items: list) -> str:
@@ -783,6 +835,8 @@ def run(intent: Intent, sched, now: float) -> Optional[Result]:
     if n == "bulk":
         return Result("Jarvis does not clear everything at once. Delete them one at a time, "
                       "here or under Coming up.", n)
+    if n.startswith("briefing_"):
+        return _run_briefing(intent, sched, now)
     if n == "timer_set":
         try:
             j = sched.add_timer(f["seconds"], f.get("label", ""), source="quick")
@@ -933,6 +987,78 @@ def _set_at(kind: str, w: When, text: str, sched, now: float, n: str) -> Result:
         return Result(f"{noun} set for {S.clock(w.at)}, in {S.length_words(w.at - now)}.",
                       n, [j["id"]])
     return Result(f"{noun} set for {S.when_words(w.at, now)}.", n, [j["id"]])
+
+
+BRIEFING_MISSING = ("Your PC's Jarvis does not have the morning briefing yet - run "
+                    "apply-patches.ps1 on the PC.")
+
+
+def _briefing_words(j: dict, now: float) -> str:
+    import jarvis_schedule as S
+    if j.get("repeats"):
+        words = j.get("repeat") or "a repeating briefing"
+        if j.get("state") == "waiting":
+            words += " (waiting for your yes on the approval card)"
+        elif j.get("state") == "paused":
+            words += " (paused)"
+        return words
+    if j.get("due") is None:
+        return "a briefing"
+    return S.when_words(j["due"], now)
+
+
+def _run_briefing(intent: Intent, sched, now: float) -> Result:
+    """The morning briefing: put one together now (reads only - no card), set
+    one up (a repeat: the scheduler's ONE card; once: no card), stop ONE, or
+    say when."""
+    import jarvis_schedule as S
+    n, f = intent.name, intent.f
+    try:
+        import jarvis_briefing as B
+    except Exception:
+        return Result(BRIEFING_MISSING, n)
+    if n == "briefing_now":
+        b = B.make(sched=sched, now=now, source="chat")
+        # Private: it quotes the calendar, reminders and the to-do list, so a
+        # spoken question's answer stays on screen under the apps' rule.
+        return Result(b["text"], n, private=True, read=list(b.get("read") or []))
+    jobs = B.setups(sched)
+    if n == "briefing_list":
+        if not jobs:
+            return Result("No briefing is set up. Say \"brief me every weekday at 7\" to set "
+                          "one up, or \"brief me now\".", n)
+        words = _join(_briefing_words(j, now) for j in jobs[:4])
+        return Result(("Your morning briefing: " if len(jobs) == 1
+                       else f"{len(jobs)} briefings: ") + words + ".", n,
+                      [j["id"] for j in jobs[:4]])
+    if n == "briefing_cancel":
+        if not jobs:
+            return Result("No briefing is set up.", n)
+        if len(jobs) > 1:
+            words = _join(_briefing_words(j, now) for j in jobs[:4])
+            return Result(f"You have {len(jobs)} briefings set up: {words}. Delete the one you "
+                          f"mean under Coming up.", n)
+        code, out = sched.act(jobs[0]["id"], "delete")
+        if code != 200:
+            return Result(out.get("error") or "That did not work.", n)
+        return Result(f"Stopped your briefing ({_briefing_words(jobs[0], now)}).", n,
+                      [jobs[0]["id"]])
+    # briefing_set
+    w: When = f["when"]
+    if w.rule is not None:
+        try:
+            j = sched.add_repeat(B.KIND, w.rule, "", source="quick")
+        except (ValueError, OverflowError) as exc:
+            return Result(S._sentence(exc), n)
+        return Result(f"That repeats ({S.rule_words(j.get('rule') or w.rule)}), so there is an "
+                      f"approval card for it. Nothing is set up until you say yes.", n, [j["id"]])
+    if w.passed:
+        return Result(f"{S.when_words(w.at, now)} has already passed. Say another time.", n)
+    try:
+        j = sched.add_at(B.KIND, w.at, "", source="quick")
+    except (ValueError, OverflowError) as exc:
+        return Result(S._sentence(exc), n)
+    return Result(f"Briefing set for {S.when_words(w.at, now)}.", n, [j["id"]])
 
 
 def answer(text, *, sched=None, now: Optional[float] = None) -> Optional[Result]:

@@ -238,6 +238,20 @@ stream2sentence (Kolja Beigel), MIT - https://github.com/KoljaB/stream2sentence
   Kolja Beigel. The MIT License text is the one given for browser-use
   above, with this copyright line in place of that one.
 
+OFFERS NOBODY ASKED FOR (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Leon (leon-ai/leon), MIT - https://github.com/leon-ai/leon
+  backend/jarvis_backoff.py follows the design of Leon's pulse manager
+  (server/src/core/pulse-manager.ts, read on the develop branch on
+  2026-09-25): a limit on offers waiting at once (MAX_PENDING_MATTERS), no
+  offer within two minutes of the owner's last message
+  (ACTIVE_CONVERSATION_GRACE_MS), and each declined offer quiet for 1, then
+  7, then 30 days (PULSE_DECLINE_COOLDOWN_MS), matched by a sha256
+  fingerprint. The design only; no code is copied. Copyright (c)
+  2019-present, Louis Grenard. Licensed under the MIT License, whose full
+  text is the one given for browser-use above with this copyright line in
+  place of that one.
+
 SUMMARY BY LICENCE
 ------------------
 (Apache-2.0 OR MIT) AND BSD-3-Clause (1): encoding_rs

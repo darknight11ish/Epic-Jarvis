@@ -680,6 +680,19 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             ));
         }
 
+        // A morning briefing is put together (backend/briefing.patch):
+        // `{"id", "kind": "briefing", "state": "ready"}`. The toast says
+        // only "Jarvis: your morning briefing is ready." - never a line of
+        // it (brain/briefing.rs toast_ready). Fanned out below too; the
+        // Brain reads the briefing again on it.
+        "schedule" if event.data["state"].as_str() == Some("ready") => {
+            tauri::async_runtime::spawn(crate::brain::briefing::toast_ready(
+                app.clone(),
+                base.to_string(),
+                event.data.clone(),
+            ));
+        }
+
         // finding | persona | model | voice — nothing here consumes them, and
         // nothing here should: they are fanned out below like everything else,
         // and the surface that renders one owns what it means.

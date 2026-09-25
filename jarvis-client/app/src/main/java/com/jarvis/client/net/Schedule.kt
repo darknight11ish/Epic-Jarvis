@@ -126,6 +126,7 @@ object Schedule {
         "alarm" -> "Alarm"
         "reminder" -> "Reminder"
         "todo" -> "To-do"
+        Briefing.KIND -> Briefing.TITLE
         else -> "Jarvis"
     }
 
@@ -135,6 +136,7 @@ object Schedule {
         "alarm" -> "Jarvis: alarm."
         "reminder" -> "Jarvis: a reminder is due."
         "todo" -> "Jarvis: a to-do item is due."
+        Briefing.KIND -> Briefing.LOCK_SCREEN
         else -> "Jarvis: something is due."
     }
 
@@ -255,6 +257,8 @@ object Schedule {
         if (job.kind == "timer") {
             return if (words.isNotEmpty()) "$words timer" else lengthWords(job.duration ?: 0.0) + " timer"
         }
+        // A morning briefing has no words of its own (Briefing.kt).
+        if (job.kind == Briefing.KIND) return Briefing.TITLE
         if (words.isNotEmpty()) return words
         return when (job.kind) {
             "alarm" -> "Alarm"
