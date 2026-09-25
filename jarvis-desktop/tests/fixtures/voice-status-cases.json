@@ -39,6 +39,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -48,6 +49,7 @@
           "stop_word": false,
           "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -518,6 +520,7 @@
       "enabled": true,
       "enrolled": false,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -527,6 +530,7 @@
           "stop_word": false,
           "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -987,6 +991,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -996,6 +1001,7 @@
           "stop_word": false,
           "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -1466,6 +1472,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -1475,6 +1482,7 @@
           "stop_word": false,
           "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -1945,6 +1953,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -1954,6 +1963,7 @@
           "stop_word": true,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -2434,6 +2444,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -2443,6 +2454,7 @@
           "stop_word": false,
           "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -2924,6 +2936,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -2933,6 +2946,7 @@
           "stop_word": false,
           "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -3403,6 +3417,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -3412,6 +3427,7 @@
           "stop_word": false,
           "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,

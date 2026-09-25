@@ -172,7 +172,8 @@ object BargeIn {
     fun describe(enabled: Boolean, echoCancellerAvailable: Boolean): String = when {
         enabled && echoCancellerAvailable ->
             "On: while Jarvis talks, this phone listens through its echo canceller. Say " +
-                "\"stop\" to silence it, or \"hey Jarvis\" to cut in with something new."
+                "\"stop\" to silence it, or \"hey Jarvis\" to cut in with something new. Or just " +
+                "start talking: Jarvis pauses, and stops if your PC hears it is you."
         enabled ->
             "On, but this phone has no echo canceller, so it may hear Jarvis's own voice " +
                 "and stop by mistake."

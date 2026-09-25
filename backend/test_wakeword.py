@@ -309,6 +309,85 @@ def t_follow_up_window():
         check("turning the wake word off closes an open window", not S._take_awake())
 
 
+def _said(text, mic=""):
+    """What say() does for one sentence, with a stand-in voice (0.5 s)."""
+    sound = (np.zeros(12000, dtype=np.float32), 24000, "kokoro", "builtin", "", "", "")
+    with mock.patch.object(S, "_synthesise", return_value=sound):
+        return S.say(text, mic=mic)
+
+
+def t_after_a_question():
+    """Keep listening after a question (the owner's decision of 2026-09-25):
+    when the last sentence Jarvis spoke asks something, the next wake-word
+    clip needs no phrase - the owner check still runs, and only a clip that
+    passes it uses the window up."""
+    import json as _json
+    from _where import REPO
+    cases = _json.loads((REPO / "jarvis-desktop" / "tests" / "fixtures"
+                         / "voice-flow-cases.json").read_text(encoding="utf-8"))
+    check("the question marks are the apps' own list",
+          list(S.QUESTION_MARKS) == cases["question_marks"], S.QUESTION_MARKS)
+    for c in cases["question_cases"]:
+        check(f"ends with a question: {c['text']!r} -> {c['question']}",
+              S.ends_with_question(c["text"]) is c["question"])
+
+    with Env():
+        turn_on()
+        samples, _ = S._read_wav(tone(220.0))
+        V.enroll([samples] * 3, embedder=V.EcapaEmbedder(), path=V.PROFILE_PATH)
+        owner = mock.patch.object(S, "_stt_engine", return_value=object())
+
+        check("a sentence that asks nothing opens nothing",
+              _said("It is ten o'clock.") is not None and not S._question_open())
+        _said("Shall I book the table?")
+        check("a question said aloud opens the window", S._question_open())
+        # Jarvis's own voice, the TV, anyone else: not the owner - and the
+        # window is NOT used up by them.
+        with mock.patch.object(W, "spot", boom("the spotter")), \
+                mock.patch.object(S, "_transcribe", boom("speech-to-text")):
+            other = S.hear(tone(880.0), source="wake_word").as_dict()
+        check("a clip that is not the owner is not transcribed", not other["ok"], other)
+        check("...and leaves the window open", S._question_open())
+        with mock.patch.object(W, "spot", boom("the spotter")), owner, \
+                mock.patch.object(S, "_transcribe", return_value="Yes please, at eight."):
+            reply = S.hear(tone(220.0), source="wake_word").as_dict()
+        check("the owner's answer needs no \"hey Jarvis\"", reply["ok"] and reply["wake_heard"]
+              and reply["text"] == "Yes please, at eight.", reply)
+        check("used once", not S._question_open())
+
+        _said("Shall I book the table?")
+        _said("Or I can wait until you decide.")
+        check("a sentence after the question closes it: the question was not the last word",
+              not S._question_open())
+
+        _said("Shall I book it?", mic="phone")
+        check("a question said to the phone opens it for the phone only",
+              S._question_open("phone") and not S._question_open("desktop"))
+        with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=False, score=0.01)), \
+                mock.patch.object(S, "_transcribe", boom("speech-to-text")):
+            desk = S.hear(tone(220.0), source="wake_word", mic="desktop").as_dict()
+        check("the desktop's clip still needs the phrase", not desk["ok"], desk)
+
+        _said("Shall I book it?")
+        with mock.patch.object(W, "spot", boom("the spotter")), owner, \
+                mock.patch.object(S, "_transcribe", return_value="Hey Jarvis, yes."):
+            said_it = S.hear(tone(220.0), source="wake_word").as_dict()
+        check("\"hey Jarvis\" said anyway: the words after it are the answer",
+              said_it["ok"] and said_it["text"] == "yes.", said_it)
+
+        _said("Shall I book it?")
+        S._QUESTION["at"] -= 3600
+        check("it closes on its own: the awake time after the question has played",
+              not S._question_open())
+
+        _said("Shall I book it?")
+        with mock.patch.object(S, "_transcribe", boom("speech-to-text")):
+            push = S.hear(tone(220.0), source="push_to_talk")
+        check("push-to-talk is unchanged and does not use it", S._question_open(), push)
+        S.set_wake_enabled(False)
+        check("turning the wake word off closes it", not S._question_open())
+
+
 def t_no_spotter_is_said_not_crashed():
     with Env():
         turn_on()
@@ -641,6 +720,7 @@ if __name__ == "__main__":
                t_order_wake_switched_off_runs_nothing, t_order_no_phrase_no_owner_check,
                t_order_not_the_owner_is_never_transcribed,
                t_order_the_owner_is_heard_and_the_phrase_removed, t_follow_up_window,
+               t_after_a_question,
                t_no_spotter_is_said_not_crashed, t_push_to_talk_is_unchanged,
                t_the_switch_is_one_card, t_the_spotter_module_writes_and_logs_nothing,
                t_48k_is_filtered_not_folded, t_the_verifier,

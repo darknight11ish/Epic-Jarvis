@@ -230,6 +230,12 @@ fn main() {
             "start_automatic_listening",
             "stop_automatic_listening",
             "speak_reply",
+            // Interrupting by talking and "One moment." (voice_flow.rs):
+            // ask for one utterance to be checked, read the status's `flow`
+            // block, fetch the clip. Quickbar only; none records anything.
+            "judge_barge_in",
+            "get_voice_flow",
+            "get_voice_moment",
             // The HUD's mic button. Shows the quickbar with push-to-talk
             // ready; records nothing. The one command the HUD holds.
             "summon_push_to_talk",

@@ -56,6 +56,20 @@ class ClientSettings(context: Context) {
         _bargeIn.value = value
     }
 
+    private val _oneMoment = MutableStateFlow(prefs.getBoolean(KEY_ONE_MOMENT, true))
+
+    /**
+     * "Say 'One moment' if I'm kept waiting" on this phone (voice.OneMoment),
+     * on by default - the desktop's switch of the same name is its own. The
+     * PC's `[voice] one_moment_enabled` can still turn the clip off for both.
+     */
+    val oneMoment: StateFlow<Boolean> = _oneMoment.asStateFlow()
+
+    fun setOneMoment(value: Boolean) {
+        prefs.edit { putBoolean(KEY_ONE_MOMENT, value) }
+        _oneMoment.value = value
+    }
+
     private val _security = MutableStateFlow(SecurityRules.fromStored { prefs.getString(it, null) })
 
     /**
@@ -119,6 +133,7 @@ class ClientSettings(context: Context) {
         const val KEY_HOST = "host"
         const val KEY_LAST_EVENT = "last_event_id"
         const val KEY_BARGE_IN = "barge_in"
+        const val KEY_ONE_MOMENT = "one_moment"
         const val KEY_UPDATE_CHECKS = "update_checks"
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
         const val KEY_UPDATE_NEWER = "update_newer_line"

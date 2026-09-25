@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-judge-barge-in"
+description = "Enables the judge_barge_in command without any pre-configured scope."
+commands.allow = ["judge_barge_in"]
+
+[[permission]]
+identifier = "deny-judge-barge-in"
+description = "Denies the judge_barge_in command without any pre-configured scope."
+commands.deny = ["judge_barge_in"]

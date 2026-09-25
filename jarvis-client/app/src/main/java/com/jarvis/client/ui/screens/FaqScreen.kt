@@ -90,8 +90,14 @@ private val FAQS = listOf(
             "the phone listens for the phrase and nothing else, and nothing " +
             "leaves the phone until it hears it. Then what you say next goes " +
             "to your desktop, which checks it is your voice before it writes " +
-            "down a word. It stops when you stop it, restart the phone, or " +
-            "Android closes Jarvis, and it uses some battery while on.",
+            "down a word. Two exceptions, both only while you are talking " +
+            "with Jarvis: with \"Interrupt Jarvis while it talks\" on, about " +
+            "two seconds of anything said over Jarvis's answer go to your " +
+            "desktop, which only checks whether it was you (it never writes " +
+            "those down); and when Jarvis ends an answer with a question, " +
+            "your reply goes without the phrase, checked the same way. It " +
+            "stops when you stop it, restart the phone, or Android closes " +
+            "Jarvis, and it uses some battery while on.",
     ),
     Faq(
         "How do I teach Jarvis my voice? Where is the talk button?",

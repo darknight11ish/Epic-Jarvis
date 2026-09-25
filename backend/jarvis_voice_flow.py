@@ -75,6 +75,9 @@ THE OWNER'S THREE DECISIONS (2026-09-24), in plain words:
    Jarvis is speaking in now (custom voices too), made once and kept in
    memory until the voice changes (moment(), GET /api/voice/moment). The
    apps decide when to play it and must never play it over the reply.
+   Since 2026-09-25 both play it when a tool starts during a spoken
+   question, once, before the answer's first sound - not on a timer
+   (docs/JARVIS-API.md section 17, part 5).
 
 SWITCHES, in `[voice]` of jarvis-framework.toml (like `turn_enabled`, read
 here, never written by a route; each app keeps its own per-device switch
@@ -900,12 +903,23 @@ def status(spawn: Optional[Callable] = None, voice: Optional[dict] = None) -> di
     the background (`spawn`). `voice`: jarvis_voice.status(), if the caller
     has it already."""
     ensure_warm(spawn)
+    S = _speech()
     return {"available": True,
             "barge_in": barge_state(voice=voice),
             "moment": moment_state(spawn),
             "warm": warm_state(),
             "timings": timings(),
-            "summary": summary()}
+            "summary": summary(),
+            # 2026-09-25 (docs/JARVIS-API.md section 17, parts 6 and 7).
+            # This PC opens the follow-up window after Jarvis asks a question
+            # aloud (jarvis_speech._note_said) - the phone records the reply
+            # without waiting for "hey Jarvis" only when this is true.
+            "after_question": bool(S is not None and hasattr(S, "ends_with_question")),
+            # This PC reads `interrupted` on a chat question and keeps it on
+            # this PC (jarvis_agent.with_cut_off_note; chat-history.patch
+            # takes it off before any model or the relay) - the apps send it
+            # only when this is true, so an older PC never passes it on.
+            "cut_off": True}
 
 
 def _reset_for_tests() -> None:

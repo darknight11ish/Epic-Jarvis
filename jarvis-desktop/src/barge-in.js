@@ -12,7 +12,9 @@
  * sentence heard over the reply is also sent as a new question.
  *
  * ON (the default - it is how this PC has always behaved): all of that, as
- * before. OFF: while Jarvis is talking, the Jarvis bar ignores what the
+ * before - and, since 2026-09-25, talking over a reply (voice-flow.js,
+ * voice_flow.rs): half a second of speech pauses it, and the PC says
+ * whether it was the owner (stop) or not (carry on). OFF: while Jarvis is talking, the Jarvis bar ignores what the
  * listener hears - no "stop", no "hey Jarvis", no new question - until the
  * reply has finished. The reply can still be stopped with Esc in the Jarvis
  * bar. (Holding the talk button is not a way round it: push-to-talk is
@@ -77,7 +79,8 @@ export function ignoreWhileTalking(bargeIn, talking) {
 export function describeBargeIn(on) {
   return on
     ? "On: while Jarvis talks, this PC keeps listening. Say \"stop\" to silence it, or \"hey Jarvis\" " +
-        "to cut in with something new. It hears you best when Windows' echo cancelling is working; " +
+        "to cut in with something new. Or just start talking: Jarvis pauses, and stops if your PC " +
+        "hears it is you. It hears you best when Windows' echo cancelling is working; " +
         "the Jarvis bar says when it is."
     : "Off: while Jarvis talks, what this PC hears is ignored, even \"stop\" and \"hey Jarvis\". " +
         "To stop a reply, press Esc in the Jarvis bar until it closes.";

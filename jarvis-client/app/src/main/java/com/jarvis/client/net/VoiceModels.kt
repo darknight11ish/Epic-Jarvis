@@ -57,7 +57,21 @@ data class VoiceStatus(
      * does not send this, and the phone's copy works without it.
      */
     val turn: VoiceTurn = VoiceTurn(),
+    /**
+     * The voice flow (docs/JARVIS-API.md section 17): whether the PC can
+     * judge an interruption by talking, and its "One moment." clip. A PC
+     * without `jarvis_voice_flow.py` sends no `flow` at all; the defaults
+     * then allow nothing - and a barge-in clip must never go to such a PC,
+     * which would treat it as push-to-talk and transcribe it.
+     */
+    val flow: FlowStatus = FlowStatus(),
 ) {
+    /** May a clip heard over a reply be sent as `source=barge_in`? Only when the PC says so. */
+    val bargeInUsable: Boolean get() = flow.bargeInUsable
+
+    /** Does the PC hand out a "One moment." clip right now? */
+    val momentUsable: Boolean get() = flow.momentUsable
+
     /**
      * Whether to show a microphone button.
      *
@@ -181,6 +195,55 @@ data class VoiceTurn(
     /** The longest pause kept inside a sentence the model called unfinished. */
     @SerialName("max_pause_ms") val maxPauseMs: Int = 2000,
     val why: String = "",
+)
+
+/** `/api/voice/status` -> `flow` (section 17). See [VoiceStatus.flow]. */
+@Serializable
+data class FlowStatus(
+    /** False: jarvis_voice_flow.py is missing on the PC, and nothing below is on. */
+    val available: Boolean = false,
+    @SerialName("barge_in") val bargeIn: FlowBargeIn = FlowBargeIn(),
+    val moment: FlowMoment = FlowMoment(),
+    /**
+     * This PC keeps listening after Jarvis asks a question aloud (section 17,
+     * part 6): the phone records the reply without waiting for "hey Jarvis"
+     * only when this is true.
+     */
+    @SerialName("after_question") val afterQuestion: Boolean = false,
+    /**
+     * This PC reads `interrupted` on a chat question and keeps it on the PC
+     * (section 17, part 7): the phone sends it only when this is true, so an
+     * older PC never passes the field on.
+     */
+    @SerialName("cut_off") val cutOff: Boolean = false,
+) {
+    /** May a clip heard over a reply be sent as `source=barge_in`? Only when the PC says so. */
+    val bargeInUsable: Boolean get() = available && bargeIn.enabled && bargeIn.available
+
+    /** Does the PC hand out a "One moment." clip right now? */
+    val momentUsable: Boolean get() = available && moment.enabled && moment.ready && moment.key.isNotEmpty()
+}
+
+/** `flow.barge_in`: may the owner interrupt Jarvis by talking? */
+@Serializable
+data class FlowBargeIn(
+    /** `[voice] barge_in_enabled` on the PC. */
+    val enabled: Boolean = false,
+    /** The PC can tell the owner's voice now (switched on, a voice print, a voice-ID model, not broad mode). */
+    val available: Boolean = false,
+    /** Why not, in the PC's words ("" when available). */
+    val why: String = "",
+)
+
+/** `flow.moment`: the "One moment." clip. */
+@Serializable
+data class FlowMoment(
+    /** `[voice] one_moment_enabled` on the PC. */
+    val enabled: Boolean = false,
+    /** Changes whenever the clip would sound different: fetch it again then. */
+    val key: String = "",
+    /** The clip for [key] is made; `GET /api/voice/moment` answers at once. */
+    val ready: Boolean = false,
 )
 
 @Serializable

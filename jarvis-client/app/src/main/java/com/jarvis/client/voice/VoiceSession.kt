@@ -5,7 +5,9 @@ import android.os.SystemClock
 import android.util.Log
 import com.jarvis.client.audio.Recorder
 import com.jarvis.client.audio.Speaker
+import com.jarvis.client.audio.Wav
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.FlowStatus
 import com.jarvis.client.net.SaidAloud
 import com.jarvis.client.net.Heard
 import com.jarvis.client.net.JarvisApi
@@ -15,6 +17,7 @@ import com.jarvis.client.net.WakeWord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +54,17 @@ class VoiceSession(
      * default knows nothing - so nothing private-looking is read aloud.
      */
     private val toolWatch: () -> PrivateAloud.Watch = { PrivateAloud.Watch(0, 0, live = false) },
+    /**
+     * "Say 'One moment' if I'm kept waiting" on this phone (ClientSettings,
+     * [OneMoment]). Read when a tool starts during a spoken question.
+     */
+    private val oneMoment: () -> Boolean = { true },
+    /**
+     * The owner cut the spoken answer off while [String] was the last
+     * sentence they heard (the runtime hands it to ChatSession's `cutOff`,
+     * for the next question - docs/JARVIS-API.md section 17, 6).
+     */
+    private val onCutOff: (String) -> Unit = {},
     /**
      * Sends a turn and returns the reply, or null if it could not be sent.
      * `onRoute` is called once with the answer's `X-Jarvis-Route` header (or
@@ -144,6 +158,146 @@ class VoiceSession(
 
     private val recentSpeech = RecentSpeech()
 
+    // -- The voice flow (VoiceFlow.kt; docs/JARVIS-API.md section 17) --------
+
+    /** Interrupting by talking: pause first, decide second. */
+    private val interrupt = InterruptFlow()
+
+    /** "One moment.", once per spoken question. */
+    private val moment = MomentFlow()
+
+    /**
+     * What the PC's `flow` block allows, from the last status read - nothing
+     * until it says (an older PC must never be sent a barge-in clip).
+     */
+    @Volatile private var flow: FlowStatus = FlowStatus()
+
+    /** The "One moment." clip and its key (`flow.moment.key`). */
+    @Volatile private var momentClip: Pair<String, ByteArray>? = null
+
+    /** "One moment." while it plays: the reply waits for it, never plays over it. */
+    @Volatile private var momentJob: Job? = null
+
+    /** Carries on after [VoiceFlow.WAIT_MAX_MS] paused with no answer from the PC. */
+    @Volatile private var pauseTimer: Job? = null
+
+    /** Numbers the clips heard over a reply. */
+    private val bargeSeq = java.util.concurrent.atomic.AtomicLong(0)
+
+    private val heardSound: ShortArray by lazy { HeardSound.samples() }
+
+    /** The last sentence of this turn's answer that started playing (not the fixed private line). */
+    @Volatile private var lastPlayed: String? = null
+
+    /**
+     * Keep listening after a question (section 17, 5): the answer just spoken
+     * ended with a question, and was not cut off. The hands-free listener
+     * then records the owner's reply without waiting for "hey Jarvis" - the
+     * PC opened the same window when it made that sentence's sound, and the
+     * owner check still runs on the clip.
+     */
+    fun askedBack(): Boolean = flow.available && flow.afterQuestion && current?.silenced == false &&
+        VoiceFlow.endsWithQuestion(lastPlayed)
+
+    /**
+     * "I heard you": the owner's turn has just been cut (the talk button let
+     * go, or the end of a "hey Jarvis" sentence). A tiny sound of the phone's
+     * own; it records and sends nothing.
+     */
+    fun heardYou() {
+        speaker.playTone(heardSound, HeardSound.RATE)
+    }
+
+    /**
+     * Half a second of speech heard over the reply (the barge-in listener's
+     * [SpeechRun]). When the reply may be interrupted - it has been playing
+     * for [VoiceFlow.GRACE_MS], the PC can tell the owner's voice, the link
+     * is live, and "stop" was not already said - it is PAUSED here and the
+     * clip's number returned: the listener then sends about two seconds of
+     * that speech to [judgeBargeIn]. Null: nothing paused, send nothing.
+     */
+    fun bargeOnset(): Long? {
+        val turn = current ?: return null
+        val allowed = flow.bargeInUsable && linkBlocker() == null && !turn.silenced &&
+            _phase.value == Phase.SPEAKING
+        val id = bargeSeq.incrementAndGet()
+        if (interrupt.onset(SystemClock.elapsedRealtime(), id, allowed) != VoiceFlow.Action.PAUSE) return null
+        pauseSpeaking()
+        return id
+    }
+
+    /**
+     * Asks the PC about clip [id] (`source=barge_in`: "should Jarvis stop?",
+     * never transcribed) and acts on the answer: the owner's voice or "stop"
+     * silences the reply for good ([stopSpeaking] - a sentence made ahead is
+     * dropped with it); anything else, and no answer, carries on. Held, not
+     * sent, on a stale link (rule 4) - the reply then carries on after the
+     * wait.
+     */
+    suspend fun judgeBargeIn(id: Long, wav: ByteArray) {
+        val verdict = if (linkBlocker() != null || !flow.bargeInUsable) {
+            BargeVerdict(stop = false, available = true, why = "held")
+        } else {
+            api.bargeIn(wav)
+        }
+        // The PC cannot tell the owner's voice now: no more clips until its
+        // status says otherwise.
+        if (!verdict.available) flow = flow.copy(bargeIn = flow.bargeIn.copy(available = false))
+        act(interrupt.verdict(id, verdict.stop))
+    }
+
+    private fun pauseSpeaking() {
+        speaker.pause()
+        pauseTimer?.cancel()
+        pauseTimer = scope.launch {
+            delay(VoiceFlow.WAIT_MAX_MS)
+            act(interrupt.tick(SystemClock.elapsedRealtime()))
+        }
+    }
+
+    private fun act(action: VoiceFlow.Action) {
+        when (action) {
+            VoiceFlow.Action.PAUSE -> pauseSpeaking()
+            VoiceFlow.Action.RESUME -> {
+                pauseTimer?.cancel()
+                speaker.resume()
+            }
+            VoiceFlow.Action.STOP -> stopSpeaking()
+            VoiceFlow.Action.NONE -> Unit
+        }
+    }
+
+    /**
+     * A `step` event said a tool is starting (JarvisRuntime). During a
+     * spoken question, before the reply has made a sound, "One moment." is
+     * played - once per question, only with this phone's switch on and a
+     * clip from the PC. The reply waits for it to end ([playClip]).
+     */
+    fun toolStarted() {
+        val turn = current ?: return
+        if (turn.silenced) return
+        val now = _phase.value
+        if (now != Phase.THINKING && now != Phase.SPEAKING) return
+        val clip = momentClip
+        if (!moment.toolStarted(oneMoment() && flow.momentUsable, clip != null) || clip == null) return
+        momentJob = scope.launch { speaker.play(clip.second) }
+    }
+
+    /** Fetches the "One moment." clip when the PC's key for it changed. */
+    private suspend fun refreshMoment() {
+        val f = flow
+        if (!f.momentUsable) return
+        val key = f.moment.key
+        if (momentClip?.first == key) return
+        (api.voiceMoment() as? ApiResult.Ok)?.let { momentClip = key to it.value }
+    }
+
+    /** The `flow` block again, quietly: only this class's own copy changes. */
+    private suspend fun refreshFlow() {
+        flow = (api.voiceStatus() as? ApiResult.Ok)?.value?.flow ?: FlowStatus()
+        refreshMoment()
+    }
+
     /**
      * Every sentence Jarvis is saying now or said in the last few seconds
      * ([RecentSpeech.WINDOW_MS]). Read by the barge-in listener alongside
@@ -166,7 +320,16 @@ class VoiceSession(
      * offline voice on this phone", a false notice.
      */
     fun stopSpeaking() {
+        // Where the owner cut the answer off - the sentence playing now, or
+        // the last one heard - goes with the next question (section 17, 6).
+        // Only while it was being spoken, and only the first time.
+        if (current?.silenced == false && _phase.value == Phase.SPEAKING && flow.available && flow.cutOff) {
+            (_speakingText.value ?: lastPlayed)?.let(onCutOff)
+        }
         current?.silenced = true
+        interrupt.replyEnded()
+        moment.stopped()
+        pauseTimer?.cancel()
         speaker.stop()
         _speakingText.value = null
     }
@@ -293,11 +456,14 @@ class VoiceSession(
                 _status.value = r.value.first
                 _strict.value = r.value.second
                 _answered.value = true
+                flow = r.value.first.flow
+                refreshMoment()
             }
             is ApiResult.Failed -> {
                 _status.value = VoiceStatus(available = false)
                 _strict.value = VoiceStrict.View()
                 _answered.value = false
+                flow = FlowStatus()
             }
         }
     }
@@ -347,7 +513,7 @@ class VoiceSession(
      * wake word. Null when it was not sent: a push-to-talk turn is running,
      * or the desktop could not be reached.
      */
-    suspend fun deliverWakeClip(wav: ByteArray): Heard? {
+    suspend fun deliverWakeClip(wav: ByteArray, waitedMs: Long? = null): Heard? {
         // A turn "hey Jarvis" just cut off may still be unwinding. It has
         // been cancelled, so this is short; without it the guards below
         // could see it half-finished and drop the owner's new sentence.
@@ -365,7 +531,7 @@ class VoiceSession(
         var verdict: Heard? = null
         val running = scope.launch {
             try {
-                verdict = deliver(turn, wav, JarvisApi.SOURCE_WAKE_WORD)
+                verdict = deliver(turn, wav, JarvisApi.SOURCE_WAKE_WORD, waitedMs)
             } finally {
                 if (current === turn) {
                     _micLevel.value = null
@@ -481,7 +647,15 @@ class VoiceSession(
                     setPhase(turn, Phase.OFF)
                     setNotice(turn, describe(captured.why))
                 }
-                is Recorder.Result.Captured -> deliver(turn, captured.wav, source)
+                is Recorder.Result.Captured -> {
+                    // The owner let go: a small "I heard you", and how long
+                    // it had been quiet when the clip went (`waited_ms`).
+                    heardYou()
+                    val waited = runCatching {
+                        VoiceFlow.trailingQuietMs(Wav.decode(captured.wav), Wav.rateOf(captured.wav))
+                    }.getOrNull()
+                    deliver(turn, captured.wav, source, waited)
+                }
             }
             } finally {
                 // Only if this turn is still the current one - the same guard
@@ -548,9 +722,16 @@ class VoiceSession(
         running.cancel()
     }
 
-    private suspend fun deliver(turn: Turn, wav: ByteArray, source: String): Heard? {
+    private suspend fun deliver(turn: Turn, wav: ByteArray, source: String, waitedMs: Long? = null): Heard? {
         setPhase(turn, Phase.VERIFYING)
-        val result = api.utterance(wav, source)
+        // A new question: interrupting starts again with its answer (its own
+        // three seconds of grace), and what the PC allows is read again while
+        // it checks this one - so the "One moment." clip is here in time.
+        interrupt.replyEnded()
+        moment.turnEnded()
+        lastPlayed = null
+        scope.launch { runCatching { refreshFlow() } }
+        val result = api.utterance(wav, source, waitedMs)
         if (result is ApiResult.Failed) {
             setPhase(turn, Phase.OFF)
             setNotice(turn, "Could not reach the desktop to check that.")
@@ -625,9 +806,18 @@ class VoiceSession(
         // erased a cancel that had arrived during the previous one and Jarvis
         // spoke on. See `Speaker.arm`.
         speaker.arm()
+        // "One moment." may be said once for this question, if a tool starts
+        // before the answer makes a sound (VoiceFlow.kt).
+        moment.turnStarted()
         // What the phone knows about tools as the question goes: every
         // sentence is checked against it before it is read aloud.
-        speakStreamed(turn, text, heard, toolWatch())
+        try {
+            speakStreamed(turn, text, heard, toolWatch())
+        } finally {
+            moment.turnEnded()
+            interrupt.replyEnded()
+            pauseTimer?.cancel()
+        }
         setPhase(turn, Phase.OFF)
         return heard
     }
@@ -744,6 +934,14 @@ class VoiceSession(
         // the voice was told to stop. (After "stop", SpeechAhead does not ask
         // the PC for anything more either.)
         if (turn.silenced) return
+        // The reply is about to make a sound: "One moment." is not started
+        // after this, and one already playing is let finish first (it is
+        // under a second) - never over the reply.
+        moment.replyStarted()
+        momentJob?.join()
+        if (turn.silenced) return
+        interrupt.replyStarted(SystemClock.elapsedRealtime())
+        if (text != PrivateAloud.ON_SCREEN) lastPlayed = text
         _speakingText.value = text
         recentSpeech.started(text)
         try {

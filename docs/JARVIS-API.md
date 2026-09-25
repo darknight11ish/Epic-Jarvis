@@ -561,8 +561,8 @@ here does **not** set it - it is recorded on the turn (`outside_flags` in
 | Endpoint | Method | Body / params | Desktop | Android | Notes |
 |---|---|---|---|---|---|
 | `/api/voice/status` | GET | — | **no** | `JarvisApi.kt:553` | Phone calls it before showing a mic button; failure returns refusing defaults. |
-| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop`; since 2026-09-24 also `source=barge_in` and `&waited_ms=` (section 17, neither app yet) | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. `source=barge_in` answers "stop or not" and is never transcribed (`voice-flow.patch`). |
-| `/api/voice/moment` | GET | - → WAV bytes | **not yet** | **not yet** | The "One moment." clip in the voice in use now (section 17, `voice-flow.patch`). 503 with `why` when there is none. |
+| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop`; since 2026-09-24 also `source=barge_in` and `&waited_ms=` (section 17; both apps since 2026-09-25) | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. `source=barge_in` answers "stop or not" and is never transcribed (`voice-flow.patch`). |
+| `/api/voice/moment` | GET | - → WAV bytes | `voice_flow.rs` `get_voice_moment` | `JarvisApi.voiceMoment` | The "One moment." clip in the voice in use now (section 17, `voice-flow.patch`). 503 with `why` when there is none. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
 | `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"`, and since 2026-09-24 `"train"` / `"strictness"` / `"privacy"` / `"memory"` / `"measure"` (§16) | `voice_training.rs` `send_voice_training`, `set_voice_setting`, `measure_voice`, `cancel_voice_training` | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
@@ -1847,9 +1847,10 @@ should call when it does.
 `backend/voice-flow.patch` and `backend/jarvis_voice_flow.py` (with small
 changes in `jarvis_speech.py`, `jarvis_voice.py`, `jarvis_voices.py`,
 `jarvis_turn.py` and `jarvis_agent.py`). The owner's three decisions of
-2026-09-24. **Built on the backend first; neither app uses any of it yet** -
-this section is what they build against. One new route
-(`GET /api/voice/moment`, `planned` in `tools/check_parity.py`); the rest
+2026-09-24. **Built on the backend first; both apps use it since
+2026-09-25** - what each app does is part 5, "In the apps", below, with the
+two additions of 2026-09-25 (parts 6 and 7). One new route
+(`GET /api/voice/moment`, `ported` in `tools/check_parity.py`); the rest
 is on routes both apps already call. How it works, and the owner's one-line
 commands, are in `backend/README.md`, "The voice flow".
 
@@ -1885,7 +1886,9 @@ this repository.)
                "state": "waiting" | "warming" | "ready" | "off",
                "seconds": float | null, "steps": {"speech_check": ms, "speech_to_text": ms, ...}},
   "timings":  [ROW, ...],                 oldest first, at most 20, in memory only
-  "summary":  [{"step", "label", "turns", "median_ms", "worst_ms"}, ...]   one line per step, over `timings`
+  "summary":  [{"step", "label", "turns", "median_ms", "worst_ms"}, ...]   one line per step, over `timings`,
+  "after_question": bool,                 since 2026-09-25: keeps listening after Jarvis asks a question (part 6)
+  "cut_off": true                         since 2026-09-25: reads `interrupted` and keeps it on this PC (part 7)
 }
 ```
 
@@ -2023,7 +2026,9 @@ speech the microphone hears is sent as `source=barge_in` (with the rules in
 1); a "Say 'One moment' if I'm kept waiting" switch (on by default) that
 plays the clip as in 3; send `waited_ms` on every utterance; and a "Voice
 delay" panel showing `flow.summary` (the `label`, `median_ms` and
-`worst_ms` columns), with `flow.warm.state`.
+`worst_ms` columns), with `flow.warm.state`. **Built 2026-09-25** (part 5),
+except the "Voice delay" panel, which neither app has yet - the one-line
+command in `backend/README.md` prints the same table.
 
 ### 4. Spoken-style answers, and speaking from the first comma (2026-09-24)
 
@@ -2084,6 +2089,145 @@ character at a time.
 `flow.timings` is unchanged: `first_sentence_ms` still marks the first
 complete sentence; an app that asks for the first piece's sound earlier
 shows up in `say_start_ms`.
+
+### 5. In the apps (2026-09-25)
+
+Both apps, the same rules and the same numbers: desktop `src/voice-flow.js`
+(the rules), `main.js` (the Jarvis bar), `src-tauri/src/voice_flow.rs` (the
+clip); phone `voice/VoiceFlow.kt` (the rules), `VoiceSession.kt`,
+`service/WakeWordService.kt`, `audio/Speaker.kt`. One list of cases holds
+both: `jarvis-desktop/tests/fixtures/voice-flow-cases.json` (desktop
+`tests/voice-flow.mjs`, phone `VoiceFlowTest.kt`).
+
+**Interrupting by talking - pause first, decide second** (LiveKit agents'
+shape, `voice/agent_activity.py`; the voice research of 2026-09-24,
+recommendation 4). Only while "hey Jarvis" listening is on (the phone's
+hands-free listener, the desktop's listener) and the app's own "Interrupt
+Jarvis while it talks" is on - the switch both apps already had; no new one.
+
+1. The app's own loudness detector (no speech-to-text, no words: the same
+   rule both apps' pause detectors use) hears **0.5 s** of speech in one
+   utterance while a reply plays.
+2. Ignored during the first **3 s** of a reply (from its first sound):
+   that is when Jarvis's own voice most often comes back through the
+   microphone while the echo canceller settles (kyutai unmute waits 3 s
+   too). The stop word is not affected - it works from the first word, as
+   before.
+3. Otherwise - and only with `flow.barge_in.available` true and a live link
+   (rule 4) - the reply is **paused at once** (not talked over), and about
+   **2 s** of that speech, from 0.3 s before it began, goes as
+   `source=barge_in` (or less, if the speech ends first: the desktop when
+   its listener cuts the utterance, the phone after 0.7 s of quiet).
+4. `stop: true`: silenced for good, exactly like "stop" - and the sentence
+   whose sound was already made ahead is dropped, never played. `stop:
+   false`: the reply carries on from where it paused. No answer within
+   **4 s** of pausing: it carries on too. `available: false`: no more
+   barge-in clips until the status says otherwise.
+5. The utterance is still sent as `source=wake_word` when it ends, as
+   before, so "hey Jarvis, ..." said over a reply is still a new question.
+
+**"One moment."** Each app fetches the clip when `flow.moment.key` changes
+(the phone on every status read, the desktop when listening starts, when the
+talk button is pressed and with every spoken question), and plays it when a
+`step` event says `tool_started` during a spoken question - **once per
+question**, only **before the answer has made a sound** (the answer's first
+sound waits for it to end; it is under a second), never after "stop" or an
+interruption, and only with the app's own switch on and
+`flow.moment.enabled`. Not on a timer. The new switch, in both apps, is the
+one this section suggested: **"Say "One moment" if I'm kept waiting"**, on
+by default, per device (desktop Settings -> Voice, "While you wait"; phone
+Checks, the "hey Jarvis" card). The PC's `[voice] one_moment_enabled` still
+turns the clip off for both.
+
+**`waited_ms`.** Sent with every push-to-talk and wake-word clip: how long
+it had been quiet when the clip went. The desktop's listener measures it
+exactly (its last loud moment to the send, the Smart Turn pause included);
+push-to-talk on both apps, and the phone's hands-free clips, measure the
+quiet at the end of the clip (30 ms steps, louder than three times the
+clip's quietest step counts as speech - `trailing_quiet` /
+`VoiceFlow.trailingQuietMs`, the same rule).
+
+**"I heard you."** A tiny two-note sound (660 Hz then 990 Hz, 55 and 75 ms,
+quiet), made from numbers in each app - no file, no new dependency - when
+the owner's turn is cut: letting go of the talk button (both apps), the end
+of a "hey Jarvis" sentence (the phone: its own spotter heard the phrase;
+the desktop: when the PC answers that "hey Jarvis" was heard from the owner,
+because only the PC knows which of the sounds its listener cuts were meant
+for Jarvis), and the reply to a question (part 6). **It cannot be turned
+off**: neither app has a sounds setting to put it under, and none was
+invented for it.
+
+**Not built:** the "Voice delay" panel (above); pausing the phone's own
+fallback voice (the handset's text-to-speech, used only when the PC has no
+voice and allows it) - it plays on while the PC decides.
+
+### 6. Keep listening after a question (2026-09-25)
+
+When the **last** sentence Jarvis spoke ends with a question mark (`?`,
+full-width `？`, or the Greek question mark U+037E - and a plain `;` in
+Greek text, where Unicode folds that mark into it; closing quotes and
+brackets after it allowed), the next hands-free clip needs **no "hey
+Jarvis"**, as after "Hey Jarvis." on its own. The pattern is Home
+Assistant's `continue_conversation` (`conversation/chat_log.py`,
+Apache-2.0); nothing of it is copied.
+
+- **On the PC** (`jarvis_speech.py`, no new route, no new field): `say()`
+  opens the window when it makes the sound of a sentence that asks
+  something, and any later sentence closes it (the question was not the
+  last thing said). It lasts `awake_timeout_s` (8 s shipped) after the
+  question should have finished playing (its sound's length, plus the
+  sentence before it, which may still have been playing - the apps ask for
+  one sentence ahead). Kept per app: a question said to the phone opens it
+  for the phone's clips only.
+- **The owner check still runs on the clip**, before any words exist, and
+  a clip that fails it does not use the window up - Jarvis's own voice or
+  the TV heard through the microphone cannot take it. The first clip that
+  passes does. It is a hands-free clip in every other way: under "Only
+  trust the talk button" it is trusted like any "hey Jarvis" clip.
+  Push-to-talk is unchanged. "Hey Jarvis, ..." said anyway is answered with
+  the words after the phrase.
+- **The desktop** needs nothing more: its listener sends every utterance
+  anyway. **The phone** (hands-free only, and only when the status says
+  `flow.after_question: true`): when the answer it just spoke
+  ended with a question and was not cut off, it records the owner's reply
+  without waiting for its spotter (up to `awake_seconds`, like the sentence
+  after "Hey Jarvis."), plays "I heard you", and sends it - only if it holds
+  speech. After a push-to-talk question the phone does not open the
+  microphone by itself.
+
+### 7. Telling the model it was interrupted (2026-09-25)
+
+When the owner stops Jarvis's spoken answer - talking over it (a `stop:
+true`), "stop", "hey Jarvis" over it, or the talk button - the app keeps the
+sentence the owner heard last (the one playing, or else the last one that
+played) and sends it **once**, with the **next** question (typed or spoken,
+within two minutes), as **`interrupted`** on the newest user message:
+
+```
+{"role": "user", "content": "what about the weekend", "provenance": "voice",
+ "interrupted": "Tomorrow looks mild, with light rain in the morning."}
+```
+
+- **On the PC** (`jarvis_agent.py`, `CUT_OFF_NOTE`, `with_cut_off_note`):
+  the answering loop reads it from the request as it arrived and adds one
+  system line to the request for **this PC's model**, just before the
+  newest question: the owner interrupted the last spoken answer and heard
+  it only up to that sentence; do not go on as if they heard the rest. The
+  sentence is cleaned (one line, at most 240 characters). The idea is
+  Hermes Agent's (`tools/tts_streaming.py`, MIT); the words are this
+  project's.
+- **Never first** (placed like the spoken-style note; `keep_rules_first`
+  runs after it), **never the owner's words**: it is a system line, never
+  in the conversation the app sent - which is what the learner
+  (`jarvis_intake.owner_turns`: user messages, their `content` only) and
+  chat history read - and **never leaves this PC**: `chat-history.patch`
+  takes `interrupted` off with `provenance` before any model or the relay
+  sees the conversation (18.1).
+- **Sent only when the status says `flow.cut_off: true`.** A PC without the
+  new `chat-history.patch` line would not take the field off, and a
+  question the router sends to a cloud model would carry it there inside
+  the message - so both apps check first, and a PC that does not say so is
+  never sent it.
 ---
 
 ## 18. Chat history (added 2026-09-24)
@@ -2136,6 +2280,9 @@ On each `role: "user"` message:
   counts as "not the owner's own words" everywhere it matters. The apps keep
   each user turn's `provenance` in their own history and send it again with
   that turn every time. The existing `origin` field is unchanged.
+- `interrupted` (since 2026-09-25, newest message only, never replayed):
+  the last sentence of Jarvis's spoken answer the owner heard before
+  cutting it off - section 17, part 7.
 
 **Phone Share.** Shared text is no longer put into the owner's draft. It
 is held as a chip above the box ("Shared text · 1,204 characters", with an
@@ -2147,8 +2294,8 @@ nothing, the shared message is sent alone.
 `clipboard`; it becomes `typed` only if the owner edits it before sending.
 The long-snippet `system` context path is unchanged.
 
-**The server takes `provenance`, `conversation_id` and `device` off before
-anything goes to any model**, local or cloud: the local answering loop gets
+**The server takes `provenance`, `interrupted`, `conversation_id` and
+`device` off before anything goes to any model**, local or cloud: the local answering loop gets
 the messages without them, and every request the relay sends (each hop of
 the step-down loop) is cleaned in `_open()`. The request as it arrived is
 left alone, because the learner reads `origin` from it and the history

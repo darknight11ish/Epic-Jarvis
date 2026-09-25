@@ -758,6 +758,84 @@ def _close_awake() -> None:
     global _AWAKE_UNTIL
     with _AWAKE_LOCK:
         _AWAKE_UNTIL = 0.0
+    _close_question()
+
+
+# --------------------------------------------------------------------------
+#   Jarvis asked a question aloud: the same window, without "hey Jarvis"
+#   (the owner's decision of 2026-09-25, docs/JARVIS-API.md section 17, 5).
+#
+#   When the LAST sentence Jarvis spoke (say()) ends with a question mark -
+#   "?", the full-width "？", or the Greek question mark U+037E - the next
+#   wake-word clip needs no phrase of its own, like after "Hey Jarvis." on
+#   its own. A later sentence that is not a question closes it: the answer
+#   went on, so the question was not the last thing said. It lasts
+#   `awake_timeout_s` from when the question should have finished playing:
+#   the sound was made at `at` and lasts `seconds`; the sentence before it
+#   may still have been playing then (the apps ask for the next sentence's
+#   sound while the current one plays), so that one's length is allowed too.
+#   Kept per app like the stop-word echo guard: a question said to the
+#   phone opens it for the phone's clips only.
+#
+#   The owner check still runs on that clip, before any words exist, and a
+#   clip that fails it does NOT use the window up (Jarvis's own voice or the
+#   TV heard through the microphone would otherwise take it); the first clip
+#   that passes does. It is a wake-word clip in every other way: under
+#   "Only trust the talk button" it is trusted like any "hey Jarvis" clip.
+# --------------------------------------------------------------------------
+
+#: The marks that end a question: ASCII, full-width, and the Greek question
+#: mark (U+037E, which looks like a semicolon). The apps use the same list
+#: (jarvis-desktop tests/fixtures/voice-flow-cases.json, `question_marks`).
+QUESTION_MARKS = ("?", "\uff1f", "\u037e")
+_QUESTION: dict = {}              # {"at", "seconds", "prev", "mic"} or empty
+_QUESTION_LOCK = threading.Lock()
+_LAST_SAY: dict = {"at": -1e9, "seconds": 0.0}
+
+
+_GREEK = re.compile("[\u0370-\u03ff\u1f00-\u1fff]")
+
+
+def ends_with_question(text: str) -> bool:
+    """Does `text` end with a question mark (closing quotes and brackets
+    after it allowed)? A plain ";" counts only in Greek: Unicode folds the
+    Greek question mark into it, so Greek text often ends a question that
+    way - and anywhere else it is only a semicolon."""
+    t = (text or "").rstrip().rstrip("\"'\u201d\u2019)]\u00bb").rstrip()
+    if not t:
+        return False
+    return t[-1] in QUESTION_MARKS or (t[-1] == ";" and bool(_GREEK.search(t)))
+
+
+def _note_said(text: str, seconds: float, mic: str = "") -> None:
+    """say() made the sound of one sentence: open the question window when
+    it asks something, close it when it does not."""
+    now = time.monotonic()
+    with _QUESTION_LOCK:
+        prev = _LAST_SAY["seconds"] if now - _LAST_SAY["at"] < 60.0 else 0.0
+        _LAST_SAY["at"], _LAST_SAY["seconds"] = now, float(seconds or 0.0)
+        _QUESTION.clear()
+        if ends_with_question(text):
+            _QUESTION.update(at=now, seconds=float(seconds or 0.0), prev=min(prev, 30.0),
+                             mic=_norm_mic(mic))
+
+
+def _question_open(mic: str = "") -> bool:
+    """The window after a question is open for a clip from `mic`."""
+    mic = _norm_mic(mic)
+    with _QUESTION_LOCK:
+        if not _QUESTION:
+            return False
+        if mic and _QUESTION.get("mic") and _QUESTION["mic"] != mic:
+            return False
+        ends = (_QUESTION["at"] + _QUESTION["prev"] + _QUESTION["seconds"]
+                + _awake_seconds())
+        return time.monotonic() < ends
+
+
+def _close_question() -> None:
+    with _QUESTION_LOCK:
+        _QUESTION.clear()
 
 
 def _wake_spotter_state() -> dict:
@@ -1483,6 +1561,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
 
     # 3. The wake word. Switched on? Then: is "hey Jarvis" in it?
     via_window = False
+    via_question = False
     spot = None
     t = time.monotonic()
     if wake:
@@ -1511,6 +1590,11 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                              reason="stop")
         if _take_awake():
             via_window = True
+        elif _question_open(mic):
+            # Jarvis's last sentence asked something (see _note_said): no
+            # phrase needed. Used up only by a clip that passes the owner
+            # check (below), never by Jarvis's own voice or the TV.
+            via_window = via_question = True
         else:
             if jarvis_wakeword is None:
                 return Heard(False, source=source, available=False, seconds=seconds,
@@ -1618,6 +1702,15 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
             _note_for_history(words, verdict, embedder, source)
 
     if not wake or via_window:
+        if via_question:
+            _close_question()
+            # "Hey Jarvis, ..." said anyway: the words after it are the answer.
+            try:
+                found, rest = jarvis_wakeword.split_wake(text)
+            except Exception:
+                found, rest = False, text
+            if found and rest:
+                text = rest
         timed(text)
         return Heard(True, text=text, engine=engine, wake_heard=wake,
                      question_private=_question_private(text), **common)
@@ -1662,6 +1755,9 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     # plays it ("phone" / "desktop"), when the route says; "" counts for both.
     _remember_said(text, mic)
     t0 = time.monotonic()
+    # Anything said closes the window after a question until this sentence's
+    # sound is known (a sentence without sound leaves it closed).
+    _close_question()
     # The delay (jarvis_voice_flow): the first sentence of a spoken turn's
     # answer marks when its first sound was ready. Numbers only.
     mark = _flow("say_started")
@@ -1670,6 +1766,8 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
         _note_timing("none", voice, text, t0, 0.0, fallback, note, failed=failed)
         return None
     _note_timing(engine, voice, text, t0, len(samples) / float(rate), fallback, note)
+    # Jarvis asked something aloud: the next wake-word clip needs no phrase.
+    _note_said(text, len(samples) / float(rate or 16000), mic)
     wav = _write_wav(samples, rate)
     if mark is not None:
         try:

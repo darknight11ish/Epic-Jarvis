@@ -1016,10 +1016,15 @@ class JarvisApi(
     suspend fun utterance(
         wav: ByteArray,
         source: String = SOURCE_PUSH_TO_TALK,
+        waitedMs: Long? = null,
     ): ApiResult<Heard> = withContext(Dispatchers.IO) {
         // mic=phone: the PC checks the clip against this phone's own voice
         // print when there is one (a PC older than 2026-09-24 ignores it).
-        val target = url("/api/voice/utterance?source=$source&mic=$MIC_PHONE") ?: return@withContext ApiResult.Failed(
+        // waited_ms (docs/JARVIS-API.md section 17, 2): how long it had been
+        // quiet when the clip was sent - a number for the PC's delay table,
+        // ignored by a PC without voice-flow.patch.
+        val waited = waitedMs?.let { "&waited_ms=${it.coerceIn(0L, 60_000L)}" }.orEmpty()
+        val target = url("/api/voice/utterance?source=$source&mic=$MIC_PHONE$waited") ?: return@withContext ApiResult.Failed(
             ApiError.Unreachable("No desktop address set"),
         )
         val body = wav.toRequestBody("audio/wav".toMediaType())
@@ -1033,6 +1038,57 @@ class JarvisApi(
                         { h -> ApiResult.Ok(h) },
                         { e -> ApiResult.Failed(ApiError.Malformed(e.message ?: "bad verdict")) },
                     )
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+    }
+
+    /**
+     * Interrupting Jarvis by talking (docs/JARVIS-API.md section 17, 1): about
+     * two seconds of what the microphone heard over a reply, and ONE question
+     * back - should Jarvis stop? The PC never transcribes it. Send it only
+     * while Jarvis is speaking and [VoiceStatus.bargeInUsable] is true: an
+     * older PC treats an unknown `source` as push-to-talk and would
+     * transcribe the clip. Anything but a readable answer is "carry on"
+     * ([com.jarvis.client.voice.BargeVerdict.FAILED]). The body is the
+     * owner's voice, and is never logged.
+     */
+    suspend fun bargeIn(wav: ByteArray): com.jarvis.client.voice.BargeVerdict = withContext(Dispatchers.IO) {
+        val failed = com.jarvis.client.voice.BargeVerdict.FAILED
+        val target = url("/api/voice/utterance?source=$SOURCE_BARGE_IN&mic=$MIC_PHONE")
+            ?: return@withContext failed
+        val body = wav.toRequestBody("audio/wav".toMediaType())
+        val req = Request.Builder().url(target).post(body).authed().build()
+        runCatching {
+            shortCall.newCall(req).execute().use {
+                if (!it.isSuccessful) return@use failed
+                val obj = runCatching {
+                    JarvisJson.parseToJsonElement(it.body?.string().orEmpty()) as? JsonObject
+                }.getOrNull()
+                com.jarvis.client.voice.BargeVerdict.read(obj)
+            }
+        }.getOrElse { failed }
+    }
+
+    /**
+     * The "One moment." clip (docs/JARVIS-API.md section 17, 3): a WAV in the
+     * voice Jarvis speaks in now. Fetched when `flow.moment.key` changes, and
+     * kept. A 503 is the PC's "none right now" - a failure here, not an error
+     * to show: the clip is a courtesy.
+     */
+    suspend fun voiceMoment(): ApiResult<ByteArray> = withContext(Dispatchers.IO) {
+        val target = url("/api/voice/moment") ?: return@withContext ApiResult.Failed(
+            ApiError.Unreachable("No desktop address set"),
+        )
+        val req = Request.Builder().url(target).get().authed().header("Accept", "audio/wav").build()
+        runCatching {
+            shortCall.newCall(req).execute().use {
+                if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                val bytes = it.body?.bytes()
+                if (bytes == null || bytes.isEmpty()) {
+                    ApiResult.Failed(ApiError.NotAvailable)
+                } else {
+                    ApiResult.Ok(bytes)
+                }
             }
         }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
     }
@@ -1231,9 +1287,10 @@ class JarvisApi(
         history: List<ChatHistory.Exchange> = emptyList(),
         picture: String? = null,
         conversationId: String? = null,
+        interrupted: String? = null,
     ): Call? {
         val target = url("/api/chat") ?: return null
-        val body = ChatHistory.requestBody(history, asking, picture, conversationId)
+        val body = ChatHistory.requestBody(history, asking, picture, conversationId, interrupted)
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
         return client.newCall(req)
@@ -1293,6 +1350,9 @@ class JarvisApi(
 
         const val SOURCE_PUSH_TO_TALK = "push_to_talk"
         const val SOURCE_WAKE_WORD = "wake_word"
+
+        /** Interrupting by talking: "should Jarvis stop?", never transcribed (section 17). */
+        const val SOURCE_BARGE_IN = "barge_in"
 
         /** Which microphone this app's clips come from - the PC keeps a voice print per microphone. */
         const val MIC_PHONE = "phone"

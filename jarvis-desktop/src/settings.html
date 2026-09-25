@@ -457,6 +457,18 @@
           This PC only; your phone has its own switch. It matters only while
           this PC is listening for "hey Jarvis".
         </p>
+
+        <!-- Also this PC's own (voice-flow.js); the phone has the same
+             switch for itself. The PC's own [voice] one_moment_enabled can
+             still turn the clip off for every app. -->
+        <h3 class="subhead">While you wait</h3>
+        <label class="toggle">
+          <input id="voice-one-moment" type="checkbox" />
+          <span>
+            Say "One moment" if I'm kept waiting
+            <span class="toggle-detail" id="voice-one-moment-detail"></span>
+          </span>
+        </label>
       </section>
 
       <!-- ── Jarvis's voice ────────────────────────────────────────────────

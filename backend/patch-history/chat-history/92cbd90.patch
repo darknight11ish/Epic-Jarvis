@@ -134,14 +134,14 @@
  
  
 +# chat-history.patch. What the apps now add to a chat request for this PC's
-+# own record - `provenance` (and `interrupted`, voice flow) on a user message,
++# own record - `provenance` on a user message (typed, voice, shared, ...),
 +# `conversation_id` and `device` on the request - is not for any model. It
 +# comes off before a model sees it: /api/chat hands the local answering
 +# loop `messages` after _chat_client_fields_off, and _open() cleans every
 +# request the relay sends. `origin` is not touched: it has always gone to
 +# the model, and the learner reads it. The request body itself is left as
 +# it arrived, because the learner and the history record read it.
-+_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "interrupted")
++_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device")
 +
 +_NO_CHAT_LOG = {
 +    "available": False,

@@ -1139,6 +1139,7 @@ class MainActivity : FragmentActivity() {
                         val voiceAnswered by voice.answered.collectAsState()
                         val phoneListening by WakeWordService.state.collectAsState()
                         val bargeInSaved by JarvisRuntime.settings.bargeIn.collectAsState()
+                        val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
                         // Asked once: whether this phone has an echo canceller
                         // at all. It decides the barge-in default.
                         val echoCanceller = remember {
@@ -1220,6 +1221,10 @@ class MainActivity : FragmentActivity() {
                             // A switch on this phone only: it changes when the
                             // phone listens, never what the desktop allows.
                             onBargeIn = { on -> JarvisRuntime.settings.setBargeIn(on) },
+                            // Also this phone's own: whether "One moment." is
+                            // played when a tool starts during a spoken question.
+                            oneMoment = oneMomentOn,
+                            onOneMoment = { on -> JarvisRuntime.settings.setOneMoment(on) },
                             onPhoneListening = { on ->
                                 if (on) {
                                     wakeNotice = startPhoneListening()

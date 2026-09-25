@@ -92,6 +92,11 @@
 //! cancelling when the machine has it (`aec.rs`, the "communications"
 //! capture category, used only when Windows reports acoustic echo
 //! cancellation active on it); otherwise the plain capture below, as before.
+//! Since 2026-09-25 talking over a reply works too (voice_flow.rs): half a
+//! second of speech tells the Jarvis bar, which pauses the reply and asks
+//! for the first two seconds to be checked by the PC as "stop or not"
+//! (`source=barge_in`, never transcribed); the utterance still goes as
+//! `source=wake_word` when it ends.
 //! Settings' "Interrupt Jarvis while it talks" (`src/barge-in.js`, on by
 //! default) is read by the Jarvis bar, not here: with it off, the bar
 //! ignores both events - and any question heard - while Jarvis is talking.
@@ -138,7 +143,9 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::{jarvis_base, jarvis_client, jarvis_headers};
-use crate::events::{VOICE_HEARD, VOICE_LISTENING, VOICE_SPEECH_STARTED};
+use crate::events::{
+    VOICE_BARGE_ONSET, VOICE_BARGE_VERDICT, VOICE_HEARD, VOICE_LISTENING, VOICE_SPEECH_STARTED,
+};
 
 /// Total round-trip budget for one utterance: speaker verification plus a
 /// whole-clip transcription is not instant, but it is also not a chat
@@ -528,7 +535,7 @@ fn resample(mono: &[i32], from: u32, to: u32) -> Vec<i16> {
 }
 
 /// `samples` as the WAV the server takes: [`to_server_format`], encoded.
-fn server_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> {
+pub(crate) fn server_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> {
     let (spec, samples) = to_server_format(spec, samples);
     encode_wav(spec, &samples)
 }
@@ -569,6 +576,7 @@ async fn post_utterance(
     spec: hound::WavSpec,
     samples: &[i16],
     source: &str,
+    waited: Option<Duration>,
 ) -> Result<HeardReply, String> {
     if samples.is_empty() {
         return Err("nothing was recorded - the microphone produced no audio".to_string());
@@ -578,9 +586,15 @@ async fn post_utterance(
     // mic=desktop: the server keeps one voice print per microphone and
     // checks this clip against this PC's own when there is one (a server
     // older than 2026-09-24 ignores it). See backend/voice-mic.patch.
+    // `waited_ms` (docs/JARVIS-API.md section 17, 2): how long it was since
+    // speech was last heard when the clip was sent - a number, for the PC's
+    // delay table; a PC without voice-flow.patch ignores it.
+    let waited = waited
+        .map(|w| format!("&waited_ms={}", w.as_millis().min(60_000)))
+        .unwrap_or_default();
     let response = jarvis_client(Some(UTTERANCE_TIMEOUT))?
         .post(format!(
-            "{base}/api/voice/utterance?source={source}&mic={MIC_DESKTOP}"
+            "{base}/api/voice/utterance?source={source}&mic={MIC_DESKTOP}{waited}"
         ))
         .headers(jarvis_headers(app)?)
         .header("Content-Type", "audio/wav")
@@ -757,7 +771,8 @@ pub async fn stop_voice_capture(
     // Push-to-talk may go to a server elsewhere: holding the button is a
     // deliberate act, unlike the room audio the wake-word listener sends.
     let base = jarvis_base(&app);
-    post_utterance(&app, &base, spec, &raw_samples, "push_to_talk").await
+    let waited = crate::voice_flow::trailing_quiet(spec, &raw_samples);
+    post_utterance(&app, &base, spec, &raw_samples, "push_to_talk", waited).await
 }
 
 /// If a recording is in progress, discards it without sending anything -
@@ -1145,6 +1160,14 @@ enum VadPhase {
         voiced: Duration,
         /// Smart Turn was already asked about the current pause.
         asked: bool,
+        /// This utterance's number, for interrupting by talking
+        /// (voice_flow.rs): the Jarvis bar asks about it by this.
+        id: u64,
+        /// The bar was told this utterance held enough speech to be an
+        /// interruption (`VOICE_BARGE_ONSET`).
+        told: bool,
+        /// Its first seconds were sent as `source=barge_in`.
+        barge_sent: bool,
     },
 }
 
@@ -1469,12 +1492,18 @@ fn run_vad_loop(
                         last_voiced_at: now,
                         voiced: chunk,
                         asked: false,
+                        id: crate::voice_flow::next_utterance_id(),
+                        told: false,
+                        barge_sent: false,
                     };
                     // No barge-in here any more. In this mode the trigger
                     // fires on the TV, on other people, and on Jarvis's own
                     // voice from the speakers - stopping a reply for every
                     // one of those would stop every reply. A reply is cut
-                    // off when "hey Jarvis" is actually heard (below).
+                    // off when "hey Jarvis" is actually heard (below), or -
+                    // since 2026-09-25 - paused after half a second of
+                    // speech and stopped only when the PC says it was the
+                    // owner (voice_flow.rs, in the Speaking arm below).
                 } else {
                     floor = update_floor(floor, level);
                     if buf.len() > idle_keep {
@@ -1491,6 +1520,9 @@ fn run_vad_loop(
                 last_voiced_at,
                 voiced: voiced_time,
                 asked,
+                id,
+                told,
+                barge_sent,
             } => {
                 if voiced {
                     *last_voiced_at = now;
@@ -1502,6 +1534,43 @@ fn run_vad_loop(
                 let silence_elapsed = now.duration_since(*last_voiced_at);
                 let speech_elapsed = now.duration_since(*started_at);
                 let voiced_so_far = *voiced_time;
+
+                // Interrupting by talking (voice_flow.rs): half a second of
+                // speech, and the Jarvis bar hears of it - it pauses a reply
+                // that is playing and asks for this utterance to be checked.
+                // The first two seconds then go to this PC as "stop or not".
+                if crate::voice_flow::onset_due(voiced_so_far, *told) {
+                    *told = true;
+                    let _ = app.emit(VOICE_BARGE_ONSET, crate::voice_flow::BargeOnset { id: *id });
+                }
+                if *told
+                    && crate::voice_flow::clip_due(
+                        speech_elapsed,
+                        crate::voice_flow::barge_wanted(*id),
+                        *barge_sent,
+                        false,
+                    )
+                {
+                    *barge_sent = true;
+                    let base = jarvis_base(app);
+                    if let Some(why) = wake_audio_refusal(&base) {
+                        drop(buf);
+                        stop_listening_because(app, why);
+                        return VadEnd::Refused;
+                    }
+                    analysed_to = Some(buf.len());
+                    let clip: Vec<i16> = buf[*started_at_index..].to_vec();
+                    // Not holding the lock through the round trip: the
+                    // microphone keeps filling the buffer.
+                    drop(buf);
+                    let verdict = tauri::async_runtime::block_on(crate::voice_flow::post_barge_in(
+                        app, &base, spec, &clip, *id,
+                    ));
+                    let _ = app.emit(VOICE_BARGE_VERDICT, verdict);
+                    buf = samples
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                }
                 let mut should_cut = match pause_step(
                     silence_elapsed,
                     voiced_so_far,
@@ -1530,7 +1599,10 @@ fn run_vad_loop(
                             return VadEnd::Refused;
                         }
                         *asked = true;
-                        analysed_to = Some(buf.len());
+                        // Kept if the barge-in check above already set it:
+                        // the audio that arrived during THAT round trip has
+                        // not been looked at yet either.
+                        analysed_to.get_or_insert(buf.len());
                         let from = buf.len().saturating_sub(turn_window).max(*started_at_index);
                         let window: Vec<i16> = buf[from..].to_vec();
                         // Not holding the lock through the round trip:
@@ -1572,6 +1644,20 @@ fn run_vad_loop(
                         return VadEnd::Refused;
                     }
                     let clip: Vec<i16> = buf[*started_at_index..buf.len()].to_vec();
+                    // How long since speech was last heard, sent as
+                    // `waited_ms` (the Smart Turn pause included).
+                    let waited = now.duration_since(*last_voiced_at);
+                    // Asked about as an interruption and ended before its
+                    // clip was sent: what there is goes now, before the
+                    // usual wake-word send below.
+                    let barge_now = *told
+                        && crate::voice_flow::clip_due(
+                            speech_elapsed,
+                            crate::voice_flow::barge_wanted(*id),
+                            *barge_sent,
+                            true,
+                        );
+                    let barge_id = *id;
                     // Reset for the next utterance. Everything captured
                     // during this cut's own send() is preserved - it just
                     // starts the next utterance's buffer, since `buf` here
@@ -1582,12 +1668,19 @@ fn run_vad_loop(
                     drop(buf); // release the lock before the blocking POST
 
                     let app = app.clone();
+                    if barge_now {
+                        let verdict = tauri::async_runtime::block_on(
+                            crate::voice_flow::post_barge_in(&app, &base, spec, &clip, barge_id),
+                        );
+                        let _ = app.emit(VOICE_BARGE_VERDICT, verdict);
+                    }
                     let heard = tauri::async_runtime::block_on(post_utterance(
                         &app,
                         &base,
                         spec,
                         &clip,
                         "wake_word",
+                        Some(waited),
                     ));
                     match heard {
                         Ok(reply) if !reply.available => {

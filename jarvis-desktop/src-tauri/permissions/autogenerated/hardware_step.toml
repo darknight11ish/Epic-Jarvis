@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hardware-step"
+description = "Enables the hardware_step command without any pre-configured scope."
+commands.allow = ["hardware_step"]
+
+[[permission]]
+identifier = "deny-hardware-step"
+description = "Denies the hardware_step command without any pre-configured scope."
+commands.deny = ["hardware_step"]

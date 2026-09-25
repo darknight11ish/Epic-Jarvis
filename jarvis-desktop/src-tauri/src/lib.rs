@@ -37,6 +37,7 @@ pub mod tray;
 pub mod update;
 pub mod vision;
 pub mod voice;
+pub mod voice_flow;
 pub mod voice_training;
 pub mod windows;
 #[cfg(windows)]
@@ -138,6 +139,14 @@ pub mod events {
     /// how it hears while still on: the echo-cancelled microphone stopped
     /// and it carries on through the ordinary one (`note` says so).
     pub const VOICE_LISTENING: &str = "voice-listening";
+    /// Payload: [`crate::voice_flow::BargeOnset`]. "Hey Jarvis" listening
+    /// heard half a second of speech in one utterance: if a reply is
+    /// playing, the Jarvis bar may pause it and ask for the utterance to be
+    /// checked (`judge_barge_in`). See voice_flow.rs.
+    pub const VOICE_BARGE_ONSET: &str = "voice-barge-onset";
+    /// Payload: [`crate::voice_flow::BargeVerdict`]. The PC's answer for an
+    /// utterance the Jarvis bar asked about: stop the reply, or carry on.
+    pub const VOICE_BARGE_VERDICT: &str = "voice-barge-verdict";
     /// Payload: [`crate::lock::Security`] - the Security settings changed
     /// (Settings' Windows Hello section). The Brain re-reads its memory
     /// lists, which may now be hidden or shown.
@@ -766,6 +775,10 @@ pub fn run() {
             voice::start_automatic_listening,
             voice::stop_automatic_listening,
             voice::speak_reply,
+            // Interrupting by talking and "One moment." (voice_flow.rs).
+            voice_flow::judge_barge_in,
+            voice_flow::get_voice_flow,
+            voice_flow::get_voice_moment,
             voice::summon_push_to_talk,
             voice::get_voice_status,
             voice::set_wake_word,
