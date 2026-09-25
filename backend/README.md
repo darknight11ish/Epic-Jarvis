@@ -3006,7 +3006,26 @@ through:
 `jarvis_ui_control.Step.heavy` already carries for the native-UI tool -
 "the front door is now unlocked" is a materially bigger consequence than
 "the kitchen light is now on", even though both are one API call to the
-same server.
+same server. Since 2026-09-25 a valve and a siren are heavy too, and so is
+any device whose id says door, gate, garage, lock, alarm, security or safe
+(a garage opener is often just `switch.garage_door`).
+
+**Several devices, one card** (your decision of 2026-09-25, after the
+creativity audit). "Turn off the kitchen, hall and bedroom lights" is now
+ONE approval card instead of three. The card's first line names every
+device and what will be done to it; below that, each device's exact
+request is listed, numbered. Approving sends exactly those requests and
+nothing else - Jarvis takes a fingerprint of them when it makes the plan
+and sends nothing if they have changed - and it gives no permission for
+anything later. At most 10 devices on one card; a longer list is refused,
+never shortened. Never on a shared card, always a card of their own:
+locks, alarms, doors, garage doors, gates, covers (blinds, shutters),
+valves, sirens, cameras, and scripts, scenes, automations and buttons
+(Jarvis cannot see what those would switch). You do not need to change
+anything: the same `home_control` line in `[tools].enabled` and the same
+`jarvis_home_control_run = "ask"` tier cover it. Nothing here has been
+tried against a real Home Assistant - the tests send every request to a
+recorder instead.
 
 **Ship disabled, for a different, simpler reason than `browser_control`.**
 Nothing here needs a new dependency (`jarvis_calendar.py`'s ICS parsing and
@@ -7953,9 +7972,10 @@ refusal, so it can never become a way round the gate.
 - **What does not count:** a tool that asks nobody, such as the calculator,
   or a read your settings allow. It still runs.
 - **Why five, not the research's example of three:** turning off three
-  lights is already three cards, because Home Assistant control takes one
-  device per card. The number is `CARDS_PER_TURN` in `jarvis_agent.py`.
-  You confirmed five on 2026-09-25.
+  lights used to be three cards, because Home Assistant control took one
+  device per card. Since 2026-09-25 it is one card for all three (up to
+  ten), and that card counts once. The number is `CARDS_PER_TURN` in
+  `jarvis_agent.py`. You confirmed five on 2026-09-25.
 
 **A key that was read is named on the next card.** Say Jarvis reads a file,
 and the file holds something that looks like a password or key. The next
@@ -8526,10 +8546,12 @@ row in `schedule.db`, like any reminder, with no words.
 
 **Fewer nagging offers (`jarvis_backoff.py`).** Jarvis sometimes offers
 things nobody asked for: the overnight memory tidying card, and "save this
-routine as a skill?". Every such offer now follows three rules: at most
-three waiting at once; none within two minutes of your last chat message;
-and each "no" keeps that same offer quiet for **1 day, then 7 days, then 30
-days** (matched by a fingerprint of what is offered, not its wording). A
+routine as a skill?". Every such offer now follows four rules: none while
+Jarvis is in **Quiet or Standby** (fixed 2026-09-25 - offers used to turn
+up in Quiet anyway; now they wait until you switch back to Active, and
+waiting is never counted as a "no"); at most three waiting at once; none
+within two minutes of your last chat message; and each "no" keeps that same
+offer quiet for **1 day, then 7 days, then 30 days** (matched by a fingerprint of what is offered, not its wording). A
 "yes" clears the count. It never approves or does anything, and it never
 stops you asking for something yourself: switching overnight tidying on
 stays one tap away however many times you said "not now". It keeps only
@@ -8542,7 +8564,7 @@ folder. The design is Leon's (leon-ai/leon, MIT) - see
 - `jarvis_briefing.py` - the briefing: a kind of job on the one scheduler
   (`register_kind`), what goes in it, the calendar and email reads (each
   through the approval gate as its own action), the two routes' answers.
-- `jarvis_backoff.py` - the three rules, for every offer.
+- `jarvis_backoff.py` - the four rules, for every offer.
 - `jarvis_schedule.py` - a kind can now repeat through the same card
   (`repeatable`) and put its own lines on it (`card_note`); the same
   briefing set up twice is refused; `get()` loads the briefing kind before
@@ -8879,10 +8901,30 @@ sends the search somewhere else.
 **When a search asks you first.** A search that comes straight from your own
 typed or spoken question, in a conversation where Jarvis has not read
 anything from outside, runs without a card. After Jarvis has read your
-email, files, notes, saved memories or any other outside text (a web page, a
-tool's answer) - or when your message was pasted or shared - the search
-shows you an approval card with the **exact search words** first, because
-something private could have slipped into them. Settings has **"Ask before
+email, files, notes or any other outside text (a web page, a tool's answer)
+- or when your message was pasted or shared - the search shows you an
+approval card with the **exact search words** first, because something
+private could have slipped into them.
+
+**Saved memories** (your decision of 2026-09-25, after the creativity
+audit): a fact Jarvis remembers about you - pinned, or recalled for this
+question - no longer makes every search ask. It asks only when:
+- **the search words repeat a saved fact** - a word, a number (a phone
+  number, a house number of three digits or more) or a name from it, or a
+  nickname the names list has for someone in it, that you did not type or
+  say yourself in this conversation. The card says which fact, for
+  example: "The search words repeat something you told Jarvis ("Leeds"),
+  so it asks before searching. The saved fact: "Owner lives in Leeds"";
+- **or a sensitive fact was used** (health, money, another person, where
+  someone lives, passwords and account details...), whatever the search
+  says. The card names the topic only, never the fact's own words.
+
+The honest limit: Jarvis compares words, so a fact said differently
+("vegetarian" saved, "meat-free" searched) is not caught. Sensitive facts
+always ask, so the private ones are covered. One thing to know: a fact
+about another person counts as sensitive, so if you PIN one ("my sister is
+called Priya"), every search in an answer still asks. Unpin it ("Always
+keep in mind", in the Brain on either app) if that is more than you want. Settings has **"Ask before
 every web search"** to make every search ask; turning it on is instant,
 turning it off asks you with a card. Search words that look like a password
 or a key are refused outright, and Jarvis says why.
@@ -9064,9 +9106,10 @@ the model; and the patch applied to what the earlier patches wrote.
 - `ddgs` cannot tell "no results" from "DuckDuckGo is blocking you for a
   while", so the answer says both. Whether its own web client uses the
   Windows proxy is not checked.
-- "Saved memories were read" is judged on the current question. If an
-  earlier question in the same conversation recalled facts and nothing else
-  was read since, a later search runs without a card.
+- Saved memories are judged on the current question: the facts recalled
+  for THIS question (and the pinned ones) are compared with the search
+  words. A fact recalled for an earlier question in the same conversation,
+  and not this one, is not compared.
 - The phone sees a change made on the desktop at its next read (Refresh).
 - The briefing's "weather and news: not available" line is unchanged -
   weather is a separate decision.

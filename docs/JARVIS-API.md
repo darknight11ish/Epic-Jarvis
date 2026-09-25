@@ -626,6 +626,32 @@ the PC, no app change needed:
   in a new message to carry on.)"). A tool that asks nobody (tier `auto` or
   `notify`) is not limited. A new message starts at zero. Both apps show the
   line as part of the answer; neither needed a change.
+- **Several smart-home devices on ONE card** (2026-09-25, the owner's
+  decision after the creativity audit; `jarvis_home.plan_services`).
+  `home_control` takes `entity_ids` (a list, at most 10) beside `entity_id`:
+  the same service and data on each device, one request per device, and
+  ONE approval card - so it counts once toward the five. The card's first
+  line names every device and the action ("Jarvis would like to call
+  light.turn_off on 3 Home Assistant devices: light.kitchen, light.hall,
+  light.bedroom."), then each device's exact request and body, numbered,
+  and says it is one decision about exactly these devices, with nothing
+  added after the yes and no permission for anything later. After a yes,
+  exactly the listed requests are sent, in order (a digest of them is taken
+  when the plan is made, and `run()` sends nothing if they no longer
+  match); one device failing does not stop the others, and the model is
+  told which worked (`results`). Never grouped - refused before any card,
+  with the reason, so the model can ask again: a lock, alarm panel, cover
+  (garage doors, gates, blinds), valve or siren; any entity whose id says
+  door, gate, garage, lock, alarm, security or safe (`switch.garage_door`);
+  a camera, script, scene, automation or button (Jarvis cannot see what
+  those would change); more than 10 devices (refused, never cut); a `data`
+  that names its own `entity_id`, `area_id` or `device_id`. Each of those
+  still works on a card of its own, as before. Both apps show the card's
+  text as sent (the phone as plain lines, the desktop's bar as Markdown,
+  where the numbered requests are a list); neither needed a change. The
+  desktop's small approval widget shows only the card's first line - which
+  is why the first line names every device - and cuts it at 200 characters,
+  so a long list is only complete in the Jarvis bar or on the phone.
 - **Ollama failing to read a tool call** (HTTP 500 before the answer, or
   `{"error": ...}` in the stream, with Ollama's "failed to parse JSON"-style
   wording) is asked again once, with a short note to the model. A second
@@ -3710,8 +3736,15 @@ email): the record says `email_check` ran.
 
 Jarvis's offers nobody asked for - today the overnight-tidy card
 (`setup.sleep_time_offer`) and the "save this routine as a skill?" card
-(`jarvis_skill_discovery.py`) - follow three rules:
+(`jarvis_skill_discovery.py`) - follow four rules:
 
+0. **Not in Quiet or Standby** (added 2026-09-25, a bug the creativity audit
+   found): `may_offer` reads `jarvis_power.current()` (which applies the
+   quiet hours too) and answers `(False, "quiet")` in `quiet` or `standby`.
+   The offer is kept for later - nothing is written, it is not counted as
+   waiting and never as a "no"; the overnight card is offered later the same
+   day once Jarvis is Active. A mode that cannot be read also holds offers
+   back (`"mode_unknown"`).
 1. **At most three offers waiting** for an answer at once.
 2. **None within two minutes** of the last chat message (`/api/chat` notes
    the time of every message, in memory, never the words). The skill offer,
@@ -3890,16 +3923,23 @@ alone:
 
 - **No card** for a search straight from the owner's own question: the
   newest message typed or said by the owner (`typed` / `voice`), nothing
-  read from outside in this turn, the conversation not tainted, no saved
-  memories recalled into the turn, no text the app attached.
+  read from outside in this turn, the conversation not tainted, no
+  sensitive saved fact in the turn and no saved fact repeated in the search
+  words, no text the app attached. Since the owner's decision after the
+  creativity audit (2026-09-25), a pinned or recalled fact on its own no
+  longer makes a search ask.
 - **One card** (gate action **`search_the_web`**, tier `ask` in the shipped
   toml; `"ask"` by `unknown_action_tier` without the line) showing the
   **exact search words**, where they go, whether a key goes with them and
   what saying no costs, plus the reason, whenever any of these holds: a
   reading tool ran this turn (an earlier web search included); the
-  conversation read outside text before (`jarvis_chat_log` taint); saved
-  memories were recalled into the turn (the chat route's quoted FACTS block,
-  pinned facts too, or `memory_search` ran); the newest message was pasted,
+  conversation read outside text before (`jarvis_chat_log` taint);
+  `memory_search` ran this turn (a tool's answer, like any reading tool); a
+  fact in the chat route's quoted FACTS block (pinned facts too) is
+  **sensitive** (`jarvis_search.fact_topic` - `jarvis_sensitive`'s
+  patterns, no model; a fact that cannot be checked counts as sensitive); the
+  **search words repeat a fact** in that block (below); the facts could not
+  be checked at all; the newest message was pasted,
   shared, from the clipboard, a picture's caption or untagged; the app sent
   a `system` message; or **"Ask before every web search"** is on. "What
   shaped this request:" follows, as on every card after outside text. It
@@ -3911,6 +3951,29 @@ alone:
   which also knows this PC's own secrets by value) - the answer names the
   kind, never the value; `search_the_web = "never"` in the toml (web search
   switched off); and a provider that cannot run (see 23.1).
+
+**"The search words repeat a saved fact"** (`jarvis_search.repeated_facts`,
+no model, no socket): each fact in the turn's FACTS block is cut into its
+distinctive pieces - words that are not everyday words (`_EVERYDAY`),
+numbers of three digits or more that are not years (a phone number written
+with spaces counts as one), and, from the names layer
+(`jarvis_search.names_for_facts`, `jarvis_memory`'s entities on this PC),
+the names, other names and nicknames of anyone or anything the fact
+mentions. A piece the owner typed or said themselves in this conversation
+does not count - it is their own words. Any other piece in the search words
+and the search asks. The card then says which fact: "The search words
+repeat something you told Jarvis (“Leeds”), so it asks before searching.
+The saved fact: “Owner lives in Leeds”" - and for a sensitive fact only the
+matching words from the search itself and the topic ("It comes from a saved
+fact about another person, so that fact's own words are not shown here").
+A sensitive fact asks on its own: "Jarvis used a saved fact about health for
+this question, so it asks before searching ...". **The honest limit:** a
+fact said in other words ("vegetarian" saved, "meat-free" searched) is not
+caught by comparing words; sensitive facts ask whatever the words say, and
+the test suite pins this limit so it is not forgotten
+(`test_web_search.t_saved_facts_ask_only_when_repeated_or_sensitive`). A
+fact about another person is a sensitive topic, so a PINNED fact about
+someone else still makes every search in the answer ask.
 
 **"Ask before every web search"**: turning it ON is immediate; turning it
 OFF is ONE approval card, **`stop_asking_before_every_web_search`** (tier `ask`; any other
