@@ -413,6 +413,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -422,6 +423,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -898,6 +900,7 @@
       "enabled": true,
       "enrolled": false,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -907,6 +910,7 @@
           "stop_word": false,
           "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -1371,6 +1375,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -1380,6 +1385,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -1867,6 +1873,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -1876,6 +1883,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -2346,6 +2354,7 @@
       "enabled": true,
       "enrolled": false,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -2355,6 +2364,7 @@
           "stop_word": false,
           "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -2815,6 +2825,7 @@
       "enabled": true,
       "enrolled": false,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -2824,6 +2835,7 @@
           "stop_word": false,
           "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -3298,6 +3310,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -3307,6 +3320,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -3791,6 +3805,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -3800,6 +3815,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -4277,6 +4293,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -4286,6 +4303,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -4756,6 +4774,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -4765,6 +4784,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -5245,6 +5265,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -5254,6 +5275,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -5730,6 +5752,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -5739,6 +5762,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -6229,6 +6253,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -6238,6 +6263,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -6746,6 +6772,7 @@
       "enabled": true,
       "enrolled": false,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -6755,6 +6782,7 @@
           "stop_word": false,
           "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -7219,6 +7247,7 @@
       "enabled": true,
       "enrolled": false,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": false,
@@ -7228,6 +7257,7 @@
           "stop_word": false,
           "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -7719,6 +7749,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -7728,6 +7759,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,
@@ -8201,6 +8233,7 @@
       "enabled": true,
       "enrolled": true,
       "flow": {
+        "after_question": true,
         "available": true,
         "barge_in": {
           "available": true,
@@ -8210,6 +8243,7 @@
           "stop_word": false,
           "why": ""
         },
+        "cut_off": true,
         "moment": {
           "after_ms": 1000,
           "enabled": true,

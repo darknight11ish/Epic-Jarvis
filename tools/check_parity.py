@@ -185,10 +185,11 @@ CLASSIFICATION = {
     "/api/voice/voices/delete": ("ported", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use. Desktop: delete_custom_voice, after an are-you-sure. Phone: asks first on the phone, never held."),
     "/api/voice/voices/better": ("ported", "The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate. Desktop: set_better_voice, offered only with a capable second card. Phone: offered only when a capable second card is there; ON held on a stale link, OFF always goes."),
     # The voice flow (backend/voice-flow.patch, 2026-09-24): built on the
-    # backend, for both apps. Its other two parts are on routes both apps
-    # already call - `?source=barge_in` / `&waited_ms=` on /api/voice/utterance
-    # and the `flow` block of /api/voice/status - so only this one is new.
-    "/api/voice/moment": ("planned", "The \"One moment.\" clip, a WAV in the voice Jarvis speaks in now (made once per voice, kept in memory). An app plays it when no sound has started about a second after the owner finished, never over the reply (docs/JARVIS-API.md section 17)."),
+    # backend first, in both apps since 2026-09-25. Its other parts are on
+    # routes both apps already call - `?source=barge_in` / `&waited_ms=` on
+    # /api/voice/utterance and the `flow` block of /api/voice/status - so
+    # only this one is new.
+    "/api/voice/moment": ("ported", "The \"One moment.\" clip, a WAV in the voice Jarvis speaks in now (made once per voice, kept in memory). Both apps fetch it when flow.moment.key changes and play it once per spoken question when a tool starts, before the answer makes a sound, never over it (docs/JARVIS-API.md section 17). Desktop: voice_flow.rs get_voice_moment, main.js. Phone: JarvisApi.voiceMoment, VoiceSession.toolStarted."),
     "/api/voice/wake": ("ported", "The wake-word switch; turning it on raises an approval card, turning it off is immediate. Both apps can do both: desktop Settings, Voice (set_wake_word; ON also from the Jarvis bar's listen button), phone Platform checks."),
     "/api/watch": ("ported", "Watches - the GitHub topics Jarvis keeps an eye on. Desktop: Brain, Watch tab. Phone: Mind, Watches (WatchPlate.kt, net/Watch.kt)."),
     "/api/watch/add": ("ported", "Watch a topic. The phone holds it on a stale link (it turns something on) and shows a card if the PC raises one."),

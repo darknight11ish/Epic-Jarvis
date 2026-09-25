@@ -520,6 +520,12 @@ object JarvisRuntime {
                     live = _link.value == LinkState.CONNECTED && !_stale.value,
                 )
             },
+            // "Say 'One moment' if I'm kept waiting" (Checks), read when a
+            // tool starts during a spoken question.
+            oneMoment = { clientSettings.oneMoment.value },
+            // Where the owner cut a spoken answer off: sent once, with the
+            // next question (typed or spoken), as `interrupted`.
+            onCutOff = { said -> chatSession.cutOff.cut(said, android.os.SystemClock.elapsedRealtime()) },
         ) { text, onRoute, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
@@ -1053,6 +1059,11 @@ object JarvisRuntime {
                 // Counted for "private answers stay on screen": an answer a
                 // tool helped write is not read aloud (PrivateAloud).
                 if (com.jarvis.client.voice.PrivateAloud.isToolRun(event.data)) toolRuns += 1
+                // A tool starting during a spoken question: "One moment."
+                // (once per question, before the answer makes a sound).
+                if (com.jarvis.client.voice.VoiceFlow.isToolStart(event.data) && started) {
+                    voice.toolStarted()
+                }
                 val line = com.jarvis.client.net.Steps.Line(
                     com.jarvis.client.net.Steps.clock(System.currentTimeMillis()),
                     com.jarvis.client.net.Steps.text(event.data),

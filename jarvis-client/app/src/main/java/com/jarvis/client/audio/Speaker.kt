@@ -67,6 +67,15 @@ class Speaker(private val context: Context) {
     @Volatile private var cancelled = false
 
     /**
+     * Paused while the PC checks whether the owner is talking over Jarvis
+     * (interrupting by talking, voice/VoiceFlow.kt): [play] holds where it
+     * is - the sound already queued in the track is paused too - until
+     * [resume], or [stop] ends it. Only [play]'s path (the PC's voice) can
+     * pause; the phone's own fallback voice ([speakOnDevice]) plays on.
+     */
+    @Volatile private var paused = false
+
+    /**
      * Play as a voice call, so the phone's echo canceller can take Jarvis's
      * voice back out of what the microphone hears (barge-in: "stop" or "hey
      * Jarvis" while it talks). Set by the "hey Jarvis" listener only while
@@ -149,6 +158,58 @@ class Speaker(private val context: Context) {
      */
     fun arm() {
         cancelled = false
+        paused = false
+    }
+
+    /** Holds the reply where it is (see [paused]). */
+    fun pause() {
+        paused = true
+    }
+
+    /** Carries on from where [pause] held it. */
+    fun resume() {
+        paused = false
+    }
+
+    /**
+     * A short sound of the phone's own - "I heard you" (voice/VoiceFlow.kt
+     * `HeardSound`) - played once and forgotten. Not a reply: it neither
+     * reads nor clears the stop flag, and nothing waits for it. A failure is
+     * logged and ignored; the sound is a courtesy.
+     */
+    fun playTone(pcm: ShortArray, rate: Int) {
+        if (pcm.isEmpty()) return
+        runCatching {
+            val out = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(rate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build(),
+                )
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .setBufferSizeInBytes(pcm.size * 2)
+                .build()
+            out.write(pcm, 0, pcm.size)
+            // Released once it has played (a static track plays from its
+            // own buffer): the marker fires at the last frame.
+            out.notificationMarkerPosition = pcm.size
+            out.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
+                override fun onMarkerReached(track: AudioTrack?) {
+                    runCatching { track?.release() }
+                }
+
+                override fun onPeriodicNotification(track: AudioTrack?) = Unit
+            })
+            out.play()
+        }.onFailure { Log.w(TAG, "could not play the heard-you sound", it) }
     }
 
     /** Plays a WAV the desktop synthesised. Real levels, straight off the samples. */
@@ -203,6 +264,10 @@ class Speaker(private val context: Context) {
             var i = 0
             val chunk = 1024
             while (i < pcm.size && !cancelled) {
+                // Held while the PC checks an interruption: the track too, so
+                // what is already queued in it stops sounding at once.
+                if (paused) holdWhilePaused(out)
+                if (cancelled) break
                 val n = minOf(chunk, pcm.size - i)
                 // write() returns a NEGATIVE error code rather than throwing, so
                 // a non-positive result is the end of the road, not a short write.
@@ -230,10 +295,24 @@ class Speaker(private val context: Context) {
         }
     }
 
+    /** Pauses [out] until [resume] or [stop]; then plays on (unless stopped). */
+    private suspend fun holdWhilePaused(out: AudioTrack) {
+        runCatching { out.pause() }
+        _level.value = null
+        while (paused && !cancelled) delay(PAUSE_POLL_MS)
+        if (!cancelled) runCatching { out.play() }
+    }
+
     /** Waits until the track has played [frames] frames, or a short bound passes. */
     private suspend fun drain(out: AudioTrack, frames: Int) {
-        val deadline = System.currentTimeMillis() + DRAIN_MAX_MS
+        var deadline = System.currentTimeMillis() + DRAIN_MAX_MS
         while (!cancelled && System.currentTimeMillis() < deadline) {
+            if (paused) {
+                // A pause during the tail: held, and the wait starts again after.
+                holdWhilePaused(out)
+                deadline = System.currentTimeMillis() + DRAIN_MAX_MS
+                continue
+            }
             val head = runCatching { out.playbackHeadPosition }.getOrDefault(Int.MAX_VALUE)
             if (head >= frames) return
             delay(DRAIN_POLL_MS)
@@ -379,6 +458,7 @@ class Speaker(private val context: Context) {
     /** Stops whichever path is speaking. */
     fun stop() {
         cancelled = true
+        paused = false
         runCatching { track?.pause() }
         runCatching { tts?.stop() }
         _level.value = null
@@ -432,5 +512,8 @@ class Speaker(private val context: Context) {
         /** Longest the tail is waited for; one buffer is a few tens of ms. */
         const val DRAIN_MAX_MS = 1_500L
         const val DRAIN_POLL_MS = 20L
+
+        /** How often a paused reply looks again for resume or stop. */
+        const val PAUSE_POLL_MS = 20L
     }
 }

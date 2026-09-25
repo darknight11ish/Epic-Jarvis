@@ -106,7 +106,7 @@ on a throwaway copy instead.
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 | `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. |
 | `voice-flow.patch` | `jarvis_hud.py` | **Interrupting Jarvis by talking, the delay in numbers, and "One moment."** `?source=barge_in` on `/api/voice/utterance` answers only "stop or not" (the owner's voice or the word "stop"; never the TV, never Jarvis's own voice) and is never transcribed; `&waited_ms=` is passed on for the delay's numbers; adds `GET /api/voice/moment` (the "One moment." clip in the voice in use now). Last in the list, after `voice-mic.patch` and `voices.patch` (textual). Needs `jarvis_voice_flow.py` - see "The voice flow", at the very end. |
-| `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them, and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
+| `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them (`provenance`, `conversation_id`, `device`, and since 2026-09-25 `interrupted` - the voice flow's cut-off sentence), and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
 | `auto-learn.patch` | `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py` | **Jarvis learns automatically, from your own words only** (the owner's decision, 2026-09-24). A proposal is saved without a card only when every check in `jarvis_auto_learn.py` passes; the rest stay cards, each saying why. Adds `GET /api/memory/learning`, `GET /api/memory/auto`, `POST /api/memory/learning/auto` and `/sensitive` (each ON is one approval card), `jarvis_extract.accept_auto()`, facts that keep their proposal's source, the learner's refusal of an Ollama cloud model, and quote marks round recalled facts. Last in the list, after `chat-history.patch`. Needs `jarvis_auto_learn.py` - see its own section, after chat-history. |
 | `memory-erase.patch` | `jarvis_hud.py` | **"Erase the words"** (the owner's decision, 2026-09-24). Adds `POST /api/memory/erase {"id"}`: ONE fact's words wiped for good - its text, its word-search entry, its meaning vector, the copies in the review queue, and the old bytes in `memory.db` and `memory.db-wal` - while its row and dates stay. Same checks as forget, no card. The work is in the shipped `rebuilt/jarvis_memory.py` (`erase()`, `handle_erase()`). See its own section. |
 | `past-recall.patch` | `jarvis_hud.py` | **Questions about the past get the old facts, labelled** (memory wave 1, 2026-09-24). "Where did I live before?" also recalls the matching retired facts, each ending "(no longer true since <date>)"; every other question gets exactly the search it got before. One line of the chat turn's recall. After `auto-learn.patch`. Needs `jarvis_past.py` - without it the old search runs. See "Memory wave 1", near the end. |
@@ -6798,9 +6798,11 @@ model's licence reads on its NGC page.
 
 # The voice flow: `voice-flow.patch` and `jarvis_voice_flow.py`
 
-Three things the owner decided on 2026-09-24, built on the PC first. **The
-apps do not use any of it yet** - two other sessions are building the voice
-screens. `docs/JARVIS-API.md` section 17 is exactly what they build against.
+Three things the owner decided on 2026-09-24, built on the PC first, and in
+**both apps since 2026-09-25** (`docs/JARVIS-API.md` section 17, part 5),
+with two more the owner moved up the same day: keeping listening after
+Jarvis asks a question, and telling the model when you cut an answer off
+(parts 6 and 7, and "Two additions, 2026-09-25" below).
 
 ## What it does, in plain words
 
@@ -6832,6 +6834,42 @@ before speech-to-text, always.
 finish, an app can play a short "One moment." in the voice Jarvis is using.
 The PC makes it once per voice and keeps it; the apps decide when to play it,
 and never over the answer.
+
+**What the apps do with it (2026-09-25).** While Jarvis talks and "hey
+Jarvis" listening is on, half a second of your speech **pauses** Jarvis at
+once, and about two seconds of it go to the PC with the question above: your
+voice (or "stop") stops Jarvis for good; anything else, or no answer within
+four seconds, and Jarvis carries on from where it paused. The first three
+seconds of each answer are ignored (that is when Jarvis's own voice most
+often comes back through the microphone); "stop" works from the first word
+as before. "One moment." is played when Jarvis starts a tool for a spoken
+question - once, and only before the answer makes a sound - not on a timer;
+each app has a switch for it, "Say "One moment" if I'm kept waiting", on by
+default. A tiny "I heard you" sound plays when your turn is taken.
+
+## Two additions, 2026-09-25
+
+**Keep listening after a question.** When the last sentence Jarvis spoke
+ends with a question mark, your next hands-free sentence needs no "hey
+Jarvis" - the same short window as after "Hey Jarvis." on its own
+(`awake_timeout_s`, 8 seconds, counted from when the question finished
+playing). Your voice is still checked first; a sound that is not you (the
+TV, Jarvis's own voice) does not use the window up. It is in
+`jarvis_speech.py` (`say()` opens it, `hear()` uses it); no new route. The
+phone opens its microphone for it by itself; the desktop's listener is
+always listening anyway.
+
+**Telling the model it was cut off.** When you stop Jarvis mid-answer (by
+talking over it, "stop", "hey Jarvis" or the talk button), your next
+question carries the sentence you heard last. The PC adds one line for its
+own model, just before your question: the answer was cut off there, so do
+not carry on as if you heard the rest. It is Jarvis's own words, so it is
+never learned from and never kept as yours: a system line for this PC's
+model only (`jarvis_agent.py`, `with_cut_off_note`), and `chat-history.patch`
+takes the field (`interrupted`) off before any model or the relay sees the
+conversation. The apps send it only to a PC whose status says it keeps it
+here (`flow.cut_off`). Tests: `test_cut_off_note.py`, and
+`test_wakeword.py` for the question window.
 
 **The switches** are three lines in the `[voice]` part of
 `jarvis-framework.toml`, all on unless you set them false (they are written

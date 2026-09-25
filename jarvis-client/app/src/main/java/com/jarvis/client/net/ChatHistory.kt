@@ -2,6 +2,7 @@ package com.jarvis.client.net
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -191,21 +192,33 @@ object ChatHistory {
      * ([ChatPicture.userContent]), the shape the desktop sends. Earlier turns
      * are always words only.
      */
-    fun messages(window: List<Exchange>, asking: List<UserTurn>, picture: String? = null): JsonArray =
+    fun messages(
+        window: List<Exchange>,
+        asking: List<UserTurn>,
+        picture: String? = null,
+        interrupted: String? = null,
+    ): JsonArray =
         buildJsonArray {
             for (ex in window) {
                 for (u in ex.asked) add(userTurn(u))
                 add(turn("assistant", ex.answer))
             }
             asking.forEachIndexed { i, u ->
+                // Where the owner cut the last spoken answer off (the
+                // voice flow, docs/JARVIS-API.md section 17, 6): on the
+                // NEWEST message only, never replayed with the history.
+                val cut = interrupted?.takeIf { i == asking.lastIndex && it.isNotBlank() }
                 if (picture != null && i == asking.lastIndex) {
                     add(
                         buildJsonObject {
                             put("role", "user")
                             put("content", ChatPicture.userContent(u.text, picture))
                             put("provenance", u.provenance)
+                            if (cut != null) put("interrupted", cut)
                         },
                     )
+                } else if (cut != null) {
+                    add(JsonObject(userTurn(u) + ("interrupted" to JsonPrimitive(cut))))
                 } else {
                     add(userTurn(u))
                 }
@@ -225,9 +238,10 @@ object ChatHistory {
         asking: List<UserTurn>,
         picture: String? = null,
         conversationId: String? = null,
+        interrupted: String? = null,
     ): String =
         buildJsonObject {
-            put("messages", messages(window, asking, picture))
+            put("messages", messages(window, asking, picture, interrupted))
             put("has_image", picture != null)
             put("stream", true)
             put("auto", true)

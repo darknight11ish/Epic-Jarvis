@@ -86,6 +86,14 @@ permissions = [
   "allow-start-automatic-listening",
   "allow-stop-automatic-listening",
   "allow-speak-reply",
+  # Interrupting by talking (voice_flow.rs): ask for one utterance the
+  # listener already heard to be checked by the PC as "stop or not" - never
+  # transcribed, sent only to this PC's Jarvis. Records nothing itself.
+  "allow-judge-barge-in",
+  # The `flow` block of /api/voice/status (a read), and the "One moment."
+  # clip (GET /api/voice/moment).
+  "allow-get-voice-flow",
+  "allow-get-voice-moment",
 ]
 
 # The HUD's mic button, and nothing else. The HUD loads a page vendored from

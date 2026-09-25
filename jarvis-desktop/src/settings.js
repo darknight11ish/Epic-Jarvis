@@ -42,6 +42,7 @@ import {
   THEMES,
 } from "./jarvis-link.js";
 import { BARGE_IN_KEY, describeBargeIn, loadBargeIn, saveBargeIn } from "./barge-in.js";
+import { describeMoment, loadMoment, MOMENT_KEY, saveMoment } from "./voice-flow.js";
 import {
   checkLine as voiceCheckLine,
   isTrained as voiceIsTrained,
@@ -2336,6 +2337,32 @@ if (bargeIn) {
     if (event.key === BARGE_IN_KEY) paintBargeIn();
   });
   paintBargeIn();
+}
+
+/* "Say 'One moment' if I'm kept waiting" - this PC's own too (voice-flow.js),
+   read by the Jarvis bar when a tool starts during a spoken question. */
+const oneMoment = $("voice-one-moment");
+const oneMomentDetail = $("voice-one-moment-detail");
+
+function paintOneMoment() {
+  if (!oneMoment) return;
+  const on = loadMoment();
+  oneMoment.checked = on;
+  oneMomentDetail.textContent = describeMoment(on);
+}
+
+if (oneMoment) {
+  oneMoment.addEventListener("change", () => {
+    if (!saveMoment(oneMoment.checked)) {
+      announce("That could not be saved on this PC.", "assertive");
+    }
+    paintOneMoment();
+    announce(oneMomentDetail.textContent);
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === MOMENT_KEY) paintOneMoment();
+  });
+  paintOneMoment();
 }
 
 onQueue(() => {

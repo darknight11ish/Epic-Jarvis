@@ -1,0 +1,153 @@
+{
+  "about": "How both apps interrupt Jarvis by talking, when they play \"One moment.\", and the small \"I heard you\" sound (docs/JARVIS-API.md section 17). Written by hand: these are the apps' own rules, with no backend answer to record. Read by jarvis-desktop/tests/voice-flow.mjs (src/voice-flow.js) and jarvis-client VoiceFlowTest.kt (voice/VoiceFlow.kt). The numbers must be the ones each app uses; every scenario is played through each app's pure rules, step by step, and must give `expect` at every step that has one. Times are milliseconds on one clock.",
+  "numbers": {
+    "grace_ms": 3000,
+    "onset_ms": 500,
+    "clip_ms": 2000,
+    "end_quiet_ms": 700,
+    "wait_max_ms": 4000
+  },
+  "interrupt": [
+    {
+      "name": "talking over the first 3 seconds of a reply is ignored (echo), later it pauses",
+      "steps": [
+        {"at": 0, "do": "reply_started"},
+        {"at": 1200, "do": "onset", "id": 1, "allowed": true, "expect": "none"},
+        {"at": 2999, "do": "onset", "id": 2, "allowed": true, "expect": "none"},
+        {"at": 3000, "do": "onset", "id": 3, "allowed": true, "expect": "pause"}
+      ]
+    },
+    {
+      "name": "the PC says it was the owner: stop for good",
+      "steps": [
+        {"at": 0, "do": "reply_started"},
+        {"at": 4000, "do": "onset", "id": 7, "allowed": true, "expect": "pause"},
+        {"at": 5800, "do": "verdict", "id": 7, "stop": true, "expect": "stop"},
+        {"at": 9000, "do": "tick", "expect": "none"},
+        {"at": 9100, "do": "onset", "id": 8, "allowed": true, "expect": "none"}
+      ]
+    },
+    {
+      "name": "the PC says it was not the owner: carry on",
+      "steps": [
+        {"at": 0, "do": "reply_started"},
+        {"at": 4000, "do": "onset", "id": 7, "allowed": true, "expect": "pause"},
+        {"at": 5800, "do": "verdict", "id": 7, "stop": false, "expect": "resume"},
+        {"at": 9000, "do": "tick", "expect": "none"}
+      ]
+    },
+    {
+      "name": "no answer from the PC: carry on after the wait, and a late stop still stops",
+      "steps": [
+        {"at": 0, "do": "reply_started"},
+        {"at": 4000, "do": "onset", "id": 7, "allowed": true, "expect": "pause"},
+        {"at": 7999, "do": "tick", "expect": "none"},
+        {"at": 8000, "do": "tick", "expect": "resume"},
+        {"at": 8001, "do": "tick", "expect": "none"},
+        {"at": 8300, "do": "verdict", "id": 7, "stop": true, "expect": "stop"}
+      ]
+    },
+    {
+      "name": "a late 'carry on' after the wait changes nothing",
+      "steps": [
+        {"at": 0, "do": "reply_started"},
+        {"at": 4000, "do": "onset", "id": 7, "allowed": true, "expect": "pause"},
+        {"at": 8000, "do": "tick", "expect": "resume"},
+        {"at": 8300, "do": "verdict", "id": 7, "stop": false, "expect": "none"}
+      ]
+    },
+    {
+      "name": "switched off, or the PC cannot tell the owner's voice: never pauses",
+      "steps": [
+        {"at": 0, "do": "reply_started"},
+        {"at": 4000, "do": "onset", "id": 1, "allowed": false, "expect": "none"},
+        {"at": 4100, "do": "verdict", "id": 1, "stop": true, "expect": "none"}
+      ]
+    },
+    {
+      "name": "before the reply makes a sound, nothing pauses; an answer for another clip is ignored",
+      "steps": [
+        {"at": 0, "do": "onset", "id": 1, "allowed": true, "expect": "none"},
+        {"at": 100, "do": "reply_started"},
+        {"at": 3050, "do": "onset", "id": 2, "allowed": true, "expect": "none"},
+        {"at": 5000, "do": "onset", "id": 3, "allowed": true, "expect": "pause"},
+        {"at": 5100, "do": "onset", "id": 4, "allowed": true, "expect": "none"},
+        {"at": 5200, "do": "verdict", "id": 2, "stop": true, "expect": "none"},
+        {"at": 5300, "do": "verdict", "id": 3, "stop": false, "expect": "resume"}
+      ]
+    },
+    {
+      "name": "a new reply starts its own grace period",
+      "steps": [
+        {"at": 0, "do": "reply_started"},
+        {"at": 4000, "do": "onset", "id": 1, "allowed": true, "expect": "pause"},
+        {"at": 4500, "do": "reply_ended"},
+        {"at": 4600, "do": "verdict", "id": 1, "stop": true, "expect": "none"},
+        {"at": 10000, "do": "reply_started"},
+        {"at": 12000, "do": "onset", "id": 2, "allowed": true, "expect": "none"},
+        {"at": 13000, "do": "onset", "id": 3, "allowed": true, "expect": "pause"}
+      ]
+    }
+  ],
+  "moment": [
+    {
+      "name": "a tool starting plays it once per turn",
+      "steps": [
+        {"do": "turn_started"},
+        {"do": "tool_started", "enabled": true, "ready": true, "expect": true},
+        {"do": "tool_started", "enabled": true, "ready": true, "expect": false},
+        {"do": "turn_started"},
+        {"do": "tool_started", "enabled": true, "ready": true, "expect": true}
+      ]
+    },
+    {
+      "name": "never once the reply has made a sound, never after stop, never outside a spoken turn",
+      "steps": [
+        {"do": "tool_started", "enabled": true, "ready": true, "expect": false},
+        {"do": "turn_started"},
+        {"do": "reply_started"},
+        {"do": "tool_started", "enabled": true, "ready": true, "expect": false},
+        {"do": "turn_started"},
+        {"do": "stopped"},
+        {"do": "tool_started", "enabled": true, "ready": true, "expect": false},
+        {"do": "turn_started"},
+        {"do": "turn_ended"},
+        {"do": "tool_started", "enabled": true, "ready": true, "expect": false}
+      ]
+    },
+    {
+      "name": "switched off, or no clip yet: nothing, and a later tool in the same turn may still play it",
+      "steps": [
+        {"do": "turn_started"},
+        {"do": "tool_started", "enabled": false, "ready": true, "expect": false},
+        {"do": "tool_started", "enabled": true, "ready": false, "expect": false},
+        {"do": "tool_started", "enabled": true, "ready": true, "expect": true}
+      ]
+    }
+  ],
+  "question_about": "Keep listening after a question: when the last sentence Jarvis spoke ends with one of `question_marks` (closing quotes and brackets after it allowed; a plain \";\" only in Greek text, where Unicode folds the Greek question mark into it), the next hands-free clip needs no \"hey Jarvis\". Read by backend test_wakeword.py (jarvis_speech.ends_with_question) and the phone's VoiceFlowTest.kt (VoiceFlow.endsWithQuestion).",
+  "question_marks": ["?", "？", ";"],
+  "question_cases": [
+    {"text": "Shall I book it?", "question": true},
+    {"text": "Shall I book it? ", "question": true},
+    {"text": "Did you mean \"Porto?\"", "question": true},
+    {"text": "(Or tomorrow?)", "question": true},
+    {"text": "明天吗？", "question": true},
+    {"text": "Τι ώρα είναι;", "question": true},
+    {"text": "Τι ώρα είναι;", "question": true},
+    {"text": "Bring a coat; it will rain;", "question": false},
+    {"text": "It is ten o'clock.", "question": false},
+    {"text": "Why? Because it rained.", "question": false},
+    {"text": "", "question": false},
+    {"text": "?", "question": true}
+  ],
+  "heard_sound": {
+    "rate": 24000,
+    "tones": [{"hz": 660, "ms": 55}, {"hz": 990, "ms": 75}],
+    "gap_ms": 25,
+    "fade_ms": 10,
+    "gain": 0.16,
+    "samples": 3720,
+    "peak_at_most": 5243
+  }
+}

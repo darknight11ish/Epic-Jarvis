@@ -27,6 +27,8 @@ import com.jarvis.client.R
 import com.jarvis.client.audio.Wav
 import com.jarvis.client.net.Heard
 import com.jarvis.client.voice.BargeIn
+import com.jarvis.client.voice.SpeechRun
+import com.jarvis.client.voice.VoiceFlow
 import com.jarvis.client.voice.OrtTurnModel
 import com.jarvis.client.voice.OrtWakeModels
 import com.jarvis.client.voice.SmartTurn
@@ -86,11 +88,16 @@ import kotlinx.coroutines.launch
  * on ([BargeIn]; on by default only where the phone has an echo canceller).
  * Then, while Jarvis speaks, it listens through Android's echo canceller
  * (the voice-call microphone, with the reply played as a voice call so the
- * canceller can take it back out) for two things only: "stop", which
- * silences the reply and does nothing else, and "hey Jarvis", which silences
+ * canceller can take it back out) for three things only: "stop", which
+ * silences the reply and does nothing else; "hey Jarvis", which silences
  * it and records what follows - sent to the PC and checked exactly like any
- * other "hey Jarvis". While the talk button records, it lets go of the
- * microphone entirely.
+ * other "hey Jarvis"; and, since 2026-09-25, half a second of any speech,
+ * which PAUSES the reply and sends about two seconds of it to the PC as
+ * `source=barge_in` - "was that the owner?", never transcribed - to stop it
+ * for good or carry on (voice/VoiceFlow.kt). After an answer that ends with
+ * a question, the owner's reply is recorded without waiting for the phrase
+ * (the PC keeps the same window open). While the talk button records, it
+ * lets go of the microphone entirely.
  */
 class WakeWordService : Service() {
 
@@ -221,6 +228,8 @@ class WakeWordService : Service() {
                         _state.value = WakeListen.Heard
                         goForeground(getString(R.string.wake_heard_text))
                         var clip: ShortArray? = recordUntilPause(rec, ring.snapshot(), GRACE_SECONDS, turnModel)
+                        // The owner's turn is cut: a small "I heard you".
+                        voice.heardYou()
                         // Not recording on this microphone while the desktop
                         // answers and Jarvis speaks: its own voice must not
                         // wake it. (With barge-in on, the echo-cancelled one
@@ -240,12 +249,34 @@ class WakeWordService : Service() {
                                     turnModel,
                                 )
                                 runCatching { rec.stop() }
+                                voice.heardYou()
                                 val answered = answerListening(next, models, stopHead, turnModel)
                                 verdict = answered.first
                                 cutIn = answered.second
                             }
                             if (verdict != null && WakeRules.verdict(verdict) == WakeRules.Verdict.STOP) {
                                 return fail(verdict.reason.ifBlank { "The desktop stopped taking \"hey Jarvis\"." })
+                            }
+                            // Jarvis ended its answer with a question: the
+                            // owner's reply needs no "hey Jarvis" (the PC
+                            // opened the same window when it made that
+                            // sentence's sound; its owner check still runs).
+                            // Recorded like the sentence after "Hey Jarvis."
+                            // alone, and sent only if it holds speech.
+                            if (cutIn == null && running && voice.askedBack()) {
+                                rec.startRecording()
+                                val reply = recordUntilPause(
+                                    rec,
+                                    ShortArray(0),
+                                    voice.status.value.wake.awakeSeconds.toFloat().coerceIn(2f, 15f),
+                                    turnModel,
+                                )
+                                runCatching { rec.stop() }
+                                if (running && VoiceFlow.trailingQuietMs(reply) != null) {
+                                    voice.heardYou()
+                                    clip = reply
+                                    continue
+                                }
                             }
                             // "Hey Jarvis" said over the reply: that sentence
                             // is the next clip, through every check again.
@@ -383,14 +414,17 @@ class WakeWordService : Service() {
             return@coroutineScope null to null
         }
         val wav = Wav.encode(clip)
-        if (!bargeInOn()) return@coroutineScope voice.deliverWakeClip(wav) to null
+        // How long it had been quiet when the clip went (`waited_ms`,
+        // docs/JARVIS-API.md section 17): a number for the PC's delay table.
+        val waited = VoiceFlow.trailingQuietMs(clip)
+        if (!bargeInOn()) return@coroutineScope voice.deliverWakeClip(wav, waited) to null
         // Voice-call mode is entered by listenWhileAnswering when the reply
         // starts (SPEAKING), not here: the PC may take many seconds to check
         // and answer, and until it speaks there is nothing to cancel the echo
         // of - only the phone's audio switched into call mode for no reason.
         // Ended here in every case (safe when it never started).
         try {
-            val turn = async { voice.deliverWakeClip(wav) }
+            val turn = async { voice.deliverWakeClip(wav, waited) }
             val cutIn = listenWhileAnswering({ turn.isActive }, models, stopHead, turnModel)
             turn.await() to cutIn
         } finally {
@@ -448,9 +482,53 @@ class WakeWordService : Service() {
             val ring = WakeClip.Ring((WakeClip.PREROLL_SECONDS * RATE).toInt())
             val buf = ShortArray(WakeSpotter.CHUNK)
             val stops = ArrayList<Float>(4)
+            // Interrupting by talking (VoiceFlow.kt): loudness only - half a
+            // second of speech pauses the reply (when VoiceSession allows it)
+            // and about two seconds of it, from where it began, go to the PC
+            // to ask "was that the owner?". Never turned into words here or
+            // there. "Stop" and "hey Jarvis" below work exactly as before.
+            val speech = SpeechRun()
+            var judging: Long? = null
+            var heard: ShortArray? = null
+            var heardCount = 0
+            val stepMs = WakeSpotter.CHUNK * 1000L / RATE
             while (running && answering() && voice.phase.value == VoiceSession.Phase.SPEAKING) {
                 if (!readFully(rec, buf)) return null
                 ring.push(buf)
+                val now = SystemClock.elapsedRealtime()
+                val event = speech.step(now, Wav.rms(buf, buf.size), stepMs)
+                val collecting = heard
+                if (collecting != null && heardCount + buf.size <= collecting.size) {
+                    System.arraycopy(buf, 0, collecting, heardCount, buf.size)
+                    heardCount += buf.size
+                }
+                when (event) {
+                    SpeechRun.Event.ONSET -> voice.bargeOnset()?.let { id ->
+                        // From just before the speech began: the ring holds
+                        // the last two seconds, this buffer included.
+                        val since = (now - (speech.startedAt ?: now) + VoiceFlow.PREROLL_MS)
+                        val keep = (since * RATE / 1000L).toInt()
+                        val past = ring.snapshot().let { it.copyOfRange(maxOf(0, it.size - keep), it.size) }
+                        val room = ((VoiceFlow.CLIP_MS + VoiceFlow.PREROLL_MS + 500L) * RATE / 1000L).toInt()
+                        heard = ShortArray(maxOf(room, past.size)).also { System.arraycopy(past, 0, it, 0, past.size) }
+                        heardCount = past.size
+                        judging = id
+                    }
+                    SpeechRun.Event.CLIP_DUE -> {
+                        val id = judging
+                        val clip = heard
+                        if (id != null && clip != null) {
+                            val wav = Wav.encode(clip.copyOf(heardCount))
+                            // Not waited for here: this loop must keep reading
+                            // the microphone (its buffer holds under a second).
+                            scope.launch { voice.judgeBargeIn(id, wav) }
+                        }
+                        judging = null
+                        heard = null
+                        heardCount = 0
+                    }
+                    SpeechRun.Event.NONE -> Unit
+                }
                 stops.clear()
                 val wakes = spotter.feed(buf, buf.size) { w -> stops.add(stopHead?.score(w) ?: 0f) }
                 val wakeThreshold = WakeRules.threshold(voice.status.value)
@@ -481,6 +559,7 @@ class WakeWordService : Service() {
                             voice.interruptForWake()
                             _state.value = WakeListen.Heard
                             return recordUntilPause(rec, ring.snapshot(), GRACE_SECONDS, turnModel)
+                                .also { voice.heardYou() }
                         }
                         BargeIn.Action.NONE -> Unit
                     }

@@ -116,6 +116,20 @@ import {
 import { startVoice, setVoiceMode } from "./voice.js";
 import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
 import {
+  createCutOff,
+  createInterruptFlow,
+  createMomentFlow,
+  flowFromStatus,
+  HEARD_SOUND,
+  heardSoundSamples,
+  isToolStart,
+  loadMoment,
+  PAUSE,
+  RESUME,
+  STOP,
+  WAIT_MAX_MS,
+} from "./voice-flow.js";
+import {
   createToolWatch,
   mayReadAloud,
   privacyFromHeard,
@@ -2376,6 +2390,18 @@ async function send(promptText, provenance = "typed") {
   // tools - not their own.
   speechQueue = [];
   aheadClip = null;
+  // Interrupting by talking starts again with this answer (its own three
+  // seconds of grace), and "One moment." may be said once for it - only
+  // when it was asked out loud (voice-flow.js).
+  interrupt.replyEnded();
+  endPause();
+  lastPlayedText = null;
+  if (state.voiceTurn) {
+    momentFlow.turnStarted();
+    refreshVoiceFlow();
+  } else {
+    momentFlow.turnEnded();
+  }
   // Nothing is known yet about whether this answer is private.
   state.turnRoute = null;
   state.toolRan = false;
@@ -2451,7 +2477,7 @@ async function send(promptText, provenance = "typed") {
       ...(state.clipboard
         ? [userMessage(`Context:\n${state.clipboard}`, "clipboard")]
         : []),
-      userMessage(content, state.turnProvenance),
+      withCutOff(userMessage(content, state.turnProvenance)),
     ],
     hasImage: Boolean(state.capture),
     auto: true,
@@ -2614,6 +2640,8 @@ function finishStream(phase, statusText) {
   // leaves behind.
   const wasVoiceTurn = state.voiceTurn;
   state.voiceTurn = false;
+  // No tool can start for this answer any more: no "One moment." after it.
+  momentFlow.turnEnded();
   if (wasVoiceTurn && phase !== "error" && !speechMuted) {
     const remainder = state.buffer.slice(spokenUpTo).trim();
     if (remainder) enqueueSpeech(remainder);
@@ -2667,9 +2695,13 @@ async function startPushToTalk() {
   if (micRecording || state.autoListening) return;
   // Barge-in: holding the mic to talk again is as clear a signal as this
   // app gets that whatever Jarvis was saying is done mattering right now.
+  noteCutOff();
   stopSpeaking();
   micRecording = true;
   dom.mic.setAttribute("aria-pressed", "true");
+  // While the owner talks: what the PC allows now, and its "One moment."
+  // clip, so both are here before the answer needs them.
+  refreshVoiceFlow();
   try {
     await invokeStrict("start_voice_capture");
   } catch (error) {
@@ -2683,6 +2715,8 @@ async function stopPushToTalk() {
   if (!micRecording) return;
   micRecording = false;
   dom.mic.setAttribute("aria-pressed", "false");
+  // The owner's turn is over: a small "I heard you" (voice-flow.js).
+  playHeardSound();
   try {
     const heard = await invokeStrict("stop_voice_capture");
     if (!heard.available) {
@@ -2764,6 +2798,31 @@ let clipPlaying = false;
  *  Dropped by "stop", by a new question, and when the answer turns out to
  *  be private; checked again right before it is played either way. */
 let aheadClip = null;
+
+/** Interrupting by talking and "One moment." (voice-flow.js): the rules,
+ *  and what the PC allows (`get_voice_flow`, the `flow` block of
+ *  /api/voice/status - nothing, until it says). */
+const interrupt = createInterruptFlow();
+const momentFlow = createMomentFlow();
+/** Where the owner last cut a spoken answer off, for the next question. */
+const cutOff = createCutOff();
+/** The sentence playing now, and the last one that started - for `cutOff`. */
+let playingText = null;
+let lastPlayedText = null;
+let voiceFlow = flowFromStatus(null);
+/** The "One moment." clip, `{key, uri}`, fetched again when the PC's key
+ *  changes (another voice). */
+let momentClip = null;
+/** The reply is paused while the PC checks whether the owner is talking. */
+let speechPaused = false;
+/** Clips waiting to start until the pause ends. */
+let pauseWaiters = [];
+/** Carries on after `WAIT_MAX_MS` with no answer from the PC. */
+let pauseTimer = null;
+/** "One moment." while it plays, and the promise of its end. */
+let momentAudio = null;
+let momentDone = null;
+let finishMoment = null;
 
 /** A rough pass at making streamed markdown speakable. Not a renderer - just
  *  enough that "**bold**" is not read aloud as "asterisk asterisk bold
@@ -2932,7 +2991,7 @@ async function drainSpeechQueue() {
         continue;
       }
       if (!dataUri) continue;
-      await playClip(dataUri, generation);
+      await playClip(dataUri, generation, clip.text);
       if (generation !== speechGeneration) return;
     }
   } finally {
@@ -2949,12 +3008,33 @@ async function drainSpeechQueue() {
 
 /** Plays one clip to its end (or until "stop"), asking for the next
  *  line's sound as it starts. */
-async function playClip(dataUri, generation) {
+async function playClip(dataUri, generation, text = "") {
+  // The reply is about to make a sound: "One moment." is not started after
+  // this, and one already playing is let finish first (it is under a
+  // second) - never over the reply.
+  momentFlow.replyStarted();
+  if (momentAudio && momentDone) await momentDone;
+  // Paused while the PC checks whether the owner is talking: this clip
+  // waits, and is dropped if the answer was "stop".
+  if (speechPaused) await new Promise((resolve) => pauseWaiters.push(resolve));
+  if (generation !== speechGeneration) return;
   const audio = new Audio(dataUri);
   currentAudio = audio;
   clipPlaying = true;
+  // "It's on your screen." is not a sentence of the answer.
+  const own = text && text !== PRIVATE_LINE ? text : null;
+  playingText = own;
+  if (own) lastPlayedText = own;
   try {
-    await audio.play();
+    try {
+      await audio.play();
+    } catch (error) {
+      // Paused (an interruption being checked) before it could begin: it
+      // starts when the pause ends - resumeSpeaking plays `currentAudio` -
+      // instead of being skipped.
+      if (!(speechPaused && currentAudio === audio)) throw error;
+    }
+    interrupt.replyStarted(performance.now());
     prefetchNextClip();
     await new Promise((resolve) => {
       if (currentAudio !== audio) return resolve();
@@ -2965,6 +3045,7 @@ async function playClip(dataUri, generation) {
   } catch (error) {
     console.info("[quickbar] spoken reply unavailable:", error);
   } finally {
+    if (playingText === own) playingText = null;
     if (generation === speechGeneration) {
       clipPlaying = false;
       currentAudio = null;
@@ -2981,6 +3062,10 @@ async function playClip(dataUri, generation) {
 function stopSpeaking() {
   speechMuted = true;
   speechGeneration += 1;
+  interrupt.replyEnded();
+  momentFlow.stopped();
+  stopMoment();
+  endPause();
   speechQueue = [];
   // A clip made ahead is dropped with the rest (its generation is old now,
   // so it would not be played anyway).
@@ -3006,6 +3091,165 @@ function jarvisTalking() {
   return speaking || speechQueue.length > 0 || aheadClip !== null;
 }
 
+/* -- Interrupting by talking: pause first, decide second (voice-flow.js) -- */
+
+/** Pauses the reply where it is, until the PC answers or `WAIT_MAX_MS`. */
+function pauseSpeaking() {
+  speechPaused = true;
+  if (currentAudio) currentAudio.pause();
+  clearTimeout(pauseTimer);
+  pauseTimer = setTimeout(() => actOnInterrupt(interrupt.tick(performance.now())), WAIT_MAX_MS);
+}
+
+/** Lets clips waiting on the pause go (they check "stop" themselves). */
+function endPause() {
+  speechPaused = false;
+  clearTimeout(pauseTimer);
+  pauseTimer = null;
+  const waiting = pauseWaiters;
+  pauseWaiters = [];
+  waiting.forEach((resolve) => resolve());
+}
+
+/** Carries on from where the reply paused. */
+function resumeSpeaking() {
+  if (!speechPaused) return;
+  const audio = currentAudio;
+  endPause();
+  if (audio) audio.play().catch(() => {});
+}
+
+function actOnInterrupt(action) {
+  if (action === PAUSE) pauseSpeaking();
+  else if (action === RESUME) resumeSpeaking();
+  // The owner's voice (or "stop"): silenced for good, a sentence made
+  // ahead dropped with it - and nothing else. It is not a command.
+  else if (action === STOP) {
+    noteCutOff();
+    stopSpeaking();
+  }
+}
+
+/** The owner is cutting the spoken answer off: the sentence they heard last
+ *  goes with the next question (voice-flow.js `createCutOff`), so the PC
+ *  can tell its model the answer stopped there. Only while it is talking. */
+function noteCutOff() {
+  // Only to a PC that keeps it on the PC (`flow.cut_off`): an older one
+  // could pass an unknown field on with the question.
+  if (!jarvisTalking() || speechMuted || !voiceFlow.cutOff) return;
+  cutOff.cut(playingText || lastPlayedText, performance.now());
+}
+
+/** The newest user message, with where the last answer was cut off when the
+ *  owner cut it off in the last two minutes - once (JARVIS-API section 17,
+ *  6). The PC takes the field off before any model or the relay sees it. */
+function withCutOff(message) {
+  const said = cutOff.take(performance.now());
+  return said ? { ...message, interrupted: said } : message;
+}
+
+/** What the PC allows now (`flow` of /api/voice/status), and the "One
+ *  moment." clip when its key changed. Never throws; an older PC allows
+ *  nothing. */
+async function refreshVoiceFlow() {
+  let flow = null;
+  try {
+    flow = await invokeStrict("get_voice_flow");
+  } catch {
+    flow = null;
+  }
+  voiceFlow = flowFromStatus(flow ? { flow } : null);
+  if (!voiceFlow.momentReady || !voiceFlow.momentKey) return;
+  if (momentClip && momentClip.key === voiceFlow.momentKey) return;
+  try {
+    const uri = await invokeStrict("get_voice_moment");
+    if (typeof uri === "string" && uri) momentClip = { key: voiceFlow.momentKey, uri };
+  } catch (error) {
+    console.info("[quickbar] no One moment clip:", error);
+  }
+}
+
+/** Half a second of speech while listening (voice.rs): pause the reply,
+ *  and have the PC say whether it was the owner. Only while Jarvis talks,
+ *  with the owner's switch on, a PC that can tell the owner's voice, and a
+ *  live link (rule 4); the first three seconds of a reply are ignored. */
+listen("voice-barge-onset", (event) => {
+  const id = event && event.payload ? Number(event.payload.id) : NaN;
+  if (!Number.isFinite(id)) return;
+  const allowed = loadBargeIn() && voiceFlow.bargeIn && jarvisTalking() && !speechMuted &&
+    toolWatch.snapshot().live;
+  if (interrupt.onset(performance.now(), id, allowed) !== PAUSE) return;
+  pauseSpeaking();
+  invoke("judge_barge_in", { id });
+});
+
+/** The PC's answer: stop for good (the owner, or "stop"), or carry on. */
+listen("voice-barge-verdict", (event) => {
+  const v = (event && event.payload) || {};
+  // The PC cannot tell the owner's voice now: no more checks until its
+  // status says otherwise.
+  if (v.available === false) voiceFlow = { ...voiceFlow, bargeIn: false };
+  actOnInterrupt(interrupt.verdict(Number(v.id), v.stop === true));
+});
+
+/* -- "One moment." when a tool starts (voice-flow.js) -- */
+
+function maybeSayOneMoment(data) {
+  if (!isToolStart(data) || !state.voiceTurn || speechMuted) return;
+  if (!momentFlow.toolStarted(loadMoment() && voiceFlow.moment, Boolean(momentClip))) return;
+  const audio = new Audio(momentClip.uri);
+  momentAudio = audio;
+  momentDone = new Promise((resolve) => {
+    let bound = null;
+    const end = () => {
+      clearTimeout(bound);
+      if (momentAudio === audio) momentAudio = null;
+      if (finishMoment === end) finishMoment = null;
+      resolve();
+    };
+    finishMoment = end;
+    audio.onended = end;
+    audio.onerror = end;
+    // Never holds the reply for long, whatever the audio does.
+    bound = setTimeout(end, 3000);
+    audio.play().catch(end);
+  });
+}
+
+function stopMoment() {
+  if (momentAudio) {
+    momentAudio.onended = null;
+    momentAudio.onerror = null;
+    momentAudio.pause();
+  }
+  if (finishMoment) finishMoment();
+  momentAudio = null;
+}
+
+/* -- "I heard you": a tiny sound when the owner's turn is cut -- */
+
+let heardContext = null;
+function playHeardSound() {
+  try {
+    const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!Ctx) return;
+    heardContext = heardContext || new Ctx();
+    const samples = heardSoundSamples();
+    const buffer = heardContext.createBuffer(1, samples.length, HEARD_SOUND.rate);
+    const channel = buffer.getChannelData(0);
+    samples.forEach((v, i) => {
+      channel[i] = v / 32768;
+    });
+    const source = heardContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(heardContext.destination);
+    if (heardContext.state === "suspended") heardContext.resume().catch(() => {});
+    source.start();
+  } catch (error) {
+    console.info("[quickbar] no I-heard-you sound:", error);
+  }
+}
+
 /** "Hey Jarvis" listening's barge-in hook: Rust sends this when a clip
  *  that held the wake word, or the word "stop", comes back, so either cuts
  *  off a reply still being spoken (other sounds in the room do not).
@@ -3017,6 +3261,7 @@ function jarvisTalking() {
  *  end, or until Esc closes the bar. */
 listen("voice-speech-started", () => {
   if (ignoreWhileTalking(loadBargeIn(), jarvisTalking())) return;
+  noteCutOff();
   stopSpeaking();
 });
 
@@ -3075,6 +3320,7 @@ async function setAutoListening(enabled) {
     // open the default microphone, and a PC with a headset and a webcam
     // has more than one.
     announce(listeningLine(info));
+    refreshVoiceFlow();
   } else {
     state.autoListening = false;
     dom.voiceAuto.setAttribute("aria-pressed", "false");
@@ -3144,6 +3390,10 @@ listen("voice-heard", (event) => {
     return;
   }
   if (!heard.isOwner) return; // ambient speech that is not the owner - ignored, not announced
+  // "Hey Jarvis" from the owner: the turn was cut and taken - a small "I
+  // heard you". Here, not when the listener cuts: that happens for every
+  // sound in the room, and only the PC knows which were addressed to Jarvis.
+  if (heard.wakeHeard) playHeardSound();
   if (heard.awake) {
     // "Hey Jarvis." on its own: the PC is listening for the next sentence.
     announce("Listening.");
@@ -3598,7 +3848,10 @@ onLink((link) => {
 });
 onEvent((frame) => {
   toolWatch.event(frame);
-  if (frame && frame.kind === "step") recheckSpeech();
+  if (frame && frame.kind === "step") {
+    recheckSpeech();
+    maybeSayOneMoment(frame.data);
+  }
 });
 listen("jarvis-resync", () => {
   toolWatch.resync();

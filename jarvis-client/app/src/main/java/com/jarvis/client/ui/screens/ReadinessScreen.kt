@@ -46,6 +46,7 @@ import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.BargeIn
+import com.jarvis.client.voice.OneMoment
 import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.delay
@@ -119,6 +120,9 @@ fun ReadinessScreen(
     /** Whether this phone has an echo canceller (the default follows it). */
     bargeInEchoCanceller: Boolean = false,
     onBargeIn: ((Boolean) -> Unit)? = null,
+    /** "Say 'One moment' if I'm kept waiting" on this phone (OneMoment). Null hides the switch. */
+    oneMoment: Boolean? = null,
+    onOneMoment: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
     /** The link, for the Connection card. Null hides the card. */
     connection: ConnectionInfo? = null,
@@ -222,6 +226,8 @@ fun ReadinessScreen(
                     bargeIn = bargeIn,
                     bargeInEchoCanceller = bargeInEchoCanceller,
                     onBargeIn = onBargeIn,
+                    oneMoment = oneMoment,
+                    onOneMoment = onOneMoment,
                 )
             }
             if (securitySummary != null) {
@@ -502,6 +508,8 @@ private fun WakeWordCard(
     bargeIn: Boolean? = null,
     bargeInEchoCanceller: Boolean = false,
     onBargeIn: ((Boolean) -> Unit)? = null,
+    oneMoment: Boolean? = null,
+    onOneMoment: ((Boolean) -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val tint = when {
@@ -617,6 +625,30 @@ private fun WakeWordCard(
                 enabled = true,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onBargeIn(!bargeIn) },
+            )
+        }
+
+        // Not tied to "hey Jarvis": it is about any spoken question, the
+        // talk button's too. This phone's own switch; the desktop has its own.
+        if (oneMoment != null && onOneMoment != null) {
+            Gap(12)
+            Text(
+                OneMoment.NAME,
+                style = MaterialTheme.typography.labelLarge,
+                color = chrome.textHi,
+            )
+            Gap(4)
+            Text(
+                OneMoment.describe(oneMoment),
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            Gap(6)
+            Secondary(
+                text = if (oneMoment) "Stay quiet while I wait" else "Say \"One moment\"",
+                enabled = true,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onOneMoment(!oneMoment) },
             )
         }
 

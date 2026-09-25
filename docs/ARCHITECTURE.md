@@ -407,6 +407,15 @@ button_only` it is never learned from without a card, and its memory,
 sensitive and private answers stay on screen (the speech route records how
 each clip started, `source`, with the transcript).
 
+**Jarvis's own words are never the owner's.** Since 2026-09-25 an app sends
+the last sentence of a spoken answer the owner cut off (`interrupted` on the
+next question, JARVIS-API §17 part 7). It is not learned from: the PC tells
+its model about it in a SYSTEM line added only to the request for this PC's
+model (`jarvis_agent.with_cut_off_note`), never to the conversation the app
+sent, which is all the learner (`jarvis_intake.owner_turns`: user messages,
+their `content` only) and chat history read; and `chat-history.patch` takes
+the field off before any model or the relay sees the conversation.
+
 ### Chat history — a second store, kept apart from memory
 
 `chat-history.db` (`jarvis_chat_log.py`, `chat-history.patch`, 2026-09-24,
@@ -613,15 +622,19 @@ backend routes, in both directions; the rest are listed here only.
 |---|---|
 | The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
 
-**On the backend, in neither app yet, NOT on purpose** (2026-09-24, both
-apps should get it; the app side is tracked as a task): the voice flow (`docs/JARVIS-API.md` §17,
-`jarvis_voice_flow.py`, `voice-flow.patch`) - interrupting Jarvis by
-talking (`?source=barge_in` on `/api/voice/utterance`: "stop or not",
-never transcribed), the "One moment." clip (`GET /api/voice/moment`,
-`planned` in `tools/check_parity.py`), `&waited_ms=` on each utterance, and
-the `flow` block of `/api/voice/status` (the delay step by step, in
-numbers). Only the clip route is new, so it is the only part
-`tools/check_parity.py` can see; this line is the record of the rest.
+**The voice flow is in both apps since 2026-09-25** (`docs/JARVIS-API.md`
+§17 part 5; it was backend-only until then): interrupting Jarvis by talking
+(`?source=barge_in`, pause first and decide second), "One moment." when a
+tool starts (`GET /api/voice/moment`, `ported` in `tools/check_parity.py`),
+`&waited_ms=`, the "I heard you" sound, keeping listening after a question
+(part 6) and telling the model it was interrupted (part 7). Two small
+differences, on purpose, each for a reason written in §17: the desktop
+plays "I heard you" for a "hey Jarvis" sentence only once the PC says the
+phrase was heard (its listener cuts every sound in the room; the phone's
+own spotter already heard the phrase), and only the phone opens its
+microphone by itself after a question (the desktop's listener is always
+listening). Still in neither app: the "Voice delay" panel (`flow.summary`)
+- the one-line command in `backend/README.md` prints it.
 
 ---
 

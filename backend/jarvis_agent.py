@@ -1743,9 +1743,11 @@ class _TurnWatch:
         # server's own system turns (the rules, recalled facts).
         self.app_context = isinstance(req.get("messages"), list) and any(
             m.get("role") == "system" for m in raw)
+        self.cut_off = ""            # where the owner cut the last answer off (with_cut_off_note)
         if users:
             i = max(j for j, m in enumerate(raw) if m.get("role") == "user")
             self.spoken = raw[i].get("provenance") == "voice"   # with_spoken_note
+            self.cut_off = cut_off_words(raw[i].get("interrupted"))
             newest = [raw[i]]
             j = i - 1
             while (j >= 0 and raw[j].get("role") == "user"
@@ -2376,6 +2378,65 @@ def with_spoken_note(msgs: list) -> list:
     return list(msgs[:at]) + [dict(_SPOKEN_MSG)] + list(msgs[at:])
 
 
+# --------------------------------------------------------------------------
+#   The owner cut the last spoken answer off
+# --------------------------------------------------------------------------
+#
+# The owner's decision of 2026-09-25 (docs/JARVIS-API.md section 17, 6).
+# When the owner interrupted Jarvis's spoken answer - talking over it, "stop",
+# "hey Jarvis", the talk button - the app puts the last sentence the owner
+# heard on its NEXT question, as `interrupted` on the newest user message (a
+# field like `provenance`: chat-history.patch takes it off before any model
+# or the relay sees the conversation). This loop reads it from the request as
+# it arrived (_TurnWatch) and tells THIS PC's model, in one system line just
+# before the newest question, that its last answer was cut off there - so it
+# does not carry on as if the owner had heard the rest.
+#
+# Not the owner's words, and never learned: it is a SYSTEM message, added
+# only to the request for this PC's model, never to the conversation the
+# app sent - which is what the learner (jarvis_intake.owner_turns: user
+# messages only, their `content` only) and chat history read. Never first:
+# placed like SPOKEN_NOTE, and keep_rules_first runs after it.
+#
+# The idea is Hermes Agent's (tools/tts_streaming.py, MIT); the words are
+# written here.
+
+#: Longest sentence quoted back, in characters. It is Jarvis's own words.
+CUT_OFF_MAX = 240
+CUT_OFF_NOTE = (
+    "The owner interrupted your last spoken answer. They heard it only up to "
+    "this sentence: \"{said}\" Nothing after it was heard. Do not go on as if "
+    "they heard the rest; answer what they say now, and repeat what was cut off "
+    "only if they ask for it.")
+
+
+def cut_off_words(value) -> str:
+    """The sentence an app sent as `interrupted`, cleaned: text only, one
+    line, at most CUT_OFF_MAX characters; "" for anything else."""
+    if not isinstance(value, str):
+        return ""
+    words = " ".join(value.split()).replace('"', "'")
+    if len(words) > CUT_OFF_MAX:
+        words = words[:CUT_OFF_MAX - 1].rstrip() + "\u2026"
+    return words
+
+
+def with_cut_off_note(msgs: list, said: str) -> list:
+    """A new list: `msgs` with CUT_OFF_NOTE (quoting `said`) as a system
+    message just before the newest user message - never first, the same
+    placing as with_spoken_note. `msgs` itself is not changed; nothing to
+    add (no user message, or no words) returns a plain copy."""
+    said = cut_off_words(said)
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not users or not said:
+        return list(msgs)
+    note = {"role": "system", "content": CUT_OFF_NOTE.format(said=said)}
+    at = users[-1]
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, note] + list(msgs)
+    return list(msgs[:at]) + [note] + list(msgs[at:])
+
+
 def keep_rules_first(msgs: list) -> list:
     """A new list whose first message is the Jarvis rules block.
 
@@ -2557,11 +2618,17 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             # A second-card lane: its model has no Jarvis SYSTEM block.
             msgs = [{"role": "system", "content": LANE_SYSTEM}] + list(convo)
         room = budget() - (estimate_tokens(_SPOKEN_MSG) if watch.spoken else 0)
+        if watch.cut_off:
+            room -= estimate_tokens({"role": "system", "content": CUT_OFF_NOTE.format(
+                said=watch.cut_off)})
         body = {"model": cur["model"], "messages": fit_messages(msgs, room),
                 "stream": True, **opts}
         if watch.spoken:
             # After trimming, so trimming can never leave the note first.
             body["messages"] = with_spoken_note(body["messages"])
+        if watch.cut_off:
+            # The owner cut the last spoken answer off: said, never first.
+            body["messages"] = with_cut_off_note(body["messages"], watch.cut_off)
         # Last, after trimming and the spoken note: the rules stay first.
         body["messages"] = keep_rules_first(body["messages"])
         if not _reasoning_field_refused:

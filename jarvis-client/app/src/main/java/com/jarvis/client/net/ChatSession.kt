@@ -39,6 +39,13 @@ import okhttp3.Response
  */
 class ChatSession(private val api: JarvisApi) {
 
+    /**
+     * Where the owner last cut Jarvis's spoken answer off (the voice flow,
+     * docs/JARVIS-API.md section 17, 6), set by VoiceSession and sent once,
+     * with the next question, as `interrupted`.
+     */
+    val cutOff = com.jarvis.client.voice.CutOff()
+
     private val _reply = MutableStateFlow("")
 
     /** The reply so far. Grows as chunks land. */
@@ -198,7 +205,11 @@ class ChatSession(private val api: JarvisApi) {
         val earlier = _history.value
         val askedIn = conversation
         val asking = ChatHistory.asking(message, provenance, shared, picture = picture != null)
-        val c = api.chatCall(asking, earlier, picture, conversationId)
+        // The owner cut the last spoken answer off (VoiceSession): where,
+        // for this question only - the PC tells its model, and takes the
+        // field off before any model or the relay sees the conversation.
+        val interrupted = cutOff.take(SystemClock.elapsedRealtime())
+        val c = api.chatCall(asking, earlier, picture, conversationId, interrupted)
         if (c == null) {
             _error.value = "No desktop address set"
             return null
