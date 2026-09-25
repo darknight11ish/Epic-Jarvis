@@ -252,6 +252,9 @@ Decided 2026-09-25, after the creativity audit
   in full on the card (e.g. "turn off the kitchen, hall and bedroom
   lights"). Locks, alarms, doors and covers always get a card of their own.
   It is one decision about a fully listed set - never a standing permission.
+- **Jarvis's manner: warm and brief by default, with a "Plain" option** in
+  both apps' settings (plain, businesslike answers). Manner never changes
+  what Jarvis does, asks or remembers - only how it phrases things.
 
 ## Every new feature gets its own audit, without being asked
 
