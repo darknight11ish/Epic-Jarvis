@@ -401,7 +401,9 @@ def _default_fetch(q: Query) -> dict:
         headers["Content-Type"] = "application/json"
         data = json.dumps(q.body).encode("utf-8")
     req = urllib.request.Request(q.url, data=data, method=q.method, headers=headers)
-    opener = urllib.request.build_opener(_RefuseRedirect)
+    # Plain http:// (home network, Tailscale, Meshnet) never via a proxy -
+    # jarvis_local_http.opener_for (security audit L7).
+    opener = jarvis_local_http.opener_for(q.url, _RefuseRedirect)
     with opener.open(req, timeout=20.0) as r:
         raw = r.read().decode("utf-8", "replace")
         return json.loads(raw) if raw.strip() else {}

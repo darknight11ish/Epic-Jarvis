@@ -24,7 +24,8 @@ FAILS on the code the audit read:
   L6  server/jarvis_mobile_ws.py: marked legacy, its example bound to
       127.0.0.1 with the token required.
   L7  the calendar and Home Assistant sent a password or token over plain
-      http:// to another machine.
+      http:// to another machine. Now (owner, 2026-09-25): allowed inside
+      the owner's own networks, refused to the open internet.
   L8  jarvis-framework.toml claimed four sandboxes nothing implemented.
 
 L1 (a person's yes, not `allowed`) is in test_task_control.py and
@@ -419,40 +420,113 @@ def t_the_legacy_websocket_server_is_marked_and_its_example_safe():
 # ---------------------------------------------------------------------- L7
 
 def t_no_password_over_plain_http_to_another_machine():
+    """Owner's decision, 2026-09-25: plain http:// is allowed inside the
+    owner's own networks (this PC, the home network, Tailscale, NordVPN
+    Meshnet) and refused to the open internet."""
     saved = {k: os.environ.get(k) for k in ("JARVIS_CALDAV_URL", "JARVIS_HOME_URL")}
     try:
-        for url in ("http://cal.example.com/dav/", "http://192.168.1.10:5232/",
-                    "http://nas.local/cal"):
+        refused = (
+            "http://cal.example.com/dav/",          # a public name
+            "http://8.8.8.8:5232/",                 # a public address
+            "http://[2606:4700::1111]:5232/",       # a public IPv6 address
+            "http://172.32.0.1:5232/",              # just outside 172.16.0.0/12
+            "http://169.254.1.1:5232/",             # link-local: not on the list
+            "http://[fe80::1]:5232/",
+            "http://fe80::1:5232/",                 # unbracketed: urllib dials fe80::1
+            "http://134744072/cal",                 # 8.8.8.8 written as one number
+            "http://ha.duckdns.org/cal",            # a public dynamic-DNS name
+            "http://mynord.com/cal", "http://evilts.net/cal",   # not the real suffixes
+            "http://nas.local.example.com/cal",     # .local, but not at the end
+            "http://[::ffff:8.8.8.8]/cal",          # a public address, IPv6-dressed
+            "http://[bad/cal",                      # unreadable: refused, not let through
+        )
+        for url in refused:
             os.environ["JARVIS_CALDAV_URL"] = url
             p = CAL.plan(7)
             check(f"calendar at {url}: nothing is planned, and it says why",
                   p.query is None and "https://" in p.reason_empty
-                  and "unencrypted" in p.reason_empty, p.reason_empty)
-        for url in ("https://cal.example.com/dav/", "http://127.0.0.1:5232/",
-                    "http://localhost:5232/", "http://100.101.102.103:5232/",
-                    "http://nas.tail1234.ts.net/cal"):
+                  and "unencrypted" in p.reason_empty
+                  and "home network" in p.reason_empty
+                  and "Meshnet" in p.reason_empty, p.reason_empty)
+        allowed = (
+            "https://cal.example.com/dav/",         # https: always
+            "http://127.0.0.1:5232/", "http://localhost:5232/",
+            "http://[::1]:5232/",                   # this PC
+            "http://192.168.1.10:5232/", "http://10.0.0.5:5232/",
+            "http://172.16.0.9:5232/", "http://172.31.255.1:5232/",   # home network
+            "http://[fd12:3456::1]:5232/",          # IPv6 unique-local
+            "http://nas.local/cal", "http://nas.lan/cal", "http://nas.home.arpa/cal",
+            "http://NAS.LOCAL./cal",                # any case, a trailing dot
+            "http://nas/cal",                       # a single-word name
+            "http://[::ffff:192.168.1.10]/cal",     # a home address, IPv6-dressed
+            "http://100.101.102.103:5232/",         # Tailscale or Meshnet
+            "http://nas.tail1234.ts.net/cal",       # Tailscale
+            "http://desk.nord:5232/",               # NordVPN Meshnet
+        )
+        for url in allowed:
             os.environ["JARVIS_CALDAV_URL"] = url
             p = CAL.plan(7)
             check(f"CONTROL: calendar at {url} is planned", p.query is not None,
                   p.reason_empty)
-        os.environ["JARVIS_HOME_URL"] = "http://192.168.1.10:8123"
+        os.environ["JARVIS_CALDAV_URL"] = "http://me:hunter2@cal.example.com/dav/"
+        reason = CAL.plan(7).reason_empty
+        check("a refusal never repeats a password written into the address",
+              reason and "hunter2" not in reason and "cal.example.com" in reason, reason)
+        os.environ["JARVIS_HOME_URL"] = "http://ha.example.com:8123"
         p = HOME.plan_states(["light.kitchen"])
-        check("Home Assistant over plain http on the home network: no read is planned",
+        check("Home Assistant over plain http on the internet: no read is planned",
               p.queries == [] and "unencrypted" in p.reason_empty, p.reason_empty)
         p = HOME.plan_service("light", "turn_on", "light.kitchen")
         check("... and no service call", p.queries == [] and "unencrypted" in p.reason_empty,
               p.reason_empty)
-        for url in ("https://ha.local:8123", "http://127.0.0.1:8123",
-                    "http://100.64.0.7:8123"):
+        for url in ("https://ha.example.com:8123", "http://127.0.0.1:8123",
+                    "http://homeassistant.local:8123", "http://homeassistant:8123",
+                    "http://192.168.1.10:8123", "http://100.64.0.7:8123",
+                    "http://ha.nord:8123"):
             os.environ["JARVIS_HOME_URL"] = url
             check(f"CONTROL: Home Assistant at {url} is planned",
-                  len(HOME.plan_states(["light.kitchen"]).queries) == 1)
+                  len(HOME.plan_states(["light.kitchen"]).queries) == 1
+                  and len(HOME.plan_service("light", "turn_on",
+                                            "light.kitchen").queries) == 1)
     finally:
         for k, v in saved.items():
             if v is None:
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+
+
+def t_plain_http_never_goes_through_a_proxy():
+    """A plain http:// request that passed the check carries the password
+    as plain text, so it must not be handed to a proxy (another machine)."""
+    import urllib.request
+    import jarvis_local_http as LH
+    real, seen = urllib.request.build_opener, []
+
+    def spy(*handlers):
+        seen.append(handlers)
+        return real(*handlers)
+
+    urllib.request.build_opener = spy
+    try:
+        for mod, url in ((CAL, "http://192.168.1.10:5232/"),
+                         (HOME, "http://homeassistant.local:8123/api/states/x")):
+            seen.clear()
+            LH.opener_for(url, mod._RefuseRedirect)
+            proxies = [h for h in seen[0] if isinstance(h, urllib.request.ProxyHandler)]
+            check(f"{mod.__name__}: plain http:// opens with an empty proxy table",
+                  len(proxies) == 1 and proxies[0].proxies == {}, seen)
+        seen.clear()
+        LH.opener_for("https://ha.example.com", HOME._RefuseRedirect)
+        check("CONTROL: https:// keeps urllib's usual opener",
+              not any(isinstance(h, urllib.request.ProxyHandler) for h in seen[0]), seen)
+    finally:
+        urllib.request.build_opener = real
+    for fname in ("jarvis_calendar.py", "jarvis_home.py"):
+        src = (HERE / fname).read_text(encoding="utf-8")
+        check(f"{fname} opens its request through jarvis_local_http.opener_for",
+              "jarvis_local_http.opener_for(q.url, _RefuseRedirect)" in src
+              and "urllib.request.build_opener(" not in src)
 
 
 # ---------------------------------------------------------------------- L8
