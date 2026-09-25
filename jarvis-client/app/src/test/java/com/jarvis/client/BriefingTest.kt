@@ -83,7 +83,12 @@ class BriefingTest {
         assertNull(Briefing.setupBody("week", "08:30", emptyList()))
         assertNull(Briefing.setupBody("week", "08:30", listOf(7)))
         for (bad in listOf("hours", "all", "", "month")) assertNull(bad, Briefing.setupBody(bad, "07:00"))
-        for (bad in listOf("24:00", "7", "07:60", "", "07:00:00")) assertNull(bad, Briefing.setupBody("day", bad))
+        for (bad in listOf("24:00", "07:60", "", "07:00:00", "7:0", "2400")) assertNull(bad, Briefing.setupBody("day", bad))
+        // A number pad has no colon.
+        for ((typed, at) in listOf("7" to "07:00", "730" to "07:30", "0730" to "07:30", "2330" to "23:30")) {
+            assertEquals(typed, """{"kind":"briefing","repeat":{"every":"day","at":"$at"}}""",
+                Briefing.setupBody("day", typed))
+        }
     }
 
     @Test

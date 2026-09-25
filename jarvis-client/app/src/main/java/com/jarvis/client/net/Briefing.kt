@@ -193,7 +193,8 @@ object Briefing {
         return words
     }
 
-    private val CLOCK = Regex("([01]?\\d|2[0-3]):([0-5]\\d)")
+    /** "7:00", "07:00", "7", "0730" or "730" - a phone's number pad has no colon. */
+    private val CLOCK = Regex("([01]?\\d|2[0-3])(?::?([0-5]\\d))?")
 
     /**
      * The body that sets up ONE briefing that repeats - the scheduler's own
@@ -203,7 +204,7 @@ object Briefing {
     fun setupBody(every: String, at: String, days: Collection<Int> = emptyList()): String? {
         if (EVERY.none { it.first == every }) return null
         val m = CLOCK.matchEntire(at.trim()) ?: return null
-        val hhmm = m.groupValues[1].padStart(2, '0') + ":" + m.groupValues[2]
+        val hhmm = m.groupValues[1].padStart(2, '0') + ":" + m.groupValues[2].ifEmpty { "00" }
         if (every == "week") {
             if (days.any { it !in 0..6 }) return null
             val d = days.toSortedSet()

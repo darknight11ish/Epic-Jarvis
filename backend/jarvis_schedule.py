@@ -6,7 +6,10 @@ NEW MODULE, shipped whole (schedule.patch adds the routes and starts it).
 THE OWNER'S DECISIONS (2026-09-25, CLAUDE.md)
   * Timers, reminders and ONE shared scheduler come first. Briefings, sleep
     mode and the overnight tidy will be new KINDS of job on this scheduler,
-    not a scheduler each (register_kind below is how they plug in).
+    not a scheduler each (register_kind below is how they plug in). The
+    morning briefing is the first (jarvis_briefing.py, loaded by get()
+    through KIND_MODULES): a kind may repeat through the same one card
+    (`repeatable`) and put its own lines on it (`card_note`).
   * A plain timer or a one-time reminder needs no approval card. Anything
     that repeats asks once, with a card that lists the next run times.
   * Simple commands like timers are answered without the AI model

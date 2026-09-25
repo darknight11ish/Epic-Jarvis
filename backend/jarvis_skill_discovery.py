@@ -51,6 +51,9 @@ RULES THIS MODULE KEEPS (each one has a test in test_skill_discovery.py)
     none.
   * One card at a time, at most one offer a day, and never more than one
     chain per card. There is no "save all" and there will not be one.
+  * It is an offer nobody asked for, so it follows jarvis_backoff.py
+    (2026-09-25): it waits until the owner has stopped chatting for two
+    minutes, and asks only while few other offers wait.
   * `run()` writes only with `approved=True` given explicitly, only after the
     gate said a HUMAN approved (tier `ask`, outcome `approved`), and never
     over an existing folder. Nothing here deletes anything - a declined

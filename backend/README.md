@@ -116,6 +116,7 @@ on a throwaway copy instead.
 | `log-scrub.patch` | `jarvis_hud.py` | **Passwords, keys and the pairing token kept out of `backend.log`** (the extraction research's Module 1, 2026-09-25). Right after the token is worked out, `jarvis_scrub.install(HUD_TOKEN)` scrubs everything the backend prints or logs from then on, including loggers set up earlier; the banner says so in one line. Its context is loopback-too's and bind-wildcard's lines. Needs `jarvis_scrub.py` - see "The log scrubber", near the very end. |
 | `schedule.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Timers, alarms, reminders and the to-do list, with one scheduler** (the owner's decisions, 2026-09-25). Adds `GET /api/schedule` and `POST /api/schedule/add` and `/act`, starts the scheduler at boot, answers "set a timer for 10 minutes" and the like in `/api/chat` WITHOUT the model, and the approval notice's words for `schedule_repeat` (anything that repeats is one card). Needs `jarvis_schedule.py` and `jarvis_quick.py` - see "Timers, alarms, reminders and the to-do list", at the very end. |
 | `memory-entities.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **"Who is my sister?" - people and things** (memory wave 3, 2026-09-25). Adds `GET /api/memory/entities` (the people and things facts are linked to, for the desktop's "About <name>"), leaves the "are these the same?" card out of `/api/memory/pending` unless asked for with `?merge_cards=1`, and gives `jarvis_extract.py` `propose_merge()` and `_accept_merge()` - accepting that card joins two entries and adds no fact. The work is in the shipped `rebuilt/jarvis_memory.py` (and `jarvis_past.py`, whose recall uses it); with an older copy the route answers 501. Last in the list, after `temporary-chat.patch`, whose route lines are its context. See "Memory wave 3", at the very end. |
+| `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing` and `POST /api/briefing/now`, makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -8293,3 +8294,128 @@ default, one call, local only; the route, the pending filter and the
 accepted card lifted from the whole patch stack and run; the patch applies
 forwards and backwards. Every check about the entity layer fails on the code
 before this change.
+
+---
+
+# The morning briefing, and fewer nagging offers: `briefing.patch`, `jarvis_briefing.py`, `jarvis_backoff.py` (2026-09-25)
+
+**What it is for.** A short list of your day, put together on the PC
+**without the AI model**, so it works when the model is slow, unloaded or
+asleep. It holds only what Jarvis can already read on this PC:
+
+- today's calendar events - only if your calendar is set up for Jarvis
+  (`JARVIS_CALDAV_URL`, and `calendar_read` in `[tools].enabled`), and only
+  while `calendar_read` runs without a card (`"auto"`, as shipped). If your
+  settings ask for a yes each time, the briefing leaves the calendar out and
+  says why - it does not wake you with a card at 7 in the morning;
+- today's alarms, reminders and timers still to come, and your to-do list;
+- how many approval cards are waiting (a number - open Jarvis to answer them);
+- only if email is set up the same way (`JARVIS_IMAP_HOST`, `email_check`
+  in `[tools].enabled`): **how many** unread emails. The number only - no
+  sender, subject or text is fetched (`jarvis_email.count()` searches and
+  counts, and fetches no message);
+- weather and news: a line saying they are **not available**, because no
+  provider has been chosen. Nothing is fetched from the internet.
+
+**How you get it.**
+
+- Say or type "brief me now" (or "read my briefing", "what's my
+  briefing"). Answered on the PC without the model.
+- Set one up: "brief me every weekday at 7", or in the desktop's Settings
+  (Morning briefing) or the phone's Mind (Morning briefing). It repeats, so
+  it is **one approval card** - the scheduler's own `schedule_repeat`,
+  listing the next three times and what each briefing reads. Nothing is set
+  up until you say yes. "brief me tomorrow at 7" is a one-off: no card.
+- Stop one: "stop my briefing", or Stop in Settings / Mind, or Delete under
+  Coming up. Immediate, one at a time.
+
+When it arrives, both apps say only **"Jarvis: your morning briefing is
+ready."** - on the lock screen and in the Windows toast, whatever your
+privacy settings. The briefing itself is in the app: the desktop's Brain,
+Work tab, and the phone's Mind. "Hide memory lists and chat history" (and
+the desktop's Windows Hello setting) hides its lines and keeps the counts.
+It is read aloud only when you ask, and then under your private-answers
+voice setting, like a calendar answer.
+
+**What is kept, and where.** The latest briefing is kept in the backend's
+memory only - never written to disk, never put on the event stream - and is
+gone when Jarvis restarts. The briefing job itself (when it goes off) is a
+row in `schedule.db`, like any reminder, with no words.
+
+**Fewer nagging offers (`jarvis_backoff.py`).** Jarvis sometimes offers
+things nobody asked for: the overnight memory tidying card, and "save this
+routine as a skill?". Every such offer now follows three rules: at most
+three waiting at once; none within two minutes of your last chat message;
+and each "no" keeps that same offer quiet for **1 day, then 7 days, then 30
+days** (matched by a fingerprint of what is offered, not its wording). A
+"yes" clears the count. It never approves or does anything, and it never
+stops you asking for something yourself: switching overnight tidying on
+stays one tap away however many times you said "not now". It keeps only
+fingerprints, counts and dates, in `backoff.json` in the Jarvis settings
+folder. The design is Leon's (leon-ai/leon, MIT) - see
+`THIRD-PARTY-NOTICES.txt`. The briefing itself makes no offers.
+
+**What is where.**
+
+- `jarvis_briefing.py` - the briefing: a kind of job on the one scheduler
+  (`register_kind`), what goes in it, the calendar and email reads (each
+  through the approval gate as its own action), the two routes' answers.
+- `jarvis_backoff.py` - the three rules, for every offer.
+- `jarvis_schedule.py` - a kind can now repeat through the same card
+  (`repeatable`) and put its own lines on it (`card_note`); the same
+  briefing set up twice is refused; `get()` loads the briefing kind before
+  the scheduler first runs.
+- `jarvis_quick.py` - "brief me now", "brief me every weekday at 7", "stop
+  my briefing", "when is my briefing".
+- `jarvis_email.py` - `count()`: the number of unread messages, nothing else.
+- `rebuilt/jarvis_sleep.py` - the overnight card follows the back-off, and
+  `not_now()`.
+- `jarvis_skill_discovery.py` - the skill offer waits until you have stopped
+  chatting for two minutes, and until few other offers wait.
+- `briefing.patch` - the routes, "not now" on `/api/memory/sleep_time`, the
+  conversation clock in `/api/chat`, and the notice's words. Last in
+  `$PATCHES`.
+
+## Owner steps (one line each, in PowerShell)
+
+Put the new code on the PC (copies `jarvis_briefing.py`, `jarvis_backoff.py`
+and the updated modules, applies `briefing.patch`), from this repository's
+folder, then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+Then type "brief me now" in the Jarvis bar. The answer should start "Your
+briefing for" and end with the weather-and-news line, with "Done -
+answered on this PC without the AI model." under it.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_briefing.py
+```
+
+About 145 checks, no model, no network (every socket is made to fail): the
+briefing kind, its card and the refusal of the same repeat twice; a run
+going off, put together without the model, kept in memory only and rung
+"ready" after "fired"; the calendar lines in this PC's time, and every
+reason the calendar is left out (settings ask, not set up, the gate says
+no, too slow); email as a count only; the back-off's three rules, its file
+(hashes only), and that nothing the owner asks for consults it; the
+overnight card and the skill offer following it; the sentences and their
+near misses; and the patch applied to what the earlier patches wrote, run.
+
+## Not checked, said plainly
+
+- Nothing has run on your PC. The toast and the phone's notification have
+  not been seen on a real Windows PC or phone.
+- Not tried against a real calendar or mail server. The calendar reader
+  does not work out repeating events: a repeating event is shown with the
+  time of its first date, marked "(repeats)". An event kept in another time
+  zone (not UTC) is shown as if it were in this PC's time zone.
+- On the desktop the toast is the same plain kind the timers use. What a
+  click on it does has not been seen on a real PC, and nothing makes it open
+  the Brain's Work tab - open the Brain yourself. The phone's notification
+  opens Mind.
+- English only, like the timers.

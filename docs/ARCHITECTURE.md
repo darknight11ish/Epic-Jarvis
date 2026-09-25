@@ -566,7 +566,11 @@ added 2026-09-25. Both apps handle it: the desktop's Rust reads the job by
 id and shows a Windows toast (`brain/schedule.rs` `toast_fired`) and the
 Brain reads Coming up again; the phone reads Coming up again and shows a
 notification (`JarvisRuntime.onScheduleEvent`). The words are read by id,
-never carried; a locked screen gets only the kind. JARVIS-API §21.)
+never carried; a locked screen gets only the kind. JARVIS-API §21.
+Since 2026-09-25 it also says `"ready"` for a morning briefing that has
+been put together (`jarvis_briefing.py`); both apps notify a briefing on
+`ready`, not `fired`, with only "Jarvis: your morning briefing is ready.",
+and read the briefing itself from `GET /api/briefing`. JARVIS-API §22.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. That includes `activity`'s sentence: while Jarvis drives a
@@ -934,6 +938,26 @@ they landed):
   the owner's `jarvis_arbiter.py`, not here. Not run on the owner's PC.
   JARVIS-API §21.
 
+- **The morning briefing** (added 2026-09-25), the first later kind on the
+  one scheduler (`jarvis_briefing.py`, `register_kind` with `repeatable`).
+  A short list of the day put together in code - no model sees it: today's
+  calendar (only when set up, and only when its read runs without a card),
+  today's alarms, reminders and timers, the to-do list, the approval count,
+  and the unread-email COUNT only (only when email is set up); weather and
+  news say they are not available. A repeat is the scheduler's own
+  `schedule_repeat` card, a one-off none; each run only reads, each read
+  that leaves the PC going through the gate as its own action. Kept in
+  memory only. Both apps: the desktop's Brain -> Work and Settings, the
+  phone's Mind; the notification says only "Jarvis: your morning briefing
+  is ready." `GET /api/briefing`, `POST /api/briefing/now`
+  (`briefing.patch`). Not run on the owner's PC. JARVIS-API §22.
+- **The back-off for offers** (added 2026-09-25, `jarvis_backoff.py`): at
+  most three offers waiting, none within two minutes of a chat message, and
+  each "no" quiet for 1, then 7, then 30 days by a fingerprint of what is
+  offered. Applied to the overnight-tidy card and the skill offer. It never
+  approves or acts, and nothing the owner asks for consults it. JARVIS-API
+  §22.6.
+
 **Still missing:**
 
 - **Obsidian daily notes in every date format.** Only formats that can be
@@ -942,8 +966,9 @@ they landed):
   refused with the reason, and so is a vault where the Periodic Notes plugin
   may be naming the daily note. Nothing guesses a file name.
 
-- **Overnight memory tidying.** `jarvis_sleep.py` only offers it, once a
-  day, and the card says it is not built; switching it on records the wish
+- **Overnight memory tidying.** `jarvis_sleep.py` only offers it, at most
+  once a day and under the back-off (a "not now" is quiet for 1, then 7,
+  then 30 days), and the card says it is not built; switching it on records the wish
   and runs nothing. If it is ever built it may only raise review cards: no
   stored fact is retired or changed without the owner's yes on that one
   fact.
@@ -1041,6 +1066,11 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    clock, the same missed-while-off rule, the same `schedule` event and the
    same Coming up list in both apps. Not a timer thread of its own. And
    anything that repeats is set up by one card, like `schedule_repeat`.
+   Does it OFFER something nobody asked for - a card, a suggestion, a nudge?
+   Then it asks `jarvis_backoff.may_offer()` first and reports every "no"
+   with `declined()`: a few at most, never mid-conversation, and a "no" is
+   heard for 1, then 7, then 30 days. The back-off only decides whether to
+   ask; it never approves, and the owner's own requests never consult it.
 4. Can you state, in one sentence, what it sends and where? If not, you do not
    know yet.
 5. Does it need a test that fails on the unpatched tree? Yes. Every patch here

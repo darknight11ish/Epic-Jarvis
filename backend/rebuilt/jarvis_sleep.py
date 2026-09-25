@@ -238,6 +238,10 @@ def reminder_card() -> Optional[dict]:
     bo, fp = _backoff()
     if bo is not None:
         try:
+            # No card was handed out today (the check above), so an earlier
+            # day's card still counted as waiting is replaced by this one,
+            # not left to hold it back.
+            bo.closed(fp)
             may, _why = bo.may_offer(fp)
         except Exception:
             may = False

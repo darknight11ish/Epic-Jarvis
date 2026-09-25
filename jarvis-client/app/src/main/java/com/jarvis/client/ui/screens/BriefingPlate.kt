@@ -228,7 +228,7 @@ internal fun BriefingSection(
                     TextInput(
                         value = at,
                         onValueChange = { at = it.take(5) },
-                        label = "Time (24-hour, like 07:00)",
+                        label = "Time (24-hour, like 07:00 or 0700)",
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                     Quiet(

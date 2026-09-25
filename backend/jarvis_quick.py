@@ -16,6 +16,12 @@ take to boil an egg" or "remind me who wrote Dune" never land here.
 LANGUAGES: English only. A sentence in any other language goes to the model,
 which may still set a timer through its tools (jarvis_agent.py).
 
+THE MORNING BRIEFING (briefing.patch, 2026-09-25) is here too: "brief me
+now" (put together by jarvis_briefing.py, no model; the answer is private,
+and marks the calendar as read when it quotes it), "brief me every weekday
+at 7" (the scheduler's ONE card), "stop my briefing" (one, at once) and
+"when is my briefing".
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
