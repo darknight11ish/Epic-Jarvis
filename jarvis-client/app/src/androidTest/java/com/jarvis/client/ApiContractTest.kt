@@ -12,6 +12,7 @@ import com.jarvis.client.net.Hardware
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.SaidAloud
+import com.jarvis.client.net.Schedule
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -620,6 +621,50 @@ class ApiContractTest {
         val out = api.hardwarePost(Hardware.CREATE_PATH, """{"name":"jarvis-chat"}""")
         assertTrue(out is ApiResult.Ok)
         assertEquals("Download qwen3:8b first.", Hardware.replyLine(out))
+    }
+
+    // ---------------------------------------------------------- schedule ---
+
+    /**
+     * `schedule.patch` (JARVIS-API §21): the list is read with the token and
+     * the client header, and one job is read by id for a notification.
+     */
+    @Test
+    fun theScheduleReadCarriesTheHeadersAndParses() = runBlocking {
+        routes[Schedule.PATH] = ok(
+            """{"available":true,"jobs":[{"id":"s0123456789","kind":"timer","text":"",""" +
+                """"state":"active","left":60,"duration":60}],"todo":[]}""",
+        )
+        val out = api.schedule()
+        assertTrue("read failed: $out", out is ApiResult.Ok)
+        assertEquals(1, Schedule.parse((out as ApiResult.Ok).value)!!.jobs.size)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals(Schedule.PATH, req.path)
+        assertEquals(TOKEN, req.getHeader("X-Jarvis-Token"))
+        assertEquals("hud", req.getHeader("X-Jarvis-Client"))
+        val one = api.scheduleJob("s0123456789")
+        assertTrue(one is ApiResult.Ok)
+        assertEquals(Schedule.PATH + "?id=s0123456789", server.takeRequest(10, TimeUnit.SECONDS)!!.path)
+    }
+
+    /** One change posts one id and one action, and nothing else. */
+    @Test
+    fun oneChangeIsOneIdAndOneAction() = runBlocking {
+        routes[Schedule.ACT_PATH] = ok("""{"ok":true,"id":"s0123456789","said":"Paused."}""")
+        val out = api.scheduleWrite(Schedule.ACT_PATH, Schedule.actBody("s0123456789", "pause")!!)
+        assertTrue(out is ApiResult.Ok)
+        assertEquals("Paused.", Schedule.said((out as ApiResult.Ok).value).second)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("POST", req.method)
+        assertEquals("""{"id":"s0123456789","do":"pause"}""", req.body.readUtf8())
+    }
+
+    /** A schedule write to any other route, or for a job id that is not one, is never sent. */
+    @Test
+    fun aScheduleWriteElsewhereIsNeverSent() = runBlocking {
+        assertTrue(api.scheduleWrite("/api/shutdown", "{}") is ApiResult.Failed)
+        assertTrue(api.scheduleJob("all") is ApiResult.Failed)
+        assertEquals("a request reached the server", 0, server.requestCount)
     }
 
     private companion object {

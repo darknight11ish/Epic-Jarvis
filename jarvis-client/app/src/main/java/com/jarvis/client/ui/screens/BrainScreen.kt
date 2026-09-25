@@ -377,6 +377,19 @@ fun BrainScreen(
             // Brain → Live. Reads JarvisRuntime directly.
             item(key = "steps") { StepsSection() }
 
+            // "Coming up" (the owner's decisions of 2026-09-25): timers,
+            // alarms, reminders and the to-do list, each with its own
+            // buttons (ComingUpPlate.kt) - the desktop's Brain -> Work ->
+            // Coming up. It reads and acts through JarvisRuntime directly.
+            item(key = "coming-up") {
+                ComingUpSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
             if (models != null) {
                 item(key = "models") {
                     Section("Model") {
