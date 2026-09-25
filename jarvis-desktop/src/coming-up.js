@@ -60,9 +60,11 @@ export const DONE_LINE = "Done - answered on this PC without the AI model.";
  */
 export const STANDBY_TITLE = "Standby schedule";
 export const STANDBY_DETAIL =
-  "Jarvis goes on standby at night and wakes in the morning. Standby unloads its models " +
-  "and frees the graphics card; waking loads the chat model again, so the first answer is " +
-  "quick. Timers and reminders still go off. Setting it up asks once with an approval card.";
+  "Jarvis goes on standby at night and wakes in the morning - but it wakes only if the " +
+  "schedule put it on standby: if you chose Standby yourself, it stays on until you choose " +
+  "Active. Standby unloads its models and frees the graphics card; waking loads the chat " +
+  "model again, so the first answer is quick. Timers and reminders still go off. Setting " +
+  "it up asks once with an approval card.";
 export const STANDBY_START_LABEL = "Standby at";
 export const STANDBY_END_LABEL = "Wake at";
 export const STANDBY_ADD = "Set up";

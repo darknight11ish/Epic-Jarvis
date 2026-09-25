@@ -107,9 +107,11 @@ object Schedule {
     /** The standby schedule, both apps' words (coming-up.js). */
     const val STANDBY_TITLE = "Standby schedule"
     const val STANDBY_DETAIL =
-        "Jarvis goes on standby at night and wakes in the morning. Standby unloads its models " +
-            "and frees the graphics card; waking loads the chat model again, so the first answer is " +
-            "quick. Timers and reminders still go off. Setting it up asks once with an approval card."
+        "Jarvis goes on standby at night and wakes in the morning - but it wakes only if the " +
+            "schedule put it on standby: if you chose Standby yourself, it stays on until you choose " +
+            "Active. Standby unloads its models and frees the graphics card; waking loads the chat " +
+            "model again, so the first answer is quick. Timers and reminders still go off. Setting " +
+            "it up asks once with an approval card."
     const val STANDBY_START_LABEL = "Standby at"
     const val STANDBY_END_LABEL = "Wake at"
     const val STANDBY_ADD = "Set up"
