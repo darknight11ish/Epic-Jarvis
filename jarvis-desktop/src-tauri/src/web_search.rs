@@ -8,7 +8,7 @@
 //! * [`get_web_search`] - `GET /api/search`: which of the four providers is
 //!   chosen (SearXNG on this PC by default), each one's "why use this one"
 //!   line in the PC's own words, whether it is ready, the SearXNG address,
-//!   "Ask before every web search", and Whoogle's reason for being left out.
+//!   "Ask before every web search", and why Whoogle and Brave are left out.
 //! * [`set_web_search`] - `POST /api/search/settings` with ONE change: the
 //!   provider or the SearXNG address (at once), or "Ask before every web
 //!   search" (on at once; off raises ONE approval card on the PC). Held
@@ -17,8 +17,7 @@
 //!   harmless word through the chosen provider, and what happened in words
 //!   ("works", "not running", "JSON not enabled", "key missing", "credits
 //!   used up"). Held on a stale link too.
-//! * [`save_search_key`] / [`forget_search_key`] - the Tavily or Brave
-//!   Search key, written straight into Windows Credential Manager on THIS PC
+//! * [`save_search_key`] / [`forget_search_key`] - the Exa or Tavily key, written straight into Windows Credential Manager on THIS PC
 //!   ([`crate::token_store::write_search_key`]) under the name the backend
 //!   reads. The key never goes over HTTP - not to the backend, not to the
 //!   phone - and is never returned to the page, logged or put in an error
@@ -38,7 +37,7 @@ use crate::token_store;
 pub(crate) const SEARCH_PATH: &str = "/api/search";
 
 /// The four providers, in the PC's order.
-pub(crate) const PROVIDERS: [&str; 4] = ["searxng", "duckduckgo", "tavily", "brave"];
+pub(crate) const PROVIDERS: [&str; 4] = ["searxng", "duckduckgo", "exa", "tavily"];
 
 /// What a backend without `jarvis_search.py` is told to do about it. The
 /// phone says the same (`WebSearch.MISSING`).
@@ -199,17 +198,17 @@ pub async fn test_web_search(app: AppHandle) -> Result<serde_json::Value, String
 
 fn provider_label(provider: &str) -> &'static str {
     match provider {
-        "tavily" => "Tavily",
-        _ => "Brave Search",
+        "exa" => "Exa",
+        _ => "Tavily",
     }
 }
 
-/// Saves the Tavily or Brave Search key in Credential Manager on this PC.
+/// Saves the Exa or Tavily key in Credential Manager on this PC.
 /// Returns words only - never the key.
 #[tauri::command]
 pub async fn save_search_key(provider: String, key: String) -> Result<serde_json::Value, String> {
     if token_store::search_key_target(&provider).is_none() {
-        return Err("Only Tavily and Brave Search use a key.".to_string());
+        return Err("Only Exa and Tavily use a key.".to_string());
     }
     if let Some(why) = token_store::search_key_problem(&key) {
         return Err(why.to_string());
@@ -225,11 +224,11 @@ pub async fn save_search_key(provider: String, key: String) -> Result<serde_json
     }))
 }
 
-/// Removes the Tavily or Brave Search key from this PC.
+/// Removes the Exa or Tavily key from this PC.
 #[tauri::command]
 pub async fn forget_search_key(provider: String) -> Result<serde_json::Value, String> {
     if token_store::search_key_target(&provider).is_none() {
-        return Err("Only Tavily and Brave Search use a key.".to_string());
+        return Err("Only Exa and Tavily use a key.".to_string());
     }
     token_store::delete_search_key(&provider).map_err(|e| format!("Not removed: {e}."))?;
     Ok(serde_json::json!({
@@ -306,8 +305,8 @@ mod tests {
     #[test]
     fn exactly_one_change_per_request() {
         assert_eq!(
-            setting_body(Some("brave"), None, None).unwrap(),
-            serde_json::json!({"provider": "brave"})
+            setting_body(Some("exa"), None, None).unwrap(),
+            serde_json::json!({"provider": "exa"})
         );
         assert_eq!(
             setting_body(None, Some(" http://127.0.0.1:8888 "), None).unwrap(),
@@ -318,7 +317,9 @@ mod tests {
             serde_json::json!({"ask_every_time": false})
         );
         assert!(setting_body(None, None, None).is_err());
-        assert!(setting_body(Some("brave"), None, Some(true)).is_err());
+        assert!(setting_body(Some("exa"), None, Some(true)).is_err());
+        // Left out: Brave (a payment card since 2026) and Whoogle.
+        assert!(setting_body(Some("brave"), None, None).is_err());
         assert!(setting_body(Some("whoogle"), None, None).is_err());
         assert!(setting_body(None, Some(&"x".repeat(201)), None).is_err());
     }

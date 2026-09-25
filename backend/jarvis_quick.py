@@ -23,10 +23,10 @@ at 7" (the scheduler's ONE card), "stop my briefing" (one, at once) and
 "when is my briefing".
 
 WEB SEARCH (2026-09-25) is here too, but only talk ABOUT it - nothing is
-searched: "which search should I use?", "why SearXNG?", "what about
-Tavily?" are answered from jarvis_search.py's own "why use this one" lines
+searched: "which search should I use?", "why SearXNG?", "why Exa?" are
+answered from jarvis_search.py's own "why use this one" lines
 (the words both apps' Settings show), and "use DuckDuckGo for web search" /
-"switch web search to Brave" changes the provider at once, as a tap in
+"switch web search to Exa" changes the provider at once, as a tap in
 either app's Settings does. Only the owner's own words, like everything here.
 
 WHERE THE IDEA COMES FROM
@@ -779,9 +779,11 @@ def _briefing(s: str, now: float) -> Optional[Intent]:
     return None
 
 
-#: The four providers and Whoogle, by the words the owner may use for them.
+#: The four providers, and the two left out (Whoogle, Brave - asked about,
+#: they get their reason), by the words the owner may use for them.
 _PROVIDER_WORDS = (("searxng", r"searx(?:ng)?"),
                    ("duckduckgo", r"duck\s*duck\s*go|ddg"),
+                   ("exa", r"exa(?:\s+ai)?"),
                    ("tavily", r"tavily"),
                    ("brave", r"brave(?:\s+search)?"),
                    ("whoogle", r"whoogle"))
@@ -840,8 +842,7 @@ def _run_search(intent: Intent) -> Result:
         return Result(SEARCH_MISSING, n)
     if n == "search_explain":
         return Result(WS.explain(which), n)
-    if which == "whoogle":
-        return Result(WS.explain("whoogle"), n)
+    # WS.use says a left-out one's reason instead of choosing it.
     return Result(WS.use(which), n)
 
 

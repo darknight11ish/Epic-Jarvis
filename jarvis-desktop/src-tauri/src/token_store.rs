@@ -271,8 +271,8 @@ pub fn delete() -> Result<(), StoreError> {
 /// backend's API, nor reach the phone. Written, checked and deleted here;
 /// never read back to a page - only whether one is saved.
 pub const SEARCH_KEY_TARGETS: [(&str, &str); 2] = [
+    ("exa", "Jarvis Backend/Exa key"),
     ("tavily", "Jarvis Backend/Tavily key"),
-    ("brave", "Jarvis Backend/Brave Search key"),
 ];
 
 /// The Credential Manager name for `provider`'s key, or `None` for a
@@ -303,7 +303,7 @@ pub fn search_key_problem(key: &str) -> Option<&'static str> {
 /// Saves a web search key, then reads it back to be sure it landed.
 pub fn write_search_key(provider: &str, key: &str) -> Result<(), StoreError> {
     let target = search_key_target(provider)
-        .ok_or_else(|| StoreError::Failed("only Tavily and Brave Search use a key".into()))?;
+        .ok_or_else(|| StoreError::Failed("only Exa and Tavily use a key".into()))?;
     let key = key.trim();
     imp::write(target, key)?;
     match imp::read(target)? {
@@ -317,7 +317,7 @@ pub fn write_search_key(provider: &str, key: &str) -> Result<(), StoreError> {
 /// Removes a web search key. Not an error when there was none.
 pub fn delete_search_key(provider: &str) -> Result<(), StoreError> {
     let target = search_key_target(provider)
-        .ok_or_else(|| StoreError::Failed("only Tavily and Brave Search use a key".into()))?;
+        .ok_or_else(|| StoreError::Failed("only Exa and Tavily use a key".into()))?;
     imp::delete(target)
 }
 
@@ -383,10 +383,9 @@ mod tests {
             search_key_target("tavily"),
             Some("Jarvis Backend/Tavily key")
         );
-        assert_eq!(
-            search_key_target("brave"),
-            Some("Jarvis Backend/Brave Search key")
-        );
+        assert_eq!(search_key_target("exa"), Some("Jarvis Backend/Exa key"));
+        // Brave is no longer offered (2026-09-25): no key is kept for it.
+        assert_eq!(search_key_target("brave"), None);
         assert_eq!(search_key_target("searxng"), None);
         assert_eq!(search_key_target("duckduckgo"), None);
         let fake = format!("{}{}", "tvly-", "fake0123456789");

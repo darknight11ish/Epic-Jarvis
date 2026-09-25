@@ -6,7 +6,7 @@ The owner's decisions of 2026-09-25 (CLAUDE.md, "Web search with a choice of
 four providers" and "When a search asks first"; docs/JARVIS-API.md section
 23). What it proves, with local stand-in servers on 127.0.0.1 only - nothing
 here reaches the internet, and nothing reaches a real SearXNG, DuckDuckGo,
-Tavily or Brave:
+Exa or Tavily:
 
   - the four "why use this one" lines: said plainly (JSON off by default,
     Docker, the internet address still seen, never "anonymous"), Whoogle
@@ -19,7 +19,7 @@ Tavily or Brave:
     JSON off (403) are said plainly with an offer to switch - and NOTHING is
     sent to any other provider (no silent fallback);
   - its address: this PC or the owner's own networks only;
-  - Tavily and Brave: the key goes in its own header to its own address
+  - Exa and Tavily: the key goes in its own header to its own address
     only, never after a redirect, never into a plan, a card, an error, an
     answer or the log (the scrubber hides it by value); no key, a refused
     key, credits used up and rate limits each said plainly;
@@ -93,7 +93,7 @@ def check(name, cond, detail=""):
 
 # Fake keys, built by concatenation so nothing here is shaped like a real one.
 FAKE_TAVILY = "tv" + "ly-" + "fake" + "0123456789ab"
-FAKE_BRAVE = "BS" + "Afake" + "0123456789abcdef"
+FAKE_EXA = "exa" + "-fake-" + "0123456789abcdef"
 FAKE_AWS = "AK" + "IA" + "Q" * 16
 
 
@@ -222,7 +222,7 @@ def _sentences(text):
 
 def t_the_why_lines():
     check("four providers, SearXNG the default",
-          WS.PROVIDERS == ("searxng", "duckduckgo", "tavily", "brave")
+          WS.PROVIDERS == ("searxng", "duckduckgo", "exa", "tavily")
           and WS.DEFAULT_PROVIDER == "searxng" and WS.DEFAULT_SEARXNG_URL == "http://127.0.0.1:8888")
     for pid in WS.PROVIDERS:
         line = WS.WHY[pid]
@@ -239,12 +239,18 @@ def t_the_why_lines():
     t = WS.WHY["tavily"]
     check("Tavily: 1,000 free credits a month, a key, sees the searches",
           "1,000" in t and "key" in t and "sees what you search" in t)
-    b = WS.WHY["brave"]
-    check("Brave: about $5 a month, a card to verify, a key, sees the searches",
-          "$5" in b and "card" in b and "key" in b and "sees what you search" in b)
+    e = WS.WHY["exa"]
+    check("Exa: by meaning, passages, about $10 a month, no payment card, a key, sees the searches",
+          "meaning" in e and "passages" in e and "$10" in e and "no payment card" in e
+          and "key" in e and "sees what you search" in e)
+    check("Brave is gone from the four", "brave" not in WS.PROVIDERS and "brave" not in WS.WHY
+          and "brave" not in WS.KEY_TARGETS)
     w = WS.LEFT_OUT[0]
     check("Whoogle is left out, and says why (Google, 2025)",
           w["id"] == "whoogle" and "2025" in w["why"] and "JavaScript" in w["why"])
+    b = WS.LEFT_OUT[1]
+    check("Brave is left out, and says why (a payment card, charged past the $5)",
+          b["id"] == "brave" and "payment card" in b["why"] and "$5" in b["why"], b)
 
 
 def _literal_forms(text: str) -> list:
@@ -260,13 +266,18 @@ def t_both_apps_say_the_same_words():
              / "client" / "net" / "WebSearch.kt").read_text(encoding="utf-8")
     words = dict(("why " + p, WS.WHY[p]) for p in WS.PROVIDERS)
     words.update({"label " + p: WS.LABEL[p] for p in WS.PROVIDERS})
-    words.update({"whoogle": WS.LEFT_OUT[0]["why"], "default why": WS.DEFAULT_WHY,
+    words.update({"whoogle": WS.LEFT_OUT[0]["why"], "brave left out": WS.LEFT_OUT[1]["why"],
+                  "default why": WS.DEFAULT_WHY,
                   "ask label": WS.ASK_EVERY_TIME_LABEL, "ask detail": WS.ASK_EVERY_TIME_DETAIL,
                   "key entry": WS.KEY_ENTRY})
     for name, text in words.items():
         js, kt = _literal_forms(text)
         check(f"the desktop's web-search.js has the PC's {name} word for word", js in desk, text)
         check(f"the phone's WebSearch.kt has the PC's {name} word for word", kt in phone, text)
+    for name, body in (("desktop", desk), ("phone", phone)):
+        check(f"the {name} offers the four in the PC's order, Brave not among them",
+              re.search(r'"searxng",\s*"duckduckgo",\s*"exa",\s*"tavily"\s*[\])]', body) is not None
+              and not re.search(r'PROVIDERS\s*=.*"brave"', body))
 
 
 # --------------------------------------------------------------------------
@@ -412,14 +423,14 @@ def t_the_searxng_address_is_the_owners_own():
 
 
 # --------------------------------------------------------------------------
-#   4. Tavily and Brave: the keys
+#   4. Exa and Tavily: the keys
 # --------------------------------------------------------------------------
 
 def _with_cloud(provider, routes, fn):
     srv = StandIn(routes)
-    attr = "TAVILY_URL" if provider == "tavily" else "BRAVE_URL"
+    attr = "TAVILY_URL" if provider == "tavily" else "EXA_URL"
     saved = getattr(WS, attr)
-    setattr(WS, attr, srv.url + ("/search" if provider == "tavily" else "/res/v1/web/search"))
+    setattr(WS, attr, srv.url + "/search")
     try:
         return fn(srv)
     finally:
@@ -475,28 +486,98 @@ def t_tavily_key_goes_only_to_tavily():
           FAKE_TAVILY not in jarvis_scrub.scrub_text(f"sending {FAKE_TAVILY} now"))
 
 
-def t_brave_key_goes_only_to_brave():
-    reset(provider="brave")
-    FakeStore.DATA[WS.KEY_TARGETS["brave"]] = FAKE_BRAVE
-    body = json.dumps({"web": {"results": [{"title": "B <strong>x</strong>",
-                                            "url": "https://b.example/1",
-                                            "description": "a <strong>b</strong> &amp; c"}]}}).encode()
-    out, seen = _with_cloud("brave", {"/res/v1/web/search": (200, {}, body)},
-                            lambda srv: (WS.run(WS.plan("walking boots"), approved=True), srv.seen))
+def t_exa_key_goes_only_to_exa():
+    reset(provider="exa")
+    FakeStore.DATA.clear()
+    with NoSockets() as ns:
+        p = WS.plan("walking boots")
+    check("Exa, no key: refused before any socket, and says where to add one",
+          p.state == "key_missing" and "No Exa key" in p.problem and not ns.tried, p.problem)
+    FakeStore.DATA[WS.KEY_TARGETS["exa"]] = FAKE_EXA
+    long_text = "page text " * 400
+    body = json.dumps({"results": [
+        {"title": "E <b>x</b>", "url": "https://e.example/1", "text": long_text,
+         "highlights": ["first useful passage.", "second &amp; last."]},
+        {"title": None, "url": "https://e.example/2", "text": long_text},
+        {"title": "bad", "url": "javascript:alert(1)", "highlights": ["x"]},
+    ] + [{"title": f"n{i}", "url": f"https://e.example/n{i}", "text": "t"} for i in range(9)],
+        "requestId": "r"}).encode()
+
+    def go(srv):
+        p = WS.plan("walking boots")
+        card = WS.describe(p)
+        return p, card, WS.run(p, approved=True), srv.seen
+    p, card, out, seen = _with_cloud("exa", {"/search": (200, {}, body)}, go)
+    r = out.get("results") or []
+    check("Exa answers: highlights joined into the snippet, tags and entities cleaned",
+          out.get("ok") and r[0] == {"title": "E x", "url": "https://e.example/1",
+                                    "snippet": "first useful passage. ... second & last."}, r[:1])
+    check("... no highlights: the start of the page text, cut to 300; no title: the link",
+          len(r) > 1 and r[1]["title"] == "https://e.example/2"
+          and len(r[1]["snippet"]) <= WS.SNIPPET_CHARS and r[1]["snippet"].startswith("page text"),
+          r[1:2])
+    check(f"... at most {WS.MAX_RESULTS} results, the javascript: link dropped",
+          len(r) == WS.MAX_RESULTS and all(x["url"].startswith("https://") for x in r))
     req = seen[0] if seen else {}
-    check("Brave answers, tags and entities cleaned",
-          out.get("ok") and out["results"][0] == {"title": "B x", "url": "https://b.example/1",
-                                                  "snippet": "a b & c"}, out)
-    check("the key went as X-Subscription-Token, a GET with the words and count=5",
-          req.get("method") == "GET" and req["headers"].get("x-subscription-token") == FAKE_BRAVE
-          and "count=5" in req["path"] and "walking+boots" in req["path"], req)
+    sent = json.loads(req.get("body") or b"{}")
+    check("the key went as x-api-key, a POST with query, numResults 5 and highlights",
+          req.get("method") == "POST" and req["headers"].get("x-api-key") == FAKE_EXA
+          and sent == {"query": "walking boots", "numResults": 5,
+                       "contents": {"highlights": True}}, (req.get("headers"), sent))
     check("... and not as Authorization", "authorization" not in req.get("headers", {}))
-    for status, state in ((401, "key_refused"), (422, "key_refused"), (402, "quota_used"),
-                          (429, "rate_limited")):
-        out = _with_cloud("brave", {"/res/v1/web/search": (status, {}, b"{}")},
+    check("the key is in no plan, card or answer",
+          FAKE_EXA not in json.dumps([p.as_dict(), card, out]))
+    check("the card says a key goes, to api.exa.ai's address only", "with your Exa key" in card)
+    for status, state in ((401, "key_refused"), (403, "key_refused"), (402, "quota_used"),
+                          (429, "rate_limited"), (500, "failed")):
+        out = _with_cloud("exa", {"/search": (status, {}, b'{"error": "x"}')},
                           lambda srv: WS.run(WS.plan("x"), approved=True))
-        check(f"Brave {status} -> {state}", out["state"] == state
-              and FAKE_BRAVE not in json.dumps(out), out)
+        check(f"Exa {status} -> {state}, said plainly, no key in it",
+              out["state"] == state and FAKE_EXA not in json.dumps(out), out)
+    target = StandIn({"*": (200, {}, body)})
+    out = _with_cloud("exa", {"/search": (307, {"Location": target.url + "/steal"}, b"")},
+                      lambda srv: WS.run(WS.plan("x"), approved=True))
+    check("Exa: a redirect is refused: the key never reaches another address",
+          out["ok"] is False and not target.seen, target.seen)
+    target.close()
+    srv_big = b'{"results": [' + b" " * (WS.MAX_BODY + 10) + b"]}"
+    out = _with_cloud("exa", {"/search": (200, {}, srv_big)},
+                      lambda srv: WS.run(WS.plan("x"), approved=True))
+    check("Exa: an answer over the size cap is refused", out["ok"] is False, out)
+    check("the real address is Exa's own, over https", WS.EXA_URL == "https://api.exa.ai/search")
+    WS._key("exa")
+    check("the log scrubber hides the Exa key by value",
+          FAKE_EXA not in jarvis_scrub.scrub_text(f"sending {FAKE_EXA} now"))
+
+
+def t_a_saved_brave_setting_searches_nothing_and_says_so():
+    reset(provider="brave")
+    s = WS.settings()
+    check("a settings file that still names Brave: no provider, said plainly",
+          s["provider"] is None and "Brave Search is no longer offered" in s["why"], s)
+    with NoSockets() as ns:
+        p = WS.plan("walking boots")
+        out = WS.run(p, approved=True)
+    check("... nothing is searched, no socket, and it offers SearXNG and DuckDuckGo",
+          not ns.tried and out["ok"] is False and out["state"] == "no_longer_offered"
+          and "SearXNG" in out.get("offer", "") and "DuckDuckGo" in out.get("offer", ""), out)
+    check("... GET still answers, with the reason", WS.view()["provider"] is None
+          and "no longer offered" in WS.view()["why"])
+    code, out = WS.handle_settings({"provider": "brave"})
+    check("Brave cannot be chosen again", code == 400)
+    WS.handle_settings({"ask_every_time": True})
+    check("changing another setting does not quietly pick a provider",
+          WS.settings()["provider"] is None)
+    code, out = WS.handle_settings({"provider": "searxng"})
+    check("choosing one puts it right", code == 200 and WS.settings()["provider"] == "searxng"
+          and WS.settings()["why"] == "")
+    reset(provider="brave")
+    gates, told, summary, seen = _turn()
+    check("in chat: no card, nothing sent, and the model is told to say so",
+          not gates and not seen and "no longer offered" in told[-1]["content"]
+          and "Do not try to search another way" in told[-1]["content"], told[-1]["content"][:300])
+    check("CLI: no key command for Brave", WS._main(["key", "brave"], ask_secret=lambda p: "x" * 20,
+                                                    out=lambda *_: None) == 2)
 
 
 def t_the_keys_stay_on_the_pc():
@@ -636,14 +717,14 @@ def t_settings_and_the_card_to_ask_less():
     check("... choosing one rewrites it", code == 200 and WS.settings()["provider"] == "duckduckgo"
           and WS.settings()["why"] == "")
     reset()
-    code, out = WS.handle_settings({"provider": "brave", "ask_every_time": True})
+    code, out = WS.handle_settings({"provider": "exa", "ask_every_time": True})
     check("one change per request", code == 400)
     code, out = WS.handle_settings({"provider": "whoogle"})
     check("Whoogle cannot be chosen", code == 400)
     FakeStore.DATA.clear()
-    code, out = WS.handle_settings({"provider": "brave"})
+    code, out = WS.handle_settings({"provider": "exa"})
     check("choosing a provider is immediate, and says what is missing",
-          code == 200 and WS.settings()["provider"] == "brave" and "No Brave Search key" in
+          code == 200 and WS.settings()["provider"] == "exa" and "No Exa key" in
           out["said"], out.get("said"))
     code, out = WS.handle_settings({"ask_every_time": True})
     check("\"Ask before every web search\" ON is immediate", code == 200
@@ -713,8 +794,11 @@ def _turn(user_text="find walking boots", *, provenance="typed", facts=False, ga
     what the model was told, turn summary, stand-in's requests)."""
     srv = StandIn({"/search": (200, {}, searxng_json(2))})
     s = WS.settings()
-    WS._save(searxng_url=srv.url, provider=s["provider"] or "searxng",
-             ask_every_time=s["ask_every_time"])
+    if s["provider"] is not None:
+        # A file with no provider in use (Brave, no longer offered) is left
+        # as it is: the turn must meet it.
+        WS._save(searxng_url=srv.url, provider=s["provider"],
+                 ask_every_time=s["ask_every_time"])
     gate_calls = []
 
     def watching(action, detail, prompt):
@@ -883,7 +967,8 @@ class _Sched:
 def t_which_search_without_the_model():
     reset()
     for said, which in (("Which search should I use?", None), ("why SearXNG?", "searxng"),
-                        ("what about Tavily for web search", "tavily"), ("why brave", "brave"),
+                        ("what about Tavily for web search", "tavily"), ("why exa", "exa"),
+                        ("why brave", "brave"),
                         ("why not whoogle", "whoogle"), ("what search engine are you using", None)):
         i = Q.match(said)
         check(f"{said!r} is answered without the model", i is not None
@@ -893,8 +978,17 @@ def t_which_search_without_the_model():
         check(f"{said!r} goes to the model", Q.match(said) is None or
               not Q.match(said).name.startswith("search_"))
     r = Q.answer("which search should I use", sched=_Sched())
-    check("the answer is the PC's own words, all four and Whoogle",
-          all(WS.WHY[p] in r.reply for p in WS.PROVIDERS) and WS.LEFT_OUT[0]["why"] in r.reply)
+    check("the answer is the PC's own words, all four, Whoogle and Brave",
+          all(WS.WHY[p] in r.reply for p in WS.PROVIDERS)
+          and all(x["why"] in r.reply for x in WS.LEFT_OUT))
+    before = WS.settings()["provider"]
+    r = Q.answer("use brave for web search", sched=_Sched())
+    check("\"use Brave for web search\" says why not, and changes nothing",
+          "payment card" in r.reply and WS.settings()["provider"] == before, r.reply)
+    FakeStore.DATA.clear()
+    r = Q.answer("use exa for web search", sched=_Sched())
+    check("\"use Exa for web search\" switches, and says the key is missing",
+          WS.settings()["provider"] == "exa" and "No Exa key" in r.reply, r.reply)
     r = Q.answer("why searxng", sched=_Sched())
     check("\"why SearXNG?\" says why it is the default", WS.DEFAULT_WHY in r.reply)
     with NoSockets() as ns:
@@ -1010,7 +1104,8 @@ if __name__ == "__main__":
                t_plan_opens_no_socket_and_refuses_a_secret,
                t_searxng_results_no_proxy_no_redirect, t_searxng_down_says_so_and_never_falls_back,
                t_the_searxng_address_is_the_owners_own, t_tavily_key_goes_only_to_tavily,
-               t_brave_key_goes_only_to_brave, t_the_keys_stay_on_the_pc,
+               t_exa_key_goes_only_to_exa, t_a_saved_brave_setting_searches_nothing_and_says_so,
+               t_the_keys_stay_on_the_pc,
                t_duckduckgo_only_and_paced, t_settings_and_the_card_to_ask_less,
                t_test_search_reports_plainly, t_no_card_for_the_owners_own_question,
                t_a_card_when_private_things_could_slip_in, t_only_a_person_s_yes_runs_it,

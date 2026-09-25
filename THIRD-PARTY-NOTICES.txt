@@ -227,9 +227,11 @@ ddgs (deedy5), MIT - https://github.com/deedy5/ddgs
   here beyond their published licence names.
   SearXNG (AGPL-3.0) is NOT part of Jarvis: the owner runs the unmodified
   searxng/searxng Docker image on their own PC and Jarvis only sends it
-  HTTP requests, so nothing of it is distributed with Jarvis. Tavily and
-  Brave Search are web services used with the owner's own keys, under
-  their own terms.
+  HTTP requests, so nothing of it is distributed with Jarvis. Exa and
+  Tavily are web services used with the owner's own keys, under their own
+  terms. Exa is called directly over HTTPS; its exa-py library (MIT) is not
+  a dependency - its 2.22.2 source was only read, to confirm the request's
+  address, header and field names, and none of it is copied.
 
 SPOKEN ANSWERS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
