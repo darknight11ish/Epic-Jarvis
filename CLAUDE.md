@@ -256,6 +256,23 @@ Decided 2026-09-25, after the creativity audit
   both apps' settings (plain, businesslike answers). Manner never changes
   what Jarvis does, asks or remembers - only how it phrases things.
 
+Decided 2026-09-25, after reviewing the "Build Your Own Jarvis" prompt pack
+and video (owner chose: build four ideas now):
+- **A live preflight check** on the PC: every real chain tested end to end,
+  "N pass, N fail, N warn", one new check per real incident.
+- **A "stop everything" hotkey** on the desktop that halts any action Jarvis
+  is taking on the screen at once.
+- **Urgent alerts without phone calls:** "tell me when ..." (a named sender's
+  email, a device change) set up with one card; a match only notifies -
+  urgent ones as a phone notification that keeps ringing until seen. No
+  telephony service: a call would send private text to an outside voice
+  company (rule 1).
+- **Focus sessions**, off unless started: a timer plus Quiet; Jarvis watches
+  which app/site is in front ON THE PC ONLY, names the distraction out loud
+  ("Instagram can wait") but never stores what it saw (only counts), waits
+  until the owner settles before locking on, and ends with a report card.
+  Snooze, "I'm doing research", pause and stop by voice. Nothing leaves the PC.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
