@@ -249,10 +249,16 @@ max_tokens = 2048
 bind_address = "127.0.0.1"
 allow_public_tunnel = false                # `jarvis tunnel` permanently forbidden
 remote_access_method = "tailscale_serve_only"
-sandbox_web_research = true
-sandbox_code_execution = true
-sandbox_file_work = true
-sandbox_email_calendar = true
+# NOT IMPLEMENTED - there is no sandbox (security audit L8, 2026-09-25).
+# Four `sandbox_*` settings stood here, all `true`: sandbox_web_research,
+# sandbox_code_execution, sandbox_file_work and sandbox_email_calendar.
+# Nothing ever read them. An approved shell command and a file read run
+# directly on this PC, as you; what protects you is the approval card, the
+# tier table in [autonomy], and (since the same audit) a shell command no
+# longer inheriting Jarvis's passwords and tokens. A setting that looks like
+# protection and gives none is worse than no setting (ARCHITECTURE.md,
+# invariant 6), so they were taken out. If your own copy of this file still
+# has them, they do nothing there either; you can delete them.
 computer_control_containerized = false     # not possible on Windows (WSL2 has no desktop)
 computer_control_always_on = false         # host-side, started on demand only
 

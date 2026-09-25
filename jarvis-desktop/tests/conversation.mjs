@@ -67,8 +67,10 @@ await check("clipboard context stays with its own turn, after the history", asyn
   assert.equal(second[1], "assistant:first answer");
   assert.equal(second[second.length - 1], "user:what does this say?");
   // The clipboard turn sits after the history, right before its question.
-  const sys = second.findIndex((m) => m.startsWith("system:"));
-  assert.equal(sys, 2, `system turn at ${sys}: ${JSON.stringify(second)}`);
+  // It is a user turn since 2026-09-25 (tagged "clipboard" - security audit
+  // M1; tests/provenance.mjs checks the tag), never a system turn.
+  assert.equal(second[2], "user:Context:\nsome pasted text", JSON.stringify(second));
+  assert.ok(!second.some((m) => m.startsWith("system:")), JSON.stringify(second));
   assert.equal(second.length, 4);
 });
 

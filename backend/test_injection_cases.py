@@ -165,6 +165,11 @@ def turn(responses, gate=None, *, user="anything new in my inbox?", request=None
     the model was sent, gate, text the app was sent)."""
     gate = gate or Gate()
     streamed = []
+    if request is None:
+        # The owner typed it, as both apps say (JARVIS-API §18.1). A message
+        # with no tag is outside text (security audit M1), so the tag is
+        # given here rather than left off by accident.
+        request = {"messages": [{"role": "user", "content": user, "provenance": "typed"}]}
     if open_stream is None:
         post, payloads = scripted_post(responses)
         extra = {"post": post}

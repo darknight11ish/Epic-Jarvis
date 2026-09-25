@@ -82,6 +82,8 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
+import jarvis_local_http
+
 URL_ENV = "JARVIS_CALDAV_URL"
 USER_ENV = "JARVIS_CALDAV_USER"
 PASSWORD_ENV = "JARVIS_CALDAV_PASSWORD"
@@ -157,6 +159,13 @@ def plan(days_ahead: int = 7, *, now: Optional[datetime] = None) -> Plan:
             if_refused="nothing is read; the calendar stays unknown to Jarvis",
             authenticated=authenticated(),
             reason_empty=f"{URL_ENV} is not set - there is no calendar to read")
+    # Security audit L7: no password over plain http:// to another machine.
+    insecure = jarvis_local_http.plain_http_problem(url, URL_ENV, "the calendar password")
+    if insecure:
+        return Plan(
+            days_ahead=days_ahead, start=start_s, end=end_s, query=None,
+            if_refused="nothing is read; the calendar stays unknown to Jarvis",
+            authenticated=authenticated(), reason_empty=insecure)
 
     body = (
         '<?xml version="1.0" encoding="utf-8" ?>\n'

@@ -85,7 +85,9 @@ data class StatusInfo(
     val activity: String? = null,
     val held: Boolean = false,
     /**
-     * What Jarvis is doing right now, in words - "Step 2/3: click 'Send'".
+     * What Jarvis is doing right now, in words - "Step 2/3: a click in another
+     * program's window" (a step number and a fixed word, never a control's name,
+     * a window title or an address - security audit L4).
      *
      * Proposed by `docs/AUTONOMY-PROPOSALS.md` §3c on the desktop branch as an
      * additive sibling of `activity`: the sentence the backend's `announce()`

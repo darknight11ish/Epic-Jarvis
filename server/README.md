@@ -1,5 +1,14 @@
 # Desktop endpoint for Jarvis Mobile
 
+> **Legacy - not used by Jarvis.** Nothing in Jarvis imports or starts
+> `jarvis_mobile_ws.py`. It speaks the WebSocket protocol of the older
+> `jarvis-android` app, which the real backend never spoke; `jarvis-client`
+> uses `docs/JARVIS-API.md` instead. It is kept for reference only - whether
+> to delete it is the owner's call. If it is ever run, bind it to
+> `127.0.0.1` and always set `auth_token`: without a token, anything that
+> can reach the port can connect and answer approval requests (security
+> audit L6, 2026-09-25).
+
 `jarvis_mobile_ws.py` is a stdlib-only WebSocket endpoint for the Android
 client. Drop it next to your desktop server and import it — there is nothing to
 install.
@@ -26,7 +35,7 @@ ENDPOINT = MobileEndpoint(
         secret=os.environ["JARVIS_SHARED_SECRET"],
         allowed_device_ids=[os.environ["JARVIS_DEVICE_ID"]],   # optional but advised
     ),
-    auth_token=os.environ.get("JARVIS_AUTH_TOKEN"),
+    auth_token=os.environ["JARVIS_AUTH_TOKEN"],     # required - never leave it out
     on_approval=lambda request_id, approved, client: PENDING.pop(request_id).resolve(approved),
     on_audio=lambda pcm, client: transcriber.feed(pcm),        # 16kHz 16-bit mono
     is_pending=lambda request_id: request_id in PENDING,
@@ -41,7 +50,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         ...   # your existing routes
 
-ThreadingHTTPServer(("0.0.0.0", 4719), Handler).serve_forever()
+# This computer only. Never "0.0.0.0" (every network interface, the home
+# network included).
+ThreadingHTTPServer(("127.0.0.1", 4719), Handler).serve_forever()
 ```
 
 `ThreadingHTTPServer` is required: `serve()` blocks its thread until the phone

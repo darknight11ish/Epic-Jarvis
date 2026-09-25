@@ -168,7 +168,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `hello` | Reads link state, re-fetches on `stale` (`stream.rs:452`) | Nothing — arrives as `Signal.Open` instead (`JarvisRuntime.kt:700`) |
 | `approval` | Re-fetches `/api/pending` once for all three surfaces (`stream.rs:518`) | Re-fetches pending (`JarvisRuntime.kt:668`) |
 | `attention` | Applies the payload directly (`stream.rs:511`) | Re-fetches `/api/attention` (`JarvisRuntime.kt:669`) |
-| `activity` | Updates activity + detail. The sentence is read from `value.detail` (the rebuilt bus's `set_activity` shape), then a top-level `detail`, then `activity_detail` (`stream.rs`, `activity_detail()`) | Reads the sentence off the event the same way - `value.detail` first, then `detail`, then `activity_detail` (`net/ActivityEvent.kt`) - and re-fetches status (`JarvisRuntime.onEvent`). Before 2026-09-24 it read only `activity_detail`, which no backend sends |
+| `activity` | Updates activity + detail. The sentence is a step number and a fixed word while Jarvis drives a browser, a window or the phone ("Step 2/3: a click in another program's window") - never an address, a window title, a control's name or typed text (security audit L4, 2026-09-25); those are on the card. The sentence is read from `value.detail` (the rebuilt bus's `set_activity` shape), then a top-level `detail`, then `activity_detail` (`stream.rs`, `activity_detail()`) | Reads the sentence off the event the same way - `value.detail` first, then `detail`, then `activity_detail` (`net/ActivityEvent.kt`) - and re-fetches status (`JarvisRuntime.onEvent`). Before 2026-09-24 it read only `activity_detail`, which no backend sends |
 | `power` | Updates power mode (`stream.rs:529`) | Re-fetches status (`JarvisRuntime.kt:682`) |
 | `persona` | Fanned out verbatim | Re-fetches status (`JarvisRuntime.kt:682`) |
 | `finding` | Fanned out verbatim | Ignored — the digest covers these (`JarvisRuntime.kt:683`) |
@@ -424,6 +424,15 @@ without it is read by `gate`: only `"escalate"` picks a cloud lane). The
 quickbar used to guess from each chunk's `model` name and the HUD page tested
 `gate == "privacy"`, a gate the router never returns - so every answer there
 was painted as cloud.
+
+**`gate: "cloud_model"` in `X-Jarvis-Route`** (security audit H1, 2026-09-25):
+the everyday model is one of Ollama's cloud models (`-cloud` / `:cloud`,
+answered on ollama.com, not on this PC). Nothing is sent to it: the answer
+is one plain error ("Jarvis did not answer: the everyday model ... is one of
+Ollama's cloud models ...", in the same framing as any other failed turn),
+and `inject_memory` is false. The same happens, with a sentence of its own,
+when `OLLAMA_URL` is not this PC. Apps show the error as they show any
+other; nothing new to handle.
 
 **`offer` in `X-Jarvis-Route`** (the router, 2026-09-24): a cloud lane that
 could have answered this turn, named but NOT used - gate `"offer"`, `where`
@@ -942,7 +951,7 @@ neither app says it would.
 | `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | `brain.rs` `brain_memory_keep_both` | `JarvisApi.kt:439` (`keepBothMemory`) | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
 | `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | `commands.rs:1017` (quickbar), `hud_bootstrap.js` (HUD page) | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | `JarvisApi.forgetFact`, from the "Saved automatically" list only (§19), after a confirm, held on a stale link | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. Since the owner's decision of 2026-09-24 (automatic learning, §19) the phone calls it too, for automatically saved facts - one fact per request, held on a stale link, like the desktop. Rewording (`/api/memory/edit`) stays desktop-only. |
-| `/api/memory/erase` | POST | `{"id": <int>}` and nothing else | `brain.rs` `brain_memory_erase` (Saved automatically, and every fact in What Jarvis knows about you - forgotten ones too), after a confirm, held on a stale link | `JarvisApi.eraseFact` / `JarvisRuntime.eraseAutoFact` (Mind, Saved automatically), after a confirm, held on a stale link | **"Erase the words"** (the owner's decision, 2026-09-24; `memory-erase.patch`, `rebuilt/jarvis_memory.py` `erase()`). Wipes ONE fact's words for good and keeps its row and dates: `text` becomes `[erased]`, `erased_at` is set, the word-search row and meaning vector are deleted, meta keeps only dates, ids and where it came from (no message hash, no conversation id), a current fact is retired as Forget retires it, and copies of the words in the review queue go too (a card still waiting with exactly those words, or a "retire this?" card about the fact, is turned down). Then the file is cleaned: the word index compacted, freed space zeroed, `memory.db-wal` emptied. Works on an already-forgotten fact. Same token and origin checks as forget and, like forget, **no approval card** - both apps ask first ("Erase the words of this fact from your PC for good? Jarvis keeps only the date it was saved, so its history shows something was erased here. This cannot be undone.") and say "Erased.". `200 {"ok": true, "id", "erased_at", "already_erased", "retired_now", "file_clean", "copies", "note"}` - **never the words** (forget's reply has a `was`; this has not). `file_clean: false`: something was reading the file, so an old copy may stay in `memory.db-wal` until the next erase. `400` for anything but one integer `id` (a list, a string, `true`, an extra key); `404 {"ok": false, "reason": "no_such_fact"}` - an app tells this apart from a PC without the route (a plain 404, or `501` from an older `jarvis_memory.py`), where nothing was erased; `503` memory not running. **No event** - forget sends none either, so the other app's list shows the change on its next read. |
+| `/api/memory/erase` | POST | `{"id": <int>}` and nothing else | `brain.rs` `brain_memory_erase` (Saved automatically, and every fact in What Jarvis knows about you - forgotten ones too), after a confirm, held on a stale link | `JarvisApi.eraseFact` / `JarvisRuntime.eraseAutoFact` (Mind, Saved automatically), after a confirm, held on a stale link | **"Erase the words"** (the owner's decision, 2026-09-24; `memory-erase.patch`, `rebuilt/jarvis_memory.py` `erase()`). Wipes ONE fact's words for good and keeps its row and dates: `text` becomes `[erased]`, `erased_at` is set, the word-search row and meaning vector are deleted, meta keeps only dates, ids and where it came from (no message hash, no conversation id), a current fact is retired as Forget retires it, and copies of the words in the review queue go too (a card still waiting with exactly those words, or a "retire this?" card about the fact, is turned down). Then the file is cleaned: the word index compacted, freed space zeroed, `memory.db-wal` emptied. Works on an already-forgotten fact. Same token and origin checks as forget and, like forget, **no approval card** - both apps ask first ("Erase the words of this fact from your PC for good? Jarvis keeps only the date it was saved, so its history shows something was erased here. This cannot be undone.") and say "Erased.". **The earlier wordings go too** (security audit L3, 2026-09-25): every fact this one replaced - an edit (`/api/memory/edit`) or a correction - and every fact THOSE replaced is erased the same way; never a later one. `200 {"ok": true, "id", "erased_at", "already_erased", "retired_now", "file_clean", "copies", "earlier", "note"}` (`earlier`: the ids of the earlier wordings erased with it, newest first) - **never the words** (forget's reply has a `was`; this has not). `file_clean: false`: something was reading the file, so an old copy may stay in `memory.db-wal` until the next erase. `400` for anything but one integer `id` (a list, a string, `true`, an extra key); `404 {"ok": false, "reason": "no_such_fact"}` - an app tells this apart from a PC without the route (a plain 404, or `501` from an older `jarvis_memory.py`), where nothing was erased; `503` memory not running. **No event** - forget sends none either, so the other app's list shows the change on its next read. |
 | `/api/memory/profile` | POST | `{"id": <int>, "pinned": true \| false}` and nothing else | `brain/profile.rs` `brain_memory_pin` (Pin / Unpin on every current fact in Saved automatically and What Jarvis knows about you, and Unpin in Always keep in mind), held on a stale link | `JarvisApi.pinFact` / `JarvisRuntime.pinFact` (Pin / Unpin in Mind, Saved automatically; Unpin in Always keep in mind), held on a stale link | **"Always keep in mind"** - pin or unpin ONE fact (the owner's decision, 2026-09-24). Only the id is stored (a `profile(fact_id, added, how)` table in memory.db); the words stay the fact's own, never summarised or rewritten. **No approval card and no confirm**: it is the owner's own tap on a fact they can see, like Forget, and Unpin takes it back. Pinning a sensitive fact is allowed - only the owner's tap can put one there. Same token and origin checks as forget. `200 {"ok": true, "id", "pinned", "changed", "chars", "limit", "note"}` (pinning a pinned fact, or unpinning one that is not, is `changed: false`); **`409`** `{"ok": false, "reason", "error", "chars", "limit"}` with `reason` `"too_long"` ("That would make the list too long - unpin something first"), `"fact_too_long"` (one fact over 1,200 characters on its own) or `"not_current"` (forgotten or erased) - both apps show `error` word for word; `404 {"ok": false, "reason": "no_such_fact"}` (told apart from a PC without the route, as for erase); `400` for anything but one integer `id` and one boolean `pinned`; `501` older `jarvis_memory.py`; `503` memory not running. The reply never has the words. Audit log: `memory.pinned` / `memory.unpinned` with the id only. **No event** - forget and erase send none either; each app reads the list again after its own memory writes and when Memory / Mind is shown. |
 | `/api/memory/edit` | POST | object | `brain.rs` `brain_memory_edit` | **no** | Refused while the stream is stale. Rewording supersedes (a new fact, the old one retired), so a pinned fact that is reworded leaves "Always keep in mind" - pin the new wording. |
 | `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | `JarvisApi.setLearning` (Mind, "What Jarvis remembers") | **ON asks first** (`learning-asks.patch`, `jarvis_learning_switch.py`, 2026-09-24): **202** `{"ok": true, "waiting": true, "enabled": false, "message"}` while one approval card under the action `learning_enable` waits; it turns on (and starts the learner) only when that card is approved. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, and it withdraws a waiting ON. Both apps hold ON (not OFF) while the stream is stale, and say "waiting" until the card leaves the queue. A "Remember:" message makes a card even while learning is off. |
@@ -1385,9 +1394,11 @@ An answer cut off while the model was still reasoning (a `<think>` with no
 limit after the reasoning closed is `done`, and `why` says it may end
 mid-sentence. While the big model is on another job, a question stays
 `loading` and `why` says it is waiting for that job.
-Times are Unix seconds. The answers are kept on the PC in
-`<config dir>/deep-questions.jsonl` (the last 100), so they survive a
-restart; questions still waiting when the backend stops are lost.
+Times are Unix seconds. The questions and answers are kept **in memory
+only**, until the backend stops (security audit L2, 2026-09-25): they used
+to be written to `<config dir>/deep-questions.jsonl` in plain text, outside
+chat history's switch and encryption. After a restart the list is empty. An
+older `deep-questions.jsonl` is no longer read or written.
 
 **The event.** When a deep question finishes, the event stream carries kind
 `deep` with `{"id", "state": "done"|"failed"}` - a doorbell, never the
@@ -2167,8 +2178,21 @@ before the owner's typed message in the same request. If the owner typed
 nothing, the shared message is sent alone.
 
 **Desktop clipboard hotkey.** The short-snippet prefill is tagged
-`clipboard`; it becomes `typed` only if the owner edits it before sending.
-The long-snippet `system` context path is unchanged.
+`clipboard` until the box is emptied, edited or not. Clipboard context
+(the attached snippet) is sent as its **own** user message,
+`{"role": "user", "content": "Context:\n<the text>", "provenance":
+"clipboard"}`, just before the question - the same shape as the phone's
+Share. Since 2026-09-25 (security audit M1); it used to be a `system`
+message, and the PC's outside-text rules read only user messages, so
+copied text slipped past them. The PC does not keep it in History (only
+the newest message, and a `shared` one just before it, are kept).
+
+**What the PC does with the tags in the answering loop** (`jarvis_agent`,
+"Outside text in the tool loop"): only `typed` and `voice` are the owner's
+own words. Any other value - or none - on the newest message, or on a
+`shared` or `clipboard` message sent just before it, makes the turn one
+shaped by outside text: a note write asks first, and every card says so.
+So does any `system` message in the request as the app sent it.
 
 **The server takes `provenance`, `conversation_id` and `device` off before
 anything goes to any model**, local or cloud: the local answering loop gets

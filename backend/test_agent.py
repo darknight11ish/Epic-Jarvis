@@ -157,7 +157,7 @@ def t_no_tool_call_streams_straight_through():
     streamed = []
     with NoRealIO():
         AG.run_local_turn(
-            [{"role": "user", "content": "hello"}], "qwen3:8b", ollama_url="http://x",
+            [{"role": "user", "content": "hello"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
             stream_out=streamed.append, gate_check=allow, open_stream=opener)
     # The bug this guards against: every turn with tools on used to be
     # generated TWICE - once whole and unseen to look for tool calls, then
@@ -193,7 +193,7 @@ def t_a_denied_tool_never_executes():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "delete everything"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=deny,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("a denied tool call never runs the real tool", executed == [], repr(executed))
@@ -217,7 +217,7 @@ def t_an_approved_tool_actually_runs_and_feeds_back_the_result():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "what is 2+2"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=allow,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("two rounds: the tool call, then the answer using its result", len(calls) == 2)
@@ -247,7 +247,7 @@ def t_arguments_already_a_dict_does_not_crash_the_loop():
         post, calls = scripted_post(responses)
         with NoRealIO():
             AG.run_local_turn(
-                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://x",
+                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
                 stream_out=lambda b: None, post=post, gate_check=allow,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("a dict-shaped arguments value is used directly, not crashed on",
@@ -273,7 +273,7 @@ def t_arguments_as_a_json_scalar_does_not_crash_the_loop():
         post, calls = scripted_post(responses)
         with NoRealIO():
             AG.run_local_turn(
-                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://x",
+                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
                 stream_out=lambda b: None, post=post, gate_check=allow,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         # Since 2026-09-24 it is not turned into {} either (that is how a
@@ -296,7 +296,7 @@ def t_an_unknown_tool_name_is_refused_not_guessed():
     post, calls = scripted_post(responses)
     with NoRealIO():
         AG.run_local_turn(
-            [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://x",
+            [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
             stream_out=lambda b: None, post=post, gate_check=allow,
             open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
     tool_msg = calls[1]["messages"][-1]
@@ -489,7 +489,7 @@ def t_every_outbound_tool_is_refused_unless_a_person_approved():
             try:
                 with NoRealIO():
                     AG.run_local_turn(
-                        [{"role": "user", "content": "go"}], "m", ollama_url="http://x",
+                        [{"role": "user", "content": "go"}], "m", ollama_url="http://127.0.0.1:11434",
                         stream_out=lambda b: None, post=post,
                         gate_check=lambda *a, v=v: v,
                         open_stream=lambda u, p: FakeStream([b""]),
@@ -524,10 +524,14 @@ def _one_call_turn(tname, plan_text, gate):
     ])
     try:
         with NoRealIO():
-            AG.run_local_turn([{"role": "user", "content": "go"}], "m", ollama_url="http://x",
+            AG.run_local_turn([{"role": "user", "content": "go"}], "m", ollama_url="http://127.0.0.1:11434",
                               stream_out=lambda b: None, post=post, gate_check=watching,
                               open_stream=lambda u, p: FakeStream([b""]),
-                              record_chain=lambda s: None)
+                              record_chain=lambda s: None,
+                              # Typed by the owner: an untagged message is
+                              # outside text (security audit M1).
+                              request={"messages": [{"role": "user", "content": "go",
+                                                     "provenance": "typed"}]})
     finally:
         tool.prepare, tool.execute = real_prepare, real_execute
     return executed, gate_calls, calls[1]["messages"][-1]["content"]
@@ -618,7 +622,7 @@ def t_enabled_tools_actually_restricts_what_the_model_is_offered_and_can_call():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "run a command"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=allow, enabled_tools={"calculator"},
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         offered = [t["function"]["name"] for t in seen_bodies[0]["tools"]]
@@ -640,7 +644,7 @@ def t_empty_enabled_tools_offers_nothing():
         return {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
     with NoRealIO():
         AG.run_local_turn(
-            [{"role": "user", "content": "hi"}], "qwen3:8b", ollama_url="http://x",
+            [{"role": "user", "content": "hi"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
             stream_out=lambda b: None, post=post, gate_check=allow,
             enabled_tools=set(),
             open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
@@ -659,7 +663,7 @@ def t_max_rounds_stops_an_infinite_tool_loop():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "loop forever"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None,
                 post=always_wants_a_tool, gate_check=allow, max_rounds=3,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("run_local_turn returns rather than looping forever", True)
@@ -691,7 +695,7 @@ def t_a_prepare_time_failure_is_a_tool_result_not_a_dead_turn():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "what is 2+2"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=allow,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("the turn survived a prepare-time raise", len(calls) == 2, repr(len(calls)))
@@ -730,7 +734,7 @@ def t_a_prepare_time_failure_never_executes_the_tool():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "x"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=watching_gate,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("CONTROL: the tool never executed", ran == [], repr(ran))
@@ -770,7 +774,7 @@ def _two_tool_turn(gate_check, recorder=None, stream_fail=False, on_step=None):
             try:
                 AG.run_local_turn(
                     [{"role": "user", "content": "PLEASE-DO-NOT-LOG-ME"}], "qwen3:8b",
-                    ollama_url="http://x", stream_out=lambda b: None,
+                    ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None,
                     gate_check=gate_check, open_stream=opener,
                     record_chain=recorder if recorder is not None else got.append,
                     on_step=on_step)
@@ -865,7 +869,7 @@ def t_a_step_sink_that_raises_never_breaks_the_turn():
     post, _ = scripted_post(responses)
     with NoRealIO():
         AG.run_local_turn([{"role": "user", "content": "hi"}], "qwen3:8b",
-                          ollama_url="http://x", stream_out=streamed.append, post=post,
+                          ollama_url="http://127.0.0.1:11434", stream_out=streamed.append, post=post,
                           gate_check=allow, on_step=boom,
                           open_stream=lambda u, p: FakeStream([b"hi"]))
     check("the answer still streams when the step sink raises",
@@ -881,7 +885,7 @@ def t_the_default_step_sink_is_the_event_bus():
     post, _ = scripted_post(responses)
     with NoRealIO():
         AG.run_local_turn([{"role": "user", "content": "hi"}], "qwen3:8b",
-                          ollama_url="http://x", stream_out=lambda b: None, post=post,
+                          ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                           gate_check=allow, open_stream=lambda u, p: FakeStream([b"x"]))
     new = [s["phase"] for s in PUBLISHED_STEPS[before:]]
     check("the default sink received the turn's steps", new == ["model", "answer"], repr(new))
@@ -909,7 +913,7 @@ def t_a_turn_with_no_tool_records_nothing():
     post, _ = scripted_post(responses)
     with NoRealIO():
         AG.run_local_turn([{"role": "user", "content": "hi"}], "qwen3:8b",
-                          ollama_url="http://x", stream_out=lambda b: None, post=post,
+                          ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                           gate_check=allow, record_chain=got.append,
                           open_stream=lambda u, p: FakeStream([b"x"]))
     check("a plain answer writes no chain record", got == [], repr(got))
@@ -931,7 +935,7 @@ def t_the_recorder_failing_never_breaks_the_turn():
         post, _ = scripted_post(responses)
         with NoRealIO():
             AG.run_local_turn([{"role": "user", "content": "2+2"}], "qwen3:8b",
-                              ollama_url="http://x", stream_out=streamed.append, post=post,
+                              ollama_url="http://127.0.0.1:11434", stream_out=streamed.append, post=post,
                               gate_check=allow, record_chain=boom,
                               open_stream=lambda u, p: FakeStream([b"four"]))
         check("the answer still streams when the recorder raises",
@@ -964,7 +968,7 @@ def t_the_default_recorder_is_used_when_none_is_passed():
         post, _ = scripted_post(responses)
         with NoRealIO():
             AG.run_local_turn([{"role": "user", "content": "x"}], "qwen3:8b",
-                              ollama_url="http://x", stream_out=lambda b: None, post=post,
+                              ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                               gate_check=allow,
                               open_stream=lambda u, p: FakeStream([b"x"]))
     finally:

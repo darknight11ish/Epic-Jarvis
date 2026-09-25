@@ -445,7 +445,7 @@ def _spoken_turn(waited="480"):
     body = OW.stream([("content", "Sure"), ("content", ", a quarter"), ("content", " past nine."),
                       ("content", " Your meeting is at ten."), ("done", "stop")])
     AG.run_local_turn([{"role": "user", "content": h.text}], "jarvis-primary",
-                      ollama_url="http://ollama", stream_out=lambda b: None,
+                      ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None,
                       open_stream=lambda url, p: OW.FakeResponse(body), context_length=16384,
                       keepalive_seconds=1000, gate_check=lambda *a: None)
     with mock.patch.object(S, "_synthesise", lambda text, **k: (

@@ -210,14 +210,41 @@ def _run_file_read(args: dict) -> dict:
     return {"ok": True, "content": content, "truncated": truncated}
 
 
+#: What an approved shell command may inherit beyond jarvis_child_env's
+#: essentials: what PowerShell and the Windows shell look for. Never a secret:
+#: jarvis_child_env drops any name that looks like one, even these.
+SHELL_ENV_NAMES = ("PSModulePath", "PUBLIC", "ALLUSERSPROFILE", "PROMPT",
+                   "USER", "SHELL", "TERM")
+SHELL_ENV_PREFIXES = ("CommonProgram",)
+
+
+def shell_env() -> dict:
+    """The environment an approved shell command runs with (security audit
+    M2, GUARDS S1). An allowlist - jarvis_child_env.inherited() - not a copy
+    of Jarvis's own: Jarvis's environment holds the pairing token and the
+    service passwords (JARVIS_IMAP_PASSWORD, JARVIS_CALDAV_PASSWORD,
+    JARVIS_HOME_TOKEN, JARVIS_GITHUB_TOKEN, ...), and an approved
+    `pip install x` runs other people's install scripts, which could read
+    every one of them. Raises ImportError when jarvis_child_env.py is
+    missing: then nothing runs, rather than running with everything."""
+    import jarvis_child_env
+    return jarvis_child_env.inherited(names=SHELL_ENV_NAMES, prefixes=SHELL_ENV_PREFIXES)
+
+
 def _run_shell_exec(args: dict) -> dict:
     import subprocess
     command = str(args.get("command", ""))
     if not command.strip():
         return {"ok": False, "error": "empty command"}
     try:
+        env = shell_env()
+    except Exception:
+        return {"ok": False, "error": "jarvis_child_env.py is missing from the backend "
+                                      "folder, so no command runs: without it the command "
+                                      "would get your passwords and the pairing token."}
+    try:
         result = subprocess.run(
-            command, shell=True, capture_output=True, text=True,
+            command, shell=True, capture_output=True, text=True, env=env,
             timeout=max(1.0, min(120.0, float(args.get("timeout_seconds", 30) or 30))))
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
@@ -1533,10 +1560,44 @@ _OWN_FLAG_WHY = {
 _MAX_SCAN_CHARS = 250_000
 
 #: The newest message's provenance values that are not the owner's own words
-#: (docs/JARVIS-API.md section 18).
+#: (docs/JARVIS-API.md section 18), with how a card says so.
+#:
+#: ONLY `typed` and `voice` are the owner's own words - every other value,
+#: and a message with none at all, is outside text here (security audit M1,
+#: 2026-09-25). This list used to name only pasted, shared and clipboard, so
+#: a message with no tag, `unknown` or `picture_caption` counted as the
+#: owner's own words - against section 18.1's own rule that "unknown counts
+#: as not the owner's own words everywhere it matters". A value not listed
+#: here reads as "unknown".
+OWN_WORDS = frozenset({"typed", "voice"})
 _NOT_OWN_WORDS = {"pasted": "was pasted in, not typed",
                   "shared": "was shared from another app",
-                  "clipboard": "came from the clipboard"}
+                  "clipboard": "came from the clipboard",
+                  "picture_caption": "came with a picture, which can show text you did not write",
+                  "voice_unverified": "was said aloud, but this PC could not check it was "
+                                      "your voice",
+                  "unknown": "was not marked as typed or said by you"}
+
+#: Messages sent with the newest one, in the same request, that are the
+#: newest turn too: the phone's Share (a `shared` message just before the
+#: typed one) and the desktop's clipboard context (a `clipboard` message
+#: just before it, since 2026-09-25 - it used to be a system message).
+_SENT_WITH_NEWEST = ("shared", "clipboard")
+
+#: A card's line when the app sent a system message of its own. Only the
+#: server writes Jarvis's rules; a system message in the request as it
+#: arrived is text the app attached - the desktop sent the clipboard that
+#: way until 2026-09-25 - so it is outside text too.
+APP_CONTEXT_LINE = ("The app sent extra text with your message (for example the "
+                    "clipboard), which you did not type.")
+NOTE_AFTER_APP_CONTEXT = ("The app sent extra text with your message (for example "
+                          "the clipboard), so Jarvis asks before writing to your notes.")
+
+
+def _provenance(m: dict) -> str:
+    """One user message's provenance; `unknown` for none, or one not known."""
+    p = m.get("provenance")
+    return p if isinstance(p, str) and (p in OWN_WORDS or p in _NOT_OWN_WORDS) else "unknown"
 
 #: The one tool whose result is not outside text: a number worked out here.
 _NOT_READING = {"calculator"}
@@ -1677,20 +1738,27 @@ class _TurnWatch:
         users = [m for m in raw if m.get("role") == "user"]
         self.provenance = None
         self.spoken = False          # the newest question was said out loud
+        # A system message the APP sent (security audit M1). Read only off the
+        # request as it arrived: `messages` without it may already hold the
+        # server's own system turns (the rules, recalled facts).
+        self.app_context = isinstance(req.get("messages"), list) and any(
+            m.get("role") == "system" for m in raw)
         if users:
             i = max(j for j, m in enumerate(raw) if m.get("role") == "user")
             self.spoken = raw[i].get("provenance") == "voice"   # with_spoken_note
             newest = [raw[i]]
-            if (i > 0 and raw[i - 1].get("role") == "user"
-                    and raw[i - 1].get("provenance") == "shared"):
-                newest.insert(0, raw[i - 1])   # phone Share: sent just before
+            j = i - 1
+            while (j >= 0 and raw[j].get("role") == "user"
+                   and raw[j].get("provenance") in _SENT_WITH_NEWEST):
+                newest.insert(0, raw[j])   # Share / clipboard: sent just before
+                j -= 1
             for m in newest:
-                if m.get("provenance") in _NOT_OWN_WORDS:
-                    self.provenance = m.get("provenance")
+                if _provenance(m) not in OWN_WORDS:
+                    self.provenance = _provenance(m)
                     break
         self.owner_words = "\n".join(
             _text_of(m.get("content")) for m in users
-            if m.get("provenance") not in _NOT_OWN_WORDS).lower()
+            if _provenance(m) in OWN_WORDS).lower()
         self.tainted = (bool(tainted) if tainted is not None
                         else _conversation_tainted(req.get("conversation_id")))
 
@@ -1762,12 +1830,14 @@ class _TurnWatch:
             return NOTE_AFTER_READING
         if self.provenance:
             return NOTE_AFTER_NOT_TYPED.format(how=_NOT_OWN_WORDS[self.provenance])
+        if self.app_context:
+            return NOTE_AFTER_APP_CONTEXT
         return ""
 
     def shaped_by(self, args: dict) -> str:
         """The lines a card gets about what shaped it, or "" when the turn has
         read nothing from outside and the owner's newest words are their own."""
-        if not (self.read or self.tainted or self.provenance):
+        if not (self.read or self.tainted or self.provenance or self.app_context):
             return ""
         lines = []
         if self.read:
@@ -1779,6 +1849,8 @@ class _TurnWatch:
                          "(an email, a file, a web page or a note).")
         if self.provenance:
             lines.append(f"Your newest message {_NOT_OWN_WORDS[self.provenance]}.")
+        if self.app_context:
+            lines.append(APP_CONTEXT_LINE)
         if self.flags:
             lines.append("Something Jarvis read may hold planted instructions: "
                          + " ".join(self.flags.values()))
@@ -1949,6 +2021,67 @@ def offered_tools(enabled_tools) -> list:
 #   on this PC, so a turn sent there is still a local turn (rule 1): the
 #   same tools, through the same gate.
 # --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+#   Is the "local" model really on this PC? (security audit H1, 2026-09-25)
+#
+#   Two ways it might not be, and neither shows in the address the chat
+#   route uses. OLLAMA_URL can point at another machine - ARCHITECTURE.md §4:
+#   "the local model is also egress if OLLAMA_URL does not point at this
+#   machine" - which the learner has always checked and this loop never did.
+#   And one of Ollama's own cloud models ("gpt-oss:120b-cloud",
+#   "glm-4.6:cloud") is served THROUGH the local Ollama at 127.0.0.1 but
+#   answered on ollama.com, so only its name gives it away
+#   (jarvis_router.is_remote_model). Picked as the everyday model, every
+#   email, file and chat this loop handles would go to ollama.com, while
+#   every privacy check said "stays on this machine". Refused here, before
+#   the first request, with the reason in plain words - the same two checks
+#   jarvis_auto_learn.check_local_model makes.
+# --------------------------------------------------------------------------
+
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
+
+
+def _is_this_machine(url) -> bool:
+    try:
+        import urllib.parse
+        host = (urllib.parse.urlparse(str(url or "")).hostname or "").lower()
+    except Exception:
+        return False
+    return host in _LOOPBACK_HOSTS
+
+
+def _is_cloud_model(name) -> bool:
+    """jarvis_router.is_remote_model; a router that cannot be read says yes
+    for a name carrying "cloud" at all, rather than letting it through."""
+    try:
+        import jarvis_router
+        return bool(jarvis_router.is_remote_model(str(name or "")))
+    except Exception:
+        return "cloud" in str(name or "").lower()
+
+
+#: Where a cloud model belongs, said the same way everywhere it is refused.
+CLOUD_MODEL_ADVICE = ("Switch the everyday model to one that runs on this PC "
+                      "(Brain -> Models). A cloud model belongs in a cloud lane, "
+                      "where Jarvis asks you before each question.")
+
+
+def local_model_refusal(ollama_url, model) -> str:
+    """"" when `model` at `ollama_url` really answers on this PC, else the
+    plain sentence the owner is shown instead of an answer."""
+    if _is_cloud_model(model):
+        return (f"Jarvis did not answer: the everyday model \"{model}\" is one of "
+                f"Ollama's cloud models. It runs on ollama.com, not on this PC, and "
+                f"this chat can carry your emails, files and saved facts, which stay "
+                f"on this PC. " + CLOUD_MODEL_ADVICE)
+    if not _is_this_machine(ollama_url):
+        return ("Jarvis did not answer: OLLAMA_URL points at another machine, not "
+                "this PC, and this chat can carry your emails, files and saved facts, "
+                "which stay on this PC. Set OLLAMA_URL to http://127.0.0.1:11434 and "
+                "restart Jarvis.")
+    return ""
+
 
 def _second_card_lane(feature: str):
     try:
@@ -2520,6 +2653,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         emit(line)
 
     try:
+        # Security audit H1: nothing is sent to a "local" model that is not on
+        # this PC - the everyday model, or the second card's lane if one was
+        # chosen. Before the first request, so not one word leaves.
+        refused = (local_model_refusal(ollama_url, model)
+                   or local_model_refusal(cur["url"], cur["model"]))
+        if refused:
+            raise UpstreamError(refused)
         last: Optional[_Round] = None
         for _round in range(max_rounds + 1):
             final = _round == max_rounds
@@ -2575,7 +2715,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 # works (offered_tools), and the rounds that read its pages
                 # run there: the main card's 16K is what it has no room for.
                 bl = _second_card_lane("browser_control")
-                if bl is not None:
+                if bl is not None and not local_model_refusal(bl.url, bl.model):
                     cur.update(url=bl.url, model=bl.model, ctx=bl.num_ctx,
                                feature="browser_control")
                     if announce is not None:

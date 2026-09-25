@@ -82,6 +82,8 @@ import urllib.request
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Optional
 
+import jarvis_local_http
+
 URL_ENV = "JARVIS_HOME_URL"
 TOKEN_ENV = "JARVIS_HOME_TOKEN"
 
@@ -202,6 +204,10 @@ def plan_states(entity_ids: list) -> Plan:
         return Plan(kind="get_states", if_refused=if_refused,
                      authenticated=authenticated(),
                      reason_empty=f"{URL_ENV} is not set - there is no Home Assistant to read")
+    insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")
+    if insecure:     # security audit L7
+        return Plan(kind="get_states", if_refused=if_refused,
+                     authenticated=authenticated(), reason_empty=insecure)
 
     queries = [
         Query(url=f"{base.rstrip('/')}/api/states/{urllib.parse.quote(eid, safe='')}",
@@ -243,6 +249,10 @@ def plan_service(domain: str, service: str, entity_id: str,
         return Plan(kind="call_service", if_refused=if_refused,
                      authenticated=authenticated(),
                      reason_empty=f"{URL_ENV} is not set - there is no Home Assistant to control")
+    insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")
+    if insecure:     # security audit L7
+        return Plan(kind="call_service", if_refused=if_refused,
+                     authenticated=authenticated(), reason_empty=insecure)
 
     # `data` is model-supplied (jarvis_agent._prepare_home_control passes
     # args["data"] straight through), and it used to be spread AFTER

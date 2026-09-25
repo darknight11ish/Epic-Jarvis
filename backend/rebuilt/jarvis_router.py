@@ -408,6 +408,14 @@ def is_remote_model(name: str) -> bool:
     return bool(_REMOTE_TAG.search(str(name or "").strip()))
 
 
+#: choose()'s reason when the configured local model is a cloud one.
+CLOUD_MODEL_AS_LOCAL = (
+    "refused: the everyday model {model} is one of Ollama's cloud models, answered "
+    "on ollama.com, not on this PC, so nothing is sent to it. Switch the everyday "
+    "model to one that runs on this PC; a cloud model belongs in a cloud lane, "
+    "where Jarvis asks you before each question")
+
+
 def complexity(query: str) -> float:
     """A rough 0-1 score. Longer, more clause-heavy questions score higher.
 
@@ -440,6 +448,8 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
     send the answer DOWNWARD toward local - none of them can escalate past a
     gate that already refused.
 
+     -1. the local model is itself  -> gate "cloud_model": refused, and
+         one of Ollama's cloud models    run_local_turn sends it nothing
       0. no cloud lanes offered      -> local
       1. the conversation is tainted -> local, unconditionally
      1b. the turn carries a picture  -> local, unconditionally
@@ -509,6 +519,19 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         return Decision(local, why, gate, c,
                         inject_memory=local_is_local,
                         tainted=conversation_tainted)
+
+    # Gate -1, before every other (security audit H1, 2026-09-25): the
+    # "local" lane is one of Ollama's cloud models. Every gate below would
+    # hand it back as the lane that "stays on this machine" - a tainted
+    # turn, a picture, a private question - so none of them may run. The
+    # lane is still named (the caller has no other that is local), with
+    # gate "cloud_model", no memory and no offer; jarvis_agent.run_local_turn,
+    # which answers every local turn, refuses to send it anything and says
+    # why in the same words. Where a cloud model belongs is a cloud lane,
+    # which asks the owner each time (gate 6).
+    if is_remote_model(local):
+        return Decision(local, CLOUD_MODEL_AS_LOCAL.format(model=local), "cloud_model", c,
+                        inject_memory=False, tainted=conversation_tainted)
 
     if not lanes:
         # "unavailable", not "no-lanes": jarvis_hud.py:1717 tests for exactly

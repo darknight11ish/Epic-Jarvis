@@ -552,6 +552,27 @@ def _ingest(gate, model=None, source="meeting.md"):
     return code, body, calls
 
 
+def t_allowed_with_nobody_asked_writes_nothing():
+    """Security audit L1: the wiki wrote on `allowed`, which tier auto or
+    notify gives with nobody asked. Now only a person's yes writes. Fails on
+    the old code."""
+    for tier in ("auto", "notify"):
+        with Vault() as v:
+            before = v.snapshot()
+
+            def gate(a, d, p, tier=tier):
+                verdict = Verdict(True, tier)
+                verdict.tier = tier
+                return verdict
+            code, body, calls = _ingest(gate)
+            _, job = W.ingest_status(body["id"])
+            check(f"allowed at tier {tier}, nobody asked: refused, nothing written",
+                  job["state"] == "refused" and v.snapshot() == before, job)
+            check(f"... and it says why, and which line to change",
+                  "without asking anyone" in job["message"] and "wiki_update" in job["message"],
+                  job["message"])
+
+
 def t_the_gate():
     with Vault() as v:
         before = v.snapshot()

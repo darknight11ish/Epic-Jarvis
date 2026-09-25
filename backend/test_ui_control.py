@@ -263,7 +263,13 @@ def t_announce_is_called_once_per_step_and_is_optional():
         out = U.run(p, read=lambda _w: live, act=lambda s: None,
                     announce=heard.append, approved=True)
     check("announce saw the step and a final message", len(heard) == 2, repr(heard))
-    check("the step text names the control", "Send" in heard[0], heard[0])
+    # Security audit L4: the line goes out on the event stream, which carries
+    # no content - a step number and a fixed word, never the control's name
+    # or the window's title (those are on the card).
+    check("the step text is the step's number and a fixed word",
+          heard[0] == "Step 1/1: a click in another program's window", heard[0])
+    check("... and names neither the control nor the window",
+          "Send" not in heard[0] and '"W"' not in heard[0] and " W" not in heard[0], heard[0])
     # CONTROL: omitting announce must not raise or change the result.
     with NoRealAction():
         p2 = U.plan("send", "W", [{"control": "Send", "action": "click", "why": "x"}],
@@ -339,9 +345,9 @@ def t_the_checkpoint_is_read_before_the_step_is_announced():
                     approved=True)
     check("only step 1 ran", acted == ["Subject"], repr(acted))
     check("the paused step was never announced",
-          not any("Send" in line for line in heard), repr(heard))
+          not any(line.startswith("Step 2/") for line in heard), repr(heard))
     check("the step that DID run was announced",
-          any("Subject" in line for line in heard), repr(heard))
+          any(line.startswith("Step 1/2") for line in heard), repr(heard))
     check("nothing claimed the run finished", "Done." not in heard, repr(heard))
     check("CONTROL: the run really did pause", out.get("paused") is True, repr(out))
 

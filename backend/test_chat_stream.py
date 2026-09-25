@@ -90,7 +90,7 @@ def turn(opener, **kw):
     kw.setdefault("gate_check", Gate())
     kw.setdefault("keepalive_seconds", 1000)
     summary = AG.run_local_turn([{"role": "user", "content": "hi"}], "jarvis-primary",
-                                ollama_url="http://ollama", stream_out=out.append,
+                                ollama_url="http://127.0.0.1:11434", stream_out=out.append,
                                 open_stream=opener, **kw)
     return b"".join(out), summary
 
@@ -206,7 +206,7 @@ def t_ollama_dying_mid_answer_is_said_plainly():
     def opener(url, payload):
         return _DiesHalfWay(cut)
     out = []
-    AG.run_local_turn([{"role": "user", "content": "x"}], "m", ollama_url="http://o",
+    AG.run_local_turn([{"role": "user", "content": "x"}], "m", ollama_url="http://127.0.0.1:11434",
                       stream_out=out.append, open_stream=opener, context_length=4096,
                       keepalive_seconds=1000)
     objs = sse_objects(b"".join(out))
@@ -267,7 +267,7 @@ def t_an_approved_tool_does_not_run_for_an_app_that_left():
                 raise BrokenPipeError(32, "Broken pipe")
             wrote.append(data)
         s = AG.run_local_turn([{"role": "user", "content": "2+2?"}], "jarvis-primary",
-                              ollama_url="http://ollama", stream_out=closed_app,
+                              ollama_url="http://127.0.0.1:11434", stream_out=closed_app,
                               open_stream=opener, enabled_tools={"calculator"},
                               gate_check=Gate(wait=0.4), keepalive_seconds=0.05,
                               status_delay=0.02, context_length=16384,
@@ -289,7 +289,7 @@ def t_an_app_leaving_mid_answer_stops_ollama():
     def gone(data):
         raise ConnectionResetError(104, "reset")
     s = AG.run_local_turn([{"role": "user", "content": "count"}], "jarvis-primary",
-                          ollama_url="http://ollama", stream_out=gone, open_stream=opener,
+                          ollama_url="http://127.0.0.1:11434", stream_out=gone, open_stream=opener,
                           context_length=16384, abort=aborted.append,
                           keepalive_seconds=1000)
     check("the request to Ollama is aborted, so the GPU stops", len(aborted) == 1, repr(aborted))
@@ -369,7 +369,7 @@ def t_history_is_trimmed_to_the_real_context():
 
     opener, calls = opener_for([("content", "ok"), ("done", "stop")])
     out = []
-    AG.run_local_turn(msgs, "qwen3:8b", ollama_url="http://ollama", stream_out=out.append,
+    AG.run_local_turn(msgs, "qwen3:8b", ollama_url="http://127.0.0.1:11434", stream_out=out.append,
                       open_stream=opener, context_length=4096, keepalive_seconds=1000)
     check("a 4,096-token model gets a trimmed conversation, with room for the answer",
           AG.estimate_tokens(calls[0]["messages"]) <= 4096 - 1024, AG.estimate_tokens(calls[0]["messages"]))
@@ -422,7 +422,7 @@ def t_errors_are_plain_sentences_in_the_same_framing():
     missing_model.read = lambda *a: b404
     opener, _ = opener_for(missing_model)
     out = []
-    AG.run_local_turn([{"role": "user", "content": "x"}], "qwen3:14b", ollama_url="http://o",
+    AG.run_local_turn([{"role": "user", "content": "x"}], "qwen3:14b", ollama_url="http://127.0.0.1:11434",
                       stream_out=out.append, open_stream=opener, context_length=4096,
                       keepalive_seconds=1000)
     msg = sse_objects(b"".join(out))[-1]["error"]["message"]

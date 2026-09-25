@@ -2415,19 +2415,21 @@ async function send(promptText, provenance = "typed") {
       ]
     : text;
 
-  // Clipboard context rides as a system turn; the server validates an
-  // OpenAI-shaped `messages` array and routes on `has_image`.
+  // Clipboard context rides as its own USER turn, tagged "clipboard", just
+  // before the question - the same shape as the phone's Share
+  // (JARVIS-API.md section 18.1). It used to be a system turn, and the PC's
+  // outside-text rules only read user turns, so copied text slipped past the
+  // "note writes after outside text ask first" rule (security audit M1). The
+  // server validates an OpenAI-shaped `messages` array and routes on
+  // `has_image`.
   //
-  // The conversation so far goes FIRST, then this turn's own system turns,
-  // then the question. Two reasons for that order. Ollama reuses what it has
-  // already read only up to the first thing that changed, so the earlier
-  // turns - identical from one request to the next - must lead, and the
-  // per-turn note or clipboard block must come after them. And a system
-  // message at position 0 makes Ollama drop the Modelfile's own SYSTEM
-  // prompt, where the persona's rules live (memory-prefix.patch quotes the
-  // line); with history in front, a follow-up keeps them. The very first
-  // turn with a note or clipboard still puts a system message first, as it
-  // always has.
+  // The conversation so far goes FIRST, then this turn's clipboard block,
+  // then the question. Ollama reuses what it has already read only up to
+  // the first thing that changed, so the earlier turns - identical from one
+  // request to the next - must lead, and the per-turn clipboard block must
+  // come after them. (It is a user turn now, so it no longer puts a system
+  // message at position 0 on a first turn, which made Ollama drop the
+  // Modelfile's own SYSTEM prompt - memory-prefix.patch quotes the line.)
   //
   // Screenshots are not kept in the conversation - only the words.
   state.turnQuestion = text;
@@ -2447,7 +2449,7 @@ async function send(promptText, provenance = "typed") {
     messages: [
       ...historyMessages(state.conversation),
       ...(state.clipboard
-        ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
+        ? [userMessage(`Context:\n${state.clipboard}`, "clipboard")]
         : []),
       userMessage(content, state.turnProvenance),
     ],
