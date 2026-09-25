@@ -564,9 +564,11 @@
   // none of that. The page no longer draws them (jarvis_hud.html), and a
   // later copy of the page that brings them back still cannot send one:
   // every memory write from this page is refused here, stale link or not.
-  // Reads (/api/memory/pending, /status, /facts) pass untouched.
+  // Reads (/api/memory/pending, /status, /facts) pass untouched. The
+  // "Always keep in mind" route (/api/memory/profile) is refused whole -
+  // its POST pins a fact, and this page never reads the list.
   var MEMORY_WRITE =
-    /\/api\/memory\/(decide|keep_both|forget|erase|edit|learning|sleep_time)(\?|$)/;
+    /\/api\/memory\/(decide|keep_both|forget|erase|edit|learning|sleep_time|profile)(\?|$)/;
   if (realFetch) {
     window.fetch = function (input, init) {
       var path = typeof input === "string" ? input : "";

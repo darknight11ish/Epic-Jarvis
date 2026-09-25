@@ -104,6 +104,9 @@ mod tests {
             "/api/memory/learning",
             "/api/memory/learning/auto",
             "/api/memory/learning/sensitive",
+            // "Always keep in mind": its POST pins a fact. Read through its
+            // own command (brain/profile.rs), never through this list.
+            "/api/memory/profile",
         ];
         for (section, path) in READ_ROUTES {
             assert!(

@@ -47,6 +47,12 @@ Two ideas, both of which the patches explain in the original's own words:
      file - and keeps the row, its id and its dates, so the history still
      shows that something was here and when. The row is never removed.
 
+     "ALWAYS KEEP IN MIND" (the owner's decision of 2026-09-24) is a short
+     list of pinned fact IDS - the `profile` table, pin() and profile()
+     below - read with every local chat question (with_profile()). It
+     holds no words: the facts' own text is read, word for word, and a
+     pinned fact that stops being current leaves the list by itself.
+
      This is the Graphiti idea done natively in the one SQLite file the
      project already uses, because Graphiti requires a graph database server -
      neo4j>=5.26 is not optional there - and the whole point here is one file,
@@ -634,6 +640,17 @@ class MemoryStore:
                         embedding float[{self.embedder.dim}])""")
             c.execute("""
                 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)""")
+            # "Always keep in mind" (the owner's decision, 2026-09-24): the
+            # facts the owner pinned, BY ID ONLY. The words stay in `facts`,
+            # word for word - nothing here holds, summarises or rewrites
+            # them - and profile() joins back to the facts that are still
+            # current, so a pinned fact that is forgotten, corrected, runs
+            # out or is erased simply stops being read. See pin().
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS profile (
+                    fact_id INTEGER PRIMARY KEY,
+                    added   REAL NOT NULL,
+                    how     TEXT NOT NULL DEFAULT 'tap')""")
             row = c.execute("SELECT v FROM meta WHERE k='embedder'").fetchone()
             if row and row["v"] != self.embedder.name:
                 # A different model: the vectors are not comparable. Rebuild.
@@ -1298,6 +1315,110 @@ class MemoryStore:
                 "model is broken, not the store.")
         return out
 
+    # ---- "Always keep in mind" (the owner's decision, 2026-09-24) ---------
+
+    #: The one rule for "a pinned fact Jarvis still reads": pinned, current
+    #: (the same `valid_to IS NULL OR valid_to > now` every reader uses),
+    #: and its words not erased. Oldest pin first, so the list reads the
+    #: same on every turn until the owner changes it.
+    _PROFILE_SQL = (
+        "SELECT f.id, f.text, f.created, f.valid_from, f.source, p.added, p.how"
+        " FROM profile p JOIN facts f ON f.id = p.fact_id"
+        " WHERE (f.valid_to IS NULL OR f.valid_to > ?) AND f.erased_at IS NULL"
+        " ORDER BY p.added, p.fact_id")
+
+    def profile(self) -> list[dict]:
+        """The pinned facts Jarvis reads with every question, oldest pin
+        first: each fact's own row (id, text, created, valid_from, source)
+        plus when it was pinned (`added`) and how (`how`).
+
+        A JOIN to the facts that are current NOW, never a copy: a pinned
+        fact that is forgotten, corrected (which retires it), reaches its
+        end date or has its words erased drops out here at once, with
+        nothing to clean up. Its pin row stays, holding an id and nothing
+        else; no fact comes back to life, so it is never read again."""
+        with _LOCK, closing(self._connect()) as c:
+            return [dict(r) for r in c.execute(self._PROFILE_SQL, (time.time(),))]
+
+    def is_pinned(self, fact_id: int) -> bool:
+        """Is this fact on the "Always keep in mind" list now?"""
+        return any(p["id"] == int(fact_id) for p in self.profile())
+
+    def pin(self, fact_id: int, how: str = "tap") -> dict:
+        """Put ONE current fact on the "Always keep in mind" list.
+
+        Only its id is stored. Refused, with `reason`, when there is no such
+        fact ("no_such_fact"), when it is no longer current or its words
+        were erased ("not_current"), when it is longer than the whole list
+        allows ("fact_too_long"), or when the pinned facts' words would then
+        pass PROFILE_LIMIT characters ("too_long"). The check and the write
+        are one transaction, so two pins at once cannot both squeeze under
+        the limit. Pinning a fact that is already pinned changes nothing.
+
+        `how` is who put it there. "tap" - the owner's own tap on a fact they
+        can see - is the only one today; a later suggestion card would say
+        so here. Returns {"ok", "id", "pinned", "changed", "chars", "limit"}
+        (+ "reason" when refused). Never the words."""
+        fid = int(fact_id)
+        how = how if isinstance(how, str) and _META_LABEL.match(how) else "tap"
+        now = time.time()
+        with _LOCK, closing(self._connect()) as c:
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                row = c.execute("SELECT text, valid_to, erased_at FROM facts WHERE id=?",
+                                (fid,)).fetchone()
+                pins = [dict(r) for r in c.execute(self._PROFILE_SQL, (now,))]
+                used = sum(len(str(p["text"] or "")) for p in pins)
+                out = {"ok": False, "id": fid, "pinned": False, "changed": False,
+                       "chars": used, "limit": PROFILE_LIMIT}
+                if row is None:
+                    out["reason"] = "no_such_fact"
+                elif (row["erased_at"] is not None
+                      or (row["valid_to"] is not None and float(row["valid_to"]) <= now)):
+                    out["reason"] = "not_current"
+                elif any(p["id"] == fid for p in pins):
+                    out.update(ok=True, pinned=True)
+                else:
+                    n = len(str(row["text"] or ""))
+                    if n > PROFILE_LIMIT:
+                        out["reason"] = "fact_too_long"
+                    elif used + n > PROFILE_LIMIT:
+                        out["reason"] = "too_long"
+                    else:
+                        # INSERT OR REPLACE: a pin row left behind by a fact
+                        # that stopped being current cannot be this id (a
+                        # fact never becomes current again), but a stale
+                        # row must never block a pin either.
+                        c.execute("INSERT OR REPLACE INTO profile (fact_id, added, how)"
+                                  " VALUES (?, ?, ?)", (fid, now, how))
+                        out.update(ok=True, pinned=True, changed=True, chars=used + n)
+                c.execute("COMMIT")
+            except Exception:
+                try:
+                    c.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                raise
+        if out["changed"]:
+            _audit("memory.pinned", {"id": fid, "how": how})   # the id only, never the words
+        return out
+
+    def unpin(self, fact_id: int) -> dict:
+        """Take ONE fact off the list. The fact itself is not touched - only
+        the pin goes. Unpinning a fact that is not pinned changes nothing.
+        Returns {"ok": True, "id", "pinned": False, "changed", "chars",
+        "limit"}."""
+        fid = int(fact_id)
+        with _LOCK, closing(self._connect()) as c:
+            cur = c.execute("DELETE FROM profile WHERE fact_id=?", (fid,))
+            changed = cur.rowcount > 0
+            used = sum(len(str(r["text"] or ""))
+                       for r in c.execute(self._PROFILE_SQL, (time.time(),)))
+        if changed:
+            _audit("memory.unpinned", {"id": fid})
+        return {"ok": True, "id": fid, "pinned": False, "changed": changed,
+                "chars": used, "limit": PROFILE_LIMIT}
+
 
 # --------------------------------------------------------------------------
 #   "Erase the words" (the owner's decision, 2026-09-24)
@@ -1351,7 +1472,9 @@ def _erase_copies(c, fid: int, old_text: str, now: float) -> int:
 
     What is in this file (checked 2026-09-24): `facts`, `facts_fts`,
     `facts_vec` (erase() handles those three), `meta` (the embedder's name
-    only), `auto_learn_notes` (why a card stayed a card - a fixed sentence,
+    only), `profile` ("Always keep in mind": fact ids and dates, never
+    words - an erased fact is no longer current, so it leaves that list by
+    itself), `auto_learn_notes` (why a card stayed a card - a fixed sentence,
     never the fact), a `documents` table that is not Jarvis's, and the
     review queue, `proposals`, which jarvis_extract keeps here:
 
@@ -1492,6 +1615,134 @@ def handle_erase(body) -> tuple:
                  "moment, so an older copy may stay in memory.db-wal until the "
                  "file is next tidied.")
     return 200, {"ok": True, **out, "note": note}
+
+
+# --------------------------------------------------------------------------
+#   "Always keep in mind" (the owner's decision, 2026-09-24)
+# --------------------------------------------------------------------------
+#
+# A short list of facts the owner pins, read with EVERY local chat question,
+# word for word. Search brings back the five facts that share words or
+# meaning with the question; "the owner is vegetarian" shares neither with
+# "what should I cook tonight?", so it was never there when it mattered.
+# (The idea is Letta's, MIRIX's and MemoryOS's "core memory" - with none of
+# their rewriting: nothing here lets a model add to, merge or summarise the
+# list. docs/RESEARCH-2026-09-24.md section 3 item 2.)
+#
+# The words are never copied, shortened or rewritten. Summarising drops
+# words, and the word most often dropped is "not" - this store is
+# bi-temporal precisely because negation matters (docs/ARCHITECTURE.md
+# section 5: "never compress facts").
+
+#: How many characters the pinned facts' words may add up to. About 300
+#: tokens, around 7% of the 4,096-token context the primary model runs with
+#: today (jarvis-primary.Modelfile) - re-read on every local question, so it
+#: is kept small. Counted as the facts' own text, without the date or the
+#: "- " each line gets in the prompt.
+PROFILE_LIMIT = 1200
+
+#: The refusals, in the words both apps show.
+PIN_TOO_LONG = "That would make the list too long - unpin something first"
+PIN_FACT_TOO_LONG = ("That fact is too long for the list on its own - the list holds "
+                     f"{PROFILE_LIMIT:,} characters in all")
+PIN_NOT_CURRENT = "That fact is no longer in use, so it cannot be kept in mind"
+PIN_NO_SUCH_FACT = "no fact with that id"
+
+
+def _audit(event: str, data: dict) -> None:
+    try:
+        if fw is not None:
+            fw.audit_log(event, data)
+    except Exception:
+        pass
+
+
+def profile_view(st: Optional["MemoryStore"] = None) -> dict:
+    """GET /api/memory/profile's answer: {"facts": [{"id", "text",
+    "added"}], "chars", "limit"}. `chars` counts the words of the facts
+    listed - the pinned facts that are still current - which is what the
+    limit is about."""
+    st = st or store()
+    facts = [{"id": int(p["id"]), "text": str(p["text"] or ""), "added": p["added"]}
+             for p in st.profile()]
+    return {"facts": facts, "chars": sum(len(f["text"]) for f in facts),
+            "limit": PROFILE_LIMIT}
+
+
+def handle_profile_get() -> tuple:
+    """GET /api/memory/profile -> (http status, reply). memory-profile.patch
+    hands the route here after the token and origin checks."""
+    try:
+        return 200, profile_view()
+    except Exception as exc:
+        return 500, {"error": type(exc).__name__}
+
+
+def handle_profile(body) -> tuple:
+    """POST /api/memory/profile {"id": <fact id>, "pinned": true|false} ->
+    (http status, reply).
+
+    ONE fact per request, and nothing else in the body - no list form, the
+    same as forget, erase and decide. No approval card: this is the owner's
+    own tap on a fact they can see (like Forget), and both apps hold it on a
+    stale link. The reply never carries the words; an app reads the list
+    again (GET) to draw it.
+
+      200  {"ok": true, "id", "pinned", "changed", "chars", "limit", "note"}
+      404  {"ok": false, "reason": "no_such_fact", "error"}
+      409  {"ok": false, "reason": "too_long" | "fact_too_long" | "not_current",
+            "error": <the sentence to show>, "chars", "limit"}
+      400  anything but one integer id and one true/false
+    """
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "need an object"}
+    fid, want = body.get("id"), body.get("pinned")
+    if not isinstance(fid, int) or isinstance(fid, bool):
+        return 400, {"ok": False, "error": "need an integer id"}
+    if not isinstance(want, bool):
+        return 400, {"ok": False, "error": 'need "pinned": true or false'}
+    if set(body) - {"id", "pinned"}:
+        return 400, {"ok": False,
+                     "error": 'pin one fact: {"id": <int>, "pinned": true|false} and nothing else'}
+    try:
+        st = store()
+        out = st.pin(fid) if want else st.unpin(fid)
+    except Exception as exc:
+        return 500, {"ok": False, "error": type(exc).__name__}
+    reason = out.get("reason")
+    if reason == "no_such_fact":
+        return 404, {"ok": False, "reason": reason, "error": PIN_NO_SUCH_FACT}
+    if reason:
+        return 409, {**out, "error": {"too_long": PIN_TOO_LONG,
+                                      "fact_too_long": PIN_FACT_TOO_LONG,
+                                      "not_current": PIN_NOT_CURRENT}[reason]}
+    note = ("Jarvis will read this with every question, word for word." if want
+            else "Jarvis will only use this when a question calls for it.")
+    return 200, {**out, "note": note}
+
+
+def with_profile(st, hits, k: int) -> list:
+    """What a local chat turn recalls, the pinned facts first.
+
+    `hits` is what the search found (jarvis_past.recall's answer: current
+    facts, and on a question about the past some retired ones, labelled).
+    The pinned facts go in front, each marked `pinned: True`, and a pinned
+    fact the search also found is left out of the rest, so nothing is said
+    twice. k <= 0 - JARVIS_MEMORY_K=0, the switch for no memory at all - is
+    NOTHING, pinned facts included. If the list cannot be read, the search's
+    facts alone: the old behaviour."""
+    if k <= 0:
+        return []
+    hits = list(hits or [])
+    try:
+        pins = st.profile()
+    except Exception:
+        return hits
+    if not pins:
+        return hits
+    ids = {p["id"] for p in pins}
+    return ([dict(p, pinned=True, current=True) for p in pins]
+            + [h for h in hits if h.get("id") not in ids])
 
 
 # --------------------------------------------------------------------------

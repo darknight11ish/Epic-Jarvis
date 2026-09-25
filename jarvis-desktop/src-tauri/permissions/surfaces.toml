@@ -372,7 +372,7 @@ permissions = ["allow-brain-remove-skill", "allow-brain-model"]
 # every other item here.
 [[set]]
 identifier = "brain-memory"
-description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, and list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off. One fact per decision; there is no bulk form."
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off, and pin or unpin a fact on \"Always keep in mind\". One fact per decision; there is no bulk form."
 permissions = [
   "allow-brain-memory-decide",
   "allow-brain-memory-forget",
@@ -403,6 +403,13 @@ permissions = [
   # (brain/auto_learn.rs note_saved). Ids only, never a fact's words; it
   # changes nothing but that count.
   "allow-brain-memory-saved-unseen",
+  # "Always keep in mind" (brain/profile.rs; the owner's decision,
+  # 2026-09-24): the pinned facts - a read, held back like the other memory
+  # lists while "Windows Hello for memory lists and chat history" hides them
+  # - and pin or unpin ONE fact per call. No approval card (the owner's own
+  # tap, like Forget), held while the event stream is stale.
+  "allow-brain-memory-profile",
+  "allow-brain-memory-pin",
 ]
 
 # Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).

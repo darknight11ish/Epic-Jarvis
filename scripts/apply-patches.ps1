@@ -321,6 +321,17 @@ $PATCHES = @(
     # `created` lines, which nothing later touches - last, like every new
     # patch. Needs jarvis_past.py copied in; without it the old search runs.
     'past-recall.patch'
+    # "Always keep in mind" (the owner's decision, 2026-09-24): a short list
+    # of facts the owner pins, read with every local chat question, word for
+    # word, first in the recalled-facts block; a pinned fact the search also
+    # found is not repeated. Adds GET and POST /api/memory/profile. Its
+    # context is auto-learn's /api/memory/auto and /learning/auto route
+    # blocks, memory-erase's route line, past-recall's search lines and
+    # auto-learn's recalled-facts lines, so it goes after past-recall - last,
+    # like every new patch. The work is in the shipped
+    # rebuilt\jarvis_memory.py (pin(), profile(), with_profile()); with an
+    # older copy the routes answer 501 and chat recalls exactly as before.
+    'memory-profile.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

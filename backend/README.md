@@ -109,7 +109,8 @@ on a throwaway copy instead.
 | `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them, and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
 | `auto-learn.patch` | `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py` | **Jarvis learns automatically, from your own words only** (the owner's decision, 2026-09-24). A proposal is saved without a card only when every check in `jarvis_auto_learn.py` passes; the rest stay cards, each saying why. Adds `GET /api/memory/learning`, `GET /api/memory/auto`, `POST /api/memory/learning/auto` and `/sensitive` (each ON is one approval card), `jarvis_extract.accept_auto()`, facts that keep their proposal's source, the learner's refusal of an Ollama cloud model, and quote marks round recalled facts. Last in the list, after `chat-history.patch`. Needs `jarvis_auto_learn.py` - see its own section, after chat-history. |
 | `memory-erase.patch` | `jarvis_hud.py` | **"Erase the words"** (the owner's decision, 2026-09-24). Adds `POST /api/memory/erase {"id"}`: ONE fact's words wiped for good - its text, its word-search entry, its meaning vector, the copies in the review queue, and the old bytes in `memory.db` and `memory.db-wal` - while its row and dates stay. Same checks as forget, no card. The work is in the shipped `rebuilt/jarvis_memory.py` (`erase()`, `handle_erase()`). See its own section. |
-| `past-recall.patch` | `jarvis_hud.py` | **Questions about the past get the old facts, labelled** (memory wave 1, 2026-09-24). "Where did I live before?" also recalls the matching retired facts, each ending "(no longer true since <date>)"; every other question gets exactly the search it got before. One line of the chat turn's recall. Last in the list, after `auto-learn.patch`. Needs `jarvis_past.py` - without it the old search runs. See "Memory wave 1", at the very end. |
+| `past-recall.patch` | `jarvis_hud.py` | **Questions about the past get the old facts, labelled** (memory wave 1, 2026-09-24). "Where did I live before?" also recalls the matching retired facts, each ending "(no longer true since <date>)"; every other question gets exactly the search it got before. One line of the chat turn's recall. After `auto-learn.patch`. Needs `jarvis_past.py` - without it the old search runs. See "Memory wave 1", near the end. |
+| `memory-profile.patch` | `jarvis_hud.py` | **"Always keep in mind"** (memory wave 2, the owner's decision, 2026-09-24). A short list of facts the owner pins - at most 1,200 characters - is read with every local chat question, word for word, first in the recalled-facts block; a pinned fact the search also found is not repeated. Adds `GET` and `POST /api/memory/profile` (one fact per request, no card, like Forget). Last in the list, after `past-recall.patch`, whose search lines it extends. The work is in the shipped `rebuilt/jarvis_memory.py` - with an older copy the routes answer 501 and chat recalls exactly as before. See "Memory wave 2", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -7301,3 +7302,114 @@ got before; the stacked chat-turn lines run, with and without
 anything into the home folder's `.openjarvis`. Every check about the floor,
 `known_at` and the past fails on the code before this change; the checks
 marked "guard" pass on both, and must.
+
+# Memory wave 2 (2026-09-24): "Always keep in mind"
+
+**What it does, in plain words.** Jarvis finds facts for a question by
+searching for shared words and meaning. "The owner is vegetarian" shares
+nothing with "what should I cook tonight?", so it was never there when it
+mattered. Now you can **pin** a few facts. Every question you ask Jarvis on
+this PC's model then gets them first, word for word, before the facts the
+search found. You choose them; nothing is pinned for you.
+
+- **Where:** the desktop's Brain -> Memory has a **Pin** button on every fact
+  still in use ("Saved automatically" and "What Jarvis knows about you"),
+  and a section, **"Always keep in mind"**, under "Saved automatically":
+  "Jarvis reads these with every question, word for word. Keep it short.",
+  "N of 1,200 characters used", and an **Unpin** on each. The phone has the
+  same section under Mind -> "Saved automatically", and Pin on that list.
+- **The limit is 1,200 characters in all** (about 300 tokens - roughly 7% of
+  the 4,096 the primary model has today, read again on every question). A
+  pin that would go over says "That would make the list too long - unpin
+  something first".
+- **No approval card and no "are you sure?"**: it is your own tap on a fact
+  you can see, and Unpin takes it back. Like Forget, it waits while the app
+  cannot confirm its link to the PC is live.
+- **Never rewritten.** The list holds fact numbers only. The words are the
+  fact's own, so a "not" can never be lost. A pinned fact that is forgotten,
+  corrected, reworded (that makes a new fact) or erased leaves the list by
+  itself - pin the new wording if you still want it.
+- **Sensitive facts** can be pinned, but only by your own tap. An answer
+  that uses one stays on screen instead of being read aloud, as before.
+- **What did not change:** `JARVIS_MEMORY_K=0` still means no memory at all,
+  pinned facts included. A question that goes to a cloud model gets none of
+  it. On a conversation's first question the Jarvis rules still go first.
+- **One thing it changes elsewhere:** a pinned fact never gets a "Stop using
+  this fact?" card from answers you marked wrong (`jarvis_feedback.py`). It
+  is in every answer, so those marks only say how answers go in general.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies the new `jarvis_memory.py` and
+`jarvis_feedback.py`, applies `memory-profile.patch`), from this
+repository's folder, then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. (Optional) Run the memory self-test again.** It now also reports what a
+pinned fact does for a question that shares no words with it. The two result
+files land in `jarvis-memory-eval` in your home folder; the command opens it:
+
+```powershell
+py -3 backend\eval_memory.py; explorer "$env:USERPROFILE\jarvis-memory-eval"
+```
+
+## What was measured here (words only, dev container, not your PC)
+
+Three golden facts, each with a question that needs it but shares none of
+its words. "Found by search alone" = among the five facts a chat turn gets
+today; "with the pin" = in the prompt once it is pinned.
+
+| Fact | Question | Found by search alone (0 / 1,000 / 10,000 filler, both kinds) | With the pin |
+|---|---|---|---|
+| "Owner is vegetarian" | what should I cook tonight? | no, at every size | yes, at every size |
+| "Owner is allergic to peanuts" | can you suggest a snack for the train? | no, at every size | yes, at every size |
+| "Owner drinks tea, not coffee" | what should I order at the cafe this morning? | no, at every size | yes, at every size |
+
+**Said plainly:** with words only, "no" is guaranteed for these questions -
+that is why they were chosen - so this shows what pinning does, not how
+often search would have missed. Meaning search on your PC may find some of
+them without the pin; your run will say. The other numbers in the report
+are unchanged by this work: the pins are taken off before anything else is
+measured.
+
+## What the code does
+
+- `rebuilt/jarvis_memory.py`: the `profile(fact_id, added, how)` table (ids
+  only), `MemoryStore.profile()` (the pinned facts still current, oldest
+  pin first), `is_pinned()`, `pin()` (the 1,200-character check and the
+  write in one transaction) and `unpin()`; `PROFILE_LIMIT`; `profile_view()`,
+  `handle_profile_get()`, `handle_profile()` (the routes' work); and
+  `with_profile()`, which the chat turn calls - pinned facts first, a pinned
+  fact the search also found left out of the rest, nothing at all when
+  `k <= 0`, the search alone if the list cannot be read. Audit log:
+  `memory.pinned` / `memory.unpinned`, ids only. No event.
+- `memory-profile.patch`: `GET /api/memory/profile` beside
+  `/api/memory/auto`; `POST /api/memory/profile` above the erase route, with
+  forget's token and origin checks; in the chat turn, `with_profile()` after
+  the past-recall search, a `pinned` flag on each recalled fact, and the
+  FACTS block starting "Always keep in mind (the owner pinned these):", then
+  "Recalled for this question:" - both fixed lines inside the same quoted
+  block, each fact through the same `recall_line`.
+- `jarvis_feedback.py`: `_maybe_raise()` raises no "retire this?" card for a
+  pinned fact.
+- `eval_memory.py`: `PIN_CASES` and the table above.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_profile.py
+```
+
+About 95 checks, no network, no model: the table holds ids and never words;
+the limit, and two pins at once cannot both squeeze under it; forgotten,
+corrected, ended and erased facts leave the list; the chat turn's own lines
+lifted from the whole patch stack put the pinned facts first, once, inside
+the quoted block, count them in `injected_facts`, `injected_ids` and
+`injected_sensitive`, give nothing at `JARVIS_MEMORY_K=0`, and leave the
+block exactly as before when nothing is pinned; on a first question the
+Jarvis rules still go first; the routes; no retire card for a pinned fact;
+and the patch applies forwards and backwards. Every check about pinning
+fails on the code before this change.
