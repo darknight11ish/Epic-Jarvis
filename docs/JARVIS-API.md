@@ -3310,6 +3310,7 @@ What it understands:
 | Alarms | "set an alarm for 7" (the next 7 o'clock), "alarm at 7:30am", "wake me up at 6", "set an alarm for tomorrow at 6" (an alarm on another day: the morning), "cancel my 7am alarm", "what alarms do I have" |
 | Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (a card), "remind me to stretch every 2 hours" (a card) |
 | To-do list | "add milk to my to-do list", "what's on my to-do list", "mark milk as done", "tick off milk", "remove milk from my to-do list" |
+| Morning briefing | "brief me now", "brief me every weekday at 7", "stop my briefing" - section 22.5 |
 
 "cancel all timers", "clear my to-do list" and the like are answered
 "Jarvis does not clear everything at once" and change nothing. Two timers
@@ -3551,5 +3552,8 @@ offer as a remembered preference; that part was not taken.
   toast the timers use; the briefing is on the Brain's Work tab. The
   phone's notification opens Mind.
 - **English only**, like the timers.
+- **One briefing is kept - the latest.** "Brief me now" on one app replaces
+  it; the other app shows the new one at its next read (Refresh, or opening
+  the section again) - there is no event for a briefing asked for by hand.
 - **Email senders are not shown** - only the count. Whether they should be
   is the owner's call.
