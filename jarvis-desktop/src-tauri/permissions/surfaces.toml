@@ -324,10 +324,10 @@ permissions = [
   "allow-apply-hardware",
   "allow-hardware-step",
   "allow-measure-hardware",
-  # "Web search": the four providers with their "why" lines, and ONE change
+  # "Web search": the five providers with their "why" lines, and ONE change
   # at a time - the provider, the SearXNG address, "Ask before every web
   # search" (off raises an approval card on the PC). Changes and the test
-  # search are held while the event stream is stale. The Tavily and Brave
+  # search are held while the event stream is stale. The Exa, Tavily and Brave
   # keys are written straight into Credential Manager on this PC by
   # save_search_key: never sent to the backend or the phone, never read
   # back to a page. Settings window only - rule 3.

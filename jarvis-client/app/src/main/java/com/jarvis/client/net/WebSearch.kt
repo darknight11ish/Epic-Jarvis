@@ -11,8 +11,10 @@ import kotlinx.serialization.json.contentOrNull
  * Web search (the owner's decisions of 2026-09-25; docs/JARVIS-API.md
  * section 23; backend `jarvis_search.py`, `web-search.patch`).
  *
- * Four providers, SearXNG the default (a search program on the PC, in
- * Docker), then DuckDuckGo (the ddgs package), Tavily and Brave Search. Each
+ * Five providers, SearXNG the default (a search program on the PC, in
+ * Docker), then DuckDuckGo (the ddgs package), Exa, Tavily and Brave Search
+ * (Brave can cost money past its free credit); Whoogle is left out, with its
+ * reason. Each
  * has a short "why use this one" line: the PC sends them with every
  * `GET /api/search`, and Mind shows the PC's words. The copies below are the
  * same words (backend/test_web_search.py checks them against the PC's and
@@ -22,7 +24,7 @@ import kotlinx.serialization.json.contentOrNull
  * "Ask before every web search" on (at once) or off (ONE approval card on
  * the PC), and run a test search - each ONE change, held on a stale link.
  *
- * What the phone does NOT do: take a Tavily or Brave key. There is no box for
+ * What the phone does NOT do: take an Exa, Tavily or Brave key. There is no box for
  * one and no route for one. Sending a key over the link to the PC would send
  * it somewhere other than its one service (CLAUDE.md rule 3); keys are typed
  * on the PC ([KEY_ENTRY]). The phone shows only whether one is saved.
@@ -35,8 +37,8 @@ object WebSearch {
     const val SETTINGS_PATH = "/api/search/settings"
     const val TEST_PATH = "/api/search/test"
 
-    val PROVIDERS = listOf("searxng", "duckduckgo", "tavily", "brave")
-    val KEYED = setOf("tavily", "brave")
+    val PROVIDERS = listOf("searxng", "duckduckgo", "exa", "tavily", "brave")
+    val KEYED = setOf("exa", "tavily", "brave")
     const val DEFAULT_ADDRESS = "http://127.0.0.1:8888"
 
     val WHY: Map<String, String> = mapOf(
@@ -44,14 +46,17 @@ object WebSearch {
             "Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on.",
         "duckduckgo" to
             "Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address.",
+        "exa" to
+            "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about \$10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key.",
         "tavily" to
             "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key.",
         "brave" to
-            "Brave's own independent index, with about \$5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key.",
+            "Brave's own independent index, with about \$5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key.",
     )
     val LABEL: Map<String, String> = mapOf(
         "searxng" to "SearXNG (on this PC)",
         "duckduckgo" to "DuckDuckGo",
+        "exa" to "Exa",
         "tavily" to "Tavily",
         "brave" to "Brave Search",
     )
@@ -65,6 +70,7 @@ object WebSearch {
     const val KEY_ENTRY =
         "Keys are entered on the PC only - in the desktop app's Settings, Web search, or with one line in PowerShell (backend/README.md). The phone never asks for one: sending a key to the PC would send it somewhere other than its own service."
     val KEY_WHERE: Map<String, String> = mapOf(
+        "exa" to "https://dashboard.exa.ai (sign up, then API Keys)",
         "tavily" to "https://app.tavily.com (sign in, then API Keys)",
         "brave" to "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
     )
@@ -183,7 +189,7 @@ object WebSearch {
         null -> KEY_UNKNOWN
     }
 
-    /** ONE change: the provider. Null for anything but the four. */
+    /** ONE change: the provider. Null for anything but the five. */
     fun providerBody(id: String): String? =
         if (id in PROVIDERS) JsonObject(mapOf("provider" to JsonPrimitive(id))).toString() else null
 

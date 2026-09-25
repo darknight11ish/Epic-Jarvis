@@ -1,4 +1,4 @@
-"""jarvis_search.py - web search, with a choice of four providers.
+"""jarvis_search.py - web search, with a choice of five providers.
 
 NEW MODULE, shipped whole. jarvis_agent.py offers it to the model as the
 tool `web_search` (only when `[tools].enabled` names it), web-search.patch
@@ -7,7 +7,7 @@ and /api/search/test), and jarvis_quick.py answers "which search should I
 use?" from the words below, without the model.
 
 THE OWNER'S DECISIONS (2026-09-25, CLAUDE.md "Decided 2026-09-25")
-  - Four providers, SearXNG the default:
+  - Five providers, SearXNG the default:
       searxng     a search program on this PC, in Docker, at
                   http://127.0.0.1:8888 unless the owner points it at another
                   of their own machines (this PC, the home network,
@@ -19,9 +19,16 @@ THE OWNER'S DECISIONS (2026-09-25, CLAUDE.md "Decided 2026-09-25")
                   DuckDuckGo engine, ddgs itself would quietly fall back to
                   "auto", so this module checks the engine is there first
                   and refuses if it is not;
+      exa         POST https://api.exa.ai/search with the owner's key
+                  (header x-api-key; body {"query", "numResults", "contents":
+                  {"highlights": true}} - read from the official exa-py
+                  2.22.2 source, which sends exactly these);
       tavily      https://api.tavily.com/search with the owner's key;
-      brave       https://api.search.brave.com/res/v1/web/search with the
-                  owner's key.
+      brave       GET https://api.search.brave.com/res/v1/web/search with
+                  the owner's key (header X-Subscription-Token). Removed
+                  and added back the same day (the owner, 2026-09-25): it
+                  needs a payment card, which Brave charges past the free
+                  monthly credit, and its "why" line says so plainly.
     Whoogle is left out, and LEFT_OUT says why.
   - Each provider has a short "why use this one" line (WHY), served from the
     PC so both apps show the same words, and used for "which search should I
@@ -54,7 +61,7 @@ RULE 1 - email, files, credentials and memory stay on this PC. Two guards:
     outside text, the search waits for a card that shows its exact words
     (jarvis_agent.py).
 
-RULE 3 - the Tavily and Brave keys. Kept in Windows Credential Manager
+RULE 3 - the Exa, Tavily and Brave keys. Kept in Windows Credential Manager
 (KEY_TARGETS, the same store and format as the pairing token -
 jarvis_token_store.WindowsStore), put there on the PC only: the desktop's
 Settings -> Web search, or `py -3 jarvis_search.py key tavily` (it asks for
@@ -69,7 +76,7 @@ variable, so it cannot reach a child program (jarvis_child_env).
 WHAT GOES OVER THE NETWORK, AND HOW
   - SearXNG: jarvis_local_http's opener - NO proxy, ever (it is on this PC
     or the owner's own network; a proxy is another machine).
-  - Tavily and Brave: https only, to a fixed address. The system proxy, if
+  - Exa, Tavily and Brave: https only, to a fixed address. The system proxy, if
     the PC has one, is used as for every other https call here
     (jarvis_local_http.opener_for): a proxy sees only scrambled traffic and
     the host name, never the key or the words.
@@ -109,13 +116,14 @@ from typing import Callable, Optional
 #   The providers, and the words both apps show
 # --------------------------------------------------------------------------
 
-PROVIDERS = ("searxng", "duckduckgo", "tavily", "brave")
+PROVIDERS = ("searxng", "duckduckgo", "exa", "tavily", "brave")
 DEFAULT_PROVIDER = "searxng"
 DEFAULT_SEARXNG_URL = "http://127.0.0.1:8888"
 
 LABEL = {
     "searxng": "SearXNG (on this PC)",
     "duckduckgo": "DuckDuckGo",
+    "exa": "Exa",
     "tavily": "Tavily",
     "brave": "Brave Search",
 }
@@ -134,14 +142,20 @@ WHY = {
         "DuckDuckGo's public pages because there is no official way in, so it "
         "can be slowed down or stop working when DuckDuckGo changes, and "
         "DuckDuckGo still sees your internet address."),
+    "exa": (
+        "Finds pages by meaning, not just matching words, and returns the useful "
+        "passages of each page, with about $10 of free credit a month (roughly "
+        "1,400 searches) and no payment card. Needs a free account and a key, and "
+        "Exa sees what you search, tied to your key."),
     "tavily": (
         "Made for AI assistants: short, clean results, with 1,000 free credits "
         "a month (a basic search uses one). Needs a free account and a key, and "
         "Tavily sees what you search, tied to your key."),
     "brave": (
-        "Brave's own independent index, with about $5 of free credit each "
-        "month. Needs an account, a payment card to verify it, and a key, and "
-        "Brave sees what you search, tied to your key."),
+        "Brave's own independent index, with about $5 of free credit each month "
+        "(roughly 1,000 searches). Needs an account, a payment card that is charged "
+        "if you go past the free credit, and a key, and Brave sees what you search, "
+        "tied to your key."),
 }
 
 #: Why SearXNG is the default - for "why SearXNG?".
@@ -149,31 +163,34 @@ DEFAULT_WHY = ("SearXNG is the default because it costs nothing, needs no key or
                "account, and runs on this PC, so no single search company keeps a "
                "record of your searches.")
 
-#: Left out on purpose, with the reason - shown under the four in both apps.
+#: Left out on purpose, with the reason - shown under the five in both apps.
 LEFT_OUT = [
     {"id": "whoogle", "label": "Whoogle",
      "why": ("Not offered: its own README says it no longer returns results, since "
              "Google blocked searching without JavaScript in 2025.")},
 ]
 
-NEEDS_KEY = frozenset({"tavily", "brave"})
+NEEDS_KEY = frozenset({"exa", "tavily", "brave"})
 
 #: Where each provider's words go, for the card. A fixed https address for
 #: the two with keys - the key is sent there and nowhere else.
+EXA_URL = "https://api.exa.ai/search"
 TAVILY_URL = "https://api.tavily.com/search"
 BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 DDG_HOST = "html.duckduckgo.com"
 
-#: The Tavily and Brave keys, in Windows Credential Manager. The desktop
+#: The Exa, Tavily and Brave keys, in Windows Credential Manager. The desktop
 #: writes them under the same names (jarvis-desktop/src-tauri/src/
 #: token_store.rs, SEARCH_KEY_TARGETS - test_web_search.py checks the text).
 KEY_TARGETS = {
+    "exa": "Jarvis Backend/Exa key",
     "tavily": "Jarvis Backend/Tavily key",
     "brave": "Jarvis Backend/Brave Search key",
 }
 
 #: Where each key is made - for the apps and backend/README.md.
 KEY_WHERE = {
+    "exa": "https://dashboard.exa.ai (sign up, then API Keys)",
     "tavily": "https://app.tavily.com (sign in, then API Keys)",
     "brave": "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
 }
@@ -414,7 +431,7 @@ def save_key(provider: str, value: str) -> dict:
     (`py -3 jarvis_search.py key tavily`); there is NO route for it - the
     desktop writes Credential Manager itself, and the phone never sends one."""
     if provider not in KEY_TARGETS:
-        return {"ok": False, "error": "only Tavily and Brave Search use a key"}
+        return {"ok": False, "error": "only Exa, Tavily and Brave Search use a key"}
     why = key_problem(value)
     if why:
         return {"ok": False, "error": why}
@@ -433,7 +450,7 @@ def save_key(provider: str, value: str) -> dict:
 
 def forget_key(provider: str) -> dict:
     if provider not in KEY_TARGETS:
-        return {"ok": False, "error": "only Tavily and Brave Search use a key"}
+        return {"ok": False, "error": "only Exa, Tavily and Brave Search use a key"}
     try:
         _store(provider).delete()
     except Exception as exc:
@@ -457,16 +474,22 @@ PIP_LINE = "py -3 -m pip install ddgs"
 
 #: Which other provider to OFFER when one is down - offered, never used.
 _OFFER = {"searxng": "duckduckgo", "duckduckgo": "searxng",
-          "tavily": "searxng", "brave": "searxng"}
+          "exa": "searxng", "tavily": "searxng", "brave": "searxng"}
 
 
 def offer_line(provider: Optional[str]) -> str:
+    if provider is None:
+        # No provider in use (asked for one that is left out): the two that
+        # need no key, and no account.
+        return (f"Switch web search to {LABEL['searxng']} or {LABEL['duckduckgo']}? Say "
+                f"\"use SearXNG for web search\" or \"use DuckDuckGo for web search\", or "
+                f"choose one in Settings, Web search.")
     other = _OFFER.get(provider or "", DEFAULT_PROVIDER)
     return (f"Switch web search to {LABEL[other]}? Say \"use {_SAY[other]} for web "
             f"search\", or choose it in Settings, Web search.")
 
 
-_SAY = {"searxng": "SearXNG", "duckduckgo": "DuckDuckGo", "tavily": "Tavily",
+_SAY = {"searxng": "SearXNG", "duckduckgo": "DuckDuckGo", "exa": "Exa", "tavily": "Tavily",
         "brave": "Brave"}
 
 
@@ -560,6 +583,8 @@ def plan(query, *, s: Optional[dict] = None) -> Plan:
         host = urllib.parse.urlsplit(s.get("searxng_url") or DEFAULT_SEARXNG_URL).netloc
     elif provider == "duckduckgo":
         host = DDG_HOST
+    elif provider == "exa":
+        host = urllib.parse.urlsplit(EXA_URL).netloc
     elif provider == "tavily":
         host = urllib.parse.urlsplit(TAVILY_URL).netloc
     elif provider == "brave":
@@ -703,8 +728,14 @@ def normalise(rows) -> list:
         if any(ord(c) < 33 for c in url):
             continue
         title = _clean(r.get("title"), TITLE_CHARS) or url
-        snippet = _clean(r.get("content") or r.get("description") or r.get("body")
-                         or r.get("snippet"), SNIPPET_CHARS)
+        hl = r.get("highlights")
+        # Exa: the useful passages of the page ("highlights"), joined; else
+        # the start of the page's text. Page content either way - outside
+        # text, cut to the same length as every other snippet.
+        hl = " ... ".join(str(h) for h in hl if isinstance(h, str)) if isinstance(hl, list) else ""
+        snippet = _clean(hl or r.get("content") or r.get("description") or r.get("body")
+                         or r.get("snippet") or (str(r.get("text") or "")[:SNIPPET_CHARS * 4]),
+                         SNIPPET_CHARS)
         out.append({"title": title, "url": url, "snippet": snippet})
         if len(out) >= MAX_RESULTS:
             break
@@ -790,7 +821,54 @@ def _tavily(p: Plan) -> list:
     return normalise(doc.get("results") if isinstance(doc, dict) else None)
 
 
+def _exa(p: Plan) -> list:
+    """Exa's search API, directly (no exa-py). What was checked against the
+    official exa-py 2.22.2 source (exa_py/api.py): base URL
+    https://api.exa.ai, POST /search, the key in the `x-api-key` header, and
+    the body fields numResults (num_results, camel-cased) and
+    contents.highlights. Its answer's `results` carry `url`, `title`,
+    `text` and `highlights` (a list of passages). NOT checked (exa-py only
+    raises on any status of 400 or more): which status means what - 401/403
+    read as a key problem, 402 as credits used up, 429 as too many searches
+    or credits used up."""
+    key = _key("exa")
+    if not key:
+        raise SearchError("key_missing", readiness("exa")[1])
+    data = json.dumps({"query": p.query, "numResults": MAX_RESULTS,
+                       "contents": {"highlights": True}}).encode("utf-8")
+    req = urllib.request.Request(EXA_URL, data=data, method="POST", headers={
+        "Content-Type": "application/json", "Accept": "application/json",
+        "User-Agent": "jarvis-search", "x-api-key": key})
+    try:
+        status, body = _send(req, local=False)
+    except SearchError:
+        raise
+    except Exception as exc:
+        raise _connection_failed("exa", exc, EXA_URL) from None
+    if status in (401, 403):
+        raise SearchError("key_refused", (
+            "Exa refused your key (it may be wrong or cancelled). Check it at "
+            f"{KEY_WHERE['exa']} and save it again in the desktop app's Settings, "
+            "Web search."))
+    if status == 402:
+        raise SearchError("quota_used", (
+            "Your Exa credit for this month is used up. It comes back next month, "
+            "or switch web search to another provider."))
+    if status == 429:
+        raise SearchError("rate_limited", (
+            "Exa says too many searches - either too fast, or this month's free credit "
+            "is used up. Wait a minute and try again."))
+    if status != 200:
+        raise SearchError("failed", f"Exa answered with an error (HTTP {status}).")
+    doc = _json(body, "Exa")
+    return normalise(doc.get("results") if isinstance(doc, dict) else None)
+
+
 def _brave(p: Plan) -> list:
+    """Brave's search API. It can cost money: past the free monthly credit
+    Brave charges the owner's card and answers as usual, so nothing here can
+    tell a free search from a paid one - there is no guard against that,
+    only the owner's own spending limit in Brave's dashboard."""
     key = _key("brave")
     if not key:
         raise SearchError("key_missing", readiness("brave")[1])
@@ -811,12 +889,15 @@ def _brave(p: Plan) -> list:
             "Web search."))
     if status == 402:
         raise SearchError("quota_used", (
-            "Your Brave Search credit for this month is used up. It comes back next month, "
-            "or switch web search to another provider."))
+            "Brave Search refused: your free credit for this month is used up, or your "
+            "payment card was not accepted. More searches would be charged to your card "
+            "once it works. Switch web search to another provider, or check your Brave "
+            "account."))
     if status == 429:
         raise SearchError("rate_limited", (
-            "Brave Search says too many searches - either too fast, or this month's free "
-            "credit is used up. Wait a minute and try again."))
+            "Brave Search says too many searches - either too fast, or your plan's limit "
+            "is reached. Wait a minute and try again. Note that Brave charges your card "
+            "for searches past the free credit rather than refusing them."))
     if status != 200:
         raise SearchError("failed", f"Brave Search answered with an error (HTTP {status}).")
     doc = _json(body, "Brave Search")
@@ -896,7 +977,7 @@ def _duckduckgo(p: Plan) -> list:
 
 
 _PROVIDER_CALL = {"searxng": _searxng, "duckduckgo": _duckduckgo,
-                  "tavily": _tavily, "brave": _brave}
+                  "exa": _exa, "tavily": _tavily, "brave": _brave}
 
 
 def run(p: Plan, *, approved: bool = False) -> dict:
@@ -1037,7 +1118,8 @@ def handle_test(body=None) -> tuple:
     through the chosen provider, and what happened in plain words. The
     owner pressed the button, and the words are fixed, never from a
     conversation, so no card. It is a real search: it uses one credit on
-    Tavily, a little of Brave's credit, and counts toward DuckDuckGo's limit."""
+    Tavily, a little of Exa's or Brave's free credit (or money, past Brave's), and
+    counts toward DuckDuckGo's limit."""
     p = plan(TEST_QUERY)
     if p.problem:
         return 200, {"ok": False, "state": p.state, "said": p.problem,
@@ -1229,11 +1311,12 @@ def _reset_for_tests() -> None:
 
 def explain(which: Optional[str] = None) -> str:
     """The answer to "which search should I use?" (which=None) or "why
-    SearXNG?" / "what about Tavily?" (which=an id, or "whoogle")."""
+    SearXNG?" / "what about Exa?" (which=an id, or one LEFT_OUT names)."""
     s = settings()
     now = s.get("provider")
-    if which == "whoogle":
-        return f"Whoogle: {LEFT_OUT[0]['why']}"
+    for x in LEFT_OUT:
+        if which == x["id"]:
+            return f"{x['label']}: {x['why']}"
     if which in PROVIDERS:
         out = f"{LABEL[which]}: {WHY[which]}"
         if which == DEFAULT_PROVIDER:
@@ -1241,19 +1324,26 @@ def explain(which: Optional[str] = None) -> str:
         if now == which:
             out += " It is the one Jarvis uses now."
         return out
-    lines = [f"Jarvis can search the web four ways. Now it uses "
-             f"{LABEL[now] if now else 'none (the settings file is damaged)'}."]
+    lines = [f"Jarvis can search the web five ways. Now it uses "
+             f"{LABEL[now] if now else 'none'}."]
+    if not now and s.get("why"):
+        lines[0] += f" ({s['why']})"
     for pid in PROVIDERS:
         lines.append(f"- {LABEL[pid]}{' (the default)' if pid == DEFAULT_PROVIDER else ''}: "
                      f"{WHY[pid]}")
-    lines.append(f"- {LEFT_OUT[0]['label']}: {LEFT_OUT[0]['why']}")
+    for x in LEFT_OUT:
+        lines.append(f"- {x['label']}: {x['why']}")
     lines.append(DEFAULT_WHY + " Change it in Settings, Web search, in either app, or say "
                  "\"use DuckDuckGo for web search\".")
     return "\n".join(lines)
 
 
 def use(provider: str) -> str:
-    """For "use DuckDuckGo for web search": the provider changed, in words."""
+    """For "use DuckDuckGo for web search": the provider changed, in words.
+    One that is left out is not chosen: its reason is said instead."""
+    for x in LEFT_OUT:
+        if provider == x["id"]:
+            return f"{x['label']}: {x['why']} {offer_line(None)}"
     code, out = handle_settings({"provider": provider})
     return str(out.get("said") or out.get("error") or "")
 
@@ -1263,9 +1353,10 @@ def use(provider: str) -> str:
 # --------------------------------------------------------------------------
 
 USAGE = """\
-py -3 jarvis_search.py key tavily        save your Tavily key (it is asked for, not shown)
+py -3 jarvis_search.py key exa           save your Exa key (it is asked for, not shown)
+py -3 jarvis_search.py key tavily        save your Tavily key
 py -3 jarvis_search.py key brave         save your Brave Search key
-py -3 jarvis_search.py forget-key tavily remove it from this PC (also: brave)
+py -3 jarvis_search.py forget-key exa    remove it from this PC (also: tavily, brave)
 py -3 jarvis_search.py status            which search is chosen, and which keys are saved
 py -3 jarvis_search.py test              one test search for "wikipedia" with the chosen search
 """
@@ -1278,7 +1369,7 @@ def _main(argv, *, ask_secret=None, out=print) -> int:
     cmd = argv[0]
     if cmd in ("key", "forget-key"):
         if len(argv) != 2 or argv[1] not in KEY_TARGETS:
-            out("Say which: tavily or brave.")
+            out("Say which: exa, tavily or brave.")
             return 2
         prov = argv[1]
         if cmd == "forget-key":

@@ -117,7 +117,7 @@ on a throwaway copy instead.
 | `schedule.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Timers, alarms, reminders and the to-do list, with one scheduler** (the owner's decisions, 2026-09-25). Adds `GET /api/schedule` and `POST /api/schedule/add` and `/act`, starts the scheduler at boot, answers "set a timer for 10 minutes" and the like in `/api/chat` WITHOUT the model, and the approval notice's words for `schedule_repeat` (anything that repeats is one card). Needs `jarvis_schedule.py` and `jarvis_quick.py` - see "Timers, alarms, reminders and the to-do list", at the very end. |
 | `memory-entities.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **"Who is my sister?" - people and things** (memory wave 3, 2026-09-25). Adds `GET /api/memory/entities` (the people and things facts are linked to, for the desktop's "About <name>"), leaves the "are these the same?" card out of `/api/memory/pending` unless asked for with `?merge_cards=1`, and gives `jarvis_extract.py` `propose_merge()` and `_accept_merge()` - accepting that card joins two entries and adds no fact. The work is in the shipped `rebuilt/jarvis_memory.py` (and `jarvis_past.py`, whose recall uses it); with an older copy the route answers 501. Last in the list, after `temporary-chat.patch`, whose route lines are its context. See "Memory wave 3", at the very end. |
 | `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing`, `POST /api/briefing/now` and `POST /api/briefing/senders` ("Show who new emails are from": off at once, on through one approval card), makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
-| `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of four providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
+| `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of five providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -8848,17 +8848,24 @@ approved shell command, and checks the command cannot see it.
 # Web search: `jarvis_search.py`, `web-search.patch` (2026-09-25)
 
 **What it is for.** Jarvis can look things up on the web. You choose where
-the search goes, from four (the owner's decisions of 2026-09-25):
+the search goes, from five (the owner's decisions of 2026-09-25):
 
 | search | why use this one |
 |---|---|
 | **SearXNG (on this PC)** - the default | Free, no key and no account: a search program that runs on this PC in Docker and asks several search engines for you, without their cookies or trackers. Those engines still see your internet address, and it needs Docker plus one setting (JSON) switched on. |
 | **DuckDuckGo** | Free, no key, and only one Python package to install (ddgs). It reads DuckDuckGo's public pages because there is no official way in, so it can be slowed down or stop working when DuckDuckGo changes, and DuckDuckGo still sees your internet address. |
+| **Exa** | Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key. |
 | **Tavily** | Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key. |
-| **Brave Search** | Brave's own independent index, with about $5 of free credit each month. Needs an account, a payment card to verify it, and a key, and Brave sees what you search, tied to your key. |
+| **Brave Search** | Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key. |
 
 **Whoogle is left out:** its own README says it no longer returns results,
 since Google blocked searching without JavaScript in 2025.
+
+**Brave can cost money.** You nearly dropped it for that reason. It needs a
+payment card, and past the free monthly credit Brave simply charges the card
+and keeps answering - Jarvis cannot tell a free search from a paid one, and
+nothing in Jarvis stops it. If you choose Brave, set a spending limit in
+Brave's own dashboard if it offers one for your plan (not checked here).
 
 Those lines are the PC's own words; both apps show them (the desktop's
 Settings, "Web search"; the phone's Mind, "Web search"), and you can ask
@@ -8881,13 +8888,14 @@ turning it off asks you with a card. Search words that look like a password
 or a key are refused outright, and Jarvis says why.
 
 **What leaves the PC.** Only the search words, to the one search you chose -
-and for Tavily and Brave, your key, to that company only. SearXNG runs on
+and for Exa, Tavily and Brave, your key, to that company only. SearXNG runs on
 your PC and asks other search engines itself; they see the words and your
 internet address. What comes back (five results at most: a title, a link, a
 snippet) is treated like a web page: outside text.
 
-**Your keys (Tavily, Brave).** Kept in Windows Credential Manager on this PC
-(`Jarvis Backend/Tavily key`, `Jarvis Backend/Brave Search key`), never in a
+**Your keys (Exa, Tavily, Brave).** Kept in Windows Credential Manager on this
+PC (`Jarvis Backend/Exa key`, `Jarvis Backend/Tavily key`,
+`Jarvis Backend/Brave Search key`), never in a
 file, never in a log, never sent anywhere but their own service. You enter
 them **on the PC only** - in the desktop app's Settings, Web search, or with
 the line below. The phone has no box for a key on purpose: typing one there
@@ -8952,7 +8960,21 @@ py -3 -m pip install ddgs
 
 Then choose DuckDuckGo in Settings, Web search, and press Test search.
 
-**3c. Tavily instead.** Make a free account at https://app.tavily.com, open
+**3c. Exa instead.** Make a free account at https://dashboard.exa.ai (no
+payment card), open API Keys and copy the key. Paste it in the desktop's
+Settings, Web search, "Exa key", and press Save key - or, in PowerShell (it
+asks for the key and does not show it as you paste):
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_search.py key exa
+```
+
+Then choose Exa and press Test search (it uses a little of your free monthly
+credit). Exa returns the most useful passages of each page, not only a
+one-line snippet; Jarvis keeps at most 300 characters of them per result,
+like every other search, and treats them as outside text.
+
+**3d. Tavily instead.** Make a free account at https://app.tavily.com, open
 API Keys and copy the key. Paste it in the desktop's Settings, Web search,
 "Tavily key", and press Save key - or, in PowerShell (it asks for the key and
 does not show it as you paste):
@@ -8964,9 +8986,11 @@ cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 
 Then choose Tavily and press Test search (it uses one of your 1,000 monthly
 credits).
 
-**3d. Brave instead.** Sign up at https://api-dashboard.search.brave.com, add
-a payment card to verify the account, choose the free plan, open API Keys and
-copy the key. Paste it in Settings, "Brave Search key" - or:
+**3e. Brave instead - it can cost money.** Sign up at
+https://api-dashboard.search.brave.com, add a payment card (Brave requires
+one, and charges it for searches past the free monthly credit), choose the
+free plan, and if the dashboard offers a spending limit, set it. Open API
+Keys and copy the key. Paste it in Settings, "Brave Search key" - or:
 
 ```powershell
 cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_search.py key brave
@@ -8974,17 +8998,17 @@ cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 
 
 To see what is set without showing any key:
 `py -3 jarvis_search.py status`. To remove a key:
-`py -3 jarvis_search.py forget-key tavily` (or `brave`), or Remove key in
+`py -3 jarvis_search.py forget-key exa` (or `tavily`, `brave`), or Remove key in
 Settings.
 
 ## What the code does
 
-- `jarvis_search.py` - the four providers behind one `plan()` (opens no
+- `jarvis_search.py` - the five providers behind one `plan()` (opens no
   socket; refuses words holding a password or key) and `run()` (only the
   chosen provider; results capped to 5, titles to 150 characters, snippets
   to 300; answers capped at 1 MB; 15 seconds each; redirects refused;
-  SearXNG with no proxy; Tavily and Brave over https only, to a fixed
-  address; DuckDuckGo through `ddgs` with its DuckDuckGo engine only, at
+  SearXNG with no proxy; Exa, Tavily and Brave over https only, to a fixed
+  address - Exa called directly, without its exa-py library; DuckDuckGo through `ddgs` with its DuckDuckGo engine only, at
   most about one search a second, and refused if a `ddgs` version has no
   DuckDuckGo engine, because `ddgs` would then quietly ask other engines).
   The settings, the card for "Ask before every web search" off, the three
@@ -9006,13 +9030,13 @@ Settings.
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_web_search.py
 ```
 
-About 200 checks, with local stand-in servers on 127.0.0.1 and a stand-in
+About 230 checks, with local stand-in servers on 127.0.0.1 and a stand-in
 `ddgs` - nothing reaches the internet: the four lines in the PC's, the
 desktop's and the phone's words; no socket in `plan()`; a key in the search
 words refused without echoing it; SearXNG through no proxy, redirects and
 oversized answers refused, "not running" and "JSON off" said plainly with an
 offer to switch and nothing sent elsewhere; the SearXNG address kept to your
-own networks; the Tavily and Brave keys only in their own header to their own
+own networks; the Exa, Tavily and Brave keys only in their own header to their own
 address, never after a redirect, never in a card, an answer or the log;
 DuckDuckGo only, paced; the settings and the card to ask less; when a search
 asks and that only a person's yes runs it; the sentences answered without
@@ -9020,13 +9044,23 @@ the model; and the patch applied to what the earlier patches wrote.
 
 ## Not checked, said plainly
 
-- **Nothing has reached a real SearXNG, DuckDuckGo, Tavily or Brave.** The
+- **Brave: nothing in Jarvis stops it charging your card.** Past the free
+  credit Brave bills and answers normally; Jarvis cannot tell. Only a limit
+  you set in Brave's dashboard can.
+- **Nothing has reached a real SearXNG, DuckDuckGo, Exa, Tavily or Brave.** The
   answers were written from their documentation and read in the dev
   container; the Docker and settings lines above have not been run on your
   PC (the PowerShell here could not be run by this session either - its
   checks blocked it - so read them once before pasting).
-- How Tavily and Brave say "your monthly credit is used up" (Tavily 432/433,
-  Brave 402 or 429) is from their documentation, not seen.
+- How Tavily, Exa and Brave say "your monthly credit is used up" (Tavily
+  432/433 and Brave 402/429 from their documentation; Exa 402 or 429,
+  assumed) has not been seen. Brave's "roughly 1,000 searches" for $5 is not
+  checked against Brave's price list.
+- Exa: its address (`https://api.exa.ai/search`), its key header
+  (`x-api-key`) and the request's field names were read from Exa's own
+  Python library (exa-py 2.22.2). Its free credit ($10 a month, about 1,400
+  searches, no card) and the dashboard address come from web search
+  summaries, not Exa's pricing page, which could not be opened from here.
 - `ddgs` cannot tell "no results" from "DuckDuckGo is blocking you for a
   while", so the answer says both. Whether its own web client uses the
   Windows proxy is not checked.

@@ -88,8 +88,12 @@ def cases() -> dict:
     _fresh(provider="tavily")
     _Store.DATA[WS.KEY_TARGETS["tavily"]] = _FAKE
     out["tavily_key_saved"] = WS.view()
-    _fresh(provider="brave", ask_every_time=True)
-    out["brave_no_key_ask_every_time"] = WS.view()
+    _fresh(provider="exa", ask_every_time=True)
+    out["exa_no_key_ask_every_time"] = WS.view()
+    # Brave: a key, and a payment card past its free credit.
+    _fresh(provider="brave")
+    out["brave_no_key"] = WS.view()
+    out["test_brave_key_missing"] = WS.handle_test({})
     _fresh(provider="duckduckgo")
     out["duckduckgo_not_installed"] = WS.view()
     _fresh()

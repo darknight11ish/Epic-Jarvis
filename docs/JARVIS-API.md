@@ -3797,7 +3797,7 @@ there is no way to type it into either app.
 ## 23. Web search (added 2026-09-25)
 
 The owner's decisions of 2026-09-25 (`CLAUDE.md`, "Web search with a choice
-of four providers" and "When a search asks first"). `backend/jarvis_search.py`
+of providers" and "When a search asks first"). `backend/jarvis_search.py`
 (shipped whole), `backend/web-search.patch` (the routes and the gate's words),
 and the model tool `web_search` in `backend/jarvis_agent.py`. **Both apps
 call all three routes**: the desktop's Settings, "Web search"
@@ -3809,25 +3809,30 @@ phone, settings for a PC feature live on Mind. `ported` in
 `tests/fixtures/web-search-cases.json` / `contract/web-search-cases.json`,
 written by `tools/gen_web_search_cases.py` from the real code.
 
-### 23.1 The four providers
+### 23.1 The five providers
 
 | id | label | where the words go | needs |
 |---|---|---|---|
 | `searxng` (**default**) | SearXNG (on this PC) | the owner's own SearXNG, `http://127.0.0.1:8888` unless set otherwise - which asks several search engines itself | Docker, and `json` added to its `formats` (it ships `html` only; without it SearXNG answers 403) |
 | `duckduckgo` | DuckDuckGo | `html.duckduckgo.com`, through the `ddgs` package with `backend="duckduckgo"` ONLY | `py -3 -m pip install ddgs` |
-| `tavily` | Tavily | `POST https://api.tavily.com/search`, `Authorization: Bearer <key>` | a key |
-| `brave` | Brave Search | `GET https://api.search.brave.com/res/v1/web/search`, `X-Subscription-Token: <key>` | a key |
+| `exa` | Exa | `POST https://api.exa.ai/search`, `x-api-key: <key>`, body `{"query", "numResults": 5, "contents": {"highlights": true}}` (address, header and field names read from the official exa-py 2.22.2 source); the snippet is the page's highlighted passages joined, else the start of its text - page content, so outside text, cut to 300 characters like every snippet | a key (free, no payment card) |
+| `tavily` | Tavily | `POST https://api.tavily.com/search`, `Authorization: Bearer <key>` | a key (free, no payment card) |
+| `brave` | Brave Search | `GET https://api.search.brave.com/res/v1/web/search?q=...&count=5`, `X-Subscription-Token: <key>` | a key, and an account with a payment card - **charged past the free monthly credit** |
 
-Whoogle is left out, and `left_out` says why: "Not offered: its own README
-says it no longer returns results, since Google blocked searching without
-JavaScript in 2025."
+Whoogle is left out, and `left_out` says why (both apps show it): "Not
+offered: its own README says it no longer returns results, since Google
+blocked searching without JavaScript in 2025."
+
+Brave was removed and added back on the same day (the owner, 2026-09-25):
+it stays, fifth, and its "why use this one" line says plainly that it can
+cost money: "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key."
 
 Each provider's **"why use this one"** line (`why`) comes from the PC and both
 apps show it word for word; each app also carries a copy, used only when an
 answer lacks it, and `backend/test_web_search.py` checks all three are the
 same words. `jarvis_quick.py` answers "which search should I use?", "why
-SearXNG?", "what about Tavily?" from the same words without the model, and
-"use DuckDuckGo for web search" / "switch web search to Brave" changes the
+SearXNG?", "why Exa?" from the same words without the model, and
+"use DuckDuckGo for web search" / "switch web search to Exa" changes the
 provider at once (the owner's own typed or said words only, like every fast
 path).
 
@@ -3851,7 +3856,7 @@ Every route needs the pairing token and passes the origin check.
 |---|---|---|---|
 | `GET /api/search` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_search.py` | A read. |
 | `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}` | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. |
-| `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit. Held on a stale link in both apps. |
+| `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit, or a little of Exa's free credit. Held on a stale link in both apps. |
 
 The view:
 
@@ -3923,12 +3928,13 @@ the rest of the conversation counts as having read outside text.
 
 ### 23.4 The keys (rule 3)
 
-The Tavily and Brave keys live in **Windows Credential Manager** on the PC,
-as `Jarvis Backend/Tavily key` and `Jarvis Backend/Brave Search key` (UTF-8,
+The Exa, Tavily and Brave keys live in **Windows Credential Manager** on the
+PC, as `Jarvis Backend/Exa key`, `Jarvis Backend/Tavily key` and
+`Jarvis Backend/Brave Search key` (UTF-8,
 the same format as the pairing token). They are entered **on the PC only**:
 the desktop's Settings, Web search (`save_search_key` / `forget_search_key`,
 written by Rust straight into Credential Manager - never sent over HTTP), or
-`py -3 jarvis_search.py key tavily` in the backend folder (it asks for the
+`py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) in the backend folder (it asks for the
 key without showing it). **The phone has no way to enter one** (ARCHITECTURE
 section 8). A key is read fresh for each search, registered with the log
 scrubber (`jarvis_scrub.register_secret`), sent only to its own service's
@@ -3938,10 +3944,18 @@ says only `key_saved: true|false`.
 
 ### 23.5 Known gaps, said plainly
 
-- **Nothing here has reached a real SearXNG, DuckDuckGo, Tavily or Brave.**
-  Every test uses local stand-in servers and a stand-in `ddgs`. The error
-  codes for "credits used up" (Tavily 432/433, Brave 402/429) are from their
-  documentation as understood, not seen.
+- **Brave can cost money, and Jarvis cannot stop it.** Past the free monthly credit Brave charges the card and answers as usual - it does not refuse - so nothing Jarvis sees tells a free search from a paid one. There is no guard against that in Jarvis. The only limit is the one you set in Brave's own dashboard (a spending limit, if Brave offers one for your plan - not checked here). Brave's 402 and 429 answers are said in words (402: "your free credit for this month is used up, or your payment card was not accepted"), but by the time Brave is billing, it no longer sends them for going over the credit.
+- **Nothing here has reached a real SearXNG, DuckDuckGo, Exa, Tavily or
+  Brave.** Every test uses local stand-in servers and a stand-in `ddgs`.
+  The error codes for "credits used up" (Tavily 432/433; Exa 402, and 429
+  read as "too many searches, or the credit is used up"; Brave 402/429, and
+  401/403/422 for a refused key) are not seen: Tavily's and Brave's from
+  their documentation as understood, Exa's assumed - exa-py only raises on any
+  status of 400 or more, so it says nothing about which means what. Exa's
+  free credit ($10 a month, roughly 1,400 searches, no payment card) and
+  its dashboard address come from web search summaries on 2026-09-25, not
+  from Exa's pricing page, which was unreachable. Brave's "roughly 1,000 searches" for
+  the $5 credit is not checked against Brave's price list either.
 - DuckDuckGo through `ddgs`: whether its HTTP client (`primp`) uses the
   Windows system proxy is not checked; Jarvis passes it none. `ddgs` cannot
   tell "no results" from "blocked for a while", so the answer says both.

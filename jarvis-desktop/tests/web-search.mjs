@@ -59,6 +59,8 @@ await check("the four lines, the labels and Whoogle's reason are the PC's own wo
     assert.equal(LABEL[p], CASES.labels[p], p);
   }
   assert.equal(WHOOGLE_WHY, CASES.left_out[0].why);
+  assert.deepEqual(CASES.left_out.map((x) => x.id), ["whoogle"]);
+  assert.match(WHY.brave, /payment card that is charged/);
 });
 
 await check("readSearch reads every real answer, and a PC without it says so", async () => {
@@ -69,8 +71,12 @@ await check("readSearch reads every real answer, and a PC without it says so", a
   assert.equal(v.address, "http://127.0.0.1:8888");
   assert.equal(v.askEveryTime, false);
   assert.equal(readSearch(C.damaged).provider, null);
+  const brave = readSearch(C.brave_no_key);
+  assert.equal(brave.provider, "brave");
+  assert.equal(keyLine(brave.providers.find((p) => p.id === "brave")), "No key saved yet.");
+  assert.match(testWords(C.test_brave_key_missing.body).text, /No Brave Search key/);
   assert.match(readSearch(C.damaged).why, /damaged/);
-  assert.equal(readSearch(C.brave_no_key_ask_every_time).askEveryTime, true);
+  assert.equal(readSearch(C.exa_no_key_ask_every_time).askEveryTime, true);
   assert.equal(keyLine(readSearch(C.tavily_key_saved).providers.find((p) => p.id === "tavily")),
     "A key is saved on this PC.");
   assert.equal(readSearch({ available: false, why: "x" }).available, false);
@@ -147,14 +153,16 @@ async function settings(scenario, data = {}) {
 
 const PLAIN = { view: C.default, test: C.test_not_running.body };
 
-await check("Settings: four providers with the PC's lines, which is in use, Whoogle left out", async () => {
+await check("Settings: five providers with the PC's lines, which is in use, Whoogle left out", async () => {
   const page = await settings(PLAIN);
   const text = await page.locator("#web-search").innerText();
   const checked = await page.locator("#ws-providers input:checked").getAttribute("value");
+  const choices = await page.locator("#ws-providers input").evaluateAll((els) => els.map((e) => e.value));
   const errors = page.__errors;
   await page.close();
   for (const p of PROVIDERS) assert.ok(text.includes(CASES.why[p]), `missing the ${p} line`);
   assert.ok(text.includes(CASES.left_out[0].why), "Whoogle's reason");
+  assert.deepEqual(choices, ["searxng", "duckduckgo", "exa", "tavily", "brave"]);
   assert.match(text, /SearXNG is the default because/);
   assert.match(text, /Search with/i, "the choice lost its label");
   assert.match(text, /In use\. Ready\./);
@@ -226,7 +234,7 @@ await check("Settings: on a stale link every change and the test are greyed; the
   const test = await page.locator("#ws-test").isDisabled();
   const key = await page.locator('#ws-keys [data-key="tavily"] button', { hasText: "Save key" }).isDisabled();
   await page.close();
-  assert.ok(radios.length === 4 && radios.every(Boolean));
+  assert.ok(radios.length === 5 && radios.every(Boolean));
   assert.equal(ask, true);
   assert.equal(addr, true);
   assert.equal(test, true);

@@ -40,13 +40,13 @@ import kotlinx.coroutines.launch
  * the desktop's Settings -> Web search, in the same words: on the phone,
  * settings for a PC feature live on Mind.
  *
- * The four providers, each with the PC's own "why use this one" line, which
+ * The five providers, each with the PC's own "why use this one" line, which
  * one is in use and what stands in the way of each; Whoogle's reason for
  * being left out; "Ask before every web search" (on at once, off through ONE
  * approval card on the PC); the SearXNG address; and Test search. Every
  * change is ONE tap, held on a stale link ([JarvisRuntime.setWebSearch]).
  *
- * NO KEY BOX. A Tavily or Brave key is typed on the PC only; this screen says
+ * NO KEY BOX. An Exa, Tavily or Brave key is typed on the PC only; this screen says
  * whether one is saved and where to add it ([WebSearch.KEY_ENTRY]).
  */
 @Composable
