@@ -2,7 +2,7 @@
  "cases": {
   "brave_no_key": {
    "ask_every_time": false,
-   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
    "ask_every_time_label": "Ask before every web search",
    "available": true,
    "default": "searxng",
@@ -87,7 +87,7 @@
   },
   "damaged": {
    "ask_every_time": true,
-   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
    "ask_every_time_label": "Ask before every web search",
    "available": true,
    "default": "searxng",
@@ -172,7 +172,7 @@
   },
   "default": {
    "ask_every_time": false,
-   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
    "ask_every_time_label": "Ask before every web search",
    "available": true,
    "default": "searxng",
@@ -257,7 +257,7 @@
   },
   "duckduckgo_not_installed": {
    "ask_every_time": false,
-   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
    "ask_every_time_label": "Ask before every web search",
    "available": true,
    "default": "searxng",
@@ -342,7 +342,7 @@
   },
   "exa_no_key_ask_every_time": {
    "ask_every_time": true,
-   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
    "ask_every_time_label": "Ask before every web search",
    "available": true,
    "default": "searxng",
@@ -428,7 +428,7 @@
   "post_address": {
    "body": {
     "ask_every_time": false,
-    "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+    "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
     "ask_every_time_label": "Ask before every web search",
     "available": true,
     "default": "searxng",
@@ -526,7 +526,7 @@
   "post_ask_on": {
    "body": {
     "ask_every_time": true,
-    "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+    "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
     "ask_every_time_label": "Ask before every web search",
     "available": true,
     "default": "searxng",
@@ -623,7 +623,7 @@
   "post_provider": {
    "body": {
     "ask_every_time": false,
-    "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+    "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
     "ask_every_time_label": "Ask before every web search",
     "available": true,
     "default": "searxng",
@@ -712,7 +712,7 @@
   },
   "tavily_key_saved": {
    "ask_every_time": false,
-   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes, saved memories or other outside text - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
+   "ask_every_time_detail": "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.",
    "ask_every_time_label": "Ask before every web search",
    "available": true,
    "default": "searxng",

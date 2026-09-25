@@ -87,7 +87,7 @@
 +    # Turning "Ask before every web search" off: a setting on this PC. It
 +    # sends nothing; searches straight from the owner's own question then run
 +    # without a card again.
-+    "stop_asking_before_every_web_search": ("yes", "local", "stops asking before every web search - a search straight from your own question runs without a card again, and any search after Jarvis has read email, files, notes, saved memories or other outside text still asks; nothing is sent by this change"),
++    "stop_asking_before_every_web_search": ("yes", "local", "stops asking before every web search - a search straight from your own question runs without a card again, and a search after Jarvis has read email, files, notes or other outside text, one whose words repeat a saved fact, and one after a sensitive saved fact was used still ask; nothing is sent by this change"),
      # schedule.patch (jarvis_schedule.py). Setting up something that repeats
      # ("every weekday at 7", a standby schedule): it acts only on this PC,
      # and deleting it is immediate. Without this line the action would be
