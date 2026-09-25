@@ -70,11 +70,12 @@ class ClientSettings(context: Context) {
         _oneMoment.value = value
     }
 
-    private val _heardSound = MutableStateFlow(prefs.getBoolean(KEY_HEARD_SOUND, true))
+    private val _heardSound = MutableStateFlow(prefs.getBoolean(KEY_HEARD_SOUND, false))
 
     /**
      * "Play a short sound when I finish speaking" on this phone
-     * (voice.HeardSound), on by default, beside [oneMoment]. The sound is
+     * (voice.HeardSound), OFF by default (the owner's choice, 2026-09-25),
+     * beside [oneMoment]. The sound is
      * made on the phone; nothing about it is on the PC. The desktop's switch
      * of the same name is its own.
      */

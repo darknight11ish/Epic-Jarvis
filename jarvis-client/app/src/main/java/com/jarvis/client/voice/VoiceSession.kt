@@ -63,7 +63,7 @@ class VoiceSession(
      * "Play a short sound when I finish speaking" on this phone
      * (ClientSettings, [HeardSound]). Read each time [heardYou] is called.
      */
-    private val heardSoundOn: () -> Boolean = { true },
+    private val heardSoundOn: () -> Boolean = { false },
     /**
      * The owner cut the spoken answer off while [String] was the last
      * sentence they heard (the runtime hands it to ChatSession's `cutOff`,

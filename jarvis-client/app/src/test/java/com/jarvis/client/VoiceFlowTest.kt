@@ -159,9 +159,9 @@ class VoiceFlowTest {
      * - the one place every "I heard you" goes through - asks it first.
      */
     @Test
-    fun heardSoundSwitchIsOnByDefaultAndGatesTheSound() {
+    fun heardSoundSwitchIsOffByDefaultAndGatesTheSound() {
         val settings = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/data/ClientSettings.kt").readText()
-        assertTrue(settings.contains("prefs.getBoolean(KEY_HEARD_SOUND, true)"))
+        assertTrue(settings.contains("prefs.getBoolean(KEY_HEARD_SOUND, false)"))
         assertTrue(settings.contains("const val KEY_HEARD_SOUND = \"heard_sound\""))
         val session = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/voice/VoiceSession.kt").readText()
         val body = session.substringAfter("fun heardYou() {").substringBefore("\n    }")

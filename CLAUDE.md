@@ -191,8 +191,8 @@ Decided 2026-09-25, after the competitiveness audit
   (private addresses such as 192.168.x.x and 10.x.x.x, and `.local` names),
   Tailscale and NordVPN Meshnet (both encrypt the traffic themselves). It is
   refused to anything on the open internet.
-- **The "I heard you" sound gets a switch in both apps, on by default**,
-  next to the "One moment" switch.
+- **The "I heard you" sound gets a switch in both apps, off by default**,
+  next to the "One moment" switch (the owner changed on to off, 2026-09-25).
 
 ## Every new feature gets its own audit, without being asked
 

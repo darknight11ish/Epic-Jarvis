@@ -695,7 +695,7 @@ backend routes, in both directions; the rest are listed here only.
 (`?source=barge_in`, pause first and decide second), "One moment." when a
 tool starts (`GET /api/voice/moment`, `ported` in `tools/check_parity.py`),
 `&waited_ms=`, the "I heard you" sound (with its own switch in both apps,
-"Play a short sound when I finish speaking", on by default), keeping
+"Play a short sound when I finish speaking", off by default), keeping
 listening after a question (part 6) and telling the model it was
 interrupted (part 7). Two small
 differences, on purpose, each for a reason written in §17: the desktop

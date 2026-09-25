@@ -2259,7 +2259,7 @@ the desktop: when the PC answers that "hey Jarvis" was heard from the owner,
 because only the PC knows which of the sounds its listener cuts were meant
 for Jarvis), and the reply to a question (part 6). **It has a switch in
 both apps since 2026-09-25** (the owner's decision): **"Play a short sound
-when I finish speaking"**, on by default, per device, right under the "One
+when I finish speaking"**, off by default, per device, right under the "One
 moment" switch (desktop Settings -> Voice, "While you wait"; phone Checks,
 the "hey Jarvis" card). Off, the sound is simply not played; nothing else
 about the turn changes. It is the app's own setting, like "One moment", but

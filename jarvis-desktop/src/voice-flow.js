@@ -36,7 +36,8 @@
  * new dependency), played when the owner's turn has been cut: on letting go
  * of the talk button, and when the PC says "hey Jarvis" was heard. The phone
  * makes the same sound from the same numbers. It has its own switch, "Play a
- * short sound when I finish speaking", on by default, beside "One moment"
+ * short sound when I finish speaking", OFF by default (the owner's choice,
+ * 2026-09-25), beside "One moment"
  * (owner's decision, 2026-09-25) - this PC's own, like that one.
  *
  * @module voice-flow
@@ -266,9 +267,14 @@ export const HEARD_KEY = "jarvis.voice.heardSound";
 /** The switch's name - the phone's `HeardSound.NAME`. */
 export const HEARD_NAME = "Play a short sound when I finish speaking";
 
-/** The owner's setting, or ON when none was saved (or storage is unreadable). */
+/** The owner's setting, or OFF when none was saved (or storage is unreadable):
+ *  the owner chose off by default, 2026-09-25. */
 export function loadHeard(storage = globalThis.localStorage) {
-  return loadOnByDefault(HEARD_KEY, storage);
+  try {
+    return !!storage && storage.getItem(HEARD_KEY) === "on";
+  } catch {
+    return false; /* private mode or cleared site data: the default */
+  }
 }
 
 /** Saves the setting. Returns whether it could be saved. */

@@ -13,7 +13,7 @@
  * per question, before the reply's first sound and never over it.
  *
  * "I heard you": a small sound when the owner's turn is cut, with its own
- * switch, "Play a short sound when I finish speaking", on by default.
+ * switch, "Play a short sound when I finish speaking", OFF by default.
  *
  * The rules themselves are held to tests/fixtures/voice-flow-cases.json,
  * which the phone's VoiceFlowTest.kt reads too.
@@ -137,18 +137,20 @@ await check("the \"One moment\" switch: on unless saved off, and its words", asy
   assert.match(F.describeMoment(false), /^Off:/);
 });
 
-await check("the \"I heard you\" switch: on unless saved off, its own key, and its words", async () => {
+await check("the \"I heard you\" switch: off unless saved on, its own key, and its words", async () => {
   const mem = (v) => ({ getItem: () => v, setItem() {} });
-  assert.equal(F.loadHeard(mem(null)), true);
+  assert.equal(F.loadHeard(mem(null)), false, "off by default (the owner's choice, 2026-09-25)");
   assert.equal(F.loadHeard(mem("off")), false);
   assert.equal(F.loadHeard(mem("on")), true);
-  assert.equal(F.loadHeard({ getItem() { throw new Error("private"); } }), true);
+  assert.equal(F.loadHeard({ getItem() { throw new Error("private"); } }), false);
   assert.equal(F.saveHeard(true, { setItem() { throw new Error("full"); } }), false);
   const store = new Map();
   const real = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  assert.equal(F.saveHeard(true, real), true);
+  assert.equal(F.loadHeard(real), true);
+  assert.equal(F.loadMoment(real), true, "turning the sound on leaves \"One moment\" alone");
   assert.equal(F.saveHeard(false, real), true);
   assert.equal(F.loadHeard(real), false);
-  assert.equal(F.loadMoment(real), true, "turning the sound off leaves \"One moment\" alone");
   assert.notEqual(F.HEARD_KEY, F.MOMENT_KEY);
   assert.equal(F.HEARD_NAME, "Play a short sound when I finish speaking");
   assert.match(F.describeHeard(true), /^On: a short two-note sound/);
@@ -425,8 +427,9 @@ await check("\"One moment.\": not once the reply has made a sound, not when swit
   await done(typed);
 });
 
-await check("\"I heard you\": on letting go of the talk button, and when the PC heard \"hey Jarvis\" from you", async () => {
+await check("\"I heard you\" switched on: on letting go of the talk button, and when the PC heard \"hey Jarvis\" from you", async () => {
   const page = await bar({ reply: [delta("Hi. ")] });
+  await page.evaluate(() => localStorage.setItem("jarvis.voice.heardSound", "on"));
   await talk(page);
   await page.waitForTimeout(200);
   assert.equal(await page.evaluate(() => window.__heardSounds), 1);
@@ -434,6 +437,7 @@ await check("\"I heard you\": on letting go of the talk button, and when the PC 
   await done(page);
 
   const wake = await bar({ reply: [delta("Hi. ")] });
+  await wake.evaluate(() => localStorage.setItem("jarvis.voice.heardSound", "on"));
   await wake.locator("#voice-auto").click();
   await wake.waitForTimeout(100);
   await wake.evaluate(() => window.__emit("voice-heard", { isOwner: false, text: "", available: true, wakeHeard: false }));
@@ -493,7 +497,7 @@ await check("Settings: \"Say One moment\" is on by default, says what it does, a
   assert.deepEqual(errors, []);
 });
 
-await check("Settings: \"Play a short sound\" is on by default, beside \"One moment\", and turning it off is saved", async () => {
+await check("Settings: \"Play a short sound\" is OFF by default (the owner's choice), beside \"One moment\", and turning it on is saved", async () => {
   const page = await K.open(browser, base, "settings.html", {}, { width: 760, height: 1400 });
   const read = () => page.evaluate(() => {
     const box = document.getElementById("voice-heard-sound");
@@ -507,10 +511,10 @@ await check("Settings: \"Play a short sound\" is on by default, beside \"One mom
     };
   });
   const before = await read();
-  assert.equal(before.checked, true);
+  assert.equal(before.checked, false);
   assert.equal(before.besideMoment, true, "right under the One moment switch");
   assert.ok(before.label.includes(F.HEARD_NAME), before.label);
-  assert.ok(before.label.includes(F.describeHeard(true)));
+  assert.ok(before.label.includes(F.describeHeard(false)));
   await page.locator("#voice-heard-sound").click();
   await page.waitForTimeout(100);
   const after = await read();
@@ -519,11 +523,11 @@ await check("Settings: \"Play a short sound\" is on by default, beside \"One mom
   const reopened = await read();
   const errors = page.__errors;
   await page.close();
-  assert.equal(after.checked, false);
-  assert.equal(after.saved, "off");
+  assert.equal(after.checked, true);
+  assert.equal(after.saved, "on");
   assert.equal(after.moment, null, "\"One moment\" is left alone");
-  assert.ok(after.label.includes(F.describeHeard(false)));
-  assert.equal(reopened.checked, false);
+  assert.ok(after.label.includes(F.describeHeard(true)));
+  assert.equal(reopened.checked, true);
   assert.deepEqual(errors, []);
 });
 
