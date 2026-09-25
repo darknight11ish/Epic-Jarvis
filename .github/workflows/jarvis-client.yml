@@ -245,10 +245,14 @@ jobs:
                  | tr -d ':[:space:]' | tr 'A-F' 'a-f')
           certs=$("$apksigner" verify --print-certs "$apk")
           printf '%s\n' "$certs"
-          signers=$(printf '%s\n' "$certs" | grep -c '^Signer #[0-9]* certificate DN:') || true
-          got=$(printf '%s\n' "$certs" \
-                | sed -n 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*//p' | awk 'NR == 1' \
-                | tr -d '[:space:]' | tr 'A-F' 'a-f')
+          # Older apksigner prints "Signer #1 certificate SHA-256 digest: ...", newer
+          # (build-tools 37) prints "V2 Signer: certificate SHA-256 digest: ...",
+          # once per signing scheme. So count DIFFERENT digests, whatever the prefix.
+          digests=$(printf '%s\n' "$certs" \
+                | sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest:[[:space:]]*//p' \
+                | tr -d ' \t\r' | tr 'A-F' 'a-f' | grep . | sort -u) || true
+          signers=$(printf '%s\n' "$digests" | grep -c .) || true
+          got=$(printf '%s\n' "$digests" | awk 'NR == 1')
 
           echo "Key CI restored: ${want:-?}"
           echo "APK is signed:   ${got:-?}"
@@ -928,10 +932,14 @@ jobs:
           fi
           certs=$("$apksigner" verify --print-certs "$apk")
           printf '%s\n' "$certs"
-          signers=$(printf '%s\n' "$certs" | grep -c '^Signer #[0-9]* certificate DN:') || true
-          got=$(printf '%s\n' "$certs" \
-                | sed -n 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*//p' | awk 'NR == 1' \
-                | tr -d '[:space:]' | tr 'A-F' 'a-f')
+          # Older apksigner prints "Signer #1 certificate SHA-256 digest: ...", newer
+          # (build-tools 37) prints "V2 Signer: certificate SHA-256 digest: ...",
+          # once per signing scheme. So count DIFFERENT digests, whatever the prefix.
+          digests=$(printf '%s\n' "$certs" \
+                | sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest:[[:space:]]*//p' \
+                | tr -d ' \t\r' | tr 'A-F' 'a-f' | grep . | sort -u) || true
+          signers=$(printf '%s\n' "$digests" | grep -c .) || true
+          got=$(printf '%s\n' "$digests" | awk 'NR == 1')
           echo "Project key: $want"
           echo "APK signed:  ${got:-?}"
           if [ "$signers" != "1" ] || [ "$got" != "$want" ]; then
@@ -1000,7 +1008,7 @@ jobs:
             "" \
             "\`SHA-256 $key_sha\`" \
             "" \
-            "To check a download yourself: \`apksigner verify --print-certs jarvis-client-$short.apk\` (in the Android SDK's build-tools folder) prints the same number, in lowercase and without the colons, as \"Signer #1 certificate SHA-256 digest\". Builds signed with this key install over each other in place, keeping the pairing." \
+            "To check a download yourself: \`apksigner verify --print-certs jarvis-client-$short.apk\` (in the Android SDK's build-tools folder) prints the same number, in lowercase and without the colons, as its \"certificate SHA-256 digest\". Builds signed with this key install over each other in place, keeping the pairing." \
             "" \
             "If \`adb install -r\` says \`INSTALL_FAILED_UPDATE_INCOMPATIBLE\`, the copy on the phone was signed with a different key. That is expected ONCE: every build published between 19 Sep 2026 and the fix for this (security audit H1) was signed by mistake with a throwaway key that CI made on the spot, a different one each time. Uninstall it once (\`adb uninstall com.jarvis.client\`, or long-press the app, Uninstall), install this one, and pair again with the token from the desktop app (Settings, Connection, Show the token for my phone) or \`py -3 jarvis_token_store.py show\` in the backend folder. Uninstalling deletes the pairing and anything still queued offline. After that, later builds should install over this one without it. If one does not, do not uninstall to get past it - something is wrong with that build.")
           title="Jarvis client - latest build ($GITHUB_REF_NAME @ $short)"
