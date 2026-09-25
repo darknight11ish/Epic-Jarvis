@@ -7944,7 +7944,7 @@ refusal, so it can never become a way round the gate.
 - **Why five, not the research's example of three:** turning off three
   lights is already three cards, because Home Assistant control takes one
   device per card. The number is `CARDS_PER_TURN` in `jarvis_agent.py`.
-  Ask if you want a different one.
+  You confirmed five on 2026-09-25.
 
 **A key that was read is named on the next card.** Say Jarvis reads a file,
 and the file holds something that looks like a password or key. The next

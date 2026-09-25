@@ -883,7 +883,7 @@ def _a_person_said_yes(verdict) -> bool:
 #: become a way round the gate - and the owner is told so in the answer.
 #: Five rather than the research's example of three: home_control takes one
 #: entity per call, so "turn off the kitchen, hall and bedroom lights" is
-#: already three cards.
+#: already three cards. The owner confirmed five, 2026-09-25.
 CARDS_PER_TURN = 5
 
 CARD_LIMIT_ERROR = ("refused: this answer has already asked the owner for approval "
