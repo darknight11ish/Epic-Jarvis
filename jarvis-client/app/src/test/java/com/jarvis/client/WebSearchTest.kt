@@ -53,10 +53,8 @@ class WebSearchTest {
         }
         val whoogle = doc["left_out"]!!.jsonArray[0].jsonObject
         assertEquals(whoogle["why"]!!.jsonPrimitive.content, WebSearch.WHOOGLE_WHY)
-        val brave = doc["left_out"]!!.jsonArray[1].jsonObject
-        assertEquals("brave", brave["id"]!!.jsonPrimitive.content)
-        assertEquals(brave["why"]!!.jsonPrimitive.content, WebSearch.BRAVE_WHY)
-        assertFalse("brave" in WebSearch.PROVIDERS)
+        assertEquals(1, doc["left_out"]!!.jsonArray.size)
+        assertTrue(WebSearch.WHY["brave"]!!.contains("payment card that is charged"))
     }
 
     @Test
@@ -71,7 +69,7 @@ class WebSearchTest {
         assertEquals("http://127.0.0.1:8888", d.address)
         assertFalse(d.askEveryTime)
         assertEquals("In use. Ready.", WebSearch.providerLine(d.providers[0], d.provider))
-        assertEquals(listOf("Whoogle", "Brave Search"), d.leftOut.map { it.label })
+        assertEquals(listOf("Whoogle"), d.leftOut.map { it.label })
         assertNull(view("damaged").provider)
         assertTrue(view("damaged").why.contains("damaged"))
         assertTrue(view("exa_no_key_ask_every_time").askEveryTime)
@@ -80,17 +78,16 @@ class WebSearchTest {
         val exa = view("exa_no_key_ask_every_time").providers.first { it.id == "exa" }
         assertEquals(WebSearch.KEY_NONE, WebSearch.keyLine(exa))
         assertTrue(WebSearch.providerLine(exa, "exa").contains("No Exa key"))
-        // A PC whose settings still name Brave: nothing in use, the reason said.
-        val old = view("brave_saved_no_longer_offered")
-        assertNull(old.provider)
-        assertTrue(old.why.contains("Brave Search is no longer offered"))
+        val brave = view("brave_no_key")
+        assertEquals("brave", brave.provider)
+        assertEquals(WebSearch.KEY_NONE, WebSearch.keyLine(brave.providers.first { it.id == "brave" }))
     }
 
     @Test
     fun `one change per request, and nothing but the four`() {
         assertEquals("{\"provider\":\"duckduckgo\"}", WebSearch.providerBody("duckduckgo"))
         assertNull(WebSearch.providerBody("whoogle"))
-        assertNull(WebSearch.providerBody("brave"))
+        assertEquals("{\"provider\":\"brave\"}", WebSearch.providerBody("brave"))
         assertEquals("{\"searxng_url\":\"http://nas.local:8888\"}", WebSearch.addressBody(" http://nas.local:8888 "))
         assertEquals("{\"searxng_url\":\"a\\\"b\"}", WebSearch.addressBody("a\"b"))
         assertNull(WebSearch.addressBody("x".repeat(201)))
@@ -107,9 +104,9 @@ class WebSearchTest {
         assertTrue(line.contains("SearXNG isn't running on this PC"))
         assertTrue(line.contains("Switch web search to DuckDuckGo?"))
         assertTrue(WebSearch.testLine(post("test_works")).first)
-        val (braveOk, braveLine) = WebSearch.testLine(post("test_brave_no_longer_offered"))
+        val (braveOk, braveLine) = WebSearch.testLine(post("test_brave_key_missing"))
         assertFalse(braveOk)
-        assertTrue(braveLine.contains("no longer offered") && braveLine.contains("DuckDuckGo"))
+        assertTrue(braveLine.contains("No Brave Search key"))
         assertTrue(WebSearch.testLine(post("test_key_missing")).second.contains("desktop app's Settings"))
         assertEquals(WebSearch.MISSING, WebSearch.replyLine(ApiResult.Failed(ApiError.NotFound)))
         assertTrue(WebSearch.missing(ApiError.NotFound))

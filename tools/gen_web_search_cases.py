@@ -90,10 +90,10 @@ def cases() -> dict:
     out["tavily_key_saved"] = WS.view()
     _fresh(provider="exa", ask_every_time=True)
     out["exa_no_key_ask_every_time"] = WS.view()
-    # A settings file from before Brave was removed (2026-09-25).
+    # Brave: a key, and a payment card past its free credit.
     _fresh(provider="brave")
-    out["brave_saved_no_longer_offered"] = WS.view()
-    out["test_brave_no_longer_offered"] = WS.handle_test({})
+    out["brave_no_key"] = WS.view()
+    out["test_brave_key_missing"] = WS.handle_test({})
     _fresh(provider="duckduckgo")
     out["duckduckgo_not_installed"] = WS.view()
     _fresh()

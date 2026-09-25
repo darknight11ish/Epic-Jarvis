@@ -156,10 +156,10 @@ fn main() {
             "apply_hardware",
             "hardware_step",
             "measure_hardware",
-            // Settings' "Web search" (backend/web-search.patch): the four
+            // Settings' "Web search" (backend/web-search.patch): the five
             // providers and their "why" lines, ONE change at a time (turning
             // "Ask before every web search" off raises a card on the PC), a
-            // test search, and the Exa / Tavily key written straight into
+            // test search, and the Exa / Tavily / Brave key written straight into
             // Credential Manager on this PC - never sent over HTTP, never
             // shown again. Settings window only.
             "get_web_search",

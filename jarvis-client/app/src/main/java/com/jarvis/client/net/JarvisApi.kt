@@ -830,7 +830,7 @@ class JarvisApi(
     // --------------------------------------------------------- hardware ----
 
     /**
-     * `GET /api/search` - web search's four providers with the PC's own "why
+     * `GET /api/search` - web search's five providers with the PC's own "why
      * use this one" lines, which is chosen, and its settings ([WebSearch.parse]).
      * A read. A 404 is an older backend ([WebSearch.missing]).
      */

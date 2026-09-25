@@ -2,16 +2,17 @@
  * Web search (the owner's decisions of 2026-09-25; JARVIS-API.md section 23;
  * backend jarvis_search.py) - the words, and how to read what the PC sends.
  *
- * Four providers, SearXNG the default (a search program on this PC, in
- * Docker), then DuckDuckGo (the ddgs package), Exa and Tavily (keys). Whoogle
- * and Brave Search are left out, each with its reason.
+ * Five providers, SearXNG the default (a search program on this PC, in
+ * Docker), then DuckDuckGo (the ddgs package), Exa, Tavily and Brave Search
+ * (keys; Brave can cost money past its free credit). Whoogle is left out,
+ * with its reason.
  * Each has a short "why use this one" line. The PC sends those lines with
  * every GET /api/search, and Settings shows the PC's words; the copies below
  * are the same words (backend/test_web_search.py checks them against the PC's
  * and the phone's net/WebSearch.kt), used only when an answer lacks them.
  *
  * Used by Settings, "Web search" (web-search-settings.js; src-tauri/src/
- * web_search.rs). The Exa and Tavily keys are typed here only - never on
+ * web_search.rs). The Exa, Tavily and Brave keys are typed here only - never on
  * the phone - and go straight into Credential Manager on this PC.
  *
  * @module web-search
@@ -26,17 +27,18 @@ export const WHY = Object.freeze({
     "Finds pages by meaning, not just matching words, and returns the useful passages of each page, with about $10 of free credit a month (roughly 1,400 searches) and no payment card. Needs a free account and a key, and Exa sees what you search, tied to your key.",
   tavily:
     "Made for AI assistants: short, clean results, with 1,000 free credits a month (a basic search uses one). Needs a free account and a key, and Tavily sees what you search, tied to your key.",
+  brave:
+    "Brave's own independent index, with about $5 of free credit each month (roughly 1,000 searches). Needs an account, a payment card that is charged if you go past the free credit, and a key, and Brave sees what you search, tied to your key.",
 });
 export const LABEL = Object.freeze({
   searxng: "SearXNG (on this PC)",
   duckduckgo: "DuckDuckGo",
   exa: "Exa",
   tavily: "Tavily",
+  brave: "Brave Search",
 });
 export const WHOOGLE_WHY =
   "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025.";
-export const BRAVE_WHY =
-  "Not offered: since 2026 Brave's search API needs a payment card, which is charged once the $5 monthly credit runs out.";
 export const DEFAULT_WHY =
   "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.";
 export const ASK_LABEL = "Ask before every web search";
@@ -47,10 +49,11 @@ export const KEY_ENTRY =
 export const KEY_WHERE = Object.freeze({
   exa: "https://dashboard.exa.ai (sign up, then API Keys)",
   tavily: "https://app.tavily.com (sign in, then API Keys)",
+  brave: "https://api-dashboard.search.brave.com (sign up, add a card, then API Keys)",
 });
 
-export const PROVIDERS = Object.freeze(["searxng", "duckduckgo", "exa", "tavily"]);
-export const KEYED = Object.freeze(["exa", "tavily"]);
+export const PROVIDERS = Object.freeze(["searxng", "duckduckgo", "exa", "tavily", "brave"]);
+export const KEYED = Object.freeze(["exa", "tavily", "brave"]);
 export const DEFAULT_ADDRESS = "http://127.0.0.1:8888";
 
 export const TITLE = "Web search";
@@ -110,7 +113,7 @@ export function readSearch(answer) {
     ? a.left_out
         .filter((x) => x && x.label)
         .map((x) => ({ label: String(x.label), why: String(x.why || "") }))
-    : [{ label: "Whoogle", why: WHOOGLE_WHY }, { label: "Brave Search", why: BRAVE_WHY }];
+    : [{ label: "Whoogle", why: WHOOGLE_WHY }];
   return {
     available: true,
     provider: PROVIDERS.includes(a.provider) ? a.provider : null,

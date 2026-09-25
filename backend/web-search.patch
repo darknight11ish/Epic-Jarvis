@@ -7,11 +7,11 @@
 +
 +        if path == "/api/search":
 +            # web-search.patch - web search (jarvis_search.py, the owner's
-+            # decisions of 2026-09-25): which of the four providers is chosen,
++            # decisions of 2026-09-25): which of the five providers is chosen,
 +            # each one's "why use this one" line (both apps show these words),
 +            # whether it is ready, the SearXNG address, "Ask before every web
 +            # search", and Whoogle's reason for being left out. Whether a
-+            # Exa or Tavily key is saved - yes or no, never the key.
++            # Exa, Tavily or Brave key is saved - yes or no, never the key.
 +            if not _origin_ok(self):
 +                return self._send(403, {"error": "cross-origin request refused"})
 +            if not _token_ok(self):
@@ -39,7 +39,7 @@
 +            #     networks only) at once; {"ask_every_time": true} at once
 +            #     (stricter); {"ask_every_time": false} 202, ONE approval
 +            #     card (stop_asking_before_every_web_search, tier "ask"). There is no route
-+            #     for an Exa or Tavily key: keys are entered on the PC only,
++            #     for an Exa, Tavily or Brave key: keys are entered on the PC only,
 +            #     straight into Credential Manager (CLAUDE.md rule 3).
 +            #   test: one search for a fixed harmless word through the chosen
 +            #     provider, and what happened in plain words. Never another
@@ -82,7 +82,7 @@
 +    # asked about because private things could slip into its words (or the
 +    # owner chose "Ask before every web search"): the words shown on the card
 +    # go to the search the owner chose - SearXNG on this PC, which asks other
-+    # engines, DuckDuckGo, Exa or Tavily. Outbound, so the notice is heavy.
++    # engines, DuckDuckGo, Exa, Tavily or Brave. Outbound, so the notice is heavy.
 +    "search_the_web": ("yes", "outbound", "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent"),
 +    # Turning "Ask before every web search" off: a setting on this PC. It
 +    # sends nothing; searches straight from the owner's own question then run

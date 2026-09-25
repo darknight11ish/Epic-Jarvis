@@ -779,8 +779,8 @@ def _briefing(s: str, now: float) -> Optional[Intent]:
     return None
 
 
-#: The four providers, and the two left out (Whoogle, Brave - asked about,
-#: they get their reason), by the words the owner may use for them.
+#: The five providers, and Whoogle (left out - asked about, it gets its
+#: reason), by the words the owner may use for them.
 _PROVIDER_WORDS = (("searxng", r"searx(?:ng)?"),
                    ("duckduckgo", r"duck\s*duck\s*go|ddg"),
                    ("exa", r"exa(?:\s+ai)?"),

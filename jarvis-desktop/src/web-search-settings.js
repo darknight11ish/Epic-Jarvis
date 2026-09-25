@@ -3,15 +3,15 @@
  * section 23; backend jarvis_search.py, web-search.patch).
  *
  * Rust commands (src-tauri/src/web_search.rs), Settings only:
- *  - get_web_search: the four providers with the PC's own "why use this one"
+ *  - get_web_search: the five providers with the PC's own "why use this one"
  *    lines, which is chosen, whether each is ready, the SearXNG address,
- *    "Ask before every web search", and why Whoogle and Brave are left out;
+ *    "Ask before every web search", and Whoogle's reason for being left out;
  *  - set_web_search: ONE change - the provider or the address at once, "Ask
  *    before every web search" on at once, off through ONE approval card on
  *    the PC. Held on a stale link, here (greyed) and in Rust;
  *  - test_web_search: one search for a fixed word through the chosen
  *    provider, and what happened in plain words. Held on a stale link too;
- *  - save_search_key / forget_search_key: the Exa or Tavily key,
+ *  - save_search_key / forget_search_key: the Exa, Tavily or Brave Search key,
  *    straight into Credential Manager on this PC. The box is emptied as soon
  *    as it is sent, and the key is never shown again - only whether one is
  *    saved. The phone has no such box (ARCHITECTURE.md section 8).
