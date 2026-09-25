@@ -576,7 +576,9 @@
            brain/briefing.rs get_briefing_setup, set_briefing, stop_briefing).
            It repeats, so setting one up raises the scheduler's ONE approval
            card listing the next three times; stopping one is immediate. The
-           briefing itself is read in the Brain (Work tab), never here. -->
+           briefing itself is read in the Brain (Work tab), never here.
+           "Show who new emails are from" (set_briefing_senders): off at once,
+           on through ONE approval card on the PC, held on a stale link. -->
       <section class="card" id="briefing-settings">
         <h2>Morning briefing</h2>
         <p class="note">Choose when your briefing arrives. It repeats, so Jarvis asks you once with an approval card that lists the next three times; nothing is set up until you say yes. Stopping it is immediate. You can also say "brief me every weekday at 7", or "brief me now" at any time.</p>
@@ -603,6 +605,15 @@
 
           <h3 class="subhead">What it includes</h3>
           <ul class="sc-cards" id="br-reads"></ul>
+          <label class="toggle" id="br-senders-row">
+            <input id="br-senders" type="checkbox" />
+            <span>
+              Show who new emails are from
+              <span class="toggle-detail">The briefing lists who your newest unread emails are from (up to 5), next to how many there are. Off: the number only. Turning it on shows you an approval card first; turning it off happens at once.</span>
+            </span>
+          </label>
+          <div class="sc-lines" id="br-senders-lines"></div>
+          <span class="status" id="br-senders-status" role="status"></span>
           <p class="note" id="br-spoken"></p>
           <p class="note">The notification says only "Jarvis: your morning briefing is ready." The briefing itself is in the Brain, on the Work tab.</p>
         </div>

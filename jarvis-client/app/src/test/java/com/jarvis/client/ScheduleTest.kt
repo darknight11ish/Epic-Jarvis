@@ -137,7 +137,7 @@ class ScheduleTest {
             obj(
                 """{"jobs":[{"id":"s00000000aa","kind":"standby","text":"","state":"active",
                   "repeats":true,"repeat":"every day from 01:00 to 07:00",
-                  "when":"awake at 07:00 today","note":"Went on standby at 01:00.",
+                  "when":"awake at 07:00 today, if the schedule put it on standby","note":"Went on standby at 01:00.",
                   "notify":false}],"todo":[]}""",
             ),
         )!!
@@ -145,7 +145,11 @@ class ScheduleTest {
         assertEquals(Schedule.STANDBY_TITLE, Schedule.titleOf(job))
         assertEquals(Schedule.STANDBY_TITLE, Schedule.titleOf(Schedule.hide(v).jobs.single()))
         assertEquals(
-            listOf("every day from 01:00 to 07:00", "next: awake at 07:00 today", "Went on standby at 01:00."),
+            listOf(
+                "every day from 01:00 to 07:00",
+                "next: awake at 07:00 today, if the schedule put it on standby",
+                "Went on standby at 01:00.",
+            ),
             Schedule.metaOf(job),
         )
         assertEquals(listOf("pause", "delete"), Schedule.actionsOf(job))

@@ -16,9 +16,15 @@
  *   briefing per tap), sets one up with the scheduler's rule (the PC raises
  *   the card), greys both on a stale link, says what a briefing includes,
  *   and never shows the briefing itself;
+ * - Settings -> Morning briefing has "Show who new emails are from" (on by
+ *   default, the owner's decision of 2026-09-25): OFF is sent at once, even
+ *   on a stale link; ON is greyed on a stale link and otherwise asks the PC,
+ *   which raises ONE approval card; the email senders are LINES of the
+ *   briefing, so they are hidden with the private lists;
  * - CONTROL: the toast says only the fixed words and only when the
  *   briefing is ready; setting up and stopping are held on a stale link in
- *   Rust; the powers sit with the right windows.
+ *   Rust, and so is turning the senders ON; the powers sit with the right
+ *   windows.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -35,6 +41,12 @@ import {
   NOW_LABEL,
   OUTSIDE_LINE,
   readBriefing,
+  readSenders,
+  SENDERS_DETAIL,
+  SENDERS_LABEL,
+  SENDERS_MISSING,
+  SENDERS_WAITING,
+  sendersView,
   SETUP_DETAIL,
   SETUP_NONE,
   setupArgs,
@@ -67,7 +79,8 @@ const BRIEFING = {
       items: ["12:00 call the bank"] },
     { key: "todo", title: "To-do list", state: "ok", summary: "1 open item.", items: ["buy milk"] },
     { key: "approvals", title: "Approvals", state: "empty", summary: "No approval cards waiting.", items: [] },
-    { key: "email", title: "Email", state: "ok", summary: "3 unread emails.", items: [] },
+    { key: "email", title: "Email", state: "ok", summary: "3 unread emails.",
+      items: ["From Alex, Your Bank and GitHub"] },
   ],
   not_included: [],
   text: "…",
@@ -79,7 +92,9 @@ const SOURCES = {
   email: { state: "off", said: "Not included: how many unread emails you have is not set up for Jarvis on this PC." },
   weather: { state: "not_available", said: OUTSIDE_LINE },
 };
-const SCENARIO = { briefing: BRIEFING, setups: SETUPS, sources: SOURCES };
+const SENDERS_ON = { on: true, waiting: false, last: null, why: "" };
+const SENDERS_OFF = { on: false, waiting: false, last: null, why: "" };
+const SCENARIO = { briefing: BRIEFING, setups: SETUPS, sources: SOURCES, senders: SENDERS_ON };
 
 /* ── The words ─────────────────────────────────────────────────────────── */
 
@@ -87,7 +102,8 @@ await check("the words are both apps' words and the PC's own", async () => {
   const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Briefing.kt")
     .replace(/"\s*\+\s*\n?\s*"/g, "");
   for (const words of [BRIEFING_TITLE, BRIEFING_DETAIL, EMPTY, NOW_LABEL, BRIEFING_MISSING, KEPT,
-    LOCK_SCREEN, OUTSIDE_LINE, SETUP_DETAIL, SETUP_NONE, ASKED, SPOKEN]) {
+    LOCK_SCREEN, OUTSIDE_LINE, SETUP_DETAIL, SETUP_NONE, ASKED, SPOKEN, SENDERS_LABEL,
+    SENDERS_DETAIL, SENDERS_WAITING, SENDERS_MISSING]) {
     assert.ok(kt.includes(`"${words.replace(/"/g, '\\"')}"`), `the phone does not say: ${words}`);
   }
   const py = readRepo("backend/jarvis_briefing.py").replace(/"\s*\n\s*"/g, "");
@@ -98,12 +114,20 @@ await check("the words are both apps' words and the PC's own", async () => {
   assert.ok(rs.includes(`LOCK_SCREEN: &str = "${LOCK_SCREEN}"`));
   assert.ok(rs.includes(`TOAST_TITLE: &str = "${TOAST_TITLE}"`));
   assert.ok(rs.replace(/"\s*\n\s*/g, '"').includes(`"${BRIEFING_MISSING}"`));
+  assert.ok(rs.replace(/"\s*\n\s*/g, '"').includes(`"${SENDERS_MISSING}"`));
+  const html = read("src/settings.html").replace(/\s+/g, " ");
+  assert.ok(html.includes(SENDERS_LABEL) && html.includes(SENDERS_DETAIL),
+    "Settings does not show the senders switch in both apps' words");
+  // The PC's email words for "What it includes", and its card, say the same.
+  assert.ok(py.includes("Included: how many unread emails you have, and who the newest "));
+  assert.ok(py.includes("If you say no: nothing changes - the briefing shows only how many new emails "));
   assert.equal(titleOf({ kind: "briefing", text: "", hidden: false }), "Morning briefing");
   assert.equal(KIND_TAGS.briefing, "briefing");
 });
 
 await check("reading the answer, and the setup's rule", async () => {
-  const v = readBriefing({ available: true, briefing: BRIEFING, setups: SETUPS, sources: SOURCES });
+  const v = readBriefing({ available: true, briefing: BRIEFING, setups: SETUPS, sources: SOURCES,
+    senders: SENDERS_ON });
   assert.equal(v.briefing.sections.length, 5);
   assert.equal(v.setups[0].id, "s00000000b1");
   for (const nothing of [null, {}, { available: false }, "x"]) {
@@ -111,6 +135,18 @@ await check("reading the answer, and the setup's rule", async () => {
     assert.equal(n.available, false);
     assert.equal(n.why, BRIEFING_MISSING);
   }
+  assert.equal(v.senders.on, true);
+  assert.equal(readBriefing({ available: true, briefing: null }).senders, null, "an older PC");
+  assert.deepEqual(sendersView(null, true), { show: false, checked: false, canChange: false,
+    lines: [SENDERS_MISSING] });
+  assert.equal(sendersView(readSenders(SENDERS_OFF), false).canChange, false, "ON offered on a stale link");
+  assert.equal(sendersView(readSenders(SENDERS_ON), false).canChange, true, "OFF held on a stale link");
+  const waiting = sendersView(readSenders({ ...SENDERS_OFF, waiting: true }), true);
+  assert.equal(waiting.checked, true);
+  assert.deepEqual(waiting.lines, [SENDERS_WAITING]);
+  const denied = sendersView(readSenders({ ...SENDERS_OFF, last: { outcome: "denied",
+    message: "The card was turned down, so the briefing shows the number only." } }), true);
+  assert.deepEqual(denied.lines, ["The card was turned down, so the briefing shows the number only."]);
   assert.deepEqual(setupArgs("weekday", "07:00"), { every: "weekday", at: "07:00" });
   assert.deepEqual(setupArgs("week", "08:30", [4, 0, 4]), { every: "week", at: "08:30", days: [0, 4] });
   assert.equal(setupArgs("week", "08:30", []), null);
@@ -141,7 +177,8 @@ await check("Brain -> Work: the latest briefing, section by section", async () =
   assert.equal(title, BRIEFING_TITLE);
   assert.equal(note, BRIEFING_DETAIL);
   for (const bit of ["Your briefing for Friday 25 September", "2 events today.", "09:30 Dentist",
-    "12:00 call the bank", "buy milk", "3 unread emails.", OUTSIDE_LINE, KEPT, NOW_LABEL]) {
+    "12:00 call the bank", "buy milk", "3 unread emails.", "From Alex, Your Bank and GitHub",
+    OUTSIDE_LINE, KEPT, NOW_LABEL]) {
     assert.ok(text.includes(bit), `missing: ${bit}`);
   }
 });
@@ -164,8 +201,9 @@ await check("the lines are hidden with the private lists; the counts stay", asyn
   const page = await workTab({ briefing: SCENARIO, security: { hidden: true } });
   const text = await page.locator("#briefing-card").innerText();
   await page.close();
-  assert.doesNotMatch(text, /Dentist|bank|milk|birthday/);
+  assert.doesNotMatch(text, /Dentist|bank|milk|birthday|Alex|GitHub/);
   assert.match(text, /2 events today\./);
+  assert.match(text, /3 unread emails\./);
   assert.match(text, /Hidden until Windows Hello/);
 });
 
@@ -246,6 +284,67 @@ await check("Settings: Set up sends the scheduler's rule; Stop sends ONE id; bot
   assert.equal(status, ASKED);
 });
 
+await check("Settings: 'Show who new emails are from' - on by default, OFF sent at once", async () => {
+  const page = await settings({ briefing: SCENARIO });
+  await page.waitForTimeout(600);
+  const label = await page.locator("#br-senders-row").innerText();
+  const checked = await page.locator("#br-senders").isChecked();
+  await page.locator("#br-senders").click();
+  await page.waitForTimeout(500);
+  const calls = await page.evaluate(() => window.__briefingCalls.filter((c) => c.cmd === "set_briefing_senders"));
+  const status = await page.locator("#br-senders-status").innerText();
+  const after = await page.locator("#br-senders").isChecked();
+  await page.close();
+  assert.ok(label.includes(SENDERS_LABEL) && label.includes(SENDERS_DETAIL), label);
+  assert.equal(checked, true, "not on by default");
+  assert.deepEqual(calls, [{ cmd: "set_briefing_senders", enabled: false }]);
+  assert.match(status, /the number|how many new emails/);
+  assert.equal(after, false);
+});
+
+await check("Settings: turning the senders ON asks the PC, which shows a card", async () => {
+  const page = await settings({ briefing: { ...SCENARIO, senders: SENDERS_OFF } });
+  await page.waitForTimeout(600);
+  await page.locator("#br-senders").click();
+  await page.waitForTimeout(600);
+  const calls = await page.evaluate(() => window.__briefingCalls.filter((c) => c.cmd === "set_briefing_senders"));
+  const status = await page.locator("#br-senders-status").innerText();
+  const lines = await page.locator("#br-senders-lines").innerText();
+  const checked = await page.locator("#br-senders").isChecked();
+  await page.close();
+  assert.deepEqual(calls, [{ cmd: "set_briefing_senders", enabled: true }]);
+  assert.match(status, /Waiting for your approval/);
+  assert.ok(lines.includes(SENDERS_WAITING), lines);
+  assert.equal(checked, true, "a waiting card reads as on");
+});
+
+await check("Settings: on a stale link the senders' ON is greyed, and OFF still goes", async () => {
+  const off = await settings({ briefing: { ...SCENARIO, senders: SENDERS_OFF }, link: { stale: true } });
+  await off.waitForTimeout(600);
+  const heldOn = await off.locator("#br-senders").isDisabled();
+  await off.close();
+  const on = await settings({ briefing: SCENARIO, link: { stale: true } });
+  await on.waitForTimeout(600);
+  const offAllowed = await on.locator("#br-senders").isDisabled();
+  await on.locator("#br-senders").click();
+  await on.waitForTimeout(500);
+  const calls = await on.evaluate(() => window.__briefingCalls.filter((c) => c.cmd === "set_briefing_senders"));
+  await on.close();
+  assert.equal(heldOn, true, "ON was offered on a stale link");
+  assert.equal(offAllowed, false, "OFF was held on a stale link");
+  assert.deepEqual(calls, [{ cmd: "set_briefing_senders", enabled: false }]);
+});
+
+await check("Settings: a PC without the setting says so, and offers no switch", async () => {
+  const page = await settings({ briefing: { ...SCENARIO, senders: undefined } });
+  await page.waitForTimeout(600);
+  const hidden = await page.locator("#br-senders-row").isHidden();
+  const lines = await page.locator("#br-senders-lines").innerText();
+  await page.close();
+  assert.equal(hidden, true);
+  assert.equal(lines.trim(), SENDERS_MISSING);
+});
+
 await check("Settings: on a stale link Set up and Stop are greyed", async () => {
   const page = await settings({ briefing: SCENARIO, link: { stale: true } });
   await page.waitForTimeout(600);
@@ -277,6 +376,10 @@ await check("CONTROL: the toast is the fixed words, on ready only; changes held 
     assert.ok(b.indexOf("require_link_live") >= 0 && b.indexOf("require_link_live") < b.indexOf("post("),
       `${cmd} is not held on a stale link`);
   }
+  const sf = rs.slice(rs.indexOf("pub async fn set_briefing_senders("));
+  const sb = sf.slice(0, sf.indexOf("\n}\n"));
+  assert.match(sb, /if enabled \{\s*require_link_live\(&app\)\?;\s*\}/, "senders ON is not held on a stale link");
+  assert.ok(sb.indexOf("require_link_live") < sb.indexOf("post_raw("), "held after it was sent");
   const now = rs.slice(rs.indexOf("pub async fn brain_briefing_now("));
   assert.doesNotMatch(now.slice(0, now.indexOf("\n}\n")), /require_link_live/, "a read is held");
   const stop = rs.slice(rs.indexOf("pub async fn stop_briefing("));
@@ -287,11 +390,11 @@ await check("CONTROL: the toast is the fixed words, on ready only; changes held 
   for (const cmd of ["brain_briefing", "brain_briefing_now"]) {
     assert.deepEqual(holders(cmd), ["brain-briefing"], cmd);
   }
-  for (const cmd of ["get_briefing_setup", "set_briefing", "stop_briefing"]) {
+  for (const cmd of ["get_briefing_setup", "set_briefing", "stop_briefing", "set_briefing_senders"]) {
     assert.deepEqual(holders(cmd), ["settings-surface"], cmd);
   }
   for (const cmd of ["brain_briefing", "brain_briefing_now", "get_briefing_setup", "set_briefing",
-    "stop_briefing"]) {
+    "stop_briefing", "set_briefing_senders"]) {
     assert.match(read("src-tauri/build.rs"), new RegExp(`"${cmd}"`));
     assert.match(read("src-tauri/src/lib.rs"), new RegExp(`brain::briefing::${cmd},`));
   }

@@ -307,10 +307,13 @@ permissions = [
   # approval card (schedule_repeat) listing the next three times - and is
   # held while the event stream is stale. Stopping one is immediate, one
   # briefing at a time, and only for a job the PC lists as a briefing. The
-  # briefing itself is never read here.
+  # briefing itself is never read here. "Show who new emails are from": OFF
+  # is immediate; ON only raises ONE approval card on the PC, and is held
+  # while the event stream is stale.
   "allow-get-briefing-setup",
   "allow-set-briefing",
   "allow-stop-briefing",
+  "allow-set-briefing-senders",
   # "Hardware and models": the cards and the three setups for them. Choosing
   # a setup changes nothing by itself; each of its steps is ONE request that
   # raises its own existing approval card (model install, model switch, a

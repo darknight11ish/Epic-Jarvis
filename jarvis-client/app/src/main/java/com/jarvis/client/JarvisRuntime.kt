@@ -3071,6 +3071,27 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * "Show who new emails are from" in the morning briefing - the desktop's
+     * `set_briefing_senders`. ON is held on a stale link (rule 4) and raises
+     * ONE approval card on the PC; OFF is never held - it only shows less.
+     * @return the sentence to show.
+     */
+    suspend fun setBriefingSenders(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        val r = writeNoticingCards { api.setBriefingSenders(on) }
+        _briefingTick.update { n -> n + 1 }
+        return when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.Briefing.sendersSaid(on, r.value)
+            is ApiResult.Failed ->
+                if (r.error == ApiError.NotFound) {
+                    com.jarvis.client.net.Briefing.SENDERS_MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
     /** Stop ONE briefing, at once, no card. Held on a stale link, like every change. */
     suspend fun stopBriefing(id: String): Pair<Boolean, String> =
         scheduleAct(id, "delete").also { _briefingTick.update { n -> n + 1 } }

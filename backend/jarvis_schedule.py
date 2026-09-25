@@ -186,7 +186,11 @@ class Kind:
         # True: at most one job of this kind on the list at a time.
         self.single = single
         # The words for a window's two ends in the list: ("on standby",
-        # "awake") -> "next: awake at 07:00 tomorrow".
+        # "awake") -> "next: awake at 07:00 tomorrow". An optional third
+        # word is said after the END's time: the standby schedule's
+        # ", if the schedule put it on standby" -> "awake at 07:00 today, if
+        # the schedule put it on standby" (the owner's decision of
+        # 2026-09-25: it wakes only what it put on standby).
         self.edges = edges
         # Extra lines for the approval card, saying what it does.
         self.about = tuple(about)
@@ -1106,9 +1110,11 @@ class Scheduler:
         if rule and rule.get("until") and "when" in v and k is not None:
             # A window's next end, said as which end it is: "awake at 07:00
             # tomorrow", "on standby at 01:00 today".
-            edge = k.edges[1] if in_window(rule, now) else k.edges[0]
+            inside = in_window(rule, now)
+            edge = k.edges[1] if inside else k.edges[0]
             if edge:
-                v["when"] = f"{edge} at {v['when']}"
+                tail = k.edges[2] if inside and len(k.edges) > 2 else ""
+                v["when"] = f"{edge} at {v['when']}{tail}"
         if rule:
             v["rule"] = rule
             v["repeat"] = rule_words(rule)

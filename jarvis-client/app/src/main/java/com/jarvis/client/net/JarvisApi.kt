@@ -597,6 +597,13 @@ class JarvisApi(
      */
     suspend fun briefing(): ApiResult<JsonObject> = probe(Briefing.PATH)
 
+    /**
+     * `POST /api/briefing/senders`: "Show who new emails are from". OFF is
+     * done at once; ON is 202 while ONE approval card waits on the PC.
+     */
+    suspend fun setBriefingSenders(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(Briefing.SENDERS_PATH, Briefing.sendersBody(on))
+
     /** "Brief me now" can wait for a slow calendar or mail server: the PC gives them 25 seconds. */
     private val briefingCall: OkHttpClient by lazy {
         client.newBuilder()

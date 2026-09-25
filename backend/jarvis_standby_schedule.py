@@ -58,11 +58,41 @@ Jarvis is awake.
     ("standby"). Refused while a task is running (unloading the model under
     it would break it): that night is skipped, and the schedule's line in
     Coming up says so.
-  * The end (07:00): if Jarvis is on standby - whoever put it there - set_mode
-    ("active"), which loads the chat model again. If it is already awake
-    (the owner woke it by hand), nothing is done.
+  * The end (07:00): set_mode("active"), which loads the chat model again -
+    ONLY IF the standby Jarvis is on was put there by the schedule (the
+    owner's decision of 2026-09-25: "Only if the schedule did it. If you
+    switched Standby on yourself, it stays on until you switch it off").
+    Who is read from jarvis_power.status()["why"], which jarvis_power sets
+    on every change of mode and on nothing else: WHY below for the
+    schedule's own change, "the owner, from ..." for a tap in either app.
+    So "why == WHY" means the schedule put it there AND nothing changed the
+    mode since. If Jarvis is already awake, nothing is done.
   * A start found late, inside the window (the PC came on at 03:00): standby
     then, once. The same missed-while-off rule as every other job.
+
+WHO OWNS THE STANDBY - the cases, and what each end does
+  * On standby by hand at 23:00, then 01:00: already on standby, nothing is
+    changed, and jarvis_power still says the owner chose it (a mode that
+    does not change keeps its `why`). So 07:00 leaves it on standby. The
+    01:00 note says so.
+  * Put on standby by the schedule at 01:00, woken by hand at 03:00: 07:00
+    finds it awake and does nothing. It does not put it back on standby.
+  * Woken by hand at 03:00 and put on standby by hand again at 04:00: the
+    owner's standby now, so 07:00 leaves it.
+  * The schedule's standby, and the owner taps Standby again at 04:00: the
+    mode does not change (jarvis_power_switch answers "Already standby."
+    and records nothing), so it is still the schedule's - 07:00 wakes it.
+  * The 01:00 start skipped because a task was running: Jarvis stayed
+    awake, so 07:00 has nothing to do. If the owner then chose Standby by
+    hand, it is theirs, and 07:00 leaves it.
+  * The backend restarted inside the window: the mode is kept in memory
+    (jarvis_power), so it comes back Active, with `why` "startup". The
+    start already went off, so nothing puts it back on standby that night;
+    07:00 finds it awake and does nothing. A known gap, said in
+    docs/JARVIS-API.md 21.8.
+  * Standby set some other way (an idle timer, "exit"), or a jarvis_power
+    that cannot say who (no status()): not the schedule's, so 07:00 leaves
+    it - the choice that does less, and Active is one tap away.
 
 WHILE ON STANDBY (the same as standby by hand - nothing new here):
   * Timers, alarms and reminders still go off, on the PC and both apps. The
@@ -102,8 +132,9 @@ WAIT_S = 30.0
 ABOUT = (
     "At the start, Jarvis goes on standby - the same as choosing Standby: it "
     "unloads its models and frees the graphics card(s).",
-    "At the end, it wakes (Active) and loads the chat model again, so the first "
-    "answer is not slow.",
+    "At the end, if the schedule put it on standby, it wakes (Active) and loads the "
+    "chat model again, so the first answer is not slow. If you chose Standby "
+    "yourself, it stays on standby until you choose Active.",
     "Timers, alarms and reminders still go off while it is on standby. A question "
     "asked then is answered, but the first answer takes 5-15 seconds.",
     "Turning it off does not wake Jarvis if it is on standby at that moment - "
@@ -148,6 +179,45 @@ def _audit(event: str, detail: dict) -> None:
 CLOCK: Callable[[], float] = time.time
 
 
+def who_set(power) -> Optional[str]:
+    """Who set the power mode now, from jarvis_power.status()["why"]:
+    "schedule" (this schedule), "owner" (a tap in either app - "the owner,
+    from ..."), "other" (anything else: an idle timer, "exit", ...), or None
+    when the power module cannot say (no status(), or it failed)."""
+    try:
+        why = (power.status() or {}).get("why")
+    except Exception:
+        return None
+    if not isinstance(why, str) or not why.strip():
+        return None
+    if why == WHY:
+        return "schedule"
+    if why.startswith("the owner"):
+        return "owner"
+    return "other"
+
+
+def set_by_schedule(power) -> Optional[bool]:
+    """Whether the power mode now was set by this schedule: True, False, or
+    None when the power module cannot say."""
+    who = who_set(power)
+    return None if who is None else who == "schedule"
+
+
+#: What each end says when Jarvis is on standby and the schedule did not
+#: put it there - by who did.
+_KEPT_AT_START = {
+    "owner": "you chose it, so the end of the schedule will leave it on",
+    "other": "the schedule did not put it there, so the end of the schedule will leave it on",
+    None: "Jarvis could not tell who chose it, so the end of the schedule will leave it on",
+}
+_KEPT_AT_END = {
+    "owner": "you chose Standby yourself, so it stays on until you choose Active",
+    "other": "the schedule did not put it on standby, so it stays on until you choose Active",
+    None: "Jarvis could not tell who chose Standby, so it stays on until you choose Active",
+}
+
+
 def run_end(job_id: str, *, sched=None, clock: Optional[Callable[[], float]] = None,
             power=None, switch=None) -> str:
     """One end of the window went off: go on standby or wake, by the clock.
@@ -169,16 +239,23 @@ def run_end(job_id: str, *, sched=None, clock: Optional[Callable[[], float]] = N
         return said
     want = "standby" if S.in_window(job["rule"], now) else "active"
     code = None
+    who = who_set(power) if mode == "standby" else None
     if want == "standby" and mode == "standby":
-        said = f"Already on standby at {at}."
+        said = (f"Already on standby at {at}." if who == "schedule" else
+                f"Already on standby at {at} - {_KEPT_AT_START[who]}.")
     elif want == "active" and mode != "standby":
         said = f"Already awake at {at}."
+    elif want == "active" and who != "schedule":
+        # The owner's decision of 2026-09-25: wake only what the schedule
+        # put to sleep. Standby chosen by hand (or by anything else, or by
+        # something the power module cannot name) stays.
+        said = f"Left on standby at {at}: {_KEPT_AT_END[who]}."
     else:
         code, out = switch.set_mode(want, by=WHY, why=WHY, wait_s=WAIT_S)
         said = _outcome(want, code, out, at)
     _say(job_id, said, now)
     _audit("standby_schedule.end", {"id": job_id, "mode_was": mode, "wanted": want,
-                                    "answer": code})
+                                    "set_by": who, "answer": code})
     return said
 
 
@@ -211,7 +288,8 @@ S.register_kind(
     KIND, "standby schedule", "Jarvis: standby schedule.",
     has_text=False, on_fire=on_fire, owner_listed=True,
     notify=False, window=True, single=True,
-    edges=("on standby", "awake"), about=ABOUT, note=note,
+    edges=("on standby", "awake", ", if the schedule put it on standby"), about=ABOUT,
+    note=note,
 )
 
 

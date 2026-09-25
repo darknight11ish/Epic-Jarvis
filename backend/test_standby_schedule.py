@@ -19,6 +19,11 @@ jarvis_power_switch.py (only the gate, Ollama and jarvis_models are fakes):
     (power_manage, the same call as the Standby button), which unloads every
     model the everyday Ollama holds; at the end it wakes and loads the chat
     model again; an end that finds it already there does nothing;
+  - the end wakes Jarvis ONLY if the schedule put it on standby (the owner's
+    decision of 2026-09-25): Standby chosen by hand - before the start or
+    during the window - stays; woken by hand, the end does nothing and does
+    not put it back; a backend restart inside the window comes back awake;
+    a power module that cannot say who chose Standby is left alone;
   - a start refused because a task runs is skipped, and said;
   - the PC off all night (both ends overdue): awake, whichever runs first;
     the PC coming on inside the window: standby, once, late;
@@ -353,8 +358,10 @@ def t_the_two_ends():
               ollama.loaded == [] and set(ollama.unloads) == {"jarvis-primary:latest",
                                                               "qwen2.5vl:7b"}, ollama.unloads)
         v = w.s.job(j["id"])
-        check("the list: next end 07:00, said as 'awake at', and how it went",
-              v["when"] == "awake at 07:00 today" and v["note"] == "Went on standby at 01:00.", v)
+        check("the list: next end 07:00, said as 'awake at ... if the schedule put it on "
+              "standby', and how it went",
+              v["when"] == "awake at 07:00 today, if the schedule put it on standby"
+              and v["note"] == "Went on standby at 01:00.", v)
 
         # A timer set and going off while on standby: the scheduler does not
         # look at the power mode.
@@ -398,15 +405,154 @@ def t_the_two_ends():
         w.clock.t = local(2026, 9, 28, 1, 0)
         w.s.tick()
         _settled()
-        check("already on standby at the start: nothing asked, and said",
-              len(gate.asked) == n_before
-              and w.s.job(j["id"])["note"] == "Already on standby at 01:00.")
+        check("already on standby by hand at the start: nothing asked, and it says the end "
+              "will leave it", len(gate.asked) == n_before
+              and w.s.job(j["id"])["note"] == ("Already on standby at 01:00 - you chose it, so "
+                                               "the end of the schedule will leave it on."),
+              w.s.job(j["id"])["note"])
+        check("... and the start did not take it over: it is still the owner's standby",
+              P.status()["why"] == "the owner, from an app", P.status())
         w.clock.t = local(2026, 9, 28, 7, 0)
         w.s.tick()
         _settled()
-        check("... and at the end it wakes, whoever put it on standby",
-              P.current() == "active")
+        check("... so at the end it STAYS on standby - the owner chose it (2026-09-25)",
+              P.current() == "standby" and len(gate.asked) == n_before
+              and w.s.job(j["id"])["note"] == ("Left on standby at 07:00: you chose Standby "
+                                               "yourself, so it stays on until you choose "
+                                               "Active."), w.s.job(j["id"])["note"])
     finally:
+        SB.CLOCK = time.time
+        _done()
+
+
+def _manual(mode):
+    """A tap in either app: the same call, recorded as the owner's."""
+    out = PS.set_mode(mode, gate_check=lambda *a: Verdict(True, "auto", "auto"),
+                      warm=lambda fn: None)
+    _settled()
+    return out
+
+
+def t_only_the_schedules_own_standby_is_woken():
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    w, gate, ollama = _world_with_power(now, "owner")
+    SB.CLOCK = w.clock
+    try:
+        j = w.s.add_repeat("standby", RULE)
+
+        def at(d, hh):
+            w.clock.t = local(2026, 9, d, hh, 0)
+            w.s.tick()
+            _settled()
+            return w.s.job(j["id"])["note"]
+
+        # Night 1: the schedule's own standby, woken by hand at 03:00.
+        at(26, 1)
+        check("night 1: the schedule put it on standby", P.current() == "standby"
+              and P.status()["why"] == SB.WHY)
+        _manual("active")
+        n = len(gate.asked)
+        note = at(26, 7)
+        check("woken by hand at 03:00: 07:00 does nothing, and does not put it back on standby",
+              P.current() == "active" and len(gate.asked) == n
+              and note == "Already awake at 07:00.", note)
+
+        # Night 2: woken by hand at 03:00, then Standby by hand at 04:00.
+        at(27, 1)
+        _manual("active")
+        _manual("standby")
+        check("Standby by hand during the window is the owner's",
+              P.status()["why"] == "the owner, from an app")
+        note = at(27, 7)
+        check("... so 07:00 leaves it on standby, and says why",
+              P.current() == "standby" and note.startswith("Left on standby at 07:00: you chose "
+                                                            "Standby yourself"), note)
+        _manual("active")
+
+        # Night 3: the schedule's standby, and a tap on Standby again changes
+        # nothing - it is still the schedule's, so 07:00 wakes it.
+        at(28, 1)
+        code, out = _manual("standby")
+        check("a tap on Standby while already on standby records nothing",
+              code == 200 and out["changed"] is False and P.status()["why"] == SB.WHY, out)
+        at(28, 7)
+        check("... so 07:00 wakes it", P.current() == "active")
+
+        # Night 4: the backend restarts at 03:00. The mode lives in memory, so
+        # it comes back Active ("startup"); the start already went off.
+        at(29, 1)
+        with P._LOCK:
+            P._state.update({"mode": "active", "since": time.time(), "why": "startup"})
+        n = len(gate.asked)
+        w.clock.t = local(2026, 9, 29, 3, 0)
+        check("a restart inside the window: nothing goes off before 07:00",
+              w.s.tick() == [] and P.current() == "active")
+        note = at(29, 7)
+        check("... and 07:00 finds it awake and does nothing", P.current() == "active"
+              and len(gate.asked) == n and note == "Already awake at 07:00.", note)
+
+        # A power module that cannot say who chose Standby: left alone.
+        at(30, 1)
+        real_status = P.status
+        P.status = lambda: (_ for _ in ()).throw(RuntimeError("no status"))
+        try:
+            note = at(30, 7)
+        finally:
+            P.status = real_status
+        check("who chose Standby cannot be read: left on standby, and said",
+              P.current() == "standby" and note.startswith("Left on standby at 07:00: Jarvis "
+                                                            "could not tell who chose Standby"),
+              note)
+        check("set_by_schedule: True, False, or None when it cannot say",
+              SB.set_by_schedule(types.SimpleNamespace(status=lambda: {"why": SB.WHY})) is True
+              and SB.set_by_schedule(types.SimpleNamespace(
+                  status=lambda: {"why": "the owner, from tray"})) is False
+              and SB.set_by_schedule(types.SimpleNamespace()) is None)
+        # Standby set some other way (the idle timer, "exit"): not the
+        # owner's words, and not the schedule's - left on, said plainly.
+        _manual("active")
+        w.clock.t = local(2026, 10, 1, 1, 0)
+        w.s.tick()
+        _settled()
+        with P._LOCK:
+            P._state["why"] = "idle timer"
+        w.clock.t = local(2026, 10, 1, 7, 0)
+        w.s.tick()
+        _settled()
+        note = w.s.job(j["id"])["note"]
+        check("standby set by something else (an idle timer): left on, and not called yours",
+              P.current() == "standby" and note == ("Left on standby at 07:00: the schedule did "
+                                                    "not put it on standby, so it stays on until "
+                                                    "you choose Active."), note)
+    finally:
+        SB.CLOCK = time.time
+        _done()
+
+
+def t_a_skipped_start_then_standby_by_hand_stays():
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    w, gate, ollama = _world_with_power(now, "skip-owner")
+    SB.CLOCK = w.clock
+    real_tasks = PS._running_tasks
+    try:
+        j = w.s.add_repeat("standby", RULE)
+        PS._running_tasks = lambda: ["appr_busy"]
+        w.clock.t = local(2026, 9, 26, 1, 0)
+        w.s.tick()
+        _settled()
+        check("01:00 skipped because a task ran: still awake", P.current() == "active")
+        PS._running_tasks = real_tasks
+        _manual("standby")
+        w.clock.t = local(2026, 9, 26, 7, 0)
+        w.s.tick()
+        _settled()
+        check("the owner then chose Standby: 07:00 leaves it",
+              P.current() == "standby"
+              and w.s.job(j["id"])["note"].startswith("Left on standby at 07:00"))
+    finally:
+        PS._running_tasks = real_tasks
         SB.CLOCK = time.time
         _done()
 
@@ -545,6 +691,11 @@ def t_shipped_and_loaded():
     k = S.KINDS.get("standby")
     check("registered as a window kind that notifies nobody and is one of its kind",
           k is not None and k.window and k.single and not k.notify and k.on_fire is SB.on_fire)
+    about = "\n".join(SB.ABOUT)
+    check("the card says the end wakes it only if the schedule put it on standby",
+          "At the end, if the schedule put it on standby, it wakes (Active)" in about
+          and "If you chose Standby yourself, it stays on standby until you choose Active."
+          in about, about)
     src = (HERE / "jarvis_standby_schedule.py").read_text(encoding="utf-8")
     check("it unloads nothing itself and runs no timer of its own: every change goes "
           "through jarvis_power_switch.set_mode",

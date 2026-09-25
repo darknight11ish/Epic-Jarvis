@@ -31,6 +31,13 @@ THE PERMISSION MODEL, WHICH IS THE POINT
                                 short preview for up to `limit` messages, and
                                 disconnects. Never touches message flags.
 
+Two narrower reads, for the morning briefing (jarvis_briefing.py), gated
+by the caller under the same action and tier:
+    count(plan, approved)      How many match - the number only; no FETCH.
+    senders(plan, approved)    How many match, and the From line ONLY of the
+                                newest five, read with BODY.PEEK so nothing is
+                                marked as read. Names only, decoded, tidied.
+
 Same split, same reason, as `jarvis_calendar.py`'s own docstring: reading
 the owner's own account is still a request leaving this machine, and this
 module does not decide on its own that it may be sent. See
@@ -327,6 +334,150 @@ def count(p: Plan, *, search: Optional[Callable[[Plan], int]] = None,
     except Exception as exc:
         return {"ok": False, "reason": f"the connection failed ({type(exc).__name__})"}
     return {"ok": True, "count": max(0, n), "mailbox": p.mailbox, "criterion": p.criterion}
+
+
+# --------------------------------------------------------------------------
+#   Who the newest unread messages are from - for the morning briefing
+# --------------------------------------------------------------------------
+#
+# The owner's decision of 2026-09-25: the briefing shows how many new emails
+# AND who they are from ("3 new emails, from Alex, your bank and GitHub"),
+# with a setting to show the number only (jarvis_briefing.py keeps it).
+#
+# Still read-only, and narrower than run(): ONE connection that logs in,
+# opens the mailbox read-only (EXAMINE), searches, and then asks for the
+# From line ONLY of the newest few matches -
+#     FETCH <id> (BODY.PEEK[HEADER.FIELDS (FROM)])
+# PEEK, so the server does not set \Seen: nothing is marked as read. No
+# subject, no date, no body, no attachment is asked for, and no STORE,
+# COPY, MOVE or EXPUNGE is ever sent.
+
+#: How many of the newest unread messages have their sender read.
+_MAX_SENDERS = 5
+#: One sender's name, at most - long enough for "Northern Rail Customer
+#: Services", short enough that a hostile name cannot fill the screen.
+_MAX_SENDER_CHARS = 60
+
+#: The one FETCH item this asks for. BODY.PEEK, never BODY or RFC822: a
+#: plain BODY[...] fetch sets \Seen on most servers when the mailbox is
+#: selected read-write (it is not, here - both are belt and braces).
+SENDER_FETCH = "(BODY.PEEK[HEADER.FIELDS (FROM)])"
+
+
+def _default_senders(p: Plan, newest: int) -> tuple:
+    """(how many match, [raw From header bytes of the newest `newest`,
+    newest first]). ONE connection; the From line only; PEEK, read-only.
+    Credentials read fresh from the environment, never cached."""
+    import imaplib
+
+    user = os.environ.get(USER_ENV, "")
+    password = os.environ.get(PASSWORD_ENV, "")
+    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_COUNT_TIMEOUT)
+    try:
+        conn.login(user, password)
+        conn.select(p.mailbox, readonly=True)
+        status, data = conn.search(None, p.criterion)
+        if status != "OK":
+            raise RuntimeError(f"SEARCH failed: {status}")
+        ids = (data[0] or b"").split()
+        heads = []
+        for msg_id in ids[-newest:][::-1] if newest > 0 else []:
+            status, got = conn.fetch(msg_id, SENDER_FETCH)
+            if status != "OK" or not got:
+                continue
+            for part in got:
+                if isinstance(part, tuple) and len(part) > 1 and isinstance(part[1], bytes):
+                    heads.append(part[1])
+                    break
+        return len(ids), heads
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        try:
+            conn.logout()
+        except Exception:
+            pass
+
+
+#: Control characters, and the invisible "format" characters a sender can
+#: use to make a name read differently from what it is (right-to-left
+#: overrides, zero-width joiners). Neither belongs in a name on a screen.
+_INVISIBLE = ("Cc", "Cf", "Cs", "Co", "Cn")
+
+
+def _tidy(text: str) -> str:
+    import unicodedata
+    t = "".join(" " if unicodedata.category(ch) in _INVISIBLE else ch for ch in str(text or ""))
+    t = " ".join(t.split()).strip(" \"'<>")
+    if len(t) > _MAX_SENDER_CHARS:
+        t = t[:_MAX_SENDER_CHARS - 3].rstrip() + "..."
+    return t
+
+
+def sender_name(raw_header) -> str:
+    """One sender, as the owner's mail app would show it: the display name
+    ("Alex Smith"), decoded (RFC 2047) and tidied; with no name, the whole
+    address ("noreply@github.com"). Not the part before the @ alone: that
+    is "noreply", "info" or "support" as often as not, which says nothing
+    about who wrote. "" when there is nothing readable."""
+    from email.utils import getaddresses
+    if isinstance(raw_header, bytes):
+        try:
+            msg = email.message_from_bytes(raw_header)
+            value = msg.get("From") or ""
+        except Exception:
+            return ""
+    else:
+        value = str(raw_header or "")
+    value = str(value)[:2000]
+    try:
+        pairs = getaddresses([value])
+    except Exception:
+        pairs = []
+    name, addr = pairs[0] if pairs else ("", "")
+    shown = _tidy(_decode(name)) if name else ""
+    if not shown:
+        shown = _tidy(_decode(addr)) if addr else ""
+    if not shown and not pairs:
+        shown = _tidy(_decode(value))
+    return shown
+
+
+def senders(p: Plan, *, fetch: Optional[Callable[[Plan, int], tuple]] = None,
+            approved: bool = False, newest: int = _MAX_SENDERS) -> dict:
+    """How many messages match (unread, for the morning briefing), and who
+    the newest `newest` (at most 5) are from - names only, each once, newest
+    first. ONE connection, the From line only, nothing marked as read.
+    `approved` has no default of True; the caller gates it (the same action
+    and tier as count()). `fetch` is injectable, like run()'s.
+
+    {"ok", "count", "senders": [str], "looked_at": int} - `looked_at` is how
+    many messages had their From line read, so a caller can say "the newest
+    5" when there are more. A failure's reason is the exception's NAME only:
+    its message could quote the server's reply."""
+    if not approved:
+        return {"ok": False, "reason": "not approved; nothing was read"}
+    if not p.configured:
+        return {"ok": False, "reason": p.reason_empty}
+    newest = max(0, min(_MAX_SENDERS, int(newest)))
+    getter = fetch or _default_senders
+    try:
+        n, heads = getter(p, newest)
+        n = max(0, int(n))
+        heads = list(heads or [])[:newest]
+    except Exception as exc:
+        return {"ok": False, "reason": f"the connection failed ({type(exc).__name__})"}
+    names, seen = [], set()
+    for h in heads:
+        name = sender_name(h)
+        key = name.casefold()
+        if name and key not in seen:
+            seen.add(key)
+            names.append(name)
+    return {"ok": True, "count": n, "senders": names, "looked_at": min(len(heads), n),
+            "mailbox": p.mailbox, "criterion": p.criterion}
 
 
 def run(p: Plan, *, fetch_messages: Optional[Callable[[Plan], list]] = None,

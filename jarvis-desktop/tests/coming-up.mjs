@@ -152,13 +152,13 @@ await check("the standby schedule's words, title, lines and times", async () => 
   assert.ok(html.includes(`>${STANDBY_IS_SET}</p>`));
   assert.ok(read("src-tauri/src/brain/schedule.rs").includes(`"${STANDBY_BAD_TIMES}"`));
   const job = { id: "s00000000aa", kind: "standby", text: "", state: "active", due: NOW + 60,
-    when: "awake at 07:00 today", repeats: true, repeat: "every day from 01:00 to 07:00",
+    when: "awake at 07:00 today, if the schedule put it on standby", repeats: true, repeat: "every day from 01:00 to 07:00",
     note: "Went on standby at 01:00." };
   const v = readSchedule({ jobs: [job], todo: [] });
   assert.equal(titleOf(v.jobs[0]), STANDBY_TITLE);
   assert.equal(titleOf({ ...v.jobs[0], hidden: true }), STANDBY_TITLE, "hidden words hid the title");
   assert.deepEqual(metaOf(v.jobs[0]), ["every day from 01:00 to 07:00",
-    "next: awake at 07:00 today", "Went on standby at 01:00."]);
+    "next: awake at 07:00 today, if the schedule put it on standby", "Went on standby at 01:00."]);
   assert.deepEqual(actionsOf(v.jobs[0]), ["pause", "delete"]);
   assert.equal(standbyOf(v).id, "s00000000aa");
   assert.equal(standbyOf(readSchedule({ jobs: JOBS, todo: [] })), null);
@@ -168,7 +168,8 @@ await check("the standby schedule's words, title, lines and times", async () => 
   }
   // The PC's own words for the kind.
   const py = readRepo("backend/jarvis_standby_schedule.py");
-  assert.ok(py.includes('"standby schedule"') && py.includes('edges=("on standby", "awake")'));
+  assert.ok(py.includes('"standby schedule"')
+    && py.includes('edges=("on standby", "awake", ", if the schedule put it on standby")'));
 });
 
 /* ── The Brain window ─────────────────────────────────────────────────── */
@@ -335,7 +336,7 @@ await check("the standby schedule: two times, Set up, ONE request, then its row"
 
 await check("the standby schedule is held on a stale link, and says how it last went", async () => {
   const job = { id: "s00000000aa", kind: "standby", text: "", state: "active", due: NOW + 60,
-    left: 60, when: "awake at 07:00 today", repeats: true, repeat: "every day from 01:00 to 07:00",
+    left: 60, when: "awake at 07:00 today, if the schedule put it on standby", repeats: true, repeat: "every day from 01:00 to 07:00",
     note: "Skipped standby at 01:00: a task was running, and standby would unload the model it uses." };
   const stale = await workTab({ schedule: { jobs: [], todo: [] }, link: { stale: true } });
   const disabled = await stale.locator("#standby-add").isDisabled();
@@ -347,7 +348,7 @@ await check("the standby schedule is held on a stale link, and says how it last 
   await page.close();
   assert.match(text, new RegExp(STANDBY_TITLE));
   assert.match(text, /Skipped standby at 01:00/);
-  assert.match(text, /next: awake at 07:00 today/);
+  assert.match(text, /next: awake at 07:00 today, if the schedule put it on standby/);
   assert.deepEqual(buttons, ["Pause", "Delete"]);
 });
 

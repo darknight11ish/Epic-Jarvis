@@ -6,7 +6,9 @@
  * A short list of the day, put together on the PC WITHOUT the AI model:
  * today's calendar (only when it is set up for Jarvis), today's alarms,
  * reminders and timers, the to-do list, how many approval cards wait, and -
- * only when email is set up - how many unread emails (the number only).
+ * only when email is set up - how many unread emails and who the newest are
+ * from (the owner's decision of 2026-09-25), or the number only when the
+ * owner turns "Show who new emails are from" off.
  * Weather and news are not available: no provider has been chosen.
  *
  * Two places use this module:
@@ -16,7 +18,9 @@
  *    lists are hidden);
  *  - Settings, "Morning briefing" (briefing-settings.js): when it arrives
  *    (get_briefing_setup, set_briefing - the scheduler's ONE approval card,
- *    held on a stale link - and stop_briefing, one at a time).
+ *    held on a stale link - and stop_briefing, one at a time), and "Show who
+ *    new emails are from" (set_briefing_senders: OFF at once, ON through ONE
+ *    approval card on the PC, held on a stale link).
  *
  * The phone says the same words (net/Briefing.kt); tests/briefing.mjs
  * checks that they match, and that the PC's own words (jarvis_briefing.py)
@@ -60,6 +64,20 @@ export const READS_TITLE = "What it includes";
 export const SPOKEN =
   "It is read aloud only when you ask (\"read my briefing\"), and then only under your " +
   "private-answers setting, like a calendar answer.";
+
+/**
+ * "Show who new emails are from" (jarvis_briefing.py SENDERS; on by
+ * default). OFF is immediate; ON raises ONE approval card on the PC and
+ * changes nothing until it is approved.
+ */
+export const SENDERS_LABEL = "Show who new emails are from";
+export const SENDERS_DETAIL =
+  "The briefing lists who your newest unread emails are from (up to 5), next to how many " +
+  "there are. Off: the number only. Turning it on shows you an approval card first; turning " +
+  "it off happens at once.";
+export const SENDERS_WAITING = "Waiting for your yes on the approval card, on your PC or phone.";
+export const SENDERS_MISSING =
+  "Your PC's Jarvis does not have this setting yet - run apply-patches.ps1 on the PC.";
 
 /** The repeats a briefing can be set up with - the scheduler's own rules. */
 export const EVERY = Object.freeze([
@@ -117,7 +135,38 @@ export function readBriefing(answer) {
       when: text(j.when),
     })) : [],
     sources: available && a.sources && typeof a.sources === "object" ? a.sources : {},
+    senders: available ? readSenders(a.senders) : null,
   };
+}
+
+/**
+ * The senders setting from `GET /api/briefing`'s `senders`, or null from a
+ * PC without it (then the switch is not offered, and SENDERS_MISSING says why).
+ */
+export function readSenders(raw) {
+  if (!raw || typeof raw !== "object" || typeof raw.on !== "boolean") return null;
+  const last = raw.last && typeof raw.last === "object" ? raw.last : null;
+  return {
+    on: raw.on,
+    waiting: raw.waiting === true,
+    last: last ? text(last.message) : "",
+    lastOutcome: last ? text(last.outcome) : "",
+    why: text(raw.why),
+  };
+}
+
+/**
+ * What the switch shows: checked while on or while an ON card waits; the
+ * lines under it. OFF is never held; ON is held on a stale link (rule 4).
+ */
+export function sendersView(senders, live) {
+  if (!senders) return { show: false, checked: false, canChange: false, lines: [SENDERS_MISSING] };
+  const lines = [];
+  if (senders.waiting) lines.push(SENDERS_WAITING);
+  else if (senders.last && senders.lastOutcome !== "enabled") lines.push(senders.last);
+  if (senders.why) lines.push(senders.why.charAt(0).toUpperCase() + senders.why.slice(1) + ".");
+  const checked = senders.on || senders.waiting;
+  return { show: true, checked, canChange: checked || Boolean(live), lines };
 }
 
 /** "(Due at 07:00 - the PC was off or asleep, so it is late.)" */
