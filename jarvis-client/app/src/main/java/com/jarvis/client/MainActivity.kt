@@ -595,10 +595,21 @@ class MainActivity : FragmentActivity() {
         val lockVersion = lockTick.intValue
         val locked = remember(lockVersion, security) { lockSession.locked(security) }
         val privateHidden = remember(lockVersion, security) { lockSession.privateHidden(security) }
-        // While anything is locked or hidden, the recent-apps picture of
-        // Jarvis is blank rather than a snapshot of what the lock hides.
+        // While App lock or "Hide memory lists and chat history" is on, Jarvis
+        // cannot be screenshotted, screen-recorded or cast, and its
+        // recent-apps picture is blank rather than a snapshot of what the
+        // lock hides (SecurityRules.blockScreenCapture; apps security audit
+        // L5). Compose dialogs and popups inherit FLAG_SECURE from this
+        // window (their securePolicy defaults to Inherit). Both are undone
+        // the moment both settings are off.
         LaunchedEffect(security.appLock, security.privateLists) {
-            setRecentsScreenshotEnabled(!security.appLock && !security.privateLists)
+            val secure = SecurityRules.blockScreenCapture(security)
+            setRecentsScreenshotEnabled(!secure)
+            if (secure) {
+                window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            } else {
+                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            }
         }
 
         // "A newer version is available": asked when the app opens (at most

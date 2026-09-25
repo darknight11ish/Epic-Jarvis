@@ -179,6 +179,19 @@ object SecurityRules {
     }
 
     /**
+     * True when screenshots, screen recording and casting of Jarvis are
+     * blocked (Android's FLAG_SECURE, set in MainActivity; apps security
+     * audit L5, the owner's decision 2026-09-25). On while App lock or "Hide
+     * memory lists and chat history" is on: both say the owner does not want
+     * what Jarvis shows seen by someone else, and a screenshot, a recording
+     * or a cast screen is another way to see it. The whole app, not chosen
+     * screens: memory, history and answers are on most of them. Off with
+     * both off, so nothing changes for an owner who asked for neither. The
+     * recent-apps picture is blank under the same rule.
+     */
+    fun blockScreenCapture(s: Security): Boolean = s.appLock || s.privateLists
+
+    /**
      * True when going from [from] to [to] weakens anything. Any one field is
      * enough: a change that tightens one thing and loosens another still
      * needs the check.
