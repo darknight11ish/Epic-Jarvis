@@ -694,8 +694,10 @@ backend routes, in both directions; the rest are listed here only.
 §17 part 5; it was backend-only until then): interrupting Jarvis by talking
 (`?source=barge_in`, pause first and decide second), "One moment." when a
 tool starts (`GET /api/voice/moment`, `ported` in `tools/check_parity.py`),
-`&waited_ms=`, the "I heard you" sound, keeping listening after a question
-(part 6) and telling the model it was interrupted (part 7). Two small
+`&waited_ms=`, the "I heard you" sound (with its own switch in both apps,
+"Play a short sound when I finish speaking", on by default), keeping
+listening after a question (part 6) and telling the model it was
+interrupted (part 7). Two small
 differences, on purpose, each for a reason written in §17: the desktop
 plays "I heard you" for a "hey Jarvis" sentence only once the PC says the
 phrase was heard (its listener cuts every sound in the room; the phone's

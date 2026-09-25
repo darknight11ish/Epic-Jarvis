@@ -535,6 +535,9 @@ object JarvisRuntime {
             // "Say 'One moment' if I'm kept waiting" (Checks), read when a
             // tool starts during a spoken question.
             oneMoment = { clientSettings.oneMoment.value },
+            // "Play a short sound when I finish speaking" (Checks), read
+            // each time the "I heard you" sound would play.
+            heardSoundOn = { clientSettings.heardSound.value },
             // Where the owner cut a spoken answer off: sent once, with the
             // next question (typed or spoken), as `interrupted`.
             onCutOff = { said -> chatSession.cutOff.cut(said, android.os.SystemClock.elapsedRealtime()) },

@@ -70,6 +70,21 @@ class ClientSettings(context: Context) {
         _oneMoment.value = value
     }
 
+    private val _heardSound = MutableStateFlow(prefs.getBoolean(KEY_HEARD_SOUND, true))
+
+    /**
+     * "Play a short sound when I finish speaking" on this phone
+     * (voice.HeardSound), on by default, beside [oneMoment]. The sound is
+     * made on the phone; nothing about it is on the PC. The desktop's switch
+     * of the same name is its own.
+     */
+    val heardSound: StateFlow<Boolean> = _heardSound.asStateFlow()
+
+    fun setHeardSound(value: Boolean) {
+        prefs.edit { putBoolean(KEY_HEARD_SOUND, value) }
+        _heardSound.value = value
+    }
+
     private val _security = MutableStateFlow(SecurityRules.fromStored { prefs.getString(it, null) })
 
     /**
@@ -134,6 +149,7 @@ class ClientSettings(context: Context) {
         const val KEY_LAST_EVENT = "last_event_id"
         const val KEY_BARGE_IN = "barge_in"
         const val KEY_ONE_MOMENT = "one_moment"
+        const val KEY_HEARD_SOUND = "heard_sound"
         const val KEY_UPDATE_CHECKS = "update_checks"
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
         const val KEY_UPDATE_NEWER = "update_newer_line"

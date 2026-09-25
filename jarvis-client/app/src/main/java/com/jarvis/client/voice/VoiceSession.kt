@@ -60,6 +60,11 @@ class VoiceSession(
      */
     private val oneMoment: () -> Boolean = { true },
     /**
+     * "Play a short sound when I finish speaking" on this phone
+     * (ClientSettings, [HeardSound]). Read each time [heardYou] is called.
+     */
+    private val heardSoundOn: () -> Boolean = { true },
+    /**
      * The owner cut the spoken answer off while [String] was the last
      * sentence they heard (the runtime hands it to ChatSession's `cutOff`,
      * for the next question - docs/JARVIS-API.md section 17, 6).
@@ -202,9 +207,11 @@ class VoiceSession(
     /**
      * "I heard you": the owner's turn has just been cut (the talk button let
      * go, or the end of a "hey Jarvis" sentence). A tiny sound of the phone's
-     * own; it records and sends nothing.
+     * own; it records and sends nothing. Silent when the owner switched it
+     * off ([heardSoundOn]); nothing else about the turn changes.
      */
     fun heardYou() {
+        if (!heardSoundOn()) return
         speaker.playTone(heardSound, HeardSound.RATE)
     }
 

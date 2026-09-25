@@ -3013,7 +3013,7 @@ environment before it can do anything at all:
 
 | integration | environment variables |
 |---|---|
-| calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` (the URL `https://`, or plain `http://` only to this PC or a Tailscale address - security audit L7, 2026-09-25) |
+| calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` (the URL `https://`, or plain `http://` only inside your own networks - this PC, the home network, Tailscale or NordVPN Meshnet - security audit L7, 2026-09-25) |
 | email | `JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` (default 993), `JARVIS_IMAP_USER`, `JARVIS_IMAP_PASSWORD`, `JARVIS_IMAP_MAILBOX` (default `INBOX`) |
 | notes | `JARVIS_OBSIDIAN_VAULT` or `[notes.obsidian] vault_directory` (the vault read as a folder - no key; used first when set, since 2026-09-24), `JARVIS_NOTES_BACKEND` (`"vault"`, `"joplin"` or `"obsidian"`, optional - otherwise the vault, then whichever token is set), `JARVIS_JOPLIN_URL`/`JARVIS_JOPLIN_TOKEN`, `JARVIS_OBSIDIAN_URL`/`JARVIS_OBSIDIAN_API_KEY` |
 | home | `JARVIS_HOME_URL`, `JARVIS_HOME_TOKEN` (the same rule for the URL as the calendar's) |
@@ -6871,7 +6871,10 @@ often comes back through the microphone); "stop" works from the first word
 as before. "One moment." is played when Jarvis starts a tool for a spoken
 question - once, and only before the answer makes a sound - not on a timer;
 each app has a switch for it, "Say "One moment" if I'm kept waiting", on by
-default. A tiny "I heard you" sound plays when your turn is taken.
+default. A tiny "I heard you" sound plays when your turn is taken; each
+app has a switch for that too, right under the "One moment" one, "Play a
+short sound when I finish speaking", on by default (your decision,
+2026-09-25). It is the app's own setting - nothing on the PC changes.
 
 ## Two additions, 2026-09-25
 
@@ -7573,16 +7576,29 @@ your own files: every change is in a module this repository ships whole
 - **L6 - `server/jarvis_mobile_ws.py`** is marked at its top as legacy and
   unused, and its README example now binds to `127.0.0.1` and requires the
   token. It is not deleted - that is your call.
-- **L7 - no password over plain `http://` to another machine.** The
+- **L7 - no password over plain `http://` to the open internet.** The
   calendar (`JARVIS_CALDAV_URL`) and Home Assistant (`JARVIS_HOME_URL`)
-  refuse a plain `http://` address unless it is this PC or a Tailscale
-  address (`100.64.x.x`-`100.127.x.x`, or a name ending in `.ts.net`),
-  which Tailscale encrypts. **This may stop your Home Assistant working**:
-  Home Assistant serves plain `http://` on port 8123 unless you set up
-  https, and an address like `http://192.168.1.10:8123` or
-  `http://homeassistant.local:8123` is now refused, with the reason in
-  plain words. Use its https address, or its Tailscale address. There is no
-  switch to allow plain http anyway; whether there should be is your call.
+  send a password or token, and plain `http://` sends it unscrambled.
+  Since your decision of 2026-09-25, plain `http://` is **allowed inside
+  your own networks** and refused to anything else:
+  - this PC (`localhost`, `127.0.0.1`);
+  - your home network: addresses starting `192.168.`, `10.`, or
+    `172.16.` up to `172.31.`, IPv6 addresses starting `fc` or `fd`, a
+    name ending in `.local`, `.lan` or `.home.arpa`, or a single word with
+    no dot (`homeassistant`);
+  - Tailscale (`100.64.x.x`-`100.127.x.x`, or a name ending in `.ts.net`);
+  - NordVPN Meshnet (the same `100.x` range, or a name ending in `.nord`).
+
+  So Home Assistant's own default address, `http://homeassistant.local:8123`,
+  and `http://192.168.1.10:8123` both work. Anything else over plain
+  `http://` - a public address, or a name like `ha.example.com` or
+  `myhome.duckdns.org` - is refused, with the reason and the list above in
+  plain words, and nothing is sent. `https://` is always allowed. Nothing is
+  looked up to decide: a name is judged by how it is spelled. Link-local
+  addresses (`169.254.x.x`) are not on the list. A plain `http://` request
+  that is allowed never goes through a proxy either, because a proxy is
+  another machine that would read the password. There is no switch to
+  allow plain `http://` to the internet.
 - **L8 - settings that claimed a sandbox.** The four `sandbox_*` settings
   in `[security]` are gone from the shipped `jarvis-framework.toml`, with a
   comment saying why: nothing ever read them, and there is no sandbox.
@@ -7592,7 +7608,7 @@ your own files: every change is in a module this repository ships whole
 ## Owner steps (one line each, in PowerShell)
 
 See whether your calendar or Home Assistant address is plain `http://` to
-another machine (it prints both; nothing is changed):
+somewhere outside your own networks (it prints both; nothing is changed):
 
 ```powershell
 'JARVIS_CALDAV_URL = ' + [Environment]::GetEnvironmentVariable('JARVIS_CALDAV_URL','User'); 'JARVIS_HOME_URL = ' + [Environment]::GetEnvironmentVariable('JARVIS_HOME_URL','User')

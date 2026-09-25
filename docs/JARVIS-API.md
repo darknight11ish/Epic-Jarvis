@@ -2257,9 +2257,17 @@ the owner's turn is cut: letting go of the talk button (both apps), the end
 of a "hey Jarvis" sentence (the phone: its own spotter heard the phrase;
 the desktop: when the PC answers that "hey Jarvis" was heard from the owner,
 because only the PC knows which of the sounds its listener cuts were meant
-for Jarvis), and the reply to a question (part 6). **It cannot be turned
-off**: neither app has a sounds setting to put it under, and none was
-invented for it.
+for Jarvis), and the reply to a question (part 6). **It has a switch in
+both apps since 2026-09-25** (the owner's decision): **"Play a short sound
+when I finish speaking"**, on by default, per device, right under the "One
+moment" switch (desktop Settings -> Voice, "While you wait"; phone Checks,
+the "hey Jarvis" card). Off, the sound is simply not played; nothing else
+about the turn changes. It is the app's own setting, like "One moment", but
+unlike that one there is nothing on the PC behind it - no route, no
+`[voice]` key: the sound is made in the app and never leaves it. Desktop:
+`jarvis.voice.heardSound` in the app's own storage (`voice-flow.js`
+`loadHeard`); phone: `heard_sound` in `ClientSettings`
+(`VoiceSession.heardYou` asks it first).
 
 **Not built:** the "Voice delay" panel (above); pausing the phone's own
 fallback voice (the handset's text-to-speech, used only when the PC has no

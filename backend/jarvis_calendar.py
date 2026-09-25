@@ -159,7 +159,7 @@ def plan(days_ahead: int = 7, *, now: Optional[datetime] = None) -> Plan:
             if_refused="nothing is read; the calendar stays unknown to Jarvis",
             authenticated=authenticated(),
             reason_empty=f"{URL_ENV} is not set - there is no calendar to read")
-    # Security audit L7: no password over plain http:// to another machine.
+    # Security audit L7: no password over plain http:// off the owner's own networks.
     insecure = jarvis_local_http.plain_http_problem(url, URL_ENV, "the calendar password")
     if insecure:
         return Plan(
@@ -277,7 +277,9 @@ def _default_fetch(q: Query) -> str:
         import base64
         token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
         req.add_header("Authorization", f"Basic {token}")
-    opener = urllib.request.build_opener(_RefuseRedirect)
+    # Plain http:// (home network, Tailscale, Meshnet) never via a proxy -
+    # jarvis_local_http.opener_for (security audit L7).
+    opener = jarvis_local_http.opener_for(q.url, _RefuseRedirect)
     with opener.open(req, timeout=20.0) as r:
         return r.read().decode("utf-8", "replace")
 

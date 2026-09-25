@@ -356,9 +356,21 @@ object OneMoment {
 /**
  * "I heard you": a tiny two-note sound when the owner's turn is cut, made
  * from numbers (no file, no new dependency) - the desktop's `HEARD_SOUND`,
- * the same numbers, so both apps sound alike.
+ * the same numbers, so both apps sound alike. It has this phone's own
+ * switch, [NAME], on by default, beside "One moment" (owner's decision,
+ * 2026-09-25); the desktop has the same switch for itself.
  */
 object HeardSound {
+    /** The switch's name - the desktop's `HEARD_NAME`. */
+    const val NAME = "Play a short sound when I finish speaking"
+
+    /** The desktop's `describeHeard`, word for word. */
+    fun describe(on: Boolean): String = if (on) {
+        "On: a short two-note sound plays as you finish speaking, so you know Jarvis heard you."
+    } else {
+        "Off: no sound; Jarvis just answers."
+    }
+
     const val RATE = 24_000
     val TONES: List<Pair<Int, Int>> = listOf(660 to 55, 990 to 75) // (hz, ms)
     const val GAP_MS = 25

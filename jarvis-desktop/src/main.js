@@ -123,6 +123,7 @@ import {
   HEARD_SOUND,
   heardSoundSamples,
   isToolStart,
+  loadHeard,
   loadMoment,
   PAUSE,
   RESUME,
@@ -3298,6 +3299,9 @@ function stopMoment() {
 
 let heardContext = null;
 function playHeardSound() {
+  // Settings -> Voice, "Play a short sound when I finish speaking"
+  // (voice-flow.js): read each time, so a change in Settings counts at once.
+  if (!loadHeard()) return;
   try {
     const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
     if (!Ctx) return;

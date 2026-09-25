@@ -140,6 +140,38 @@ class VoiceFlowTest {
         assertEquals("Say \"One moment\" if I'm kept waiting", OneMoment.NAME)
     }
 
+    @Test
+    fun heardSoundSwitchUsesTheDesktopsWords() {
+        val js = repoFile("jarvis-desktop/src/voice-flow.js").readText()
+        for (on in listOf(true, false)) {
+            val line = "\"" + HeardSound.describe(on).replace("\"", "\\\"") + "\""
+            assertTrue("voice-flow.js says $line", js.contains(line))
+        }
+        assertEquals("Play a short sound when I finish speaking", HeardSound.NAME)
+        assertTrue(js.contains("\"" + HeardSound.NAME + "\""))
+        assertTrue(HeardSound.describe(true).startsWith("On:"))
+        assertTrue(HeardSound.describe(false).startsWith("Off:"))
+    }
+
+    /**
+     * The switch's plumbing, read from the source (it needs Android to run):
+     * on by default, stored apart from "One moment", and [VoiceSession.heardYou]
+     * - the one place every "I heard you" goes through - asks it first.
+     */
+    @Test
+    fun heardSoundSwitchIsOnByDefaultAndGatesTheSound() {
+        val settings = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/data/ClientSettings.kt").readText()
+        assertTrue(settings.contains("prefs.getBoolean(KEY_HEARD_SOUND, true)"))
+        assertTrue(settings.contains("const val KEY_HEARD_SOUND = \"heard_sound\""))
+        val session = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/voice/VoiceSession.kt").readText()
+        val body = session.substringAfter("fun heardYou() {").substringBefore("\n    }")
+        assertTrue(body, body.trimStart().startsWith("if (!heardSoundOn()) return"))
+        assertTrue(body, body.contains("speaker.playTone("))
+        assertEquals("the sound is played in one place only", 1, Regex("speaker\\.playTone\\(").findAll(session).count())
+        val runtime = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt").readText()
+        assertTrue(runtime.contains("heardSoundOn = { clientSettings.heardSound.value }"))
+    }
+
     // -- Keep listening after a question, and the cut-off note ---------------
 
     @Test

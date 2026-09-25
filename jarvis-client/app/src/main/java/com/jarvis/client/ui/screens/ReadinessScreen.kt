@@ -46,6 +46,7 @@ import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.BargeIn
+import com.jarvis.client.voice.HeardSound
 import com.jarvis.client.voice.OneMoment
 import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceTraining
@@ -123,6 +124,9 @@ fun ReadinessScreen(
     /** "Say 'One moment' if I'm kept waiting" on this phone (OneMoment). Null hides the switch. */
     oneMoment: Boolean? = null,
     onOneMoment: ((Boolean) -> Unit)? = null,
+    /** "Play a short sound when I finish speaking" on this phone (HeardSound). Null hides the switch. */
+    heardSound: Boolean? = null,
+    onHeardSound: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
     /** The link, for the Connection card. Null hides the card. */
     connection: ConnectionInfo? = null,
@@ -228,6 +232,8 @@ fun ReadinessScreen(
                     onBargeIn = onBargeIn,
                     oneMoment = oneMoment,
                     onOneMoment = onOneMoment,
+                    heardSound = heardSound,
+                    onHeardSound = onHeardSound,
                 )
             }
             if (securitySummary != null) {
@@ -510,6 +516,8 @@ private fun WakeWordCard(
     onBargeIn: ((Boolean) -> Unit)? = null,
     oneMoment: Boolean? = null,
     onOneMoment: ((Boolean) -> Unit)? = null,
+    heardSound: Boolean? = null,
+    onHeardSound: ((Boolean) -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val tint = when {
@@ -649,6 +657,30 @@ private fun WakeWordCard(
                 enabled = true,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onOneMoment(!oneMoment) },
+            )
+        }
+
+        // Beside "One moment", and like it about any spoken question (the
+        // talk button's too). This phone's own; the desktop has its own.
+        if (heardSound != null && onHeardSound != null) {
+            Gap(12)
+            Text(
+                HeardSound.NAME,
+                style = MaterialTheme.typography.labelLarge,
+                color = chrome.textHi,
+            )
+            Gap(4)
+            Text(
+                HeardSound.describe(heardSound),
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            Gap(6)
+            Secondary(
+                text = if (heardSound) "No sound when I finish" else "Play the sound",
+                enabled = true,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onHeardSound(!heardSound) },
             )
         }
 
