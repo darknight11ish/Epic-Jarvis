@@ -533,9 +533,24 @@ def _not_capable(card) -> Optional[str]:
     return None
 
 
+def _preset_lanes() -> Optional[dict]:
+    """jarvis_hardware.lane_plan(): where the lanes go under the preset the
+    owner chose (docs/HARDWARE-PROFILES.md 4.3), or None - no preset chosen,
+    or the module is missing - which means exactly today's behaviour below.
+    Imported when asked, never at load."""
+    try:
+        import jarvis_hardware
+        return jarvis_hardware.lane_plan()
+    except Exception:
+        return None
+
+
 def detect(fresh: bool = False) -> dict:
     """`detected` in status(). Never raises."""
     try:
+        plan = _preset_lanes()
+        if plan is not None:
+            return _detect_preset(plan, fresh)
         return _detect(fresh)
     except Exception as exc:
         return {"capable": False, "why": f"the graphics cards could not be read "
@@ -595,6 +610,70 @@ def _detect(fresh: bool) -> dict:
             "_second": None}
 
 
+def _detect_preset(plan: dict, fresh: bool) -> dict:
+    """`detected` under a chosen preset. The same shape as _detect's, plus
+    `_plan`, `_main` (the lanes run inside the everyday Ollama, beside chat
+    on one card) and `unsupported` ({feature: why} for a feature this
+    preset has no model for)."""
+    cards = list(_cards(fresh))
+    chat, lane = plan["chat_card"], plan.get("lane_card")
+    preset = {"fast": "Fastest answers", "smart": "Smartest answers",
+              "features": "Most features"}.get(plan.get("preset"), "the chosen preset")
+
+    def dev_for(card):
+        if card is None or not getattr(card, "uuid", ""):
+            return None
+        return next((d for d in cards if d.uuid and d.uuid.lower() == card.uuid.lower()), None)
+
+    chat_dev, lane_dev = dev_for(chat), dev_for(lane)
+    unsupported = {}
+    for f in FEATURE_IDS:
+        key = "vision" if f == "vision" else "long_context"
+        if key in plan.get("why_none", {}):
+            unsupported[f] = plan["why_none"][key]
+    main = lane is None
+    capable = bool(plan.get("long") or plan.get("pictures"))
+    why = ""
+    if lane is not None and lane_dev is None:
+        capable = False
+        why = (f"the preset \"{preset}\" puts the extra features on the {lane.name}, but "
+               f"nvidia-smi does not see that card now")
+    elif not capable:
+        why = f"the preset \"{preset}\" has no extra features on these cards"
+    elif main:
+        why = (f"the preset \"{preset}\" runs the extra features inside your everyday copy of "
+               f"Ollama, beside chat on the {chat.name}")
+    else:
+        why = (f"the preset \"{preset}\" puts the extra features on the {lane.name}; everyday "
+               f"chat stays on the {chat.name}")
+    p = {"uuid": chat.uuid or None, "index": chat_dev.index if chat_dev else None,
+         "name": chat.name}
+    target = chat if main else lane
+    tdev = chat_dev if main else lane_dev
+    s = {"uuid": target.uuid or None, "index": tdev.index if tdev else None,
+         "name": target.name,
+         "total_mb": tdev.total_mb if tdev else int(round(target.total_gib * 1024)),
+         "compute_cap": tdev.compute_cap if tdev else None}
+    rows = []
+    for c in sorted(cards, key=lambda d: d.index):
+        if chat_dev is not None and c is chat_dev:
+            role = "primary"
+            why_c = f"everyday chat runs here (the preset \"{preset}\")"
+            if main and capable:
+                why_c += "; the extra features run beside it, in the same copy of Ollama"
+        elif lane_dev is not None and c is lane_dev:
+            role, why_c = "second", f"the extra features run here (the preset \"{preset}\")"
+        else:
+            role, why_c = "unused", f"the preset \"{preset}\" does not use it"
+        rows.append({"index": c.index, "uuid": c.uuid or None, "name": c.name,
+                     "total_mb": c.total_mb, "free_mb": c.free_mb,
+                     "compute_cap": c.compute_cap, "display_active": c.display_active,
+                     "role": role, "why": why_c})
+    return {"capable": capable, "why": why, "primary": p, "second": s if capable else None,
+            "cards": rows, "_second": None if main else lane_dev, "_main": main and capable,
+            "_plan": plan, "unsupported": unsupported}
+
+
 def _long_context_plan(total_mb: int) -> tuple:
     """(model, num_ctx, memory_gib) for a second card with this much memory."""
     return LONG_BIG if total_mb >= BIG_TOTAL_MB else LONG_SMALL
@@ -607,6 +686,12 @@ def _vision_gib(num_ctx: int) -> float:
 
 def _feature_model(feature: str, det: dict) -> tuple:
     """(model, num_ctx, memory_gib) - all None without a capable card."""
+    plan = det.get("_plan")
+    if plan is not None:
+        if not det.get("capable"):
+            return None, None, None
+        lane = plan.get("pictures") if feature == "vision" else plan.get("long")
+        return tuple(lane) if lane else (None, None, None)
     second = det.get("_second")
     if second is None:
         return None, None, None
@@ -664,7 +749,7 @@ def _model_installed(model: Optional[str]) -> Optional[bool]:
 
 def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
              base: Optional[dict] = None, flash: str = "auto",
-             keep_alive: str = "30m") -> dict:
+             keep_alive: str = "30m", fit_target: Optional[str] = None) -> dict:
     """The environment for the second `ollama serve`. Raises ValueError for
     a host that is not 127.0.0.1 (rule 2) or an id that is not a card id.
 
@@ -705,6 +790,13 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
         env["OLLAMA_FLASH_ATTENTION"] = "1"
     elif flash == "off":
         env["OLLAMA_FLASH_ATTENTION"] = "0"
+    if fit_target is not None:
+        # Under a chosen preset only: the empty gap llama.cpp keeps on the
+        # card, in MiB (the owner's 0.75 GB, docs/HARDWARE-PROFILES.md
+        # decision 1). Without a preset it is llama.cpp's own 1 GB, as today.
+        if not re.fullmatch(r"\d{1,5}", str(fit_target)):
+            raise ValueError("the empty-gap setting must be a whole number of MiB")
+        env["LLAMA_ARG_FIT_TARGET"] = str(fit_target)
     return env
 
 
@@ -734,6 +826,7 @@ class _LaneProcess:
         self.failed_at = -1e9
         self.gen = 0
         self.claimed = ""          # the card id whose claim this lane holds
+        self.fit = None            # LLAMA_ARG_FIT_TARGET under a preset, else None
 
     def url(self) -> str:
         return f"http://{HOST}:{self.port}"
@@ -745,10 +838,11 @@ class _LaneProcess:
         except Exception:
             return False
 
-    def ensure(self, uuid: str, card: str, num_ctx: int) -> None:
+    def ensure(self, uuid: str, card: str, num_ctx: int, fit: Optional[str] = None) -> None:
         with self.lock:
             port = _port()
-            same = (self.uuid == uuid and self.num_ctx == num_ctx and self.port == port)
+            same = (self.uuid == uuid and self.num_ctx == num_ctx and self.port == port
+                    and self.fit == fit)
             if self.state in ("running", "starting") and same and self.alive():
                 return
             if self.state == "running" and same and not self.alive():
@@ -763,6 +857,7 @@ class _LaneProcess:
                 return
             if self.proc is not None:
                 self._stop_proc()
+            self.fit = fit
             self._start(uuid, card, num_ctx, port)
 
     def _exit_code(self):
@@ -810,7 +905,7 @@ class _LaneProcess:
             return self._fail(refused)
         try:
             env = lane_env(uuid, port=port, num_ctx=num_ctx, flash=_flash_setting(),
-                           keep_alive=_keep_alive())
+                           keep_alive=_keep_alive(), fit_target=self.fit)
         except ValueError as exc:
             return self._fail(str(exc))
         # The card's claim, taken BEFORE the process starts. jarvis_big_model
@@ -1002,6 +1097,7 @@ def _wanted(sw: dict, det: dict) -> bool:
 
 def _feature_active(feature: str, sw: dict, det: dict) -> bool:
     return bool(det.get("capable") and sw["master"] and sw["features"].get(feature)
+                and feature not in (det.get("unsupported") or {})
                 and all(sw["features"].get(d) for d in _BY_ID[feature]["needs"]))
 
 
@@ -1015,9 +1111,23 @@ def _reconcile(sw: dict, det: dict) -> None:
             else:
                 _LANE.why = _ASLEEP["why"]
             return
+        if det.get("_main"):
+            # A chosen preset runs the lanes inside the everyday Ollama, on
+            # the one card: no second copy is started (HARDWARE-PROFILES 4.3).
+            why = "the extra features run inside your everyday copy of Ollama, beside chat"
+            if _LANE.state != "off" or _LANE.proc is not None:
+                _LANE.stop(why)
+            else:
+                _LANE.why = why
+            return
         if _wanted(sw, det):
             second = det["_second"]
             _, ctx, _ = _long_context_plan(second.total_mb)
+            plan = det.get("_plan")
+            fit = None
+            if plan is not None:
+                ctx = max([x[1] for x in (plan.get("long"), plan.get("pictures")) if x] or [ctx])
+                fit = plan.get("fit_target")
             ours = (_LANE.state in ("starting", "running") and _LANE.uuid == second.uuid
                     and _LANE.alive())
             if not ours:
@@ -1028,7 +1138,7 @@ def _reconcile(sw: dict, det: dict) -> None:
                 if held:
                     _LANE.hold(held)
                     return
-            _LANE.ensure(second.uuid, second.name, ctx)
+            _LANE.ensure(second.uuid, second.name, ctx, fit)
         elif _LANE.state != "off" or _LANE.proc is not None:
             if not det.get("capable"):
                 why = f"no capable second card: {det.get('why')}"
@@ -1156,9 +1266,19 @@ def lane_for(feature: str) -> Optional[Lane]:
             wake()              # the owner is using it: wake on demand
         det = detect()
         _reconcile(sw, det)
-        if not det.get("capable") or _LANE.state != "running":
+        if not det.get("capable") or feature in (det.get("unsupported") or {}):
             return None
         model, ctx, _ = _feature_model(feature, det)
+        if det.get("_main"):
+            # A chosen preset with the lanes inside the everyday Ollama.
+            url = _main_ollama_url()
+            if not model or not _is_loopback_url(url) or _model_installed(model) is not True:
+                return None
+            return Lane(url=url, model=model, num_ctx=int(ctx),
+                        why=(f"{_BY_ID[feature]['name']}: {model} beside chat on the "
+                             f"{det['second']['name']}"))
+        if _LANE.state != "running":
+            return None
         if not model or _model_installed(model) is not True:
             return None
         url = _LANE.url()
@@ -1371,10 +1491,17 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
     active = _feature_active(fid, sw, det)
     model, ctx, gib = _feature_model(fid, det)
     installed = _model_installed(model) if model else None
-    available = bool(active and lane_state == "running" and installed is True)
+    main = bool(det.get("_main"))
+    running = main or lane_state == "running"
+    available = bool(active and running and installed is True)
     missing = [d for d in f["needs"] if not sw["features"].get(d)]
     names = ", ".join(_BY_ID[d]["name"] for d in missing)
-    if not det.get("capable"):
+    unsupported = (det.get("unsupported") or {}).get(fid)
+    if unsupported and det.get("capable"):
+        why = (f"{'On' if enabled else 'Off'}, but {unsupported}. "
+               + ("Your choice is kept." if enabled else "It cannot be turned on with this "
+                  "preset."))
+    elif not det.get("capable"):
         if enabled:
             why = (f"On, but it cannot run: {det['why']}. Your choice is kept; it works "
                    f"again once a capable second card is back.")
@@ -1390,13 +1517,16 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
         why = "On, but the main second-card switch is off."
     elif missing:
         why = f"On, but it needs {names} to be on as well."
-    elif lane_state != "running":
+    elif not running:
         why = f"On. The second copy of Ollama is {lane_state}: {lane_why}."
     elif installed is None:
         why = f"On, but Jarvis could not ask Ollama whether {model} is installed."
     elif installed is False:
         why = (f"On, but {model} is not installed yet. Install it (Brain, Models, or "
                f"'ollama pull {model}' in a terminal) and it starts working.")
+    elif main:
+        why = (f"Working: {model} in your everyday copy of Ollama, beside chat on the "
+               f"{det['second']['name']}, with room for {ctx:,} tokens of conversation.")
     else:
         why = (f"Working: {model} on the {det['second']['name']}, with room for "
                f"{ctx:,} tokens of conversation.")
@@ -1547,6 +1677,16 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
     lane = (f"Jarvis starts a second copy of Ollama that uses only that card and "
             f"listens on {HOST}:{_port()} - this PC only, not your network or the "
             f"internet.")
+    if det.get("_main"):
+        # A chosen preset with one card: the lanes are more models in the
+        # everyday Ollama. No second copy starts.
+        lane = ("It runs in your everyday copy of Ollama on this PC, beside chat on the same "
+                "card - no second copy is started.")
+        pics = (det.get("_plan") or {}).get("pictures_mode")
+        if pics == "swap" and feature in ("vision", "master"):
+            lane += (" There is not room for both at once: a message with a picture unloads "
+                     "chat for a moment, and chat loads again on your next message (a few "
+                     "seconds each way).")
     if _brings_browser(feature, sw):
         # AP-9: not "Nothing leaves this PC". The model stays here; the
         # browser tool it offers works real web pages.
@@ -1720,6 +1860,8 @@ def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = No
     det = detect(fresh=True)
     if not det.get("capable"):
         return 503, {"error": f"{label} cannot be turned on: {det.get('why')}."}
+    if feature in (det.get("unsupported") or {}):
+        return 503, {"error": f"{label} cannot be turned on: {det['unsupported'][feature]}."}
     if feature != "master":
         if not sw["master"]:
             return 400, {"error": "Turn on the second graphics card itself first "
@@ -1728,7 +1870,7 @@ def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = No
         if missing:
             names = ", ".join(f"\"{_BY_ID[d]['name']}\"" for d in missing)
             return 400, {"error": f"{label} needs {names} on first."}
-    if feature != "master" or any(sw["features"].values()):
+    if (feature != "master" or any(sw["features"].values())) and not det.get("_main"):
         # This ON would start the second Ollama. Not while the big model is
         # on the card: the approval would turn on something that cannot run.
         held = big_model_holds(det["second"]["uuid"], det["second"]["name"])

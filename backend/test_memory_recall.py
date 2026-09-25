@@ -375,7 +375,9 @@ def t_the_patch_applies_forwards_and_backwards():
     check("jarvis_hud.py: the stack before past-recall.patch builds", text is not None)
     if text is None:
         return
-    full, flog = _stack.stand_in("jarvis_hud.py")
+    # The stack up to and including this patch: a later patch (hardware.patch,
+    # 2026-09-25) may change the same file, and that is not this test's business.
+    full, flog = _stack.stand_in("jarvis_hud.py", order[:order.index("past-recall.patch") + 1])
     check("its one hunk found its context in the stack (none made up)",
           not any("past-recall" in str(line) for line in flog),
           [line for line in flog if "past-recall" in str(line)])

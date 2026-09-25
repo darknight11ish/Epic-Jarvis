@@ -1,0 +1,4516 @@
+{
+ "_about": "jarvis_profiles.plan() for every hardware case in docs/HARDWARE-PROFILES.md section 4.4 and the three presets, at the owner's 0.75 GB gap. Calculated, not measured. Made by tools/gen_hardware_cases.py; do not edit by hand.",
+ "cases": {
+  "one_10gb": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "10 GB card",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 10,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "███████████░░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 10.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 10.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 10.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 10 GB card and adds what fits beside it.",
+   "title": "10 GB"
+  },
+  "one_11gb": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "11 GB card",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 11,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████░░░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 11.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 11.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 11.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 11 GB card and adds what fits beside it.",
+   "title": "11 GB"
+  },
+  "one_12gb": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "12 GB card",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 12,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "█████████░░░░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 12.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "█████████████░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 12.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 9.44,
+       "total_gib": 12.0,
+       "used_gib": 11.62
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:14b",
+      "need_gib": 9.44
+     },
+     "long": null,
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 14B model's weights and the empty gap leave little room on a 12 GB card.",
+      "Pictures: off. The picture model does not fit beside the 14B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 12 GB card and adds what fits beside it.",
+   "title": "12 GB"
+  },
+  "one_16gb": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "16 GB card",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 16,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "███████░░░░░░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 16.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.51,
+       "models_gib": 11.02,
+       "total_gib": 16.0,
+       "used_gib": 13.53
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "beside",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 11.43,
+       "total_gib": 16.0,
+       "used_gib": 13.61
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:14b",
+      "need_gib": 11.43
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. The picture model does not fit beside the 14B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 16 GB card and adds what fits beside it.",
+   "title": "16 GB"
+  },
+  "one_24gb": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "24 GB card",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 24,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "█████░░░░░░░░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 24.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "███████████░░░░░",
+       "card": "a",
+       "fixed_gib": 2.51,
+       "models_gib": 13.75,
+       "total_gib": 24.0,
+       "used_gib": 16.26
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "beside",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "█████████░░░░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 11.43,
+       "total_gib": 24.0,
+       "used_gib": 13.61
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:14b",
+      "need_gib": 11.43
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off by choice. A picture model would fit beside chat, but this choice keeps the card for chat alone, so nothing competes with it."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 24 GB card and adds what fits beside it.",
+   "title": "24 GB"
+  },
+  "one_6gb": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "6 GB card",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 6,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 3.44,
+       "total_gib": 6.0,
+       "used_gib": 5.62
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 12288,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 3.44
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 3.66,
+       "total_gib": 6.0,
+       "used_gib": 5.84
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 12288,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 3.44
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 3.44,
+       "total_gib": 6.0,
+       "used_gib": 5.62
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 12288,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 3.44
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. The picture model does not fit beside the 4B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "smart",
+   "recommended_why": "It keeps the 4B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "title": "6 GB"
+  },
+  "one_8gb": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "RTX 2080 SUPER",
+     "route": "CUDA",
+     "speed_gbs": 496.0,
+     "total_gib": 8,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat is the 4B: the 8B would get only 8,192 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": null,
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "smart",
+   "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "title": "8 GB - the owner's PC today"
+  },
+  "one_8gb_maxwell": {
+   "cards": [
+    {
+     "compute": "5.2",
+     "key": "a",
+     "monitor": true,
+     "name": "Quadro M5000",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.97
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79
+     },
+     "long": "chat",
+     "notes": [
+      "The Quadro M5000 cannot use the compact conversation format (q8_0) - it would stop models loading - so it gets the larger one (f16)."
+     ],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "f16"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.97
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79
+     },
+     "long": "chat",
+     "notes": [
+      "The Quadro M5000 cannot use the compact conversation format (q8_0) - it would stop models loading - so it gets the larger one (f16)."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.79 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "f16",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.79
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "f16"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.97
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79
+     },
+     "long": "chat",
+     "notes": [
+      "The Quadro M5000 cannot use the compact conversation format (q8_0) - it would stop models loading - so it gets the larger one (f16)."
+     ],
+     "off": [
+      "Pictures: off. The picture model does not fit beside the 4B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "f16"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "smart",
+   "recommended_why": "It keeps the 4B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "title": "An older 8 GB NVIDIA card (Maxwell, before GTX 10)"
+  },
+  "one_8gb_pascal": {
+   "cards": [
+    {
+     "compute": "6.1",
+     "key": "a",
+     "monitor": true,
+     "name": "GTX 1080",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat is the 4B: the 8B would get only 8,192 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": null,
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "smart",
+   "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "title": "GTX 1080, 8 GB (Pascal)"
+  },
+  "one_8gb_rocm": {
+   "cards": [
+    {
+     "compute": "gfx1102",
+     "key": "a",
+     "monitor": true,
+     "name": "RX 7600",
+     "route": "ROCm",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "",
+     "vendor": "amd"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat is the 4B: the 8B would get only 8,192 tokens of conversation here, too little for long conversations, and nothing would fit beside it."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.66 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": null,
+     "notes": [],
+     "off": [
+      "Long conversations: no. Chat gets only 8,192 tokens (about 6 pages): the 8B model's weights and the empty gap leave little room on a 8 GB card.",
+      "Pictures: off. The picture model does not fit beside the 8B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "smart",
+   "recommended_why": "It keeps the 8B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "title": "RX 7600, 8 GB (ROCm)"
+  },
+  "one_8gb_vulkan_amd": {
+   "cards": [
+    {
+     "compute": "",
+     "key": "a",
+     "monitor": true,
+     "name": "RX 6600",
+     "route": "Vulkan",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "",
+     "vendor": "amd"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.97
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79
+     },
+     "long": "chat",
+     "notes": [
+      "The RX 6600 is reached through Vulkan, where the compact conversation format (q8_0) is only safe on some drivers, so it gets the larger one (f16) until a measured test says otherwise."
+     ],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "f16"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.97
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79
+     },
+     "long": "chat",
+     "notes": [
+      "The RX 6600 is reached through Vulkan, where the compact conversation format (q8_0) is only safe on some drivers, so it gets the larger one (f16) until a measured test says otherwise."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.79 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "f16",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.79
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "f16"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.97
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79
+     },
+     "long": "chat",
+     "notes": [
+      "The RX 6600 is reached through Vulkan, where the compact conversation format (q8_0) is only safe on some drivers, so it gets the larger one (f16) until a measured test says otherwise."
+     ],
+     "off": [
+      "Pictures: off. The picture model does not fit beside the 4B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "f16"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "smart",
+   "recommended_why": "It keeps the 4B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "title": "RX 6600, 8 GB (Vulkan)"
+  },
+  "one_8gb_vulkan_intel": {
+   "cards": [
+    {
+     "compute": "",
+     "key": "a",
+     "monitor": true,
+     "name": "Arc A750",
+     "route": "Vulkan",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "",
+     "vendor": "intel"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.97
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79
+     },
+     "long": "chat",
+     "notes": [
+      "The Arc A750 is reached through Vulkan, where the compact conversation format (q8_0) is only safe on some drivers, so it gets the larger one (f16) until a measured test says otherwise."
+     ],
+     "off": [
+      "Pictures: off. They would share the card with chat, and this choice keeps the card for chat alone."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "f16"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.97
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79
+     },
+     "long": "chat",
+     "notes": [
+      "The Arc A750 is reached through Vulkan, where the compact conversation format (q8_0) is only safe on some drivers, so it gets the larger one (f16) until a measured test says otherwise."
+     ],
+     "off": [
+      "Pictures take turns with chat: a message with a picture unloads chat for a moment (qwen2.5vl:3b needs 3.79 GB on its own), and chat loads again on your next message. That costs a few seconds each way (not measured)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "f16",
+      "mode": "swap",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.79
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "f16"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.79,
+       "total_gib": 8.0,
+       "used_gib": 6.97
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "f16",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.79
+     },
+     "long": "chat",
+     "notes": [
+      "The Arc A750 is reached through Vulkan, where the compact conversation format (q8_0) is only safe on some drivers, so it gets the larger one (f16) until a measured test says otherwise."
+     ],
+     "off": [
+      "Pictures: off. The picture model does not fit beside the 4B chat model on this card."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "f16"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "smart",
+   "recommended_why": "It keeps the 4B everyday model; the other choices would swap it for the smaller 4B to make room.",
+   "title": "Intel Arc, 8 GB (Vulkan)"
+  },
+  "two_12_12": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": false,
+     "name": "12 GB card A",
+     "route": "CUDA",
+     "speed_gbs": 336.0,
+     "total_gib": 12,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": true,
+     "name": "12 GB card B",
+     "route": "CUDA",
+     "speed_gbs": 336.0,
+     "total_gib": 12,
+     "uuid": "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "█████████░░░░░░░",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 4.94,
+       "total_gib": 12.0,
+       "used_gib": 6.62
+      },
+      {
+       "blocks": "███████████░░░░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 6.39,
+       "total_gib": 12.0,
+       "used_gib": 8.57
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 12 GB card A (the two look equally fast, and it has more room (no monitor on it))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 12 GB card B cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "████████████░░░░",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 7.36,
+       "total_gib": 12.0,
+       "used_gib": 9.04
+      },
+      {
+       "blocks": "███████████░░░░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 6.39,
+       "total_gib": 12.0,
+       "used_gib": 8.57
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 12 GB card A (the two look equally fast, and it has more room (no monitor on it))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 12 GB card B cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 10.1,
+       "total_gib": 12.0,
+       "used_gib": 11.78
+      },
+      {
+       "blocks": "█████████████░░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 12.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:14b",
+      "need_gib": 10.1
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "notes": [
+      "Chat runs on the 12 GB card A (the two look equally fast, and it has more room (no monitor on it)).",
+      "Long conversations and pictures take turns on the 12 GB card B: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 12 GB card A and adds what fits beside it.",
+   "title": "12 + 12 GB, monitor on one of them"
+  },
+  "two_2080s_2060_mon12": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": false,
+     "name": "RTX 2080 SUPER",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": true,
+     "name": "RTX 2060",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 12,
+     "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "█████████████░░░",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 6.62
+      },
+      {
+       "blocks": "███████████░░░░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 6.39,
+       "total_gib": 12.0,
+       "used_gib": 8.57
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the RTX 2080 SUPER (its memory is faster (496 against 336 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The RTX 2060 cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 6.17,
+       "total_gib": 8.0,
+       "used_gib": 7.85
+      },
+      {
+       "blocks": "█████████████░░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 12.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 6.17
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "notes": [
+      "Chat runs on the RTX 2080 SUPER (its memory is faster (496 against 336 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the RTX 2060: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "█████████████░░░",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 6.62
+      },
+      {
+       "blocks": "███████████████░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 9.44,
+       "total_gib": 12.0,
+       "used_gib": 11.62
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:14b",
+      "need_gib": 9.44
+     },
+     "long": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "notes": [
+      "Chat runs on the RTX 2060, the slower card: the 14B gets more room there, and answers come out more slowly.",
+      "Long conversations and pictures take turns on the RTX 2080 SUPER: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the RTX 2080 SUPER and adds what fits beside it.",
+   "title": "RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2060"
+  },
+  "two_2080s_2060_mon8": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "RTX 2080 SUPER",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": false,
+     "name": "RTX 2060",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 12,
+     "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      },
+      {
+       "blocks": "███████████░░░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 6.39,
+       "total_gib": 12.0,
+       "used_gib": 8.07
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the RTX 2080 SUPER (its memory is faster (496 against 336 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The RTX 2060 cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      },
+      {
+       "blocks": "████████████████",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 10.1,
+       "total_gib": 12.0,
+       "used_gib": 11.78
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": {
+      "card": "b",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:14b",
+      "need_gib": 10.1
+     },
+     "notes": [
+      "Chat runs on the RTX 2080 SUPER (its memory is faster (496 against 336 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the RTX 2060: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      },
+      {
+       "blocks": "████████████████",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 10.1,
+       "total_gib": 12.0,
+       "used_gib": 11.78
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "b",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:14b",
+      "need_gib": 10.1
+     },
+     "long": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "notes": [
+      "Chat runs on the RTX 2060, the slower card: the 14B gets more room there, and answers come out more slowly.",
+      "Long conversations and pictures take turns on the RTX 2080 SUPER: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the RTX 2080 SUPER and adds what fits beside it.",
+   "title": "RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - the planned pair"
+  },
+  "two_2080s_2080ti": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "RTX 2080 SUPER",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": false,
+     "name": "RTX 2080 Ti",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 11,
+     "uuid": "GPU-51c0e8aa-6d2f-4b19-8e37-2a4c9f0b6d58",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████░░░░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 4.94,
+       "total_gib": 11.0,
+       "used_gib": 6.62
+      },
+      {
+       "blocks": "████████████░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 3.66,
+       "total_gib": 8.0,
+       "used_gib": 5.84
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the RTX 2080 Ti (its memory is faster (616 against 496 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The RTX 2080 SUPER cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-51c0e8aa-6d2f-4b19-8e37-2a4c9f0b6d58"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "█████████████░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 7.36,
+       "total_gib": 11.0,
+       "used_gib": 9.04
+      },
+      {
+       "blocks": "████████████░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 3.66,
+       "total_gib": 8.0,
+       "used_gib": 5.84
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the RTX 2080 Ti (its memory is faster (616 against 496 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The RTX 2080 SUPER cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-51c0e8aa-6d2f-4b19-8e37-2a4c9f0b6d58"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "█████████████░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 7.36,
+       "total_gib": 11.0,
+       "used_gib": 9.04
+      },
+      {
+       "blocks": "████████████░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 3.66,
+       "total_gib": 8.0,
+       "used_gib": 5.84
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the RTX 2080 Ti (its memory is faster (616 against 496 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The RTX 2080 SUPER cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-51c0e8aa-6d2f-4b19-8e37-2a4c9f0b6d58"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the RTX 2080 Ti and adds what fits beside it.",
+   "title": "RTX 2080 SUPER + RTX 2080 Ti (11 GB, the faster), monitor on the 8"
+  },
+  "two_8_10_mon10": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": false,
+     "name": "8 GB card",
+     "route": "CUDA",
+     "speed_gbs": 496.0,
+     "total_gib": 8,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": true,
+     "name": "10 GB card",
+     "route": "CUDA",
+     "speed_gbs": 448.0,
+     "total_gib": 10,
+     "uuid": "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "█████████████░░░",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 6.62
+      },
+      {
+       "blocks": "██████████████░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 6.39,
+       "total_gib": 10.0,
+       "used_gib": 8.57
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 10 GB card cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 6.17,
+       "total_gib": 8.0,
+       "used_gib": 7.85
+      },
+      {
+       "blocks": "███████████████░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 10.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 6.17
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the 10 GB card: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 6.17,
+       "total_gib": 8.0,
+       "used_gib": 7.85
+      },
+      {
+       "blocks": "███████████████░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 10.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 6.17
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the 10 GB card: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 8 GB card and adds what fits beside it.",
+   "title": "8 + 10 GB, monitor on the 10"
+  },
+  "two_8_10_mon8": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "8 GB card",
+     "route": "CUDA",
+     "speed_gbs": 496.0,
+     "total_gib": 8,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": false,
+     "name": "10 GB card",
+     "route": "CUDA",
+     "speed_gbs": 448.0,
+     "total_gib": 10,
+     "uuid": "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      },
+      {
+       "blocks": "█████████████░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 6.39,
+       "total_gib": 10.0,
+       "used_gib": 8.07
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 10 GB card cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      },
+      {
+       "blocks": "██████████████░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 7.36,
+       "total_gib": 10.0,
+       "used_gib": 9.04
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the 10 GB card: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      },
+      {
+       "blocks": "██████████████░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 7.36,
+       "total_gib": 10.0,
+       "used_gib": 9.04
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the 10 GB card: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 8 GB card and adds what fits beside it.",
+   "title": "8 + 10 GB, monitor on the 8"
+  },
+  "two_8_11_mon8": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "8 GB card",
+     "route": "CUDA",
+     "speed_gbs": 496.0,
+     "total_gib": 8,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": false,
+     "name": "11 GB card",
+     "route": "CUDA",
+     "speed_gbs": 448.0,
+     "total_gib": 11,
+     "uuid": "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      },
+      {
+       "blocks": "████████████░░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 6.39,
+       "total_gib": 11.0,
+       "used_gib": 8.07
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 11 GB card cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      },
+      {
+       "blocks": "█████████████░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 7.36,
+       "total_gib": 11.0,
+       "used_gib": 9.04
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the 11 GB card: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      },
+      {
+       "blocks": "█████████████░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 7.36,
+       "total_gib": 11.0,
+       "used_gib": 9.04
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the 11 GB card: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 8 GB card and adds what fits beside it.",
+   "title": "8 + 11 GB, monitor on the 8 (the 11 GB card slower)"
+  },
+  "two_8_16_mon16": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": false,
+     "name": "8 GB card",
+     "route": "CUDA",
+     "speed_gbs": 496.0,
+     "total_gib": 8,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": true,
+     "name": "16 GB card",
+     "route": "CUDA",
+     "speed_gbs": 448.0,
+     "total_gib": 16,
+     "uuid": "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "█████████████░░░",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 6.62
+      },
+      {
+       "blocks": "█████████░░░░░░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 6.39,
+       "total_gib": 16.0,
+       "used_gib": 8.57
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 16 GB card cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 6.17,
+       "total_gib": 8.0,
+       "used_gib": 7.85
+      },
+      {
+       "blocks": "██████████░░░░░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 7.36,
+       "total_gib": 16.0,
+       "used_gib": 9.54
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 6.17
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:8b",
+      "need_gib": 7.36
+     },
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the 16 GB card: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████░░░░░",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 3.66,
+       "total_gib": 8.0,
+       "used_gib": 5.34
+      },
+      {
+       "blocks": "██████████████░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 11.43,
+       "total_gib": 16.0,
+       "used_gib": 13.61
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:14b",
+      "need_gib": 11.43
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 16 GB card, the slower card: the 14B gets more room there, and answers come out more slowly."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 8 GB card cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 8 GB card and adds what fits beside it.",
+   "title": "8 + 16 GB, monitor on the 16"
+  },
+  "two_8_16_mon8": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "8 GB card",
+     "route": "CUDA",
+     "speed_gbs": 496.0,
+     "total_gib": 8,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": false,
+     "name": "16 GB card",
+     "route": "CUDA",
+     "speed_gbs": 448.0,
+     "total_gib": 16,
+     "uuid": "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      },
+      {
+       "blocks": "████████░░░░░░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 6.39,
+       "total_gib": 16.0,
+       "used_gib": 8.07
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 16 GB card cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      },
+      {
+       "blocks": "████████████░░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 10.1,
+       "total_gib": 16.0,
+       "used_gib": 11.78
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": {
+      "card": "b",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:14b",
+      "need_gib": 10.1
+     },
+     "notes": [
+      "Chat runs on the 8 GB card (its memory is faster (496 against 448 GB/s, the published figures)).",
+      "Long conversations and pictures take turns on the 16 GB card: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:7b",
+      "need_gib": 6.39
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "████████████░░░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 3.66,
+       "total_gib": 8.0,
+       "used_gib": 5.84
+      },
+      {
+       "blocks": "█████████████░░░",
+       "card": "b",
+       "fixed_gib": 1.68,
+       "models_gib": 11.43,
+       "total_gib": 16.0,
+       "used_gib": 13.11
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:14b",
+      "need_gib": 11.43
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 16 GB card, the slower card: the 14B gets more room there, and answers come out more slowly."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 8 GB card cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 8 GB card and adds what fits beside it.",
+   "title": "8 + 16 GB, monitor on the 8"
+  },
+  "two_8_8": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": false,
+     "name": "8 GB card A",
+     "route": "CUDA",
+     "speed_gbs": 496.0,
+     "total_gib": 8,
+     "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "7.5",
+     "key": "b",
+     "monitor": true,
+     "name": "8 GB card B",
+     "route": "CUDA",
+     "speed_gbs": 496.0,
+     "total_gib": 8,
+     "uuid": "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61",
+     "vendor": "nvidia"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "█████████████░░░",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 6.62
+      },
+      {
+       "blocks": "████████████░░░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 3.66,
+       "total_gib": 8.0,
+       "used_gib": 5.84
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the 8 GB card A (the two look equally fast, and it has more room (no monitor on it))."
+     ],
+     "off": [
+      "A separate long-conversation model: off. The 8 GB card B cannot hold more conversation than chat already does (32,768 tokens)."
+     ],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 6.17,
+       "total_gib": 8.0,
+       "used_gib": 7.85
+      },
+      {
+       "blocks": "██████████████░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 6.17
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "notes": [
+      "Chat runs on the 8 GB card A (the two look equally fast, and it has more room (no monitor on it)).",
+      "Long conversations and pictures take turns on the 8 GB card B: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "████████████████",
+       "card": "a",
+       "fixed_gib": 1.68,
+       "models_gib": 6.17,
+       "total_gib": 8.0,
+       "used_gib": 7.85
+      },
+      {
+       "blocks": "██████████████░░",
+       "card": "b",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      }
+     ],
+     "best_effort": false,
+     "chat": {
+      "card": "a",
+      "context": 16384,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 6.17
+     },
+     "long": {
+      "card": "b",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "notes": [
+      "Chat runs on the 8 GB card A (the two look equally fast, and it has more room (no monitor on it)).",
+      "Long conversations and pictures take turns on the 8 GB card B: one model is loaded there at a time."
+     ],
+     "off": [],
+     "pictures": {
+      "card": "b",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "turns",
+      "model": "qwen2.5vl:3b",
+      "need_gib": 3.66
+     },
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+      ],
+      [
+       "OLLAMA_VULKAN",
+       "0"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the 8 GB card A and adds what fits beside it.",
+   "title": "8 + 8 GB, monitor on one of them"
+  },
+  "two_8_rx7600": {
+   "cards": [
+    {
+     "compute": "7.5",
+     "key": "a",
+     "monitor": true,
+     "name": "RTX 2080 SUPER",
+     "route": "CUDA",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+     "vendor": "nvidia"
+    },
+    {
+     "compute": "gfx1102",
+     "key": "b",
+     "monitor": false,
+     "name": "RX 7600",
+     "route": "ROCm",
+     "speed_gbs": null,
+     "total_gib": 8,
+     "uuid": "",
+     "vendor": "amd"
+    }
+   ],
+   "presets": {
+    "fast": {
+     "bars": [
+      {
+       "blocks": "██████████████░░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 4.94,
+       "total_gib": 8.0,
+       "used_gib": 7.12
+      },
+      {
+       "blocks": "███░░░░░░░░░░░░░",
+       "card": "b",
+       "fixed_gib": 1.35,
+       "models_gib": 0.0,
+       "total_gib": 8.0,
+       "used_gib": 1.35
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 32768,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:4b",
+      "need_gib": 4.94
+     },
+     "long": "chat",
+     "notes": [
+      "Chat runs on the RTX 2080 SUPER (it is the card Jarvis's settings are made for; the other is best effort)."
+     ],
+     "off": [
+      "Extra features on the RX 7600: not possible yet. Jarvis starts its second copy of Ollama only on an NVIDIA card, pinned by the card's id."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "features": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      },
+      {
+       "blocks": "███░░░░░░░░░░░░░",
+       "card": "b",
+       "fixed_gib": 1.35,
+       "models_gib": 0.0,
+       "total_gib": 8.0,
+       "used_gib": 1.35
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": null,
+     "notes": [
+      "Chat runs on the RTX 2080 SUPER (it is the card Jarvis's settings are made for; the other is best effort)."
+     ],
+     "off": [
+      "Extra features on the RX 7600: not possible yet. Jarvis starts its second copy of Ollama only on an NVIDIA card, pinned by the card's id.",
+      "Long conversations: no. Chat gets only 8,192 tokens."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    },
+    "smart": {
+     "bars": [
+      {
+       "blocks": "███████████████░",
+       "card": "a",
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
+       "total_gib": 8.0,
+       "used_gib": 7.75
+      },
+      {
+       "blocks": "███░░░░░░░░░░░░░",
+       "card": "b",
+       "fixed_gib": 1.35,
+       "models_gib": 0.0,
+       "total_gib": 8.0,
+       "used_gib": 1.35
+      }
+     ],
+     "best_effort": true,
+     "chat": {
+      "card": "a",
+      "context": 8192,
+      "format": "q8_0",
+      "mode": "own",
+      "model": "qwen3:8b",
+      "need_gib": 5.57
+     },
+     "long": null,
+     "notes": [
+      "Chat runs on the RTX 2080 SUPER (it is the card Jarvis's settings are made for; the other is best effort)."
+     ],
+     "off": [
+      "Extra features on the RX 7600: not possible yet. Jarvis starts its second copy of Ollama only on an NVIDIA card, pinned by the card's id.",
+      "Long conversations: no. Chat gets only 8,192 tokens."
+     ],
+     "pictures": null,
+     "settings": [
+      [
+       "OLLAMA_KV_CACHE_TYPE",
+       "q8_0"
+      ],
+      [
+       "OLLAMA_KEEP_ALIVE",
+       "-1"
+      ],
+      [
+       "CUDA_VISIBLE_DEVICES",
+       "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+      ],
+      [
+       "LLAMA_ARG_FIT_TARGET",
+       "768"
+      ]
+     ]
+    }
+   },
+   "recommended": "features",
+   "recommended_why": "It keeps an 8B everyday model on the RTX 2080 SUPER and adds what fits beside it.",
+   "title": "RTX 2080 SUPER + RX 7600 (the second card not NVIDIA)"
+  }
+ },
+ "gap_gib": 0.75
+}

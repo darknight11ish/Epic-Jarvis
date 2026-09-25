@@ -173,6 +173,10 @@ class World:
             (SC, "_audit"): lambda event, detail: None,
             (SC, "_tier"): lambda action: "ask",
             (SC, "_main_ollama_url"): lambda: "http://127.0.0.1:11434",
+            # No preset chosen (docs/HARDWARE-PROFILES.md): these cases are
+            # today's behaviour, whatever the settings folder of the PC
+            # running this holds.
+            (SC, "_preset_lanes"): lambda: None,
             # `_sleep` does nothing here, so a start that never answers would
             # spin for the real 30 seconds.
             (SC._LaneProcess, "START_SECONDS"): 0.3,
