@@ -22,6 +22,7 @@ sqlite-vec                             # memory: the search index fastembed's nu
 uiautomation; sys_platform == "win32"  # the "control_computer" tool: reading and clicking other apps' windows (jarvis_ui_control.py). Windows only.
 tomli; python_version < "3.11"         # reading jarvis-framework.toml on Python 3.10 or older; 3.11 and newer have it built in (rebuilt jarvis_framework.py)
 cryptography                           # chat history: encrypting every kept chat on this PC (jarvis_chat_log.py). Without it NOTHING is kept - never a plain-text copy.
+tzdata; sys_platform == "win32"        # calendar: time-zone data, so an event stored in another time zone shows at the right hour (jarvis_calendar.py). Windows has none built in.
 
 # NOT installed by the script - large, or for something that is off by default:
 #

@@ -3541,7 +3541,7 @@ asleep. Only what Jarvis can already read on this PC, in this order:
 
 | Section (`key`) | What | When it is left out |
 |---|---|---|
-| Calendar (`calendar`) | Today's events: all-day first, then by this PC's time. A repeating event (RRULE) shows the time of its first date and "(repeats)"; one that began earlier "(continues from an earlier day)". | Not set up (`JARVIS_CALDAV_URL` unset, or `calendar_read` not in `[tools].enabled`); or `calendar_read` is not tier `auto`/`notify` - then it is not read and **no card is raised**, and the briefing says why. |
+| Calendar (`calendar`) | Today's events: all-day first, then by this PC's time. Repeating events (RRULE) are worked out, so a weekly meeting shows on today's date; one whose rule `jarvis_calendar` cannot work out (BYSETPOS and the like) shows the time of its first date and "(repeats)"; one that began earlier "(continues from an earlier day)". | Not set up (neither `JARVIS_CALDAV_URL` nor the private calendar link `JARVIS_CALENDAR_ICS_SECRET_URL` set, or `calendar_read` not in `[tools].enabled`); or `calendar_read` is not tier `auto`/`notify` - then it is not read and **no card is raised**, and the briefing says why. |
 | Today (`today`) | Alarms, reminders and timers still to come today, with their words. | Never. |
 | To-do list (`todo`) | How many open items, and the first five. | Never. |
 | Approvals (`approvals`) | How many approval cards wait - "Open Jarvis to answer." Never an Approve. | Never. |
@@ -3550,8 +3550,9 @@ asleep. Only what Jarvis can already read on this PC, in this order:
 Then always: "Weather and news: not available. No provider has been chosen,
 so Jarvis fetches nothing from the internet for this."
 
-Each read that leaves the PC (the calendar to the owner's CalDAV server, the
-count to the owner's IMAP server) goes through `jarvis_gate.check()` as its
+Each read that leaves the PC (the calendar to the owner's CalDAV server, or
+to Google through the private calendar link - section 22.8 - and the count
+to the owner's IMAP server) goes through `jarvis_gate.check()` as its
 own action (`calendar_read`, `email_read`), exactly as the model's tools do,
 and runs only if the gate says `allowed`. Together they get 25 seconds
 (`READ_DEADLINE`); a slow one is left out ("did not answer in time"). A
@@ -3684,9 +3685,12 @@ offer as a remembered preference; that part was not taken.
 - **Not run on the owner's PC**, nor against a real calendar or mail
   server. The toast and the notification have not been seen on a real
   Windows PC or phone.
-- **Repeating calendar events are not worked out**: shown with their first
-  date's time, marked "(repeats)". An event kept in a time zone other than
-  UTC (a `TZID`) is shown as if it were in this PC's time zone.
+- **Repeating calendar events**: the common rules are worked out (section
+  22.8); a rule that is not is shown with its first date's time, marked
+  "(repeats)". An event kept in a time zone (a `TZID`) is shown at the right
+  hour only when Python on the PC has time-zone data - on Windows the
+  `tzdata` package, in `requirements.txt` since 2026-09-25 - and otherwise as
+  if it were in this PC's time zone.
 - **The desktop toast does not open the briefing**: it is the same plain
   toast the timers use; the briefing is on the Brain's Work tab. The
   phone's notification opens Mind.
@@ -3696,3 +3700,33 @@ offer as a remembered preference; that part was not taken.
   the section again) - there is no event for a briefing asked for by hand.
 - **Email senders are not shown** - only the count. Whether they should be
   is the owner's call.
+
+### 22.8 The calendar's second source: a private calendar link (added 2026-09-25)
+
+The owner's decision (2026-09-25): Jarvis may read Google Calendar through
+its **private link** ("Secret address in iCal format"), read-only, the link
+kept like a password. No route, no event and no app screen changes: it is a
+PC setting, the environment variable `JARVIS_CALENDAR_ICS_SECRET_URL`
+(steps: `backend/README.md`, "Google Calendar, by its private link"), and
+there is no way to type it into either app.
+
+- **The same tool, gate action and tier** as the CalDAV read:
+  `calendar_read`, gate action `calendar_read` (`jarvis_calendar_read_run`),
+  shipped `auto`. When both are set, the private link wins and the card
+  says the CalDAV address was not read.
+- **One GET** of the link, with no password or header of its own (the link
+  is the key). The card names only the calendar and the host: "Jarvis would
+  like to read your Google Calendar (private link) ... 1 request, to
+  calendar.google.com". The link itself is never in the card, the plan, the
+  tool's result, an error, the log, the bus or the audit log.
+- `https://` only (plain `http://` only inside the owner's own networks,
+  the same rule as the CalDAV address). A redirect is followed only to
+  https on the same host or between `calendar.google.com`,
+  `www.google.com` and `google.com`, at most three times.
+- The whole calendar comes back; at most 10 MB of it is read, for at most
+  30 seconds, and the days asked for are picked out on the PC. A result cut
+  short says so: `"incomplete": true` and a `"note"` in the tool's result,
+  and "Some may be missing" in the briefing's calendar summary.
+- `GET /api/briefing`'s `sources.calendar.said` names the source in use:
+  "Included: your Google Calendar (private link)." (the only place either
+  app shows which calendar is read).

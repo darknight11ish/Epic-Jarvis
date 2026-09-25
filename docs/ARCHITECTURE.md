@@ -220,13 +220,22 @@ needs registry/COM plumbing this session could not add with confidence.
 
 ## 4. The egress boundary
 
-Three lanes leave the machine. Nothing else may.
+These lanes leave the machine. Nothing else may.
 
 | lane | what may go | enforced by |
 |---|---|---|
 | **cloud model** | user-role turns only - and, with `cloud-one-turn.patch`, only the **newest** one, because the clients now send the conversation so far | a role filter, re-derived on **every** hop of the degrade loop; the newest-turn cut in `_open` |
 | **ntfy push** | text generated from our own tables, never payload, never while tainted | `notice_for` (`_safe_detail` where there is no action name) + `taint_active()` |
 | **research** | enumerated search terms, per approved plan | `jarvis_research.plan/run` |
+| **the owner's own accounts** - calendar, email, Home Assistant, each only when its settings are filled in on the PC | one request (or one small batch) per plan: to the calendar the owner set up - their CalDAV server with the time range, **or, since 2026-09-25, Google (`calendar.google.com`) through the calendar's private link**, which asks for the whole calendar and has the days picked out on the PC; to their IMAP server; to their Home Assistant. The password, token or private link goes only to the host it belongs to; the private link is also kept off every card, result, error and the log (`test_calendar_link.py`) | each module's `plan()`/`run()` through the gate (`jarvis_calendar`, `jarvis_email`, `jarvis_home`); `jarvis_local_http.plain_http_problem` (plain `http://` only inside the owner's own networks); each module's redirect handler (`_RefuseRedirect`, and for the private link `_FeedRedirect`: https on the same host or between Google's calendar hosts only) |
+
+The last row was not in this table until 2026-09-25, although those reads
+already left the machine; it was written down when the Google Calendar link
+was added. Their settings are environment variables on the PC, and neither
+app has a screen to enter them. For the private calendar link that is on
+purpose (2026-09-25): a link typed on the phone would be one more place to
+keep a password safe. Only the morning briefing's settings line says which
+calendar is read ("your Google Calendar (private link)"), in both apps.
 
 The cloud filter deserves a note because it was broken in the least obvious
 way: it ran once, above the degrade loop, and the loop could go cloud → local

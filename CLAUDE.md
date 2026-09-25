@@ -209,6 +209,10 @@ Decided 2026-09-25, after the competitiveness audit
   read email, files, notes or saved memories; no card for a search that
   comes straight from the owner's question. A setting makes it ask every
   time.
+- **Jarvis may read Google Calendar through its private link** ("Secret
+  address in iCal format"): read-only, set on the PC only, and the link
+  kept as safely as a password (never logged, shown or sent anywhere but
+  Google).
 
 ## Every new feature gets its own audit, without being asked
 

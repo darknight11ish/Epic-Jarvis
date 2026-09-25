@@ -75,6 +75,13 @@ THIRD_PARTY = {
     "cryptography": "cryptography",
 }
 
+# Packages in requirements.txt that no shipped module imports BY NAME,
+# because the standard library loads them itself. Each says who uses it.
+INDIRECT = {
+    "tzdata": "the standard library's zoneinfo reads it on Windows, which has no "
+              "time-zone data of its own (jarvis_calendar.py's event times)",
+}
+
 # Files in backend/ that are NOT shipped, on purpose. Tools run from this
 # repository, not from the backend folder.
 NOT_SHIPPED = {
@@ -268,6 +275,10 @@ def t_the_exemptions_are_real():
         used |= imports_of_source((HERE / p).read_text(encoding="utf-8"))
     by_pip = {v.lower(): k for k, v in THIRD_PARTY.items()}
     for pip in sorted(requirement_names()):
+        if pip in INDIRECT:
+            check(f"requirements.txt's {pip} is used indirectly, and says by whom",
+                  bool(INDIRECT[pip]))
+            continue
         check(f"requirements.txt's {pip} is imported by a shipped module",
               by_pip.get(pip) in used, f"no shipped module imports {by_pip.get(pip, pip)}")
 
