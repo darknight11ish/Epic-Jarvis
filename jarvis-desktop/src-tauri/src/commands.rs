@@ -1264,6 +1264,9 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
         .connect_timeout(HEALTH_TIMEOUT)
         // These are loopback services; a proxy would only get in the way.
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("unable to build the HTTP client: {e}"))?;
 
@@ -1360,7 +1363,10 @@ pub(crate) fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::
     let mut builder = reqwest::Client::builder()
         .connect_timeout(CHAT_CONNECT_TIMEOUT)
         // A loopback service; a proxy would only get in the way.
-        .no_proxy();
+        .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none());
     if let Some(timeout) = total_timeout {
         builder = builder.timeout(timeout);
     }

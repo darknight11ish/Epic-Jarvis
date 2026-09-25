@@ -339,6 +339,9 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
         // instead, which is the only thing that can tell a healthy idle stream
         // from a dead one.
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("unable to build the stream client: {e}"))?;
 
@@ -747,6 +750,9 @@ async fn fetch_json(app: &AppHandle, base: &str, path: &str) -> Option<serde_jso
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(FETCH_TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .ok()?;
     let headers = commands::jarvis_headers(app).ok()?;
@@ -833,6 +839,9 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(FETCH_TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
     else {
         return false;

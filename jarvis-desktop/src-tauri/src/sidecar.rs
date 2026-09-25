@@ -316,6 +316,9 @@ pub async fn backend_reachable(app: &AppHandle, base: &str) -> bool {
         .connect_timeout(PROBE_TIMEOUT)
         .timeout(PROBE_TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
     else {
         return false;
@@ -654,6 +657,9 @@ async fn request_shutdown(app: &AppHandle) -> Result<(), String> {
         .connect_timeout(PROBE_TIMEOUT)
         .timeout(ASK_TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| e.to_string())?;
     let headers = commands::jarvis_headers(app)?;

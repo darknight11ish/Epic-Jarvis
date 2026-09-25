@@ -226,6 +226,10 @@ pub async fn brain_watch_add(
     language: Option<String>,
     notify: Option<bool>,
 ) -> Result<serde_json::Value, String> {
+    // Held on a stale link, as the phone's JarvisRuntime.addWatch is:
+    // creating a watch turns something ON (apps security audit L4). Removing
+    // one and marking findings read are not held, on either app.
+    require_link_live(&app)?;
     let mut body = serde_json::Map::new();
     body.insert("name".into(), serde_json::json!(name));
     if let Some(q) = query.filter(|q| !q.trim().is_empty()) {
@@ -746,6 +750,9 @@ async fn get_json_status(
         .connect_timeout(READ_TIMEOUT)
         .timeout(budget)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| (None, format!("could not build an HTTP client: {e}")))?;
     let response = client
@@ -813,6 +820,9 @@ async fn post(
         .connect_timeout(READ_TIMEOUT)
         .timeout(WRITE_TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("could not build an HTTP client: {e}"))?;
     let response = client

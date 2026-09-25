@@ -388,6 +388,49 @@ await check("no window can send events to the others (apps security audit M1)", 
   }
 });
 
+await check("no HTTP client in the app follows a redirect (apps security audit L1)", () => {
+  // reqwest drops Authorization and Cookie on a cross-host redirect but
+  // keeps X-Jarvis-Token, so a redirect would hand the token to wherever it
+  // pointed. Every client is built with redirects off, and uses no proxy.
+  const dir = join(HERE, "..", "src-tauri", "src");
+  const files = readdirSync(dir, { recursive: true }).filter((f) => String(f).endsWith(".rs"));
+  let builders = 0;
+  for (const f of files) {
+    const text = read(`src-tauri/src/${f}`);
+    let at = text.indexOf("Client::builder()");
+    while (at !== -1) {
+      builders++;
+      const chain = text.slice(at, text.indexOf(".build()", at));
+      assert.match(chain, /\.redirect\(reqwest::redirect::Policy::none\(\)\)/, `${f}: a client that follows redirects`);
+      assert.match(chain, /\.no_proxy\(\)/, `${f}: a client that uses the system proxy`);
+      at = text.indexOf("Client::builder()", at + 1);
+    }
+  }
+  assert.ok(builders >= 13, `only ${builders} clients found - did the search break?`);
+});
+
+await check("adding a GitHub watch is held on a stale link, as on the phone (apps security audit L4)", () => {
+  const rust = read("src-tauri/src/brain.rs");
+  const body = rust.slice(rust.indexOf("pub async fn brain_watch_add"));
+  const fn = body.slice(0, body.indexOf("\n}\n"));
+  assert.ok(fn.indexOf("require_link_live(&app)?") > 0
+    && fn.indexOf("require_link_live(&app)?") < fn.indexOf("post("), "brain_watch_add is not held on a stale link");
+  const kt = readFileSync(join(HERE, "..", "..", "jarvis-client", "app", "src", "main", "java", "com", "jarvis",
+    "client", "JarvisRuntime.kt"), "utf8");
+  const add = kt.slice(kt.indexOf("suspend fun addWatch("));
+  assert.ok(add.indexOf("actionBlocker()") > 0 && add.indexOf("actionBlocker()") < add.indexOf("api.watchAdd"),
+    "the phone's addWatch stopped being held - the two apps disagree again");
+});
+
+await check("no page may connect to Ollama or LiteLLM directly (apps security audit L6)", () => {
+  // Ollama has no login: a script allowed to reach it could pull or delete
+  // models with no approval card. The health checks run in Rust, which the
+  // page's content policy does not govern.
+  const csp = JSON.parse(read("src-tauri/tauri.conf.json")).app.security.csp;
+  const connect = /connect-src ([^;]*)/.exec(csp)[1];
+  assert.doesNotMatch(connect, /:11434|:4000\b|\*/, `connect-src allows too much: ${connect}`);
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nWindows Hello decides in Rust, and the pages say so");
