@@ -34,7 +34,9 @@ LISTED = ("second_card_enable", "second_card_browser_enable", "big_model_enable"
           "learning_enable", "history_enable", "learning_auto_enable",
           "learning_sensitive_enable", "wiki_update", "change_own_config",
           "custom_voice", "better_voice_enable",
-          "power_manage", "append_obsidian_daily", "download_model", "switch_model")
+          "power_manage", "append_obsidian_daily", "download_model", "switch_model",
+          # email-send.patch: each email is its own card, sent only on "ask".
+          "send_email")
 
 
 def check(name, cond, detail=""):
@@ -113,7 +115,9 @@ def t_a_no_on_an_always_ask_card_proposes_nothing():
     for action in LISTED:
         check(f"denying {action} proposes no memory", _proposals(ns, action) == [])
     # CONTROL: an ordinary action still gets its proposal, so the stub is live.
-    for action in ("send_email", "delete_file", "edit_joplin_note"):
+    # (send_email was the first control here until email-send.patch made
+    # it always-ask: one "no" to one email is not a standing wish.)
+    for action in ("spend_money", "delete_file", "edit_joplin_note"):
         calls = _proposals(ns, action)
         check(f"CONTROL: denying {action} still proposes one", len(calls) == 1
               and calls[0][1].get("source") == "gate_denial", repr(calls))

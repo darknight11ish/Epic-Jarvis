@@ -402,6 +402,16 @@ $PATCHES = @(
     # Needs jarvis_search.py copied in; without it the routes answer 503 and
     # the model is never offered web_search's settings.
     'web-search.patch'
+    # Sending email, one approval card per email (the owner's decision of
+    # 2026-09-25, after the Muse audit): GET /api/email/sending (whether it
+    # is set up - the Settings line in both apps), and in jarvis_gate.py the
+    # notice's words for send_email, send_email in _TOOL_ACTIONS, and "no
+    # memory rule from a no" (each email is its own card). Its context is
+    # web-search's GET route block and _NO_RULE_FROM_DENIAL / _RISK lines, and
+    # note-capture's _TOOL_ACTIONS lines, so it goes after web-search - last,
+    # like every new patch. Needs jarvis_email_send.py copied in; without it
+    # the route answers 503 and the send_email tool says it is unavailable.
+    'email-send.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -487,6 +497,7 @@ $SHIPPED = @(
     'jarvis_browser_control.py'  # tool "browser_control": a real browser, via Playwright
     'jarvis_calendar.py'         # tool "calendar_read"
     'jarvis_email.py'            # tool "email_check"
+    'jarvis_email_send.py'       # tool "send_email": ONE email per approval card; email-send.patch
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch
