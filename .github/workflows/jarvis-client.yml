@@ -19,6 +19,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      # The SHA-256 of the certificate in the project key (see "Check the
+      # release APK is signed with the project key").
+      key_sha256: ${{ steps.signing.outputs.sha256 }}
     defaults:
       run:
         working-directory: jarvis-client
@@ -155,30 +159,29 @@ jobs:
             exit 1
           fi
 
-      - name: Collect APK
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          find . -name '*.apk' -not -path './artifacts/*' -exec cp {} artifacts/ \;
-          ls -lh artifacts
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: jarvis-client-debug-apk
-          path: jarvis-client/artifacts/*.apk
-          if-no-files-found: error
-          retention-days: 30
-
-      # After the debug artifact is collected, so `find -name '*.apk'` above
-      # keeps picking up exactly one file.
+      # No debug APK is uploaded any more (security audit L3). It was
+      # debuggable AND signed with the project key, and every build had the
+      # same versionCode - so anyone with adb on the unlocked phone could
+      # install it over the release, keep the app's data, and use
+      # `adb shell run-as` to act as the app and have the Keystore decrypt the
+      # pairing token. The release APK below is the one artifact now.
       #
-      # The release variant is now the one that gets published, but not from
-      # here. R8 breaks at RUNTIME, not at build time - a stripped serializer
-      # is a crash on first decode and a green `assembleRelease` - so the
-      # publish sits behind the smoke job, which installs and starts the
-      # shrunk APK on a real device first. This step earns its place anyway:
-      # it fails a broken shrink in about three minutes without waiting for an
-      # emulator to boot, and it prints the two sizes side by side.
+      # THE build that gets published. It is built here, and only here,
+      # because this is the one job that has the signing key: the smoke job
+      # below downloads this exact file, starts it on an emulator, and
+      # publishes it. It never rebuilds it.
+      #
+      # It used to rebuild it. The smoke job ran its own `assembleRelease` on
+      # a fresh machine with no key restored, the Android build tools quietly
+      # made a throwaway key there, and every release from 19 Sep 2026 to
+      # this fix was published with a different throwaway certificate - so
+      # none of them would install over the one before (security audit H1).
+      # build.gradle.kts now refuses a release build in CI without the key,
+      # and the step after this one compares the certificate itself.
+      #
+      # R8 breaks at RUNTIME, not at build time - a stripped serializer is a
+      # crash on first decode and a green `assembleRelease` - which is why the
+      # publish still waits for the smoke job to start this APK on a device.
       - name: Assemble release APK
         run: |
           set -uo pipefail
@@ -201,6 +204,78 @@ jobs:
           done
           echo "::endgroup::"
 
+      # The certificate inside the APK, compared with the certificate in the
+      # key CI restored above. If they differ, the APK was signed with
+      # something else (a throwaway key the build tools made, say) and must
+      # not be published: the phone would refuse to install it over the copy
+      # it has, and the only way past that is an uninstall that wipes the
+      # pairing. The fingerprint is handed to the smoke job, which checks the
+      # downloaded file against it again right before publishing.
+      #
+      # A certificate fingerprint is public - it is printed from the APK by
+      # anyone who downloads it - so passing it between jobs leaks nothing.
+      - name: Check the release APK is signed with the project key
+        id: signing
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/release/app-release.apk
+          ks="$GITHUB_WORKSPACE/keystore/debug.keystore"
+          if [ ! -e "$apk" ]; then
+            echo "::error::$apk is missing, so there is nothing to check."
+            exit 1
+          fi
+          if [ ! -e "$ks" ]; then
+            echo "::error::$ks is missing. The restore step should have stopped the job already."
+            exit 1
+          fi
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          apksigner=$(find "$sdk/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1) || true
+          if [ -z "$apksigner" ]; then
+            echo "::error::No apksigner under $sdk/build-tools, so the certificate cannot be checked."
+            exit 1
+          fi
+          echo "Using $apksigner"
+
+          # keytool prints "SHA256: AB:CD:..."; apksigner prints lowercase hex
+          # with no colons. Both are reduced to the second form. awk, not
+          # head, so nothing upstream is killed by a closed pipe under
+          # pipefail.
+          want=$(keytool -list -v -keystore "$ks" -storepass android -alias androiddebugkey \
+                 | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | awk 'NR == 1' \
+                 | tr -d ':[:space:]' | tr 'A-F' 'a-f')
+          certs=$("$apksigner" verify --print-certs "$apk")
+          printf '%s\n' "$certs"
+          signers=$(printf '%s\n' "$certs" | grep -c '^Signer #[0-9]* certificate DN:') || true
+          got=$(printf '%s\n' "$certs" \
+                | sed -n 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*//p' | awk 'NR == 1' \
+                | tr -d '[:space:]' | tr 'A-F' 'a-f')
+
+          echo "Key CI restored: ${want:-?}"
+          echo "APK is signed:   ${got:-?}"
+          if [ "${#want}" -ne 64 ]; then
+            echo "::error::Could not read a SHA-256 fingerprint from the restored keystore."
+            exit 1
+          fi
+          if [ "$signers" != "1" ]; then
+            echo "::error::Expected exactly one signer in the APK, found ${signers:-0}."
+            exit 1
+          fi
+          if [ "$got" != "$want" ]; then
+            echo "::error::The release APK is NOT signed with the project key. Not publishing it."
+            exit 1
+          fi
+          echo "sha256=$want" >> "$GITHUB_OUTPUT"
+          echo "The release APK is signed with the project key."
+
+      # Kept 30 days. It is what the smoke job installs and publishes, and it
+      # is the fallback if publishing to the release fails. Not debuggable.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: jarvis-client-release-apk
+          path: jarvis-client/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
   # The gap that let a crash in onCreate ship with a green tick on every
   # check: the job above compiles the APK and runs unit tests, and never once
   # launches it. This one does, on a real Android image — and because an APK
@@ -210,9 +285,14 @@ jobs:
   # pinned to a SHA so it cannot be swapped underneath us, and the one I
   # reached for could not have its SHA verified from where this was written —
   # so it is thirty lines of shell against the SDK that the already-pinned
-  # setup-android installs. Publishing from this job rather than a third
-  # avoids an artifact download, which would have meant another unverifiable
-  # pin for no gain.
+  # setup-android installs.
+  #
+  # The APK this job starts and publishes is DOWNLOADED from the build job,
+  # not rebuilt here. This job has no signing key, and a rebuild here is
+  # exactly how every release from 19 Sep 2026 until this fix went out
+  # signed with a throwaway key (security audit H1). download-artifact is
+  # pinned below to the commit its v4 tag pointed at on 2026-09-25 (read
+  # from the tag list of github.com/actions/download-artifact).
   smoke:
     runs-on: ubuntu-latest
     needs: build
@@ -269,24 +349,30 @@ jobs:
       # Compiled before the device is needed, so a Kotlin error still fails in
       # about a minute rather than after a boot.
       #
-      # `assembleRelease` is here too, because the RELEASE apk is the one this
-      # job now publishes, and it has to exist on disk before the emulator is
-      # up. R8 takes about three and a half minutes; failing that here costs a
-      # boot cycle less than failing it later.
+      # NOT `assembleRelease`. The release APK comes from the build job (the
+      # step after this one), signed with the project key. The debug builds
+      # made here are only for the instrumentation tests on the emulator and
+      # are never published or uploaded; they are signed with whatever key
+      # this machine has, which does not matter for a throwaway emulator.
       - name: Compile the app and the test
         run: |
           set -uo pipefail
           chmod +x ./gradlew
-          if ! ./gradlew assembleDebug assembleDebugAndroidTest assembleRelease --stacktrace 2>&1 | tee build.log; then
-            echo "::group::Kotlin errors, and R8's"
-            # R8's complaints are not Kotlin diagnostics and look nothing like
-            # them: a missing keep rule appears as a warning about a class it
-            # could not resolve a reference for.
-            grep -E "^e: |Unresolved reference|Argument type mismatch|Compilation error|Missing class|R8: " build.log | head -80 \
+          if ! ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace 2>&1 | tee build.log; then
+            echo "::group::Kotlin errors"
+            grep -E "^e: |Unresolved reference|Argument type mismatch|Compilation error" build.log | head -80 \
               || echo "(no compiler diagnostics found; see the full log above)"
             echo "::endgroup::"
             exit 1
           fi
+
+      # The one signed release build, made by the build job. Lands at
+      # jarvis-client/signed/app-release.apk.
+      - name: Fetch the signed release APK from the build job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: jarvis-client-release-apk
+          path: jarvis-client/signed
 
       # Create, start, wait and test in ONE step. Everything this job has got
       # wrong so far has been state that did not survive a step boundary: the
@@ -615,16 +701,12 @@ jobs:
           # signatures. It does not walk every screen. A keep rule missing for
           # something only reachable three taps in would still get through.
           echo "::group::The release build on the device"
-          # `|| true` on the assignment, not decoration. If the release
-          # directory does not exist, `find` exits non-zero, `pipefail` hands
-          # that status to the whole pipeline, and under `-e` the ASSIGNMENT
-          # is the failing command - so the step would die here and the
-          # friendly message two lines down, written for exactly this case,
-          # would never be printed. Same bug as the pid check below, same fix.
-          rel=$(find app/build/outputs/apk/release -name 'app-release.apk' 2>/dev/null | head -1) || true
-          if [ -z "$rel" ] || [ ! -e "$rel" ]; then
-            echo "::error::No release APK was built, so there is nothing to smoke or publish."
-            find app/build/outputs/apk -name '*.apk' 2>/dev/null || true
+          # The file downloaded from the build job - the same bytes that are
+          # published below, never a rebuild.
+          rel=signed/app-release.apk
+          if [ ! -e "$rel" ]; then
+            echo "::error::The release APK from the build job is missing, so there is nothing to smoke or publish."
+            find . -name '*.apk' -not -path './app/build/*' 2>/dev/null || true
             exit 1
           fi
           echo "Installing $rel"
@@ -806,21 +888,57 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      # The RELEASE apk, which the step above has just started on a real
-      # device. `app-release.apk` and not `*.apk`: the debug build and the
-      # androidTest build are both sitting in the same tree, and picking the
-      # wrong one here would publish a debuggable APK under release notes
-      # saying otherwise - which is worse than publishing the debug one openly.
+      # The RELEASE apk from the build job, which the step above has just
+      # started on a real device. Named exactly, not found by pattern: the
+      # debug build and the androidTest build are both sitting in this tree
+      # too, and picking the wrong one would publish a debuggable APK under
+      # release notes saying otherwise.
       - name: Collect APK
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          find . -name 'app-release.apk' -not -path './artifacts/*' -exec cp {} artifacts/ \;
-          if [ ! -e artifacts/app-release.apk ]; then
+          if [ ! -e signed/app-release.apk ]; then
             echo "::error::No release APK to publish."
             exit 1
           fi
+          cp signed/app-release.apk artifacts/app-release.apk
           ls -lh artifacts
+
+      # Right before publishing: the certificate in the file about to be
+      # published must be the project key's, as read from the restored
+      # keystore by the build job. The build job checked this already; this
+      # checks the downloaded copy, so nothing between the two jobs can
+      # swap the file unnoticed.
+      - name: Check the APK to publish is signed with the project key
+        env:
+          WANT: ${{ needs.build.outputs.key_sha256 }}
+        run: |
+          set -euo pipefail
+          apk=artifacts/app-release.apk
+          want=$(printf '%s' "$WANT" | tr -d ':[:space:]' | tr 'A-F' 'a-f')
+          if [ "${#want}" -ne 64 ]; then
+            echo "::error::The build job did not hand over the project key's fingerprint. Not publishing."
+            exit 1
+          fi
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          apksigner=$(find "$sdk/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1) || true
+          if [ -z "$apksigner" ]; then
+            echo "::error::No apksigner under $sdk/build-tools, so the certificate cannot be checked. Not publishing."
+            exit 1
+          fi
+          certs=$("$apksigner" verify --print-certs "$apk")
+          printf '%s\n' "$certs"
+          signers=$(printf '%s\n' "$certs" | grep -c '^Signer #[0-9]* certificate DN:') || true
+          got=$(printf '%s\n' "$certs" \
+                | sed -n 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*//p' | awk 'NR == 1' \
+                | tr -d '[:space:]' | tr 'A-F' 'a-f')
+          echo "Project key: $want"
+          echo "APK signed:  ${got:-?}"
+          if [ "$signers" != "1" ] || [ "$got" != "$want" ]; then
+            echo "::error::The APK is NOT signed with the project key. Not publishing it."
+            exit 1
+          fi
+          echo "Signed with the project key. Publishing."
 
       # This is the app that actually talks to Jarvis, so it gets the same
       # phone-reachable delivery as the other one: a plain .apk at a stable URL
@@ -832,9 +950,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: client-latest
+          KEY_SHA256: ${{ needs.build.outputs.key_sha256 }}
         run: |
           set -euo pipefail
           short="${GITHUB_SHA::7}"
+          # The certificate fingerprint, colon-separated in pairs, as keytool
+          # and most tools print it. Checked equal to the APK's in the step
+          # before this one.
+          key_sha=$(printf '%s' "$KEY_SHA256" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
           apk="jarvis-client-$short.apk"
           mv jarvis-client/artifacts/app-release.apk "jarvis-client/artifacts/$apk"
           size=$(du -h "jarvis-client/artifacts/$apk" | cut -f1)
@@ -867,15 +990,19 @@ jobs:
             "" \
             "### What was checked before this was published" \
             "" \
-            "The unit tests and the instrumentation suite both passed, on an Android 34 emulator. Then THIS apk - the shrunk one, not a rebuild of it - was installed fresh on that emulator, started, and watched for fifteen seconds. It has to still be running, with nothing in its log that looks like the shrinker removed code it needed, or nothing is published." \
+            "The unit tests and the instrumentation suite both passed, on an Android 34 emulator. Then THIS apk - the exact file the build job made and signed, not a rebuild of it - was installed fresh on that emulator, started, and watched for fifteen seconds. It has to still be running, with nothing in its log that looks like the shrinker removed code it needed, or nothing is published." \
             "" \
             "Honest limit: that proves it starts and the first screen works. It does not walk every screen, so a shrinker fault on something only reachable several taps in would still get through. Report anything that crashes only on this build and not the previous debug one." \
             "" \
             "### Signing" \
             "" \
-            "Signed with the project's debug key, which CI restores from the \`DEBUG_KEYSTORE_B64\` repository secret; it is not in the repository. Builds signed with that same key install over each other in place, keeping the pairing. The key was replaced on 19 Sep 2026, because the old one had been committed to a public repository." \
+            "Signed with the project's key, which CI restores from the \`DEBUG_KEYSTORE_B64\` repository secret; it is not in the repository. Before this was published, CI compared the certificate inside this APK with the restored key and they matched:" \
             "" \
-            "If \`adb install -r\` says \`INSTALL_FAILED_UPDATE_INCOMPATIBLE\`, the copy on the phone was signed with the OLD key. Uninstall it once (\`adb uninstall com.jarvis.client\`, or long-press the app, Uninstall), install this one, and pair again with the token from the desktop app (Settings, Connection, Show the token for my phone) or \`py -3 jarvis_token_store.py show\` in the backend folder. Uninstalling deletes the pairing and anything still queued offline.")
+            "\`SHA-256 $key_sha\`" \
+            "" \
+            "To check a download yourself: \`apksigner verify --print-certs jarvis-client-$short.apk\` (in the Android SDK's build-tools folder) prints the same number, in lowercase and without the colons, as \"Signer #1 certificate SHA-256 digest\". Builds signed with this key install over each other in place, keeping the pairing." \
+            "" \
+            "If \`adb install -r\` says \`INSTALL_FAILED_UPDATE_INCOMPATIBLE\`, the copy on the phone was signed with a different key. That is expected ONCE: every build published between 19 Sep 2026 and the fix for this (security audit H1) was signed by mistake with a throwaway key that CI made on the spot, a different one each time. Uninstall it once (\`adb uninstall com.jarvis.client\`, or long-press the app, Uninstall), install this one, and pair again with the token from the desktop app (Settings, Connection, Show the token for my phone) or \`py -3 jarvis_token_store.py show\` in the backend folder. Uninstalling deletes the pairing and anything still queued offline. After that, later builds should install over this one without it. If one does not, do not uninstall to get past it - something is wrong with that build.")
           title="Jarvis client - latest build ($GITHUB_REF_NAME @ $short)"
 
           # Replace the old build WITHOUT a moment of having none. The old
@@ -910,8 +1037,8 @@ jobs:
         run: |
           echo "::warning::Could not publish the release. If this was a 403, set" \
                "Settings -> Actions -> General -> Workflow permissions to" \
-               "'Read and write permissions'. The APK is still available as the" \
-               "jarvis-client-debug-apk run artifact."
+               "'Read and write permissions'. The same signed APK is still available" \
+               "as the jarvis-client-release-apk run artifact."
 
   # The face photographs, on their own emulator, never gating anything.
   #

@@ -11,11 +11,16 @@
 //!
 //! ## The four settings (Settings, "Security")
 //!
-//! * **App lock** - off by default. On: opening the Jarvis bar, the Brain or
-//!   Settings needs Windows Hello, and so does coming back to one of them
-//!   after being away longer than "Lock again after" (straight away, 1, 5
-//!   or 15 minutes; 1 minute by default). One of them left open on screen
-//!   is hidden once that time is up ([`spawn_watch`]).
+//! * **App lock** - off by default. On: opening the Jarvis bar, the Brain,
+//!   Settings or the HUD needs Windows Hello, and so does coming back to one
+//!   of them after being away longer than "Lock again after" (straight away,
+//!   1, 5 or 15 minutes; 1 minute by default). One of them left open on
+//!   screen is hidden once that time is up ([`spawn_watch`]). The widget
+//!   stays on the desktop, but while the lock is on its approval card shows
+//!   only the notice's title, and its Approve opens the Jarvis bar - behind
+//!   the lock - instead of approving (`commands::answer_approval`,
+//!   `open_approval_in_quickbar`; apps security audit M3, the owner's
+//!   decision 2026-09-25). Deny still works from the widget, as on the phone.
 //! * **Windows Hello for approvals** - "Risky only" (the default, and the
 //!   phone's rule: [`is_risky`]) or "Every approval". There is no third
 //!   value below "Risky only", so the type itself cannot express "never".
@@ -85,19 +90,32 @@ fn save(app: &AppHandle, security: &Security) -> Result<(), String> {
 }
 
 /// The windows the app lock covers.
+///
+/// The HUD joined on 2026-09-25 (apps security audit M3): it shows the
+/// memory galaxy, what was recalled for each answer, and the conversation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Covered {
     Quickbar,
     Brain,
     Settings,
+    Hud,
 }
 
 impl Covered {
+    /// Every covered window, for the checks that look at all of them.
+    const ALL: [Covered; 4] = [
+        Covered::Quickbar,
+        Covered::Brain,
+        Covered::Settings,
+        Covered::Hud,
+    ];
+
     fn from_label(label: &str) -> Option<Self> {
         match label {
             crate::QUICKBAR_LABEL => Some(Self::Quickbar),
             crate::windows::BRAIN_LABEL => Some(Self::Brain),
             crate::windows::SETTINGS_LABEL => Some(Self::Settings),
+            crate::HUD_LABEL => Some(Self::Hud),
             _ => None,
         }
     }
@@ -107,6 +125,7 @@ impl Covered {
             Self::Quickbar => crate::QUICKBAR_LABEL,
             Self::Brain => crate::windows::BRAIN_LABEL,
             Self::Settings => crate::windows::SETTINGS_LABEL,
+            Self::Hud => crate::HUD_LABEL,
         }
     }
 }
@@ -168,10 +187,10 @@ impl LockState {
     }
 }
 
-/// True when the Jarvis bar, the Brain or Settings has the keyboard focus.
-/// Asked of Windows through Tauri each time, not remembered.
+/// True when the Jarvis bar, the Brain, Settings or the HUD has the keyboard
+/// focus. Asked of Windows through Tauri each time, not remembered.
 fn covered_focused(app: &AppHandle) -> bool {
-    [Covered::Quickbar, Covered::Brain, Covered::Settings]
+    Covered::ALL
         .iter()
         .filter_map(|c| app.get_webview_window(c.label()))
         .any(|w| w.is_focused().unwrap_or(false))
@@ -463,6 +482,7 @@ fn open_now(app: &AppHandle, which: Covered) {
         }),
         Covered::Brain => crate::windows::show_brain_unlocked(app),
         Covered::Settings => crate::windows::show_settings_unlocked(app),
+        Covered::Hud => crate::windows::show_hud_unlocked(app),
     };
     if let Err(err) = shown {
         eprintln!(
@@ -532,7 +552,7 @@ const WATCH_EVERY: Duration = Duration::from_secs(5);
 /// window after the owner left - but a Brain or Settings window left open and
 /// visible on a second screen can be READ without being clicked. So every few
 /// seconds: when the owner has been away longer than "Lock again after", the
-/// Jarvis bar, the Brain and Settings are hidden (App lock on), and a Show
+/// Jarvis bar, the Brain, Settings and the HUD are hidden (App lock on), and a Show
 /// on the Brain's memory lists ends (private answers on). Opening one again
 /// asks Windows Hello, as ever.
 pub fn spawn_watch(app: AppHandle) {
@@ -553,7 +573,7 @@ pub fn spawn_watch(app: AppHandle) {
                 emit_private_hidden(&app);
             }
             if security.app_lock {
-                for which in [Covered::Quickbar, Covered::Brain, Covered::Settings] {
+                for which in Covered::ALL {
                     if let Some(window) = app.get_webview_window(which.label()) {
                         if window.is_visible().unwrap_or(false) {
                             let _ = window.hide();

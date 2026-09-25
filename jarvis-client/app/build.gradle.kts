@@ -23,6 +23,21 @@ fun gitSha(): String {
     return if (Regex("^[0-9a-f]{7,40}$").matches(sha)) sha else "unknown"
 }
 
+/**
+ * Android's version number for this build: CI's run number for this
+ * workflow, which only goes up, or 1 for a build made anywhere else.
+ *
+ * It used to be pinned at 1, so ANY build installed over any other and kept
+ * the app's data - including an older one, or a debuggable one (security
+ * audit L3). Android refuses to install a lower number over a higher one
+ * (`adb install -r` says INSTALL_FAILED_VERSION_DOWNGRADE), so with the run
+ * number an older build can no longer replace a newer one. A re-run of the
+ * same workflow run keeps its number, which Android accepts as equal.
+ */
+fun buildVersionCode(): Int =
+    providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.trim()
+        ?.toIntOrNull()?.takeIf { it in 1..2_100_000_000 } ?: 1
+
 /** When [gitSha]'s commit was made, in seconds since 1970, or 0 when git cannot say. */
 fun gitCommitTime(): Long = runCatching {
     providers.exec {
@@ -41,11 +56,11 @@ android {
         // taking 30 would mean a GLES fallback branch carried forever.
         minSdk = 33
         targetSdk = 36
-        versionCode = 1
-        // Not "step0" any more. The number is cosmetic — versionCode is
-        // pinned at 1 so any build installs over any other — but a version
-        // string naming a step this app passed long ago is one more thing
-        // quietly asserting something untrue.
+        versionCode = buildVersionCode()
+        // Not "step0" any more. The name is cosmetic - versionCode above is
+        // what Android compares - but a version string naming a step this
+        // app passed long ago is one more thing quietly asserting something
+        // untrue.
         versionName = "0.1"
 
         // There was no instrumentation runner, so there was nowhere to put a
@@ -87,7 +102,8 @@ android {
     //
     // Guarded on existence rather than assumed: a checkout of this module alone,
     // without the repository around it, falls back to AGP's generated key and still
-    // builds.
+    // builds. EXCEPT a release build in CI: see verifyReleaseSigningKey below,
+    // which stops it rather than let it quietly sign with a throwaway key.
     signingConfigs {
         getByName("debug") {
             val shared = rootProject.file("../keystore/debug.keystore")
@@ -186,6 +202,45 @@ android {
         // (checked), so either way loads on Android 15's 16 KB devices.
         jniLibs { useLegacyPackaging = true }
     }
+}
+
+// A RELEASE build in CI without the shared key fails, instead of quietly
+// signing with a key this machine just made (security audit H1). That quiet
+// fallback is exactly what happened: from 19 Sep 2026 the smoke job rebuilt
+// the release APK on a machine with no key restored, and every published
+// build carried a different throwaway certificate, so none would install
+// over the one before it without an uninstall that wipes the pairing.
+//
+// Only release, only CI. Debug builds (the unit tests, the emulator tests)
+// still fall back to a generated key, because nothing signed that way is
+// published, and a local release build outside CI still works for anyone
+// building the module on its own. GitHub Actions sets CI=true on every run.
+//
+// Checked when the task RUNS, not while Gradle reads this file, so an
+// `assembleDebug` in a job without the key is not stopped by it. The values
+// are captured as a File and a Provider, which the configuration cache
+// (gradle.properties) can store.
+val releaseKeyFile = rootProject.file("../keystore/debug.keystore")
+val onCi = providers.environmentVariable("CI")
+val verifyReleaseSigningKey = tasks.register("verifyReleaseSigningKey") {
+    val keyFile = releaseKeyFile
+    val ci = onCi
+    doLast {
+        if (ci.orNull.equals("true", ignoreCase = true) && !keyFile.exists()) {
+            throw GradleException(
+                "The shared signing key is missing at ${keyFile.path}, and this is a " +
+                    "release build in CI. Stopping on purpose: without it the build tools " +
+                    "would sign with a throwaway key, and the phone would refuse to install " +
+                    "the APK over the copy it already has. Restore the key from the " +
+                    "DEBUG_KEYSTORE_B64 secret first (see keystore/README.md).",
+            )
+        }
+    }
+}
+// configureEach, not named(): AGP registers preReleaseBuild later than this
+// line runs, and configureEach also reaches tasks registered afterwards.
+tasks.configureEach {
+    if (name == "preReleaseBuild") dependsOn(verifyReleaseSigningKey)
 }
 
 dependencies {

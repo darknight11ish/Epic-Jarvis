@@ -115,14 +115,16 @@ export function helloLine(hello, settings) {
 }
 
 export function appLockDetail() {
-  return "Opening the Jarvis bar, the Brain or Settings needs Windows Hello. " +
-    "The widget and the HUD window are not locked.";
+  return "Opening the Jarvis bar, the Brain, Settings or the HUD window needs " +
+    "Windows Hello. The widget stays on the desktop, but while this is on it " +
+    "shows only a short title for an approval, and its Approve opens the " +
+    "Jarvis bar to approve there. Deny still works from the widget.";
 }
 
 export function relockNote(settings) {
   const s = normalise(settings);
-  const base = "How long you can be away from the Jarvis bar, the Brain and " +
-    "Settings before Windows Hello is asked again.";
+  const base = "How long you can be away from the Jarvis bar, the Brain, " +
+    "Settings and the HUD window before Windows Hello is asked again.";
   return s.appLock || s.privateAnswers
     ? base
     : `${base} It matters once App lock, or Windows Hello for memory lists and chat history, is on.`;

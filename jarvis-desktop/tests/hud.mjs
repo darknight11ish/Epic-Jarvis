@@ -102,21 +102,66 @@ async function openHud(browser, status, pageOptions = {}) {
   const marks = [];
   const memoryReads = [];
   const memoryWrites = [];
+  // Requests that reached the backend WITHOUT the token the shell adds - so
+  // made by the page itself, not by the shell (apps security audit M2).
+  const direct = [];
   page.on("pageerror", (e) => problems.push(String(e)));
   page.on("console", (m) => {
     if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) problems.push(m.text());
   });
-  // The shell's IPC, for the one command the HUD holds (hud-voice). Only
-  // when a scenario asks for it: every other test runs with no __TAURI__
-  // at all, the way the page is served in a plain browser.
-  if (status.tauriInvoke) {
-    await page.addInitScript((mode) => {
+  // The shell's IPC, as the HUD holds it (capabilities/hud.json): the mic's
+  // summon_push_to_talk, and hud_proxy.rs's reads, chat and the mark, which
+  // this stands in for the way Rust does them - the same request to the
+  // backend, with the token ADDED HERE, never taken from the page (apps
+  // security audit M2). `noShell` serves the page the way a plain browser
+  // does, with no __TAURI__ at all; `tauriInvoke: "fail"` makes the mic's
+  // command refused.
+  if (!status.noShell) {
+    await page.addInitScript(({ mode, backend, hangs }) => {
+      // Captured before the bootstrap replaces window.fetch.
+      const origFetch = window.fetch.bind(window);
+      const shellHeaders = { "X-Jarvis-Client": "hud", "X-Jarvis-Token": "test-token" };
       window.__invokes = [];
-      window.__TAURI__ = { core: { invoke: (cmd, args) => {
-        window.__invokes.push([cmd, args]);
-        return mode === "fail" ? Promise.reject(new Error("not allowed on window")) : Promise.resolve(null);
+      class Channel { constructor() { this.onmessage = null; } }
+      window.__TAURI__ = { core: { Channel, invoke: async (cmd, args) => {
+        window.__invokes.push([cmd, cmd === "hud_chat" ? { body: args.body } : args]);
+        switch (cmd) {
+          case "summon_push_to_talk":
+            if (mode === "fail") throw new Error("not allowed on window");
+            return null;
+          case "hud_get": {
+            const r = await origFetch(backend + args.path, { headers: shellHeaders });
+            return { status: r.status, contentType: r.headers.get("Content-Type") || "",
+              route: r.headers.get("X-Jarvis-Route"), body: await r.text() };
+          }
+          case "hud_chat": {
+            const ch = args.onEvent;
+            const r = await origFetch(backend + "/api/chat", { method: "POST",
+              headers: { ...shellHeaders, "Content-Type": "application/json" },
+              body: JSON.stringify(args.body) });
+            ch.onmessage(JSON.stringify({ kind: "head", status: r.status,
+              contentType: r.headers.get("Content-Type") || "", route: r.headers.get("X-Jarvis-Route") }));
+            const text = await r.text();
+            // Whole lines, as hud_proxy.rs sends them.
+            for (const piece of text.split(/(?<=\n)/)) ch.onmessage(JSON.stringify({ kind: "data", text: piece }));
+            if (hangs) return new Promise(() => {});
+            ch.onmessage(JSON.stringify({ kind: "end" }));
+            return null;
+          }
+          case "hud_chat_cancel": return null;
+          case "mark_answer": {
+            const r = await origFetch(backend + "/api/feedback/mark", { method: "POST",
+              headers: { ...shellHeaders, "Content-Type": "application/json" },
+              body: JSON.stringify({ turn_id: args.turnId, mark: args.mark }) });
+            if ([404, 501, 503].includes(r.status)) return { available: false, status: r.status };
+            if (!r.ok) throw new Error(`the server answered HTTP ${r.status}`);
+            return r.json();
+          }
+          default:
+            throw new Error(`Command ${cmd} not allowed by ACL`);
+        }
       } } };
-    }, status.tauriInvoke);
+    }, { mode: status.tauriInvoke || "ok", backend: BACKEND, hangs: Boolean(status.chatHangs) });
   }
   // A browser's voice list, with one online voice and one local one, and
   // an utterance class that accepts them (the real one only takes real
@@ -132,9 +177,7 @@ async function openHud(browser, status, pageOptions = {}) {
       synth.cancel = () => {};
     }, status.voices);
   }
-  await page.addInitScript(BOOT
-    .replace("__JARVIS_BASE__", JSON.stringify(BACKEND))
-    .replace("__JARVIS_TOKEN__", JSON.stringify("test-token")));
+  await page.addInitScript(BOOT.replace("__JARVIS_BASE__", JSON.stringify(BACKEND)));
   const html = readFileSync(join(SRC, "jarvis_hud.html"), "utf8");
   await page.route("**/*", async (route) => {
     const req = route.request();
@@ -149,6 +192,7 @@ async function openHud(browser, status, pageOptions = {}) {
     }
     if (url.origin === BACKEND) {
       if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+      if ((await req.allHeaders())["x-jarvis-token"] !== "test-token") direct.push(`${req.method()} ${url.pathname}`);
       if (url.pathname === "/api/status") return route.fulfill({ status: 200, headers: cors, json: status });
       if (url.pathname === "/api/chat") {
         chats.push(JSON.parse(req.postData() || "{}"));
@@ -197,7 +241,7 @@ async function openHud(browser, status, pageOptions = {}) {
   });
   await page.goto(`${ORIGIN}/jarvis_hud.html`);
   await page.waitForTimeout(800);
-  return { page, problems, chats, marks, memoryReads, memoryWrites };
+  return { page, problems, chats, marks, memoryReads, memoryWrites, direct };
 }
 
 async function send(page, text) {
@@ -479,35 +523,123 @@ await check("the HUD says what the link is doing, live, under the brand", async 
   assert.deepEqual(problems, []);
 });
 
-await check("while stale, a HUD approval card cannot be clicked, and is not removed", async () => {
-  // The fetch refusal was already there; what happened next was the page
-  // printing "no longer waiting" over a card that WAS still waiting, and
-  // removing it. The click is now stopped before the page's handler runs.
-  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
-  await page.evaluate(() => {
-    const box = document.getElementById("approvals");
-    box.hidden = false;
-    box.innerHTML = '<div class="appr" data-id="7"><div class="det">send it</div>'
-      + '<div class="btns"><button class="yes">Approve</button><button class="no">Deny</button></div></div>';
-    window.__clicked = 0;
-    box.querySelector(".yes").onclick = () => { window.__clicked++; };
-    window.__jarvisFeed("link", { connected: true, stale: true });
+await check("a HUD approval card is shown but never answered in the HUD, stale or not (audit M2)", async () => {
+  // Approvals are answered in the Jarvis bar or the widget, through
+  // decide_approval, with Windows Hello and the stale check. The page's own
+  // Approve and Deny are hidden, their click is stopped, and the request is
+  // refused before it leaves the page - on a live link as much as a stale one.
+  const { page, problems, direct } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  for (const stale of [true, false]) {
+    await page.evaluate((stale) => {
+      const box = document.getElementById("approvals");
+      box.hidden = false;
+      box.innerHTML = '<div class="appr" data-id="7"><div class="det">send it</div>'
+        + '<div class="btns"><button class="yes">Approve</button><button class="no">Deny</button></div></div>';
+      window.__clicked = 0;
+      box.querySelector(".yes").onclick = () => { window.__clicked++; };
+      box.querySelector(".no").onclick = () => { window.__clicked++; };
+      window.__jarvisFeed("link", { connected: true, stale });
+    }, stale);
+    // Hidden, so not clickable by a person; a script can still click it.
+    await page.evaluate(() => {
+      document.querySelector("#approvals .yes").click();
+      document.querySelector("#approvals .no").click();
+    });
+    const out = await page.evaluate(() => ({
+      clicked: window.__clicked,
+      shown: getComputedStyle(document.querySelector("#approvals .yes")).display,
+      where: getComputedStyle(document.querySelector("#approvals .btns"), "::after").content,
+      card: document.querySelector("#approvals .appr .det").textContent,
+    }));
+    assert.equal(out.clicked, 0, `the page's own Approve or Deny ran (stale: ${stale})`);
+    assert.equal(out.shown, "none", "the HUD still shows an Approve button");
+    assert.match(out.where, /Jarvis bar or the widget/);
+    assert.equal(out.card, "send it", "the card itself should stay");
+  }
+  const refused = await page.evaluate(async () => {
+    const out = [];
+    for (const path of ["/api/approve", "/api/deny"]) {
+      for (const url of [path, JARVIS.url(path)]) {
+        const r = await window.fetch(url, { method: "POST",
+          headers: { "Content-Type": "application/json", "X-Jarvis-Client": "hud" },
+          body: JSON.stringify({ id: "7", by: "hud" }) });
+        out.push([url, r.status, (await r.json()).error]);
+      }
+    }
+    return out;
   });
-  await page.locator("#approvals .yes").click({ force: true });
-  const out = await page.evaluate(() => ({
-    clicked: window.__clicked,
-    stale: document.documentElement.classList.contains("jarvis-stale"),
-    opacity: getComputedStyle(document.querySelector("#approvals .yes")).opacity,
-  }));
-  assert.equal(out.clicked, 0, "the page's own Approve handler ran on a stale link");
-  assert.equal(out.stale, true);
-  assert.ok(Number(out.opacity) < 0.6, `the stale Approve button still looked live (opacity ${out.opacity})`);
-  // Live again: the same click reaches the page.
-  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
-  await page.locator("#approvals .yes").click();
-  assert.equal(await page.evaluate(() => window.__clicked), 1);
   await page.close();
+  for (const [url, code, error] of refused) {
+    assert.equal(code, 403, `${url} was not refused`);
+    assert.match(error, /Jarvis bar or the widget/);
+  }
+  assert.deepEqual(direct.filter((d) => /approve|deny/.test(d)), [], "an approval reached the backend");
   assert.deepEqual(problems, []);
+});
+
+await check("the HUD page holds no token, and every request it makes goes through the shell (audit M2)", async () => {
+  const { page, problems, chats, direct } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const log = await send(page, "hi");
+  const held = await page.evaluate(() => ({
+    token: JARVIS.token,
+    header: JARVIS.headers()["X-Jarvis-Token"],
+    stored: (() => { try { return localStorage.getItem("jarvis.token"); } catch (e) { return "?"; } })(),
+    invoked: [...new Set(window.__invokes.map((c) => c[0]))].sort(),
+    reads: window.__invokes.filter((c) => c[0] === "hud_get").map((c) => c[1].path.split("?")[0]),
+  }));
+  await page.close();
+  assert.equal(held.token, "", "the page was given a token");
+  assert.equal(held.header, undefined);
+  assert.equal(held.stored, null);
+  assert.deepEqual(direct, [], `the page reached the backend by itself: ${JSON.stringify(direct)}`);
+  assert.equal(chats.length, 1, "the chat did not reach the backend through the shell");
+  assert.ok(log.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."), JSON.stringify(log));
+  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get"].includes(c)), [],
+    `the HUD called ${JSON.stringify(held.invoked)}`);
+  // Every read is one hud_proxy.rs allows (HUD_GET_PATHS and /api/retrieve).
+  const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
+  const list = /HUD_GET_PATHS: \[&str; \d+\] = \[([\s\S]*?)\];/.exec(rust)[1];
+  const allowed = [...list.matchAll(/"([^"]+)"/g)].map((m) => m[1]).concat(["/api/retrieve"]);
+  for (const path of held.reads) assert.ok(allowed.includes(path), `the page reads ${path}, which Rust refuses`);
+  assert.ok(held.reads.includes("/api/status"), `no status read through the shell: ${held.reads}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("a script in the HUD cannot send anything but the page's own requests (audit M2)", async () => {
+  const { page, direct } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const out = await page.evaluate(async () => {
+    const res = [];
+    for (const [method, path] of [["POST", "/api/shutdown"], ["POST", "/api/models/switch"],
+      ["POST", "/api/memory/forget"], ["PUT", "/api/chat"], ["DELETE", "/api/history"]]) {
+      const r = await window.fetch(JARVIS.url(path), { method, body: "{}" });
+      res.push([method, path, r.status]);
+    }
+    return res;
+  });
+  await page.close();
+  for (const [method, path, code] of out) assert.equal(code, 403, `${method} ${path} was not refused`);
+  assert.deepEqual(direct, []);
+});
+
+await check("stopping a HUD answer stops it in Rust too (audit M2)", async () => {
+  const { page } = await openHud(browser, { jarvis: false, ollama: true, proxy: false, chatHangs: true });
+  const out = await page.evaluate(async () => {
+    const ctrl = new AbortController();
+    const res = await window.fetch(JARVIS.url("/api/chat"), { method: "POST", signal: ctrl.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hi" }], stream: true }) });
+    const reader = res.body.getReader();
+    const first = new TextDecoder().decode((await reader.read()).value);
+    ctrl.abort("timeout");
+    let why = null;
+    try { await reader.read(); } catch (e) { why = String(e && e.message || e); }
+    return { status: res.status, first, why, cancels: window.__invokes.filter((c) => c[0] === "hud_chat_cancel").length };
+  });
+  await page.close();
+  assert.equal(out.status, 200);
+  assert.match(out.first, /Hello from the backend/);
+  assert.equal(out.why, "timeout", "the page's own abort reason did not reach its reader");
+  assert.equal(out.cancels, 1, "the answer kept running in Rust");
 });
 
 await check("memory cards are decided in the Brain: the HUD only says how many wait, and where", async () => {
@@ -546,7 +678,7 @@ await check("memory cards are decided in the Brain: the HUD only says how many w
   assert.deepEqual(problems, []);
 });
 
-await check("a HUD answer with an id gets a right/wrong mark, posted to the backend", async () => {
+await check("a HUD answer with an id gets a right/wrong mark, sent through the shell", async () => {
   const turnId = "0123456789abcdef0123456789abcdef";
   const { page, problems, marks } = await openHud(browser,
     { jarvis: false, ollama: true, proxy: false, turnId });
@@ -593,7 +725,7 @@ await check("the HUD mic opens the quickbar's push-to-talk, and records nothing 
     pressed: document.getElementById("mic").getAttribute("aria-pressed"),
   }));
   await page.close();
-  assert.deepEqual(after.invokes.map((c) => c[0]), ["summon_push_to_talk"],
+  assert.deepEqual(after.invokes.map((c) => c[0]).filter((c) => c !== "hud_get"), ["summon_push_to_talk"],
     "the mic must ask the shell for the quickbar's push-to-talk, and nothing else");
   assert.equal(after.listening, false, "the page's own (browser) recogniser started");
   assert.equal(after.pressed, "false");
@@ -607,7 +739,7 @@ await check("the HUD mic opens the quickbar's push-to-talk, and records nothing 
 await check("a refused or missing shell says where the mic is, instead of doing nothing", async () => {
   for (const mode of ["fail", undefined]) {
     const { page } = await openHud(browser,
-      { jarvis: false, ollama: true, proxy: false, tauriInvoke: mode });
+      { jarvis: false, ollama: true, proxy: false, tauriInvoke: mode, noShell: mode === undefined });
     await page.locator("#mic").click();
     await page.waitForTimeout(200);
     const log = await page.evaluate(() => [...document.querySelectorAll("#log .msg.system .body")]
@@ -618,10 +750,25 @@ await check("a refused or missing shell says where the mic is, instead of doing 
   }
 });
 
-await check("the HUD holds exactly one app command, and it cannot record", async () => {
+await check("the HUD holds the mic's command and its reads, chat and mark - and cannot record or approve", async () => {
   const cap = JSON.parse(readFileSync(join(HERE, "..", "src-tauri", "capabilities", "hud.json"), "utf8"));
   assert.deepEqual(cap.permissions,
-    ["core:default", "core:webview:allow-set-webview-zoom", "hud-voice"]);
+    ["core:app:default", "core:event:allow-listen", "core:event:allow-unlisten",
+      "core:path:default", "core:webview:default", "core:window:default",
+      "core:webview:allow-set-webview-zoom", "hud-voice", "hud-link"]);
+  assert.match(cap.description, /holds NO pairing token/);
+  assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
+  const surfaces = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
+  const link = surfaces.slice(surfaces.indexOf('identifier = "hud-link"'));
+  const linkPerms = link.slice(link.indexOf("permissions = ["), link.indexOf("]") + 1);
+  assert.deepEqual(linkPerms.match(/allow-[a-z-]+/g),
+    ["allow-hud-get", "allow-hud-chat", "allow-hud-chat-cancel", "allow-mark-answer"]);
+  // The token is never put in the page.
+  const lib = readFileSync(join(HERE, "..", "src-tauri", "src", "lib.rs"), "utf8");
+  assert.doesNotMatch(BOOT, /__JARVIS_TOKEN__/);
+  assert.doesNotMatch(lib, /__JARVIS_TOKEN__/);
+  const configure = lib.slice(lib.indexOf("pub fn configure_hud("), lib.indexOf("// Global hotkeys"));
+  assert.doesNotMatch(configure, /jarvis_token_for/, "configure_hud gives the page the token");
   const toml = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
   const set = toml.slice(toml.indexOf('identifier = "hud-voice"'));
   const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1);

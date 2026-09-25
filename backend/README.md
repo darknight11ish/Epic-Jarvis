@@ -2674,11 +2674,12 @@ refusing to boot over the desktop's half.
 
 Two things it does not change, both worth knowing:
 
-- **A backend started by hand still needs `JARVIS_HUD_ORIGINS`.** The HUD page
-  is served from `http://tauri.localhost`, which the server's allowlist cannot
-  guess. The desktop passes it when it starts the backend itself
-  (`sidecar.rs`); from a terminal, set
-  `$env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"` before `jarvis_hud.py`.
+- **`JARVIS_HUD_ORIGINS` is no longer needed** (since 2026-09-25, apps
+  security audit M2). The desktop's HUD page used to call the backend from
+  its webview, whose origin `http://tauri.localhost` had to be allowed. Its
+  requests are now made by the desktop app's Rust side (`hud_proxy.rs`),
+  which sends no `Origin`, like every other window's, so nothing needs
+  setting and `sidecar.rs` no longer sets it.
 - **`/api/shutdown` arriving on the loopback listener** may only stop that
   listener, depending on how `_install_shutdown` reaches the server. The
   desktop's supervised stop already kills the process tree when the backend
@@ -4783,7 +4784,7 @@ For a British male voice add `tts_speaker_id = 9` under `[voice]` in
 |---|---|---|
 | waiting for "hey Jarvis" (phone) | on the phone: openWakeWord's "hey jarvis" model through ONNX Runtime | **nothing**. The microphone is open; Android shows its microphone dot and a notification the whole time |
 | waiting for "hey Jarvis" (desktop) | the desktop app cuts the room's sound into sentences by loudness; the Jarvis server **on the same PC** runs the model on each | each sentence goes to the PC's own Jarvis over loopback (`127.0.0.1`) and is dropped there unless it holds "hey Jarvis" - not voice-checked, not transcribed, not kept. The desktop refuses to listen at all if its server address is not this PC |
-| it heard "hey Jarvis" | | the phone sends that sentence (from 2 s before the phrase to your pause) to your PC over Tailscale. **Never anywhere else** |
+| it heard "hey Jarvis" | | the phone sends that sentence (from 2 s before the phrase to your pause) to your PC over your private network (Tailscale or NordVPN Meshnet). **Never anywhere else** |
 | on the PC | `jarvis_speech.hear()`: Silero VAD -> "hey Jarvis" checked again -> your voice checked -> speech-to-text -> the sentence must start with "hey Jarvis" | the words go to Jarvis like typed text. "Hey Jarvis." on its own opens an 8-second window for the next sentence |
 
 No company's servers are involved at any point, and no API key is needed.

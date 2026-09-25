@@ -23,6 +23,7 @@ pub mod autostart;
 pub mod brain;
 pub mod commands;
 pub mod hotkeys;
+pub mod hud_proxy;
 pub mod lock;
 pub mod logfile;
 pub mod proctree;
@@ -249,12 +250,16 @@ pub fn emit_all<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, paylo
 
 /// Pushes a value into the HUD page by evaluating a call to its feed.
 ///
-/// The HUD is the one window that cannot receive a Tauri event. `jarvis_hud
-/// .html` carries its own Content-Security-Policy meta tag whose `connect-src`
-/// lists the backend's loopback origins and nothing else, and Tauri's IPC on
-/// Windows is a fetch to `http://ipc.localhost` — so `listen` and `invoke` are
-/// both refused inside that page before the request leaves the webview. An
-/// `eval` from the host is not a fetch and is not subject to the page's policy.
+/// Why a feed and not a Tauri event: this comment used to say `listen` and
+/// `invoke` are both refused inside the HUD, because `jarvis_hud.html`'s own
+/// Content-Security-Policy does not list `http://ipc.localhost`. That was
+/// wrong (apps security audit M2): when that fetch is refused, Tauri's
+/// `ipc-protocol.js` falls back to `window.ipc.postMessage`, which no CSP
+/// governs, so IPC works from the HUD - it is how the mic button's
+/// `summon_push_to_talk` and the page's reads (`hud_proxy.rs`) reach Rust.
+/// What limits the HUD is its capability file, `capabilities/hud.json`.
+/// The feed stays because it was here first and delivers the shell's one
+/// event stream to the page's `EventSource` shim without a second listener.
 ///
 /// `serde_json` is what makes it safe: the payload is a JSON literal, escaped
 /// by the serialiser, spliced into a call to a function the initialisation
@@ -276,26 +281,23 @@ pub fn push_to_hud<S: serde::Serialize>(app: &AppHandle, channel: &str, payload:
     }
 }
 
-/// Gives the HUD page the current base and token, if it holds different ones.
+/// Gives the HUD page the current base, if it holds a different one - and
+/// never a token.
 ///
-/// The initialisation script (`hud_bootstrap.js`) injects them once, when the
-/// window is built - and on a first launch that is BEFORE the backend has
-/// started and made its token, so the page got an empty token and
-/// every request it made was refused (401) until the app was restarted. The
-/// page-load fallback that follows only re-sent when the page had no base,
-/// and it always has one. So this runs on every page load and on every link
-/// change (`stream::publish_link`) - the stream connecting is the moment the
-/// backend, and so its token, certainly exists - and does nothing when
-/// the page already agrees. The token goes only into the page, as the
-/// bootstrap already puts it; it is not logged.
+/// The page used to be given the pairing token here and in the bootstrap,
+/// so any script running in it could call the whole API (apps security
+/// audit M2). Now its requests go through `hud_proxy.rs`, which adds the
+/// token in Rust, and the page is configured with an EMPTY token, on every
+/// page load and every link change, so a token some earlier version or a
+/// browser session left in the page is wiped too. The base is still set:
+/// the page builds its URLs from it, and the bootstrap's `fetch` shim reads
+/// the path back out of them.
 pub fn configure_hud(app: &AppHandle) {
     let Some(hud) = app.get_webview_window(HUD_LABEL) else {
         return;
     };
     let base = commands::jarvis_base(app);
-    let token = commands::jarvis_token_for(app).unwrap_or_default();
-    let (Ok(base), Ok(token)) = (serde_json::to_string(&base), serde_json::to_string(&token))
-    else {
+    let Ok(base) = serde_json::to_string(&base) else {
         return;
     };
     // `typeof` guards the reference rather than `window.JARVIS`, because a
@@ -303,9 +305,9 @@ pub fn configure_hud(app: &AppHandle) {
     // `window`.
     let script = format!(
         "if (typeof JARVIS !== 'undefined' && JARVIS && typeof JARVIS.set === 'function' \
-         && (JARVIS.base !== {base} || JARVIS.token !== {token})) {{ \
+         && (JARVIS.base !== {base} || JARVIS.token !== '')) {{ \
          if (typeof JARVIS.forget === 'function') JARVIS.forget(); \
-         JARVIS.set({base}, {token}, false); }}"
+         JARVIS.set({base}, '', false); }}"
     );
     if let Err(err) = hud.eval(&script) {
         eprintln!("[jarvis] unable to configure the HUD page: {err}");
@@ -511,20 +513,15 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     }
 
     let base = commands::jarvis_base(app);
-    let token = commands::jarvis_token_for(app).unwrap_or_default();
-    // `serde_json` is what makes this safe: the base and token are values a
-    // user typed into a settings field, and they are spliced into JavaScript.
-    // Serialising them as JSON string literals is exactly the escaping that
-    // needs, quotes and backslashes included.
-    let script = HUD_BOOTSTRAP
-        .replace(
-            "__JARVIS_BASE__",
-            &serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
-        )
-        .replace(
-            "__JARVIS_TOKEN__",
-            &serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".into()),
-        );
+    // `serde_json` is what makes this safe: the base is a value a user typed
+    // into a settings field, and it is spliced into JavaScript. Serialising
+    // it as a JSON string literal is exactly the escaping that needs, quotes
+    // and backslashes included. No token: the page does not get one (apps
+    // security audit M2; hud_proxy.rs makes its requests).
+    let script = HUD_BOOTSTRAP.replace(
+        "__JARVIS_BASE__",
+        &serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
+    );
 
     // Started by hand, the HUD is what you came for, so it opens focused.
     // Started by Windows at login it must not: a 1280x820 window taking focus
@@ -544,6 +541,11 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     // Hidden, exactly as for a login start: fully built and warm, reachable
     // from the tray or the hotkey the moment the owner does want it.
     let hidden = at_login || launched_by_deny();
+    // App lock on: a restart starts locked (lock.rs), and the HUD is covered
+    // (apps security audit M3), so it is built hidden and shown through the
+    // lock below - Windows Hello first. Not at login or on a Deny launch,
+    // where it stays hidden anyway.
+    let lock_first = !hidden && lock::current(app).app_lock;
 
     tauri::WebviewWindowBuilder::new(
         app,
@@ -559,17 +561,25 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     .always_on_top(false)
     .skip_taskbar(false)
     .resizable(true)
-    .visible(!hidden)
-    .focused(!hidden)
+    .visible(!hidden && !lock_first)
+    .focused(!hidden && !lock_first)
     .shadow(true)
     .theme(Some(tauri::Theme::Dark))
     .initialization_script(&script)
     .build()
     .map_err(|e| format!("{e}"))?;
 
+    if lock_first {
+        if let Err(err) = windows::show_hud(app) {
+            eprintln!("[jarvis] the HUD could not be shown through the lock: {err}");
+        }
+    }
+
     logfile::log(&format!(
         "[jarvis] HUD window created for {base}{}",
-        if at_login {
+        if lock_first {
+            " (hidden until Windows Hello: App lock is on)"
+        } else if at_login {
             " (hidden: started at login)"
         } else if hidden {
             " (hidden: launched by a notification Deny, which must not open the app)"
@@ -611,10 +621,10 @@ pub fn run() {
                 return;
             }
             logfile::log("[jarvis] second launch folded into the running instance");
-            if let Some(hud) = app.get_webview_window(HUD_LABEL) {
-                let _ = hud.show();
-                let _ = hud.unminimize();
-                let _ = hud.set_focus();
+            // Through the app lock, like every other way to the HUD (apps
+            // security audit M3): with it on, Windows Hello is asked first.
+            if let Err(err) = windows::show_hud(app) {
+                eprintln!("[jarvis] second launch: HUD unavailable: {err}");
             }
         }));
     }
@@ -653,6 +663,8 @@ pub fn run() {
         // Windows Hello: when the owner was last here, and whether the
         // Brain's private lists are shown (lock.rs).
         .manage(lock::LockState::default())
+        // The HUD's own chat stream, apart from the Jarvis bar's (hud_proxy.rs).
+        .manage(hud_proxy::HudChatState::default())
         // Every window's focus changes reach the app lock: a Jarvis bar,
         // Brain or Settings window focused again after the owner was away is
         // hidden and asks Windows Hello (lock.rs `on_window_event`).
@@ -671,6 +683,14 @@ pub fn run() {
             commands::temporary_chat_available,
             commands::cancel_chat,
             commands::decide_approval,
+            // The HUD page's requests, made in Rust so the page holds no
+            // token (apps security audit M2; hud_proxy.rs).
+            hud_proxy::hud_get,
+            hud_proxy::hud_chat,
+            hud_proxy::hud_chat_cancel,
+            // App lock and the widget (apps security audit M3).
+            commands::get_app_lock,
+            commands::open_approval_in_quickbar,
             // The five `jarvis-link.js` has invoked since before they
             // existed. Without these lines every task-control button and the
             // approval note failed at the Tauri boundary, which reads to the

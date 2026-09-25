@@ -2,19 +2,19 @@
    the page itself: jarvis_hud.html is vendored byte-identical from the backend
    and not ours to edit.
 
-   While the event stream is stale the approval queue cannot be confirmed, so
-   nothing may be answered (rule 4). The bootstrap refuses the click itself;
-   this makes the buttons look refused before anyone clicks, and says why.
-   No colours of its own - it only dims and inherits - so the HUD's palette
-   stays the HUD's. */
+   Approvals are not answered in the HUD (apps security audit M2): they are
+   answered in the Jarvis bar or the widget, where Windows Hello and the
+   stale-link check apply. The page's own Approve and Deny are hidden, and
+   the card says where to go instead. The bootstrap also refuses the click
+   and the request. No colours of its own - it only inherits - so the HUD's
+   palette stays the HUD's. */
 
-.jarvis-stale #approvals .appr .btns button {
-  opacity: 0.4;
-  cursor: not-allowed;
+#approvals .appr .btns button {
+  display: none;
 }
 
-.jarvis-stale #approvals .appr .btns::after {
-  content: "Not connected — nothing can be answered until it reconnects.";
+#approvals .appr .btns::after {
+  content: "Answer this in the Jarvis bar or the widget.";
   align-self: center;
   font-size: 12px;
   opacity: 0.85;

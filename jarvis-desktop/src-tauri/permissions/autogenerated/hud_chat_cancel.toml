@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-chat-cancel"
+description = "Enables the hud_chat_cancel command without any pre-configured scope."
+commands.allow = ["hud_chat_cancel"]
+
+[[permission]]
+identifier = "deny-hud-chat-cancel"
+description = "Denies the hud_chat_cancel command without any pre-configured scope."
+commands.deny = ["hud_chat_cancel"]

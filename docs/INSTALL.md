@@ -587,7 +587,7 @@ hand instead. One line (put in your own `100.x` address, and change the path
 if your backend folder is elsewhere):
 
 ```powershell
-cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:JARVIS_HUD_BIND = "<your 100.x address>"; $env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"; py -3 jarvis_hud.py
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:JARVIS_HUD_BIND = "<your 100.x address>"; py -3 jarvis_hud.py
 ```
 
 **Do not set `HUD_TOKEN` here.** This page used to tell you to invent one,
@@ -596,10 +596,10 @@ Credential Manager, and the desktop app and the phone only know the saved
 one - so both would be locked out. Leave it unset and the backend uses the
 saved token.
 
-`JARVIS_HUD_ORIGINS` is the one the desktop also sets for a backend it starts
-itself. Without it the server refuses every request from the desktop's HUD
-window as cross-origin — the window's pages come from `http://tauri.localhost`,
-which the server has no way to guess.
+`JARVIS_HUD_ORIGINS` used to be in that line too, for the desktop's HUD
+window. It is not needed any more (2026-09-25): the HUD's requests are now
+made by the desktop app itself, not by the window's page, so the server
+never sees the window's origin. If you still set it, it does no harm.
 
 The server refuses to start on a non-loopback bind with no token, which is
 correct. Its refusal message tells you to edit `bind_address` in

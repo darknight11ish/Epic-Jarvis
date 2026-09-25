@@ -286,4 +286,24 @@ class SecurityRulesTest {
         session.lockTurnedOn()
         assertFalse(session.locked(Security(appLock = true)))
     }
+
+    @Test
+    fun `screenshots are blocked while App lock or hidden lists is on, and only then`() {
+        assertFalse("defaults block nothing", SecurityRules.blockScreenCapture(Security()))
+        assertTrue(SecurityRules.blockScreenCapture(Security(appLock = true)))
+        assertTrue(SecurityRules.blockScreenCapture(Security(privateLists = true)))
+        assertTrue(SecurityRules.blockScreenCapture(Security(appLock = true, privateLists = true)))
+        // The other settings are about approvals and how to check, not about
+        // what is on screen: on their own they block nothing.
+        assertFalse(SecurityRules.blockScreenCapture(Security(approvals = ApprovalCheck.EVERY)))
+        assertFalse(SecurityRules.blockScreenCapture(Security(method = CheckMethod.FINGERPRINT_ONLY)))
+        assertFalse(SecurityRules.blockScreenCapture(Security(relockAfter = RelockAfter.NOW)))
+        // Whether the app is locked right now does not matter: the rule is
+        // the setting, so an unlocked, in-use Jarvis is covered too.
+        val session = LockSession()
+        session.lockTurnedOn()
+        val on = Security(appLock = true)
+        assertFalse(session.locked(on))
+        assertTrue(SecurityRules.blockScreenCapture(on))
+    }
 }

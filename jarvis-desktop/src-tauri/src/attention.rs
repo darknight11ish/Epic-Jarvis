@@ -161,6 +161,9 @@ async fn get_json_status(
         .connect_timeout(TIMEOUT)
         .timeout(TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|_| None)?;
     let headers = commands::jarvis_headers(app).map_err(|_| None)?;
@@ -205,6 +208,9 @@ async fn post_json(
         .connect_timeout(TIMEOUT)
         .timeout(TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("could not build an HTTP client: {e}"))?;
     let headers = commands::jarvis_headers(app)?;

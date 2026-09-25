@@ -14,7 +14,8 @@ system instead of into it.
 ## 1. What it is
 
 A local-first assistant for one person, on one Windows 11 workstation, with an
-Android companion reached over Tailscale. A Python HTTP server does the work;
+Android companion reached over a private network (Tailscale, or NordVPN
+Meshnet). A Python HTTP server does the work;
 a Tauri 2 shell (Rust + WebView2) is the desktop face; the model runs in Ollama
 on the machine's own GPU.
 
@@ -31,8 +32,14 @@ it works.
 
 1. **Everything private stays on the local model.** Cloud lanes exist; what
    may reach them is bounded and enforced in code, not by convention.
-2. **No public tunnel, ever.** Reachability is Tailscale. A non-loopback bind
-   with no `HUD_TOKEN` refuses to start — `SystemExit(2)`, not a warning.
+2. **No public tunnel, ever.** Reachability is a private, encrypted
+   device-to-device network: Tailscale, or NordVPN Meshnet. Both give each
+   device an address in `100.64.0.0/10` that only the owner's own devices
+   can reach, and neither is a public tunnel. The desktop's bind-address
+   check accepts exactly that range (`validate_bind_address`, commands.rs),
+   and the phone allows plain HTTP only to loopback, `*.ts.net` and `*.nord`
+   names (`network_security_config.xml`). A non-loopback bind with no
+   `HUD_TOKEN` refuses to start — `SystemExit(2)`, not a warning.
 3. **No auto-approve anywhere, and no approve-all control anywhere.** One
    action, one decision. Do not build one.
 
@@ -534,9 +541,38 @@ any window holding the capability can call them, so a check that lives only in
 the webview is not a check. `decide_approval` consults link staleness in Rust
 for exactly that reason.
 
-**Android** (`jarvis-client/`): Kotlin, native, over Tailscale. It is a
+No desktop page holds the pairing token. The HUD page (vendored from the
+backend) used to be given it; since the apps security audit (M2,
+2026-09-25) its requests go through Rust (`hud_proxy.rs`: a fixed list of
+reads, its chat, the right/wrong mark), and approvals are not answered in
+the HUD at all - only in the Jarvis bar and the widget, through
+`decide_approval`. No window may `emit` events to the others either (M1).
+
+**Android** (`jarvis-client/`): Kotlin, native, over Tailscale or NordVPN
+Meshnet. It is a
 remote, not a second brain. It renders, it decides one thing at a time, it
 does not hold its own copy of state.
+
+### App lock: what it covers on each app
+
+Both apps have an App lock (off by default) that asks the owner's own check -
+Windows Hello on the PC, the fingerprint or phone PIN on the phone - before
+Jarvis opens, and again after "Lock again after". What it covers, since the
+apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
+
+- **Desktop:** the Jarvis bar, the Brain, Settings **and the HUD window**
+  (`lock.rs` `Covered`; every way the HUD is shown - the tray, a second
+  launch, a normal start - goes through `lock::may_open`). The widget stays
+  on the desktop, but while App lock is on its approval card shows only the
+  notice's title, and its Approve opens the Jarvis bar to approve there;
+  `decide_approval` refuses an Approve from the widget in Rust as well. Deny
+  works from the widget, as from the phone's.
+- **Phone:** the whole app. The home-screen widget only ever shows the
+  `notice` text and offers Deny only, lock or not.
+- **Screenshots (phone):** while App lock or "Hide memory lists and chat
+  history" is on, Jarvis cannot be screenshotted, screen-recorded or cast
+  (`FLAG_SECURE`, `SecurityRules.blockScreenCapture`). Phone only for now -
+  see "One-sided on purpose" below.
 
 `jarvis-android/` is the older app, kept for reference only: it speaks a
 protocol the backend does not have, so it cannot talk to Jarvis. Its safe
@@ -651,6 +687,7 @@ backend routes, in both directions; the rest are listed here only.
 | what | why |
 |---|---|
 | The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
+| **Blocking screenshots while a lock is on** (`FLAG_SECURE`, `SecurityRules.blockScreenCapture`) | **Undecided on the desktop - the owner's call.** The owner decided it for the phone (apps security audit L5, 2026-09-25), where screenshots, screen recording and casting are all a tap away. Windows could do the same for Jarvis's windows (Tauri's `set_content_protected`, which keeps a window out of screenshots, recordings and screen sharing), but it was not part of that decision and is not built. |
 
 **The voice flow is in both apps since 2026-09-25** (`docs/JARVIS-API.md`
 §17 part 5; it was backend-only until then): interrupting Jarvis by talking
@@ -858,7 +895,7 @@ Do not relitigate these without new evidence.
 
 | | |
 |---|---|
-| Reachability | Tailscale, properly. Never a public tunnel. |
+| Reachability | Tailscale or NordVPN Meshnet, properly. Never a public tunnel. |
 | Face / appearance | Rendered locally on each device; the server is a sync channel only. |
 | Voice | sherpa-onnx for STT (Parakeet TDT 0.6B v2), speaker verification, Kokoro TTS, Silero VAD. 0 GB VRAM. First audio is slow: from the owner finishing to Jarvis's first sound is roughly **2.5–4 s** today, with the voice on the processor. That is an estimate - the model's part (first word, first sentence) has not been measured; making the first sentence's sound alone takes about 1.3–1.6 s (measured in the dev container, not the owner's PC). The real figure is in `flow.timings` and `flow.summary` of `/api/voice/status` on the owner's PC (`backend/README.md`, "The voice flow"). Design a "thinking" state that survives several seconds of silence. Both apps make the next sentence's sound while the current one plays (one ahead), so there is no silence *between* sentences as long as making the next one takes less time than saying the current one (a simulation in the dev container: 3.5 s of mid-answer silence became 0 s; a short sentence followed by a long one can still leave a pause). Both apps also start speaking at the **first comma** of an answer once the phrase is long enough - the first piece only, the same rule on both (`jarvis-desktop/src/speech-pieces.js`, `SpeechText.kt`, one shared list of cases); in the dev container that moved the first sound from 2.04 s to 1.23 s, at the cost of one short pause after that first phrase. And a question **said** out loud is answered in a spoken style - a short first sentence, one to three sentences, no lists or markdown - by one line the PC adds for this PC's own model only (`jarvis_agent.SPOKEN_NOTE`, `JARVIS-API.md` section 17); typed questions are unchanged. The "One moment." clip's suggested 1000 ms (`JARVIS-API.md` section 17) would therefore fire on most spoken turns at today's speeds. **The wake word is the exception**: openWakeWord's `hey_jarvis` model on ONNX Runtime, on the phone and the PC alike - sherpa-onnx has no Android library on Maven Central/Google, and the TOML and `WAKE-WORD.md` had already chosen openWakeWord. Measured side by side in `backend/README.md`. **Custom voices** (2026-09-24, the owner's decision): ZipVoice via sherpa-onnx on the processor, and F5-TTS as an optional second-card "better voice" in its own process (on demand, stopped when idle and in standby); Kokoro stays the fallback. Adding a voice and switching to one are each a card; a voice that sounds like the owner's is refused (`backend/jarvis_voices.py`, `JARVIS-API.md` section 15). |
 | Cloud / API keys | Allowed, **per use, with permission**. Jarvis works out what it genuinely needs the internet for, explains it, and asks. No standing grant. Enforced in `jarvis_router.choose()` since 2026-09-24 (the owner chose "ask each time"): without the owner's yes for that one question it answers locally and only names the cloud lane in `offer`; a yes never carries a private, tainted or picture turn out. Before that, the router escalated long questions by itself. |

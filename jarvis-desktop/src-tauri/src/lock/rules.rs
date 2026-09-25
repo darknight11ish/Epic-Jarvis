@@ -43,6 +43,10 @@ pub const NOT_SET_UP: &str = "Windows Hello is not set up on this PC, and a lock
 pub const TURN_ON_NEEDS_HELLO: &str = "Windows Hello is not set up on this PC, so this lock \
      cannot be turned on - it could never be unlocked again. Set up Windows Hello in Windows \
      Settings, Accounts, Sign-in options (a PIN is enough), then try again.";
+/// Why the widget did not approve while App lock is on (apps security audit
+/// M3). No "already" in it (see above), and it says what happens instead.
+pub const WIDGET_APPROVES_IN_BAR: &str = "App lock is on, so approvals are made in the Jarvis \
+     bar, not the widget. The Jarvis bar is opening - approve it there";
 pub const PRIVATE_STILL_HIDDEN: &str = "What Jarvis remembers about you is hidden. Press Show \
      on the Brain's Memory tab and confirm it is you with Windows Hello first.";
 
@@ -70,7 +74,8 @@ pub enum ApprovalCheck {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Security {
-    /// Opening the Jarvis bar, the Brain or Settings needs Windows Hello.
+    /// Opening the Jarvis bar, the Brain, Settings or the HUD needs Windows
+    /// Hello, and the widget approves nothing (its Approve opens the bar).
     pub app_lock: bool,
     /// How long away before the lock asks again. One of [`RELOCK_CHOICES`].
     pub relock_after_secs: u32,
@@ -570,6 +575,7 @@ mod tests {
             COULD_NOT_SHOW,
             NOT_SET_UP,
             TURN_ON_NEEDS_HELLO,
+            WIDGET_APPROVES_IN_BAR,
         ] {
             assert!(!said.to_lowercase().contains("already"), "{said}");
             assert!(!said.contains("409"), "{said}");

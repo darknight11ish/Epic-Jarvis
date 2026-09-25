@@ -179,6 +179,10 @@ const state = {
    *  comment on `sendTaskAction` before changing that - it is the one
    *  honesty rule this whole feature exists to hold. */
   taskActivity: "idle",
+  /** App lock is on (Settings, Security). While it is, an approval card
+   *  here shows the notice's title only, and Approve opens the Jarvis bar -
+   *  behind the lock - instead of approving. See `applyAppLock`. */
+  appLock: false,
 };
 
 /**
@@ -473,6 +477,58 @@ function approvalDetail(approval) {
   return "No detail supplied.";
 }
 
+/* App lock and this window (apps security audit M3; the owner's decision,
+ * 2026-09-25). The widget sits on the desktop outside the lock, where anyone
+ * at the PC can read it. So while App lock is on its approval card shows only
+ * the notice's short title - never `detail`, `prompt`, the rush quote or the
+ * options, which can quote an email or a file - and its Approve opens the
+ * Jarvis bar, which asks Windows Hello before it shows, to approve there.
+ * Deny stays here, as on the phone's widget: refusing never needs the lock.
+ * Rust holds the same rule in `decide_approval`, so this is the courtesy and
+ * that is the gate. */
+const LOCKED_TITLE = "Jarvis is waiting for your approval";
+const LOCKED_DETAIL = "App lock is on, so what this is for is shown in the Jarvis bar, not here.";
+const LOCKED_APPROVE = "Approve in the Jarvis bar";
+
+/** The one line shown about a card while App lock is on. */
+function lockedTitle(approval) {
+  const title = approval && approval.notice && typeof approval.notice.title === "string"
+    ? approval.notice.title.trim()
+    : "";
+  return title ? clip(title, 80) : LOCKED_TITLE;
+}
+
+/** App lock turned on or off (read at start, then `security-changed`). */
+function applyAppLock(on) {
+  const next = Boolean(on);
+  if (next === state.appLock) return;
+  state.appLock = next;
+  // Repaint the card on screen under the new rule. Same id, so nothing is
+  // announced again and a half-typed note is kept.
+  if (state.approval) openApproval(state.approval);
+}
+
+/** Whether App lock is on. Fails closed: a read that fails is treated as on,
+ *  which only means Approve opens the Jarvis bar. */
+async function readAppLock() {
+  try {
+    return (await invokeStrict("get_app_lock")) !== false;
+  } catch (error) {
+    console.error("[widget] could not read whether App lock is on:", error);
+    return true;
+  }
+}
+
+/** Approve while App lock is on: open the Jarvis bar on this card. */
+async function approveInBar() {
+  flash("Opening the Jarvis bar - approve it there.");
+  try {
+    await invokeStrict("open_approval_in_quickbar");
+  } catch (error) {
+    flash(`${String((error && error.message) || error)} - nothing was decided.`, "bad");
+  }
+}
+
 /**
  * Renders the gate.
  *
@@ -487,24 +543,33 @@ function openApproval(approval) {
   if (state.decided && state.decided !== approval.id) state.decided = null;
   // The gate no longer claims `alertdialog`, so it announces itself — with the
   // risk line, which is the part that changes the decision.
+  const locked = state.appLock;
   if (!state.approval || state.approval.id !== approval.id) {
     announce(
-      `Approval required: ${approval.action}. ${riskLine(approval.risk)}.`,
+      `Approval required: ${locked ? lockedTitle(approval) : approval.action}. ${riskLine(approval.risk)}.`,
       "assertive"
     );
   }
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
-  dom.apprAction.textContent = approval.action;
+  dom.apprAction.textContent = locked ? lockedTitle(approval) : approval.action;
   // textContent, never innerHTML: this string comes from a model.
-  dom.apprDetail.textContent = approvalDetail(approval);
+  dom.apprDetail.textContent = locked ? LOCKED_DETAIL : approvalDetail(approval);
+  dom.btnApprYes.textContent = locked ? LOCKED_APPROVE : "Approve";
+  dom.btnApprYes.title = locked
+    ? "App lock is on: opens the Jarvis bar, which asks Windows Hello, to approve there"
+    : "";
+  // A note changes the plan, so it waits for the unlocked Jarvis bar too.
+  const noteRow = dom.apprNoteInput.closest(".appr-note-row");
+  if (noteRow) noteRow.hidden = locked;
   dom.apprRisk.textContent = riskLine(approval.risk);
   dom.apprRisk.dataset.reversible = approval.risk ? approval.risk.reversible : "no";
 
   // Why this is being asked at all. `text` already carries its own "(4th time
   // today)" when the source has tripped this repeatedly; nothing here counts.
   // Both strings are hostile text by definition and go in as textContent.
-  const raised = approval.raised;
+  // Not while App lock is on: the quote is outside text, word for word.
+  const raised = locked ? null : approval.raised;
   dom.apprRaised.hidden = !raised;
   dom.apprRaisedChip.textContent = raised ? raised.text : "";
   dom.apprRaisedQuote.textContent = raised && raised.quote ? `“${raised.quote}”` : "";
@@ -545,7 +610,9 @@ function openApproval(approval) {
  * out first.
  */
 function renderOptions(approval) {
-  const options = Array.isArray(approval.options) ? approval.options : [];
+  // No options while App lock is on: their labels are the plan's own words,
+  // and the one button then opens the Jarvis bar, which shows them.
+  const options = !state.appLock && Array.isArray(approval.options) ? approval.options : [];
   dom.apprOptions.replaceChildren();
   const multiple = options.length > 1;
   dom.apprOptions.hidden = !multiple;
@@ -653,6 +720,11 @@ setInterval(() => {
 
 async function decide(approved, optionId = null) {
   if (!state.approval || state.deciding) return;
+  // App lock on: this window approves nothing (see `applyAppLock`).
+  if (approved && state.appLock) {
+    await approveInBar();
+    return;
+  }
   // The id latch the spotlight has and this window did not. `deciding` is
   // released in `finally`, but the card only closes when the backend
   // broadcasts the resolution — so between those two moments a second click
@@ -1064,6 +1136,10 @@ listen("approval-resolved", (event) => {
   // Asked again each time the widget is focused, so an app set up since shows.
   window.addEventListener("focus", () => refreshNoteTargets());
   syncTaskControls();
+
+  // App lock first, so a card already waiting is never drawn in full.
+  applyAppLock(await readAppLock());
+  listen("security-changed", (event) => applyAppLock(event.payload && event.payload.appLock));
 
   // Restore the mode the user left the widget in.
   const prefs = await invoke("get_widget_prefs");
