@@ -278,6 +278,25 @@ pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut backoff = BASE_BACKOFF;
         loop {
+            // An address the owner configured that is refused (off their own
+            // networks - CLAUDE.md, 2026-09-26) is never connected to, and
+            // never quietly swapped for another: the link stays offline with
+            // the reason, which every window shows like any other connection
+            // error, until Settings saves an address (which kicks this loop).
+            if let Some(problem) = commands::base_problem(&app) {
+                publish_link(&app, |link| {
+                    link.base = String::new();
+                    link.connected = false;
+                    link.stale = true;
+                    link.error = Some(problem);
+                });
+                tokio::select! {
+                    _ = tokio::time::sleep(MAX_BACKOFF) => {}
+                    _ = wake().notified() => {}
+                }
+                backoff = BASE_BACKOFF;
+                continue;
+            }
             let base = commands::jarvis_base(&app);
             publish_link(&app, |link| {
                 link.base = base.clone();

@@ -121,7 +121,9 @@ class EventStream(private val api: JarvisApi) {
         while (coroutineContext.isActive) {
             val base = api.baseUrl()
             if (base == null) {
-                trySend(Signal.Down("No desktop address set", attempt))
+                // A saved address off the owner's own networks is never
+                // connected to (OwnNetwork); the link says why instead.
+                trySend(Signal.Down(api.baseProblem() ?: "No desktop address set", attempt))
                 delay(RETRY_NO_HOST_MS)
                 continue
             }

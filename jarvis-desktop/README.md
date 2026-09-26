@@ -39,7 +39,12 @@ config dir), is read in Rust, and is pushed into the page as
 `persist = false`, so nothing is cached in `localStorage`. `JARVIS_HUD_BASE`
 is the environment fallback. Nothing hardcodes a port: `JARVIS_HUD_PORT`
 defaults to 4719 in `jarvis_hud.py` and `DEFAULT_BASE` in `commands.rs`
-matches it.
+matches it. Either way the address must be on the owner's own networks
+(this PC, the home network, Tailscale or NordVPN Meshnet - the backend's
+own rule, `docs/ARCHITECTURE.md` section 2, rule 2); one that is not is
+refused in Settings, and one saved or set before that rule is not used:
+requests go to this PC's `DEFAULT_BASE` and the link stays offline, saying
+why.
 
 The page used to be given the token too, so any script running in it could
 call the whole API, `POST /api/approve` included (apps security audit M2,

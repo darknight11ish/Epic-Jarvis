@@ -141,7 +141,26 @@ pub const DEFAULT_BASE: &str = "http://127.0.0.1:4719";
 ///
 /// Read rather than baked in, because the port is configuration — the last
 /// resync turned on a wrong one having been hardcoded.
+///
+/// **A configured address that [`validate_base`] refuses is never used**
+/// (CLAUDE.md, decided 2026-09-26: the owner's own networks only). One saved
+/// by an older version, or set in `JARVIS_HUD_BASE`, that points at the open
+/// internet would otherwise get the token with every request. It falls back
+/// to [`DEFAULT_BASE`], this PC, so nothing ever goes to the refused
+/// address - and not silently: [`base_problem`] says why, the event stream
+/// stays offline with that sentence as its reason (`stream.rs`), which every
+/// window shows the way it shows any other connection error, and Settings
+/// shows it in red under the field.
 pub fn jarvis_base(app: &AppHandle) -> String {
+    match configured_base(app) {
+        Some(base) if validate_base(&base).is_ok() => base,
+        _ => DEFAULT_BASE.to_string(),
+    }
+}
+
+/// The address the owner configured - Settings, else `JARVIS_HUD_BASE` -
+/// not yet checked. `None` when neither is set.
+fn configured_base(app: &AppHandle) -> Option<String> {
     use tauri_plugin_store::StoreExt;
 
     app.store(SETTINGS_STORE)
@@ -153,7 +172,14 @@ pub fn jarvis_base(app: &AppHandle) -> String {
         .or_else(|| std::env::var("JARVIS_HUD_BASE").ok())
         .map(|b| b.trim().trim_end_matches('/').to_string())
         .filter(|b| !b.is_empty())
-        .unwrap_or_else(|| DEFAULT_BASE.to_string())
+}
+
+/// Why the configured address is not being used, or `None` when it is (or
+/// nothing is configured, and this PC's default is used). Read afresh every
+/// time, so an address an older version saved - before the own-networks
+/// rule - is caught at startup, not only when it is typed.
+pub(crate) fn base_problem(app: &AppHandle) -> Option<String> {
+    configured_base(app).and_then(|base| validate_base(&base).err())
 }
 
 /// Where the token in use came from. Reported to Settings by name - never
@@ -615,7 +641,13 @@ pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn get_api_settings(app: AppHandle) -> serde_json::Value {
     serde_json::json!({
-        "base": jarvis_base(&app),
+        // The address as configured, even a refused one, so the field shows
+        // what is wrong and the owner can change it...
+        "base": configured_base(&app).unwrap_or_else(|| jarvis_base(&app)),
+        // ...and why it is refused (not on the owner's own networks, say).
+        // It is not used: requests go to this PC instead, and the event
+        // stream stays offline saying the same sentence.
+        "baseProblem": base_problem(&app),
         "hasToken": jarvis_token_for(&app).is_some(),
         // Where it came from, by name - "credential-manager",
         // "settings-file", "environment", "backend-credential-manager" or
@@ -980,9 +1012,17 @@ pub(crate) fn save_file_then_token(
 /// It deliberately does NOT require loopback. The server supports binding off
 /// the loopback interface — that is what `HUD_TOKEN` exists for, and what a
 /// phone on a tailnet needs — so an allowlist of `127.0.0.1` would break a
-/// supported deployment. What it enforces is shape: a bare origin, nothing
-/// else, so the value cannot smuggle a path, a query, credentials or
-/// whitespace into every URL the client builds.
+/// supported deployment. It enforces two things:
+///
+/// 1. shape: a bare origin, nothing else, so the value cannot smuggle a path,
+///    a query, credentials or whitespace into every URL the client builds;
+/// 2. **where** (CLAUDE.md, decided 2026-09-26): the host must be on the
+///    owner's own networks - this PC, the home network, Tailscale or NordVPN
+///    Meshnet - by the backend's own rule ([`own_network_problem`]). It used
+///    to check shape only, so `https://abc.ngrok-free.app` was accepted and
+///    the pairing key went through a public tunnel with every request.
+///    https:// is refused off those networks too: the question is where the
+///    key goes, not whether the line is scrambled.
 fn validate_base(base: &str) -> Result<(), String> {
     if base.is_empty() {
         return Ok(()); // clearing it falls back to the default
@@ -1003,7 +1043,192 @@ fn validate_base(base: &str) -> Result<(), String> {
     if rest.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err("the base URL contains whitespace or control characters".to_string());
     }
-    Ok(())
+    match own_network_problem(base) {
+        Some(problem) => Err(problem),
+        None => Ok(()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The owner's own networks (CLAUDE.md, decided 2026-09-26)
+// ---------------------------------------------------------------------------
+//
+// NOT a rule of this app's own. It is the backend's, word for word:
+// `backend/jarvis_local_http.py`, `_own_network`, the rule that already
+// decides where plain http:// may carry the Home Assistant token or the
+// calendar password. `tools/gen_own_network_cases.py` runs that real code
+// over a table of cases and writes `tests/fixtures/own-network-cases.json`;
+// `own_network_tests` below, `tests/own-network.mjs` and the phone's
+// `OwnNetworkTest` all read it, so the three cannot drift apart unnoticed.
+//
+// Judged by spelling alone: nothing is looked up, no DNS, no network call.
+
+/// What the owner sees when an address is refused - one sentence, so the
+/// link line ("Offline — <first sentence>") shows all of it. The same words
+/// as the phone's `OwnNetwork.MESSAGE`; both are checked against the
+/// `message` in own-network-cases.json.
+pub(crate) const OWN_NETWORK_MESSAGE: &str = "Jarvis's address {address} is not on your own \
+     networks, so this app will not send your pairing key there: use this PC (localhost), your \
+     home network (an address like 192.168.x.x or 10.x.x.x, or a name ending in .local), \
+     Tailscale (a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord).";
+
+/// Name endings that only the owner's own networks answer - the backend's
+/// `_OWN_SUFFIXES`.
+const OWN_SUFFIXES: [&str; 5] = [".local", ".lan", ".home.arpa", ".ts.net", ".nord"];
+
+/// `None` when `base` (a whole address, `http://host:port`) is on the
+/// owner's own networks, else the sentence saying why it is refused.
+///
+/// Two readings of the host must BOTH pass, the way the backend judges both
+/// `urlsplit`'s host and the one urllib dials: a plain split of the text as
+/// typed, and the host `reqwest::Url` parses - the parser the requests
+/// themselves use, which also decodes `%6c`-escapes and reads `3232235777`
+/// as 192.168.1.1. So an address one of them misreads cannot slip past the
+/// other.
+pub(crate) fn own_network_problem(base: &str) -> Option<String> {
+    let base = base.trim().trim_end_matches('/');
+    let typed = typed_host(base);
+    // `host_str` gives an IPv6 address in its brackets; the check wants it
+    // without, like the typed reading.
+    let dialled = reqwest::Url::parse(base).ok().and_then(|url| {
+        url.host_str().map(|h| {
+            h.strip_prefix('[')
+                .and_then(|h| h.strip_suffix(']'))
+                .unwrap_or(h)
+                .to_string()
+        })
+    });
+    match (typed, dialled) {
+        (Some(t), Some(d)) if own_network_host(t) && own_network_host(&d) => None,
+        _ => Some(own_network_message(base)),
+    }
+}
+
+/// [`OWN_NETWORK_MESSAGE`] for `base`, which is shown as typed - unless it
+/// holds something that must not be repeated back (a user name or password
+/// written into it, "me:pw@...", or a space), when the sentence leaves the
+/// address out.
+fn own_network_message(base: &str) -> String {
+    let unshown = base.is_empty()
+        || base
+            .chars()
+            .any(|c| c == '@' || c.is_whitespace() || c.is_control());
+    if unshown {
+        OWN_NETWORK_MESSAGE.replace("{address} ", "")
+    } else {
+        OWN_NETWORK_MESSAGE.replace("{address}", base)
+    }
+}
+
+/// The host as the address is written: after `scheme://`, up to the first
+/// `/`, `?`, `#` or `\`, without a `:port`, and without IPv6's brackets.
+/// `None` when that is not one host (an unbracketed IPv6 address, which
+/// reads as a host and a port, or a port that is not a number).
+fn typed_host(base: &str) -> Option<&str> {
+    let rest = base.split_once("://").map_or(base, |(_, rest)| rest);
+    let authority = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
+    let (host, port) = if let Some(inner) = authority.strip_prefix('[') {
+        let (host, after) = inner.split_once(']')?;
+        if after.is_empty() {
+            (host, None)
+        } else {
+            (host, Some(after.strip_prefix(':')?))
+        }
+    } else {
+        match authority.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (authority, None),
+        }
+    };
+    if let Some(port) = port {
+        if !port.is_empty() && !port.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+    }
+    Some(host).filter(|h| !h.is_empty())
+}
+
+/// Is `host` this PC or on one of the owner's own networks? The backend's
+/// `_own_network`, line for line:
+///
+/// - an address (in any spelling the operating system would still dial -
+///   `3232235777`, `0xc0a80101`, `10.1` - judged as that address) must be in
+///   127.0.0.0/8, ::1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7
+///   (which holds Tailscale's fd7a:115c:a1e0::/48) or 100.64.0.0/10
+///   (Tailscale and NordVPN Meshnet). Link-local (169.254.x.x, fe80::) is
+///   not on the list, the same as the backend;
+/// - a name must be `localhost`, a single word with no dot (a home-network
+///   name such as `nas`, which the home router answers), or end in `.local`,
+///   `.lan`, `.home.arpa`, `.ts.net` or `.nord`.
+pub(crate) fn own_network_host(host: &str) -> bool {
+    let lowered = host.trim().to_lowercase();
+    let host = lowered.trim_end_matches('.');
+    if host.is_empty() {
+        return false;
+    }
+    if let Some(ip) = host_address(host) {
+        return own_address(ip);
+    }
+    if !plain_name(host) {
+        return false; // an odd IPv6 form, an "@", a space, a "%"...
+    }
+    if host == "localhost" || !host.contains('.') {
+        return true;
+    }
+    OWN_SUFFIXES.iter().any(|suffix| host.ends_with(suffix))
+}
+
+/// The address `host` denotes, or `None` when it is a name - the backend's
+/// `_as_address`: the usual spellings first, then the old numeric forms
+/// `inet_aton` reads (each part must start with a digit and hold only hex
+/// digits, `x` or dots, as glibc's does - `u64::from_str_radix` would take a
+/// leading `+` that inet_aton refuses).
+fn host_address(host: &str) -> Option<std::net::IpAddr> {
+    use std::net::{IpAddr, Ipv4Addr};
+
+    let ip = match host.parse::<IpAddr>() {
+        Ok(ip) => ip,
+        Err(_) => {
+            let numeric = host.split('.').all(|part| {
+                part.starts_with(|c: char| c.is_ascii_digit())
+                    && part.chars().all(|c| c.is_ascii_hexdigit() || c == 'x')
+            });
+            if !numeric {
+                return None;
+            }
+            IpAddr::V4(Ipv4Addr::from(inet_aton(host)?))
+        }
+    };
+    Some(match ip {
+        IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(ip, IpAddr::V4),
+        v4 => v4,
+    })
+}
+
+/// The backend's `_OWN_NETS`.
+fn own_address(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            let [a, b, _, _] = v4.octets();
+            a == 127
+                || a == 10
+                || (a == 172 && (16..=31).contains(&b))
+                || (a == 192 && b == 168)
+                || (a == 100 && (64..=127).contains(&b))
+        }
+        std::net::IpAddr::V6(v6) => v6.is_loopback() || (v6.octets()[0] & 0xfe) == 0xfc,
+    }
+}
+
+/// The backend's `_NAME_RE`, `^[\w-]+(\.[\w-]+)*$`: words of letters,
+/// digits, `_` or `-`, joined by single dots.
+fn plain_name(host: &str) -> bool {
+    host.split('.').all(|label| {
+        !label.is_empty()
+            && label
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    })
 }
 
 /// Shared secret for `X-Jarvis-Token`, read once from the environment.
@@ -5330,5 +5555,128 @@ mod stop_everything_tests {
         let said = stop_everything_words(Ok(serde_json::json!({"ok": true})));
         assert!(said.starts_with("Stopped speaking. "), "{said}");
         assert!(said.len() > "Stopped speaking. ".len());
+    }
+}
+
+#[cfg(test)]
+mod own_network_tests {
+    use super::{
+        own_network_host, own_network_message, own_network_problem, validate_base,
+        OWN_NETWORK_MESSAGE,
+    };
+
+    /// The backend's real verdicts, written by `tools/gen_own_network_cases.py`
+    /// from `backend/jarvis_local_http.py`; `backend/test_own_network_cases.py`
+    /// fails when it is stale. The phone's OwnNetworkTest reads the same file.
+    const FIXTURE: &str = include_str!("../../tests/fixtures/own-network-cases.json");
+
+    fn cases() -> serde_json::Value {
+        serde_json::from_str(FIXTURE).expect("fixture parses")
+    }
+
+    fn rows(all: &serde_json::Value, list: &str) -> Vec<(String, bool)> {
+        all[list]
+            .as_array()
+            .expect("a list")
+            .iter()
+            .map(|c| {
+                let text = c["host"].as_str().or_else(|| c["url"].as_str());
+                (
+                    text.expect("host or url").to_string(),
+                    c["own"].as_bool().expect("own"),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_words_are_the_shared_ones() {
+        assert_eq!(cases()["message"].as_str(), Some(OWN_NETWORK_MESSAGE));
+        assert_eq!(
+            cases()["message_unshown"].as_str(),
+            Some(own_network_message("http://me:pw@evil.com").as_str())
+        );
+    }
+
+    /// Every host, exactly as the backend's `_own_network` judges it.
+    #[test]
+    fn every_host_is_judged_as_the_backend_judges_it() {
+        let all = cases();
+        let hosts = rows(&all, "hosts");
+        assert!(hosts.len() > 40, "the table lost its hosts");
+        for (host, own) in hosts {
+            assert_eq!(own_network_host(&host), own, "{host:?}");
+        }
+    }
+
+    /// Every whole address the way the owner types it: the same verdict,
+    /// and a refusal in exactly the shared words.
+    #[test]
+    fn every_origin_is_judged_the_same_and_a_refusal_says_why() {
+        let all = cases();
+        let message = all["message"].as_str().expect("message");
+        for (url, own) in rows(&all, "origins") {
+            let got = validate_base(&url);
+            if own {
+                assert_eq!(got, Ok(()), "{url}");
+            } else {
+                assert_eq!(got, Err(message.replace("{address}", &url)), "{url}");
+            }
+        }
+    }
+
+    /// Odd shapes: nothing the backend refuses gets through. This app may
+    /// refuse more (a path, a bad port), because it checks the shape too.
+    #[test]
+    fn nothing_the_backend_refuses_is_accepted() {
+        for (url, own) in rows(&cases(), "tricky") {
+            if !own {
+                assert!(validate_base(&url).is_err(), "{url} was accepted");
+            }
+        }
+    }
+
+    /// The tunnels CLAUDE.md names, and https:// to the open internet: it is
+    /// about where the key goes, not whether the line is scrambled.
+    #[test]
+    fn public_tunnels_are_refused_even_over_https() {
+        for url in [
+            "https://abc123.ngrok-free.app",
+            "https://my-jarvis.trycloudflare.com",
+            "https://jarvis.example.com",
+        ] {
+            let why = own_network_problem(url).expect(url);
+            assert!(why.contains("not on your own networks"), "{why}");
+            assert!(why.contains(url), "{why}");
+        }
+    }
+
+    /// A user name or password written into an address is never repeated
+    /// back in the message.
+    #[test]
+    fn a_password_in_the_address_is_not_echoed() {
+        let said = own_network_message("http://me:hunter2@evil.com:4719");
+        assert!(!said.contains("hunter2"), "{said}");
+        assert!(
+            said.starts_with("Jarvis's address is not on your own networks"),
+            "{said}"
+        );
+    }
+
+    /// CONTROL: empty still means "use the default, this PC".
+    #[test]
+    fn empty_still_means_this_pc() {
+        assert_eq!(validate_base(""), Ok(()));
+        assert_eq!(validate_base(super::DEFAULT_BASE), Ok(()));
+    }
+
+    /// CONTROL: the shape errors still come first, in their own words.
+    #[test]
+    fn the_shape_is_still_checked_first() {
+        assert_eq!(
+            validate_base("http://me@127.0.0.1:4719"),
+            Err("the base URL must not carry credentials".to_string())
+        );
+        assert!(validate_base("ftp://127.0.0.1").is_err());
     }
 }

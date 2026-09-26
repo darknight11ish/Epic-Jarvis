@@ -290,7 +290,15 @@ class ChatSession(
             interrupted = interrupted, temporary = asTemporary,
         )
         if (c == null) {
-            val p = PlainErrors.forInput(PlainErrors.Input(notPaired = true)).copy(chat = true)
+            // No address to send to: none saved, or a saved one off the
+            // owner's own networks (OwnNetwork), which says why in its own
+            // sentence rather than "not paired".
+            val refused = api.baseProblem()
+            val p = if (refused != null) {
+                PlainErrors.forApiError(ApiError.Unreachable(refused)).copy(chat = true)
+            } else {
+                PlainErrors.forInput(PlainErrors.Input(notPaired = true)).copy(chat = true)
+            }
             _problem.value = p
             _error.value = p.text
             return null

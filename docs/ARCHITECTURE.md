@@ -40,6 +40,46 @@ it works.
    and the phone allows plain HTTP only to loopback, `*.ts.net` and `*.nord`
    names (`network_security_config.xml`). A non-loopback bind with no
    `HUD_TOKEN` refuses to start — `SystemExit(2)`, not a warning.
+
+   **The other end too: both apps talk only to a Jarvis on the owner's own
+   networks** (the owner's decision, 2026-09-26, after a Gemini audit
+   finding). Until then the desktop's Settings checked only the SHAPE of the
+   Jarvis address (`validate_base`), and the phone checked nothing, so
+   `https://abc.ngrok-free.app` was accepted and the pairing token went
+   through a public tunnel with every request. Now an address is accepted
+   only on this PC, the home network, Tailscale or NordVPN Meshnet, **by the
+   backend's own rule** - `jarvis_local_http._own_network`, the one that
+   already limits plain http:// to Home Assistant and the calendar - and
+   refused otherwise, https:// included (this is about where the token goes,
+   not whether the line is scrambled):
+
+   | allowed | refused |
+   |---|---|
+   | this PC: `localhost`, 127.x.x.x, `::1` | anything else, e.g. `8.8.8.8`, `0.0.0.0` |
+   | home network: 10.x, 172.16-31.x, 192.168.x, IPv6 `fc00::/7`, names ending `.local`, `.lan`, `.home.arpa`, and a single word with no dot (`nas`) | link-local 169.254.x.x and `fe80::` (not on the backend's list either) |
+   | Tailscale and NordVPN Meshnet: 100.64.0.0 to 100.127.255.255, `fd7a:115c:a1e0::/48`, names ending `.ts.net` or `.nord` | 100.63.x and 100.128.x (outside that block), 172.15.x and 172.32.x, any other name: `*.ngrok-free.app`, `*.trycloudflare.com`, `localhost.evil.com`, `10.0.0.1.nip.io` |
+
+   Judged by spelling alone, no DNS. A number written the old way
+   (`3232235777`) is judged as the address it dials, and both the address as
+   written and the host each app's own HTTP library parses must pass, so a
+   user name in the address (`http://127.0.0.1@evil.com`) cannot fool it.
+   Refused in one sentence, the same on both apps: *"Jarvis's address X is
+   not on your own networks, so this app will not send your pairing key
+   there: use this PC (localhost), your home network (...), Tailscale (...)
+   or NordVPN Meshnet (...)."* An address saved before the rule (or set in
+   `JARVIS_HUD_BASE`) is not used: the desktop sends its requests to this PC
+   instead and keeps the event stream offline with that sentence as the
+   reason, and Settings shows it in red (`jarvis_base`, `base_problem`,
+   `stream.rs`); the phone treats it as no address at all, opens the pairing
+   screen with the sentence, and says it wherever it would say any other
+   connection failure (`OwnNetwork.kt`, `ClientSettings.baseUrl`). One case
+   table, `tools/gen_own_network_cases.py`, made from the backend's real
+   code, is read by the Rust tests, `tests/own-network.mjs` and
+   `OwnNetworkTest`; `backend/test_own_network_cases.py` fails when it is
+   stale. Debatable things the backend allows, kept for parity: single-word
+   names (a home router answers them, but a DNS search domain could too),
+   `.lan` and `.home.arpa`, and the whole 100.64.0.0/10 block (also used by
+   some mobile carriers' own networks, not only Tailscale and Meshnet).
 3. **No auto-approve anywhere, and no approve-all control anywhere.** One
    action, one decision. Do not build one.
 

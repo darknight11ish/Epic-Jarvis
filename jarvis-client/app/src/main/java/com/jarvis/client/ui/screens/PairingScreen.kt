@@ -151,7 +151,8 @@ fun PairingScreen(
                 "Tailscale name (ends in .ts.net) or its NordVPN Meshnet name (ends " +
                 "in .nord). A number like 100.x will not work, because Android only " +
                 "lets this app use names it has been told about. Leave off :4719 and " +
-                "it is added for you.",
+                "it is added for you. An address on the open internet, a public tunnel " +
+                "such as ngrok included, is refused, so your token is never sent there.",
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Next,

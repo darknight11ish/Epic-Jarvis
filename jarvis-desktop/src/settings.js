@@ -212,10 +212,19 @@ async function loadConnection() {
   dom.storePath.textContent = settings.store || "";
   // Saved by an older version that checked less; the backend is not started
   // with it, so say so instead of letting the field look like it works.
-  if (settings.bindAddressProblem) {
-    report(dom.connectionStatus,
-      `The phone address above is not being used: ${settings.bindAddressProblem}`, "bad");
+  // The same for the Jarvis address (own networks only, CLAUDE.md
+  // 2026-09-26): Rust never sends anything to a refused one, and the link
+  // stays offline saying the same sentence.
+  const problems = [];
+  if (settings.baseProblem) {
+    problems.push(`The Jarvis address above is not being used. ${settings.baseProblem} ` +
+      "Nothing is sent to it: until you change it, the connection stays offline and " +
+      "approving is blocked.");
   }
+  if (settings.bindAddressProblem) {
+    problems.push(`The phone address above is not being used: ${settings.bindAddressProblem}`);
+  }
+  if (problems.length) report(dom.connectionStatus, problems.join(" "), "bad");
 }
 
 dom.saveConnection.addEventListener("click", () =>

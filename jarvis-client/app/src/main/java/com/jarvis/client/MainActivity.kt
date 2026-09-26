@@ -1061,8 +1061,12 @@ class MainActivity : FragmentActivity() {
                     hasToken = JarvisRuntime.tokens.hasToken(),
                     busy = busy,
                     // Brought back by a refusal the stream reported, there may be
-                    // no notice yet - so say why the screen appeared.
-                    notice = notice ?: if (tokenRefused) badTokenNotice else null,
+                    // no notice yet - so say why the screen appeared. The same
+                    // for a saved address off the owner's own networks
+                    // (OwnNetwork): it is never used, so the app opens here,
+                    // and this sentence is the reason.
+                    notice = notice ?: JarvisRuntime.settings.baseProblem()
+                        ?: if (tokenRefused) badTokenNotice else null,
                     onPair = { host, token ->
                         busy = true
                         scope.launch {
