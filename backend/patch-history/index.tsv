@@ -37,7 +37,6 @@ gate-outcome.patch	gate-outcome/3fe5486.patch	3fe5486e240d54cd0ca8f77dd9dbc3b9ce
 gate-outcome.patch	gate-outcome/37fad26.patch	37fad2683a8941a4d26ae5ce6909cc9c984d6a4d	2026-09-16T20:38:00+00:00	gate: a denial can propose a standing rule, never apply one
 gate-outcome.patch	gate-outcome/10db67c.patch	10db67c2111fb8d61d0954380cd764052c5717d5	2026-09-15T04:28:13+00:00	There was an approve-all in the gate, and a timeout looked like a refusal
 gate-push.patch	gate-push/5cb5947.patch	5cb5947da824b6d2faf13f16a5335674a2cdabd5	2026-09-15T00:16:24+00:00	Stop the two paths that send private content off the machine
-loopback-too.patch	loopback-too/88921b8.patch	88921b89d89c516c30caad112696d0e79b7dcbdc	2026-09-24T00:20:44+00:00	Bind address: refuse every spelling of "every interface", on both sides
 memory-intake.patch	memory-intake/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
 memory-intake.patch	memory-intake/c870ceb.patch	c870cebfff6cebd437ac56e4aa8ff78a8b915f93	2026-09-23T09:02:25+00:00	Learning jobs integrated: patch order, retire card vs "Both are true", script fix
 memory-intake.patch	memory-intake/a1d21de.patch	a1d21de7a10014af8282786adf8e4653c25b52ed	2026-09-23T08:37:20+00:00	Memory intake: Remember:, near-duplicates, numbered corrections, keep-both, real dates, planted-instruction flags, origin check

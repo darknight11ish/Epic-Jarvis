@@ -182,6 +182,21 @@ class ChatSession(
      */
     val usedIds: StateFlow<List<Long>> = _usedIds.asStateFlow()
 
+    private val _crisis = MutableStateFlow(false)
+
+    /**
+     * The crisis help line (`jarvis_wellbeing.py`, the owner's decision of
+     * 2026-09-27; docs/JARVIS-API.md section 38): true only while the
+     * answer on screen is the one Jarvis is showing after the owner
+     * mentioned wanting to hurt themselves - so Home can draw it as a
+     * calm, plain panel. The word check, the help message and never
+     * learning from it all run on the PC regardless of this flag; it only
+     * changes how the words already on screen are drawn. Read off the same
+     * `X-Jarvis-Route` header as [usedIds] ([Wellbeing.crisisFromHeader]);
+     * cleared with the answer, like it.
+     */
+    val crisis: StateFlow<Boolean> = _crisis.asStateFlow()
+
     /**
      * Turns a temporary chat on or off, and starts a new conversation
      * either way ([newConversation]) - so nothing said in one kind of chat
@@ -267,6 +282,7 @@ class ChatSession(
         _waiting.value = null
         _answerNote.value = null
         _usedIds.value = emptyList()
+        _crisis.value = false
         // A temporary question goes only to a PC that says it can hold one -
         // asked again now, since the PC may have changed since it was turned on.
         val asTemporary = _temporary.value
@@ -418,6 +434,12 @@ class ChatSession(
                     // said about a temporary question (TemporaryChat.notes).
                     if (call === c) {
                         _usedIds.value = if (asTemporary) emptyList() else MemoryUsed.idsFromRouteHeader(routeHeader)
+                        // The crisis help line (jarvis_wellbeing.py): the
+                        // one flag that says whether the answer arriving is
+                        // shown as a calm, plain panel. Not confirmed sent
+                        // by every backend yet (see Wellbeing.kt); false
+                        // just means an ordinary bubble, as before.
+                        _crisis.value = Wellbeing.crisisFromHeader(routeHeader)
                     }
                     val temporaryNotes = TemporaryChat.notes(asTemporary, routeHeader)
                     // Decoded as CHARACTERS, not as whatever bytes happened
@@ -672,6 +694,7 @@ class ChatSession(
         _waiting.value = null
         _answerNote.value = null
         _usedIds.value = emptyList()
+        _crisis.value = false
     }
 
     /**

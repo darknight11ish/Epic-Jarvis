@@ -1026,12 +1026,18 @@ are architectural rather than configuration:
   invariants live. Both from one line. If delimiters are ever added around
   recalled facts, they go on that message, not around the list.
 - **The rules block always goes first; everything added to a turn goes after
-  it.** The spoken-style note, the "you were interrupted" note and the owner's
-  manner line (warm or plain, `jarvis_manner.py`, 2026-09-25) are system lines
-  placed just before the newest question, and `keep_rules_first` puts the
-  rules in front whenever anything else would be first. Manner is wording
-  only: its line says every rule still applies, it changes no tier, card,
-  memory or egress, and it is never sent to a cloud lane.
+  it.** The spoken-style note, the "you were interrupted" note, the owner's
+  manner line (warm or plain, `jarvis_manner.py`, 2026-09-25) and the crisis
+  note (`jarvis_wellbeing.py`, 2026-09-27, nearest the question of all of
+  them) are system lines placed just before the newest question, and
+  `keep_rules_first` puts the rules in front whenever anything else would be
+  first. Manner is wording only: its line says every rule still applies, it
+  changes no tier, card, memory or egress, and it is never sent to a cloud
+  lane. The crisis note is stricter still: on a match, no tools are offered
+  that turn at all, and the fixed help message (`jarvis_wellbeing.reply()`)
+  is appended after the answer, or sent alone if the model fails - the one
+  place in this codebase where the backend, not the model, adds words to a
+  reply. Neither approves or acts (rule 4): both only change what is said.
 
 ---
 
