@@ -301,6 +301,14 @@ Decided 2026-09-26, after the approvals audit
   Windows Hello per change. Nothing outside that list can be loosened from
   an app.
 
+Decided 2026-09-26, after the professionalism audit
+(`docs/PROFESSIONALISM-AUDIT-2026-09-26.md`):
+- **The maker's name is the owner's GitHub name, "darknight11ish"** - as
+  publisher, copyright holder and in the licence - not "Jarvis Labs" (a real
+  company uses that name).
+- **Bring GitHub's `main` up to date with one pull request, once the bug
+  audit's fixes have landed.** The owner presses Merge on GitHub.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
