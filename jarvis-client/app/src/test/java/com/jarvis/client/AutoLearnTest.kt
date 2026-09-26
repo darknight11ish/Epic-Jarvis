@@ -358,6 +358,29 @@ class AutoLearnTest {
         assertNull(AutoLearn.fromWhere(null))
     }
 
+    @Test
+    fun aRowSaysHowOftenItWasSaidAgain() {
+        // Memory idea 3: GET /api/memory/auto's said_again {count, last}, only
+        // on a fact said again; the desktop's words (auto-learn.js).
+        val zone = ZoneOffset.UTC
+        val today = LocalDate.of(2024, 9, 24)
+        val facts = AutoLearn.page(
+            obj("""{"facts":[
+                {"id":1,"text":"a","saved_at":1727180400,"device":"phone","said_again":{"count":3,"last":1727180500}},
+                {"id":2,"text":"b","saved_at":1727180400,"said_again":{"count":1,"last":1727180500}},
+                {"id":3,"text":"c","saved_at":1727180400},
+                {"id":4,"text":"d","saved_at":1727180400,"said_again":{"count":"2"}},
+                {"id":5,"text":"e","saved_at":1727180400,"said_again":{"count":-1}}
+            ]}"""),
+        ).facts
+        assertEquals(listOf(3, 1, 0, 0, 0), facts.map { it.saidAgain })
+        assertEquals("Today 12:20 · from the phone · said again 3 times",
+            AutoLearn.rowLine(facts[0], zone, today))
+        assertEquals("Today 12:20 · said again once", AutoLearn.rowLine(facts[1], zone, today))
+        assertEquals("Today 12:20", AutoLearn.rowLine(facts[2], zone, today))
+        assertNull(AutoLearn.saidAgainWords(0))
+    }
+
     // --------------------------------------------- cards that stayed cards ---
 
     @Test

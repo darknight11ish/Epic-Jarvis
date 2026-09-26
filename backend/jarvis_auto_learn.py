@@ -1443,6 +1443,12 @@ def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None) -> dict:
                              " ORDER BY created DESC, id DESC",
                              [now, float(sec), float(sec + 1)]).fetchall()
             rows += [tuple(r) for r in rest if r[0] not in have]
+    # "Said again" (memory idea 3): how often the owner has said a fact
+    # again since it was saved, and when last. Only for those said again.
+    try:
+        again = store.said_again_counts([int(r[0]) for r in rows])
+    except Exception:
+        again = {}
     for fid, text, created, meta in rows:
         try:
             m = json.loads(meta or "{}")
@@ -1450,8 +1456,12 @@ def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None) -> dict:
         except Exception:
             m = {}
         prov = m.get("provenance") if m.get("provenance") in ("typed", "voice") else "typed"
-        out["facts"].append({"id": int(fid), "text": text, "saved_at": int(created or 0),
-                             "provenance": prov, "device": str(m.get("device") or "unknown")})
+        row = {"id": int(fid), "text": text, "saved_at": int(created or 0),
+               "provenance": prov, "device": str(m.get("device") or "unknown")}
+        if again.get(int(fid)):
+            row["said_again"] = {"count": again[int(fid)]["count"],
+                                 "last": int(again[int(fid)]["last"])}
+        out["facts"].append(row)
     return out
 
 

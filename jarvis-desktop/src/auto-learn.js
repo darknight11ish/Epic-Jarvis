@@ -302,13 +302,28 @@ export function readAuto(answer, status = null) {
         savedAt: num(f.saved_at),
         provenance: text(f.provenance),
         device: text(f.device),
+        // Memory idea 3: how often the owner has said it again since, or 0.
+        saidAgain: saidAgainCount(f.said_again),
       })),
   };
 }
 
-/** One row's meta line: when it was saved, and where. */
+/** `said_again.count` from the PC (memory idea 3), or 0 for anything else. */
+function saidAgainCount(v) {
+  const n = v && typeof v === "object" ? v.count : null;
+  return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
+/** "said again once" / "said again 3 times" - the phone says the same. */
+export function saidAgainWords(n) {
+  if (!Number.isInteger(n) || n <= 0) return "";
+  return n === 1 ? "said again once" : `said again ${n} times`;
+}
+
+/** One row's meta line: when it was saved, where, and how often said again. */
 export function factMeta(f, nowMs = Date.now()) {
-  const parts = [whenWords(f.savedAt, nowMs), DEVICE_WORDS[f.device] || ""];
+  const parts = [whenWords(f.savedAt, nowMs), DEVICE_WORDS[f.device] || "",
+    saidAgainWords(f.saidAgain)];
   return parts.filter(Boolean).join(" · ");
 }
 

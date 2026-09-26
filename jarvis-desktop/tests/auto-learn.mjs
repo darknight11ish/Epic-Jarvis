@@ -45,6 +45,7 @@ import {
   readAuto,
   refreshRows,
   rememberedLine,
+  saidAgainWords,
   savedIds,
   SENSITIVE_DETAIL,
   SENSITIVE_LABEL,
@@ -103,7 +104,7 @@ await check("the list is read as the PC sends it; a switch is on only when the P
   assert.equal(v.auto, true);
   assert.equal(v.sensitive, false);
   assert.deepEqual(v.facts[0], { id: 12, text: "Is building Jarvis, a local assistant.",
-    savedAt: NOW - 300.5, provenance: "typed", device: "desktop" });
+    savedAt: NOW - 300.5, provenance: "typed", device: "desktop", saidAgain: 0 });
   // Missing or damaged: off, never assumed on.
   const bare = readAuto({ facts: [] });
   assert.equal(bare.auto, false);
@@ -175,6 +176,19 @@ await check("a row says when and where; Forget asks today's question; a card say
   assert.equal(factMeta({ savedAt: NOW - 120, device: "desktop" }, NOW * 1000), "2 min ago · from the PC");
   assert.equal(factMeta({ savedAt: NOW - 120, device: "hud" }, NOW * 1000), "2 min ago · from the HUD");
   assert.equal(factMeta({ savedAt: NOW - 30, device: "" }, NOW * 1000), "just now");
+  // Memory idea 3: how often the owner said it again, after where.
+  assert.equal(factMeta({ savedAt: NOW - 120, device: "phone", saidAgain: 3 }, NOW * 1000),
+    "2 min ago · from the phone · said again 3 times");
+  assert.equal(factMeta({ savedAt: NOW - 30, device: "", saidAgain: 1 }, NOW * 1000),
+    "just now · said again once");
+  const again = readAuto({ facts: [
+    { id: 1, text: "a", saved_at: NOW, said_again: { count: 2, last: NOW } },
+    { id: 2, text: "b", saved_at: NOW },
+    { id: 3, text: "c", saved_at: NOW, said_again: { count: "2" } },
+    { id: 4, text: "d", saved_at: NOW, said_again: { count: -1 } },
+  ] }).facts;
+  assert.deepEqual(again.map((f) => f.saidAgain), [2, 0, 0, 0]);
+  assert.equal(saidAgainWords(0), "");
   // Both apps' Forget words (FIXLIST 25); the question itself stays
   // (the owner's decision 24).
   assert.equal(forgetQuestion({ text: "Prefers tea." }),

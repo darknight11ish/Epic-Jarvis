@@ -246,6 +246,51 @@ def _gate(w, I, A, case) -> dict:
     return {"ok": ok, "got": {"decision": how, "why": why}}
 
 
+def _said_again(w, I, A, case) -> dict:
+    """Memory idea 3: the owner says something Jarvis already knows. The
+    learner's model is a stand-in that proposes `proposed` (as the real one
+    would re-propose a fact it hears again); the rest is the real code -
+    jarvis_intake.propose's wrapper, note_said_again, the live-turn
+    registry and MemoryStore.said_again. Scored: how many times it was
+    recorded for the stored fact."""
+    if not hasattr(w.store, "said_again_counts") or not hasattr(I, "note_said_again"):
+        return {"ok": False, "got": "this memory has no \"said again\" (idea 3 not built)"}
+    cid = w.conversation()
+    history = []
+
+    def say(turn):
+        nonlocal history
+        if turn.get("prov") == "voice" and turn.get("heard"):
+            w.H.note_transcript(turn["text"], strictness="very_strict",
+                                model=A.STRONG_MODEL_LABEL, mode="owner",
+                                source="push_to_talk")
+        history = w.say(cid, history, turn)
+    for turn in case.get("before", []):
+        say(turn)
+    time.sleep(0.005)
+    fid = w.store.add(case["stored"], source="eval")
+    if case.get("forget"):
+        w.store.retire(fid)
+    time.sleep(0.005)
+    for turn in case.get("turns", []):
+        time.sleep(0.005)
+        say(turn)
+    facts = [p if isinstance(p, dict) else {"text": p} for p in case.get("proposed", [])]
+    answer = json.dumps({"facts": facts})
+    extract = types.SimpleNamespace(
+        propose=lambda messages, llm=None, source="": (llm("the learner's prompt"), [])[1])
+    owner = [m for m in history if m.get("role") == "user"]
+    for _ in range(int(case.get("passes", 1))):
+        if case.get("remember"):
+            msgs = w.say(cid, history, {"text": case["remember"]})[:-1]
+            I.remember_from_turn(msgs, extract=w.x)
+        else:
+            I.propose(extract, [{"role": "user", "content": m["content"]} for m in owner],
+                      lambda prompt, *a, **k: answer, store=w.store)
+    got = w.store.said_again_counts([fid]).get(fid, {}).get("count", 0)
+    return {"ok": got == case["want"], "got": {"recorded": got}}
+
+
 # ----------------------------------------------------- the real learner --
 
 def _ollama(url: str, model: str, timeout: float = 120.0):
@@ -363,6 +408,8 @@ def run(M, scratch: Path, *, model: Optional[str] = None, ollama: str = LOCAL) -
                     r = _dates(w, I, case)
                 elif kind == "gate":
                     r = _gate(w, I, A, case)
+                elif kind == "said_again":
+                    r = _said_again(w, I, A, case)
                 else:
                     r = {"ok": False, "got": f"unknown kind {kind!r}"}
             except Exception as exc:

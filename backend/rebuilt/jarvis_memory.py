@@ -890,6 +890,17 @@ class MemoryStore:
                     fact_id   INTEGER NOT NULL,
                     entity_id INTEGER NOT NULL,
                     PRIMARY KEY (fact_id, entity_id))""")
+            # "Said again" (memory idea 3, 2026-09-26): each time the owner
+            # says something Jarvis already knows, one row - the fact's ID,
+            # when this PC saw the owner's turn arrive, and whether it was
+            # typed or said aloud. NO WORDS, and nothing a guess can be
+            # checked against: see said_again().
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS fact_repeats (
+                    fact_id INTEGER NOT NULL,
+                    said_at REAL NOT NULL,
+                    how     TEXT NOT NULL,
+                    PRIMARY KEY (fact_id, said_at))""")
             c.execute("CREATE INDEX IF NOT EXISTS ix_fe_entity ON fact_entities(entity_id)")
             c.execute("CREATE INDEX IF NOT EXISTS ix_ea_fact ON entity_aliases(fact_id)")
             c.execute("""
@@ -1569,6 +1580,65 @@ class MemoryStore:
                 out = ranked
         return out[:k]
 
+    # ---- "said again" (memory idea 3, 2026-09-26) -------------------------
+
+    def said_again(self, fact_id: int, said_at: float, how: str = "typed") -> bool:
+        """Record that the owner said this fact again. True if a row was
+        written.
+
+        `said_at` is when this PC saw the owner's turn arrive (the live-turn
+        registry's time, jarvis_chat_log) - so the same turn, read again by
+        the learner on its next pass over the conversation, is the same row
+        and is not counted twice. `how` is "typed" or "voice"; the caller
+        (jarvis_intake.note_said_again) has already checked the turn with
+        the same rules automatic learning uses.
+
+        Only for a fact that is still in use and whose words are not erased,
+        only for a turn AFTER the fact was saved (a turn from before is the
+        one it was learned from, not a repeat), and never a time in the
+        future. The row holds no words: erasing the fact's words leaves it,
+        like the fact's own dates. Nothing reads it to decide anything - it
+        can never make a fact harder to forget, correct or erase."""
+        if how not in ("typed", "voice"):
+            return False
+        try:
+            t = float(said_at)
+        except (TypeError, ValueError):
+            return False
+        now = time.time()
+        if not math.isfinite(t) or t > now + 60:
+            return False
+        with _LOCK, closing(self._connect()) as c:
+            row = c.execute("SELECT created, valid_to, erased_at FROM facts WHERE id=?",
+                            (int(fact_id),)).fetchone()
+            if row is None or row["erased_at"] is not None:
+                return False
+            if row["valid_to"] is not None and row["valid_to"] <= now:
+                return False
+            if t <= float(row["created"]):
+                return False
+            cur = c.execute("INSERT OR IGNORE INTO fact_repeats (fact_id, said_at, how)"
+                            " VALUES (?, ?, ?)", (int(fact_id), t, how))
+            c.commit()
+            return cur.rowcount > 0
+
+    def said_again_counts(self, ids) -> dict:
+        """{fact id: {"count": times said again, "last": when, epoch
+        seconds}} for those of `ids` said again at least once."""
+        ids = [int(i) for i in ids or [] if isinstance(i, int) and not isinstance(i, bool)]
+        if not ids:
+            return {}
+        out = {}
+        with _LOCK, closing(self._connect()) as c:
+            for i in range(0, len(ids), 500):
+                part = ids[i:i + 500]
+                for r in c.execute(
+                        "SELECT fact_id, COUNT(*) AS n, MAX(said_at) AS last FROM fact_repeats"
+                        f" WHERE fact_id IN ({','.join('?' * len(part))}) GROUP BY fact_id",
+                        part):
+                    out[int(r["fact_id"])] = {"count": int(r["n"]), "last": float(r["last"])}
+        return out
+
     def get(self, fact_id: int) -> Optional[dict]:
         """One fact by id, retired or not. None if it is not there."""
         with _LOCK, closing(self._connect()) as c:
@@ -1683,11 +1753,13 @@ class MemoryStore:
                                " WHERE erased_at IS NOT NULL").fetchone()[0]
             ents = c.execute("SELECT COUNT(*) FROM entities WHERE merged_into IS NULL"
                              ).fetchone()[0]
+            repeats = c.execute("SELECT COUNT(*) FROM fact_repeats").fetchone()[0]
         out = {"db": str(self.path), "facts": total, "current": current,
                "retired": total - current,
                "embedder": self.embedder.name, "semantic": self.embedder.semantic,
                "vector_search": self._vec_ok, "unembedded": pending,
-               "erased": erased, "entities": ents, "reranker": reranker_status()}
+               "erased": erased, "entities": ents, "reranker": reranker_status(),
+               "said_again": repeats}
         if self._entity_errors:
             out["entity_errors"] = self._entity_errors
         if self._bad_vectors:

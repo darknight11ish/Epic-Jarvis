@@ -560,6 +560,29 @@ class ChatLog:
             out["tainted"] = since is not None and since <= out["seq"]
             return out
 
+    def live_turn_any(self, text) -> Optional[dict]:
+        """live_turn() for a message in ANY conversation: the newest entry
+        with exactly these words, or None. For "said again" (jarvis_intake.
+        note_said_again), whose caller - the learner - does not know which
+        conversation it is reading."""
+        if not isinstance(text, str) or not _norm(text):
+            return None
+        h = _hash(text)
+        with self._lock:
+            best = None
+            for (cid, hh), entry in self._live.items():      # oldest first
+                if hh == h:
+                    best = (cid, entry)
+            if best is None:
+                return None
+            cid, got = best
+            out = dict(got)
+            if isinstance(out.get("voice_check"), dict):
+                out["voice_check"] = dict(out["voice_check"])
+            since = self._taint.get(cid)
+            out["tainted"] = since is not None and since <= out["seq"]
+            return out
+
     def conversation_tainted(self, conversation_id) -> bool:
         """Has any live turn of this conversation read outside text?"""
         with self._lock:
@@ -855,6 +878,11 @@ def live_turn(conversation_id, text) -> Optional[dict]:
     """For jarvis_auto_learn: did this PC see this message arrive live, in
     this conversation, and with what provenance? None if not."""
     return _log().live_turn(conversation_id, text)
+
+
+def live_turn_any(text) -> Optional[dict]:
+    """live_turn() in any conversation: the newest entry for these words."""
+    return _log().live_turn_any(text)
 
 
 def conversation_tainted(conversation_id) -> bool:
