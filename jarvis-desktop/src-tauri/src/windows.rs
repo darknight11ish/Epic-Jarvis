@@ -147,7 +147,7 @@ pub fn apply_quickbar_effects(window: &WebviewWindow) -> Result<(), String> {
 
     // The tint argument is honoured only on Windows 10 v1809..=22H1 and
     // Windows 11 builds below 22523. Above that — which is every currently
-    // shipping Windows 11 — window-vibrancy 0.5.3 takes the DWM path,
+    // shipping Windows 11 — window-vibrancy 0.6 takes the DWM path,
     // `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW)`,
     // and never passes `color` at all. It is kept because it still applies on
     // Windows 10, and it is documented here because a colour that silently does

@@ -114,7 +114,7 @@ import {
   followZoom,
   start as startLink,
 } from "./jarvis-link.js";
-import { startVoice, setVoiceMode } from "./voice.js";
+import { startVoice, setVoiceMode, setLevel, attachSpeechSource } from "./voice.js";
 import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
 import {
   createCutOff,
@@ -169,6 +169,9 @@ import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
 import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
 // A timer said aloud while hands-free listening is on (2026-09-25).
 import { aloudFor } from "./coming-up.js";
+// What a `step` event means, in words - shared with Brain's Live tab
+// (item 10, UI-AUDIT-2026-09-26.md).
+import { stepText } from "./step-words.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -219,6 +222,7 @@ const $ = (id) => document.getElementById(id);
 
 const dom = {
   root: document.documentElement,
+  reactor: $("reactor"),
   shell: $("shell"),
   prompt: $("prompt"),
   route: $("route"),
@@ -2911,6 +2915,27 @@ function newConversation() {
  *  recording that never started. */
 let micRecording = false;
 
+/**
+ * "Caught it" (item 7, UI-AUDIT-2026-09-26.md): the reactor contracts toward
+ * its core and springs back, once, the moment the talk button is let go -
+ * the desktop's answer to the phone's haptic tick, since a PC cannot buzz.
+ * A plain CSS class plus a `@keyframes` in style.css; reduced motion already
+ * collapses any one-shot animation to nothing, the same as `.fresh`/`card-in`
+ * elsewhere in this file, so this needs no motion check of its own.
+ */
+function inhaleReactor() {
+  const el = dom.reactor;
+  if (!el) return;
+  el.classList.remove("inhale");
+  // Force a reflow so letting go again before the last inhale finished
+  // restarts the animation instead of the class-add being a no-op.
+  void el.offsetWidth;
+  el.classList.add("inhale");
+}
+dom.reactor?.addEventListener("animationend", (event) => {
+  if (event.animationName === "reactor-inhale") dom.reactor.classList.remove("inhale");
+});
+
 async function startPushToTalk() {
   if (micRecording || state.autoListening) return;
   // Barge-in: holding the mic to talk again is as clear a signal as this
@@ -2935,8 +2960,12 @@ async function stopPushToTalk() {
   if (!micRecording) return;
   micRecording = false;
   dom.mic.setAttribute("aria-pressed", "false");
-  // The owner's turn is over: a small "I heard you" (voice-flow.js).
+  // The owner's turn is over: a small "I heard you" (voice-flow.js) and the
+  // reactor's own "Caught it" (item 7, UI-AUDIT-2026-09-26.md) - on the same
+  // beat, same as the phone's tick-plus-inhale. Only on a real release: a
+  // pointer cancel (abandonPushToTalk, below) never played this either.
   playHeardSound();
+  inhaleReactor();
   try {
     const heard = await invokeStrict("stop_voice_capture");
     if (!heard.available) {
@@ -3018,6 +3047,19 @@ let clipPlaying = false;
  *  Dropped by "stop", by a new question, and when the answer turns out to
  *  be private; checked again right before it is played either way. */
 let aheadClip = null;
+/** One `AudioContext` reused across every clip, rather than one per
+ *  sentence: `attachSpeechSource` (voice.js) would otherwise open and close
+ *  one per `Audio` element, and a fast reply is many of those a second. */
+let speechAudioCtx = null;
+function speechContext() {
+  if (speechAudioCtx) return speechAudioCtx;
+  const Ctx = typeof AudioContext === "function"
+    ? AudioContext
+    : typeof webkitAudioContext === "function" ? webkitAudioContext : null;
+  if (!Ctx) return null;
+  try { speechAudioCtx = new Ctx(); } catch { speechAudioCtx = null; }
+  return speechAudioCtx;
+}
 
 /** Interrupting by talking and "One moment." (voice-flow.js): the rules,
  *  and what the PC allows (`get_voice_flow`, the `flow` block of
@@ -3262,6 +3304,16 @@ async function playClip(dataUri, generation, text = "") {
   const own = text && !isFixedLine(text) ? text : null;
   playingText = own;
   if (own) lastPlayedText = own;
+  // The reactor's mic-and-voice meter (item 1, UI-AUDIT-2026-09-26.md): the
+  // level of the audio actually playing, never a guess at what it might
+  // sound like. `attachSpeechSource` (voice.js) was already written for
+  // exactly this and never called - this is the clip it was written for.
+  // A context that fails to open (no Web Audio, or blocked) leaves the
+  // reactor on its honest synthetic fallback; the reply still plays either
+  // way, since detachLevel is a no-op and nothing here awaits it.
+  const speechCtx = speechContext();
+  if (speechCtx && speechCtx.state === "suspended") speechCtx.resume().catch(() => {});
+  const detachLevel = speechCtx ? attachSpeechSource(audio, { context: speechCtx }) : () => {};
   try {
     try {
       await audio.play();
@@ -3282,6 +3334,7 @@ async function playClip(dataUri, generation, text = "") {
   } catch (error) {
     console.info("[quickbar] spoken reply unavailable:", error);
   } finally {
+    detachLevel();
     if (playingText === own) playingText = null;
     if (generation === speechGeneration) {
       clipPlaying = false;
@@ -3447,6 +3500,19 @@ async function refreshVoiceFlow() {
     console.info("[quickbar] no One moment clip:", error);
   }
 }
+
+/**
+ * The face's mic-level meter (item 1, UI-AUDIT-2026-09-26.md): the
+ * microphone's own loudness, 0..1, while push-to-talk or "hey Jarvis"
+ * listening holds it open (voice.rs, `VOICE_LEVEL`) - never the audio
+ * itself. `setLevel` (voice.js) is authoritative about the mode this puts
+ * the reactor in: the moment a real level arrives it takes over from
+ * whatever the event stream last said, and the arriving numbers replace
+ * the synthetic "still listening" fallback with the owner's real voice.
+ */
+listen("voice-level", (event) => {
+  setLevel(Number(event && event.payload));
+});
 
 /** Half a second of speech while listening (voice.rs): pause the reply,
  *  and have the PC say whether it was the owner. Only while Jarvis talks,
@@ -4145,6 +4211,14 @@ onEvent((frame) => {
   if (frame && frame.kind === "step") {
     recheckSpeech();
     maybeSayOneMoment(frame.data);
+    // Item 10 (UI-AUDIT-2026-09-26.md): the card used to feed a step only to
+    // speech (above) and never to the screen, so it said "Working…" through
+    // the whole of a tool call. Brain's Live tab already turns the same
+    // event into words with `stepText` (now shared, step-words.js) - the bar
+    // shows the same words here, not a word of its own.
+    if (state.phase === "streaming" && !dom.card.hidden) {
+      dom.cardStatusText.textContent = stepText(frame.data);
+    }
   }
   // A timer going off, said aloud while "Hey Jarvis" listening is on - the
   // owner's "say timers aloud when voice is on" (2026-09-25). The toast

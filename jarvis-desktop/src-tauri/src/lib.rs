@@ -158,6 +158,12 @@ pub mod events {
     /// Payload: [`crate::voice_flow::BargeVerdict`]. The PC's answer for an
     /// utterance the Jarvis bar asked about: stop the reply, or carry on.
     pub const VOICE_BARGE_VERDICT: &str = "voice-barge-verdict";
+    /// Payload: `f32`, 0.0-1.0 - the microphone's own loudness, while
+    /// push-to-talk or "hey Jarvis" listening holds it open. Sent to the
+    /// quickbar only (`emit_quickbar`), which is the one window whose
+    /// reactor reads it (`voice.js` `setLevel`). Never the audio itself -
+    /// one number, computed from samples that never leave this process.
+    pub const VOICE_LEVEL: &str = "voice-level";
     /// Payload: [`crate::lock::Security`] - the Security settings changed
     /// (Settings' Windows Hello section). The Brain re-reads its memory
     /// lists, which may now be hidden or shown.
