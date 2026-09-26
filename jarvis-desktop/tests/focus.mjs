@@ -207,6 +207,19 @@ await check("Brain, running: the countdown moves, and ONE thing per tap", async 
   assert.deepEqual(after, ["Resume", "+10 minutes", "Stop"]);
 });
 
+await check("Brain: what a session is on is hidden with the private lists", async () => {
+  // What Rust sends while "Hide memory lists and chat history" hides them.
+  const hidden = { ...CASES.locked_on_target, intent: "", intent_hidden: true };
+  const page = await workTab({ focus: { status: hidden } });
+  const text = await page.locator("#focus").innerText();
+  await page.close();
+  assert.ok(!text.includes("the essay"), text);
+  assert.match(text, /On: hidden until Windows Hello confirms it is you\./);
+  const rs = read("src-tauri/src/brain/focus.rs");
+  const f = rs.slice(rs.indexOf("pub async fn focus_status("));
+  assert.match(f.slice(0, f.indexOf("\n}\n")), /private_hidden\(&app\)[\s\S]*hide_intent\(answer\)/);
+});
+
 await check("Brain, drifting: tinted, with the PC's line and the count", async () => {
   const page = await workTab({ focus: { status: CASES.drifting } });
   const tone = await page.locator("#focus .focus-now").getAttribute("data-tone");

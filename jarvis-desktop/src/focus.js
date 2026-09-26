@@ -53,6 +53,9 @@ export const HELD_WHEN_STALE = new Set(["start", "resume", "extend", "lock"]);
 const num = (v, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
 const text = (v) => (typeof v === "string" ? v.trim() : "");
 
+/** The "On:" line while the private lists hide what the session is on. */
+export const INTENT_HIDDEN = "On: hidden until Windows Hello confirms it is you.";
+
 /**
  * GET /api/focus as a view, or `{available: false, why}` for a PC without
  * focus sessions (Rust answers that for a 404 or 501) or anything unreadable.
@@ -70,6 +73,8 @@ export function readFocus(body) {
     minutes: num(body.minutes),
     left: Math.max(0, num(body.left_s)),
     intent: text(body.intent),
+    // Taken out by Rust while the private lists are hidden (focus.rs hide_intent).
+    intentHidden: body.intent_hidden === true,
     deferred: body.deferred === true,
     onTarget: typeof body.on_target === "boolean" ? body.on_target : null,
     drifting: body.drifting === true,

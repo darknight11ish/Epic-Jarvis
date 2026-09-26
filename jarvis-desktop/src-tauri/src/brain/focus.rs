@@ -168,7 +168,30 @@ pub async fn focus_status(app: AppHandle) -> Result<serde_json::Value, String> {
         .map_err(|e| commands::backend_unreachable(&e, &base))?;
     let status = response.status().as_u16();
     let body = response.text().await.unwrap_or_default();
-    status_answer(status, &body)
+    let answer = status_answer(status, &body)?;
+    // What the session is "on" is the owner's own words, like a reminder's:
+    // hidden with the private lists (continuity audit 2026-09-26, #10).
+    Ok(if crate::lock::private_hidden(&app) {
+        hide_intent(answer)
+    } else {
+        answer
+    })
+}
+
+/// The status with its `intent` taken out and `intent_hidden` set, when
+/// there was one to hide.
+pub(crate) fn hide_intent(mut answer: serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = answer.as_object_mut() {
+        let had = obj
+            .get("intent")
+            .and_then(|v| v.as_str())
+            .is_some_and(|s| !s.trim().is_empty());
+        if had {
+            obj.insert("intent".into(), serde_json::json!(""));
+            obj.insert("intent_hidden".into(), serde_json::json!(true));
+        }
+    }
+    answer
 }
 
 /// Start a session. Held on a stale link.
@@ -269,6 +292,15 @@ pub async fn play_callout(app: AppHandle, base: String, data: serde_json::Value)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn what_a_session_is_on_is_hidden_with_the_private_lists() {
+        let out = hide_intent(serde_json::json!({"on": true, "intent": "the tax return"}));
+        assert_eq!(out["intent"], "");
+        assert_eq!(out["intent_hidden"], true);
+        let none = hide_intent(serde_json::json!({"on": true, "intent": ""}));
+        assert!(none.get("intent_hidden").is_none());
+    }
 
     #[test]
     fn a_stop_while_the_sound_was_being_made_drops_it() {

@@ -4270,7 +4270,38 @@ pub async fn get_deep(app: AppHandle) -> Result<serde_json::Value, String> {
         .map_err(|e| second_card_unreachable(&e, &base))?;
     let status = response.status().as_u16();
     let body = response.text().await.unwrap_or_default();
-    deep_answer(status, &body)
+    let answer = deep_answer(status, &body)?;
+    // The questions and answers are the owner's own words, like the memory
+    // lists and chat history: hidden with them (bug audit 2026-09-26,
+    // Gemini finding checked; the phone does the same).
+    Ok(if crate::lock::private_hidden(&app) {
+        redact_deep(answer)
+    } else {
+        answer
+    })
+}
+
+/// A deep-questions list with every question and answer taken out, for
+/// while "Hide memory lists and chat history" hides them. States, times and
+/// speeds stay (they say nothing about the owner), and so does `why` - the
+/// backend's own sentence for a refusal or a failure.
+pub(crate) fn redact_deep(mut answer: serde_json::Value) -> serde_json::Value {
+    let mut count = 0usize;
+    if let Some(obj) = answer.as_object_mut() {
+        if let Some(serde_json::Value::Array(jobs)) = obj.get_mut("jobs") {
+            for job in jobs.iter_mut() {
+                if let Some(o) = job.as_object_mut() {
+                    count += 1;
+                    o.insert("question".into(), serde_json::json!(""));
+                    o.insert("answer".into(), serde_json::json!(""));
+                    o.insert("hidden".into(), serde_json::json!(true));
+                }
+            }
+        }
+        obj.insert("hidden".into(), serde_json::json!(true));
+        obj.insert("hidden_count".into(), serde_json::json!(count));
+    }
+    answer
 }
 
 /// "Ask slowly": `POST /api/deep/ask` with `{"question"}`, built here from
@@ -5574,6 +5605,33 @@ mod turn_tests {
             assert!(chat_extras(None, Some(bad)).is_empty(), "{bad:?}");
         }
         assert!(chat_extras(None, None).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod deep_hidden_tests {
+    use super::redact_deep;
+
+    #[test]
+    fn hidden_deep_questions_keep_their_state_and_lose_their_words() {
+        let out = redact_deep(serde_json::json!({
+            "available": true,
+            "jobs": [
+                {"id": "d1", "question": "Is my rash serious?", "state": "done",
+                 "answer": "It may be...", "seconds": 90},
+                {"id": "d2", "question": "Plan my budget", "state": "failed",
+                 "why": "The big model stopped."}
+            ]
+        }));
+        let text = out.to_string();
+        for private in ["rash", "It may be", "budget"] {
+            assert!(!text.contains(private), "{private} is still in {text}");
+        }
+        assert_eq!(out["hidden"], true);
+        assert_eq!(out["hidden_count"], 2);
+        assert_eq!(out["jobs"][0]["state"], "done");
+        assert_eq!(out["jobs"][0]["seconds"], 90);
+        assert_eq!(out["jobs"][1]["why"], "The big model stopped.");
     }
 }
 
