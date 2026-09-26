@@ -84,6 +84,13 @@ class EventService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_STOP_RINGING) {
+            // Stop on a ringing alarm or urgent "tell me when": silence and
+            // remove that one notification. Nothing is sent, nothing decided.
+            ScheduleNotifier.stopRinging(this, intent.getIntExtra(ScheduleNotifier.EXTRA_NOTIFICATION_ID, -1))
+            JarvisRuntime.startStream()
+            return START_STICKY
+        }
         if (intent?.action == ACTION_DENY) {
             // The stream first, same as every other start. This branch used to
             // skip it, so a Deny tapped while the service was cold - after a
@@ -407,6 +414,7 @@ class EventService : Service() {
         const val ACTION_STOP = "com.jarvis.client.STOP_LINK"
         const val ACTION_DENY = "com.jarvis.client.DENY_APPROVAL"
         const val ACTION_SNOOZE = "com.jarvis.client.SNOOZE_JOB"
+        const val ACTION_STOP_RINGING = "com.jarvis.client.STOP_RINGING"
 
         /**
          * How long a Deny from outside the app waits for the link to come up

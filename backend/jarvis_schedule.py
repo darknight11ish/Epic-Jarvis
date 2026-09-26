@@ -89,6 +89,13 @@ says "notify": false, so neither app shows a toast or a notification at
 three windows, and deleted like any job. KIND_MODULES below imports it
 before the loop first starts.
 
+"Tell me when" (jarvis_tellme.py, 2026-09-25) is a kind that LOOKS every
+few minutes and tells the owner only when something happened. It brings
+its own rule check (every N minutes, with an end date - the shared
+check_rule still refuses minutes, so every other repeat keeps the hourly
+floor), its own card, and is `silent`: a look rings no doorbell. See
+Kind's hooks below.
+
 NO BULK
 Every change names ONE job. There is no "delete all", no "mark everything
 done" - here, in the routes, or in either app. The one exception, asked for
@@ -206,7 +213,11 @@ class Kind:
                  owner_listed: bool = True, notify: bool = True, window: bool = False,
                  single: bool = False, edges: tuple = ("", ""), about: tuple = (),
                  note: Optional[Callable[[str], str]] = None, repeatable: bool = False,
-                 card_note: tuple = ()):
+                 card_note: tuple = (), check: Optional[Callable] = None,
+                 card: Optional[Callable] = None, silent: bool = False,
+                 add: Optional[Callable] = None, first_now: bool = False,
+                 fields: Optional[Callable[[str], dict]] = None, what: str = "",
+                 leaves: bool = False):
         self.name = name
         self.noun = noun                 # "timer", "reminder"
         self.lock_screen = lock_screen   # what a locked phone may show
@@ -242,6 +253,31 @@ class Kind:
         # Its card's own lines about what each run does and what it reads,
         # in place of the plain "nothing is sent anywhere" paragraph.
         self.card_note = tuple(card_note)
+        # "Tell me when" (jarvis_tellme.py, 2026-09-25) - a kind that LOOKS
+        # at something every few minutes and tells the owner only when it
+        # matches. These let a kind do that without a scheduler of its own:
+        #   check(rule, now) -> rule   its own rule check, used instead of
+        #                              check_rule (which keeps the hourly
+        #                              floor for every other kind);
+        #   card(rule, text, now)      the whole approval card, in its words;
+        #   silent                     going off rings NO doorbell - a look
+        #                              is not news; the kind publishes its
+        #                              own event when there is something;
+        #   add(body) -> (code, body)  POST /api/schedule/add for this kind;
+        #   first_now                  once approved, the first run is now,
+        #                              not one interval later;
+        #   fields(job_id) -> dict     extra fields for the job's view;
+        #   what                       the card's short "what" line;
+        #   leaves                     each run asks a server outside this
+        #                              PC (the owner's own), said on the card.
+        self.check = check
+        self.card = card
+        self.silent = silent
+        self.add = add
+        self.first_now = first_now
+        self.fields = fields
+        self.what = what
+        self.leaves = leaves
 
 
 KINDS: dict = {}
@@ -250,7 +286,7 @@ KINDS: dict = {}
 #: imports each one before the loop first runs, so a job of that kind that
 #: is already due - missed while the PC was off - finds its on_fire there.
 #: A module that is missing is skipped: its jobs still go off, as a doorbell.
-KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing")
+KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,
@@ -258,7 +294,11 @@ def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = Fa
                   owner_listed: bool = True, notify: bool = True, window: bool = False,
                   single: bool = False, edges: tuple = ("", ""), about: tuple = (),
                   note: Optional[Callable[[str], str]] = None, repeatable: bool = False,
-                  card_note: tuple = ()) -> Kind:
+                  card_note: tuple = (), check: Optional[Callable] = None,
+                  card: Optional[Callable] = None, silent: bool = False,
+                  add: Optional[Callable] = None, first_now: bool = False,
+                  fields: Optional[Callable[[str], dict]] = None, what: str = "",
+                  leaves: bool = False) -> Kind:
     """Add a kind of job. For the features still to come (briefing, tidy,
     sleep): their job goes off through the same loop, the same missed-while-
     off rule and the same event; `on_fire(job_id)` is called after the event,
@@ -273,7 +313,8 @@ def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = Fa
     k = Kind(name, noun, lock_screen, has_text=has_text, on_fire=on_fire,
              owner_listed=owner_listed, notify=notify, window=window, single=single,
              edges=edges, about=about, note=note, repeatable=repeatable,
-             card_note=card_note)
+             card_note=card_note, check=check, card=card, silent=silent, add=add,
+             first_now=first_now, fields=fields, what=what, leaves=leaves)
     KINDS[name] = k
     return k
 
@@ -492,6 +533,16 @@ def next_run(rule: dict, after: float) -> float:
         uh, um = _hhmm(rule["until"])
         return min(next_at(hh, mm, after), next_at(uh, um, after))
     every = rule["every"]
+    if every == "minutes":
+        # Only a kind with its own check() may have this ("tell me when",
+        # jarvis_tellme.py): check_rule() refuses it, so every other repeat
+        # keeps the hourly floor.
+        step = rule["minutes"] * 60.0
+        start = float(rule["start"])
+        if after < start:
+            return start
+        k = int((after - start) // step) + 1
+        return start + k * step
     if every == "hours":
         step = rule["hours"] * 3600.0
         start = float(rule["start"])
@@ -635,6 +686,9 @@ def rule_words(rule: Optional[dict]) -> str:
     if every == "hours":
         n = rule.get("hours")
         return "every hour" if n == 1 else f"every {n} hours"
+    if every == "minutes":
+        n = rule.get("minutes")
+        return "every minute" if n == 1 else f"every {n} minutes"
     return ""
 
 
@@ -893,7 +947,10 @@ class Scheduler:
         if not _repeatable(kind) and not window:
             raise ValueError("only alarms, reminders and briefings can repeat")
         now = self.now()
-        rule = check_rule(rule, now, window=window)
+        if k is not None and k.check is not None:
+            rule = k.check(rule, now)
+        else:
+            rule = check_rule(rule, now, window=window)
         text = self._clean_text(text, kind) if (k is None or k.has_text) else ""
         with self._lock, self._db() as c:
             self._room(c, kind)
@@ -927,6 +984,8 @@ class Scheduler:
 
     def card_text(self, kind: str, rule: dict, text: str, now: float) -> str:
         k = KINDS[kind]
+        if k.card is not None:
+            return k.card(rule, text, now)
         if rule.get("until"):
             return self._window_card(k, rule, now)
         runs = next_runs(rule, now)
@@ -995,9 +1054,10 @@ class Scheduler:
         if self._tier_of(ACTION) != "ask":
             return finish("refused")
         try:
-            v = self._gate(ACTION, {"text": text, "what": "set up a repeating " +
-                                    KINDS[row["kind"]].noun, "leaves_this_pc": False,
-                                    "job": jid}, text)
+            k = KINDS[row["kind"]]
+            v = self._gate(ACTION, {"text": text,
+                                    "what": k.what or ("set up a repeating " + k.noun),
+                                    "leaves_this_pc": bool(k.leaves), "job": jid}, text)
         except Exception:
             return finish("refused")
         vtier = getattr(v, "tier", "unknown")
@@ -1016,7 +1076,11 @@ class Scheduler:
                 # Deleted while the card waited: approving it sets up nothing.
                 self.last_card[jid] = "withdrawn"
                 return
-            due = next_run(rule, self.now())
+            kk = KINDS.get(row["kind"])
+            if kk is not None and kk.first_now:
+                due = self.now()
+            else:
+                due = next_run(rule, self.now())
             c.execute("UPDATE jobs SET state = 'active', due = ?, changed = ? WHERE id = ?",
                       (due, self.now(), jid))
         finish("approved")
@@ -1299,11 +1363,19 @@ class Scheduler:
                              "AND due <= ? ORDER BY due", (now,)).fetchall()
             for row in rows:
                 late = (now - float(row["due"])) > LATE_AFTER
+                ended = False
                 if row["rule"]:
                     try:
-                        nxt = next_run(json.loads(row["rule"]), now)
+                        rule = json.loads(row["rule"])
+                        nxt = next_run(rule, now)
+                        # A rule with an end date ("tell me when",
+                        # jarvis_tellme.py): this is its last run when the
+                        # next one would come after the end.
+                        if rule.get("ends") is not None and nxt > float(rule["ends"]):
+                            nxt = None
                     except Exception:
                         nxt = None
+                    ended = nxt is None
                     # Straight to the next time after NOW: a week of missed
                     # dailies goes off once, not seven times.
                     # Going off again: an earlier snooze of it is its own job
@@ -1322,27 +1394,51 @@ class Scheduler:
                     c.execute("UPDATE jobs SET state = 'fired', fired_at = ?, fired_due = ?, "
                               "late = ?, changed = ? WHERE id = ?",
                               (now, row["due"], int(late), now, row["id"]))
-                went.append((row["id"], row["kind"], late))
+                went.append((row["id"], row["kind"], late, ended))
             # Housekeeping: what went off a day ago, and done to-dos a week old.
             c.execute("DELETE FROM jobs WHERE state = 'fired' AND fired_at < ?",
                       (now - FIRED_KEEP,))
             c.execute("DELETE FROM jobs WHERE state = 'done' AND fired_at < ?",
                       (now - DONE_KEEP,))
             c.execute("DELETE FROM commands WHERE at < ?", (now - 30 * 86400,))
-        for jid, kind, late in went:
+        for jid, kind, late, ended in went:
             self.fired += 1
-            _audit("schedule.fired", {"id": jid, "kind": kind, "late": late})
             k = KINDS.get(kind)
-            data = {"id": jid, "kind": kind, "state": "fired", "late": bool(late)}
-            if k is not None and not k.notify:
-                # Nothing to tell the owner (the standby schedule at 01:00):
-                # both apps show no notification or toast for it.
-                data["notify"] = False
-            self._publish("schedule", data)
+            if k is not None and k.silent:
+                # A look, not news ("tell me when" checking the inbox every
+                # five minutes): no doorbell, and no audit line per look -
+                # the kind's own on_fire says when something matched. Only
+                # the list changing (its last look, at its end) is told.
+                if ended:
+                    self._changed(jid, kind)
+            else:
+                _audit("schedule.fired", {"id": jid, "kind": kind, "late": late})
+                data = {"id": jid, "kind": kind, "state": "fired", "late": bool(late)}
+                if k is not None and not k.notify:
+                    # Nothing to tell the owner (the standby schedule at
+                    # 01:00): both apps show no notification or toast for it.
+                    data["notify"] = False
+                self._publish("schedule", data)
             if k is not None and k.on_fire is not None:
                 fn = k.on_fire
                 self._spawn(lambda fn=fn, jid=jid: _safe(fn, jid))
-        return [j for j, _, _ in went]
+        return [w[0] for w in went]
+
+    def end(self, jid: str) -> bool:
+        """ONE job with a rule is over before its end date - a "tell me
+        when" that matched and was to tell only once. It is kept readable by
+        id for FIRED_KEEP, like a job that went off, so an app can still read
+        what it was. False when it is not on the list (deleted meanwhile)."""
+        now = self.now()
+        with self._lock, self._db() as c:
+            row = self._row(c, jid)
+            if row is None or row["state"] not in ("active", "paused"):
+                return False
+            c.execute("UPDATE jobs SET state = 'fired', due = NULL, fired_at = ?, "
+                      "fired_due = NULL, late = 0, changed = ? WHERE id = ?", (now, now, jid))
+        _audit("schedule.ended", {"id": jid, "kind": row["kind"]})
+        self._changed(jid, row["kind"])
+        return True
 
     def next_due(self) -> Optional[float]:
         with self._lock, self._db() as c:
@@ -1413,7 +1509,15 @@ class Scheduler:
                 tail = k.edges[2] if inside and len(k.edges) > 2 else ""
                 v["when"] = f"{edge} at {v['when']}{tail}"
         if rule:
-            v["rule"] = rule
+            # What a "tell me when" watches (a sender's name, a device) is in
+            # the rule's `watch`, for the card and the checks. It is the
+            # owner's own words, like `text`, which is what an app shows -
+            # so it is not handed out a second time here, where the desktop's
+            # hiding of the private lists (it blanks `text`) would miss it.
+            watch = rule.get("watch") if isinstance(rule.get("watch"), dict) else None
+            v["rule"] = {key: x for key, x in rule.items() if key != "watch"}
+            if watch is not None:
+                v["urgent"] = watch.get("urgent") is True
             v["repeat"] = rule_words(rule)
             base = now if row["state"] != "active" or row["due"] is None else float(row["due"]) - 1
             try:
@@ -1427,7 +1531,9 @@ class Scheduler:
             v["fired_at"] = row["fired_at"]
             v["late"] = bool(row["late"])
             v["went_off_at"] = clock(float(row["fired_at"]))
-            if row["late"] and row["fired_due"] is not None:
+            if row["late"] and row["fired_due"] is not None and not (k is not None and k.silent):
+                # A silent kind's late look (the PC slept) is just a look
+                # made later - there is nothing the owner missed.
                 v["missed"] = f"missed at {clock(float(row['fired_due']))}"
         if kind == "todo":
             # "" is the to-do list itself; a name is a named list ("shopping").
@@ -1444,6 +1550,15 @@ class Scheduler:
                 said = ""
             if said:
                 v["note"] = said
+        if k is not None and k.fields is not None:
+            try:
+                extra = k.fields(row["id"]) or {}
+            except Exception:
+                extra = {}
+            for key, x in extra.items():
+                # A kind adds fields; it never replaces the scheduler's own.
+                if key not in v:
+                    v[key] = x
         return v
 
     def job(self, jid: str) -> Optional[dict]:
@@ -1613,6 +1728,10 @@ def handle_add(body: dict) -> tuple:
         return 400, {"ok": False, "error": "need a JSON object"}
     kind = str(body.get("kind") or "").strip().lower()
     s = get()
+    if kind in KINDS and KINDS[kind].add is not None:
+        # A kind with its own way in ("tell me when", jarvis_tellme.add_route):
+        # it checks its own body and ends in add_repeat - ONE card.
+        return KINDS[kind].add(body)
     try:
         if kind == "todo":
             job = s.add_todo(body.get("text"), source="app", list_name=body.get("list"))

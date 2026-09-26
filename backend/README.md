@@ -9893,3 +9893,128 @@ On the PC, with Jarvis running: ask it something long with "Read aloud" on
 and press Alt+Shift+X while it talks. The speech stops at once, and a
 notification says what else was stopped. `selftest.py --preflight` checks
 that the running Jarvis answers the route.
+
+---
+
+# "Tell me when ..." and urgent alerts: `jarvis_tellme.py` (2026-09-25)
+
+**What it is for, in one line:** say "tell me when an email from Alex
+arrives" or "let me know when the washing machine finishes", approve ONE
+card, and Jarvis tells you when it happens - ringing until you look, if you
+said "urgently". It only ever tells you; it never replies or acts.
+
+Your decision (CLAUDE.md, after the prompt pack): "Urgent alerts without
+phone calls: 'tell me when ...' (a named sender's email, a device change)
+set up with one card; a match only notifies - urgent ones as a phone
+notification that keeps ringing until seen. No telephony service." And, from
+the creativity audit: alarms that keep ringing.
+
+## What it does
+
+- **Two things it can watch.** A new email from someone you name (it reads
+  only the From line of new mail, with PEEK so nothing is marked as read -
+  never a subject or any text), or one Home Assistant device changing to a
+  state ("finishes", "opens", "closes", "turns on", "turns off", or "is off").
+- **ONE approval card** to set one up, listing exactly what is watched,
+  which server is asked, how often (email every 5 minutes, a device every
+  minute), until when (30 days unless you say "for the next 2 hours" or
+  "today"; at most 90), whether it tells you once or every time, and
+  whether it is urgent.
+- **A match only notifies**: "An email from Alex arrived." - made from the
+  words YOU said, never from the email. A locked phone shows only "Jarvis:
+  something you asked to be told about happened." - and so do both apps
+  while App lock or "Hide memory lists and chat history" is on.
+- **Urgent**: the phone rings and vibrates until you look (Stop button, or
+  open it); the PC shows an alarm toast whose sound loops until you dismiss
+  it. **Every alarm now rings the same way.** On the desktop, a timer is
+  also said aloud ("Your timer is done.") while "Hey Jarvis" listening is on.
+- **Coming up** in both apps lists each one ("When an email from Alex
+  arrives", "tell me when, urgent", "Looks every 5 minutes", until when and
+  how the last look went) with Pause and Delete. Delete is immediate.
+
+## Owner steps (one line each, in PowerShell)
+
+Put the new code on the PC (copies `jarvis_tellme.py` and the updated
+`jarvis_schedule.py` and `jarvis_quick.py`), from this repository's folder,
+then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+It needs email (or Home Assistant) already set up for Jarvis on the PC, as
+for the morning briefing: `JARVIS_IMAP_HOST` and `email_check` in
+`[tools].enabled` (or `JARVIS_HOME_URL` and `home_read`), with the read's
+tier left at `"auto"` (as shipped). Then type in the Jarvis bar: `tell me
+when an email from <someone who will write to you> arrives` and approve the
+card. Send yourself a test email from that address; within about 5
+minutes both apps should say "An email from ... arrived."
+
+To try the ringing without waiting: `urgently tell me when an email from
+<you> arrives`, approve, send yourself an email, and leave the phone on
+the table. It should keep ringing until you pull the notification down or
+press Stop.
+
+## What the code does
+
+- `jarvis_tellme.py` (new, shipped whole, no patch) - the `"tellme"` kind:
+  its own rule check (every N minutes, with the 5 and 1 minute floors and an
+  end date), its card, its looks (`_look_email`, `_look_home`), what it keeps
+  (a `tellme` table in `schedule.db`: a mailbox position, a device's last
+  state, when it last looked and matched - never a name or any email text),
+  and `add_route` for `POST /api/schedule/add` with `"kind": "tellme"`.
+- `jarvis_schedule.py` - small, general hooks a kind may use: its own
+  `check` (the shared check still refuses "every N minutes", so every other
+  repeat keeps the hourly floor), its own `card`, `silent` (a look rings no
+  doorbell), `first_now` (the first look right after the yes), `fields` and
+  `add`; `next_run` understands "every N minutes"; a rule with an `ends`
+  stops there; `end(id)` finishes one job early; the job's view never hands
+  the watched name out a second time (its `rule` has no `watch`).
+- `jarvis_quick.py` - "tell me when ...", "let me know when ...",
+  "urgently ...", "every time ...", "for the next 2 hours", "today". A
+  device said in words is looked up by reading a few likely names
+  (`switch.washing_machine`, `binary_sensor.washing_machine`,
+  `sensor.washing_machine`) - never a list of the whole house.
+- The desktop: `brain/schedule.rs` (`toast_matched`, `rings`, the alert
+  hidden with the private lists), `stream.rs` (the `matched` event),
+  `winrt_toast.rs` (`notify_alarm`: a looping alarm toast), `coming-up.js`
+  and `brain.html` (the row and the hint), `main.js` (a timer said aloud).
+- The phone: `net/Schedule.kt` (the words, `matchedFrom`, `rings`),
+  `ScheduleNotifier.kt` (the ringing notification and Stop),
+  `JarvisApp.kt` (the "Alarms and urgent alerts" channel), `EventService.kt`
+  (Stop), `JarvisRuntime.kt` (`onTellMeMatched`), `ComingUpPlate.kt`.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_tellme.py; py -3 backend\test_schedule.py
+```
+
+About 110 checks in `test_tellme.py`, no network, no model: the floors (and
+that every other repeat keeps the hourly one); one card listing everything;
+denied, timed out, a toml tier or email not set up - nothing set up; the
+first look only noting the mailbox; "Alex" matching "Alex Smith" but never
+"alexandra@..."; the real IMAP code against a stand-in that records every
+command (only LOGIN, EXAMINE, UID SEARCH, UID FETCH of BODY.PEEK From,
+CLOSE, LOGOUT); a device changing (and not "changing" when it was already
+off, or went unavailable); one event with no words; tell once, every time,
+the end date; a read switched to "ask" later being skipped and said; the
+fast path's sentences and near misses; only your own words; no model tool.
+
+## Not checked, said plainly
+
+- **Nothing here ran on your PC, against a real mail server, or against a
+  real Home Assistant.** The mail server's side (especially the mailbox
+  position, UIDNEXT) was a stand-in.
+- **The ringing has not been seen** on a real phone (there is no Android
+  build here; CI compiles it) or a real Windows PC (the looping toast needs
+  the installed app; an uninstalled build rings once).
+- **Do Not Disturb**: the phone treats it as an alarm - it rings through Do
+  Not Disturb only if your phone lets alarms through (the default). Windows'
+  Do not disturb may hold the toast back.
+- **The phone hears of it only while connected to the PC.**
+- **Snooze** on the ringing notification is not built (Stop / Dismiss only).
+- Each look writes one line to the approval gate's log.
+- The GitHub watchlist (Brain -> Watch) is not merged into this - it lives
+  in your own backend files, and a GitHub source needs a key and a new way
+  out of the PC. Left for later.

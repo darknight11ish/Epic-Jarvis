@@ -3,11 +3,14 @@ package com.jarvis.client
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import androidx.core.content.ContextCompat
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.GpuProbe
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
+import com.jarvis.client.service.ScheduleNotifier
 
 class JarvisApp : Application() {
     override fun onCreate() {
@@ -88,6 +91,34 @@ class JarvisApp : Application() {
             ).apply {
                 description = getString(R.string.channel_approval_quiet_desc)
                 setShowBadge(true)
+            },
+        )
+
+        // Alarms and urgent "tell me when"s (2026-09-25: "alarms that keep
+        // ringing"; ScheduleNotifier.postRinging). Its own channel because the
+        // sound belongs to the channel: the ALARM sound, with alarm usage, so
+        // Do Not Disturb treats it as an alarm (let through when the phone
+        // allows alarms - the default) rather than as a message. Nothing here
+        // asks to override Do Not Disturb itself. Still no full-screen intent.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ScheduleNotifier.ALARM_CHANNEL_ID,
+                getString(R.string.channel_alarm_name),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = getString(R.string.channel_alarm_desc)
+                setShowBadge(true)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 600, 400, 600)
+                val sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                setSound(
+                    sound,
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
             },
         )
     }

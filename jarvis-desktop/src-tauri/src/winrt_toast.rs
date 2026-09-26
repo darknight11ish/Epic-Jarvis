@@ -226,6 +226,71 @@ fn try_notify_approval(
     notifier.Show(&toast)
 }
 
+/// The XML of a toast that keeps ringing: an alarm, or an urgent "tell me
+/// when" (backend jarvis_tellme.py; the owner's decision of 2026-09-25,
+/// "alarms that keep ringing"). `scenario="alarm"` keeps it on screen
+/// until it is dismissed, and its sound loops until then
+/// (`Notification.Looping.Alarm`, `loop="true"`). Windows requires an
+/// alarm toast to carry a button; its last button is Windows' own Dismiss
+/// (`activationType="system"`), which stops the sound and starts nothing.
+/// A timer, alarm or reminder going off also gets Snooze (`snooze`: the job
+/// id and the button's words), the same button as [`notify_fired`]'s - it
+/// carries the id only. There is no Approve here.
+pub(crate) fn alarm_xml(title: &str, body: &str, snooze: Option<(&str, &str)>) -> String {
+    let snooze = snooze
+        .map(|(id, label)| {
+            format!(
+                r#"<action content="{label}" arguments="{prefix}{id}" activationType="foreground"/>
+    "#,
+                label = escape_xml(label),
+                prefix = SNOOZE_PREFIX,
+                id = escape_xml(id),
+            )
+        })
+        .unwrap_or_default();
+    format!(
+        r#"<toast scenario="alarm" activationType="foreground" launch="jarvis-open">
+  <visual>
+    <binding template="ToastGeneric">
+      <text>{title}</text>
+      <text>{body}</text>
+    </binding>
+  </visual>
+  <audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>
+  <actions>
+    {snooze}<action activationType="system" arguments="dismiss" content=""/>
+  </actions>
+</toast>"#,
+        title = escape_xml(title),
+        body = escape_xml(body),
+    )
+}
+
+/// Shows a toast that keeps ringing until it is dismissed ([`alarm_xml`]),
+/// or - on an uninstalled build, or if anything here fails - the plain toast
+/// the plugin shows, which rings ONCE. Said, not hidden: the looping sound
+/// needs the installed app's identity, like the Deny button above.
+pub fn notify_alarm(app: &AppHandle, title: &str, body: &str, snooze: Option<(&str, &str)>) {
+    if is_uninstalled_build() {
+        crate::commands::notify(app, title, body);
+        return;
+    }
+    if let Err(e) = try_show(&alarm_xml(title, body, snooze)) {
+        crate::logfile::log(&format!(
+            "[jarvis] ringing toast failed, falling back to a plain one: {e}"
+        ));
+        crate::commands::notify(app, title, body);
+    }
+}
+
+fn try_show(xml: &str) -> windows::core::Result<()> {
+    let doc = XmlDocument::new()?;
+    doc.LoadXml(&HSTRING::from(xml))?;
+    let toast = ToastNotification::CreateToastNotification(&doc)?;
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(AUMID))?;
+    notifier.Show(&toast)
+}
+
 /// Reads a Deny action's id out of a launch's argv, if this launch is one.
 /// `None` for every ordinary launch and every ordinary second-instance
 /// activation - the ONLY thing that produces this prefix is a click on the
@@ -454,6 +519,28 @@ mod tests {
         assert_eq!(escape_xml("A & B"), "A &amp; B");
         assert_eq!(escape_xml("<script>"), "&lt;script&gt;");
         assert_eq!(escape_xml(r#"say "hi""#), "say &quot;hi&quot;");
+    }
+
+    #[test]
+    fn a_ringing_toast_loops_until_dismissed_and_cannot_act() {
+        let xml = alarm_xml("Tell me when", "An email from <Alex> & co arrived.", None);
+        assert!(xml.contains(r#"scenario="alarm""#));
+        assert!(xml
+            .contains(r#"<audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>"#));
+        assert!(xml.contains(r#"activationType="system" arguments="dismiss""#));
+        assert!(xml.contains("An email from &lt;Alex&gt; &amp; co arrived."));
+        assert!(!xml.contains(DENY_PREFIX) && !xml.to_lowercase().contains("approve"));
+        assert_eq!(xml.matches("<action ").count(), 1);
+    }
+
+    #[test]
+    fn a_ringing_alarm_also_offers_snooze_with_its_id_only() {
+        let xml = alarm_xml("Alarm", "Wake up", Some(("s0123456789", "Snooze")));
+        assert!(xml.contains(r#"scenario="alarm""#));
+        assert!(xml.contains(&format!(r#"arguments="{SNOOZE_PREFIX}s0123456789""#)));
+        assert!(xml.contains(r#"activationType="system" arguments="dismiss""#));
+        assert_eq!(xml.matches("<action ").count(), 2);
+        assert!(!xml.contains(DENY_PREFIX) && !xml.to_lowercase().contains("approve"));
     }
 
     #[test]

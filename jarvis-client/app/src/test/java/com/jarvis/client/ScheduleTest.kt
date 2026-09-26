@@ -248,4 +248,57 @@ class ScheduleTest {
             Schedule.firedFrom(obj("""{"id":"s0000000001","kind":"timer","state":"fired","late":false}""")),
         )
     }
+
+    private val tellme = obj(
+        """{"id":"s00000000bb","kind":"tellme","text":"an email from Alex arrives","state":"active",
+          "repeats":true,"repeat":"every 5 minutes","when":"12:05 today","urgent":true,
+          "note":"Until Sunday 25 October at 12:00, or the first time it happens. Urgent: rings until you look.",
+          "alert":"An email from Alex arrived.","alert_at":1790334600.0,
+          "lock_screen":"Jarvis: something you asked to be told about happened."}""",
+    )
+
+    @Test
+    fun aTellMeWhenRowSaysWhatIsWatchedHowOftenAndThatItIsUrgent() {
+        val j = Schedule.job(tellme)!!
+        assertEquals("When an email from Alex arrives", Schedule.titleOf(j))
+        assertEquals("tell me when, urgent", Schedule.tagOf(j))
+        assertEquals("tell me when", Schedule.tagOf(j.copy(urgent = false)))
+        assertEquals(listOf("Looks every 5 minutes", j.note), Schedule.metaOf(j))
+        assertEquals(listOf("Looks every 5 minutes", "Paused", j.note), Schedule.metaOf(j.copy(state = "paused")))
+        assertEquals(listOf("pause", "delete"), Schedule.actionsOf(j))
+        val hidden = Schedule.hide(Schedule.View(listOf(j), emptyList(), false)).jobs.single()
+        assertEquals(Schedule.TELLME_TITLE, Schedule.titleOf(hidden))
+        assertEquals("", hidden.alert)
+        assertEquals(1790334600.0, j.alertAt!!, 0.0)
+        // A repeating reminder's tag is unchanged.
+        val v = Schedule.parse(list)!!
+        assertEquals("reminder, repeats", Schedule.tagOf(v.jobs[2]))
+    }
+
+    @Test
+    fun aMatchNotifiesTheAlertAndOnlyTheGenericWordsWhenLocked() {
+        val j = Schedule.job(tellme)!!
+        assertEquals("Tell me when" to "An email from Alex arrived.", Schedule.notification("tellme", j, false))
+        val (_, locked) = Schedule.notification("tellme", j, true)
+        assertEquals(Schedule.TELLME_LOCK_SCREEN, locked)
+        assertFalse(locked.contains("Alex"))
+        assertEquals(Schedule.TELLME_LOCK_SCREEN, Schedule.notification("tellme", null, false).second)
+        assertEquals(Schedule.TELLME_LOCK_SCREEN, Schedule.lockScreen("tellme"))
+        assertEquals(
+            "s00000000bb" to true,
+            Schedule.matchedFrom(obj("""{"id":"s00000000bb","kind":"tellme","state":"matched","urgent":true}""")),
+        )
+        assertNull(Schedule.matchedFrom(obj("""{"id":"s00000000bb","kind":"tellme","state":"fired"}""")))
+        assertNull(Schedule.matchedFrom(obj("""{"id":"all","kind":"tellme","state":"matched"}""")))
+        assertNull(Schedule.matchedFrom(obj("""{"id":"s00000000bb","kind":"timer","state":"matched"}""")))
+    }
+
+    @Test
+    fun alarmsAndUrgentTellMeWhensRingUntilSeen() {
+        assertTrue(Schedule.rings("alarm", urgent = false))
+        assertTrue(Schedule.rings("tellme", urgent = true))
+        assertFalse(Schedule.rings("tellme", urgent = false))
+        assertFalse(Schedule.rings("timer", urgent = true))
+        assertFalse(Schedule.rings("reminder", urgent = false))
+    }
 }

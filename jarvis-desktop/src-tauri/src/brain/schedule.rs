@@ -43,6 +43,14 @@
 //! hidden, the toast says only what KIND of thing is due ("Jarvis: a
 //! reminder is due.") - the same lock-screen words the phone uses.
 //!
+//! "Tell me when" (backend jarvis_tellme.py, 2026-09-25): a watch that
+//! matched says `"state": "matched"`, and [`toast_matched`] shows the job's
+//! `alert` ("An email from Alex arrived.") - built on the PC from the
+//! owner's own words, never from the email. An ALARM, and a "tell me when"
+//! marked urgent, keep ringing until dismissed ([`rings`]: an alarm toast
+//! whose sound loops, winrt_toast.rs `notify_alarm`). The owner's decision:
+//! "alarms that keep ringing"; a match only notifies.
+//!
 //! The answer-reading functions are plain functions of (status, body) so
 //! their tests run without a Tauri app or a network.
 
@@ -187,6 +195,11 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
                             count += 1;
                         }
                         o.insert("text".into(), serde_json::json!(""));
+                        // A "tell me when"'s notice names the sender or the
+                        // device, from the same words.
+                        if o.contains_key("alert") {
+                            o.insert("alert".into(), serde_json::json!(""));
+                        }
                         o.insert("hidden".into(), serde_json::json!(true));
                         let named = o
                             .get("list")
@@ -319,6 +332,12 @@ pub(crate) fn wants_toast(data: &serde_json::Value) -> bool {
     data.get("notify").and_then(|v| v.as_bool()) != Some(false)
 }
 
+/// "Tell me when" - what a locked screen, and a toast while App lock or the
+/// hidden lists are on, ever says about one (jarvis_tellme.LOCK_SCREEN; the
+/// phone's `Schedule.TELLME_LOCK_SCREEN`).
+pub(crate) const TELLME_LOCK_SCREEN: &str =
+    "Jarvis: something you asked to be told about happened.";
+
 /// The toast's title for a kind - both apps' words.
 pub(crate) fn toast_title(kind: &str) -> &'static str {
     match kind {
@@ -327,8 +346,16 @@ pub(crate) fn toast_title(kind: &str) -> &'static str {
         "reminder" => "Reminder",
         "todo" => "To-do",
         "briefing" => "Morning briefing",
+        "tellme" => "Tell me when",
         _ => "Jarvis",
     }
+}
+
+/// Whether this keeps ringing until it is dismissed: an alarm going off,
+/// and a "tell me when" the owner marked urgent. Everything else rings once.
+pub(crate) fn rings(kind: &str, data: &serde_json::Value) -> bool {
+    kind == "alarm"
+        || (kind == "tellme" && data.get("urgent").and_then(|v| v.as_bool()) == Some(true))
 }
 
 /// What a locked screen may show for a kind, when the PC did not say. The
@@ -340,6 +367,7 @@ pub(crate) fn lock_screen_words(kind: &str) -> &'static str {
         "reminder" => "Jarvis: a reminder is due.",
         "todo" => "Jarvis: a to-do item is due.",
         "briefing" => "Jarvis: your morning briefing is ready.",
+        "tellme" => TELLME_LOCK_SCREEN,
         _ => "Jarvis: something is due.",
     }
 }
@@ -365,11 +393,10 @@ pub(crate) fn toast_words(
     if private {
         return (title, fallback);
     }
-    let text = job
-        .get("text")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .trim();
+    // A "tell me when" says its `alert` - made on the PC from the owner's
+    // own words - never its `text`, which is what is watched.
+    let field = if kind == "tellme" { "alert" } else { "text" };
+    let text = job.get(field).and_then(|v| v.as_str()).unwrap_or("").trim();
     let mut body = if !text.is_empty() {
         if kind == "timer" {
             format!("The {text} timer is done.")
@@ -437,13 +464,59 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     let (title, body) = toast_words(&kind, job.as_ref(), private);
     // A timer, alarm or reminder gets a Snooze button (2026-09-25) - on
     // Windows, through winrt_toast.rs; anything else, or anywhere else, the
-    // plain toast. The button carries the id only.
-    #[cfg(windows)]
-    if SNOOZABLE.contains(&kind.as_str()) {
-        crate::winrt_toast::notify_fired(&app, &title, &body, &id, SNOOZE_LABEL);
+    // plain toast. The button carries the id only. An alarm also keeps
+    // ringing until it is dismissed or snoozed.
+    let snooze = SNOOZABLE
+        .contains(&kind.as_str())
+        .then_some((id.as_str(), SNOOZE_LABEL));
+    show(&app, &title, &body, rings(&kind, &data), snooze);
+}
+
+/// A "tell me when" matched (`{"id", "kind": "tellme", "state": "matched",
+/// "urgent"}`): read its `alert` by id and show it - ringing until dismissed
+/// when it is urgent. Only ever a notice: nothing here acts, and the toast's
+/// only button is Windows' own Dismiss. Once per match, even when a
+/// reconnect replays the event.
+pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value) {
+    let Some(id) = data.get("id").and_then(|v| v.as_str()).map(str::to_string) else {
+        return;
+    };
+    if !valid_id(&id) || data.get("kind").and_then(|v| v.as_str()) != Some("tellme") {
         return;
     }
-    commands::notify(&app, &title, &body);
+    let job = read_job(&app, &base, &id).await;
+    let at = job
+        .as_ref()
+        .and_then(|j| j.get("alert_at"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as i64;
+    if !first_time(&format!("{id}#match"), at) {
+        return;
+    }
+    let security = crate::lock::current(&app);
+    let private = security.app_lock || crate::lock::private_hidden(&app);
+    let (title, body) = toast_words("tellme", job.as_ref(), private);
+    show(&app, &title, &body, rings("tellme", &data), None);
+}
+
+/// One toast: a ringing one (an alarm, an urgent "tell me when") through
+/// WinRT, where its sound can loop until it is dismissed; one with Snooze
+/// through WinRT too; any other through the plugin, as before.
+fn show(app: &AppHandle, title: &str, body: &str, ring: bool, snooze: Option<(&str, &str)>) {
+    #[cfg(windows)]
+    {
+        if ring {
+            crate::winrt_toast::notify_alarm(app, title, body, snooze);
+            return;
+        }
+        if let Some((id, label)) = snooze {
+            crate::winrt_toast::notify_fired(app, title, body, id, label);
+            return;
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (ring, snooze);
+    commands::notify(app, title, body);
 }
 
 /// A Snooze pressed on a toast (winrt_toast.rs): the same change as the
@@ -776,6 +849,36 @@ mod tests {
                 "{a} {b}"
             );
         }
+    }
+
+    #[test]
+    fn a_tell_me_when_says_its_alert_and_only_the_generic_words_when_locked() {
+        let job = serde_json::json!({"id": "s0123456789", "kind": "tellme",
+            "text": "an email from Alex arrives", "alert": "An email from Alex arrived.",
+            "lock_screen": TELLME_LOCK_SCREEN});
+        assert_eq!(
+            toast_words("tellme", Some(&job), false),
+            (
+                "Tell me when".to_string(),
+                "An email from Alex arrived.".to_string()
+            )
+        );
+        let (_, b) = toast_words("tellme", Some(&job), true);
+        assert_eq!(b, TELLME_LOCK_SCREEN);
+        assert!(!b.contains("Alex"));
+        assert_eq!(toast_words("tellme", None, false).1, TELLME_LOCK_SCREEN);
+        let hidden = redact_list(serde_json::json!({"jobs": [job], "todo": []}));
+        assert!(!hidden.to_string().contains("Alex"));
+    }
+
+    #[test]
+    fn alarms_and_urgent_tell_me_whens_ring_until_dismissed() {
+        let fired = serde_json::json!({"id": "s0123456789", "state": "fired"});
+        assert!(rings("alarm", &fired));
+        assert!(!rings("timer", &fired) && !rings("reminder", &fired));
+        assert!(rings("tellme", &serde_json::json!({"urgent": true})));
+        assert!(!rings("tellme", &serde_json::json!({"urgent": false})));
+        assert!(!rings("tellme", &serde_json::json!({})));
     }
 
     #[test]

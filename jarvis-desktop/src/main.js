@@ -160,6 +160,8 @@ import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
 // One card on every screen, and what a spoken question hears about a card
 // (the creativity audit, 2026-09-25) - card-words.js.
 import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
+// A timer said aloud while hands-free listening is on (2026-09-25).
+import { aloudFor } from "./coming-up.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -4055,7 +4057,23 @@ onEvent((frame) => {
     recheckSpeech();
     maybeSayOneMoment(frame.data);
   }
+  // A timer going off, said aloud while "Hey Jarvis" listening is on - the
+  // owner's "say timers aloud when voice is on" (2026-09-25). The toast
+  // shows as well (Rust). Generic words only: the room may not be private.
+  const aloud = aloudFor(frame, state.autoListening);
+  if (aloud) sayAside(aloud);
 });
+
+/** One fixed line, said on its own - not part of any answer, so none of an
+ *  answer's queue or privacy rules apply to it, and it never stops one. */
+async function sayAside(line) {
+  try {
+    const uri = await invokeStrict("speak_reply", { text: line });
+    if (uri) await new Audio(uri).play();
+  } catch (error) {
+    console.info("[quickbar] could not say it aloud:", error);
+  }
+}
 listen("jarvis-resync", () => {
   toolWatch.resync();
   recheckSpeech();

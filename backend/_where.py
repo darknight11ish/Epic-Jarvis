@@ -145,6 +145,8 @@ SHIPPED = (
     "jarvis_search.py",
     # Stop everything (stop-all.patch)
     "jarvis_stop_all.py",
+    # "tell me when ..." - a kind of job on the one scheduler (not a tool)
+    "jarvis_tellme.py",
 )
 
 

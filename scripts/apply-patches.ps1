@@ -537,6 +537,7 @@ $SHIPPED = @(
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch
     # --- Stop everything (2026-09-25) ---
     'jarvis_stop_all.py'         # stop-all.patch: POST /api/stop_all, and the hook other features register with
+    'jarvis_tellme.py'           # "tell me when ..." (an email from someone, a device changing): a kind of job on the one scheduler, no patch; NOT a model tool
 )
 
 # The settings file. Installed only where none exists; never overwritten.

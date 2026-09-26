@@ -192,6 +192,13 @@ internal fun ComingUpSection(
                     }
                     shown.jobs.forEach { ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) } }
                     Gap(14)
+                    // "Tell me when" - set up by saying or typing it (one card
+                    // on the PC); its rows are in the list above.
+                    Text(Schedule.TELLME_TITLE, style = MaterialTheme.typography.labelMedium,
+                        color = chrome.textMid)
+                    Text(Schedule.TELLME_HINT, style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo)
+                    Gap(14)
                     Text(Schedule.TODO_TITLE, style = MaterialTheme.typography.labelMedium,
                         color = chrome.textMid)
                     val todoItems = Schedule.todoItems(shown)

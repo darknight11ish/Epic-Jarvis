@@ -3141,6 +3141,12 @@ object JarvisRuntime {
             com.jarvis.client.net.Briefing.readyFrom(obj)?.let { onBriefingReady(it) }
             return
         }
+        // A "tell me when" matched: it only tells - the alert is read by id,
+        // and an urgent one rings until seen.
+        com.jarvis.client.net.Schedule.matchedFrom(obj)?.let { (id, urgent) ->
+            onTellMeMatched(id, urgent)
+            return
+        }
         val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(obj) ?: return
         val context = appContext ?: return
         scope.launch {
@@ -3163,7 +3169,44 @@ object JarvisRuntime {
             val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
             val lockScreen = job?.lockScreen?.takeIf { it.isNotEmpty() }
                 ?: com.jarvis.client.net.Schedule.lockScreen(kind)
-            com.jarvis.client.service.ScheduleNotifier.post(context, id, kind, title, text, lockScreen)
+            // An alarm keeps ringing until seen (2026-09-25).
+            com.jarvis.client.service.ScheduleNotifier.post(
+                context, id, kind, title, text, lockScreen,
+                ring = com.jarvis.client.net.Schedule.rings(kind, urgent = false),
+            )
+        }
+    }
+
+    /**
+     * A "tell me when" matched (backend jarvis_tellme.py): read its alert by
+     * id ("An email from Alex arrived." - made on the PC from the owner's own
+     * words) and show it; urgent rings until seen. While App lock or "Hide
+     * memory lists and chat history" is on, only the generic words. Once per
+     * match, even when a reconnect replays the event. It only tells: nothing
+     * here acts.
+     */
+    private fun onTellMeMatched(id: String, urgent: Boolean) {
+        val context = appContext ?: return
+        val kind = com.jarvis.client.net.Schedule.TELLME
+        scope.launch {
+            val job = when (val r = api.scheduleJob(id)) {
+                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+                is ApiResult.Failed -> null
+            }
+            val key = id + "#match@" + (job?.alertAt?.toLong() ?: 0L)
+            val fresh = synchronized(scheduleShown) {
+                if (scheduleShown.size > 500) scheduleShown.clear()
+                scheduleShown.add(key)
+            }
+            if (!fresh) return@launch
+            val security = settings.security.value
+            val locked = security.appLock || security.privateLists
+            val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
+            com.jarvis.client.service.ScheduleNotifier.post(
+                context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_LOCK_SCREEN,
+                ring = com.jarvis.client.net.Schedule.rings(kind, urgent),
+                key = key,
+            )
         }
     }
 

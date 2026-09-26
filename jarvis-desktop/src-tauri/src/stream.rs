@@ -693,6 +693,22 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             ));
         }
 
+        // A "tell me when" matched (backend jarvis_tellme.py): `{"id",
+        // "kind": "tellme", "state": "matched", "urgent"}` - never a word.
+        // The toast reads the job's `alert` by id ("An email from Alex
+        // arrived."), says only the generic words while App lock is on or
+        // the private lists are hidden, and keeps ringing until dismissed
+        // when it is urgent (brain/schedule.rs toast_matched). It only
+        // tells: nothing here acts. Fanned out below too; the Brain reads
+        // Coming up again on it.
+        "schedule" if event.data["state"].as_str() == Some("matched") => {
+            tauri::async_runtime::spawn(crate::brain::schedule::toast_matched(
+                app.clone(),
+                base.to_string(),
+                event.data.clone(),
+            ));
+        }
+
         // finding | persona | model | voice — nothing here consumes them, and
         // nothing here should: they are fanned out below like everything else,
         // and the surface that renders one owns what it means.

@@ -59,6 +59,15 @@ items 6 and 7):
   * "What did I miss?": jarvis_briefing.build_missed - since the owner's
     previous message to Jarvis from either app (answer_turn notes the time
     of every one, jarvis_briefing.touch).
+"TELL ME WHEN ..." (jarvis_tellme.py, 2026-09-25) is here too: "tell me
+when an email from Alex arrives", "let me know when the washing machine
+finishes", "urgently tell me when the front door opens", "tell me every
+time Sam emails me", "... for the next 2 hours" / "... today". Each is ONE
+approval card raised by the scheduler; nothing is watched before a yes. A
+device said in words is looked up first - one read of each of up to three
+likely Home Assistant names (switch.washing_machine, ...), through the
+gate like any read - and the answer then counts as having read outside
+text. The model has no tool for this.
 
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
@@ -726,6 +735,11 @@ def _match(text, now: float) -> Optional[Intent]:
     if _REACH.fullmatch(s):
         return Intent("reach_list")
 
+    # --- "tell me when ..." (jarvis_tellme.py) ------------------------------------------
+    got = _tellme(s, text, now)
+    if got is not None:
+        return got
+
     # --- reminders -----------------------------------------------------------------
     got = _reminder(s, now)
     if got is not None:
@@ -942,6 +956,178 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
         if when is not None:
             return Intent("reminder_set", {"text": text, "when": when})
     return None
+
+
+#: "Tell me when ..." (jarvis_tellme.py, the owner's decision of 2026-09-25):
+#: an email from a named sender, or a Home Assistant device doing something.
+#: Whole sentences only, like everything here: "tell me when you're ready"
+#: or "let me know when it's done" go to the model.
+_TELL = re.compile(
+    r"(?P<urg>urgently\s+)?(?:tell\s+me|let\s+me\s+know|notify\s+me|alert\s+me|ping\s+me"
+    r"|warn\s+me|give\s+me\s+a\s+shout)(?P<urg2>\s+urgently)?\s+(?:(?P<every>every\s+time"
+    r"|each\s+time|whenever)|when|as\s+soon\s+as|once|if)\s+(?P<what>.+)")
+_URGENT_TAIL = re.compile(
+    r"[\s,.;-]+(?:and\s+)?(?:(?:it'?s|it\s+is|make\s+it|mark\s+it)\s+urgent|urgently|urgent"
+    r"|(?:and\s+)?keep\s+ringing(?:\s+until\s+i\s+(?:see|look\s+at)\s+it)?)$")
+_NUMS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+         "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12, "fourteen": 14,
+         "thirty": 30}
+_FOR_TAIL = re.compile(
+    r"[\s,]+(?:for\s+(?:the\s+next\s+|the\s+)?(?P<n>\d{1,3}|a|an|one|two|three|four|five|six"
+    r"|seven|eight|nine|ten|twelve|fourteen|thirty)\s+(?P<u>minutes?|hours?|days?|weeks?)"
+    r"|(?P<today>today|tonight|for\s+today))$")
+_MAIL = r"(?:e-?mail|mail)"
+_MAIL_WHAT = (
+    re.compile(r"(?:i\s+(?:get|receive|have)\s+)?(?:an?\s+|any\s+)?(?:new\s+)?" + _MAIL
+               + r"s?\s+(?:from|by)\s+(?P<who>.+?)(?:\s+(?:arrives|comes\s+in|comes|gets\s+here"
+               r"|lands|shows\s+up|is\s+here|turns\s+up|appears|is\s+in))?"),
+    re.compile(r"(?P<who>.+?)\s+(?:emails|e-mails|mails|writes\s+to|replies\s+to)\s+me"),
+)
+#: What a device may do, and how jarvis_tellme names it.
+_DEV_VERBS = (
+    (r"finishes|has\s+finished|is\s+(?:done|finished)|stops|has\s+stopped", {"say": "finishes"}),
+    (r"opens|is\s+opened|is\s+open|gets\s+opened", {"say": "opens"}),
+    (r"closes|is\s+closed|gets\s+closed", {"say": "closes"}),
+    (r"turns\s+on|switches\s+on|starts", {"say": "turns on"}),
+    (r"turns\s+off|switches\s+off", {"say": "turns off"}),
+    (r"is\s+(?:turned\s+|switched\s+)?on", {"states": ["on"]}),
+    (r"is\s+(?:turned\s+|switched\s+)?off", {"states": ["off"]}),
+)
+_DEV = re.compile(r"(?:the\s+|my\s+|our\s+)?(?P<dev>[a-z0-9][a-z0-9 ._'-]{0,59}?)\s+(?P<verb>"
+                  + "|".join(f"(?:{p})" for p, _ in _DEV_VERBS) + r")")
+_ENTITY_STATE = re.compile(r"(?P<dev>[a-z0-9_]+\.[a-z0-9_]+)\s+(?:is|becomes|reaches|goes\s+to"
+                           r"|changes\s+to|turns|is\s+now)\s+(?P<st>[a-z0-9_]{1,30})")
+#: Not a device - and not a sender: "tell me when it's done" is the model's.
+_NOT_A_THING = frozenset(("it", "this", "that", "they", "you", "he", "she", "we", "something",
+                          "timer", "alarm", "reminder", "everything", "anything", "one",
+                          "things", "jarvis", "the timer", "my timer", "the alarm"))
+_ANYONE = frozenset(("anyone", "anybody", "someone", "somebody", "everyone", "them", "him",
+                     "her", "it", "people"))
+
+
+def _tellme(s: str, original, now: float) -> Optional[Intent]:
+    m = _TELL.fullmatch(s)
+    if not m:
+        return None
+    what = m.group("what").strip()
+    urgent = bool(m.group("urg") or m.group("urg2"))
+    once = not m.group("every")
+    ends = None
+    for _ in range(3):
+        u = _URGENT_TAIL.search(what)
+        if u:
+            urgent = True
+            what = what[:u.start()].strip()
+            continue
+        d = _FOR_TAIL.search(what)
+        if d:
+            if d.group("today"):
+                lt = time.localtime(now)
+                import jarvis_schedule as S
+                y, mo, dd = S._add_days(lt.tm_year, lt.tm_mon, lt.tm_mday, 1)
+                ends = S.wall_to_epoch(y, mo, dd, 0, 0)
+            else:
+                n = d.group("n")
+                n = int(n) if n.isdigit() else _NUMS.get(n, 1)
+                unit = d.group("u").rstrip("s")
+                ends = now + n * {"minute": 60, "hour": 3600, "day": 86400,
+                                  "week": 7 * 86400}[unit]
+            what = what[:d.start()].strip()
+            continue
+        break
+    f = {"urgent": urgent, "once": once, "ends": ends}
+    for rx in _MAIL_WHAT:
+        mm = rx.fullmatch(what)
+        if mm:
+            who = mm.group("who").strip()
+            if who in _ANYONE or not who:
+                return Intent("tellme_help", {"why": "who"})
+            return Intent("tellme_email", dict(f, who=_restore(original, who)))
+    mm = _ENTITY_STATE.fullmatch(what)
+    if mm:
+        return Intent("tellme_home", dict(f, entity=mm.group("dev"), name="",
+                                          states=[mm.group("st")]))
+    mm = _DEV.fullmatch(what)
+    if mm:
+        dev = mm.group("dev").strip()
+        if dev in _NOT_A_THING or re.search(r"\b(?:e-?mail|mail|message|text)\b", dev):
+            return None
+        verb = mm.group("verb")
+        how = next(h for p, h in _DEV_VERBS if re.fullmatch(p, verb))
+        if re.fullmatch(r"[a-z0-9_]+\.[a-z0-9_]+", dev):
+            return Intent("tellme_home", dict(f, entity=dev, name="", **how))
+        # "tell me when the shop opens" is as often a QUESTION as a request:
+        # with these verbs, a name that is no Home Assistant device goes to
+        # the model instead of being told "no such device".
+        ambiguous = bool(re.search(r"open|close|start|stop", verb))
+        return Intent("tellme_home", dict(f, entity="", name=dev, ambiguous=ambiguous, **how))
+    return None
+
+
+TELLME_MISSING = ("Your PC's Jarvis cannot do \"tell me when\" yet - run apply-patches.ps1 "
+                  "on the PC.")
+
+
+def _run_tellme(intent: Intent, sched, now: float) -> Result:
+    """"Tell me when ...": ONE approval card, raised by the scheduler. A
+    device named in words ("the washing machine") is looked up first: one
+    read of each of a few likely Home Assistant names, through the gate like
+    any read - never a list of the whole house."""
+    import jarvis_schedule as S
+    n, f = intent.name, intent.f
+    if n == "tellme_help":
+        return Result("Say who the email is from, like \"tell me when an email from Alex "
+                      "arrives\".", n)
+    try:
+        import jarvis_tellme as TM
+    except Exception:
+        return Result(TELLME_MISSING, n)
+    read = []
+    if n == "tellme_email":
+        watch = {"source": "email", "sender": f["who"], "urgent": f["urgent"],
+                 "once": f["once"]}
+    else:
+        entity, name = f.get("entity") or "", f.get("name") or ""
+        if not entity:
+            try:
+                got = TM.find_device(name, f.get("say") or "")
+            except Exception as exc:
+                return Result("Jarvis could not look for that device in Home Assistant "
+                              f"({type(exc).__name__}).", n)
+            if f.get("ambiguous") and (got["why"] or not got["found"]):
+                return None     # "tell me when the shop opens": the model's
+            if got["why"]:
+                return Result(got["why"], n)
+            read = ["home_read"] if got["tried"] else []
+            if not got["found"]:
+                tried = got["tried"]
+                return Result(f"Jarvis could not find a Home Assistant device called {name} "
+                              f"(it looked for {_join(tried)}). Say its Home Assistant name, "
+                              f"like \"tell me when {tried[0] if tried else 'switch.' + TM.slug(name)} "
+                              f"is off\".", n, read=read)
+            if len(got["found"]) > 1:
+                return Result(f"There is more than one: {_join(got['found'])}. Say which, like "
+                              f"\"tell me when {got['found'][0]} is off\".", n, read=read)
+            entity = got["found"][0]
+        watch = {"source": "home", "entity": entity, "name": name, "urgent": f["urgent"],
+                 "once": f["once"]}
+        if f.get("say"):
+            watch["say"] = f["say"]
+        else:
+            watch["states"] = f.get("states") or []
+    try:
+        j = TM.add(watch, ends=f.get("ends"), source="quick", sched=sched)
+    except (ValueError, OverflowError) as exc:
+        return Result(S._sentence(exc), n, read=read)
+    # Like a reminder's words, the sender or device is not said back: the
+    # card shows exactly what is watched.
+    rule = j.get("rule") or {}
+    until = S.long_date(float(rule["ends"])) if rule.get("ends") else "its end"
+    tail = "tells you once" if f["once"] else "tells you every time"
+    urgent = " It is marked urgent: your phone rings until you look." if f["urgent"] else ""
+    return Result(f"That needs your yes on the approval card, which shows exactly what is "
+                  f"watched. Then Jarvis looks {S.rule_words(rule)} until {until} and "
+                  f"{tail}.{urgent}", n, [j["id"]], read=read)
 
 
 #: "the briefing", "my morning briefing", "today's briefing", "briefing".
@@ -1171,6 +1357,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n.startswith("tellme_"):
+        return _run_tellme(intent, sched, now)
     if n == "timer_set":
         try:
             j = sched.add_timer(f["seconds"], f.get("label", ""), source="quick")

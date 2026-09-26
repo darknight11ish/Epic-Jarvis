@@ -1031,7 +1031,7 @@ path ever appears in it (`routes.rs:67-101`).
 
 | Endpoint | Method | Desktop | Android | Notes |
 |---|---|---|---|---|
-| `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§26). `started` (2026-09-25) is when the server process started, in epoch seconds (§27). The desktop falls back to `/api/status` for anything an older server leaves out. |
+| `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§28). `started` (2026-09-25) is when the server process started, in epoch seconds (§29). The desktop falls back to `/api/status` for anything an older server leaves out. |
 | `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Mind screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
 | `/api/graph` | GET | `routes.rs:15` | **no — by rule** | The memory graph stays off the phone. Gets its own longer timeout (`brain.rs:97`). |
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |
@@ -3430,6 +3430,7 @@ A `job`:
  "lock_screen": "Jarvis: a reminder is due.",   the kind's words, never the job's
  "notify": false,                 only for a kind that tells nobody (the standby schedule)
  "note": "Went on standby at 01:00.",   a kind's line about how it last went (21.8)
+ "urgent", "watches", "alert", "alert_at",   a "tell me when" only (section 30)
  "created", "source": "quick"|"tool"|"app"}
 ```
 
@@ -3485,8 +3486,11 @@ the owner asked for it.
 that tells nobody - the standby schedule at 01:00 - and then neither app
 shows a toast or a notification; both still read Coming up again.
 `"fired"` is a job going off; `"changed"` is the list changing (added,
-paused, deleted, a card decided). Both apps read Coming up again on it. On
-`"fired"`:
+paused, deleted, a card decided). Both apps read Coming up again on it.
+Since 2026-09-25 there is also `"matched"` - a "tell me when" that
+happened, `{"id", "kind": "tellme", "state": "matched", "urgent"}`
+(section 30) - and an ALARM going off keeps ringing until seen in both
+apps (26.5). On `"fired"`:
 
 - **Desktop**: reads the job by id and shows a Windows toast - title "Timer
   done", "Alarm", "Reminder" or "To-do", and the words (or "The pasta timer
@@ -4778,3 +4782,212 @@ databases, the token) and fails loudly if one does.
 server process started), which the preflight compares with each shipped
 module's file time - a module changed after the start may not be the code
 the running server uses.
+
+## 30. "Tell me when ..." and urgent alerts (added 2026-09-25)
+
+The owner's decision (`CLAUDE.md`, after the prompt pack): "Urgent alerts
+without phone calls: 'tell me when ...' (a named sender's email, a device
+change) set up with one card; a match only notifies - urgent ones as a
+phone notification that keeps ringing until seen. No telephony service: a
+call would send private text to an outside voice company (rule 1)." And
+from the creativity audit: alarms that keep ringing.
+
+`backend/jarvis_tellme.py`, shipped whole, no patch: a KIND of job on the
+one scheduler (section 21), kind `"tellme"`, loaded by
+`jarvis_schedule.KIND_MODULES`. Called "Tell me when" in both apps - not
+"Watch", which is the desktop's GitHub watchlist (Brain -> Watch).
+
+### 30.1 What it watches
+
+| Source | Set up with | Each look |
+|---|---|---|
+| **An email from a named sender** | `{"source": "email", "sender": "Alex"}` (a name, 1-60 plain characters, or an address) | ONE connection to the mail server `jarvis_email.plan()` names: LOGIN, EXAMINE (read-only), `UID SEARCH UID <n>:*`, `UID FETCH <new uids> (BODY.PEEK[HEADER.FIELDS (FROM)])`, CLOSE, LOGOUT. The From line only, of mail that arrived since the last look (at most 50), with PEEK so nothing is marked as read. The first look only notes where the mailbox is. The name is matched ON THIS PC (every word of it a whole word of the sender's name or address; an address compared whole) and never sent to the server. |
+| **A Home Assistant device reaching a state** | `{"source": "home", "entity": "switch.washing_machine", "say": "finishes" \| "opens" \| "closes" \| "turns on" \| "turns off"}` or `"states": ["off"]`, and `"name"?` (the owner's word for it) | `jarvis_home.plan_states([entity])`: one GET of one entity. It matches when the state CHANGES into a wanted one - already there when the watch starts is not a match; `unavailable` / `unknown` are skipped. "finishes" = off, idle, finished, complete(d), done, stopped or standby; "opens" = on, open, opening or unlocked; "closes" = off, closed, closing or locked. |
+
+Both add `"urgent"?: bool` (default false) and `"once"?: bool` (default
+true: tell once, then end; false: every time until the end date).
+
+**How often, and until when.** Email every 5 minutes at most often (each
+look is one sign-in; mail apps check every 5-15 minutes, and providers slow
+down accounts that sign in much more often); Home Assistant every minute at
+most often (one small request on the owner's own network). Up to every 60
+minutes. These floors are for this kind only: the generic rule check still
+refuses "every N minutes", so every other repeat keeps the hourly floor
+(`MIN_EVERY_HOURS`). It ends 30 days later by default (the same clock time),
+90 days at most, or at the first match when it tells once. At most 10 at
+once, 5 of them watching email.
+
+**Each look goes through the gate**, as `email_read` or `home_read` - the
+same actions as the model's reads - and runs only at tier `"auto"` (the
+shipped tier). `"ask"` would be a card every few minutes and `"notify"` a
+"Jarvis read your email" message every few minutes, so with either,
+setting one up is refused with the reason ("Your settings ask for a yes each
+time Jarvis reads email, and a "tell me when" cannot ask you every 5
+minutes - so it cannot watch email."), and a look that meets it later is
+skipped and says so under Coming up. The source must be set up for Jarvis
+on the PC (`JARVIS_IMAP_HOST` and `email_check`; `JARVIS_HOME_URL` and
+`home_read` in `[tools].enabled`) or setting one up is refused.
+
+### 30.2 Setting one up: ONE card
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/schedule/add` | `{"kind": "tellme", "source": "email", "sender", "urgent"?, "once"?, "days"?, "minutes"?}` or `{"kind": "tellme", "source": "home", "entity", "say" \| "states", "name"?, ...}` | **202** `{"ok": true, "waiting": true, "job", "said"}`; 400 a bad watch (a sentence); **409** the source is not set up or its reads ask each time, or too many (a sentence) |
+| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete"}` | as 21.2 - immediate, no card. Deleting while the card waits withdraws it. |
+| `GET /api/schedule` / `?id=` | - | as 21.2 |
+
+Neither app sends the add today: a "tell me when" is set up by saying or
+typing it (30.4), like a timer. The route is there for a later form.
+
+The card is the scheduler's `schedule_repeat` (tier `ask`; any other tier
+is refused and nothing is set up), in this kind's own words. For example:
+
+```
+Set up "Tell me when".
+
+Watching for: an email from Alex.
+How: every 5 minutes, Jarvis signs in to your mail server (imap.gmail.com:993, mailbox "INBOX") and reads only the From line of mail that arrived since it last looked - with PEEK, so nothing is marked as read. No subject, no text and no attachment is read, and nothing goes to the AI model.
+It matches when the sender's name or address has "Alex" in it, as whole words. Your words stay on this PC: they are not sent to the mail server.
+Until: Sunday 25 October at 12:00 (30 days), or the first time it happens - whichever comes first.
+Urgent: yes. Your phone rings and vibrates until you look, and the PC plays an alarm sound until you dismiss it.
+
+When it happens, Jarvis only tells you: "An email from Alex arrived." It never replies, never acts, and never opens or reads out the email or anything else.
+A locked phone shows only: "Jarvis: something you asked to be told about happened."
+
+It runs on this PC, by this PC's clock. Each look is a request to your own mail server, under the same settings as asking Jarvis to read it; the notification goes only to your own apps. Nothing else is sent anywhere.
+Stopping or deleting it is immediate, from either app.
+
+If you say no: nothing is set up, and nothing is watched.
+```
+
+A device's card says instead "Watching for: the washing machine
+(switch.washing_machine) - when it finishes.", "How: every minute, Jarvis
+reads that one device's state from your Home Assistant: GET
+http://homeassistant.local:8123/api/states/switch.washing_machine. Nothing
+in your home is changed." and "It matches when the state CHANGES to: off,
+idle, finished, complete, completed, done, stopped, standby." Its detail
+says `leaves_this_pc: true` (each look asks the owner's own server). Once
+approved, the first look is at once.
+
+### 30.3 A match only notifies
+
+A look rings no doorbell and writes no "fired" line (the kind is `silent`
+on the scheduler). A match publishes `schedule` `{"id", "kind": "tellme",
+"state": "matched", "urgent": bool}` - no words - and, when it tells once,
+ends the job (kept readable by id for a day, like a job that went off).
+Nothing else happens: no reply, no action, no card, nothing to the model.
+
+The job's view then carries `"alert"` - "An email from Alex arrived.", "2
+emails from Alex arrived.", "The washing machine finished.",
+"switch.dryer is now off." - and `"alert_at"`. **The alert is built from
+the owner's own words** (the name they asked to watch for, the device's
+name they said), never from the email or the device: no From line, address,
+subject or state value is shown, kept or logged. What this module keeps
+(the `tellme` table in `schedule.db`): the mailbox position (a number), the
+device's last state (a short word), when it last looked and how that went
+(a fixed sentence), when it last matched.
+
+Other fields on a "tell me when" job: `"urgent"`, `"watches"` (`"email"` or
+`"home"`), `"repeat"` ("every 5 minutes"), `"note"` ("Until Sunday 25
+October at 12:00, or the first time it happens. Urgent: rings until you
+look. Last looked at 12:05 - nothing yet."), `"lock_screen"` ("Jarvis:
+something you asked to be told about happened."). `rule` has no `watch` in
+the view: what is watched is in `text` ("an email from Alex arrives"), the
+one field the desktop blanks while the private lists are hidden - and it
+blanks `alert` too.
+
+**In the apps** (both, the same words): Coming up lists it as "When an
+email from Alex arrives", tagged "tell me when" (", urgent"), with "Looks
+every 5 minutes" and the note, and Pause / Delete. Under the list, "Tell me
+when" and one line: "Say or type "tell me when an email from Alex arrives"
+or "tell me when the washing machine finishes" - add "urgently" to make it
+ring until you look. Setting one up asks once with an approval card; when it
+happens, Jarvis only tells you." On `matched` each app reads the job by id
+and shows a notification titled "Tell me when" with the alert - or only the
+lock-screen words while App lock or "Hide memory lists and chat history"
+is on (and always on a locked phone). Once per match.
+
+### 30.4 Said or typed - the fast path
+
+`jarvis_quick.py`, the owner's own typed or said words only (21.5):
+"tell me when an email from Alex arrives", "let me know when I get an email
+from Dr Patel", "tell me when Sam emails me", "tell me every time Sam
+emails me", "urgently tell me when ...", "... it's urgent", "let me know
+when the washing machine finishes", "tell me when the front door opens",
+"tell me when switch.dryer is off", "... for the next 2 hours", "...
+today". The answer does not say the name back (the card shows it): "That
+needs your yes on the approval card, which shows exactly what is watched.
+Then Jarvis looks every 5 minutes until Sunday 25 October at 12:00 and
+tells you once." "tell me when it's done", "tell me when you are ready",
+"tell me when dinner is ready" go to the model.
+
+A device said in words is looked up first: `switch.`, `binary_sensor.` and
+`sensor.` + the words (`binary_sensor.`, `cover.`, `lock.` for opens and
+closes) - one GET of each, through the gate as `home_read`, never a list of
+the whole house. One found: set up. None: "Jarvis could not find a Home
+Assistant device called tumble dryer (it looked for switch.tumble_dryer,
+binary_sensor.tumble_dryer and sensor.tumble_dryer). Say its Home Assistant
+name, like "tell me when switch.tumble_dryer is off"." Two: it asks which,
+and sets nothing up. Such an answer counts as having read Home Assistant
+(outside text), like a briefing that quotes the calendar. With "opens",
+"closes", "starts" or "stops", a name that is no device (or Home Assistant
+not set up) goes to the model instead: "tell me when the shop opens" is as
+often a question as a request.
+
+**The model has no tool for this.** A web page or an email cannot set one
+up.
+
+### 30.5 Ringing until seen - urgent alerts, and every alarm
+
+An **alarm** going off, and a **"tell me when" marked urgent** that
+matches, keep ringing until the owner looks:
+
+- **Phone**: a notification on its own channel, "Alarms and urgent alerts"
+  (`jarvis_alarm`, importance high, the phone's ALARM sound with alarm
+  usage, vibration), `CATEGORY_ALARM`, `FLAG_INSISTENT` - the sound and
+  vibration repeat until the notification is opened, pulled down, tapped,
+  stopped or swiped away - marked ongoing, which stops a swipe on Android 13
+  (Android 14 and later allow the swipe, which also silences it), with one
+  button, **Stop**,
+  which removes it and does nothing else. Still never a full-screen intent.
+  **Do Not Disturb**: nothing overrides it. As an alarm, it rings through
+  Do Not Disturb when the phone lets alarms through (Android's default:
+  Settings -> Do Not Disturb -> Alarms); if the owner turned alarms off
+  there, it arrives silently. The lock screen still shows only the kind's
+  words.
+- **Desktop**: a Windows toast with `scenario="alarm"`, which stays on
+  screen, and `ms-winsoundevent:Notification.Looping.Alarm` with
+  `loop="true"`, which repeats until it is dismissed; its one button is
+  Windows' own Dismiss (`winrt_toast.rs` `notify_alarm`). On an uninstalled
+  build, or if the WinRT call fails, the plain toast rings once instead.
+  Windows' own Do not disturb may hold it back like any toast.
+
+Timers still ring once. **Said aloud**: on the desktop, a timer going off
+while "Hey Jarvis" listening is on in the Jarvis bar is also said: "Your
+timer is done." (never the timer's own words - the room may not be
+private). The phone does not say timers aloud (ARCHITECTURE section 8).
+
+### 30.6 Known gaps, said plainly
+
+- **Not run against a real mail server or Home Assistant**, and the
+  ringing has not been seen on a real phone or Windows PC. The IMAP
+  conversation was checked against a stand-in that records the commands;
+  a server that sends no UIDNEXT falls back to `UID SEARCH ALL` once.
+- **The phone hears of a match only while connected** (21.1). An urgent
+  alert while the phone is out of reach of the PC rings on the PC only.
+- **Snooze on the ringing notification is not built**: Stop (phone) and
+  Dismiss (desktop) only; snooze on the scheduler was being built
+  separately.
+- **Every look writes one line to the gate's audit log** (email every 5
+  minutes, a device every minute).
+- A paused watch that is resumed reports what happened while it was
+  paused (an email that arrived, a device that changed) at its next look.
+- The desktop says timers aloud only while "Hey Jarvis" listening is on.
+- The approval card's lock-screen notice is the scheduler's shared
+  `schedule_repeat` one ("sets up something that repeats on this PC - a
+  reminder, an alarm, a morning briefing or a standby schedule; setting it
+  up sends nothing anywhere, ..."), which does not name "tell me when".
+- The GitHub watchlist (Brain -> Watch) is NOT merged into this: it lives
+  in the owner's own backend files, which this repository does not hold,
+  and a GitHub source would need a key and a new way out of the PC. Left
+  for later.
