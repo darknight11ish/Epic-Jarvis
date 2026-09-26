@@ -827,6 +827,25 @@
             </div>
           </div>
 
+          <!-- Which of Kokoro's own voices the built-in voice uses: the
+               PC's `speaker` block, choices and words its own (custom-
+               voices.js speakerView) - the exact same row as speed above,
+               right next to it. No card either way; held on a stale link
+               (voice_training.rs set_voice_speaker). The phone's Voices
+               screen has the same. -->
+          <div id="cv-speaker" hidden>
+            <h3 class="subhead" id="cv-speaker-title">Jarvis's built-in voice</h3>
+            <p class="note" id="cv-speaker-detail"></p>
+            <fieldset class="theme-list" id="cv-speaker-list">
+              <legend class="label">Voice</legend>
+              <div id="cv-speaker-choices"></div>
+            </fieldset>
+            <p class="note" id="cv-speaker-note" hidden></p>
+            <div class="row">
+              <span class="status" id="cv-speaker-status" role="status"></span>
+            </div>
+          </div>
+
           <h3 class="subhead">Voices</h3>
           <ul class="sc-cards" id="cv-list"></ul>
           <div class="row">

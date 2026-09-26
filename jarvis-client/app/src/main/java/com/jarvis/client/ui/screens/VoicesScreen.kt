@@ -3,6 +3,8 @@ package com.jarvis.client.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -75,6 +77,7 @@ fun VoicesScreen(
     delete: suspend (id: String) -> CustomVoices.Answer?,
     setBetter: suspend (on: Boolean) -> CustomVoices.Answer?,
     setSpeed: suspend (id: String) -> CustomVoices.Answer?,
+    setSpeaker: suspend (id: String) -> CustomVoices.Answer?,
     onPickFile: () -> Unit,
     onClearPicked: () -> Unit,
     onRefresh: suspend () -> Unit,
@@ -185,6 +188,9 @@ fun VoicesScreen(
 
                     s.speed?.let { sp ->
                         SpeedPlate(sp, busy, linkBlocker, onSet = { id -> act { setSpeed(id) } })
+                    }
+                    s.speaker?.let { sk ->
+                        SpeakerPlate(sk, busy, linkBlocker, onSet = { id -> act { setSpeaker(id) } })
                     }
 
                     Plate {
@@ -489,28 +495,82 @@ private fun SpeedPlate(
     linkBlocker: String?,
     onSet: (String) -> Unit,
 ) {
+    ChoicePlate(
+        title = sp.title,
+        detail = sp.detail,
+        note = sp.note,
+        choices = sp.choices.map { it.id to it.label },
+        choice = sp.choice,
+        busy = busy,
+        linkBlocker = linkBlocker,
+        onSet = onSet,
+    )
+}
+
+/**
+ * "Jarvis's built-in voice": which of Kokoro's own voices - the PC's own
+ * choices and words, the exact same plate as [SpeedPlate] right next to it.
+ * No card either way; held on a stale link, like every change sent to the PC.
+ */
+@Composable
+private fun SpeakerPlate(
+    sk: CustomVoices.Speaker,
+    busy: Boolean,
+    linkBlocker: String?,
+    onSet: (String) -> Unit,
+) {
+    ChoicePlate(
+        title = sk.title,
+        detail = sk.detail,
+        note = sk.note,
+        choices = sk.choices.map { it.id to it.label },
+        choice = sk.choice,
+        busy = busy,
+        linkBlocker = linkBlocker,
+        onSet = onSet,
+    )
+}
+
+/**
+ * The plate speed and the built-in-voice choice share: a title, a detail
+ * line, one chip per choice - wrapped in a [FlowRow] rather than a plain
+ * Row, since the built-in voice offers many more of them than speed's
+ * three and a Row does not wrap (BrainScreen.kt's FlowChips, same reason)
+ * - and an optional note.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChoicePlate(
+    title: String,
+    detail: String,
+    note: String,
+    choices: List<Pair<String, String>>,
+    choice: String,
+    busy: Boolean,
+    linkBlocker: String?,
+    onSet: (String) -> Unit,
+) {
     val chrome = LocalChrome.current
     Plate {
-        Text(sp.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
-        if (sp.detail.isNotBlank()) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+        if (detail.isNotBlank()) {
             Gap(4)
-            Text(sp.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            Text(detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
         }
         Gap(8)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (c in sp.choices) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            for ((id, label) in choices) {
                 OptionChip(
-                    c.label,
-                    isSelected = c.id == sp.choice,
-                    modifier = Modifier.weight(1f),
+                    label,
+                    isSelected = id == choice,
                     enabled = !busy && linkBlocker == null,
-                    onClick = { if (c.id != sp.choice) onSet(c.id) },
+                    onClick = { if (id != choice) onSet(id) },
                 )
             }
         }
-        if (sp.note.isNotBlank()) {
+        if (note.isNotBlank()) {
             Gap(6)
-            Text(sp.note, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            Text(note, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
         }
         if (linkBlocker != null) {
             Gap(4)

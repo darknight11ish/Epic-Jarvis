@@ -305,6 +305,50 @@ await check("how fast Jarvis speaks: one click, at once; held on a stale link", 
   assert.deepEqual(none, []);
 });
 
+await check("Jarvis's built-in voice: the PC's eleven choices and words, from every real status", async () => {
+  for (const [name, st] of Object.entries(V)) {
+    const sk = CV.speakerView(st);
+    assert.equal(sk.show, true, `${name}: no speaker block`);
+    assert.equal(sk.choices.length, 11, name);
+    assert.deepEqual(sk.choices.map((c) => c.id), [...Array(11).keys()].map(String), name);
+    assert.equal(sk.title, "Jarvis's built-in voice", name);
+    noRaw([sk.title, sk.detail, sk.note, ...sk.choices.map((c) => c.label)].join(" "));
+  }
+  assert.equal(CV.speakerView(V.builtin_nothing_installed).choice, "0");
+  assert.equal(CV.speakerView(V.speaker_chosen).choice, "9");
+  assert.equal(CV.speakerView({ voices: [] }).show, false, "an older PC has no speaker block: nothing shown");
+  const reply = CV.voiceReply(P("speaker_9"), WHERE);
+  assert.equal(reply.text, "Jarvis's built-in voice is now British (male) - George.");
+  assert.equal(reply.waiting, false, "no card");
+  assert.equal(CV.voiceReply(P("speaker_bad"), WHERE).text, "Choose one of the listed voices.");
+});
+
+await check("Jarvis's built-in voice: one click, at once; held on a stale link", async () => {
+  const page = await open(V.builtin_nothing_installed);
+  const shown = await page.evaluate(() => ({
+    hidden: document.getElementById("cv-speaker").hidden,
+    checked: [...document.querySelectorAll("#cv-speaker-choices input")].find((r) => r.checked)?.value,
+  }));
+  await page.click('#cv-speaker-choices input[value="9"]');
+  await page.waitForTimeout(200);
+  const sent = await calls(page, "set_voice_speaker");
+  const said = await text(page, "cv-speaker-status");
+  await page.close();
+  assert.equal(shown.hidden, false);
+  assert.equal(shown.checked, "0");
+  assert.deepEqual(sent, [{ speaker: "9" }]);
+  assert.equal(said, "Jarvis's built-in voice is now British (male) - George.");
+  assert.doesNotMatch(said, /approv/i, "no card for the voice choice");
+
+  const stale = await open(V.builtin_nothing_installed, {}, { link: { stale: true } });
+  const disabled = await stale.evaluate(() =>
+    [...document.querySelectorAll("#cv-speaker-choices input")].every((r) => r.disabled));
+  const none = await calls(stale, "set_voice_speaker");
+  await stale.close();
+  assert.equal(disabled, true, "held on a stale link");
+  assert.deepEqual(none, []);
+});
+
 await check("the fallback, a waiting card, the last card and the timings are on the page", async () => {
   const page = await open(V.fallback);
   const all = await text(page, "voices");
@@ -350,10 +394,11 @@ await check("CONTROL (Rust): only what raises a card is held on a stale link", a
   assert.match(fnBody(RUST, "pub async fn set_active_voice("), /if voice != "builtin" && stale\(&app\)/);
   assert.match(fnBody(RUST, "pub async fn set_better_voice("), /if enabled && stale\(&app\)/);
   assert.match(fnBody(RUST, "pub async fn set_voice_speed("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
+  assert.match(fnBody(RUST, "pub async fn set_voice_speaker("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
   assert.doesNotMatch(fnBody(RUST, "pub async fn delete_custom_voice("), /stale/);
   for (const [fn, route] of [["create_custom_voice", "/api/voice/voices/create"], ["set_active_voice", "/api/voice/voices/active"],
     ["delete_custom_voice", "/api/voice/voices/delete"], ["set_better_voice", "/api/voice/voices/better"],
-    ["set_voice_speed", "/api/voice/voices/speed"]]) {
+    ["set_voice_speed", "/api/voice/voices/speed"], ["set_voice_speaker", "/api/voice/voices/speaker"]]) {
     assert.ok(fnBody(RUST, `pub async fn ${fn}(`).includes(`"${route}"`), `${fn} does not post to ${route}`);
   }
   assert.match(fnBody(RUST, "pub async fn get_custom_voices("), /\.headers\(jarvis_headers\(&app\)\?\)/);

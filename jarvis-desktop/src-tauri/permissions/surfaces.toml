@@ -433,6 +433,9 @@ permissions = [
   # How fast every voice speaks (Slower / Normal / Faster): no card either
   # way; held on a stale link in Rust, like the manner setting.
   "allow-set-voice-speed",
+  # Which of Kokoro's own voices the built-in voice uses: the same shape,
+  # no card either way.
+  "allow-set-voice-speaker",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",

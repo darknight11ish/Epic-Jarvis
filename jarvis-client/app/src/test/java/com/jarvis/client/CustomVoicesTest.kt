@@ -332,6 +332,26 @@ class CustomVoicesTest {
     }
 
     @Test
+    fun `Jarvis's built-in voice - the PC's choices and words, no card`() {
+        val sk = requireNotNull(status("empty").speaker) { "no speaker block" }
+        assertEquals((0..10).map { it.toString() }, sk.choices.map { it.id })
+        assertEquals("American (female)", sk.choices[0].label)
+        assertEquals("British (male) - George", sk.choices[9].label)
+        assertEquals("0", sk.choice)
+        assertEquals(CustomVoices.SPEAKER_TITLE, sk.title)
+        assertEquals("", sk.note)
+        assertEquals("9", status("speaker_9").speaker?.choice)
+        assertEquals("{\"speaker\":\"9\"}", CustomVoices.speakerBody("9"))
+        val a = answer("speaker_9")
+        assertTrue(a.accepted)
+        assertFalse("no card for the built-in voice choice", a.pending)
+        assertEquals("Jarvis's built-in voice is now British (male) - George.", CustomVoices.answerLine(a))
+        assertEquals("Choose one of the listed voices.", CustomVoices.answerLine(answer("speaker_bad")))
+        // A PC too old to have it sends no `speaker`: nothing is shown.
+        assertNull(CustomVoices.parse(JsonObject(raw("empty") - "speaker"))?.speaker)
+    }
+
+    @Test
     fun `Pocket TTS, if it ever replaces ZipVoice, is named in ZipVoice's place`() {
         assertEquals("Pocket TTS, on your PC's processor", CustomVoices.engineWords("pocket"))
         val s = status("fallback")

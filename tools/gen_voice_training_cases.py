@@ -524,6 +524,11 @@ def voices_cases():
         keep(w, "speed_faster", post("/api/voice/voices/speed", {"speed": "faster"}), posts)
         keep(w, "speed_chosen", VO.status(), statuses)
         keep(w, "speed_bad", post("/api/voice/voices/speed", {"speed": "warp"}), posts)
+        # Which of Kokoro's own voices speaks: the same shape, at once, no
+        # card either way (ease-of-use audit row 13).
+        keep(w, "speaker_9", post("/api/voice/voices/speaker", {"speaker": "9"}), posts)
+        keep(w, "speaker_chosen", VO.status(), statuses)
+        keep(w, "speaker_bad", post("/api/voice/voices/speaker", {"speaker": "99"}), posts)
 
     # A custom voice chosen, but ZipVoice's files are not on this PC: the
     # built-in voice speaks, and says why.

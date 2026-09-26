@@ -492,6 +492,50 @@ def t_past_its_end_it_does_not_look_again():
           r == {"ok": False, "why": "ended"} and w.s.job(j3["id"])["state"] == "fired", r)
 
 
+def t_matched_since_real_matches_only():
+    """"What did I miss?"'s "'tell me when' matches" (ease-of-use audit row
+    12) reads `matched_since()`, never `fired_since()`: an idle look, and a
+    watch that simply ran out, are both left out - only a real match is
+    "something I missed"."""
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    w = World(now, name="matchedsince")
+    # An idle watch: several looks, nothing matches.
+    idle = TM.add(dict(EMAIL, sender="Nobody"))
+    w.s.tick()
+    for i in range(1, 4):
+        w.clock.t = now + 300 * i
+        w.s.tick()
+    check("idle looks: no rows at all",
+          TM.matched_since(now - 60, w.clock.t, sched=w.s) == [])
+    # A real match.
+    matching = TM.add(dict(EMAIL, sender="Alex"))
+    w.s.tick()
+    w.mail.add(1, "Alex <alex@example.test>")
+    w.clock.t += 300
+    w.s.tick()
+    matched_at = w.clock.t
+    rows = TM.matched_since(now - 60, w.clock.t + 1, sched=w.s)
+    check("a real match: one row, the same sentence the notification says",
+          len(rows) == 1 and rows[0]["id"] == matching["id"]
+          and rows[0]["alert"] == "An email from Alex arrived."
+          and rows[0]["matched_at"] == matched_at and rows[0]["urgent"] is False, rows)
+    check("... and the idle watch is still not one of them",
+          idle["id"] not in [r["id"] for r in rows], rows)
+    check("... outside the window: not found",
+          TM.matched_since(matched_at + 1, w.clock.t + 3600, sched=w.s) == [])
+    check("... 'what did I miss?' itself lists none of it under 'went off'",
+          w.s.fired_since(now - 60, w.clock.t + 1) == [])
+    # A watch that ran out without ever matching: still not a match.
+    ran_out = TM.add(dict(EMAIL, sender="Sam"), ends=w.clock.t + 3600)
+    w.s.tick()
+    w.clock.t += 4000
+    w.s.tick()
+    check("a watch that ran out with no match: not in matched_since either",
+          ran_out["id"] not in [r["id"] for r in
+                                TM.matched_since(now - 60, w.clock.t, sched=w.s)])
+
+
 def t_sender_matching():
     m = TM.sender_matches
     check("a name matches a display name, whole words", m("Alex", b"From: Alex Smith <a@x.test>"))

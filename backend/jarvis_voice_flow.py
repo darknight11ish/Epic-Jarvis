@@ -324,7 +324,9 @@ def _reference_sources() -> list:
         except Exception:
             size = -1
         if size > 0:
-            sid = S._cfg("tts_speaker_id", 0) or 0
+            # The owner's built-in-voice choice (one source: jarvis_speech.tts_speaker).
+            sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
+                  else int(S._cfg("tts_speaker_id", 0) or 0))
             # The owner's speaking speed (one source: jarvis_speech.tts_speed).
             speed = (S.tts_speed() if hasattr(S, "tts_speed")
                      else float(S._cfg("tts_speed", 1.0) or 1.0))
@@ -659,9 +661,11 @@ def moment_key() -> tuple:
             parts.append("unreadable")
     S = _speech()
     if S is not None:
+        sid = (S.tts_speaker() if hasattr(S, "tts_speaker")
+              else S._cfg("tts_speaker_id", 0) or 0)
         speed = (S.tts_speed() if hasattr(S, "tts_speed")
                  else S._cfg("tts_speed", 1.0) or 1.0)
-        parts += [str(S._cfg("tts_speaker_id", 0) or 0), str(speed)]
+        parts += [str(sid), str(speed)]
         try:
             parts.append(__import__("os").path.getsize(S._sherpa_tts_paths()["model"]))
         except Exception:

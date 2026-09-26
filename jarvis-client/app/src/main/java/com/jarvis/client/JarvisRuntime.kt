@@ -1950,6 +1950,16 @@ object JarvisRuntime {
         return postCustomVoice(CustomVoices.SPEED_PATH, CustomVoices.speedBody(id))
     }
 
+    /**
+     * Which of Kokoro's own voices the built-in voice uses - one of the ids
+     * the PC offered. Same shape as [setVoiceSpeed]: no card either way, but
+     * held on a stale link like every change sent to the PC (rule 4).
+     */
+    suspend fun setVoiceSpeaker(id: String): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.SPEAKER_PATH, CustomVoices.speakerBody(id))
+    }
+
     private val _customVoiceNote = MutableStateFlow<String?>(null)
 
     /** The last thing a Voices request came to, in words, for the screen to show. */

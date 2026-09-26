@@ -975,31 +975,43 @@ function paintVoices() {
   $("cv-timings").replaceChildren(...timings.map((t) => node("li", "sc-gpu", t)));
   $("cv-timings-none").hidden = timings.length > 0;
   paintSpeed();
+  paintSpeaker();
 }
 
 /** "How fast Jarvis speaks": the PC's three choices, as radios. */
 function paintSpeed() {
-  const sp = CV.speedView(cv.status);
-  $("cv-speed").hidden = !sp.show;
-  if (!sp.show) return;
-  $("cv-speed-title").textContent = sp.title;
-  $("cv-speed-detail").textContent = sp.detail;
-  const note = $("cv-speed-note");
-  note.hidden = !sp.note;
-  note.textContent = sp.note;
-  $("cv-speed-choices").replaceChildren(...sp.choices.map((c) => {
+  paintChoiceRow(CV.speedView(cv.status), "cv-speed", setSpeed);
+}
+
+/** "Jarvis's built-in voice": the PC's choices, as radios - the same row
+ * as speed, right next to it. */
+function paintSpeaker() {
+  paintChoiceRow(CV.speakerView(cv.status), "cv-speaker", setSpeaker);
+}
+
+/** The row both speed and the built-in-voice choice use: a title, a
+ * detail line, radios for the PC's own choices, and an optional note. */
+function paintChoiceRow(view, prefix, onChoose) {
+  $(prefix).hidden = !view.show;
+  if (!view.show) return;
+  $(`${prefix}-title`).textContent = view.title;
+  $(`${prefix}-detail`).textContent = view.detail;
+  const note = $(`${prefix}-note`);
+  note.hidden = !view.note;
+  note.textContent = view.note;
+  $(`${prefix}-choices`).replaceChildren(...view.choices.map((c) => {
     const row = node("label", "theme-row");
     row.dataset.choice = c.id;
     const radio = document.createElement("input");
     radio.type = "radio";
-    radio.name = "cv-speed";
+    radio.name = prefix;
     radio.value = c.id;
-    radio.checked = c.id === sp.choice;
+    radio.checked = c.id === view.choice;
     // Every change sent to the PC is held on a stale link (rule 4).
     radio.disabled = cv.busy || linkStale;
     radio.title = linkStale ? HELD : "";
     radio.addEventListener("change", () => {
-      if (radio.checked) setSpeed(c.id);
+      if (radio.checked) onChoose(c.id);
     });
     const text = node("span", "theme-text");
     text.append(node("span", "theme-name", c.label));
@@ -1011,17 +1023,25 @@ function paintSpeed() {
 }
 
 async function setSpeed(speed) {
-  const out = $("cv-speed-status");
+  await sendChoice("cv-speed-status", "set_voice_speed", { speed }, [paintSpeed]);
+}
+
+async function setSpeaker(speaker) {
+  await sendChoice("cv-speaker-status", "set_voice_speaker", { speaker }, [paintSpeaker]);
+}
+
+async function sendChoice(statusId, command, args, repaint) {
+  const out = $(statusId);
   if (linkStale) {
     say(out, HELD, "bad");
-    paintSpeed();
+    repaint.forEach((fn) => fn());
     return;
   }
   cv.busy = true;
-  paintSpeed();
+  repaint.forEach((fn) => fn());
   say(out, "Sending…");
   try {
-    const reply = CV.voiceReply(await invoke("set_voice_speed", { speed }), APPROVE_WHERE);
+    const reply = CV.voiceReply(await invoke(command, args), APPROVE_WHERE);
     say(out, reply.text, reply.tone);
     announce(reply.text);
   } catch (error) {
@@ -1221,6 +1241,7 @@ export function startVoicePanel(opts = {}) {
       if (cv.status) {
         paintAdd();
         paintSpeed();
+        paintSpeaker();
       }
     }
   });
