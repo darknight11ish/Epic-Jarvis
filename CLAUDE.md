@@ -279,6 +279,9 @@ Decided 2026-09-26, after checking a Gemini audit finding:
   Tailscale and NordVPN Meshnet. Anything on the open internet - including
   a public tunnel such as ngrok or Cloudflare - is refused with a plain
   message saying why, so the pairing key never travels through one.
+  While a refused address is saved, the desktop does nothing over the
+  network - no chat, no reads - until an allowed address is entered; it
+  does not quietly fall back to this PC (owner, 2026-09-26).
 
 Decided 2026-09-26, after the approvals audit
 (`docs/APPROVALS-AUDIT-2026-09-26.md`) - small, low-risk things stop asking:
