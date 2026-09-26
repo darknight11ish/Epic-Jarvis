@@ -364,6 +364,21 @@ outside text - never makes Jarvis act and is never saved as a fact; shown
 or summarised only when the owner asks; nothing leaves the owner's own
 devices. Never text messages (SMS), and Jarvis never replies or sends.
 
+Decided 2026-09-26, when the owner asked for memory and learning to be
+"really refined":
+- **Memory and learning run now, alongside the four groups** - not after
+  them. Every memory or learning change must beat the memory self-test
+  (`backend/eval_memory.py`) and the learner test (`backend/eval_learner.py`)
+  before it is kept; a change that makes a number worse is not kept.
+  Numbers from the real model come from the owner's PC (one PowerShell
+  line), and are written on a memory scoreboard page after each change.
+  A dedicated memory review team follows ideas 1-4.
+- **"Bring in my Notion export"** joins the Documents & email group: the
+  export (Markdown pages and CSV tables) goes into a folder Jarvis searches,
+  then the owner can ask about it or have it tidied. Imported notes are
+  outside text: they are never learned as facts, and every note Jarvis
+  writes back after reading them asks first, as for any note.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

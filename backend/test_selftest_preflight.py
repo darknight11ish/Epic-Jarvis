@@ -418,6 +418,9 @@ def t_modules():
     fake.routes[("GET", "/api/version")] = (200, {"api": 1, "started": time.time() - 3600,
                                                   "capabilities": {"stop_all": True}})
     d3 = _backend_copy()
+    now = time.time()
+    for f3 in d3.iterdir():   # copy2 keeps the checkout's dates; make them "just edited"
+        os.utime(f3, (now, now))
     live, _f, _o = _live(fake, backend=d3)
     _p, f, _w, _s, rows, _t = _run(live, only={"backend", "handshake", "modules"})
     mod = _rows(rows, "modules")
