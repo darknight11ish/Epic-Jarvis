@@ -167,7 +167,8 @@ def land():
         <section id="s3" class="clip" data-start="9.5" data-duration="3" data-track-index="3">
           <div class="tl" id="tl-tell"><i>ONE YES TO SET UP</i> · URGENT RINGS UNTIL YOU LOOK · NEVER REPLIES</div>
           <!-- Real capture: the quick-ask approval card, its text from jarvis_tellme's own describe. -->
-          <div class="shot" id="tell-card"><img src="assets/ui/tellme-card.png" alt="" style="display:block;width:100%" /><div class="press" id="press-tell"></div></div>
+          <img class="shot" id="tell-card" src="assets/ui/tellme-card.png" alt="" />
+          <div class="chip" id="tell-ok">✓ APPROVED</div>
 ''' + PHONE_TELL + '''        </section>
 
         <!-- 4: stop everything -->
@@ -214,7 +215,7 @@ def land():
           hero: [[0, "standby"], [0.9, "thinking"], [2, "idle"], [6.9, "speaking"], [8.2, "idle"], [19, "standby"], [25.5, "thinking"]],
           // [start, end, x, y, scale from, scale to, opacity]
           frames: [[0, 2, 0, -60, 0.9, 0.98, 1], [2, 5.5, 330, 0, 0.42, 0.45, 1], [6.9, 8.2, 520, 60, 0.42, 0.44, 1],
-                   [12.5, 15, 0, 40, 0.95, 0.98, 0.3], [19, 22, -440, 0, 0.62, 0.66, 1], [25.5, 30, 0, 0, 1.25, 1.45, 1]],
+                   [12.5, 15, 0, 40, 0.95, 0.98, 0.3], [19, 22, -560, 40, 0.55, 0.58, 1], [25.5, 30, 0, 0, 1.25, 1.45, 1]],
           drift: [[0, 2], [2, 5.5], [5.5, 9.5], [9.5, 12.5], [15, 19], [19, 22], [22, 25.5], [25.5, 30]],
           hits: [["edge", 1], ["local", 0.6], ["focus", 0.6], ["report", 0.7], ["tell", 0.6], ["ring", 0.3], ["stop", 1], ["toast", 0.3],
                  ["asks", 0.6], ["asksLine", 0.9], ["hello", 0.4], ["ok", 0.35], ["instant", 0.6], ["answer", 0.35],
@@ -253,7 +254,8 @@ def tall():
         </section>
         <section id="s3" class="clip" data-start="4" data-duration="2.3" data-track-index="3">
           <div class="tl" id="tl-tell"><i>ONE YES TO SET UP</i><br />RINGS UNTIL YOU LOOK · NEVER REPLIES</div>
-          <div class="shot" id="tell-card"><img src="assets/ui/tellme-card.png" alt="" style="display:block;width:100%" /><div class="press" id="press-tell"></div></div>
+          <img class="shot" id="tell-card" src="assets/ui/tellme-card.png" alt="" />
+          <div class="chip" id="tell-ok">✓ APPROVED</div>
 ''' + PHONE_TELL + '''        </section>
         <section id="s4" class="clip" data-start="6.3" data-duration="1.7" data-track-index="3">
           <div class="tl" id="tl-stop"><i>ALT+SHIFT+X</i><br />HALTS BEFORE ITS NEXT STEP</div>

@@ -64,18 +64,19 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 #tag-files { left: 1430px; top: 400px; }
 #tag-mem { left: 1290px; top: 690px; }
 #room-label { position: absolute; left: 900px; width: 780px; top: 950px; text-align: center; font: 500 22px var(--mono); letter-spacing: 0.24em; color: var(--dim); opacity: 0; }
-#tl-local { top: 110px; }
-#tl-net { top: 160px; font-size: 22px; color: var(--dim); }
+#tl-local { top: 150px; }
+#tl-net { top: 196px; font-size: 22px; color: var(--dim); }
 
 /* ---------- 2: focus ---------- */
-#focus-run { left: 110px; top: 230px; width: 820px; }
-#focus-rep { left: 990px; top: 250px; width: 820px; }
-#in-front { position: absolute; left: 110px; top: 150px; color: var(--rose); opacity: 0; }
-#tl-focus { top: 90px; }
+#focus-run { left: 110px; top: 280px; width: 820px; }
+#focus-rep { left: 990px; top: 330px; width: 820px; }
+#in-front { position: absolute; left: 110px; top: 196px; color: var(--rose); opacity: 0; }
+#tl-focus { top: 150px; }
 
 /* ---------- 3: tell me when ---------- */
-#tell-card { left: 110px; top: 200px; width: 980px; }
-#tl-tell { top: 110px; }
+#tell-card { left: 110px; top: 230px; width: 900px; }
+#tell-ok { position: absolute; left: 110px; top: 680px; color: var(--verdant); opacity: 0; }
+#tl-tell { top: 150px; }
 
 /* ---------- phones (redrawn: an Android frame; the words come from the app's code) ---------- */
 .phone { position: absolute; width: 420px; height: 860px; border-radius: 58px; background: #0b1016; border: 2px solid #2a3a4a; opacity: 0;
@@ -107,20 +108,20 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 #toast .ap { font: 400 16px var(--body); color: var(--dim); }
 #toast .ti { margin-top: 8px; font: 600 22px var(--body); color: var(--ink); }
 #toast .tx { margin-top: 6px; font: 400 19px/1.4 var(--body); color: var(--ink); }
-#tl-stop { top: 110px; }
+#tl-stop { top: 150px; }
 
 /* ---------- 5: and it still asks first ---------- */
-#s5 .line { top: 70px; font-size: 104px; }
-#mail-card { left: 110px; top: 250px; width: 900px; }
-#ready-mail { position: absolute; left: 110px; top: 196px; color: var(--violet); opacity: 0; }
-#hello { position: absolute; left: 1090px; top: 300px; width: 720px; padding: 30px 34px 34px; background: #1f2530; border: 1px solid #3a4452; border-radius: 12px; opacity: 0;
+#s5 .line { top: 140px; font-size: 96px; }
+#mail-card { left: 110px; top: 320px; width: 880px; }
+#ready-mail { position: absolute; left: 110px; top: 262px; color: var(--violet); opacity: 0; }
+#hello { position: absolute; left: 1060px; top: 360px; width: 720px; padding: 30px 34px 34px; background: #1f2530; border: 1px solid #3a4452; border-radius: 12px; opacity: 0;
          box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7); font-family: var(--body); }
 #hello .hd { font: 400 18px var(--body); color: var(--dim); }
 #hello .big { margin-top: 18px; font: 600 34px var(--body); color: var(--ink); }
 #hello .msg { margin-top: 14px; font: 400 21px/1.45 var(--body); color: var(--ink); }
 #hello .face { margin: 26px 0 8px; display: flex; align-items: center; gap: 18px; font: 400 20px var(--body); color: var(--dim); }
 #hello .face svg { width: 70px; height: 70px; }
-#approved { position: absolute; left: 1090px; top: 860px; color: var(--verdant); opacity: 0; }
+#approved { position: absolute; left: 1060px; top: 720px; color: var(--verdant); opacity: 0; }
 #tl-asks { bottom: 150px; top: auto; }
 
 /* fingerprint sheet (Android's own BiometricPrompt: the card's title, then its "why") */
@@ -135,14 +136,15 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 #phone-f { left: 1400px; top: 170px; }
 
 /* ---------- 6: instant answers ---------- */
-#timer-shot { left: 990px; top: 330px; width: 820px; }
-#asleep { position: absolute; left: 200px; top: 860px; color: var(--dim); opacity: 0; }
-#tl-instant { top: 110px; }
+#timer-shot { left: 820px; top: 290px; width: 1000px; }
+#asleep { position: absolute; left: 150px; top: 820px; color: var(--dim); opacity: 0; }
+#tl-instant { top: 150px; }
 
 /* ---------- 7: it learns you ---------- */
-#mem-saved { left: 110px; top: 220px; width: 1000px; }
-#mem-sens { left: 1150px; top: 300px; width: 680px; }
-#tl-learn { top: 110px; }
+#mem-saved { left: 210px; top: 230px; width: 1500px; }
+#mem-sens { left: 210px; top: 660px; width: 1500px; }
+#press-erase { left: 1318px; top: 112px; width: 162px; height: 42px; }
+#tl-learn { top: 150px; }
 
 /* ---------- 8: your rules ---------- */
 #scrim { background: radial-gradient(ellipse 48% 42% at 50% 50%, rgba(4, 7, 12, 0.78), rgba(4, 7, 12, 0.2) 70%, transparent); opacity: 0; }

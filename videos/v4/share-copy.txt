@@ -1,0 +1,14 @@
+Jarvis v4: cutting-edge, and it still asks first. An AI assistant that runs on your own PC.
+
+- Focus sessions: "focus for 30 minutes". Jarvis watches which app is in front, on your PC only, says "YouTube can wait." out loud, and ends with a report card. It keeps counts, never what it saw.
+- "Tell me when an email from Alex arrives. Urgently." One yes sets it up. Your phone rings until you look. It never replies.
+- Alt+Shift+X stops Jarvis talking and halts what it is doing before its next step. The phone has a Stop everything button.
+- Sending email is ready: one card shows every word, then Windows Hello on the PC, or your fingerprint or PIN on the phone. There is no "always allow". (Sending is off until you turn it on.)
+- Timers and quick questions are answered without the AI model, so they work even while the model is asleep.
+- It learns from your own words only. Every fact has Forget and "Erase the words", and sensitive topics wait for your yes.
+- Also built: "Hey Jarvis" that answers only your trained voice (off until you turn it on), interrupting by just talking, and web search on your own PC's search engine by default.
+- Ready for a second graphics card: longer conversations, and pictures.
+
+Your email, files and memories are handled only by the AI on your PC. Your phone reaches it over your own private network, never a public tunnel. No subscription.
+
+The screens in the video are the real desktop app with made-up example data. None of this has been run on the maker's own PC yet.

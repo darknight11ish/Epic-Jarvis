@@ -211,7 +211,7 @@
 
       // 3: tell me when
       appear($("tell-card"), t, H.tellCard, { d: 0.45, dy: 60, e: E.back });
-      press($("press-tell"), t, H.tellOk);
+      appear($("tell-ok"), t, H.tellOk, { d: 0.3, dy: 0, s0: 0.7, e: E.back });
       appear($("phone-t"), t, H.ring - 0.35, { d: 0.45, dy: 120, e: E.out3 });
       appear($("notif-t"), t, H.ring, { d: 0.3, dy: -30, e: E.back });
       ["ring-a", "ring-b"].forEach(function (id, i) {
