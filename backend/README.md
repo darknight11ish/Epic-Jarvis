@@ -10283,3 +10283,152 @@ the repository folder). Also `test_schedule.py`, `test_standby_schedule.py`,
   aloud and for web search asking first - only saving changed. Say if you
   want those to follow the new rule too. *(Superseded the same day: the
   owner chose "normal everywhere"; see "Memory ideas 1-4" at the end.)*
+
+# Memory ideas 1-4: a re-ranker, a bigger self-test, "said again", real "true from" dates (2026-09-26)
+
+Your decision of 2026-09-26, after `docs/MEMORY-RESEARCH-2026-09-26.md`:
+build ideas 1-4, each measured by the memory self-test. All four are built.
+**Nothing new to switch on, and no new card.** API side:
+`docs/JARVIS-API.md` section 34; the design: `docs/ARCHITECTURE.md`
+section 5, "Memory ideas 1-4".
+
+## What you will notice
+
+- **"Said again 3 times"** under a fact in "Saved automatically", in both
+  apps, when you have told Jarvis the same thing again since it was saved.
+- **"Where did I live in May?" answers from when things really changed.**
+  Say "I moved to Leeds in January" in March, and Jarvis now knows it has
+  been true since January, not since March.
+- **A correction that is older than what Jarvis knows says so on its
+  card:** "It sounds older than what Jarvis knows ... Keeping it saves it as
+  history - the newer fact stays in use."
+- **Forget now works on a fact that ends later** (a bug, below).
+- **The re-ranker** you will not see - it only changes which five facts
+  reach the model, and in what order. Its first use downloads about 80 MB
+  (fastembed does this, like the meaning model).
+
+## The self-test numbers
+
+`python backend\eval_memory.py` - a made-up person on a scratch store, never
+your memory. Run here with **words only** (no meaning model: it cannot
+download in the build container), 71 golden facts plus 0 to 10,000 filler
+facts. "Before" is the same new self-test run against the memory code from
+before ideas 1, 3 and 4. As a chat turn recalls (the entity layer on):
+
+| | Before | After |
+|---|---|---|
+| Time questions ("what phone did I have in June?") found, unrelated filler | 8/10 at every size | **9/10** |
+| ... found, filler about the same things | 8, 7, 7, 5 /10 (71 to 10,071 facts) | **9, 8, 8, 6 /10** |
+| ... a version that was NOT true then came back | 4 at every size | **0** |
+| Two-fact questions, both facts among the five | 6/10 (5/10 at 10,071 same-topic) | unchanged |
+| Recall@5 of the older questions | 78.7% (71 facts) to 75.5% (10,071) | unchanged |
+| "Don't know": wrong facts per question | 1.47 to 2.37 | unchanged |
+| The learner: which turns it reads, "Remember:", dates, the automatic-learning gate | 33/33 | 33/33 |
+| The learner: "said again" cases | 0/12 (not built) | **12/12** |
+| The learner: "true from" cases | 0/8 (not built) | **8/8** |
+
+**The re-ranker is NOT measured.** Its model cannot be downloaded here
+(huggingface.co answers 403 through this container's proxy; tried with
+fastembed 0.8.1). With a word-overlap STAND-IN in its place - which proves
+the wiring, not the gain - recall@5 moved 78.7% -> 78.7% (71 facts),
+77.7% -> 78.7% (171, unrelated filler), 75.5% -> 75.5% (10,071, same
+topic); MRR 0.698 -> 0.701; two-fact questions lost one at 1,071 and
+10,071 same-topic facts; the middle search time (p50) rose 0.1-0.5 ms.
+**Run the self-test on the PC** to see what the real model does:
+`py -3 backend\eval_memory.py` (it measures the re-ranker when fastembed
+can load it; `--reranker off` skips it).
+
+## 1. The re-ranker
+
+After search finds its facts, a small model on the processor
+(`Xenova/ms-marco-MiniLM-L-6-v2`, Apache-2.0, English only) reads your
+question and each of the top 20 facts together and puts the best answers
+first; then the first 5 go to the model, as before. It only re-orders: it
+never adds a fact, never changes how many, never touches corrections. It
+never makes a chat wait: it loads in the background, and until it is ready,
+if it cannot load, or if it takes more than 1.5 seconds on a question,
+recall is exactly what it was - and the backend says once, in its window
+and the audit log, why it is off. To turn it off: set
+`JARVIS_MEMORY_RERANK=0`. It was on by default in this build because the
+brief said to use it when it loads; **if the self-test on your PC shows it
+does not help, say so and it goes off by default.**
+
+## 2. A bigger self-test
+
+`backend/eval_memory.py` now also asks questions that need two facts,
+questions about a time, and more "don't know" questions, and tests the
+LEARNER (`backend/eval_learner.py`, cases in `backend/eval/
+learner_cases.jsonl`): which turns it may read, "Remember:" word for word,
+relative dates, the automatic-learning gate (saved when it should be, a
+card for the right reason when not), "said again" and "true from". No model
+is needed; the one stand-in (the sensitive check's model answer) is named
+in the report. With your local model:
+`py -3 backend\eval_memory.py --learner-model qwen3:8b` also runs the real
+learner on made-up conversations (set `JARVIS_BACKEND` to the backend
+folder first; it needs `jarvis_extract.py`). **That part could not be run
+here** - there is no model and no `jarvis_extract.py` in this repository.
+
+## 3. "Said again"
+
+When you tell Jarvis something it already knows, the day is kept - one row
+per time: the fact's number, when this PC saw your message arrive, typed or
+voice. No words. It counts only your own live words, with the same checks
+as automatic learning (not pasted, not after a tool read outside text, a
+voice turn checked at its strictest, every word said and no "not" left
+out), only after the fact was saved, and once per message however often the
+learner re-reads the conversation. Nothing uses the count to decide
+anything: it cannot make a fact harder to forget, correct or erase. "Erase
+the words" leaves these rows (they hold no words). Shown in the "Saved
+automatically" list in both apps; the full memory list comes from
+`jarvis_hud.py` on your PC and does not show it yet.
+
+## 4. Real "true from" dates, and older news
+
+A fact whose words say when something changed is true from that date:
+"moved to Leeds in January" (1 January), "started ... yesterday
+(2026-09-25)", "since 2019". Strict rules, no model: a change word
+("moved", "started", "joined", "since"...), exactly one date, nothing about
+the future ("I'm moving in March" is a plan - true now), and **never a
+future date**. A correction with such a date ends the old fact on that date.
+**Older news never replaces newer news** (Graphiti's rule): if both facts'
+dates come from your words and the correction's is earlier, keeping its
+card saves it as history and the newer fact stays in use. English only.
+
+**The bug fixed with it:** Forget, a correction, and the "stop using this
+fact?" card did nothing to a fact whose end date is in the future (a lease
+that ends in December) - they only looked for facts with no end date at
+all. They now use the same "still in use" rule everything else uses.
+**One copy of the old rule is left, in your own `jarvis_extract.py`**
+(`_accept`, from `memory-safety.patch`): keeping a correction CARD aimed at
+such a fact still saves the new fact without retiring the old one. Fixing
+that needs a change to a patch for that file - not done here.
+
+## Also in this change
+
+- **Everyday facts about people are normal everywhere** (your decision of
+  2026-09-26): a recalled "Owner's sister Priya likes jazz" may now be read
+  aloud and does not make a web search ask first
+  (`jarvis_sensitive.topic()`). Their health, money, address, contact
+  details, debts and secrets stay sensitive. The voice card now says
+  "other people's private details". **Not changed here:** both apps' own
+  voice-settings line still says "a saved fact about your health, money,
+  passwords or other people" (`StrictVoice.kt`, `voice-training.js`) - app
+  text, left for the apps' builder.
+
+## Test it
+
+```
+python3 backend/test_memory_rerank.py
+python3 backend/test_memory_said_again.py
+python3 backend/test_memory_true_from.py
+python3 backend/test_memory_recall.py
+python3 backend/eval_memory.py --sizes 0,100 --words-only --reranker stand-in
+```
+
+## Not checked, said plainly
+
+- **The real re-ranker's gain and speed on your processor** - see above.
+- **Meaning search** - every number here is words only.
+- **The real learner with your model** (`--learner-model`) - not run.
+- **The phone code** compiles only in CI; the desktop's change is tested
+  here (`jarvis-desktop/tests/auto-learn.mjs`).

@@ -6,6 +6,8 @@ You asked (2026-09-24): "Cutting-edge memory: research GitHub memory systems, co
 
 **A word on numbers.** Every score in this page is **the project's own claim** unless it says otherwise. Nothing was measured on your PC, and nothing new was measured here.
 
+**Status, later on 26 September:** you chose ideas 1-4; all four are now built and measured by the self-test. What changed and the numbers: `backend/README.md`, "Memory ideas 1-4"; the API side: `docs/JARVIS-API.md` section 34. The re-ranker's real gain is still unmeasured - its model cannot be downloaded where it was built.
+
 This builds on the earlier memory research (`docs/RESEARCH-2026-09-24.md` §3). Four of that page's ideas are now built: the memory self-test, "Always keep in mind", "who is my sister?" and questions about the past. Four were approved for later and are **still not built**: real "true from" dates, counting repeats, the overnight tidy, and a re-ranker. They come back below, with new evidence.
 
 ---

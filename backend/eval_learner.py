@@ -279,14 +279,16 @@ def _said_again(w, I, A, case) -> dict:
     answer = json.dumps({"facts": facts})
     extract = types.SimpleNamespace(
         propose=lambda messages, llm=None, source="": (llm("the learner's prompt"), [])[1])
-    owner = [m for m in history if m.get("role") == "user"]
+    owner = [{"role": "user", "content": m["content"]} for m in history
+             if m.get("role") == "user"]
+    import jarvis_intake
     for _ in range(int(case.get("passes", 1))):
         if case.get("remember"):
             msgs = w.say(cid, history, {"text": case["remember"]})[:-1]
             I.remember_from_turn(msgs, extract=w.x)
         else:
-            I.propose(extract, [{"role": "user", "content": m["content"]} for m in owner],
-                      lambda prompt, *a, **k: answer, store=w.store)
+            jarvis_intake.propose(extract, owner, lambda prompt, *a, **k: answer,
+                                  store=w.store)
     got = w.store.said_again_counts([fid]).get(fid, {}).get("count", 0)
     return {"ok": got == case["want"], "got": {"recorded": got}}
 
