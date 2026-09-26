@@ -105,6 +105,7 @@ const dom = {
   revealToken: $("reveal-token"),
   pairingShown: $("pairing-shown"),
   pairingToken: $("pairing-token"),
+  pairingTokenDisplay: $("pairing-token-display"),
   hideToken: $("hide-token"),
   connectionStatus: $("connection-status"),
   linkState: $("link-state"),
@@ -269,9 +270,21 @@ dom.clearToken.addEventListener("click", () =>
 /* Showing the token for the phone. Hidden again after a minute. */
 let hideTimer = null;
 
+// Ease-of-use audit #18: shown in groups of 4 so a long random key is
+// easier to read back and type correctly. Display only - the real
+// `dom.pairingToken.value` (read by nothing else in this file, since there
+// is deliberately no Copy button, CONN-6 above) always keeps the raw,
+// unspaced key Jarvis issued.
+function groupInFours(value) {
+  const groups = [];
+  for (let i = 0; i < value.length; i += 4) groups.push(value.slice(i, i + 4));
+  return groups.join(" ");
+}
+
 function hidePairingToken() {
   clearTimeout(hideTimer);
   dom.pairingToken.value = "";
+  dom.pairingTokenDisplay.textContent = "";
   dom.pairingShown.hidden = true;
   dom.revealToken.hidden = false;
 }
@@ -280,10 +293,13 @@ dom.revealToken.addEventListener("click", () =>
   act(dom.revealToken, dom.connectionStatus, async () => {
     const token = await invoke("reveal_pairing_token");
     dom.pairingToken.value = token;
+    dom.pairingTokenDisplay.textContent = groupInFours(token);
     dom.pairingShown.hidden = false;
     dom.revealToken.hidden = true;
     // Focused so a screen reader reads it, and NOT selected: a selected
-    // token is one Ctrl+C away from Windows' clipboard history.
+    // token is one Ctrl+C away from Windows' clipboard history. The
+    // screen reader gets the real (off-screen) field, not the grouped
+    // display, so it reads the exact characters to type.
     dom.pairingToken.focus();
     clearTimeout(hideTimer);
     hideTimer = setTimeout(hidePairingToken, 60_000);
