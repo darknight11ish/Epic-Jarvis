@@ -927,6 +927,20 @@ class JarvisApi(
     suspend fun emailSending(): ApiResult<JsonObject> = probe(EmailSending.PATH)
 
     /**
+     * `GET /api/folders` - "Folders Jarvis may look in": the list, in the PC's
+     * own words ([Folders.parse]). A read. A 404 is a PC without it
+     * ([Folders.missing]).
+     */
+    suspend fun folders(): ApiResult<JsonObject> = probe(Folders.PATH)
+
+    /**
+     * `POST /api/folders/remove {"path"}` - take ONE folder off the list. At
+     * once, no card. The phone never adds one: that is the PC's alone.
+     */
+    suspend fun removeFolder(path: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(Folders.REMOVE_PATH, Folders.removeBody(path))
+
+    /**
      * `GET /api/focus`: the focus session - its countdown, booleans and counts
      * and the last report card ([Focus.parse]). Never what was in front on
      * the PC: the PC does not send it. A read.

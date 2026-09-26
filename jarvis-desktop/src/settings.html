@@ -953,6 +953,37 @@
         </div>
       </section>
 
+      <!-- ── Folders Jarvis may look in ────────────────────────────────────
+           The owner's decisions of 2026-09-26: asking about PDFs and Word
+           files, and bringing in a Notion export (folders-settings.js;
+           folders.rs get_folders, add_folder, remove_folder, import_notion;
+           backend jarvis_documents.py). ONE list, empty by default. Adding
+           is the Windows folder picker, then one approval card on the PC,
+           held on a stale link; removing is at once. The phone shows the
+           same list with Remove only - adding is the PC's. -->
+      <section class="card" id="folders">
+        <h2>Folders Jarvis may look in</h2>
+        <p class="note" id="fo-detail"></p>
+        <p class="state" id="fo-state" role="status">Asking Jarvis…</p>
+        <div id="fo-body" hidden>
+          <ul class="sc-cards" id="fo-list"></ul>
+          <p class="note" id="fo-empty" hidden></p>
+          <div class="row">
+            <button class="btn small" id="fo-add" type="button">Add a folder…</button>
+          </div>
+          <p class="note" id="fo-add-why" hidden></p>
+          <p class="sc-line" id="fo-docs"></p>
+          <h3 class="subhead" id="fo-notion-title">Bring in a Notion export</h3>
+          <p class="note" id="fo-notion-detail"></p>
+          <div class="row">
+            <label for="fo-notion-into">Into</label>
+            <select id="fo-notion-into"></select>
+            <button class="btn small" id="fo-notion-pick" type="button">Choose the .zip…</button>
+          </div>
+          <span class="status" id="fo-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── What Jarvis can reach ─────────────────────────────────────────
            The Muse audit, 2026-09-25 (reach-settings.js; reach.rs get_reach;
            backend jarvis_reach.py). Every way Jarvis can reach something
@@ -1355,6 +1386,7 @@
     <script type="module" src="reach-settings.js"></script>
     <script type="module" src="asks-first-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
+    <script type="module" src="folders-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
   </body>
 </html>

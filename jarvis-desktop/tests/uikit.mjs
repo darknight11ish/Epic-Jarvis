@@ -100,6 +100,11 @@ export const EMAIL_SENDING = JSON.parse(fsSync.readFileSync(path.join(
   path.dirname(fileURLToPath(import.meta.url)), "fixtures", "email-sending-cases.json"),
   "utf8"));
 
+/** GET /api/folders as the backend answers it (tools/gen_folders_cases.py). */
+export const FOLDERS = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "fixtures", "folders-cases.json"),
+  "utf8"));
+
 /**
  * Where the browser is.
  *
@@ -430,10 +435,12 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing, emailSending, focus }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing, emailSending, focus, folders }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
+  // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
+  window.__folders = folders || null;
   // App lock on or off, for get_app_lock (apps security audit M3).
   window.__appLock = Boolean(appLock);
   const state = {
@@ -1558,6 +1565,16 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           // "set up, not offered to the model yet").
           case "get_email_sending":
             return JSON.parse(JSON.stringify(window.__emailSending));
+          // folders.rs: "Folders Jarvis may look in". The pickers are Rust's;
+          // here a scenario's answers stand in for "the owner chose ...".
+          case "get_folders":
+            return window.__folders ? JSON.parse(JSON.stringify(window.__folders.view)) : null;
+          case "add_folder":
+            return window.__folders && window.__folders.addAnswer || { cancelled: true };
+          case "remove_folder":
+            return window.__folders && window.__folders.removeAnswer || { ok: true };
+          case "import_notion":
+            return window.__folders && window.__folders.importAnswer || { cancelled: true };
           default: return null;
         }
       },

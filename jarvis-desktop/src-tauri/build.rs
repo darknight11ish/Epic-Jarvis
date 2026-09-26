@@ -186,6 +186,16 @@ fn main() {
             // window only. Each email is its own approval card, answered
             // through decide_approval like every other.
             "get_email_sending",
+            // Settings' "Folders Jarvis may look in" (backend/documents.patch):
+            // the list (a read); add ONE folder through the Windows folder
+            // picker (one approval card on the PC, held on a stale link);
+            // remove one (at once); bring in a Notion export through the
+            // Windows file picker (held on a stale link). The pickers run in
+            // Rust - the window gets only the chosen path. Settings window only.
+            "get_folders",
+            "add_folder",
+            "remove_folder",
+            "import_notion",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
             // way (it changes wording only). Settings window only.

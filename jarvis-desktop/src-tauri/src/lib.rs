@@ -25,6 +25,7 @@ pub mod autostart;
 pub mod brain;
 pub mod commands;
 pub mod email_sending;
+pub mod folders;
 pub mod hardware;
 pub mod hotkeys;
 pub mod hud_proxy;
@@ -824,6 +825,10 @@ pub fn run() {
             asks_first::set_asks_first,
             asks_first::set_lights_without_card,
             email_sending::get_email_sending,
+            folders::get_folders,
+            folders::add_folder,
+            folders::remove_folder,
+            folders::import_notion,
             plain_errors::get_manner,
             plain_errors::set_manner,
             plain_errors::open_fix_place,
