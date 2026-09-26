@@ -433,7 +433,7 @@ export const MEMORY = Object.freeze([
 
 /**
  * The owner's decision 13 (2026-09-24): answers that use a SENSITIVE saved
- * fact - health, money, passwords, other people - stay on screen by
+ * fact - health, money, passwords, other people's private details - stay on screen by
  * default, even while "Answers that use what Jarvis remembers" reads the
  * rest aloud, and even with "Voice check is enough". Reading them aloud is
  * the looser choice: the voice card, and held on a stale link.
@@ -443,7 +443,7 @@ export const SENSITIVE_MEMORY = Object.freeze([
     id: "sensitive_on_screen",
     label: "Keep on screen",
     recommended: true,
-    detail: "Answers that use a saved fact about your health, money, passwords or other people are shown, not read aloud.",
+    detail: "Answers that use a saved fact about your health, money, passwords or other people's private details are shown, not read aloud.",
   },
   {
     id: "sensitive_aloud",

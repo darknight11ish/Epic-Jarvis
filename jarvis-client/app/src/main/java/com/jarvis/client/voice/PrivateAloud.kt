@@ -54,7 +54,7 @@ object PrivateAloud {
     /**
      * What the chat answer's `X-Jarvis-Route` header says about privacy.
      * [injectedSensitive] is how many of the [injectedFacts] are about a
-     * sensitive topic (health, money, passwords, other people) - see [route]
+     * sensitive topic (health, money, passwords, other people's private details) - see [route]
      * for a header that does not say.
      */
     data class Route(val privateGate: Boolean, val injectedFacts: Int, val injectedSensitive: Int = 0)

@@ -29,6 +29,7 @@
  */
 
 import { whenWords } from "./history-view.js";
+import { cardLines, trueFromLine } from "./memory-words.js";
 
 /** Section 5's words, word for word. The phone says the same. */
 export const AUTO_LABEL = "Learn automatically";
@@ -304,6 +305,9 @@ export function readAuto(answer, status = null) {
         device: text(f.device),
         // Memory idea 3: how often the owner has said it again since, or 0.
         saidAgain: saidAgainCount(f.said_again),
+        // Memory idea 4 (I10): "YYYY-MM-DD" when the owner's own words gave
+        // the day it became true ("moved to Leeds in 2021"), else "".
+        trueFrom: text(f.true_from),
       })),
   };
 }
@@ -320,10 +324,11 @@ export function saidAgainWords(n) {
   return n === 1 ? "said again once" : `said again ${n} times`;
 }
 
-/** One row's meta line: when it was saved, where, and how often said again. */
+/** One row's meta line: when it was saved, where, how often said again,
+ *  and "true from 1 January 2021" when the owner's words gave that day. */
 export function factMeta(f, nowMs = Date.now()) {
   const parts = [whenWords(f.savedAt, nowMs), DEVICE_WORDS[f.device] || "",
-    saidAgainWords(f.saidAgain)];
+    saidAgainWords(f.saidAgain), trueFromLine(f.trueFrom)];
   return parts.filter(Boolean).join(" · ");
 }
 
@@ -360,9 +365,11 @@ export function refreshRows(shown, page, pageSize, moreBefore) {
  * The reason line on a card that stayed a card (section 2): the PC's own
  * plain words - "from pasted text", "about health, a sensitive topic", "not
  * in your own words" - under `auto_reason` on its `/api/memory/pending` row. Nothing
- * when the PC sent none (absent or "").
+ * when the PC sent none (absent or ""). Trimmed and without a trailing full
+ * stop, as the phone shows it. The PC's "it sounds older" warning, which it
+ * adds to the same field, is NOT part of this line: memory-words.js's
+ * cardLines gives it a line of its own (the memory review's I9).
  */
 export function cardReason(p) {
-  const why = p && text(p.auto_reason).trim();
-  return why ? `Not saved automatically: ${why}` : "";
+  return cardLines(p).reason || "";
 }

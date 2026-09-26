@@ -553,18 +553,29 @@ def t_the_desktop_reads_what_status_sends():
     sent = set(status) | {"available", "sleep_time"}     # the route adds these two
     js = BRAIN_JS.read_text(encoding="utf-8")
     reads = _reads(_js_function(js, "renderMemory"), "body")
+    # Since the memory review's I8 (2026-09-27) the rows come from
+    # memory-words.js's statusRows(s), the phone's MemoryCounts.fields word
+    # for word; renderMemory adds only the store's path.
+    words = (BRAIN_JS.parent / "memory-words.js").read_text(encoding="utf-8")
+    reads |= _reads(_js_function(words, "statusRows"), "s")
     missing = sorted(reads - sent)
     check("every field renderMemory reads is one GET /api/memory/status sends",
           not missing, f"reads {missing}, status() sends {sorted(sent)}")
-    for need in ("db", "embedder", "current", "retired"):
+    for need in ("db", "embedder", "current", "retired", "reranker", "said_again"):
         check(f"renderMemory shows `{need}`", need in reads, sorted(reads))
     kit = (REPO / "jarvis-desktop" / "tests" / "uikit.mjs").read_text(encoding="utf-8")
     m = re.search(r"^  memory: \{(.*?)\},\n  memory_pending", kit, re.S | re.M)
     fixture = re.sub(r'"(?:[^"\\]|\\.)*"', '""', m.group(1)) if m else ""
+    rr = re.search(r"reranker: \{([^}]*)\}", fixture)
+    rr_keys = set(re.findall(r"(\w+):", rr.group(1))) if rr else set()
+    fixture = re.sub(r"reranker: \{[^}]*\}", "reranker: {}", fixture)
     keys = set(re.findall(r"(\w+):", fixture))
     keys -= {"enabled", "remind"}                        # inside sleep_time
     check("the UI tests' memory fixture invents no field status() does not send",
           m is not None and keys <= sent, f"{sorted(keys - sent)}")
+    real_rr = set(M.reranker_status()) | {"slow"}        # "slow" only once it has happened
+    check("... nor a re-ranker field reranker_status() does not send",
+          rr_keys <= real_rr, f"{sorted(rr_keys - real_rr)}")
 
 
 def t_the_desktop_reads_what_a_fact_row_has():
@@ -577,7 +588,7 @@ def t_the_desktop_reads_what_a_fact_row_has():
     have = cols | {"current"}                            # the route adds it
     js = BRAIN_JS.read_text(encoding="utf-8")
     reads = set()
-    for fn in ("renderFacts", "whenLearned", "whenNoticed"):
+    for fn in ("renderFacts", "whenTrue", "whenLearned", "whenNoticed"):
         reads |= _reads(_js_function(js, fn), "f")
     check("every fact field the desktop reads is a real column",
           reads <= have, f"{sorted(reads - have)} not in {sorted(have)}")

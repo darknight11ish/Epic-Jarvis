@@ -174,6 +174,13 @@ data class MemoryCardView(
      * said nothing (absent or "").
      */
     val autoReasonLine: String? = null,
+    /**
+     * The PC's "it sounds older than what Jarvis knows" warning (memory idea
+     * 4), which it adds to `auto_reason`: on a line of its own, with plain
+     * dates ("1 January 2026") - the memory review's I9. Null when there is
+     * none. [MemoryWords.cardLines], the desktop's words.
+     */
+    val olderNewsLine: String? = null,
 )
 
 object MemoryCards {
@@ -222,19 +229,18 @@ object MemoryCards {
     fun keepBothBody(id: Long): String = """{"id":$id}"""
 
     /** The start of the line under a card that automatic learning left for a yes. */
-    const val AUTO_REASON_PREFIX = "Not saved automatically: "
+    const val AUTO_REASON_PREFIX = MemoryWords.REASON_PREFIX
 
     /**
      * `auto_reason` off a pending row, as the card's line, or null. The PC's
      * words are shown as they are, trimmed and without a trailing full stop
-     * so the line reads as one phrase. Only a string counts.
+     * so the line reads as one phrase. Only a string counts. The PC's
+     * older-news warning is not part of it: see [olderNewsLine].
      */
-    fun autoReasonLine(row: JsonObject): String? {
-        val p = row["auto_reason"] as? JsonPrimitive ?: return null
-        if (p is JsonNull || !p.isString) return null
-        val why = p.content.trim().trimEnd('.').trim().takeIf { it.isNotEmpty() } ?: return null
-        return AUTO_REASON_PREFIX + why
-    }
+    fun autoReasonLine(row: JsonObject): String? = MemoryWords.cardLines(row).reason
+
+    /** The older-news warning off a pending row, on its own line, or null. */
+    fun olderNewsLine(row: JsonObject): String? = MemoryWords.cardLines(row).older
 
     fun from(row: JsonObject): MemoryCardView {
         val id = row.str("id")?.toLongOrNull()
@@ -267,6 +273,7 @@ object MemoryCards {
         }.distinct()
         val ownWords = row.bool("verbatim") == true || source == REMEMBER_SOURCE
         val autoReason = autoReasonLine(row)
+        val olderNews = olderNewsLine(row)
         return when (kind) {
             MemoryCardKind.RETIRE -> MemoryCardView(
                 id = id,
@@ -285,6 +292,7 @@ object MemoryCards {
                 ownWords = false,
                 sourceLine = null,
                 autoReasonLine = autoReason,
+                olderNewsLine = olderNews,
             )
             else -> MemoryCardView(
                 id = id,
@@ -310,6 +318,7 @@ object MemoryCards {
                 // "your own words" says it better than "from remember".
                 sourceLine = source?.takeIf { !ownWords }?.let { "from ${it.replace('_', ' ')}" },
                 autoReasonLine = autoReason,
+                olderNewsLine = olderNews,
             )
         }
     }
@@ -331,7 +340,9 @@ object MemoryCards {
                 out += "Your last \"Remember:\" message: $note"
             }
         }
-        setup.str("near_duplicates_note")?.let { out += it }
+        // The desktop labels this line "Repeated cards dropped" (the memory
+        // review's I8), and so does the phone.
+        setup.str("near_duplicates_note")?.let { out += "${MemoryWords.REPEATS}: $it" }
         return out
     }
 
@@ -406,8 +417,8 @@ object MemoryAsOf {
         val note: String?,
     )
 
-    const val TRUE_THEN = "true then"
-    const val NO_LONGER_TRUE = "no longer true"
+    const val TRUE_THEN = MemoryWords.TRUE_THEN
+    const val NO_LONGER_TRUE = MemoryWords.NO_LONGER_TRUE
 
     /** Null when there is no `facts` list at all - a shape this cannot read. */
     fun parse(body: JsonObject): Answer? {

@@ -104,7 +104,7 @@ await check("the list is read as the PC sends it; a switch is on only when the P
   assert.equal(v.auto, true);
   assert.equal(v.sensitive, false);
   assert.deepEqual(v.facts[0], { id: 12, text: "Is building Jarvis, a local assistant.",
-    savedAt: NOW - 300.5, provenance: "typed", device: "desktop", saidAgain: 0 });
+    savedAt: NOW - 300.5, provenance: "typed", device: "desktop", saidAgain: 0, trueFrom: "" });
   // Missing or damaged: off, never assumed on.
   const bare = readAuto({ facts: [] });
   assert.equal(bare.auto, false);

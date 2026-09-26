@@ -1425,7 +1425,7 @@ def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None) -> dict:
         limit = LIST_DEFAULT
     now = time.time() if now is None else now
     store = store or _store()
-    sql = ("SELECT id, text, created, meta FROM facts WHERE source='auto'"
+    sql = ("SELECT id, text, created, meta, valid_from FROM facts WHERE source='auto'"
            " AND (valid_to IS NULL OR valid_to > ?)")
     args = [now]
     where = ""
@@ -1449,7 +1449,7 @@ def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None) -> dict:
         again = store.said_again_counts([int(r[0]) for r in rows])
     except Exception:
         again = {}
-    for fid, text, created, meta in rows:
+    for fid, text, created, meta, valid_from in rows:
         try:
             m = json.loads(meta or "{}")
             m = m if isinstance(m, dict) else {}
@@ -1461,8 +1461,35 @@ def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None) -> dict:
         if again.get(int(fid)):
             row["said_again"] = {"count": again[int(fid)]["count"],
                                  "last": int(again[int(fid)]["last"])}
+        true_from = _true_from_day(m, valid_from)
+        if true_from:
+            row["true_from"] = true_from
         out["facts"].append(row)
     return out
+
+
+def _true_from_day(meta: dict, valid_from) -> Optional[str]:
+    """"YYYY-MM-DD" - the day this fact became true, in this PC's time zone -
+    only when that date came from the owner's own words (memory idea 4:
+    "I moved to Leeds in January" is true from 1 January, and the store marks
+    it meta["true_from"] = "said"). Otherwise None: the fact became true when
+    it was saved, which `saved_at` already says. Both apps show it as "true
+    from 1 January 2026" (the memory review's I10, 2026-09-27)."""
+    M = sys.modules.get("jarvis_memory")
+    said = getattr(M, "TRUE_FROM_SAID", "said")
+    if meta.get("true_from") != said:
+        return None
+    try:
+        v = float(valid_from)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(v) or v <= 0:
+        return None
+    import datetime as _dt
+    try:
+        return _dt.date.fromtimestamp(v).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 # --------------------------------------------------------------------------

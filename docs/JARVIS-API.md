@@ -1046,7 +1046,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/content-risk` | GET | `routes.rs:23` | **no** | Read-only by design. |
 | `/api/watch` | GET | `routes.rs:24` | **no** | |
 | `/api/watch/report` | GET | `routes.rs:27` | **no** | A peek. Marking read is a POST on purpose. |
-| `/api/memory/status` | GET | `routes.rs:28` | **no** | `{available, db, facts, current, retired, erased, entities, embedder, semantic, vector_search, unembedded, sleep_time}` - `MemoryStore.status()` plus the route's own two. `facts` counts retired ones too; `current` is what is in use; `erased` (since 2026-09-24) counts facts whose words were erased; `entities` (since 2026-09-25) counts the people and things facts are linked to (one per group), and `entity_errors` appears only when linking a saved fact failed (the fact is saved either way). |
+| `/api/memory/status` | GET | `routes.rs:28` | `JarvisRuntime.memoryStatus` (`MemoryCounts.STATUS_PATH`; Brain, "What Jarvis remembers", `MemoryCountsPlate.kt`) | `{available, db, facts, current, retired, erased, entities, embedder, semantic, vector_search, unembedded, reranker, said_again, sleep_time}` - `MemoryStore.status()` plus the route's own two. `facts` counts retired ones too; `current` is what is in use; `erased` (since 2026-09-24) counts facts whose words were erased; `entities` (since 2026-09-25) counts the people and things facts are linked to (one per group), and `entity_errors` appears only when linking a saved fact failed (the fact is saved either way). `reranker` (since 2026-09-26, §34) is `{"state": "on" \| "loading" \| "off" \| "not started", "model", "why", "used", "slow"?}`; `said_again` (since 2026-09-26, §34) is how many "said again" rows are kept. Both apps show the same rows in the same words (`memory-words.js` `statusRows`, `MemoryWords.statusRows`, one shared fixture - §34 "In the apps"); only the desktop shows `db`, a path on the PC. The phone reads this route too - this table used to say it did not (the memory review's B19, 2026-09-27). |
 | `/api/memory/pending` | GET | `routes.rs` (`memory_pending`), as `?retire_cards=1&sleep_offer=1&merge_cards=1` (the "are these the same?" card, desktop only - below) | via `probe`, as `/api/memory/pending?retire_cards=1&sleep_offer=1` (`MemoryCards.PENDING_PATH`, read by `JarvisRuntime.refreshBrain`/`refreshMemoryQueue`) | The review QUEUE, never the corpus. Both apps ask for retire cards because they label them correctly, and for the overnight-tidy card because they show it - see below. The HUD page reads it plainly, for a count only. |
 | `/api/memory/facts` | GET | `routes.rs:32`, `brain.rs:413` | `JarvisApi.kt:429` | Takes `?known_at=<unix seconds>` — "what did I believe then?" Each fact's `current` is judged as Jarvis knew it at that moment, not as of today: a fact retired later (`retired_at` after that moment) was current then; `valid_to` counts only while `retired_at` is empty (`bitemporal.patch`). Every row carries `erased_at` (a column since 2026-09-24): a number means "Erase the words" was used on it - its `text` is then only the marker `[erased]`, and both apps show "Erased on <date>" instead, never the marker (`/api/memory/erase`, under Writes). |
 | `/api/memory/export` | GET | `brain.rs` `brain_memory_export` | **no** | Everything, current and retired. The desktop saves it to a file the owner picks in the Windows "Save as" dialog - never the clipboard, which Windows can sync to other devices. |
@@ -3185,7 +3185,10 @@ Every reply carries the `GET /api/memory/learning` fields except `enabled`,
 
 ```json
 {"facts": [{"id": 41, "text": "The owner is learning Kotlin",
-            "saved_at": 1790000300, "provenance": "typed", "device": "phone"}],
+            "saved_at": 1790000300, "provenance": "typed", "device": "phone"},
+           {"id": 40, "text": "Owner moved to Leeds in 2021",
+            "saved_at": 1790000200, "provenance": "voice", "device": "desktop",
+            "true_from": "2021-01-01"}],
  "auto": true, "auto_sensitive": false}
 ```
 
@@ -3198,7 +3201,12 @@ the last row's second come with it - so nothing is skipped or repeated.
 A fact the owner has said again since it was saved also carries
 `"said_again": {"count": 3, "last": 1790000900}` (memory idea 3, §34);
 both apps add "said again 3 times" to the row's small line. No field when
-it was never said again.
+it was never said again. A fact whose own words gave the day it became true
+("I moved to Leeds in 2021" - memory idea 4, §34) carries `"true_from":
+"2021-01-01"`, that day in the PC's time zone; both apps add "true from 1
+January 2021" to the row's small line (the memory review's I10, 2026-09-27,
+`jarvis_auto_learn._true_from_day`). No field when the fact became true when
+it was saved - `saved_at` says that already.
 
 `POST /api/memory/forget {"id": <fact id>}` - unchanged (§6): one fact per
 request, retired, not deleted. Now **also called by the phone**, for this
@@ -3257,7 +3265,9 @@ Where the learning switch lives today (desktop: Brain -> Memory; phone: Brain
   saved automatically" for the whole list. Hidden like the other memory
   lists. Desktop: Brain -> Memory (`brain.js` `openSavedList`); phone:
   Brain (`MemoryCountsPlate.kt`, `JarvisRuntime.autoRememberedIds`).
-- Cards that stayed cards show `auto_reason` as one quiet line.
+- Cards that stayed cards show `auto_reason` as one quiet line ("Not saved
+  automatically: ..."). The PC's older-news warning, which it adds to the
+  same field (§34), goes on a line of its own under it, with plain dates.
 
 The approval cards read "Turn on automatic learning. ..." and "Also remember
 sensitive topics automatically. ..." (`jarvis_auto_learn.AUTO_CARD`,
@@ -5572,6 +5582,8 @@ apps can see:
   `{"state": "on" | "loading" | "off" | "not started", "model", "why",
   "used", "slow"?}` and `said_again` (how many repeats are recorded).
   Setup status (`jarvis_intake.status`) says the same count in words.
+- `GET /api/memory/auto` rows carry `true_from` ("YYYY-MM-DD") when the
+  fact's own words gave the day it became true (§19.4; added 2026-09-27).
 
 What changed on the PC, and nothing else:
 
@@ -5618,6 +5630,49 @@ treated only `valid_to IS NULL` as "still in use", so a fact that ends in
 the future could not be forgotten, corrected or reworded. They now use
 `valid_to IS NULL OR valid_to > now`, like every reader (§6 Forget and the
 "stop using this fact?" card now work on such a fact).
+
+### 34.1 In the apps (the memory review's I8-I11, 2026-09-27)
+
+One set of memory words for both apps, decided in
+`tools/gen_memory_words_cases.py` and written into
+`contract/memory-words-cases.json` (the desktop's
+`tests/fixtures/memory-words-cases.json` and the phone's
+`src/test/resources/contract/memory-words-cases.json`, byte-identical).
+The desktop's `src/memory-words.js` and the phone's `net/MemoryWords.kt`
+build every line below; `tests/memory-words.mjs` and
+`MemoryWordsContractTest` read the same file, so changing one app's words
+fails the other app's test. The status cases in it are the real
+`MemoryStore.status()` in each re-ranker state.
+
+- **The memory counts** (desktop: Brain -> Memory; phone: Brain, "What
+  Jarvis remembers") gain two rows. "Answer ordering (re-ranker)": "on -
+  used for 12 answers" (with "; too slow once, so that answer kept the old
+  order" when `slow` says so), "still loading - answers keep the old order
+  until it is ready", "not loaded yet - it starts loading with the first
+  question", or "off - " and the PC's reason (`JARVIS_MEMORY_RERANK=0` reads
+  "turned off on the PC (JARVIS_MEMORY_RERANK=0)"). "Said again": "nothing
+  yet", "once", "twice", "3 times". An older PC without the fields shows
+  neither row.
+- **"Repeated cards dropped"** labels the PC's `near_duplicates_note` in
+  both apps (the desktop called it "Repeats"; the phone showed it
+  unlabelled). It is about cards the learner did not queue twice - not the
+  same thing as "Said again".
+- **Older news on its own line.** Under a card's "Not saved automatically:
+  ..." line, the PC's "It sounds older than what Jarvis knows: ..." sentence
+  gets a line of its own, its dates written plainly ("1 January 2026"). A
+  card whose reason is only that sentence shows only that line.
+- **"True from" dates.** "Saved automatically" rows add "true from 1 January
+  2021" from `true_from`. The desktop's full list ("What Jarvis knows about
+  you") says "true from 1 January 2021" when a fact became true more than a
+  day away from when Jarvis learned it, else "saved 3 h ago"; it no longer
+  shows a bare "2825d ago". "learned ..." and "true until ..., noticed ..."
+  use plain dates too.
+- **One wording for a fact no longer in use.** Today's list (the desktop's;
+  the phone has none) says "no longer used", like the "No longer used"
+  count. Looking at a past date, both apps say "true then" / "no longer
+  true" (the desktop used to say "no longer recalled" in both views).
+- Dates are the same words in every language setting: day, English month
+  name, year.
 
 ## 35. Folders Jarvis may look in: PDFs, Word files and a Notion export (added 2026-09-26)
 

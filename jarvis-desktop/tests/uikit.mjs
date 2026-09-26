@@ -332,7 +332,9 @@ export const BRAIN = {
   memory: { available: true, db: "C:\\Users\\pcadmin\\.openjarvis\\memory.db",
             facts: 612, current: 590, retired: 22,
             embedder: "BAAI/bge-small-en-v1.5", semantic: true, vector_search: true,
-            unembedded: 0, sleep_time: { enabled: false, remind: true } },
+            unembedded: 0, erased: 0, entities: 40,
+            reranker: { state: "on", model: "Xenova/ms-marco-MiniLM-L-6-v2", why: "", used: 14 },
+            said_again: 3, sleep_time: { enabled: false, remind: true } },
   memory_pending: { available: true, setup: { setup_complete: false, note:
       "extraction is a scaffold: review its proposals and tune the prompt against real conversations" },
     pending: [

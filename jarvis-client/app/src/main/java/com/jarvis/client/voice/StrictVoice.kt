@@ -24,8 +24,9 @@ import kotlin.math.roundToInt
  *   READ ALOUD by default, or KEPT ON SCREEN. Offered only when the PC
  *   reports the setting.
  * - Sensitive saved facts (the owner's decision, 2026-09-24): an answer that
- *   uses a saved fact about health, money, passwords or other people is
- *   KEPT ON SCREEN by default - even when memories are read aloud, and even
+ *   uses a saved fact about health, money, passwords or other people's
+ *   private details is KEPT ON SCREEN by default - even when memories are
+ *   read aloud, and even
  *   under "voice check is enough" - or READ ALOUD. Offered only when the PC
  *   reports the setting.
  * - Hands-free ("Hey Jarvis") (the owner's decision, 2026-09-24): a question
@@ -104,7 +105,7 @@ object StrictVoice {
 
     /**
      * Answers that use a SENSITIVE saved fact - health, money, passwords,
-     * other people (the owner's decision, 2026-09-24): kept on screen by
+     * other people's private details (the owner's decision, 2026-09-24): kept on screen by
      * default, even when answers that use memories are read aloud and even
      * under "voice check is enough". Reading them aloud is the looser choice
      * and raises the voice card. Offered only when the PC reports it.
@@ -113,8 +114,8 @@ object StrictVoice {
         Choice(
             VoiceStrict.SENSITIVE_ON_SCREEN,
             "Keep on screen (recommended)",
-            "Answers that use a saved fact about your health, money, passwords or other people are " +
-                "shown, not read aloud.",
+            "Answers that use a saved fact about your health, money, passwords or other people's " +
+                "private details are shown, not read aloud.",
         ),
         Choice(
             VoiceStrict.SENSITIVE_ALOUD,

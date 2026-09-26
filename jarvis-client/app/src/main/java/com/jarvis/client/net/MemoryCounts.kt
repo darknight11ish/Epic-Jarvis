@@ -3,8 +3,6 @@ package com.jarvis.client.net
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.doubleOrNull
 
 /**
  * How much Jarvis remembers, and whether it is learning - the numbers the
@@ -13,7 +11,8 @@ import kotlinx.serialization.json.doubleOrNull
  *
  * - `GET /api/memory/status` - `MemoryStore.status()` plus the route's own
  *   `sleep_time` (docs/JARVIS-API.md: `{available, db, facts, current,
- *   retired, embedder, semantic, vector_search, unembedded, sleep_time}`).
+ *   retired, erased, entities, embedder, semantic, vector_search, unembedded,
+ *   reranker, said_again, sleep_time}`).
  *   `facts` counts retired ones too, so it is not shown; `current` is what
  *   is in use. `db` is a file path on the PC and is not shown on the phone.
  * - `learning` rides on `GET /api/memory/facts` (`memory-pane.patch`); asked
@@ -52,41 +51,14 @@ object MemoryCounts {
 
     private fun JsonObject.prim(key: String): JsonPrimitive? = this[key] as? JsonPrimitive
 
-    /** A number as the desktop's `num()` shows it: only a real number, else nothing. */
-    private fun JsonObject.num(key: String): String? {
-        val p = prim(key)?.takeIf { !it.isString } ?: return null
-        val d = p.doubleOrNull ?: return null
-        return if (d == Math.floor(d) && !d.isInfinite()) d.toLong().toString() else d.toString()
-    }
-
-    /** The label/value rows, in the desktop's order. Empty when the store said nothing. */
-    fun fields(status: JsonObject): List<Pair<String, String>> {
-        if (status.prim("available")?.booleanOrNull == false) return emptyList()
-        val out = mutableListOf<Pair<String, String>>()
-        status.num("current")?.let { out += "Facts in use" to it }
-        status.num("retired")?.let { out += "No longer used" to it }
-        status.prim("embedder")?.takeIf { it.isString }?.contentOrNull?.takeIf { it.isNotBlank() }?.let { e ->
-            out += "Embedding" to if (status.prim("semantic")?.booleanOrNull == false) {
-                "$e (matches words only until the real embedding model has downloaded)"
-            } else {
-                e
-            }
-        }
-        if (status.prim("vector_search")?.booleanOrNull == false) {
-            out += "Search by meaning" to "off - facts are found by keyword"
-        }
-        status.num("unembedded")?.takeIf { (it.toDoubleOrNull() ?: 0.0) > 0 }?.let {
-            out += "Waiting to be indexed" to it
-        }
-        (status["sleep_time"] as? JsonObject)?.let { st ->
-            out += "Overnight tidying" to if (st.prim("enabled")?.booleanOrNull == true) {
-                "switched on, but not built yet - nothing runs"
-            } else {
-                "off (not built yet)"
-            }
-        }
-        return out
-    }
+    /**
+     * The label/value rows, in the desktop's order and words. Empty when the
+     * store said nothing. Since the memory review of 2026-09-27 (I8) they are
+     * [MemoryWords.statusRows] - the desktop's memory-words.js `statusRows`,
+     * held to one shared fixture - and include the re-ranker's state
+     * ("Answer ordering (re-ranker)") and "Said again".
+     */
+    fun fields(status: JsonObject): List<Pair<String, String>> = MemoryWords.statusRows(status)
 
     /** `learning` off `/api/memory/facts`: true, false, or null when it is not there. */
     fun learning(facts: JsonObject): Boolean? = facts.prim("learning")?.booleanOrNull

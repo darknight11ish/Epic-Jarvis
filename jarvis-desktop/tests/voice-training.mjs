@@ -527,7 +527,7 @@ function withoutSensitive(st) {
 await check("answers that use sensitive saved facts: on screen by default, the contract's words, and only when the PC has it", async () => {
   assert.deepEqual(VT.SENSITIVE_MEMORY.map(VT.choiceText), ["Keep on screen (recommended)", "Read aloud"]);
   assert.equal(VT.SENSITIVE_MEMORY[0].detail,
-    "Answers that use a saved fact about your health, money, passwords or other people are shown, not read aloud.");
+    "Answers that use a saved fact about your health, money, passwords or other people's private details are shown, not read aloud.");
   assert.equal(VT.SENSITIVE_MEMORY[1].detail,
     "Those answers are read aloud when your voice passes the check. Anyone near the speaker will hear them.");
   assert.equal(VT.loosens("sensitive_memory", "sensitive_aloud"), true);
@@ -551,7 +551,7 @@ await check("answers that use sensitive saved facts: on screen by default, the c
   assert.equal(got.title, "Answers that use sensitive saved facts");
   assert.deepEqual(got.labels, ["Keep on screen (recommended)", "Read aloud"]);
   assert.equal(got.pressed, "sensitive_on_screen");
-  assert.match(note, /health, money, passwords or other people are shown, not read aloud/);
+  assert.match(note, /health, money, passwords or other people's private details are shown, not read aloud/);
   // A PC without it ("" or missing): not offered at all.
   const old = await open(withoutSensitive(S.strong_ready));
   const hidden = await old.evaluate(() => document.getElementById("vt-sensitive-box").hidden);
