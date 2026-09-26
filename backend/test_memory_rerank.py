@@ -389,8 +389,8 @@ def t_it_is_off_by_default():
               and ids_of(P.recall(st, "tennis", k=3)) == base)
         s = M.reranker_status()
         check("off: status() says so, and how to turn it on",
-              s["state"] == "off" and "JARVIS_MEMORY_RERANK=1" in s["why"]
-              and "self-test" in s["why"], s)
+              s["state"] == "off" and "how to switch it on" in s["why"]
+              and "MEMORY-SCOREBOARD" in s["why"] and "self-test" in s["why"], s)
         M.set_reranker(Reverse())
         check("off: a re-ranker the self-test sets is still used (so it can be measured)",
               ids_of(P.recall(st, "tennis", k=3)) != base

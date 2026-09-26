@@ -519,7 +519,7 @@
       ]
     },
     {
-      "name": "off: turned off in the PC's settings",
+      "name": "off: not switched on (the default until the PC's self-test shows it helps)",
       "status": {
         "db": "~/.openjarvis/memory.db",
         "facts": 4,
@@ -534,7 +534,7 @@
         "reranker": {
           "state": "off",
           "model": null,
-          "why": "JARVIS_MEMORY_RERANK=0",
+          "why": "not switched on until the memory self-test on this PC shows it helps; the memory scoreboard page (docs/MEMORY-SCOREBOARD.md) says how to switch it on",
           "used": 0
         },
         "said_again": 3
@@ -562,7 +562,7 @@
         ],
         [
           "Answer ordering (re-ranker)",
-          "off - turned off on the PC (JARVIS_MEMORY_RERANK=0)"
+          "off - not switched on until the memory self-test on this PC shows it helps; the memory scoreboard page (docs/MEMORY-SCOREBOARD.md) says how to switch it on"
         ],
         [
           "Said again",

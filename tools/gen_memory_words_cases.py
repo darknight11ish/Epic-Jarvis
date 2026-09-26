@@ -280,6 +280,10 @@ def _real_statuses() -> list:
             raise exc
         return factory
     try:
+        # The states below are the re-ranker's own, so it is switched on for
+        # them; it is off by default (the last case) until the PC's
+        # self-test shows it helps.
+        M._RERANK_ON = True
         reset()
         snap("not started: no question asked since the PC started")
         reset(state="loading")
@@ -304,7 +308,7 @@ def _real_statuses() -> list:
             snap("off: the model could not be loaded")
         reset()
         M._RERANK_ON = False
-        snap("off: turned off in the PC's settings")
+        snap("off: not switched on (the default until the PC's self-test shows it helps)")
     finally:
         M._RERANK_ON = keep_on
         reset()

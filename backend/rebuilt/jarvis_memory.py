@@ -512,8 +512,10 @@ RERANK_BUDGET_S = _env_float("JARVIS_MEMORY_RERANK_BUDGET", 1.5, 0.05, 10.0)
 #: Off unless JARVIS_MEMORY_RERANK is 1/on/true/yes (see above).
 _RERANK_ON = os.environ.get("JARVIS_MEMORY_RERANK", "0").strip().lower() in (
     "1", "on", "true", "yes")
-RERANK_OFF_WHY = ("off by default until the memory self-test on this PC shows it helps; "
-                  "JARVIS_MEMORY_RERANK=1 turns it on")
+#: The apps show it after "off - ", so it is plain words, not a setting's name
+#: (docs/MEMORY-SCOREBOARD.md has the one line that turns it on).
+RERANK_OFF_WHY = ("not switched on until the memory self-test on this PC shows it helps; "
+                  "the memory scoreboard page (docs/MEMORY-SCOREBOARD.md) says how to switch it on")
 
 
 class Reranker:
