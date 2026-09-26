@@ -456,7 +456,28 @@ minute at ONE named Home Assistant device, each look through the gate as
 stays on this PC (it is matched here, never sent to the mail server), and
 a match only rings the owner's own apps over the existing link, with words
 built from the owner's own - no telephone call, no outside notification
-service.
+service. **Since 2026-09-26 it is instant, still on this row**: while an
+email watch is on, ONE connection to the same IMAP server stays open and
+the server says when mail arrives (IMAP IDLE; LOGIN, CAPABILITY, EXAMINE,
+IDLE, DONE and LOGOUT only - nothing is fetched over it). A nudge runs the
+ordinary look above, through the gate. The connection is itself put to the
+gate as `email_read` each time it opens, closes on Standby and on Stop
+everything, and falls back to the 5-minute looks when it drops. "Tell me if
+Alex hasn't replied by Friday" is the same look, told when nothing matched.
+**Every connection to the owner's mail server checks its certificate and
+name since 2026-09-26** (`jarvis_email.tls_context`): Python's `imaplib`
+did neither by default, so the email reads and the watch's looks
+encrypted to whoever answered. A mail program on this PC itself (a bridge
+such as Proton Mail Bridge, with a home-made certificate) is the one
+exception; its traffic never leaves the PC.
+
+**"Folders Jarvis may look in" adds no lane** (2026-09-26,
+`jarvis_documents.py`, JARVIS-API §35): finding, searching and reading the
+owner's own files in the folders listed on the PC, and bringing in a Notion
+export, all stay on this PC. PDF and Word files are turned into text by
+MarkItDown's document parts only (never its audio part, which sends sound to
+Google, or its YouTube part), in a separate program with no passwords in its
+environment; the text goes only to the model on this PC.
 
 The owner's-own-accounts row was not in this table until 2026-09-25, although those reads
 already left the machine; it was written down when the Google Calendar link
@@ -1139,6 +1160,8 @@ backend routes, in both directions; the rest are listed here only.
 | Saying a timer aloud when it goes off ("Your timer is done.", while "Hey Jarvis" listening is on in the Jarvis bar; 2026-09-25) | The owner asked for it on the desktop ("say timers aloud on the desktop when voice is on"). The phone's timer notification rings, and its voice is only switched on for a conversation - a phone in a pocket speaking on its own was not asked for. Alarms and urgent "tell me when"s ring until seen on both apps (JARVIS-API §30.5). |
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
+
+| Adding a folder to "Folders Jarvis may look in" (`POST /api/folders/add`) and bringing in a Notion export (`POST /api/folders/import`) (the owner's decisions of 2026-09-26; the feasibility audit's guardrail 1: "one folder list, PC only, empty by default") | Written with the feature. Both are about files on the PC: the desktop opens the Windows folder picker (or the file picker, for the export's `.zip`) in Rust, and only the path the owner chose is sent; adding then raises ONE approval card (`change_own_config`). A phone has no view of the PC's folders to pick from, and a path typed on the phone would be a guess. The backend refuses both routes from any device but the PC (`jarvis_owner_check.from_this_pc`), not only the apps. Everything else is on both apps: the list in the PC's words and Remove on each folder (at once, never held on a stale link - it only lets Jarvis see less; `/api/folders` and `/api/folders/remove`, `ported` in `tools/check_parity.py`), and asking about the files, which is ordinary chat from either app (the `my_files` tool runs on the PC, with the model on the PC). |
 
 **On the phone, kept off the desktop:**
 

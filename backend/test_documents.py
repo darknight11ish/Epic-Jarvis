@@ -242,6 +242,16 @@ def t_only_inside_a_listed_folder():
     except (OSError, NotImplementedError):
         check("(links cannot be made here - skipped)", True)
     check("no list: refused", D.allowed_path(str(root / "a.md"), []) is None)
+    prog = D._program_folder()
+    check("Jarvis's own program folder is refused even inside a listed folder (the "
+          "owner's backend folder is inside Documents)",
+          D.protected(os.path.join(prog, "jarvis-framework.toml"))
+          and D.allowed_path(os.path.join(prog, "jarvis_documents.py"),
+                             [os.path.dirname(prog)]) is None)
+    code, out = D.request_add({"path": prog}, here=True, spawn=run_now,
+                              gate=lambda *a: Verdict(True, "approved"), tier_of=lambda a: "ask")
+    check("... and cannot be added", code == 400 and "never looks there" in out.get("error", ""),
+          out)
     real = D.protected
     D.protected = lambda p: True
     try:
@@ -573,6 +583,8 @@ def t_the_notion_import():
     for bad in ("../x.md", "/x.md", "C:\\x.md", "a/../../x.md", ""):
         check(f"safe_parts refuses {bad!r}", D.safe_parts(bad) is None)
     check("safe_parts keeps an ordinary name", D.safe_parts("A/b c.md") == ["A", "b c.md"])
+    check("the console's own names are made safe too", D.safe_parts("x/CONIN$.md")
+          == ["x", "_CONIN$.md"] and D.safe_parts("NUL") == ["_NUL"])
     fresh()
 
 

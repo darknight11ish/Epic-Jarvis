@@ -20,6 +20,13 @@ The first numbered version. It gathers the work of the last few days.
   changing (the washing machine finishing). One approval card to set it up;
   a match only notifies you - urgent ones keep ringing on the phone until
   you look.
+- **"Folders Jarvis may look in"**: add a folder on the PC (one approval
+  card) and ask about the files in it - find them by name, search your notes,
+  read PDF, Word, Excel and PowerPoint files a part at a time. "Bring in a
+  Notion export" unzips your Notion export into one of those folders. What
+  Jarvis reads there is never saved as a fact about you.
+- **Instant "tell me when" for email**, and **"tell me if Alex hasn't
+  replied by Friday"**.
 - **Sending email**: one approval card per email, showing the exact
   recipients, subject and whole text. Never an "always allow".
 - **Web search** with five providers to choose from (SearXNG on your own PC
@@ -58,6 +65,8 @@ The first numbered version. It gathers the work of the last few days.
   asks first.
 - App lock hides the approval widget's details on the PC, and blocks
   screenshots on the phone.
+- Reading email now checks the mail server's certificate, as sending
+  always did (it encrypted, but to whoever answered).
 
 **Fixed**
 

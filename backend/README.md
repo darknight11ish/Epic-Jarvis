@@ -124,6 +124,7 @@ on a throwaway copy instead.
 | `stop-all.patch` | `jarvis_hud.py` | **Stop everything** (the owner's decision of 2026-09-25). `POST /api/stop_all` - the desktop's Alt+Shift+X and the phone's "Stop everything" button - stops a running task before its next step, makes the answer being written use no more tools, and tells every registered stopper (focus sessions) to stop; it never approves or starts anything and needs no card. Last in the list; its context is `owner-check.patch`'s banner lines. Needs `jarvis_stop_all.py` - see "Stop everything", at the very end. |
 | `email-send.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Sending email, one approval card per email** (the owner's decision, 2026-09-25, after the Muse audit). Adds `GET /api/email/sending` (whether sending is set up - the Settings line in both apps, never the password), and in the gate the notice's words for `send_email`, `send_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Its context is `web-search.patch`'s route block and gate lines and `note-capture.patch`'s `_TOOL_ACTIONS` lines. Needs `jarvis_email_send.py` - see "Sending email", at the very end. |
 | `manner.patch` | `jarvis_hud.py` | **How Jarvis talks: warm and brief, or plain** (the owner's decision, 2026-09-25). Adds `GET` and `POST /api/manner` - one change at a time, **no approval card either way** (it changes only how answers are worded). Its context is `web-search.patch`'s route blocks. Needs `jarvis_manner.py` - see "How Jarvis talks, and errors in plain words", at the very end. |
+| `documents.patch` | `jarvis_hud.py` | **Folders Jarvis may look in** (the owner's decisions of 2026-09-26: asking about PDFs and Word files, and the Notion import). One call at start-up, `jarvis_documents.install(Handler, ...)`, answers `GET /api/folders` and `POST /api/folders/add` (this PC only, one approval card), `/remove` (at once) and `/import` (a Notion export, this PC only). Last in the list; its context is `stop-all.patch`'s banner lines. Needs `jarvis_documents.py` - see "Documents & email", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -10432,3 +10433,133 @@ python3 backend/eval_memory.py --sizes 0,100 --words-only --reranker stand-in
 - **The real learner with your model** (`--learner-model`) - not run.
 - **The phone code** compiles only in CI; the desktop's change is tested
   here (`jarvis-desktop/tests/auto-learn.mjs`).
+
+
+# Documents & email: `jarvis_documents.py`, `documents.patch`, and instant "tell me when" (2026-09-26)
+
+The owner's "Documents & email" group (`CLAUDE.md`, cutting-edge decision of
+2026-09-26, and "Bring in my Notion export"), built as step 4 of
+`docs/FEASIBILITY-AUDIT-2026-09-26.md` - except saving email drafts, which
+waits for the owner's answer (the audit's question 1). `docs/JARVIS-API.md`
+sections 30.7 and 35 have the routes, the words and the known gaps.
+
+## In plain words
+
+1. **"Folders Jarvis may look in"** - one list, empty until you add a
+   folder. Desktop: Settings, Folders Jarvis may look in, "Add a folder…"
+   (Windows' folder picker, then one approval card). Removing a folder is
+   instant, from either app; the phone shows the list but adds nothing.
+2. **Asking about your files.** "Where's my tenancy agreement?", "what does
+   the lease say about pets?", "find my notes about the boiler". Jarvis finds
+   files by name, searches inside notes and text files, and reads PDF, Word,
+   Excel and PowerPoint files one part at a time (a big document is split at
+   its headings, never refused). Only inside the folders on the list; never
+   keys, saved passwords, browser data or hidden folders. What it reads counts
+   as outside text: it is never saved as a fact about you, and a note Jarvis
+   writes afterwards asks you first.
+3. **"Bring in a Notion export"**, on the same page: in Notion, Settings,
+   Export all workspace content, as Markdown & CSV. Then pick a folder from
+   the list and the `.zip` Notion made. Jarvis unzips it into a new folder
+   "Notion export <date>" there - notes, tables, documents and pictures only,
+   never a program - and never runs anything from it.
+4. **"Tell me when" for email is now instant.** While an email watch is on,
+   Jarvis keeps one connection open to your mail server, which tells it the
+   moment mail arrives. It closes when Jarvis goes on standby or you press
+   Stop everything, and if it drops, the looks every 5 minutes carry on. The
+   line under the watch in Coming up says which.
+5. **"Tell me if Alex hasn't replied by Friday."** Said or typed; one card;
+   Jarvis tells you only if no email from Alex has arrived by then ("by
+   Friday" means Friday at 17:00 - it says so).
+
+**Said plainly - two things found while building:**
+
+- **Reading email checked nobody's certificate.** Python's `imaplib` encrypts
+  the connection to your mail server but, unless told to, does not check the
+  server's certificate or name - so something in the middle of the network
+  could have posed as Gmail and been handed your app password. Every email
+  read now checks both (`jarvis_email.tls_context`), as sending email always
+  did. A mail program on this PC itself (for example Proton Mail Bridge) is
+  the one exception, because its traffic never leaves the PC. If your email
+  reading suddenly says the mail server did not answer, tell me: it may mean
+  your server's certificate is not one Windows trusts.
+- **"Where's that file?" does not use Everything (`es.exe`)**, although the
+  audit named it: it is a separate program to install and keep updated, and
+  it could not be tried here. Jarvis walks the listed folders itself (up to
+  100,000 files and 4 seconds, and it says when it stopped early). If your
+  folders are too big for that, say so and it can be added.
+
+## Owner steps (one line each, in PowerShell)
+
+1. **Put the new code on the PC** (copies `jarvis_documents.py` and the
+   updated `jarvis_tellme.py`, `jarvis_email.py`, `jarvis_quick.py`,
+   `jarvis_agent.py` and `jarvis_reach.py`, applies `documents.patch`, and
+   installs MarkItDown from `requirements.txt`), from this repository's
+   folder, then quit Jarvis from the tray icon and start it again:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+   Only if the script could not install MarkItDown (the preflight's
+   "Folders" line says "MarkItDown is not installed"), this one line
+   installs just it, the document parts only, at the pinned version:
+
+```powershell
+py -3 -m pip install "markitdown[pdf,docx,xlsx,pptx]==0.1.8"; 'Installed. Quit Jarvis from the tray icon and start it again.'
+```
+
+   Never `markitdown[all]`: its audio part sends sound to Google.
+
+2. **Let the model use it.** Open your `jarvis-framework.toml` (in
+   `C:\Users\pcadmin\.openjarvis\`, or beside `jarvis_hud.py`), find the
+   `enabled = [...]` line under `[tools]`, and add `"my_files"`, for example
+   `enabled = ["email_check", "web_search", "my_files"]`. It is offered to
+   the model only while a folder is on the list, so it costs nothing until
+   then. Reading files goes by the `read_files_readonly` line under
+   `[autonomy.tiers]` (the shipped file says `"auto"`); set it to `"ask"` to
+   get a card for every look. Restart Jarvis.
+
+3. **Add a folder:** desktop, Settings, Folders Jarvis may look in, "Add a
+   folder…", pick it, approve the card. Then ask Jarvis about a file in it.
+
+4. **Check it:** the preflight's "Folders" and "Is the instant email watch
+   connected?" lines (`py -3 backend\selftest.py --preflight`, from this
+   repository's folder).
+
+## What the code does
+
+- `jarvis_documents.py` - the list (`folders.json`), its card
+  (`change_own_config`), the `my_files` tool's `find` / `search` / `read`,
+  the converter in its own program, the Notion import, and `install()`,
+  which answers the four routes.
+- `documents.patch` - one call at start-up, after stop-all's.
+- `jarvis_agent.py` - the `my_files` tool (offered only with a folder
+  listed; decided under `file_read`'s action; at most 2 parts per answer).
+- `jarvis_tellme.py` - the instant connection (`_IdleWatch`, `_Imap`, by
+  hand: Python 3.12 has no IMAP IDLE) and "hasn't replied by ..." watches.
+- `jarvis_email.py` - `tls_context()`.
+- `jarvis_quick.py` - "tell me if Alex hasn't replied by Friday".
+- `selftest.py` - the preflight's "folders" and "instant_email" checks.
+
+## Test it
+
+```
+python3 backend/test_documents.py
+python3 backend/test_tellme.py
+python3 backend/test_email.py
+```
+
+`test_documents.py` converts a real PDF and Word file when MarkItDown is
+installed, and says it skipped that when it is not. `test_tellme.py` runs
+the instant connection against a stand-in mail server on this PC's
+loopback: new mail, a drop and a reconnect, Stop everything, Standby, and a
+server without IDLE.
+
+## Not checked, said plainly
+
+- Not run on the owner's PC: not the Windows pickers, not MarkItDown on
+  Python 3.12, not a real mail server's IDLE (Gmail's own time limit for an
+  idle connection was not checked; Jarvis renews every 9 minutes).
+- A scanned PDF has no text layer: Jarvis says "no text was found".
+- PDFs and Word files are found by name and read part by part; they are not
+  searched inside (a search index over them is a later idea, I41).

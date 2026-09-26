@@ -22,7 +22,7 @@
    "max": 20,
    "notion": {
     "can_import": false,
-    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it.",
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
     "title": "Bring in a Notion export"
    },
    "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
@@ -46,7 +46,7 @@
    "max": 20,
    "notion": {
     "can_import": true,
-    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it.",
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
     "title": "Bring in a Notion export"
    },
    "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
@@ -70,7 +70,7 @@
    "max": 20,
    "notion": {
     "can_import": false,
-    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it.",
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
     "title": "Bring in a Notion export"
    },
    "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
@@ -106,7 +106,7 @@
    "max": 20,
    "notion": {
     "can_import": true,
-    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it.",
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
     "title": "Bring in a Notion export"
    },
    "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
@@ -135,7 +135,7 @@
    "max": 20,
    "notion": {
     "can_import": true,
-    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it.",
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
     "title": "Bring in a Notion export"
    },
    "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
@@ -172,7 +172,7 @@
    "max": 20,
    "notion": {
     "can_import": true,
-    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it.",
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
     "title": "Bring in a Notion export"
    },
    "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
@@ -209,7 +209,7 @@
    "max": 20,
    "notion": {
     "can_import": true,
-    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it.",
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
     "title": "Bring in a Notion export"
    },
    "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
@@ -246,7 +246,7 @@
    "max": 20,
    "notion": {
     "can_import": false,
-    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it.",
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
     "title": "Bring in a Notion export"
    },
    "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
@@ -277,7 +277,7 @@
    "max": 20,
    "notion": {
     "can_import": true,
-    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it.",
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
     "title": "Bring in a Notion export"
    },
    "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",

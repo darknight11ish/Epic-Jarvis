@@ -1209,7 +1209,7 @@ def _deadline(s: str, now: float) -> Optional[float]:
             return now + n * (7 * 86400 if dm.group(2).startswith("week") else 86400)
         d = parse_duration(m.group(1))
         return now + d if d else None
-    m = re.fullmatch(r"(?:by|before)\s+(?:the\s+end\s+of\s+)?(.+)", s)
+    m = re.fullmatch(r"(?:by|before)\s+(?:(?:the\s+)?end\s+of\s+)?(.+)", s)
     if not m:
         return None
     when = parse_when(m.group(1), now, "reminder")

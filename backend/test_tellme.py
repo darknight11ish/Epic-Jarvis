@@ -851,6 +851,9 @@ def t_no_reply_on_the_fast_path():
               and got.f.get("who") == who and got.f.get("by") == by, got)
     got = Q.match("urgently tell me if Alex has not replied by 5pm", now)
     check("... urgently", got is not None and got.f.get("urgent") is True)
+    got = Q.match("tell me if Alex hasn't replied by end of Friday", now)
+    check("'by end of Friday' is Friday at 17:00", got is not None
+          and got.f.get("by") == fri, got)
     got = Q.match("tell me if anyone hasn't replied by Friday", now)
     check("'anyone' asks who", got is not None and got.name == "tellme_help")
     w = World(now, name="noreplyq")
@@ -1017,18 +1020,17 @@ def t_instant_email_idle():
         j2 = TM.add({"source": "email", "sender": "Sam"})
         w.s.tick()
         check("a new watch opens it again", _wait(lambda: TM.IDLE.status()["state"] == "on"))
+        TM.IDLE_BACKOFF = (0.6,)
         srv.drop()
         check("the server drops it: said under Coming up, and it tries again",
               _wait(lambda: TM.IDLE.status()["state"] == "dropped")
               and "not connected" in (w.s.job(j2["id"]).get("note") or ""),
               (TM.IDLE.status(), w.s.job(j2["id"]).get("note")))
         calls = len(w.mail.calls)
-        w.clock.t = now + 900
-        w.s.tick()
-        check("while dropped, the regular look signs in as before",
-              len(w.mail.calls) == calls + 1 or TM.IDLE.healthy(), w.mail.calls)
         check("it reconnects by itself after the back-off",
               _wait(lambda: TM.IDLE.status()["state"] == "on"), TM.IDLE.status())
+        check("... and on reconnecting it looks once, for mail that came while nothing "
+              "listened", len(w.mail.calls) == calls + 1, w.mail.calls[calls:])
 
         import jarvis_stop_all as SA
         said = SA.stop_all("this PC")
@@ -1080,11 +1082,14 @@ def t_instant_email_needs_idle():
         check("a server without IDLE: said plainly, and the looks carry on",
               _wait(lambda: TM.IDLE.status()["state"] == "unsupported"), TM.IDLE.status())
         n = len(srv.words)
+        calls = len(w.mail.calls)
         w.clock.t = now + 300
         w.s.tick()
         time.sleep(0.2)
         check("... and it is not asked again at every look", srv.words[n:].count("LOGIN") == 0,
               srv.words[n:])
+        check("... while the regular looks sign in as before (not instant: no skipping)",
+              len(w.mail.calls) == calls + 1, w.mail.calls)
         check("a look that is faked never opens a real socket for it",
               TM.Deps(email_look=lambda *a: {}).idle_connect is None)
     finally:
@@ -1111,6 +1116,13 @@ def t_the_imap_lines():
     check("a literal is read into its line", got and got[0].endswith(b"hello)"), got)
     check("a sign-in with a line break is refused before anything is sent",
           _raises(lambda: TM._quote("a\r\nb"), TM.IdleRefused))
+    # New mail said while it was not listening (during the looks a nudge
+    # started) arrives before "+ idling" - and must not be lost.
+    conn.exists = 7
+    b.sendall(b"* 8 EXISTS\r\n+ idling\r\n")
+    before = conn.idle()
+    check("a new-mail line that came before listening started is handed back",
+          conn.new_mail(before) and conn.idle_tag is not None, before)
     b.close()
     check("the server closing is an error, not a hang", _raises(lambda: conn.line(0.5),
                                                                ConnectionError))

@@ -153,7 +153,9 @@ WAITING = "Waiting for your yes on the approval card."
 NOTION_TITLE = "Bring in a Notion export"
 NOTION_DETAIL = ("In Notion: Settings, Export all workspace content, as Markdown & CSV. Then "
                  "pick the .zip it made and a folder from the list: Jarvis unzips it into a "
-                 "new folder there and never runs anything from it.")
+                 "new folder there and never runs anything from it. If that folder is synced "
+                 "by OneDrive or a similar app, that app uploads the new files, as it does "
+                 "anything you put there.")
 REMOVE_LABEL = "Remove"
 PC_ONLY = ("Folders are added on the PC only (Settings, Folders Jarvis may look in), with an "
            "approval card.")
@@ -268,10 +270,22 @@ def _from_this_pc(peer, local) -> bool:
         return False
 
 
+def _program_folder() -> str:
+    """Jarvis's own program folder - where this file, jarvis_hud.py, and on
+    some PCs the settings file and the logs sit."""
+    return os.path.dirname(os.path.realpath(__file__))
+
+
 def protected(path: str) -> bool:
-    """file_read's refusal list (jarvis_agent._protected_path) - the ONE list.
-    Without jarvis_agent.py, every path is refused rather than guessed."""
+    """file_read's refusal list (jarvis_agent._protected_path) - the ONE list -
+    and, for the folders here, Jarvis's own program folder too (the owner's
+    backend folder is inside Documents on their PC: "Documents\\Claude\\Open
+    jarvis files\\Desktop program"). Without jarvis_agent.py, every path is
+    refused rather than guessed."""
     try:
+        real = os.path.realpath(os.path.expanduser(path))
+        if _inside(_program_folder(), real):
+            return True
         import jarvis_agent
         return bool(jarvis_agent._protected_path(path))
     except Exception:
@@ -1070,7 +1084,8 @@ def describe(args: dict) -> str:
 # --------------------------------------------------------------------------
 
 _BAD_CHARS = re.compile(r'[<>:"|?*\x00-\x1f]')
-_RESERVED = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", re.I)
+_RESERVED = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(\..*)?$",
+                       re.I)
 
 
 class ImportRefused(Exception):

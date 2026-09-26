@@ -1262,19 +1262,24 @@ class _Imap:
             if m:
                 self.exists = int(m.group(1))
 
-    def idle(self) -> None:
+    def idle(self) -> list:
+        """Start listening. The lines the server sent first - a new-mail
+        line held back while it was not listening (during the looks a nudge
+        started) arrives here, and must not be lost."""
         self.n += 1
         tag = b"J%d" % self.n
         self.sock.sendall(tag + b" IDLE\r\n")
+        seen = []
         while True:
             got = self.line(IDLE_TIMEOUT)
             if got is None:
                 raise ConnectionError("the mail server did not start listening")
             if got.startswith(b"+"):
                 self.idle_tag = tag
-                return
+                return seen
             if got.startswith(tag + b" "):
                 raise NoIdle()
+            seen.append(got)
 
     def wait(self, timeout: float) -> list:
         """The lines the server sent while listening, waiting at most
@@ -1507,6 +1512,10 @@ class _IdleWatch:
                         return None
                     self.conn = conn
                 conn.idle()
+                # Mail that came since the last look, while nothing was
+                # listening: one ordinary look now, before the regular looks
+                # start skipping the sign-in.
+                self._nudge(deps, sched)
                 with self.lock:
                     self.heard = time.time()
                 self._set(ev, "on")
@@ -1561,17 +1570,19 @@ class _IdleWatch:
                     self._set(ev, "off")
                     return
             if nudge_at is not None and time.monotonic() - nudge_at >= IDLE_DEBOUNCE:
-                conn.done()
+                conn.new_mail(conn.done())
                 nudge_at = None
                 self._nudge(deps, sched)
-                conn.idle()
+                if conn.new_mail(conn.idle()):
+                    nudge_at = time.monotonic()     # more came during the looks
                 renewed = time.monotonic()
                 with self.lock:
                     self.heard = time.time()
             elif time.monotonic() - renewed >= IDLE_RENEW_SECONDS:
                 if conn.new_mail(conn.done()):
                     self._nudge(deps, sched)
-                conn.idle()
+                if conn.new_mail(conn.idle()):
+                    nudge_at = time.monotonic()
                 renewed = time.monotonic()
                 with self.lock:
                     self.heard = time.time()
