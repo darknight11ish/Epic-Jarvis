@@ -1,5 +1,7 @@
 # Questions for the owner - 2026-09-27
 
+**ANSWERED 2026-09-27** - every question below has been answered; the answers are in `CLAUDE.md` ("Decided 2026-09-27, the owner's answers"). This page is kept as the record of what was asked.
+
 Short multiple choice, most important first. The first option is always the
 recommendation. Reply with numbers and letters ("1a, 2a, 3b ...") or just
 "all recommended". I will also ask them in the chat, two at a time.

@@ -379,6 +379,59 @@ Decided 2026-09-26, when the owner asked for memory and learning to be
   outside text: they are never learned as facts, and every note Jarvis
   writes back after reading them asks first, as for any note.
 
+Decided 2026-09-27, the owner's answers to `docs/OWNER-QUESTIONS-2026-09-27.md`
+(after the feasibility, UI, memory and ease-of-use audits):
+- **Email drafts: a card every time**, showing the full draft, before any
+  text goes to the owner's Drafts folder.
+- **Plug-in programs (MCP): programs on this PC only** (the owner had no
+  preference; the built, stricter version stays). A card when a plug-in is
+  added and again when its program or version changes; each start is logged.
+- **Backups: one locked backup file into a folder the owner picks, a
+  NordLocker (or other cloud-synced) folder included.** Locked with a
+  recovery code only the owner has (shown once); Jarvis keeps only the last
+  few. This bends rule 1 for that one locked file only; the app must say
+  plainly that a lost code means a useless backup and that erased facts stay
+  in older backups until they age out.
+- **The feasibility audit's 31 small items are queued after the four groups.**
+- **Build the UI audit's "do first" list.** The HUD window uses the app's
+  theme colours; the widget's Approve button matches the Jarvis bar's; the
+  phone keeps its own font everywhere.
+- **Memory:** "Erase the words" also offers "Also delete the chat it came
+  from"; the re-ranker may also drop weak facts, but only if the PC's
+  self-test shows it helps.
+- **Web search ships switched on** (with the existing asks-first rules).
+- **A read-only list of past approvals** (title, Approved / Denied / Timed
+  out, when, which device) - after reading the owner's `jarvis_gate.py`.
+- **Reading tools (calendar, email, notes, home status) can be switched on
+  from the PC app**, each with a card plus Windows Hello; other tools stay in
+  the settings file.
+- **A search box in History for the owner's own old chats is allowed now**
+  (shown on screen only; nothing saved, nothing handed to the AI).
+- **Crisis help line: United States - 988 (Suicide & Crisis Lifeline) and
+  911.** Crisis messages are never learned from and never counted.
+- **The plan card is allowed later**, only after the multi-step safety tests
+  pass; risky steps still get their own card.
+- **"From now on, ..." style requests apply at once, with Undo, no card.**
+- **Phone: allow home-network addresses** (private addresses and `.local`)
+  as the 2026-09-26 own-networks decision says; never the open internet.
+- **Focus report card: drop the streak line.**
+- **12 GB card:** longer conversations with picture understanding first, and
+  making pictures too (swapped in when asked, since both cannot sit on the
+  card at once) - decided in detail after the card is measured.
+- **Music/video control on the PC: no card**, only from the owner's own words.
+- **Smartwatch: every notification stays on the phone by default**, with a
+  setting to let them all show on a compatible watch (turning it on raises a
+  card, turning it off is instant).
+- **News headlines and "tell me when this page changes": yes, the safe
+  version** - one card per address the owner adds, read-only, never follows
+  links elsewhere, never acts on what it reads, outside text; queued with
+  the small items.
+- **Games and role-play run in a temporary chat automatically.**
+- **Inside jokes: yes**, a "between us" list in Brain with Forget, from the
+  owner's own words only.
+- **Humour: a switch in "How Jarvis talks", off to start**; never on cards,
+  errors or serious topics.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
