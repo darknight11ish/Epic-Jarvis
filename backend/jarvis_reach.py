@@ -345,13 +345,34 @@ def _tool_row(id_: str, name: str, tool: str, ctx: Ctx, *, configured: bool,
     return _row(id_, name, "off", "", ASK_NA, off_line)
 
 
+def _tool_switchable(tool: str) -> bool:
+    """Can this tool be offered to the model from an app at all - the owner's
+    answer of 2026-09-27 ("Reading tools ... can be switched on from the PC
+    app") - or is it file-only, like every other tool?"""
+    try:
+        import jarvis_asks_first
+        return tool in jarvis_asks_first.TOOLS_SWITCHABLE
+    except Exception:
+        return False
+
+
 def _enable_line(tool: str) -> str:
+    if _tool_switchable(tool):
+        return (f"Set up on this PC, but the AI model is not offered it yet: switch it on in "
+                f"Settings, \"What asks first\" (one approval card and Windows Hello), or add "
+                f"\"{tool}\" to [tools].enabled in jarvis-framework.toml by hand.")
     return (f"Set up on this PC, but the AI model is not offered it: \"{tool}\" is not in "
-            f"[tools].enabled in jarvis-framework.toml.")
+            f"[tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be "
+            f"switched on from either app.")
 
 
 def _off_line(tool: str) -> str:
-    return f"Off: \"{tool}\" is not in [tools].enabled in jarvis-framework.toml."
+    if _tool_switchable(tool):
+        return (f"Off: switch it on in Settings, \"What asks first\" (one approval card and "
+                f"Windows Hello), or add \"{tool}\" to [tools].enabled in jarvis-framework.toml "
+                f"by hand.")
+    return (f"Off: \"{tool}\" is not in [tools].enabled in jarvis-framework.toml. This one is "
+            f"file-only - it cannot be switched on from either app.")
 
 
 def _join(items: list) -> str:

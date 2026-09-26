@@ -830,6 +830,7 @@ pub fn run() {
             asks_first::get_asks_first,
             asks_first::set_asks_first,
             asks_first::set_lights_without_card,
+            asks_first::set_tool_enabled,
             email_sending::get_email_sending,
             folders::get_folders,
             folders::add_folder,

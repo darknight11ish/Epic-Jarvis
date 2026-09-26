@@ -370,6 +370,12 @@ permissions = [
   "allow-get-asks-first",
   "allow-set-asks-first",
   "allow-set-lights-without-card",
+  # Offering a reading tool to the AI model at all (the owner's answer of
+  # 2026-09-27) - a DIFFERENT thing from "Ask me first" above. ON is one
+  # approval card that needs Windows Hello on the PC, held on a stale link in
+  # Rust; OFF is at once. Rust refuses any tool off the short list before
+  # sending; so does the PC. Desktop only.
+  "allow-set-tool-enabled",
   # "Sending email": whether it is set up, from which address and through
   # which server (GET /api/email/sending). A read: it sends nothing and
   # never carries the password. Each email is its own approval card.

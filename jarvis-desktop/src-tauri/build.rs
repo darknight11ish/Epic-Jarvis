@@ -175,11 +175,14 @@ fn main() {
             // action and whether it asks, in the PC's words; "Ask me first"
             // on ONE action of the short safe list (stricter at once, never
             // held; looser is one card plus Windows Hello on the PC, held on
-            // a stale link); and "Lights, plugs and fans without a card" (ON
-            // is one card, held; OFF at once). Settings window only.
+            // a stale link); "Lights, plugs and fans without a card" (ON
+            // is one card, held; OFF at once); and (2026-09-27) "Offer this
+            // to the AI model" on the four reading tools (ON one card, held;
+            // OFF at once). Settings window only.
             "get_asks_first",
             "set_asks_first",
             "set_lights_without_card",
+            "set_tool_enabled",
             // Settings' "Sending email" (backend/email-send.patch): whether
             // sending is set up - from which address, through which server -
             // in the PC's own words. A read; never the password. Settings

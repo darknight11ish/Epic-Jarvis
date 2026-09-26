@@ -357,6 +357,14 @@ body {
   margin: 0 0 8px;
 }
 
+/* Chat history's search box: filters the loaded list (brain.js
+   paintHistoryList), the same shape as .memory-facts-filter above. */
+.history-filter {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 8px;
+}
+
 .field {
   padding: 6px 10px;
   border: var(--stroke-hair) solid var(--border-strong);

@@ -1,7 +1,8 @@
 """jarvis_asks_first.py - "What asks first": every action Jarvis can take and
 whether it asks you first, in plain words; "make stricter" switches; on the
-PC only, loosening a short safe list; and the "lights, plugs and fans
-without a card" setting.
+PC only, loosening a short safe list; the "lights, plugs and fans without a
+card" setting; and, on the PC only, offering a reading tool to the AI model
+at all.
 
 NEW MODULE, shipped whole. asks-first.patch adds the routes (jarvis_hud.py)
 and the gate's words for the loosening card (jarvis_gate.py). Both apps show
@@ -18,6 +19,23 @@ docs/APPROVALS-AUDIT-2026-09-26.md; CLAUDE.md)
     devices the owner names without a card. Turning it on raises a card;
     turning it off is immediate. Never after outside text in the turn.
     Locks, doors, alarms and covers always keep a card of their own.
+
+OFFERING A READING TOOL TO THE AI MODEL AT ALL (2026-09-27, the owner's
+answer to the ease-of-use audit, docs/OWNER-QUESTIONS-2026-09-27.md; CLAUDE.md)
+  * "Reading tools (calendar, email, notes, home status) can be switched on
+    from the PC app, each with a card plus Windows Hello; other tools stay
+    in the settings file." A DIFFERENT thing from loosening, above: loosening
+    changes whether an offered tool asks first ([autonomy.tiers]); this
+    changes whether the model is offered the tool AT ALL ([tools].enabled -
+    jarvis_agent.offered_tools() only offers a tool named there). Each of
+    the four switches on its own, one card at a time (ENABLE_TOOL_ACTION,
+    "enable_reading_tool"), the same PC-only, Windows-Hello shape as
+    loosening (jarvis_owner_check.PC_ONLY_ACTIONS). Turning one OFF removes
+    it from [tools].enabled at once, from either app, never a card - it
+    only narrows what the model may do. Every other tool (github_search,
+    send_email, home_control, browser_control, ...) stays file-only: it can
+    only be added to [tools].enabled by hand (jarvis_reach.py's rows for
+    them say so plainly).
 
 WHAT THE PAGE READS
 The same things the gate reads: each action's tier in [autonomy.tiers] of
@@ -192,6 +210,21 @@ SWITCHABLE = tuple(LOOSE)
 #: PC_ONLY_ACTIONS holds the same name.
 LOOSEN_ACTION = "loosen_what_asks_first"
 
+#: The four reading tools the owner may offer to the AI model at ALL, from
+#: the PC (CLAUDE.md, the owner's answer of 2026-09-27: "Reading tools
+#: (calendar, email, notes, home status) can be switched on from the PC app,
+#: each with a card plus Windows Hello; other tools stay in the settings
+#: file."). A DIFFERENT thing from LOOSE above: this changes [tools].enabled
+#: - whether the model is offered the tool at all - never [autonomy.tiers],
+#: which decides whether it asks first once offered. Each switches on its
+#: own, one card at a time, because the owner may want one offered without
+#: the others.
+TOOLS_SWITCHABLE = ("calendar_read", "email_read", "notes_search", "home_read")
+
+#: The approval card for offering one of them. jarvis_owner_check.
+#: PC_ONLY_ACTIONS holds the same name.
+ENABLE_TOOL_ACTION = "enable_reading_tool"
+
 #: Never loosened from an app, whatever else changes: anything that leaves
 #: the PC, deletes, sends, spends, moves a lock or a door, touches secrets
 #: or loosens a security or privacy setting - and the actions whose module
@@ -209,7 +242,7 @@ HARD_LIMITS = frozenset({
     "better_voice_enable", "download_model", "switch_model", "models_create",
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
-    "watch_notifications_enable",
+    "watch_notifications_enable", ENABLE_TOOL_ACTION,
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -222,7 +255,7 @@ MUST_ASK = frozenset({
     "models_create", "second_card_enable", "second_card_browser_enable", "big_model_enable",
     "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
-    "wiki_update", LOOSEN_ACTION, "watch_notifications_enable",
+    "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -252,7 +285,7 @@ GROUPS = (
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
         "memory_manage", "user_profile_manage", "custom_voice", "better_voice_enable",
-        "watch_notifications_enable", "modify_own_code", LOOSEN_ACTION]),
+        "watch_notifications_enable", "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
 )
 
@@ -435,7 +468,7 @@ def view(*, here: bool = False) -> dict:
             "groups": groups, "switchable": list(SWITCHABLE), "can_loosen": bool(here),
             "waiting": ({"action": pending["action"], "title": _title(pending["action"]),
                          "said": WAITING} if pending else None),
-            "last": last, "lights": lights_status()}
+            "last": last, "lights": lights_status(), "tools": tools_status(here=here)}
 
 
 # ---------------------------------------------------------------------------
@@ -593,6 +626,9 @@ NOT_ON_LIST = ("Only reading your calendar, email, notes and home status, and ad
                "your settings file (jarvis-framework.toml), and some things always ask.")
 NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so nothing can be "
                   "loosened from the app - run apply-patches.ps1 on the PC.")
+TOOLS_NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so no tool can "
+                       "be offered to the AI model from the app - run apply-patches.ps1 on "
+                       "the PC.")
 
 
 def loosen_card(action: str) -> str:
@@ -777,6 +813,335 @@ def request_tier(body, *, peer=None, local=None, gate: Optional[Callable] = None
 
 def _here(here: Optional[bool], peer, local) -> bool:
     return bool(here) if here is not None else _from_this_pc(peer, local)
+
+
+# ---------------------------------------------------------------------------
+# Offering a reading tool to the AI model at all - the PC, one card plus
+# Windows Hello. A DIFFERENT thing from loosening (above): that changes
+# whether a tool asks first once it is offered; this changes whether it is
+# offered at all - one line of [tools].enabled, never [autonomy.tiers].
+# ---------------------------------------------------------------------------
+
+TOOLS_LABEL = "Offer this to the AI model"
+TOOLS_DETAIL = ("Whether the AI model is offered each reading tool at all - a separate thing "
+               "from whether it asks you first, above. Turning one on shows an approval card "
+               "and asks Windows Hello, on this PC; turning it off is instant, from either "
+               "app. Every other tool can only be added by hand, in your settings file "
+               "(jarvis-framework.toml, [tools].enabled) - see backend/README.md.")
+TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
+                "What asks first). It takes an approval card and Windows Hello.")
+TOOLS_NOT_ON_LIST = ("Only reading your calendar, email, notes and home status can be offered "
+                     "to the AI model from an app. Every other tool changes only in your "
+                     "settings file (jarvis-framework.toml, [tools].enabled).")
+
+TOOL_ENABLE_LAST_WORDS = {
+    "enabled": "You approved the card, so the AI model is offered this tool.",
+    "denied": "The card was turned down, so the AI model is still not offered this tool.",
+    "timed_out": "Nobody answered the card in time, so the AI model is still not offered this "
+                "tool.",
+    "refused": "Your PC's settings do not let this be approved, so the AI model is still not "
+              "offered this tool.",
+    "withdrawn": "You turned it off while the card waited, so approving it changed nothing.",
+    "failed": "It was approved, but the settings file could not be changed, so the AI model "
+             "is still not offered this tool.",
+}
+
+
+def tools_enabled_set() -> set:
+    try:
+        cfg = fw.load_framework() if fw is not None else {}
+        return set((cfg.get("tools") or {}).get("enabled") or [])
+    except Exception:
+        return set()
+
+
+def tool_enable_card(tool: str) -> str:
+    phrase = _title(tool)
+    phrase = phrase[:1].lower() + phrase[1:]
+    return "\n".join([
+        f"Offer \"{phrase}\" to the AI model?",
+        "",
+        f"From now on the AI model may use this tool when it decides to - it can {phrase}. "
+        f"This changes one line of your settings file on this PC (jarvis-framework.toml): "
+        f"\"{tool}\" is added to [tools].enabled. Nothing else in it changes.",
+        "",
+        "This is separate from whether it asks you first: that is set above, in \"Ask me "
+        "first\", and is unchanged by this card.",
+        "",
+        "Approving it needs Windows Hello on this PC. You can turn it off again at any time "
+        "from either app, and that is instant.",
+        "",
+        "If you did not just do this, say no.",
+        "",
+        "If you say no: nothing changes - the AI model is still not offered this tool.",
+    ])
+
+
+#: The [tools] table's header, and its one `enabled = [...]` line - the only
+#: shape this page can change safely (mirrors _HEADER/_ANY_HEADER/_KEY_LINE
+#: above, for a different table).
+_TOOLS_HEADER = re.compile(r"^[ \t]*\[[ \t]*tools[ \t]*\][ \t]*(?:#.*)?$")
+_ENABLED_LINE = re.compile(
+    r'^(?P<lead>[ \t]*enabled[ \t]*=[ \t]*)\[(?P<items>[^\[\]]*)\](?P<rest>[ \t]*(?:#.*)?)$')
+_QUOTED_ITEM = re.compile(r'"([^"\\]*)"|\'([^\']*)\'')
+
+TOOLS_HAND_EDIT = ("Your settings file (jarvis-framework.toml) is written in a way this page "
+                  "cannot change safely, so nothing was changed. Edit [tools] enabled by hand "
+                  "in Notepad, then restart Jarvis")
+
+
+def rewrite_tools(text: str, tool: str, on: bool) -> str:
+    """`text` with `tool` added to (on) or removed from (not on) the single
+    `enabled = [...]` line under [tools]. Pure: no file is read or written
+    here. Raises TierFileError. Mirrors rewrite() above, for an array
+    instead of a scalar."""
+    if not re.fullmatch(r"[a-z][a-z0-9_]{1,60}", tool or ""):
+        raise TierFileError("That is not a tool name")
+    before = _parse(text)
+    nl = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(nl)
+    heads = [i for i, line in enumerate(lines) if _TOOLS_HEADER.match(line)]
+    if len(heads) != 1:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    start = heads[0] + 1
+    end = next((i for i in range(start, len(lines)) if _ANY_HEADER.match(lines[i])),
+               len(lines))
+    hits = [i for i in range(start, end) if _ENABLED_LINE.match(lines[i])]
+    if len(hits) > 1:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    if hits:
+        i = hits[0]
+        m = _ENABLED_LINE.match(lines[i])
+        items = [a or b for a, b in _QUOTED_ITEM.findall(m.group("items"))]
+        if on:
+            if tool not in items:
+                items = items + [tool]
+        else:
+            items = [x for x in items if x != tool]
+        rebuilt = ", ".join(f'"{x}"' for x in items)
+        lines[i] = f"{m.group('lead')}[{rebuilt}]{m.group('rest')}"
+    else:
+        if not on:
+            return text  # already absent: nothing to remove
+        keys = [i for i in range(start, end) if _KEY_LINE.match(lines[i])]
+        at = (keys[-1] + 1) if keys else start
+        lines.insert(at, f'enabled = ["{tool}"]{_INSERTED_NOTE}')
+    out = nl.join(lines)
+    after = _parse(out)
+    want = set(before.get("tools", {}).get("enabled") or [])
+    if on:
+        want.add(tool)
+    else:
+        want.discard(tool)
+    got = set(after.get("tools", {}).get("enabled") or [])
+    if got != want:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    # Nothing else in the file may have changed: compare the two parses with
+    # [tools].enabled normalised to a sorted list on both sides.
+    def _norm(doc):
+        d = json.loads(json.dumps(doc, default=str))
+        d.setdefault("tools", {})["enabled"] = sorted(str(x) for x in
+                                                       (d.get("tools", {}).get("enabled") or []))
+        return d
+    b = _norm(before)
+    b["tools"]["enabled"] = sorted(want)
+    if _norm(after) != b:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    return out
+
+
+def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> dict:
+    """Add or remove ONE tool from [tools].enabled, atomically - the same
+    write discipline as set_tier (parse, change, parse again and compare,
+    write to a temporary file, move into place). Raises TierFileError."""
+    p = path or _toml_path()
+    if p is None or not Path(p).is_file():
+        raise TierFileError("Jarvis could not find your settings file "
+                            "(jarvis-framework.toml), so nothing was changed")
+    p = Path(p)
+    with _FILE_LOCK:
+        try:
+            raw = p.read_bytes()
+        except OSError as exc:
+            raise TierFileError(f"Your settings file could not be read "
+                                f"({type(exc).__name__}), so nothing was changed")
+        bom = raw.startswith(b"\xef\xbb\xbf")
+        try:
+            text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise TierFileError(TOOLS_HAND_EDIT)
+        new = rewrite_tools(text, tool, on)
+        if new == text:
+            _reload()
+            return {"ok": True, "changed": False}
+        data = (b"\xef\xbb\xbf" if bom else b"") + new.encode("utf-8")
+        fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+            try:
+                os.chmod(tmp, stat.S_IMODE(os.stat(p).st_mode))
+            except OSError:
+                pass
+            os.replace(tmp, p)
+        except OSError as exc:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise TierFileError(f"Your settings file could not be written "
+                                f"({type(exc).__name__}), so nothing was changed")
+    _reload()
+    return {"ok": True, "changed": True}
+
+
+_T_LOCK = threading.Lock()
+_T_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+#: Held the same way _L_SWITCH is: from an approved card's "was it withdrawn?"
+#: check through writing [tools].enabled, and from an OFF's withdrawing
+#: through ITS write - so an OFF pressed in between is never overwritten by
+#: the card. Always taken BEFORE _T_LOCK.
+_T_SWITCH = threading.Lock()
+
+
+def _tools_finish(pid: str, tool: str, outcome: str, why: str = "") -> None:
+    with _T_LOCK:
+        if _T_STATE["pending"].get("id") == pid:
+            _T_STATE["pending"].clear()
+        _T_STATE["withdrawn"].discard(pid)
+        if _T_STATE["latest"].get("id") not in (None, pid):
+            return
+        _T_STATE["last"].clear()
+        _T_STATE["last"].update(outcome=outcome, tool=tool, why=why, at=time.time(),
+                                message=TOOL_ENABLE_LAST_WORDS.get(outcome, ""))
+    _audit("asks_first.tools.card", {"tool": tool, "outcome": outcome})
+
+
+def _tools_decide(pid: str, tool: str, gate: Callable, tier_of: Callable,
+                  write: Callable) -> None:
+    card = tool_enable_card(tool)
+    detail = {"text": card, "what": f"offer {_title(tool).lower()} to the AI model",
+              "setting": tool, "to": True, "leaves_this_pc": False}
+    try:
+        v = gate(ENABLE_TOOL_ACTION, detail, card)
+    except Exception as exc:
+        return _tools_finish(pid, tool, "refused",
+                             f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(ENABLE_TOOL_ACTION) != "ask":
+        return _tools_finish(pid, tool, "refused", f"the gate answered at tier {vtier!r}, "
+                                                   f"which is not a person saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _tools_finish(pid, tool, outcome)
+        return _tools_finish(pid, tool, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _T_SWITCH:
+        with _T_LOCK:
+            withdrawn = pid in _T_STATE["withdrawn"]
+        if withdrawn:
+            return _tools_finish(pid, tool, "withdrawn")
+        try:
+            write(tool, True)
+        except TierFileError as exc:
+            return _tools_finish(pid, tool, "failed", str(exc))
+        except Exception as exc:
+            return _tools_finish(pid, tool, "failed", type(exc).__name__)
+    _audit("asks_first.tools.enabled", {"tool": tool})
+    _tools_finish(pid, tool, "enabled")
+
+
+def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable] = None,
+                        tier_of: Optional[Callable[[str], str]] = None,
+                        spawn: Optional[Callable] = None, write: Optional[Callable] = None,
+                        armed: Optional[Callable[[], bool]] = None,
+                        here: Optional[bool] = None) -> tuple:
+    """POST /api/asks_first/tools {"tool": "<name>", "enabled": bool}.
+    (code, body). ON is the PC only, one card plus Windows Hello - the same
+    shape as request_tier's looser side, aimed at [tools].enabled instead of
+    [autonomy.tiers]. OFF is instant, never a card, from either app."""
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    write = write or (lambda t, on: set_tools_enabled(t, on))
+    armed = armed or _owner_check_armed
+    if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool) \
+            or not isinstance(body.get("tool"), str):
+        return 400, {"ok": False, "error": 'need {"tool": "<name>", "enabled": true|false}'}
+    tool, enabled = body["tool"], body["enabled"]
+    if tool not in TOOLS_SWITCHABLE:
+        return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
+    now_on = tool in tools_enabled_set()
+    if not enabled:
+        # OFF: at once, never a card - it only narrows what the model may do.
+        with _T_SWITCH:
+            with _T_LOCK:
+                p = _T_STATE["pending"]
+                if p and p.get("tool") == tool:
+                    _T_STATE["withdrawn"].add(p["id"])
+                    p.clear()
+            if not now_on:
+                return 200, {"ok": True, "changed": False, "tools": tools_status(here=True),
+                             "message": "The AI model is already not offered this tool."}
+            try:
+                write(tool, False)
+            except TierFileError as exc:
+                return 409, {"ok": False, "error": str(exc) + "."}
+            except Exception as exc:
+                return 500, {"ok": False, "error": f"could not change it ({type(exc).__name__})"}
+        _audit("asks_first.tools.disabled", {"tool": tool})
+        return 200, {"ok": True, "changed": True, "tools": tools_status(here=True),
+                     "message": "Done - the AI model is not offered this tool any more."}
+    # ON: the PC only, one card plus Windows Hello.
+    if not _here(here, peer, local):
+        return 403, {"ok": False, "error": TOOLS_PC_ONLY, "pc_only": True}
+    if now_on:
+        return 200, {"ok": True, "changed": False, "tools": tools_status(here=True),
+                     "message": "The AI model is already offered this tool."}
+    if not armed():
+        return 503, {"ok": False, "error": TOOLS_NO_OWNER_CHECK}
+    t = tier_of(ENABLE_TOOL_ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "error": (
+            f"{ENABLE_TOOL_ACTION} is tier {t!r} in jarvis-framework.toml; offering a tool "
+            f"needs a person to say yes, so it must be 'ask'")}
+    with _T_LOCK:
+        if _T_STATE["pending"]:
+            return 409, {"ok": False, "error": "A card to offer a tool is already waiting - "
+                                               "answer it first."}
+        pid = uuid.uuid4().hex
+        _T_STATE["pending"].update(id=pid, tool=tool, since=time.time())
+        _T_STATE["latest"]["id"] = pid
+    try:
+        spawn(lambda: _tools_decide(pid, tool, gate, tier_of, write))
+    except Exception:
+        with _T_LOCK:
+            _T_STATE["pending"].clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True, "tools": tools_status(here=True),
+                 "message": "Waiting for your approval. Approve the card on this PC - it "
+                            "asks Windows Hello - and the AI model will be offered this tool."}
+
+
+def tools_status(*, here: bool = False) -> dict:
+    """The switch as the desktop shows it: {"label", "detail", "can_enable",
+    "items": [{"id", "title", "on", "waiting", "last"}, ...]}. Desktop only
+    (CLAUDE.md: no deep config editing on the phone) - the phone simply does
+    not read this key."""
+    enabled = tools_enabled_set()
+    with _T_LOCK:
+        pending = dict(_T_STATE["pending"])
+        last_all = dict(_T_STATE["last"])
+    items = []
+    for tool in TOOLS_SWITCHABLE:
+        waiting = bool(pending) and pending.get("tool") == tool
+        last = dict(last_all) if last_all.get("tool") == tool else None
+        items.append({"id": tool, "title": _title(tool), "on": tool in enabled,
+                      "waiting": waiting, "last": last})
+    return {"label": TOOLS_LABEL, "detail": TOOLS_DETAIL, "can_enable": bool(here),
+            "items": items}
 
 
 # ---------------------------------------------------------------------------
@@ -1084,8 +1449,13 @@ def handle_lights(body) -> tuple:
     return request_lights(body.get("enabled"))
 
 
+def handle_tools(body, peer=None, local=None) -> tuple:
+    """POST /api/asks_first/tools."""
+    return request_tool_enable(body, peer=peer, local=local)
+
+
 def _reset_for_tests() -> None:
-    for st, lock in ((_L_STATE, _L_LOCK), (_LS_STATE, _LS_LOCK)):
+    for st, lock in ((_L_STATE, _L_LOCK), (_LS_STATE, _LS_LOCK), (_T_STATE, _T_LOCK)):
         with lock:
             for v in st.values():
                 v.clear()

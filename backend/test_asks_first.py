@@ -1,6 +1,7 @@
-"""test_asks_first.py - "What asks first" and "Lights, plugs and fans without
+"""test_asks_first.py - "What asks first", "Lights, plugs and fans without
 a card" (jarvis_asks_first.py, asks-first.patch; the owner's decisions of
-2026-09-26, after the approvals audit).
+2026-09-26, after the approvals audit), and offering a reading tool to the
+AI model at all (the owner's answer of 2026-09-27, ease-of-use audit).
 
     python3 backend/test_asks_first.py
 
@@ -27,6 +28,11 @@ Runs anywhere; no Home Assistant, no model and no network. What it proves:
    after outside text still gets its card.
 8. The patch: applies after focus.patch, reverses, and touches only
    jarvis_hud.py and jarvis_gate.py; the module is shipped.
+9. Offering a reading tool to the AI model at all (a DIFFERENT setting from
+   1-5: [tools].enabled, never [autonomy.tiers]) is the same shape as
+   loosening - the PC only, one card (enable_reading_tool) plus Windows
+   Hello to turn ON; OFF is instant, from either app - and writes ONE line
+   of the settings file the same careful way.
 """
 from __future__ import annotations
 
@@ -622,6 +628,52 @@ def t_the_patch():
           and '"/api/asks_first/tier"' in patch and '"/api/asks_first/lights"' in patch)
 
 
+def t_the_tools_enable_patch():
+    """tools-enable.patch: the route for offering a reading tool to the AI
+    model, built on top of asks-first.patch (same shape as t_the_patch,
+    section 8, for the new patch)."""
+    order = _stack.order()
+    check("tools-enable.patch comes after asks-first.patch in apply-patches.ps1's list",
+          "tools-enable.patch" in order
+          and order.index("asks-first.patch") < order.index("tools-enable.patch"), order[-3:])
+    order = order[:order.index("tools-enable.patch") + 1]
+    patch = (HERE / "tools-enable.patch").read_text(encoding="utf-8")
+    check("it patches jarvis_hud.py and jarvis_gate.py and nothing else",
+          sorted(l[6:].strip() for l in patch.splitlines() if l.startswith("+++ b/"))
+          == ["jarvis_gate.py", "jarvis_hud.py"])
+    git = shutil.which("git")
+    if not git:
+        check("git is here to apply it", False)
+        return
+    for target in ("jarvis_hud.py", "jarvis_gate.py"):
+        text, log = _stack.stand_in(target, order[:-1])
+        if text is None:
+            check(f"a stand-in of {target} could be built", False, log)
+            continue
+        d = Path(tempfile.mkdtemp(prefix="jarvis-tools-enable-patch-"))
+        try:
+            (d / target).write_text(text, encoding="utf-8", newline="\n")
+            one = "".join(_stack.hunks(patch, target) and
+                          [h for h, _ in _stack.hunks(patch, target)])
+            (d / "p.patch").write_text(f"--- a/{target}\n+++ b/{target}\n{one}",
+                                       encoding="utf-8", newline="\n")
+            r = subprocess.run([git, "apply", "p.patch"], cwd=d, capture_output=True, text=True)
+            ok = r.returncode == 0
+            r2 = subprocess.run([git, "apply", "-R", "p.patch"], cwd=d, capture_output=True,
+                                text=True)
+            back = (d / target).read_text(encoding="utf-8") == text
+            check(f"{target}: applies to what the earlier patches wrote, and reverses",
+                  ok and r2.returncode == 0 and back, (r.stderr, r2.stderr))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+    ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
+    check("tools-enable.patch is in apply-patches.ps1's list",
+          "'tools-enable.patch'" in ps1[ps1.index("$PATCHES = @("):])
+    check("the risk words entry and the must-stay-ask entry are both there",
+          '"enable_reading_tool": ("yes", "local"' in patch
+          and '"enable_reading_tool",  # jarvis_asks_first.py acts only on tier "ask"' in patch)
+
+
 def t_the_shipped_settings_and_the_case_table_agree():
     """The page's cases (tools/gen_asks_first_cases.py SHIPPED) are the
     shipped settings file's tiers, line for line. And draft_email - on the
@@ -650,6 +702,185 @@ def t_the_shipped_settings_and_the_case_table_agree():
     check("nothing on the never-loosened list ships looser than \"ask\" "
           "(web_research aside: the tool loop always asks a person for it)",
           not (loose & AF.HARD_LIMITS) - {"web_research"}, sorted(loose & AF.HARD_LIMITS))
+
+
+# ======================================================== 9. offering a reading tool
+#
+# A DIFFERENT thing from sections 4 and 5: those change whether an action
+# asks first ([autonomy.tiers]); this changes whether the AI model is
+# offered the tool AT ALL ([tools].enabled). Same shape - the PC only, one
+# card plus Windows Hello to turn it ON; OFF is instant, from either app.
+
+class ToolsFile:
+    """A fake [tools].enabled, for request_tool_enable's write=."""
+
+    def __init__(self, *enabled):
+        self.on = set(enabled)
+        self.writes = []
+
+    def write(self, tool, on):
+        self.writes.append((tool, on))
+        if on:
+            self.on.add(tool)
+        else:
+            self.on.discard(tool)
+
+    def enabled(self):
+        return set(self.on)
+
+
+def _treq(body, tools, *, here, tiers=None, gate=None, armed=True, spawn=None):
+    AF._reset_for_tests()
+    keep = AF.tools_enabled_set
+    AF.tools_enabled_set = tools.enabled
+    try:
+        return AF.request_tool_enable(
+            body, here=here, tier_of=tiers or Tiers(), write=tools.write,
+            gate=gate or (lambda a, d, p: Verdict(True, "ask", "approved")),
+            spawn=spawn or (lambda fn: fn()), armed=lambda: armed)
+    finally:
+        AF.tools_enabled_set = keep
+
+
+def t_offering_a_reading_tool_is_a_different_thing_from_loosening():
+    check("the four reading tools, and only them",
+          AF.TOOLS_SWITCHABLE == ("calendar_read", "email_read", "notes_search", "home_read"))
+    check("its own action, always 'ask', never loosened by the tier mechanism above",
+          AF.ENABLE_TOOL_ACTION in AF.HARD_LIMITS and AF.ENABLE_TOOL_ACTION in AF.MUST_ASK
+          and AF.ENABLE_TOOL_ACTION not in AF.SWITCHABLE)
+    check("jarvis_owner_check requires Windows Hello, PC only, for its card too",
+          AF.ENABLE_TOOL_ACTION in OC.PC_ONLY_ACTIONS)
+    check("its card has a title in plain words",
+          W.title_for(AF.ENABLE_TOOL_ACTION)
+          == "Jarvis wants to offer a reading tool to the AI model")
+
+
+def t_off_is_instant_from_either_app():
+    for here in (False, True):
+        tools = ToolsFile("calendar_read")
+        code, out = _treq({"tool": "calendar_read", "enabled": False}, tools, here=here,
+                          gate=lambda a, d, p: (_ for _ in ()).throw(AssertionError("no card")))
+        check(f"off from {'the PC' if here else 'the phone'}: 200, written, no card",
+              code == 200 and tools.writes == [("calendar_read", False)]
+              and "calendar_read" not in tools.on, (code, out))
+    tools = ToolsFile()
+    code, out = _treq({"tool": "calendar_read", "enabled": False}, tools, here=True)
+    check("already off: nothing written", code == 200 and tools.writes == []
+          and out["changed"] is False)
+
+
+def t_on_only_on_the_pc_only_from_the_list_only_with_a_card():
+    tools = ToolsFile()
+    code, out = _treq({"tool": "calendar_read", "enabled": True}, tools, here=False)
+    check("from the phone: 403, the PC only, nothing written",
+          code == 403 and out.get("pc_only") is True and tools.writes == [], out)
+    for tool in ("send_email", "home_control", "shell_exec", "notes_read",
+                "append_obsidian_daily", "web_search", "nonsense"):
+        tools = ToolsFile()
+        code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
+        check(f"{tool}: cannot be offered from an app (403), nothing written",
+              code == 403 and tools.writes == [] and out["error"] == AF.TOOLS_NOT_ON_LIST,
+              (code, out))
+    tools = ToolsFile()
+    code, out = _treq({"tool": "calendar_read", "enabled": True}, tools, here=True, armed=False)
+    check("without the backend's own Windows Hello check: 503, nothing written",
+          code == 503 and tools.writes == [] and "Windows Hello" in out["error"])
+    tools = ToolsFile()
+    code, out = _treq({"tool": "calendar_read", "enabled": True}, tools, here=True,
+                      tiers=Tiers(**{AF.ENABLE_TOOL_ACTION: "auto"}))
+    check("the card's own tier not 'ask': 503 - a line is not a yes", code == 503
+          and tools.writes == [])
+    asked = []
+    tools = ToolsFile()
+    code, out = _treq({"tool": "calendar_read", "enabled": True}, tools, here=True,
+                      gate=lambda a, d, p: (asked.append((a, d, p)),
+                                            Verdict(True, "ask", "approved"))[1])
+    check("from the PC: ONE card, enable_reading_tool", code == 202
+          and [a for a, _, _ in asked] == [AF.ENABLE_TOOL_ACTION], (code, asked))
+    card = asked[0][2] if asked else ""
+    check("the card says what, the exact line, Windows Hello, and what no means",
+          card.startswith("Offer \"read your calendar\" to the AI model?")
+          and '"calendar_read" is added to [tools].enabled' in card and "Windows Hello" in card
+          and "If you say no: nothing changes" in card, card)
+    check("approved by a person: the tool is added",
+          tools.writes == [("calendar_read", True)] and "calendar_read" in tools.on)
+    check("... and the page says so", AF._T_STATE["last"].get("outcome") == "enabled")
+    for verdict, why in ((Verdict(False, "ask", "denied"), "denied"),
+                        (Verdict(False, "ask", "timed_out"), "timed out"),
+                        (Verdict(True, "auto", "auto"), "allowed at 'auto' (nobody asked)")):
+        tools = ToolsFile()
+        _treq({"tool": "calendar_read", "enabled": True}, tools, here=True,
+             gate=lambda a, d, p, v=verdict: v)
+        check(f"{why}: nothing written", tools.writes == [])
+    tools = ToolsFile("calendar_read")
+    code, out = _treq({"tool": "calendar_read", "enabled": True}, tools, here=True)
+    check("already offered: nothing written", code == 200 and tools.writes == []
+          and out["changed"] is False)
+    # A stricter/off press while the card waits withdraws it (mirrors the
+    # tier mechanism's own R5-style test above).
+    held = []
+    tools = ToolsFile()
+    AF._reset_for_tests()
+    keep = AF.tools_enabled_set
+    AF.tools_enabled_set = tools.enabled
+    try:
+        AF.request_tool_enable({"tool": "calendar_read", "enabled": True}, here=True,
+                               tier_of=Tiers(), write=tools.write,
+                               gate=lambda a, d, p: Verdict(True, "ask", "approved"),
+                               spawn=held.append, armed=lambda: True)
+        AF.request_tool_enable({"tool": "calendar_read", "enabled": False}, here=False,
+                               tier_of=Tiers(), write=tools.write, armed=lambda: True)
+        held[0]()
+    finally:
+        AF.tools_enabled_set = keep
+    check("off while the card waited: approving it later changes nothing",
+          tools.writes == [] and AF._T_STATE["last"].get("outcome") == "withdrawn",
+          (tools.writes, AF._T_STATE["last"]))
+    code, out = AF.request_tool_enable({"tool": "calendar_read"}, here=True)
+    check("a body without enabled: 400", code == 400)
+
+
+def t_the_tools_status_and_the_page():
+    tools = ToolsFile("calendar_read")
+    keep = AF.tools_enabled_set
+    AF.tools_enabled_set = tools.enabled
+    try:
+        st = AF.tools_status(here=True)
+        check("the label and the four items, one on", st["label"] == AF.TOOLS_LABEL
+              and st["can_enable"] is True
+              and sorted(i["id"] for i in st["items"]) == sorted(AF.TOOLS_SWITCHABLE)
+              and next(i for i in st["items"] if i["id"] == "calendar_read")["on"] is True
+              and next(i for i in st["items"] if i["id"] == "email_read")["on"] is False, st)
+        v = AF.view(here=False)
+        check("the page's view carries it, can_enable false off the PC",
+              v["tools"]["can_enable"] is False)
+    finally:
+        AF.tools_enabled_set = keep
+
+
+def t_writing_the_tools_table():
+    toml_with_tools = SAMPLE.replace(
+        "[self_modification]", "[tools]\r\nenabled = [\"web_search\"]\r\n\r\n[self_modification]")
+    out = AF.rewrite_tools(toml_with_tools, "calendar_read", True)
+    check("adds the tool, keeps web_search, keeps everything else",
+          'enabled = ["web_search", "calendar_read"]' in out
+          and "# a comment in the middle" in out and "\r\n" in out, out)
+    out2 = AF.rewrite_tools(out, "web_search", False)
+    check("removes a tool, keeps the array shape",
+          'enabled = ["calendar_read"]' in out2, out2)
+    check("removing a tool not present is a no-op",
+          AF.rewrite_tools(toml_with_tools, "home_read", False) == toml_with_tools)
+    try:
+        AF.rewrite_tools(SAMPLE, "calendar_read", True)  # no [tools] header at all
+        check("no [tools] header: refused", False)
+    except AF.TierFileError:
+        check("no [tools] header: refused", True)
+    two_tables = toml_with_tools + "\n[tools]\nenabled = []\n"
+    try:
+        AF.rewrite_tools(two_tables, "calendar_read", True)
+        check("two [tools] headers: refused", False)
+    except AF.TierFileError:
+        check("two [tools] headers: refused", True)
 
 
 def t_both_apps_read_the_current_contract():

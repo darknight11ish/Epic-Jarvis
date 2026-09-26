@@ -105,10 +105,13 @@ QUEUE_UNREADABLE = ("The approval queue could not be read, so Jarvis cannot tell
 #: Cards that are approved on THIS PC only, and always with Windows Hello,
 #: whatever their risk says: loosening "What asks first" (jarvis_asks_first.
 #: py, the owner's decision of 2026-09-26 - "on the PC only ... one card plus
-#: Windows Hello per change"). An approval of one from another device - the
+#: Windows Hello per change"), and offering a reading tool to the AI model at
+#: all (jarvis_asks_first.py, the owner's answer of 2026-09-27 - "each with a
+#: card plus Windows Hello"). An approval of one from another device - the
 #: phone, or anything on the owner's network pretending to be it - is
-#: refused (403), so a stolen token used elsewhere cannot loosen anything.
-PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first"})
+#: refused (403), so a stolen token used elsewhere cannot loosen or enable
+#: anything.
+PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 

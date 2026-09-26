@@ -58,6 +58,21 @@ export const SWITCHABLE = Object.freeze([
   "append_obsidian_daily", "append_logseq_journal", "create_joplin_note",
 ]);
 
+/**
+ * The four reading tools that may be OFFERED to the AI model at all, from
+ * the desktop only - jarvis_asks_first.TOOLS_SWITCHABLE. A DIFFERENT thing
+ * from SWITCHABLE (above): that is whether an offered tool asks first; this
+ * is whether it is offered at all ([tools].enabled). The owner's answer of
+ * 2026-09-27: "Reading tools ... can be switched on from the PC app, each
+ * with a card plus Windows Hello; other tools stay in the settings file."
+ */
+export const TOOLS_SWITCHABLE = Object.freeze(["calendar_read", "email_read", "notes_search",
+  "home_read"]);
+export const TOOLS_LABEL = "Offer this to the AI model";
+export const TOOLS_PC_ONLY =
+  "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
+  "first). It takes an approval card and Windows Hello.";
+
 const text = (v) => (typeof v === "string" ? v : "");
 
 function readSwitch(s) {
@@ -90,6 +105,29 @@ function readLights(l) {
   };
 }
 
+function readToolItem(i) {
+  const last = i.last && typeof i.last === "object" ? i.last : null;
+  return {
+    id: text(i.id),
+    title: text(i.title),
+    on: i.on === true,
+    waiting: i.waiting === true,
+    last: last ? text(last.message) : "",
+    lastOutcome: last ? text(last.outcome) : "",
+  };
+}
+
+/** `view.tools` - the "Offer this to the AI model" switches, desktop only. */
+function readTools(t) {
+  if (!t || typeof t !== "object" || !Array.isArray(t.items)) {
+    return { canEnable: false, items: [] };
+  }
+  return {
+    canEnable: t.can_enable === true,
+    items: t.items.filter((i) => i && typeof i === "object").map(readToolItem),
+  };
+}
+
 /**
  * `get_asks_first`'s answer, read. `available: false` with `why` from a PC
  * without it. A row whose switch names an action off the short list gets no
@@ -115,6 +153,7 @@ export function readAsksFirst(answer) {
     waiting: w ? { action: text(w.action), title: text(w.title), said: text(w.said) || WAITING } : null,
     last: last ? { outcome: text(last.outcome), action: text(last.action), message: text(last.message) } : null,
     lights: readLights(a.lights),
+    tools: readTools(a.tools),
   };
 }
 
@@ -157,6 +196,41 @@ export function switchView(row, view, live) {
     lines.push(view.last.message);
   }
   return { checked, disabled, lines, loosens: checked };
+}
+
+/**
+ * One "Offer this to the AI model" switch, on the four reading tools only:
+ * {checked, disabled, lines}. Checked while offered, and while a card to
+ * offer it waits. Unchecking it (OFF) is never held. Checking it (ON) needs
+ * the PC to say this app may enable, a live link, and no other tool's card
+ * waiting.
+ */
+export function toolSwitchView(item, tools, live) {
+  if (!item) return null;
+  const waitingHere = Boolean(item.waiting);
+  const anyWaiting = tools.items.some((i) => i.waiting);
+  const checked = item.on || waitingHere;
+  const lines = [];
+  let disabled = false;
+  if (waitingHere) {
+    lines.push(WAITING);
+    disabled = true;
+  } else if (!item.on) {
+    // Turning it ON: needs the PC, a live link, and no other tool's card
+    // waiting. Turning it OFF (item.on true) is always allowed, never held.
+    if (!tools.canEnable) {
+      lines.push(TOOLS_PC_ONLY);
+      disabled = true;
+    } else if (anyWaiting) {
+      lines.push(ONE_AT_A_TIME);
+      disabled = true;
+    } else if (!live) {
+      lines.push(STALE);
+      disabled = true;
+    }
+  }
+  if (item.last && item.lastOutcome !== "enabled" && !waitingHere) lines.push(item.last);
+  return { checked, disabled, lines };
 }
 
 /**

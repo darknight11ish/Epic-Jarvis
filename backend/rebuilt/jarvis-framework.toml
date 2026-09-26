@@ -127,6 +127,13 @@ change_own_config         = "ask"
 # else and loosening from the app is refused. Making a line stricter from
 # either app ("ask") needs no card.
 loosen_what_asks_first    = "ask"
+# enable_reading_tool - offering calendar_read, email_read, notes_search or
+# home_read to the AI model at all (adding it to [tools].enabled, below) from
+# the PC's "What asks first" page. Must stay "ask", like the line above: it
+# is a DIFFERENT thing from loosening whether a tool asks first - jarvis_
+# asks_first.py refuses it unless it comes from this PC, with Windows Hello,
+# whatever this line says.
+enable_reading_tool       = "ask"
 modify_own_code           = "ask"        # additional gate — see [self_modification]
 post_to_external_service  = "never"
 open_public_tunnel        = "never"      # see [security].allow_public_tunnel

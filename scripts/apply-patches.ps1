@@ -525,6 +525,15 @@ $PATCHES = @(
     # goes after it - last, like every new patch. Needs jarvis_sayable.py
     # copied in; without it, or on any error, the route says so.
     'sayable.patch'
+    # Offering a reading tool to the AI model at all, from the PC (the
+    # owner's answer, 2026-09-27): POST /api/asks_first/tools - a DIFFERENT
+    # thing from asks-first.patch's /api/asks_first/tier (whether a tool is
+    # offered at all, [tools].enabled, never whether it asks first). Its
+    # jarvis_hud.py context is asks-first.patch's own tier/lights route
+    # block, so it goes after asks-first.patch; its jarvis_gate.py context
+    # is asks-first.patch's two blocks too. Needs jarvis_asks_first.py -
+    # already needed by asks-first.patch, so nothing new to copy in.
+    'tools-enable.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

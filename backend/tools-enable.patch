@@ -1,0 +1,65 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2242,6 +2242,38 @@
+                 code, out = jarvis_asks_first.handle_lights(body)
+             return self._send(code, out)
+ 
++        if route == "/api/asks_first/tools":
++            # tools-enable.patch - offering a reading tool to the AI model at
++            # all (jarvis_asks_first.py, the owner's answer of 2026-09-27): a
++            # DIFFERENT thing from /api/asks_first/tier - whether the model is
++            # offered a tool at all ([tools].enabled), never whether it asks
++            # first. {"enabled": true} is the PC only, ONE approval card
++            # (enable_reading_tool) that needs Windows Hello - jarvis_owner_
++            # check.PC_ONLY_ACTIONS refuses its approval from any other
++            # device. {"enabled": false} is instant, from either app.
++            # Desktop only by CLAUDE.md's standing rule; the phone reads the
++            # same GET /api/asks_first and simply does not show the new
++            # "tools" key it now carries.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_asks_first
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++            peer = (getattr(self, "client_address", None) or ("",))[0]
++            try:
++                local = self.connection.getsockname()[0]
++            except Exception:
++                local = None
++            code, out = jarvis_asks_first.handle_tools(body, peer, local)
++            return self._send(code, out)
++
+         if route == "/api/second-card":
+             # second-card.patch - one second-card switch on or off. ON raises
+             # one approval card (second_card_enable, tier "ask") and changes
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -154,6 +154,7 @@
+     "append_obsidian_daily",  # shipped "auto": the same
+     "loosen_what_asks_first",  # jarvis_asks_first.py acts only on tier "ask" (asks-first.patch)
+     "watch_notifications_enable",  # jarvis_watch_notify.py acts only on tier "ask" (watch-notifications.patch)
++    "enable_reading_tool",  # jarvis_asks_first.py acts only on tier "ask" (tools-enable.patch)
+ })
+ 
+ 
+@@ -687,6 +688,13 @@
+     # paired smartwatch too - not a Jarvis watch app, and nothing about it
+     # reaches this PC. Turning it off again is instant.
+     "watch_notifications_enable": ("yes", "local", "lets your phone's own notification bridging copy Jarvis's notifications to a paired smartwatch too, instead of keeping them on the phone only; nothing about this reaches this PC, and turning it off again is instant"),
++    # tools-enable.patch (jarvis_asks_first.py, the owner's answer of
++    # 2026-09-27). A DIFFERENT thing from loosen_what_asks_first, above: this
++    # offers a reading tool to the AI model at all, by changing one line of
++    # [tools].enabled on this PC, and sends nothing. Turning it back off is
++    # instant, from either app. jarvis_owner_check.PC_ONLY_ACTIONS makes its
++    # approval need Windows Hello on this PC whatever this line says.
++    "enable_reading_tool": ("yes", "local", "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
