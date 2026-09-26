@@ -9,13 +9,12 @@ on:
   push:
     branches: ["**"]
     # A push that changes ONLY these files runs nothing: no test reads them
-    # (checked 2026-09-26 - the suites read docs/*.md and backend/README.md,
-    # so those are NOT listed). Every changed file must be on this list for
-    # a run to be skipped; one other file in the push and everything runs.
+    # (checked 2026-09-26 - the suites read docs/*.md, backend/README.md and
+    # CHANGELOG.md, so those are NOT listed). Every changed file must be on
+    # this list for a run to be skipped; one other file and everything runs.
     paths-ignore:
       - "CLAUDE.md"
       - "README.md"
-      - "CHANGELOG.md"
   # Pull requests into main only (every other branch is already checked by
   # its push). No path filter here, so a required check on a pull request
   # always reports instead of waiting for a run that never starts.

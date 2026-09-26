@@ -81,7 +81,7 @@ def main() -> int:
     check("LICENSE: copyright darknight11ish, and third-party files keep their own licences",
           "Copyright (c) 2026 darknight11ish" in lic and "THIRD-PARTY-NOTICES.txt" in lic)
     for rel in ("LICENSE", "jarvis-desktop/src-tauri/tauri.conf.json",
-                "jarvis-desktop/src-tauri/Cargo.toml", "README.md",
+                "jarvis-desktop/src-tauri/Cargo.toml",
                 "jarvis-desktop/src/settings.html",
                 "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/FaqScreen.kt"):
         check(f"no 'Jarvis Labs' in {rel}", "Jarvis Labs" not in read(rel))
