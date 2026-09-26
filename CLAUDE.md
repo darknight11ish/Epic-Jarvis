@@ -309,6 +309,14 @@ Decided 2026-09-26, after the professionalism audit
 - **Bring GitHub's `main` up to date with one pull request, once the bug
   audit's fixes have landed.** The owner presses Merge on GitHub.
 
+Decided 2026-09-26, after the bug audit (`docs/BUG-AUDIT-2026-09-26-*.md`):
+- **App lock covers task notes too**, like approval notes: with App lock on,
+  adding a note to a running task needs the app unlocked first.
+- **A late alarm rings only if it is at most 10 minutes late.** If the phone
+  (or the PC app) hears about an alarm or reminder later than that - it was
+  out of reach, or restarted - it shows a silent notification saying when
+  it was missed, instead of ringing as if it were happening now.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
