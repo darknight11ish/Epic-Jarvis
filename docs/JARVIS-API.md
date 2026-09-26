@@ -3671,7 +3671,9 @@ the times stay, so a timer still counts down.
   notification have not been seen on a real Windows PC or phone.
 - **English only.** Other languages go to the model, whose tools can still
   set a timer when they are switched on.
-- **The phone hears of a job going off only while connected** (21.1).
+- **The phone hears of a job going off only while connected** (21.1) -
+  except an alarm or reminder the owner handed to the phone's own apps with
+  "Also on my phone" (21.10).
 - **Snooze, "cancel that" and named lists (21.9)** were tested in the dev
   container only. The Windows toast's Snooze button and the phone
   notification's Snooze action have not been pressed on a real PC or phone;
@@ -3684,6 +3686,45 @@ the times stay, so a timer still counts down.
   as new kinds (`register_kind`), not as schedulers of their own. Sleep mode
   now has, as the standby schedule (21.8), and so has the morning briefing
   (section 22).
+
+### 21.10 "Also on my phone" (added 2026-09-26, the phone only)
+
+The owner's decision of 2026-09-26 (the cutting-edge "Quick wins"; the
+feasibility audit's I93). In the phone's Brain -> Coming up, an **alarm**
+or a **reminder** has a button, "Also on my phone", that hands a copy to the
+phone's own apps - **by the owner's tap only, never on its own**:
+
+- an alarm -> the phone's Clock app (`AlarmClock.ACTION_SET_ALARM`): the
+  hour, the minute and the owner's words, and for a repeat the days (every
+  day, weekdays, or the chosen days). The Clock app shows its own screen
+  (`EXTRA_SKIP_UI` false) and the owner saves it there. A one-off alarm is
+  offered only when it is due within 24 hours - the Clock app sets an alarm
+  by time of day only - and further ahead the row says "offered from the day
+  before". One that repeats every few hours is not offered.
+- a reminder -> the phone's calendar (`Intent.ACTION_INSERT` on
+  `CalendarContract.Events`): an event at its next time, 15 minutes long,
+  titled with the owner's words, repeating the same way (`RRULE`
+  `FREQ=DAILY` or `FREQ=WEEKLY;BYDAY=...`). The calendar app shows its own
+  editing screen.
+
+Nothing is sent to the PC and nothing changes there, so there is **no
+approval card** (the tap, and saving in the phone's own app, are the
+owner's decision) and the button is not held on a stale link. It reads the
+job's `rule` (`every`, `at`, `days`) and `due` from `GET /api/schedule` -
+the same answer Coming up already reads; no new route. Not offered while
+the private lists are hidden (the words are hidden), nor for a paused one,
+a timer, a to-do item, a briefing, a "tell me when" or the standby
+schedule. One line under the list says what it does and warns plainly:
+"Keep both and both will ring; the phone's calendar may copy the event to
+your Google account." The phone asks for one install-time permission,
+`com.android.alarm.permission.SET_ALARM`, and still no exact-alarm
+permission. Jarvis's own late-alarm rule (21.1, a job heard of more than 10
+minutes late is a silent "Missed at") stays on Jarvis's own alarms; a copy
+in the Clock app is the Clock app's. A repeat's time is the PC's wall-clock
+time ("07:00"); on a phone set to another time zone it rings at 07:00 there.
+
+The desktop has no such button, on purpose (ARCHITECTURE section 8, "On the
+phone, kept off the desktop").
 
 ### 21.9 Snooze, "cancel that" and named lists (added 2026-09-25)
 

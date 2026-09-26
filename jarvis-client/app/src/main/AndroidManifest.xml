@@ -5,6 +5,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- "Also on my phone" (2026-09-26): the owner's tap hands an alarm to the
+         phone's own Clock app (AlarmClock.ACTION_SET_ALARM), which needs this
+         install-time permission. The Clock app shows its own screen and the
+         owner saves it there; this app sets no alarm of its own, and asks
+         for no exact-alarm permission. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
     <!-- §3.1(2). specialUse is uncapped; dataSync is not. See strings.xml. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />

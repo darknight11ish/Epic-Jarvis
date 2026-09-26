@@ -20,7 +20,10 @@ import kotlinx.serialization.json.doubleOrNull
  * stream open). A reminder due while the phone is off, or out of reach of
  * the PC, is not shown on the phone until it reconnects and reads the list;
  * nothing here sets a phone alarm of its own (no exact-alarm permission is
- * asked for). Said plainly in JARVIS-API section 21.
+ * asked for). Said plainly in JARVIS-API section 21. Since 2026-09-26 the
+ * owner can hand an alarm to the phone's own Clock app, or a reminder to its
+ * calendar, with a tap ([AlsoOnPhone]) - the Clock app then rings it, even
+ * with the PC off.
  *
  * The event carries the job's id and kind only, never its words. The words
  * are read by id from `GET /api/schedule?id=` for the notification, whose
@@ -262,6 +265,14 @@ object Schedule {
         val alert: String = "",
         /** When that happened (epoch seconds) - one notification per match. */
         val alertAt: Double? = null,
+        /**
+         * A repeating job's rule, as the PC keeps it (jarvis_schedule's
+         * `rule`): "day", "weekday", "week" or "hours"; its "HH:MM"; and for
+         * "week" the days, 0 = Monday. For "Also on my phone" ([AlsoOnPhone]).
+         */
+        val ruleEvery: String = "",
+        val ruleAt: String = "",
+        val ruleDays: List<Int> = emptyList(),
     )
 
     /** A named list: its name as the PC keeps it, its title, how many open items. */
@@ -280,6 +291,7 @@ object Schedule {
     fun job(o: JsonObject): Job? {
         val id = o.text("id") ?: return null
         if (!validId(id)) return null
+        val rule = o["rule"] as? JsonObject
         return Job(
             id = id,
             kind = o.text("kind") ?: "",
@@ -302,6 +314,11 @@ object Schedule {
             urgent = o.flag("urgent") == true,
             alert = o.text("alert") ?: "",
             alertAt = o.num("alert_at"),
+            ruleEvery = rule?.text("every") ?: "",
+            ruleAt = rule?.text("at") ?: "",
+            ruleDays = (rule?.get("days") as? JsonArray)?.mapNotNull { d ->
+                (d as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.toInt()
+            } ?: emptyList(),
         )
     }
 

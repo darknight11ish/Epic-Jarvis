@@ -1,5 +1,10 @@
 package com.jarvis.client.ui.screens
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.provider.AlarmClock
+import android.provider.CalendarContract
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,9 +25,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.net.AlsoOnPhone
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Schedule
 import com.jarvis.client.ui.parts.Gap
@@ -190,7 +197,17 @@ internal fun ComingUpSection(
                         Text(Schedule.EMPTY_JOBS, style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid)
                     }
-                    shown.jobs.forEach { ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) } }
+                    shown.jobs.forEach {
+                        ScheduleRow(it, now - readAt, canAct && busyId == null,
+                            onSaid = { s -> said = s }) { a -> act(it, a) }
+                    }
+                    // "Also on my phone": the one line that says what it does and
+                    // warns about two alarms and Google, once, while a row offers it.
+                    if (AlsoOnPhone.anyOffered(shown.jobs, System.currentTimeMillis())) {
+                        Gap(6)
+                        Text(AlsoOnPhone.NOTE, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo)
+                    }
                     Gap(14)
                     // "Tell me when" - set up by saying or typing it (one card
                     // on the PC); its rows are in the list above.
@@ -405,8 +422,16 @@ private fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> U
 
 /** One job: its kind, its title, its lines, and its own buttons - ONE job per tap. */
 @Composable
-private fun ScheduleRow(job: Schedule.Job, sinceMs: Long, enabled: Boolean, onAct: (String) -> Unit) {
+private fun ScheduleRow(
+    job: Schedule.Job,
+    sinceMs: Long,
+    enabled: Boolean,
+    onSaid: (String) -> Unit = {},
+    onAct: (String) -> Unit,
+) {
     val chrome = LocalChrome.current
+    val context = LocalContext.current
+    val offer = AlsoOnPhone.offer(job, System.currentTimeMillis())
     Gap(10)
     Column(Modifier.fillMaxWidth()) {
         Text(
@@ -418,6 +443,9 @@ private fun ScheduleRow(job: Schedule.Job, sinceMs: Long, enabled: Boolean, onAc
         Schedule.metaOf(job, sinceMs).forEach {
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
+        if (offer is AlsoOnPhone.Offer.Later) {
+            Text(offer.why, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Schedule.actionsOf(job).forEach { action ->
                 Quiet(
@@ -427,6 +455,51 @@ private fun ScheduleRow(job: Schedule.Job, sinceMs: Long, enabled: Boolean, onAc
                     onClick = { onAct(action) },
                 )
             }
+            // The owner's tap is the approval: it only opens the phone's own
+            // Clock app or calendar, filled in, and the owner saves it there.
+            // Nothing is sent to the PC, so it is not held on a stale link.
+            val handOver: AlsoOnPhone.Offer? =
+                offer?.takeIf { it is AlsoOnPhone.Offer.ToClock || it is AlsoOnPhone.Offer.ToCalendar }
+            if (handOver != null) {
+                Quiet(AlsoOnPhone.LABEL, onClick = { handToPhone(context, handOver)?.let(onSaid) })
+            }
         }
+    }
+}
+
+/**
+ * Opens the phone's own Clock app or calendar for an [AlsoOnPhone] offer -
+ * only ever from the owner's tap. Returns a sentence to show when no app on
+ * the phone takes it, else null.
+ */
+private fun handToPhone(context: Context, offer: AlsoOnPhone.Offer): String? {
+    val intent = when (offer) {
+        is AlsoOnPhone.Offer.ToClock -> Intent(AlarmClock.ACTION_SET_ALARM).apply {
+            putExtra(AlarmClock.EXTRA_HOUR, offer.alarm.hour)
+            putExtra(AlarmClock.EXTRA_MINUTES, offer.alarm.minute)
+            if (offer.alarm.message.isNotEmpty()) putExtra(AlarmClock.EXTRA_MESSAGE, offer.alarm.message)
+            if (offer.alarm.days.isNotEmpty()) {
+                putIntegerArrayListExtra(AlarmClock.EXTRA_DAYS, ArrayList(offer.alarm.days))
+            }
+            // The Clock app shows its own screen: the owner saves it there.
+            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+        }
+        is AlsoOnPhone.Offer.ToCalendar -> Intent(Intent.ACTION_INSERT).apply {
+            data = CalendarContract.Events.CONTENT_URI
+            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, offer.event.beginMs)
+            putExtra(CalendarContract.EXTRA_EVENT_END_TIME, offer.event.endMs)
+            putExtra(CalendarContract.Events.TITLE, offer.event.title)
+            offer.event.rrule?.let { putExtra(CalendarContract.Events.RRULE, it) }
+        }
+        is AlsoOnPhone.Offer.Later -> return null
+    }
+    val missing = if (offer is AlsoOnPhone.Offer.ToClock) AlsoOnPhone.NO_CLOCK else AlsoOnPhone.NO_CALENDAR
+    return try {
+        context.startActivity(intent)
+        null
+    } catch (e: ActivityNotFoundException) {
+        missing
+    } catch (e: SecurityException) {
+        missing
     }
 }
