@@ -657,7 +657,7 @@ await check("CONTROL: toasts on fired only, words by id, lock-screen words while
   // The toast's Snooze: only for the kinds that can be snoozed, and the
   // relaunch lands in one snooze held on a stale link.
   const toastBody = rs.slice(rs.indexOf("pub async fn toast_fired("));
-  assert.match(toastBody.slice(0, toastBody.indexOf("\n}\n")), /SNOOZABLE\.contains/);
+  assert.match(toastBody.slice(0, toastBody.indexOf("\n}\n")), /SNOOZABLE\s*\.contains/);
   const fromToast = rs.slice(rs.indexOf("pub(crate) async fn snooze_from_toast("));
   const ft = fromToast.slice(0, fromToast.indexOf("\n}\n"));
   assert.ok(ft.indexOf("require_link_live") >= 0 && ft.indexOf("require_link_live") < ft.indexOf("post("),
