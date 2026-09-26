@@ -92,7 +92,7 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 .notif .tx { margin-top: 4px; font: 400 20px var(--body); color: var(--ink); }
 .notif .act { margin-top: 14px; display: inline-block; padding: 8px 22px; border-radius: 18px; background: rgba(255, 182, 72, 0.18); color: var(--amber); font: 600 18px var(--body); }
 .ringw { position: absolute; left: 50%; top: 50%; width: 560px; height: 560px; margin: -280px 0 0 -280px; border-radius: 50%; border: 3px solid var(--amber); opacity: 0; }
-#phone-t { left: 1380px; top: 220px; }
+#phone-t { left: 1650px; top: 250px; zoom: 0.85; }
 #phone-s { left: 1400px; top: 170px; }
 .redbtn { position: absolute; left: 30px; right: 30px; top: 470px; padding: 26px 0; border-radius: 22px; background: #d9364b; color: #fff; text-align: center; font: 600 30px var(--mach); }
 .redhint { position: absolute; left: 30px; right: 30px; top: 580px; font: 400 17px/1.4 var(--body); color: var(--dim); text-align: center; }
