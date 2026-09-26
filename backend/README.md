@@ -6198,9 +6198,12 @@ a card.
      address or contact details, a break-up, a death, a secret, a debt or
      trouble ("my brother owes me money"), "<Name>'s address / salary /
      diagnosis", and passwords, PINs, account and ID numbers. The patterns
-     still SEE the other person (`patterns()`, `topic()`), so a recalled
-     fact about someone still counts as sensitive when Jarvis decides what
-     to read aloud or whether a web search asks first. Not flagged: a famous name as a taste ("I'm
+     still SEE the other person (`patterns()`), but since the owner's later
+     decision of 2026-09-26 ("everyday facts about people are normal
+     everywhere") `topic()` calls an everyday fact about someone normal too,
+     so a recalled "my sister likes jazz" may be read aloud and does not
+     make a web search ask first. Their private details stay sensitive
+     there as well. Not flagged: a famous name as a taste ("I'm
      a fan of Terry Pratchett"), pets and things ("My dog is called Max"),
      and your own name ("My name is Tom"). Since round 2, a group with no
      "my" in front ("cooking for friends") is not flagged either; "my
@@ -10278,4 +10281,5 @@ the repository folder). Also `test_schedule.py`, `test_standby_schedule.py`,
   here). It was re-read by hand; CI is the proof.
 - **A recalled fact about someone still counts as sensitive** for reading
   aloud and for web search asking first - only saving changed. Say if you
-  want those to follow the new rule too.
+  want those to follow the new rule too. *(Superseded the same day: the
+  owner chose "normal everywhere"; see "Memory ideas 1-4" at the end.)*

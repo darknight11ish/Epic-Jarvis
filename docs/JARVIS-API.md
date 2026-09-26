@@ -2069,7 +2069,7 @@ uses a sensitive saved fact stays on screen by default, even under "Read
 aloud" for memories): `sensitive_on_screen` is the default and the strict
 value, and applies at once. `sensitive_aloud` is the looser one and raises
 the voice card, which reads: "Let Jarvis read answers that use a saved fact
-about your health, money, passwords or other people aloud, when you ask by
+about your health, money, passwords or other people's private details aloud, when you ask by
 voice? / Anyone near the speaker will hear them. / If you did not just do
 this, say no. / If you say no: nothing changes - those answers stay on your
 screen." A missing, damaged or unreadable value reads as
@@ -3021,9 +3021,12 @@ ALL of these, or it stays a card. The words in quotes are what the card's
      details (their own topics), a break-up, a death, a secret, a debt or
      trouble ("my brother owes me money", the private-life words),
      "<Name>'s address / salary / diagnosis ...", and passwords, PINs,
-     account and ID numbers. `patterns()` and `topic()` still see the
-     other person, so a recalled fact about someone still counts as
-     sensitive for reading aloud and for web search (section 23);
+     account and ID numbers. `patterns()` still sees the other person, but
+     since the owner's later decision of 2026-09-26 ("treated as normal
+     everywhere") `topic()` calls an everyday fact about someone normal
+     too: a recalled "my sister likes jazz" may be read aloud and does not
+     make a web search ask first (section 23). Their private details stay
+     sensitive there as well;
    - **the learner's own local model**, asked only when the patterns find
      nothing (or only another person, above), for a one-line JSON verdict. Its "unsure", an answer that is
      not that JSON, no answer within 8 seconds, Ollama not reachable, no
@@ -4310,9 +4313,14 @@ this question, so it asks before searching ...". **The honest limit:** a
 fact said in other words ("vegetarian" saved, "meat-free" searched) is not
 caught by comparing words; sensitive facts ask whatever the words say, and
 the test suite pins this limit so it is not forgotten
-(`test_web_search.t_saved_facts_ask_only_when_repeated_or_sensitive`). A
-fact about another person is a sensitive topic, so a PINNED fact about
-someone else still makes every search in the answer ask.
+(`test_web_search.t_saved_facts_ask_only_when_repeated_or_sensitive`). An
+everyday fact about another person ("Owner's sister Priya likes jazz") is a
+normal fact (the owner's decision of 2026-09-26: everyday facts about people
+are normal everywhere): it asks only when the search words repeat it, like
+any other. A fact about someone's health, money, address, contact details,
+debts or secrets is still sensitive, so a PINNED fact like that still makes
+every search in the answer ask (`test_sensitive.
+t_everyday_people_facts_are_normal_when_used`).
 
 **"Ask before every web search"**: turning it ON is immediate; turning it
 OFF is ONE approval card, **`stop_asking_before_every_web_search`** (tier `ask`; any other

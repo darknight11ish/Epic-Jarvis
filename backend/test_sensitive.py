@@ -406,9 +406,9 @@ def t_everyday_facts_about_people_save_private_ones_still_ask():
                  "The owner's brother supports Leeds United"):
         check(f"saves (the model says no): {text!r}", S.card_reason(text, [text], ask=no) == "",
               S.classify(text, context=[text], ask=no))
-        check(f"... the patterns still see another person: {text!r}",
-              S.patterns(text)["everyday_other"] and S.topic(text) == "another person",
-              S.patterns(text))
+        check(f"... the patterns still see another person, and topic() calls it normal: "
+              f"{text!r}", S.patterns(text)["everyday_other"] and S.topic(text) == "",
+              (S.patterns(text), S.topic(text)))
     for text, want in (
             ("my sister's phone number is 07700 900123", "someone else's ID numbers"),
             ("my friend's email is anna@example.com", "someone else's ID numbers"),
@@ -708,6 +708,49 @@ def t_the_owners_switch_skips_everything():
               S.card_reason("My password is hunter2", ["I have lupus"], allowed=True) == "")
     finally:
         S.ASK_MODEL = keep
+
+
+def t_everyday_people_facts_are_normal_when_used():
+    """The owner's decision of 2026-09-26, after the approvals build:
+    everyday facts about people are treated as normal EVERYWHERE, not only
+    when saving. A recalled "Owner's sister Priya likes jazz" may be read
+    aloud (the chat route's injected_sensitive does not count it) and does
+    not make a web search ask first; their health, money, address, contact
+    details, debts and secrets stay sensitive."""
+    import jarvis_auto_learn as A
+    import jarvis_search as WS
+    import jarvis_agent as AG
+    everyday = ["Owner's sister is called Priya", "Owner's sister Priya likes jazz",
+                "Owner's partner Jonas works as a railway signal engineer",
+                "Owner's best friend Kofi lives in Glasgow", "Owner's boss is called Tom",
+                "My brother supports Leeds United"]
+    private = [("Owner's dad has diabetes", "someone else's health"),
+               ("Owner's brother owes them money", "someone else's money"),
+               ("Owner's friend lives at 12 Oak Road", "where someone can be found"),
+               ("Owner's sister's phone number is 07700 900123", "someone else's ID numbers"),
+               ("Owner's mum and dad got divorced", "another person"),
+               ("Owner's sister's PIN is 4471", "someone else's passwords")]
+    for t in everyday:
+        check(f"recalled, everyday: not sensitive for reading aloud: {t!r}",
+              not A.is_sensitive_fact(t) and S.topic(t) == "", S.topic(t))
+        check(f"... and not a reason for a web search to ask: {t!r}",
+              WS.fact_topic(t) == "" and AG.web_search_memory_lines(
+                  [t], "best pizza near the station", names={}) == [],
+              AG.web_search_memory_lines([t], "best pizza near the station", names={}))
+    for t, want in private:
+        check(f"recalled, private about someone: still sensitive: {t!r} -> {want}",
+              A.is_sensitive_fact(t) and want in S.topic(t), S.topic(t))
+        lines = AG.web_search_memory_lines([t], "best pizza near the station", names={})
+        check(f"... and a web search still asks: {t!r}",
+              len(lines) == 1 and lines[0].startswith("Jarvis used a saved fact about"), lines)
+    # A normal fact is still "normal": if the search words repeat it, the
+    # search asks, exactly as for any other saved fact (the creativity
+    # audit's rule, unchanged).
+    lines = AG.web_search_memory_lines(["Owner's sister Priya likes jazz"],
+                                       "Priya jazz gigs", names={})
+    check("an everyday people-fact repeated in the search words asks like any fact",
+          len(lines) == 1 and "repeat something you told Jarvis" in lines[0]
+          and "\u201cOwner's sister Priya likes jazz\u201d" in lines[0], lines)
 
 
 def t_jarvis_auto_learn_uses_this_module():

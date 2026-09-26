@@ -856,10 +856,12 @@ def _turn(user_text="find walking boots", *, provenance="typed", facts=False, ga
         return next(it)
     messages = [{"role": "user", "content": user_text}]
     if facts:
-        # True: one fact about another person (sensitive). A list: those
+        # True: one sensitive fact - another person's health (an everyday
+        # fact about someone, "Owner's sister is called Priya", is a normal
+        # fact since the owner's decision of 2026-09-26). A list: those
         # facts, pinned first under memory-profile.patch's heading when
         # `pinned` names how many of them are pinned.
-        lines = (["Owner's sister is called Priya."] if facts is True else list(facts))
+        lines = (["Owner's dad has diabetes."] if facts is True else list(facts))
         body = "\n".join(f"- [2026-09-20] {f}" for f in lines)
         if pinned:
             body = ("Always keep in mind (the owner pinned these):\n"
@@ -921,8 +923,8 @@ def _card_case(label, want_line, **kw):
 
 
 def t_a_card_when_private_things_could_slip_in():
-    _card_case("a sensitive saved fact recalled", "Jarvis used a saved fact about another "
-               "person", facts=True)
+    _card_case("a sensitive saved fact recalled", "Jarvis used a saved fact about someone "
+               "else's health", facts=True)
     _card_case("the conversation read outside text before", AG.WEB_SEARCH_READ, tainted=True)
     _card_case("a pasted message", "was pasted in", provenance="pasted")
     _card_case("the app's own text", AG.WEB_SEARCH_APP, app_system=True)
@@ -1003,12 +1005,23 @@ def t_saved_facts_ask_only_when_repeated_or_sensitive():
               facts=["Owner has type 2 diabetes"] + plain, pinned=3, query="walking boots",
               user_text="find walking boots", want=("about health",),
               not_want=("diabetes", "Leeds"))
+    # An everyday fact about someone is a normal fact (the owner's decision
+    # of 2026-09-26): it asks only because the search repeats it, and the
+    # card shows it like any other normal fact.
     _mem_case("the search repeats the sister's name", True,
               facts=["Owner's sister is called Priya"], query="Priya Sharma LinkedIn",
               user_text="can you look her up?",
-              want=("about another person", "(“Priya”)",
+              want=("(“Priya”)", "The saved fact: “Owner's sister is called Priya”"),
+              not_want=("about another person", "that fact's own words are not shown"))
+    _mem_case("an everyday fact about someone, the search about something else", False,
+              facts=["Owner's sister is called Priya"], query="walking boots",
+              user_text="find walking boots")
+    _mem_case("the search repeats a private fact about someone", True,
+              facts=["Owner's brother Tom owes the bank money"], query="Tom debt advice",
+              user_text="where can he get help?",
+              want=("(“Tom”)", "about someone else's money",
                     "that fact's own words are not shown here"),
-              not_want=("sister is called",))
+              not_want=("owes the bank",))
     _mem_case("the search repeats a phone number from a fact", True,
               facts=["Owner's plumber Dave's number is 07700 900123"],
               query="07700900123 who called", user_text="who keeps calling me?",

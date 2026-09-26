@@ -927,7 +927,7 @@ _SETTING_WORDS = {
     # fact stay on screen unless this card is approved.
     ("sensitive_memory", "sensitive_aloud"): (
         "Let Jarvis read answers that use a saved fact about your health, money, "
-        "passwords or other people aloud, when you ask by voice?\n\n"
+        "passwords or other people's private details aloud, when you ask by voice?\n\n"
         "Anyone near the speaker will hear them.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - those answers stay on your screen."),

@@ -490,7 +490,7 @@ def t_sensitive_saved_facts_stay_on_screen_by_default():
               and V.settings()["sensitive_memory"] == "sensitive_on_screen", (code, out))
         check("the card: the agreed words", gate.calls and gate.calls[0][2] == (
             "Let Jarvis read answers that use a saved fact about your health, money, "
-            "passwords or other people aloud, when you ask by voice?\n\n"
+            "passwords or other people's private details aloud, when you ask by voice?\n\n"
             "Anyone near the speaker will hear them.\n\n"
             "If you did not just do this, say no.\n\n"
             "If you say no: nothing changes - those answers stay on your screen."),

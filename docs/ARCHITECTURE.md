@@ -207,7 +207,9 @@ repeating alarm, reminder or standby schedule has no card (the briefing and
 "tell me when" keep `schedule_repeat`); a light, plug or fan the owner named
 can run with no card when the owner's lights setting is on (above,
 `jarvis_agent` LIGHTS_WITHOUT_CARD); an everyday fact about someone the owner
-mentions saves without a memory card (section 5); and the "What asks first"
+mentions saves without a memory card, and once saved it is a normal fact
+everywhere - it may be read aloud and does not make a web search ask
+(section 5, `jarvis_sensitive.topic()`); and the "What asks first"
 page in both apps shows every action's tier, makes one stricter at once, and
 - on the PC only - loosens one of seven with a card that needs Windows Hello
 (`jarvis_owner_check.PC_ONLY_ACTIONS`). Each one is a place where no card is
