@@ -82,8 +82,10 @@
   .demo .dot {
     width: 10px; height: 10px; border-radius: 50%; flex: none;
   }
-  .demo .dot.thinking { background: #ffb648; box-shadow: 0 0 8px #ffb648; }
-  .demo .dot.waiting { background: #ff6a6a; box-shadow: 0 0 8px #ff6a6a; }
+  /* The tray's real colours (theme.css --state-*, from jarvis-visual-spec.json):
+     violet while thinking, amber ONLY when something waits on you. */
+  .demo .dot.thinking { background: var(--state-thinking); box-shadow: 0 0 8px var(--state-thinking); }
+  .demo .dot.waiting { background: var(--state-approval); box-shadow: 0 0 8px var(--state-approval); }
   .demo .dot.resting { background: var(--accent); box-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.6); }
   .foot {
     display: flex;

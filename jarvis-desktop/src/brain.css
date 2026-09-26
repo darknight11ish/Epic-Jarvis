@@ -816,8 +816,8 @@ body {
    it is dim. `tests/disabled.mjs` measures all four themes. */
 .btn:disabled {
   opacity: 1;
-  background: var(--surface-raised);
-  border-color: var(--hairline);
+  background: var(--surface-1);
+  border-color: var(--border);
   color: var(--text-faint);
   box-shadow: none;
   cursor: default;
