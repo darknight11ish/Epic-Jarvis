@@ -864,6 +864,10 @@
      "name": "Send an email (one card each)"
     },
     {
+     "id": "draft_email",
+     "name": "Save an email draft (one card each)"
+    },
+    {
      "id": "notes_search",
      "name": "Searching your notes"
     },

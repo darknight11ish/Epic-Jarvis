@@ -97,11 +97,14 @@ home_control              = "ask"
 # in", which is empty until you add a folder on the PC with an approval
 # card). "ask" gives a card for every look.
 read_files_readonly       = "auto"
-# Saving an email draft (not built yet; I53, "saving drafts to your Drafts
-# folder"). A draft goes up to the mail provider's servers, so it asks
-# until the owner answers the drafts question (docs/FEASIBILITY-AUDIT-
-# 2026-09-26.md, question 1). It is on the never-loosened list
-# (jarvis_asks_first.HARD_LIMITS): no app can make it "auto".
+# Saving an email draft (jarvis_email_draft.py, draft-email.patch; the
+# owner's decision of 2026-09-27, "a card every time, showing the full
+# draft"; I53). A draft goes up to the mail provider's servers (an IMAP
+# APPEND), so it asks every time. Must stay "ask": anything else and every
+# draft is refused, never saved unasked; "never" switches drafts off. It is
+# on the never-loosened list (jarvis_asks_first.HARD_LIMITS): no app can
+# make it "auto". The model is offered the tool only once "draft_email" is
+# in [tools].enabled.
 draft_email               = "ask"
 # Sending one email (jarvis_email_send.py, the owner's decision of
 # 2026-09-25): ONE approval card per email, showing who it goes to, the

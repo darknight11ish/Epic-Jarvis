@@ -291,7 +291,7 @@
   "type": "function",
   "function": {
    "name": "send_email",
-   "description": "Send one plain-text email from the owner's account. The owner sees all of it on an approval card first; nothing is sent without their yes. No attachments. To read the inbox, use email_check.",
+   "description": "Send one plain-text email from the owner's account. The owner sees all of it on an approval card first; nothing is sent without their yes. No attachments. To read the inbox, use email_check. To save a draft instead of sending, use draft_email.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -319,6 +319,41 @@
     "required": [
      "to",
      "subject",
+     "body"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "draft_email",
+   "description": "Save one plain-text email draft to the owner's own Drafts folder. Never sent. The owner sees all of it on an approval card first; nothing is saved without their yes. `to` may be left out or incomplete - a draft does not need a confirmed recipient yet. No attachments. To send an email now, use send_email.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "email addresses, e.g. [\"alex@example.com\"]; may be left out for a draft with no confirmed recipient yet"
+     },
+     "cc": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "subject": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string",
+      "description": "the whole draft, as it will be saved"
+     }
+    },
+    "required": [
      "body"
     ]
    }

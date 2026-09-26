@@ -526,6 +526,33 @@ def _run_send_email(args: dict, plan_obj, **_) -> dict:
     return SEND.run(plan_obj, approved=True)
 
 
+def _prepare_draft_email(args: dict):
+    try:
+        import jarvis_email_draft as DRAFT
+    except Exception as exc:
+        # No arguments on this line: they are the draft itself. A plan that
+        # carries a `problem` never reaches a card (_one_call).
+        import types
+        why = f"saving an email draft is not available here ({type(exc).__name__})"
+        return types.SimpleNamespace(problem=why), f"Save an email draft ({why})"
+    # Only these four fields are ever read out of the model's arguments - an
+    # "attachments" key it adds anyway is never looked at (jarvis_email_draft
+    # has no attachments parameter at all; see that module's docstring).
+    p = DRAFT.plan(args.get("to"), args.get("cc"), args.get("subject", ""),
+                   args.get("body", ""), reply_to_message_id=args.get("reply_to_message_id"))
+    return p, DRAFT.describe(p)
+
+
+def _run_draft_email(args: dict, plan_obj, **_) -> dict:
+    """Saves the plan the card showed - `plan_obj`, the SAME object, never a
+    new plan from `args` (jarvis_email_draft.run checks its fingerprint)."""
+    if plan_obj is None or getattr(plan_obj, "problem", ""):
+        return {"ok": False, "saved": False,
+                "error": "saving an email draft is not available here"}
+    import jarvis_email_draft as DRAFT
+    return DRAFT.run(plan_obj, approved=True)
+
+
 def _prepare_notes_search(args: dict):
     try:
         import jarvis_notes as NOTES
@@ -930,7 +957,29 @@ TOOLS: dict = {
          "required": ["to", "subject", "body"]},
         _prepare_send_email, _run_send_email,
         gate_lookup_name=lambda args: "send_email",
-        instead={"email_check": "To read the inbox, use email_check."}),
+        instead={"email_check": "To read the inbox, use email_check.",
+                 "draft_email": "To save a draft instead of sending, use draft_email."}),
+    # Saving one email draft (jarvis_email_draft.py; the owner's decision of
+    # 2026-09-27): ONE approval card per draft showing all of it, saved to
+    # the account's Drafts folder only, and only a person's yes saves it
+    # (NEEDS_A_PERSON). Never sent - see jarvis_email_draft.py's docstring.
+    "draft_email": Tool(
+        "draft_email",
+        "Save one plain-text email draft to the owner's own Drafts folder. Never sent. "
+        "The owner sees all of it on an approval card first; nothing is saved without "
+        "their yes. `to` may be left out or incomplete - a draft does not need a "
+        "confirmed recipient yet. No attachments.",
+        {"type": "object", "properties": {
+            "to": {"type": "array", "items": {"type": "string"},
+                   "description": "email addresses, e.g. [\"alex@example.com\"]; may be "
+                                   "left out for a draft with no confirmed recipient yet"},
+            "cc": {"type": "array", "items": {"type": "string"}},
+            "subject": {"type": "string"},
+            "body": {"type": "string", "description": "the whole draft, as it will be saved"}},
+         "required": ["body"]},
+        _prepare_draft_email, _run_draft_email,
+        gate_lookup_name=lambda args: "draft_email",
+        instead={"send_email": "To send an email now, use send_email."}),
     "notes_search": Tool(
         "notes_search",
         "Search the owner's own notes (Obsidian or Joplin). Read-only.",
@@ -1294,6 +1343,7 @@ NEEDS_A_PERSON = {
     "shell_exec": "runs a command, which can do anything, including reach the internet",
     "home_control": "changes something real in the house",
     "send_email": "sends an email in the owner's name, which cannot be taken back",
+    "draft_email": "writes into the owner's own Drafts folder on their mail account",
 }
 
 #: The same rule for every tool from a plug-in program (jarvis_mcp.py): a
@@ -1413,6 +1463,66 @@ def _send_email_refusal(watch: "_TurnWatch") -> str:
     why = SEND.tier_problem(_tier_of)
     if why:
         return f"refused: {why}. Nobody was asked and nothing was sent. Tell the owner."
+    return ""
+
+
+#: Saving one email draft (jarvis_email_draft.py; the owner's decision of
+#: 2026-09-27, CLAUDE.md): one approval card per draft, showing From, To, Cc,
+#: the subject and the WHOLE text; never an "always allow"; never sent. Same
+#: shape as SEND_EMAIL_* just above, and reused where the two are identical
+#: (rule 1, tier "ask", the card-too-long refusal, the outside-text lines):
+#:   - refused with no card unless the turn's model is on this PC (rule 1:
+#:     a draft is written by the local model only);
+#:   - refused with no card unless draft_email is tier "ask";
+#:   - refused with no card when the plan itself says why nothing could be
+#:     saved (a bad address, too long, not set up);
+#:   - put to the gate under jarvis_email_draft.ACTION whatever the lookup
+#:     says, so its card, tier and notice are always draft_email's;
+#:   - a card too long to show whole is refused, never cut - in words about
+#:     a draft, not a plan.
+DRAFT_EMAIL_ACTION = "draft_email"
+DRAFT_EMAIL_READ = ("This conversation read outside text (an email, a web page, a file or "
+                    "another tool's answer) before this draft was written - check that "
+                    "saving it was your idea.")
+DRAFT_EMAIL_NOT_TYPED = ("Your newest message {how} - check that saving this draft was "
+                         "your idea.")
+DRAFT_EMAIL_APP = ("The app sent extra text with your message (for example the clipboard) "
+                   "- check that saving this draft was your idea.")
+DRAFT_EMAIL_NOT_LOCAL = ("refused: a draft may only be written by the model on this PC "
+                         "(rule 1), and this turn's model is not on this PC. Nothing was "
+                         "saved and nobody was asked.")
+DRAFT_EMAIL_TOO_LONG = ("refused: this draft's card would be too long to show in full, so "
+                        "nobody was asked and nothing was saved. Write it shorter, or tell "
+                        "the owner to start the draft from their own mail app.")
+
+
+def draft_email_card_lines(watch: "_TurnWatch") -> list:
+    """The plain lines at the TOP of a draft's card when outside text shaped
+    the turn - [] when the owner's own typed or said words did. Same rule as
+    send_email_card_lines."""
+    lines = []
+    if watch.read or watch.tainted:
+        lines.append(DRAFT_EMAIL_READ)
+    if watch.provenance:
+        lines.append(DRAFT_EMAIL_NOT_TYPED.format(how=_NOT_OWN_WORDS[watch.provenance]))
+    if watch.app_context:
+        lines.append(DRAFT_EMAIL_APP)
+    return lines
+
+
+def _draft_email_refusal(watch: "_TurnWatch") -> str:
+    """Why this turn may not even ask about a draft, or "". Fails closed: a
+    turn whose model is unknown is refused."""
+    lane = getattr(watch, "lane", None)
+    if not isinstance(lane, dict) or local_model_refusal(lane.get("url"), lane.get("model")):
+        return DRAFT_EMAIL_NOT_LOCAL
+    try:
+        import jarvis_email_draft as DRAFT
+    except Exception as exc:
+        return f"refused: saving an email draft is not available here ({type(exc).__name__})."
+    why = DRAFT.tier_problem(_tier_of)
+    if why:
+        return f"refused: {why}. Nobody was asked and nothing was saved. Tell the owner."
     return ""
 
 
@@ -2571,10 +2681,11 @@ def _provenance(m: dict) -> str:
     return p if isinstance(p, str) and (p in OWN_WORDS or p in _NOT_OWN_WORDS) else "unknown"
 
 #: The tools whose result is not outside text: a number worked out here, and
-#: send_email's own confirmation ("Sent to ..."), built from the plan the
-#: owner approved - so a second email in the same answer is not marked as
-#: shaped by outside text just because the first one was sent.
-_NOT_READING = {"calculator", "send_email"}
+#: send_email's own confirmation ("Sent to ..."), and draft_email's ("Saved
+#: to your Drafts folder..."), each built from the plan the owner approved -
+#: so a second email or draft in the same answer is not marked as shaped by
+#: outside text just because the first one was sent or saved.
+_NOT_READING = {"calculator", "send_email", "draft_email"}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -3126,6 +3237,7 @@ TOOL_GROUPS = (
     ("timers", "a countdown timer, the to-do list, what is coming up",
      ("set_timer", "todo_add", "todo_done", "coming_up")),
     ("send_email", "send an email", ("send_email",)),
+    ("draft_email", "save an email draft", ("draft_email",)),
     ("notes", "add to the owner's Logseq, Obsidian or Joplin notes",
      ("append_logseq_journal", "append_obsidian_daily", "create_joplin_note")),
     ("home_control", "switch a light or another device", ("home_control",)),
@@ -4601,6 +4713,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
             return
+    if name == "draft_email":
+        # Refused before anything is planned or anyone asked - see DRAFT_EMAIL_*.
+        why = _draft_email_refusal(watch)
+        if why:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "saved": False,
+                                                    "error": why})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
     if name == FILES_TOOL and str(args.get("action") or "").strip().lower() == "read":
         # Refused before the gate: what fits in the model's working memory
         # (FILES_PARTS_PER_TURN). The model is told plainly, once per call.
@@ -4625,6 +4747,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             pass
     if name == "send_email":
         action_name = SEND_EMAIL_ACTION
+    if name == "draft_email":
+        action_name = DRAFT_EMAIL_ACTION
     # A note write after outside text waits for a person (NOTE_WRITES): put
     # to the gate as NOTE_AFTER_OUTSIDE_ACTION when its own tier would not
     # ask. "never" stays "never", and "ask" asks anyway.
@@ -4665,6 +4789,25 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         top = send_email_card_lines(watch)
         if top:
             plan_text = "\n".join(top) + "\n\n" + plan_text
+    if name == "draft_email":
+        # A plan that says why nothing could be drafted (a bad address, too
+        # long, not set up, the module missing): nothing to ask about, so no
+        # card. The model is told why, in the plan's own words.
+        problem = getattr(state, "problem", "")
+        if problem:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({
+                              "ok": False, "saved": False,
+                              "error": f"refused: {problem}. Nothing was saved and nobody "
+                                       f"was asked."})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
+        # The owner's decision: the card says PLAINLY, at the top, when
+        # outside text shaped this turn.
+        top = draft_email_card_lines(watch)
+        if top:
+            plan_text = "\n".join(top) + "\n\n" + plan_text
     # "Lights, plugs and fans without a card" (LIGHTS_WITHOUT_CARD): with the
     # owner's setting on, a light, plug or fan the owner named in their own
     # words, in a turn nothing from outside shaped, runs with no card.
@@ -4684,6 +4827,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                       "content": _tool_content(
                           {"ok": False,
                            "error": SEND_EMAIL_TOO_LONG if name == "send_email" else
+                                    DRAFT_EMAIL_TOO_LONG if name == "draft_email" else
                                     (f"refused: the plan for {name} is too long "
                                      f"to show in full on one approval card, so "
                                      f"nobody was asked and nothing ran. Make a "

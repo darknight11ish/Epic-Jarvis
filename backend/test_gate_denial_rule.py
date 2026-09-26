@@ -36,7 +36,9 @@ LISTED = ("second_card_enable", "second_card_browser_enable", "big_model_enable"
           "custom_voice", "better_voice_enable",
           "power_manage", "append_obsidian_daily", "download_model", "switch_model",
           # email-send.patch: each email is its own card, sent only on "ask".
-          "send_email")
+          "send_email",
+          # draft-email.patch: each draft is its own card, saved only on "ask".
+          "draft_email")
 
 
 def check(name, cond, detail=""):
