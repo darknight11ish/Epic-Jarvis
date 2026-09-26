@@ -1020,6 +1020,10 @@ async function pictureCanBeSeen() {
     check = { vision: null, model: null, reason: String((error && error.message) || error) };
   }
   if (check && check.vision === true) return { ok: true, check };
+  // The PC reads the WORDS in the picture itself when the model cannot see
+  // it, and sends them marked as outside text (backend jarvis_ocr.py, the
+  // owner's decision of 2026-09-26): nothing to ask, the picture just goes.
+  if (check && check.readsText === true) return { ok: true, check };
   return { ok: false, check: check || { vision: null, model: null, reason: "" } };
 }
 

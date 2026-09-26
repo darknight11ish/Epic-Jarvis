@@ -90,8 +90,28 @@ class SharedPictureTest {
         }
         assertEquals(
             "The shared picture was not attached: Jarvis takes pictures only while Pictures on the " +
-                "second graphics card is working (timed out). Nothing was sent.",
+                "second graphics card is working, or your PC can read the words in them (timed out). " +
+                "Nothing was sent.",
             ChatPicture.sharedRefusal(SecondCard.Read.Failed("timed out")),
         )
+    }
+
+    @Test
+    fun whenThePcReadsTheWordsInAPictureTheShareIsAttachedAndSaysSo() {
+        // The PC's real status (tools/gen_second_card_cases.py): no picture
+        // model, but the PC reads the words in a picture (2026-09-26).
+        val read = loaded("one_card_reads_words")
+        assertFalse(SecondCard.visionAvailable(read))
+        assertTrue(SecondCard.pictureTextAvailable(read))
+        assertTrue("the Photo button would be offered", SecondCard.picturesTaken(read))
+        assertNull(ChatPicture.sharedRefusal(read))
+        val p = ChatPicture.Ready("data:image/jpeg;base64,AA", 10, 20, 2048)
+        assertEquals(
+            "Picture attached (10 × 20, 2 KB). " + ChatPicture.WORDS_ONLY,
+            ChatPicture.attachedLine(p, wordsOnly = true),
+        )
+        assertTrue(ChatPicture.WORDS_ONLY.contains("outside text"))
+        // An older PC says nothing about it: not taken.
+        assertFalse(SecondCard.pictureTextAvailable(loaded("one_card")))
     }
 }

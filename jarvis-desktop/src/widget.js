@@ -126,6 +126,7 @@ const dom = {
   cpuBar: $("cpu-bar"),
   gpuVal: $("gpu-val"),
   gpuBar: $("gpu-bar"),
+  gpuCards: $("gpu-cards"),
 
   apprCard: $("approval-card"),
   apprRisk: $("appr-risk"),
@@ -529,18 +530,68 @@ function applyTelemetry(data) {
     paintMeter(dom.meterGpu, dom.gpuBar, 0, false);
   }
 
+  // Every card, one line each, once there are two (I12, 2026-09-26): the
+  // meters above are the first card's, so a second card was never shown.
+  const cards = gpuCards(data);
+  paintGpuCards(cards);
+
   // Compact readout: temperature is the one number worth a glance when the
-  // widget is collapsed.
-  if (Number.isFinite(data.gpuTempC)) {
-    dom.gpuTemp.textContent = `${data.gpuTempC}°`;
-    dom.gpuTemp.classList.toggle("hot", data.gpuTempC >= TEMP_WARN);
-    dom.gpuTemp.classList.toggle("critical", data.gpuTempC >= TEMP_CRITICAL);
+  // widget is collapsed - the HOTTEST card's, so a hot second card shows.
+  const hottest = cards.reduce((t, c) => (Number.isFinite(c.tempC) && c.tempC > t ? c.tempC : t),
+    Number.isFinite(data.gpuTempC) ? data.gpuTempC : -Infinity);
+  if (Number.isFinite(hottest)) {
+    dom.gpuTemp.textContent = `${hottest}°`;
+    dom.gpuTemp.title = cards.length > 1 ? "The hottest graphics card's temperature" : "GPU temperature";
+    dom.gpuTemp.classList.toggle("hot", hottest >= TEMP_WARN);
+    dom.gpuTemp.classList.toggle("critical", hottest >= TEMP_CRITICAL);
   } else {
     dom.gpuTemp.textContent = `${Math.round(cpu)}%`;
     dom.gpuTemp.title = "CPU load (no NVIDIA GPU detected)";
   }
 
   if (data.routeLane) applyLane(data.routeLane);
+}
+
+/** The telemetry's `gpus`, read: numbers only where they are numbers. */
+function gpuCards(data) {
+  const list = Array.isArray(data.gpus) ? data.gpus : [];
+  const num = (v) => (Number.isFinite(v) ? v : null);
+  return list.filter((g) => g && typeof g === "object").map((g, i) => ({
+    name: typeof g.name === "string" && g.name.trim() ? g.name.trim() : `Card ${i + 1}`,
+    tempC: num(g.tempC),
+    util: num(g.utilPercent),
+    usedMb: num(g.vramUsedMb),
+    totalMb: num(g.vramTotalMb),
+    powerW: num(g.powerW),
+  }));
+}
+
+/** "RTX 2060 · 38° · 0.3 / 12.0 GB · 10 W" - one card's line. */
+function gpuCardLine(c) {
+  const short = c.name.replace(/^NVIDIA\s+/i, "").replace(/^GeForce\s+/i, "");
+  const bits = [short];
+  if (c.tempC !== null) bits.push(`${c.tempC}°`);
+  if (c.util !== null) bits.push(`${c.util}%`);
+  if (c.usedMb !== null && c.totalMb) bits.push(`${(c.usedMb / 1024).toFixed(1)} / ${(c.totalMb / 1024).toFixed(1)} GB`);
+  if (c.powerW !== null) bits.push(`${c.powerW} W`);
+  return bits.join(" · ");
+}
+
+function paintGpuCards(cards) {
+  if (!dom.gpuCards) return;
+  if (cards.length < 2) {
+    dom.gpuCards.hidden = true;
+    dom.gpuCards.replaceChildren();
+    return;
+  }
+  dom.gpuCards.replaceChildren(...cards.map((c) => {
+    const li = document.createElement("li");
+    li.textContent = gpuCardLine(c);
+    li.classList.toggle("hot", c.tempC !== null && c.tempC >= TEMP_WARN);
+    li.classList.toggle("critical", c.tempC !== null && c.tempC >= TEMP_CRITICAL);
+    return li;
+  }));
+  dom.gpuCards.hidden = false;
 }
 
 /** Paints the route pill. */

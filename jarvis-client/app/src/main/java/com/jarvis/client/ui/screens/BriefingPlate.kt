@@ -191,8 +191,9 @@ internal fun BriefingSection(
                         Gap(8)
                         val isMissed = b.source == "missed"
                         // "What did I miss?" fetches nothing from the internet.
+                        // The last line is the PC's own (weather from Home Assistant, or not).
                         if (!isMissed) {
-                            Text(Briefing.OUTSIDE_LINE, style = MaterialTheme.typography.labelSmall,
+                            Text(Briefing.outsideLine(b), style = MaterialTheme.typography.labelSmall,
                                 color = chrome.textLo)
                         }
                         b.notIncluded.forEach {

@@ -153,6 +153,8 @@ SHIPPED = (
     "jarvis_asks_first.py",
     # "Folders Jarvis may look in" and the my_files tool (documents.patch)
     "jarvis_documents.py",
+    # the words in a picture, read on this PC and marked as outside text (no patch)
+    "jarvis_ocr.py",
 )
 
 

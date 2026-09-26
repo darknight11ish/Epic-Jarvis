@@ -75,6 +75,12 @@ const check = async (name, fn) => {
   catch (e) { fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`); }
 };
 
+/** The PC's own words for the weather (jarvis_briefing.WEATHER_OFF, NEWS_LINE). */
+const WEATHER_OFF = "Not included: the weather. It comes only from your own Home Assistant, " +
+  "which is not set up for Jarvis on this PC.";
+const NEWS_LINE = "News: not available. No news provider has been chosen, so Jarvis fetches " +
+  "nothing from the internet for this.";
+
 const BRIEFING = {
   id: "b0123456789",
   heading: "Your briefing for Friday 25 September, made at 07:00.",
@@ -99,7 +105,7 @@ const SETUPS = [{ id: "s00000000b1", kind: "briefing", state: "active", repeats:
 const SOURCES = {
   calendar: { state: "on", said: "Included: your calendar." },
   email: { state: "off", said: "Not included: how many unread emails you have is not set up for Jarvis on this PC." },
-  weather: { state: "not_available", said: OUTSIDE_LINE },
+  weather: { state: "off", said: WEATHER_OFF },
 };
 const SENDERS_ON = { on: true, waiting: false, last: null, why: "" };
 const SENDERS_OFF = { on: false, waiting: false, last: null, why: "" };
@@ -116,7 +122,8 @@ await check("the words are both apps' words and the PC's own", async () => {
     assert.ok(kt.includes(`"${words.replace(/"/g, '\\"')}"`), `the phone does not say: ${words}`);
   }
   const py = readRepo("backend/jarvis_briefing.py").replace(/"\s*\n\s*"/g, "");
-  for (const words of [LOCK_SCREEN, OUTSIDE_LINE, EMPTY.replace(/"/g, '\\"')]) {
+  for (const words of [LOCK_SCREEN, OUTSIDE_LINE, WEATHER_OFF, NEWS_LINE,
+    EMPTY.replace(/"/g, '\\"')]) {
     assert.ok(py.includes(words), `the PC does not say: ${words}`);
   }
   const rs = read("src-tauri/src/brain/briefing.rs");
@@ -190,6 +197,25 @@ await check("Brain -> Work: the latest briefing, section by section", async () =
     OUTSIDE_LINE, KEPT, NOW_LABEL]) {
     assert.ok(text.includes(bit), `missing: ${bit}`);
   }
+});
+
+await check("the weather from Home Assistant: its own section, and the PC's last line (I75)", async () => {
+  const withWeather = {
+    ...BRIEFING,
+    sections: [{ key: "weather", title: "Weather", state: "ok", summary: "Now 12 °C, partly cloudy.",
+      items: ["Today: rain, 9 to 14 °C, 80% chance of rain", "Tomorrow: sunny, 11 to 18 °C"] },
+    ...BRIEFING.sections],
+    outside_line: NEWS_LINE,
+  };
+  const page = await workTab({ briefing: { ...SCENARIO, briefing: withWeather } });
+  const text = await page.locator("#briefing-card").innerText();
+  await page.close();
+  assert.match(text, /weather/i);
+  for (const bit of ["Now 12 °C, partly cloudy.", "Today: rain, 9 to 14 °C, 80% chance of rain",
+    "Tomorrow: sunny, 11 to 18 °C", NEWS_LINE]) {
+    assert.ok(text.includes(bit), `missing: ${bit}`);
+  }
+  assert.ok(!text.includes(OUTSIDE_LINE), "the old weather-and-news line beside a weather section");
 });
 
 await check("Brief me now is a read: it works on a stale link too", async () => {
@@ -325,7 +351,7 @@ await check("Settings: the setups, one Stop each, what it includes - never the b
   await page.close();
   assert.match(text, /every weekday \(Monday to Friday\) at 07:00/);
   assert.match(text, /Included: your calendar\./);
-  assert.ok(text.includes(OUTSIDE_LINE));
+  assert.ok(text.includes(WEATHER_OFF), "the weather's line, in the PC's words");
   assert.ok(text.includes(SPOKEN));
   assert.doesNotMatch(text, /Dentist|bank|milk/, "Settings showed the briefing itself");
   assert.deepEqual(stops, ["Stop"]);

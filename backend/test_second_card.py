@@ -710,7 +710,7 @@ def t_status_shape_and_no_secrets():
             os.environ.pop("HUD_TOKEN_TEST_PROBE", None)
     check("status() has exactly the contract's keys",
           set(st) == {"detected", "enabled", "active", "pending", "lane", "main_ollama_pinned",
-                      "pin_note", "pin_command", "features", "last"}, sorted(st))
+                      "pin_note", "pin_command", "features", "last", "picture_text"}, sorted(st))
     check("detected has exactly its keys",
           set(st["detected"]) == {"capable", "why", "primary", "second", "cards"})
     check("each feature row has exactly its keys",
@@ -1123,9 +1123,10 @@ def t_the_fixture():
     check("second-card-cases.json (the desktop's and the phone's copy) equals a fresh run",
           rc == 0, "run python3 tools/gen_second_card_cases.py")
     data = json.loads(G.FIXTURE.read_text(encoding="utf-8"))["cases"]
-    check("the six named cases are there",
+    check("the seven named cases are there",
           set(data) == {"one_card", "capable_off", "capable_pending", "running_long_context",
-                        "card_missing_but_enabled", "not_capable_old_card"}, sorted(data))
+                        "card_missing_but_enabled", "not_capable_old_card",
+                        "one_card_reads_words"}, sorted(data))
 
 
 def t_the_real_file():

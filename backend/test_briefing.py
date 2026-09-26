@@ -468,9 +468,11 @@ def t_a_kind_on_the_one_scheduler():
           and "Wednesday 30 September at 07:00" in prompt, prompt)
     check("... says what each run reads and that it only reads",
           "the number only" in prompt and "It only reads" in prompt
-          and "without the AI model" in prompt and "Weather and news are not included" in prompt)
+          and "without the AI model" in prompt and "News is not included" in prompt
+          and "the weather, from your own Home Assistant, if it is set up" in prompt)
     check("... and does not claim nothing is sent (the calendar read is a request)",
-          "Nothing is sent anywhere." not in prompt and "your own calendar and mail servers" in prompt)
+          "Nothing is sent anywhere." not in prompt
+          and "your own calendar, mail server and Home Assistant" in prompt)
     check("a briefing has no words of its own", w.s.job(j["id"])["text"] == "")
     try:
         w.s.add_repeat("briefing", {"every": "weekday", "at": "07:00"})
@@ -965,6 +967,144 @@ def t_no_model_is_anywhere_near_it():
                         r"jarvis_second_card|chat/completions", code, re.I))
 
 
+def _weather_deps(w=None, *, tier="auto", tools=("home_read",), fetch=None, gate=None):
+    """Deps with Home Assistant 'set up' for the weather (the feasibility
+    audit's I75). `fetch` stands in for jarvis_home's one real call."""
+    seen = [] if w is None else w.reads
+
+    def g(action, detail, prompt):
+        seen.append((action, prompt))
+        return gate(action, detail, prompt) if gate else Verdict(True, "auto", "auto")
+    return _DEPS(tier_of=lambda a: {"home_read": tier}.get(a, "ask"), gate=g,
+                 tools_enabled=lambda: set(tools), pending_count=lambda: 0,
+                 calendar_fetch=_unreachable, email_search=_unreachable,
+                 home_fetch=fetch or _unreachable, senders_on=lambda: False,
+                 publish=lambda k, d: None, deadline=5.0), seen
+
+
+HA_STATE = {"state": "partlycloudy", "attributes": {"temperature": 11.6, "temperature_unit": "°C"}}
+
+
+def ha_forecast(today, tomorrow):
+    return {"changed_states": [], "service_response": {"weather.forecast_home": {"forecast": [
+        {"datetime": today + "T10:00:00+00:00", "condition": "rainy", "temperature": 14.4,
+         "templow": 8.6, "precipitation_probability": 80},
+        {"datetime": tomorrow + "T10:00:00+00:00", "condition": "sunny", "temperature": 18.2,
+         "templow": 10.9}]}}}
+
+
+def t_the_weather_from_home_assistant():
+    """I75 (the owner's choice, 2026-09-26): the weather in the briefing, from
+    the owner's OWN Home Assistant only, read-only, no card, outside text."""
+    use_tz("Europe/London")
+    saved = {k: os.environ.get(k) for k in ("JARVIS_HOME_URL", "JARVIS_HOME_WEATHER")}
+    os.environ["JARVIS_HOME_URL"] = "http://192.168.1.20:8123"
+    os.environ.pop("JARVIS_HOME_WEATHER", None)
+    try:
+        w = World(local(2026, 9, 26, 6, 0), name="weather")
+        sent = []
+
+        def fetch(q):
+            sent.append((q.method, q.url))
+            return HA_STATE if q.method == "GET" else ha_forecast("2026-09-26", "2026-09-27")
+        d, seen = _weather_deps(fetch=fetch)
+        src = B.sources(d)["weather"]
+        check("weather: 'Included', naming the device, when Home Assistant is set up",
+              src == {"state": "on", "said": B.WEATHER_ON.format(entity="weather.forecast_home")},
+              repr(src))
+        with NoSockets() as ns:
+            b = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d)
+        weather = b["sections"][0]
+        check("weather: its own section, first, with now, today and tomorrow in plain words",
+              weather["key"] == "weather" and weather["summary"] == "Now 12 °C, partly cloudy."
+              and weather["items"] == ["Today: rain, 9 to 14 °C, 80% chance of rain",
+                                       "Tomorrow: sunny, 11 to 18 °C"], repr(weather))
+        check("weather: exactly the two fixed requests, and no socket of its own",
+              sent == [("GET", "http://192.168.1.20:8123/api/states/weather.forecast_home"),
+                       ("POST", "http://192.168.1.20:8123/api/services/weather/get_forecasts"
+                                "?return_response")] and not ns.tried, repr(sent))
+        check("weather: through the gate as home_read - the action every Home Assistant read uses",
+              [a for a, _ in seen] == ["home_read"] and "get_forecasts" in seen[0][1])
+        check("weather: the forecast is outside text - the briefing says Home Assistant was read",
+              "home_read" in b["read"])
+        check("weather: the last line says only news is not available",
+              b["outside_line"] == B.NEWS_LINE and B.NEWS_LINE in b["text"]
+              and B.OUTSIDE_LINE not in b["text"])
+        check("weather: no card was raised, and nothing speaks: it is one more section",
+              w.cards == [] and b["private"] is True)
+
+        # Tier "ask": left out, said why, and Home Assistant is not asked.
+        asked = []
+        d2, seen2 = _weather_deps(tier="ask", fetch=lambda q: asked.append(q) or {})
+        b2 = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d2)
+        check("weather: settings that ask for a yes leave it out, say why, and raise no card",
+              not any(s["key"] == "weather" for s in b2["sections"]) and not asked
+              and not seen2 and B.WEATHER_ASKS in b2["not_included"]
+              and b2["outside_line"] == B.OUTSIDE_LINE)
+        # Not offered the tool: the old last line, nothing asked.
+        d3, seen3 = _weather_deps(tools=(), fetch=lambda q: asked.append(q) or {})
+        b3 = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d3)
+        check("weather: not set up - the last line says where the weather would come from",
+              B.OUTSIDE_LINE in b3["text"] and "Home Assistant" in B.OUTSIDE_LINE
+              and not asked and not seen3 and "home_read" not in b3["read"])
+        # The gate says no: nothing is read.
+        d4, _ = _weather_deps(fetch=lambda q: asked.append(q) or {},
+                              gate=lambda a, dd, p: Verdict(False, "auto", "refused"))
+        b4 = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d4)
+        check("weather: a gate that says no reads nothing, and says so",
+              not asked and b4["sections"][0]["state"] == "refused")
+
+        # "What's the weather?" - the same read, without the model.
+        got = B.weather_now(now=local(2026, 9, 26, 9, 0), deps=d)
+        check("\"what's the weather?\": the same words, and Home Assistant marked as read",
+              got["text"].startswith("Now 12 °C, partly cloudy. Today: rain, 9 to 14 °C")
+              and got["text"].endswith("(From your own Home Assistant.)")
+              and got["read"] == ["home_read"], repr(got))
+        got = B.weather_now(now=local(2026, 9, 26, 9, 0), deps=d3)
+        check("\"what's the weather?\" with no Home Assistant: says so, fetches nothing",
+              got == {"text": B.WEATHER_NOT_HERE, "read": []})
+        got = B.weather_now(now=local(2026, 9, 26, 9, 0), deps=d2)
+        check("\"what's the weather?\" when reading Home Assistant asks first: says so, no card",
+              got == {"text": B.WEATHER_ASKS_NOW, "read": []} and not seen2)
+        gone = threading.Event()
+
+        def hangs(q):
+            gone.wait(5)
+            return {}
+        d5, _ = _weather_deps(fetch=hangs)
+        d5.deadline = 0.3
+        t0 = time.time()
+        got = B.weather_now(now=local(2026, 9, 26, 9, 0), deps=d5)
+        gone.set()
+        check("\"what's the weather?\": a Home Assistant that does not answer never holds the "
+              "answer past the deadline", time.time() - t0 < 2 and "did not answer in time"
+              in got["text"] and got["read"] == [], repr(got))
+
+        def odd(q):
+            return ["not", "a", "state"] if q.method == "GET" else {
+                "service_response": {"weather.forecast_home": {"forecast": {"a": 1}}}}
+        d6, _ = _weather_deps(fetch=odd)
+        b6 = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d6)
+        check("an answer of the wrong shape from Home Assistant is survived, and said",
+              b6["sections"][0]["key"] == "weather"
+              and b6["sections"][0]["state"] in ("empty", "failed"), repr(b6["sections"][0]))
+        check("the grammar: the plain question, today or tomorrow, is answered without the model",
+              all(Q.match(t) is not None and Q.match(t).name == "weather_now" for t in (
+                  "what's the weather", "What is the weather like today?", "weather",
+                  "how's the weather tomorrow", "Jarvis, what's the forecast?",
+                  "tell me the weather")))
+        check("... and anything more goes to the model",
+              all(Q.match(t) is None for t in (
+                  "what's the weather in Paris", "what is the weather going to be like this weekend",
+                  "why is the weather so bad", "weather in Tokyo tomorrow")))
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
 def t_the_routes():
     use_tz("Europe/London")
     B.forget()
@@ -973,7 +1113,7 @@ def t_the_routes():
     check("GET: no briefing yet, with the words to say so", code == 200 and out["briefing"] is None
           and out["empty"] == B.EMPTY and out["lock_screen"] == B.LOCK_SCREEN)
     check("... and what a briefing includes", out["sources"]["calendar"]["state"] == "off"
-          and out["sources"]["weather"]["state"] == "not_available")
+          and out["sources"]["weather"] == {"state": "off", "said": B.WEATHER_OFF})
     w.s.add_repeat("briefing", {"every": "day", "at": "07:00"})
     code, out = B.handle_now({}, sched=w.s, deps=deps(tools=()))
     check("POST now: one, straight away", code == 200 and out["briefing"]["source"] == "now")

@@ -84,7 +84,7 @@ import {
   lateLine,
   NOW_BUSY as BRIEFING_NOW_BUSY,
   NOW_LABEL as BRIEFING_NOW_LABEL,
-  OUTSIDE_LINE as BRIEFING_OUTSIDE,
+  outsideLine as briefingOutsideLine,
   MISSED_BUSY,
   MISSED_DETAIL,
   MISSED_LABEL,
@@ -4127,7 +4127,8 @@ function paintBriefing() {
   out.push(list);
   const missed = b.source === "missed";
   // "What did I miss?" fetches nothing from the internet and is not kept.
-  if (!missed) out.push(el("p", "note", BRIEFING_OUTSIDE));
+  // The last line is the PC's own (the weather from Home Assistant, or not).
+  if (!missed) out.push(el("p", "note", briefingOutsideLine(b)));
   for (const n of b.notIncluded) out.push(el("p", "note", n));
   if (b.hidden) out.push(hiddenNode(0, "lines"));
   out.push(el("p", "note", missed ? MISSED_DETAIL : BRIEFING_KEPT));

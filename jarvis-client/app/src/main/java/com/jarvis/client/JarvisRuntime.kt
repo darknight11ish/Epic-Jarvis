@@ -1643,10 +1643,12 @@ object JarvisRuntime {
         actionBlocker()?.let { return it }
         refreshSecondCard()
         val read = _secondCard.value
-        if (SecondCard.visionAvailable(read)) return null
+        // A picture model sees it, or the PC reads the words in it (2026-09-26).
+        if (SecondCard.picturesTaken(read)) return null
         val why = com.jarvis.client.net.ChatPicture.notWorkingWhy(read)
         return "The picture was not sent: Pictures on the second graphics card is not " +
-            "working right now" + (why?.let { " ($it)" } ?: "") + "."
+            "working right now, and your PC cannot read the words in it" +
+            (why?.let { " ($it)" } ?: "") + "."
     }
 
     /**

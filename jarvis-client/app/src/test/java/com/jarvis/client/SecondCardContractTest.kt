@@ -50,8 +50,10 @@ class SecondCardContractTest {
         SecondCard.switches(s).first { it.id == id }
 
     @Test
-    fun `all six cases are read, with the five features in the PC's order`() {
-        assertEquals(6, cases.size)
+    fun `all seven cases are read, with the five features in the PC's order`() {
+        // Seven since 2026-09-26: one_card_reads_words (the PC reads the
+        // words in a picture).
+        assertEquals(7, cases.size)
         for (name in cases.keys) {
             val s = status(name)
             assertEquals(name, listOf("long_context", "vision", "learning", "browser_control", "wiki"),

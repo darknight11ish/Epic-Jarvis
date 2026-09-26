@@ -522,15 +522,19 @@ await check("CONTROL: only the settings window may read or change the second car
 await check("CONTROL: the picture check asks the second card first, and only a working Pictures switch says yes", async () => {
   const rust = read("src-tauri/src/vision.rs");
   const cmd = fnBody(rust, "pub async fn local_model_vision(");
-  const second = cmd.indexOf("read_second_card_picture_model(");
+  // Since 2026-09-26 the status is read once (it also says whether the PC
+  // reads the words in a picture), and the picture model taken from it.
+  const second = cmd.indexOf("read_second_card_status(");
+  const picked = cmd.indexOf("and_then(second_card_picture_model)");
   const current = cmd.indexOf("read_current_model(");
-  assert.ok(second > -1 && second < current, "the second card is not asked before the current model");
+  assert.ok(second > -1 && second < picked && picked < current,
+    "the second card is not asked before the current model");
   const pick = fnBody(rust, "pub fn second_card_picture_model(");
   assert.match(pick, /Some\("vision"\)/);
   assert.match(pick, /get\("available"\)\.and_then\(\|a\| a\.as_bool\(\)\) != Some\(true\)/);
   assert.match(rust, /Pictures go to \{model\} on the second graphics card\./);
   // Same client (loopback Jarvis only) and the same headers as the rest.
-  const reader = fnBody(rust, "async fn read_second_card_picture_model(");
+  const reader = fnBody(rust, "async fn read_second_card_status(");
   assert.match(reader, /jarvis_base\(app\)/);
   assert.match(reader, /jarvis_headers\(app\)/);
 });

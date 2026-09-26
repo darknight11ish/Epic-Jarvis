@@ -85,7 +85,11 @@ def turn(request_messages):
     return sent[0]["messages"], passed_in
 
 
-HISTORY = [{"role": "user", "content": "what is the weather tomorrow", "provenance": "voice"},
+# Not "what is the weather tomorrow": since 2026-09-26 that plain question
+# is answered without the model (jarvis_quick, the weather from Home
+# Assistant), and a command is never read by the learner.
+HISTORY = [{"role": "user", "content": "what will the weather be like tomorrow",
+            "provenance": "voice"},
            {"role": "assistant", "content": "Tomorrow looks mild, with light rain in the "
                                             "morning. It clears by noon. Take a coat."}]
 SAID = "Tomorrow looks mild, with light rain in the morning."
@@ -152,7 +156,8 @@ def t_it_is_never_the_owners_words():
     msgs, passed = turn(request)
     learnt = IN.owner_turns(request, IN.ORIGIN_OWNER)
     check("the learner reads the owner's questions only, and nothing of the note",
-          [m["content"] for m in learnt] == ["what is the weather tomorrow", "what about the weekend"],
+          [m["content"] for m in learnt] == ["what will the weather be like tomorrow",
+                                             "what about the weekend"],
           learnt)
     check("the note is a system line, not a user one",
           all(m.get("role") == "system" for m in msgs if "interrupted your last" in str(m.get("content"))))

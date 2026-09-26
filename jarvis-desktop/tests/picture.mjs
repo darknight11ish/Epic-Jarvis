@@ -125,6 +125,22 @@ await check("a model that can see pictures: sent straight away, no notice", asyn
   assert.deepEqual(errors, []);
 });
 
+await check("the PC reads the words in it (2026-09-26): sent straight away, picture and all, no notice", async () => {
+  const page = await withCapture({ vision: { model: "qwen3:8b", vision: false, readsText: true,
+    reason: "Ollama lists what qwen3:8b can do, and pictures are not on the list." } });
+  const sent = await chats(page);
+  const noticeHidden = await page.locator("#picture-notice").isHidden();
+  await page.close();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].hasImage, true, "the PC needs the picture to read its words");
+  assert.match(JSON.stringify(sent[0].messages.at(-1).content), /image_url/);
+  assert.equal(noticeHidden, true);
+  // The Rust sets readsText only from the PC's own answer (vision.rs).
+  const rs = (await import("node:fs")).readFileSync(
+    new URL("../src-tauri/src/vision.rs", import.meta.url), "utf8");
+  assert.match(rs, /check\.reads_text = check\.vision != Some\(true\) && status\.is_some_and\(picture_text_available\)/);
+});
+
 await check("CONTROL: with no picture, nothing is asked and the turn just goes", async () => {
   const page = await K.open(browser, base, "index.html", {});
   await page.fill("#prompt", "hello");

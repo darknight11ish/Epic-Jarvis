@@ -187,9 +187,11 @@ shaped this request:" - which tools were read, and which values came from
 that text, not the owner. The card still shows the plan in full; this only
 adds to it. One thing there does change which tools ask (the owner's
 decision of 2026-09-24, after the safety research): in a turn shaped by
-outside text - a reading tool ran, the conversation is tainted, the
+outside text - a reading tool ran (since 2026-09-26 that includes the PC
+reading the words in a picture, JARVIS-API section 36), the conversation is tainted, the
 newest message was not typed or said by the owner (pasted, shared, from the
-clipboard, a picture's caption, or with no tag at all - only `typed` and
+clipboard, a picture's caption - since 2026-09-26 decided by the backend
+from the picture itself, whatever the app's tag - or with no tag at all - only `typed` and
 `voice` are the owner's own words), or the app sent a `system` message of
 its own (security audit M1, 2026-09-25) - a note write
 (Obsidian, Logseq, Joplin) is put to the same gate as
@@ -434,7 +436,7 @@ These lanes leave the machine. Nothing else may.
 | **cloud model** | user-role turns only - and, with `cloud-one-turn.patch`, only the **newest** one, because the clients now send the conversation so far | a role filter, re-derived on **every** hop of the degrade loop; the newest-turn cut in `_open` |
 | **ntfy push** | text generated from our own tables, never payload, never while tainted | `notice_for` (`_safe_detail` where there is no action name) + `taint_active()` |
 | **research** | enumerated search terms, per approved plan | `jarvis_research.plan/run` |
-| **the owner's own accounts** - calendar, email, Home Assistant, each only when its settings are filled in on the PC | one request (or one small batch) per plan: to the calendar the owner set up - their CalDAV server with the time range, **or, since 2026-09-25, Google (`calendar.google.com`) through the calendar's private link**, which asks for the whole calendar and has the days picked out on the PC; to their IMAP server; to their Home Assistant. The password, token or private link goes only to the host it belongs to; the private link is also kept off every card, result, error and the log (`test_calendar_link.py`) | each module's `plan()`/`run()` through the gate (`jarvis_calendar`, `jarvis_email`, `jarvis_home`); `jarvis_local_http.plain_http_problem` (plain `http://` only inside the owner's own networks); each module's redirect handler (`_RefuseRedirect`, and for the private link `_FeedRedirect`: https on the same host or between Google's calendar hosts only) |
+| **the owner's own accounts** - calendar, email, Home Assistant, each only when its settings are filled in on the PC | one request (or one small batch) per plan: to the calendar the owner set up - their CalDAV server with the time range, **or, since 2026-09-25, Google (`calendar.google.com`) through the calendar's private link**, which asks for the whole calendar and has the days picked out on the PC; to their IMAP server; to their Home Assistant (since 2026-09-26 also the forecast its weather device already has, for the briefing and "what's the weather?": two fixed read-only requests, `jarvis_home.plan_forecast`, never a service call through `home_control`). The password, token or private link goes only to the host it belongs to; the private link is also kept off every card, result, error and the log (`test_calendar_link.py`) | each module's `plan()`/`run()` through the gate (`jarvis_calendar`, `jarvis_email`, `jarvis_home`); `jarvis_local_http.plain_http_problem` (plain `http://` only inside the owner's own networks); each module's redirect handler (`_RefuseRedirect`, and for the private link `_FeedRedirect`: https on the same host or between Google's calendar hosts only) |
 | **sending email** (2026-09-25, the owner's decision after the Muse audit) | ONE plain-text email per approval card, from the owner's own account (the address email reading uses), to at most 10 people in To and Cc (no Bcc), with the subject and text the card showed word for word - at most 2,500 characters, no attachments - and the owner's password, to their own sending server only (`smtp.X` for `imap.X`, e.g. `smtp.gmail.com`, or `JARVIS_SMTP_HOST`), inside SSL/TLS or STARTTLS with the certificate checked; unencrypted only to this PC or the owner's own networks. Written by the model on this PC only (rule 1) | `jarvis_email_send.plan/run` (no socket in `plan`; addresses, caps and invisible characters checked; a plan whose fingerprint or settings changed after its card is refused; never retried; the password never in a plan, card, result, error, event or the log) + `jarvis_agent._one_call` (`send_email` in `NEEDS_A_PERSON`: only a person's yes sends; no card unless the tier is `ask` and the turn's model is on this PC; the card says at the top when outside text shaped the turn; `CARDS_PER_TURN`) |
 | **web search** (2026-09-25) | ONE search's words (at most 300 characters), to the ONE provider the owner chose - SearXNG on the owner's own machine (which asks other engines), DuckDuckGo, Exa, Tavily or Brave - and, for the last three, the owner's key to that service only. Never words that look like a password or key. A card with the exact words whenever the conversation has read email, files, notes, saved memories or other outside text, or the owner chose "Ask before every web search" | `jarvis_search.plan/run` (no socket in `plan`, secret refusal, one provider, no fallback, redirects refused, answers capped) + `jarvis_agent._web_search_call` (when it asks; only a person's yes after that) |
 
@@ -1177,6 +1179,7 @@ backend routes, in both directions; the rest are listed here only.
 | what | why |
 |---|---|
 | The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
+| "Also on my phone" (the owner's decision of 2026-09-26; `net/AlsoOnPhone.kt`, a button on an alarm or reminder in Brain -> Coming up) | Written with the feature. It hands an alarm to the PHONE's own Clock app, or a reminder to its calendar, by the owner's tap, so it rings with the PC off - the gap it closes is the phone's alone (the PC is Jarvis's clock, and the phone hears of a job only while connected). On the desktop the PC already rings it; Windows' Clock app offers no way for another program to add an alarm; and putting an event into Google Calendar from the desktop would be a new way out of the PC (a link to Google carrying the event's words), which the creativity audit (usefulness #12) said needs the owner's OK first - not built. No route is involved, so `tools/check_parity.py` has nothing to check. |
 | **Blocking screenshots while a lock is on** (`FLAG_SECURE`, `SecurityRules.blockScreenCapture`) | **Undecided on the desktop - the owner's call.** The owner decided it for the phone (apps security audit L5, 2026-09-25), where screenshots, screen recording and casting are all a tap away. Windows could do the same for Jarvis's windows (Tauri's `set_content_protected`, which keeps a window out of screenshots, recordings and screen sharing), but it was not part of that decision and is not built. |
 
 **The voice flow is in both apps since 2026-09-25** (`docs/JARVIS-API.md`
@@ -1515,6 +1518,10 @@ they landed):
   (`qwen3:8b`, via `jarvis-primary.Modelfile`) reads text only. A screenshot
   sent to it is not seen, so the quickbar asks Ollama first
   (`local_model_vision`) and offers to send the words without the picture.
+  Since 2026-09-26 the PC itself reads the WORDS in such a picture
+  (`jarvis_ocr.py`, Windows' own text recognition) and adds them as
+  outside text (JARVIS-API section 36); then the quickbar sends the picture
+  without asking. That is the words only - not what the picture shows.
   The fix is BUILT but off: the second card's "Pictures" switch sends a
   picture turn to `qwen2.5vl:7b` there (`jarvis_second_card.py`, below), and
   nothing changes until that card is installed and the switch approved. The

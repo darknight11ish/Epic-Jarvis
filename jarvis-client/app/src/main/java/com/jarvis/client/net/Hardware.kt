@@ -87,7 +87,14 @@ object Hardware {
     /** While a step's card waits. The same line as every other card on the phone. */
     const val WAITING = "Waiting for your approval. " + Approvals.WHERE
 
-    data class Card(val name: String, val totalGb: Double?, val used: Boolean, val whyUnused: String?)
+    data class Card(
+        val name: String,
+        val totalGb: Double?,
+        val used: Boolean,
+        val whyUnused: String?,
+        /** Its heat, power, fan and load right now, in the PC's words (I12), or null. */
+        val healthWords: String? = null,
+    )
 
     data class Role(
         val words: String,
@@ -200,6 +207,7 @@ object Hardware {
                     totalGb = (c["total_gb"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull,
                     used = c.bool("used") ?: false,
                     whyUnused = c.str("why_unused"),
+                    healthWords = c.str("health_words"),
                 )
             },
             nowLabel = now?.str("label") ?: "Custom (your own setup)",
@@ -282,6 +290,14 @@ object Hardware {
         val size = c.totalGb?.let { ", ${Math.round(it)} GB" }.orEmpty()
         return "${c.name}$size" + if (c.used) "" else " - not used by Ollama"
     }
+
+    /**
+     * "Now: 64 °C, using 120 of 250 watts, fan at 40%, 30% busy." - every
+     * card's health, in the PC's own words (jarvis_hardware.health_words;
+     * I12, 2026-09-26), or null when the PC read none for it. The desktop
+     * shows the same line under each card.
+     */
+    fun healthLine(c: Card): String? = c.healthWords?.takeIf { it.isNotBlank() }?.let { "Now: $it" }
 
     /** The same sentence the desktop builds for a role. */
     fun roleLine(label: String, r: Role?): String? {

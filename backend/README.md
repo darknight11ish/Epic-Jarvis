@@ -10607,3 +10607,176 @@ server without IDLE.
 - A scanned PDF has no text layer: Jarvis says "no text was found".
 - PDFs and Word files are found by name and read part by part; they are not
   searched inside (a search index over them is a later idea, I41).
+
+---
+
+# Quick wins (2026-09-26): the weather from your Home Assistant, the words in a picture, both graphics cards' health
+
+Step 1 of `docs/FEASIBILITY-AUDIT-2026-09-26.md` section 3 - the "Quick
+wins" group you chose. No new patch: every change is in a module
+`apply-patches.ps1` copies whole (`jarvis_home.py`, `jarvis_briefing.py`,
+`jarvis_quick.py`, `jarvis_hardware.py`, `jarvis_reach.py`, `selftest.py`,
+`jarvis_agent.py`, `jarvis_second_card.py`, and one new one,
+`jarvis_ocr.py`). The fourth quick win, "Also on my phone", is in the phone
+app only (JARVIS-API section 21.10).
+
+## The weather in the briefing, from your own Home Assistant
+
+**What you get.** A "Weather" section at the top of the morning briefing -
+"Now 12 °C, partly cloudy.", then a line for today and one for tomorrow -
+and "what's the weather?" answered without the AI model, in both apps.
+
+**Where it comes from.** Only your own Home Assistant. It already fetches a
+forecast for its weather device (many installs have "Forecast Home", from
+met.no), so Jarvis opens no connection to any weather service: it asks
+Home Assistant, on your own network, the way it already reads a light.
+
+**What it sends, in one sentence.** Two fixed requests to your Home
+Assistant with its token - read the weather device's state, and ask its one
+`weather.get_forecasts` service for the forecast - and nothing else.
+
+**How it is kept to exactly that.** Home Assistant hands a forecast out only
+through a "service call", the same kind of address that switches a light.
+So this is NOT the switching code and never goes through its approval card:
+`jarvis_home.plan_forecast()` builds exactly those two requests, and
+`run()` refuses a weather plan whose requests are anything else - another
+service, another device, another host, an extra body field, an extra
+request (`backend/test_home_control.py` tries each). It is a read, under
+the same gate action every Home Assistant read uses (`home_read`, tier
+`auto` as shipped), so it raises **no card**. The forecast counts as
+outside text: a conversation that read it asks before note writes, like one
+that read a calendar.
+
+**Setting it up.** Nothing, if Home Assistant is already set up for Jarvis
+(`JARVIS_HOME_URL`, `JARVIS_HOME_TOKEN`, and `home_read` in
+`[tools].enabled`) and your weather device is `weather.forecast_home`. If
+it has another name (Home Assistant: Settings, Devices & services,
+Entities, search "weather"), set it on the PC - one line, then restart
+Jarvis:
+
+```powershell
+[Environment]::SetEnvironmentVariable('JARVIS_HOME_WEATHER', 'weather.forecast_home', 'User'); Write-Host 'Saved for your Windows user. Restart Jarvis to use it.'
+```
+
+(Put your own device's id in place of `weather.forecast_home`.) Without Home
+Assistant, the briefing's last line says the weather can come only from it,
+and "what's the weather?" says so too - nothing is looked up anywhere else.
+
+## Home Assistant: a user of its own for Jarvis
+
+**Why.** A token made by an ADMINISTRATOR can also use Home Assistant's
+admin-only parts: templates, the live stream of every event in the house,
+firing events, the error log. Jarvis never uses them, but a token that
+leaked could. A token made by a separate user who is **not** an
+administrator cannot. Said plainly: that user can still switch every
+device - Home Assistant gives every user that - so this makes a leak less
+bad, not harmless.
+
+**How, in Home Assistant** (words from Home Assistant's own screens; check
+them on yours):
+
+1. Your profile (bottom left): turn on **Advanced mode**.
+2. **Settings -> People -> Users -> Add user.** Name it "Jarvis", give it
+   a password, and leave **Administrator** OFF.
+3. Log out, and log in as "Jarvis".
+4. The profile page -> **Security -> Long-lived access tokens -> Create
+   token.** Name it "Jarvis PC". Copy it now - it is shown once.
+5. Log back in as yourself.
+6. On the PC, paste this one line into PowerShell. It asks for the token;
+   paste it there and press Enter. The token is typed at the question, not
+   into the command, so it does not end up in PowerShell's history file.
+   Then quit Jarvis from the tray icon and start it again:
+
+```powershell
+$t = Read-Host 'Paste the Home Assistant token for the Jarvis user, then press Enter'; $t = $t.Trim(); if (-not $t) { 'Nothing was pasted - nothing was saved.' } else { [Environment]::SetEnvironmentVariable('JARVIS_HOME_TOKEN', $t, 'User'); 'Saved for your Windows user. Quit Jarvis from the tray icon and start it again.' }; Remove-Variable t
+```
+
+   Said plainly: this keeps the token where every Home Assistant token for
+   Jarvis is kept today - a Windows setting for your user, which every
+   program you run can read ("Google Calendar, by its private link" above
+   says more). Moving these into Credential Manager is still an open task.
+
+7. Check it: `py -3 backend\selftest.py --preflight` - the Home Assistant
+   line should say "a plain user's, not an administrator's". Then delete
+   the old administrator's token (your own profile -> Security).
+
+Also copy Home Assistant's exact address into `JARVIS_HOME_URL`: new
+installs do not always use `:8123`.
+
+**The check.** The preflight's new "home" check asks Home Assistant two
+things that read nothing of the house: `GET /api/` (is the token accepted?)
+and a template of the constant text "ok", which Home Assistant renders only
+for an administrator's token. **WARN** means the token is an
+administrator's. It was read from Home Assistant's source by the research
+(`api/__init__.py`), not checked on your Home Assistant.
+
+## The words in a picture, read on this PC (`jarvis_ocr.py`, new)
+
+**What you get.** A screenshot (Alt+Shift+S on the PC) or a photo from the
+phone, sent to Jarvis while your model cannot see pictures, is no longer
+ignored: the PC reads the WORDS in it with Windows' own text recognition
+and gives them to the model. The layout and anything else in the picture
+are not seen - only the words.
+
+**What it sends, in one sentence.** Nothing leaves the PC: the picture goes
+to Windows' own text recognition on this PC (Windows PowerShell, started by
+its full path with a fixed script, the picture on standard input - never
+written to a file), and the words go to the model on this PC.
+
+**Why it is safe to act on.** The words are marked as OUTSIDE TEXT by the
+backend itself - never by the app, and never merged into your own typed
+words. So, exactly as after reading an email: a note write in that
+conversation asks first, a card says "Proposed after Jarvis read: the words
+in your picture", planted instructions are flagged, and nothing from the
+picture is ever learned as a fact. At most 4,500 characters (about 1,500
+tokens) are sent; the model is told how much was left out.
+
+**Setting it up.** Nothing, usually: Windows 10 and 11 include text
+recognition for your display language. If it is missing, the first picture's
+answer says the words could not be read, and from then until Jarvis
+restarts the apps treat pictures as before (the "can't see pictures"
+notice on the PC, no Photo button on the phone). To fix it, add your language
+again with its optional features in Settings -> Time & language -> Language
+& region (the words of Windows' screens, not checked on your PC), then
+restart Jarvis. No download by Jarvis, no Python package, nothing to switch
+on.
+
+## Both graphics cards' health
+
+Every card's heat, power, fan and load, and "It is slowing itself down
+because it is hot." when the driver says so - under each card in both
+apps' Hardware screens, and in the desktop's widget, one line per card once
+there are two. The desktop used to read only the FIRST line nvidia-smi
+printed, so the RTX 2060 would never have shown. No new notification. Read
+on this PC only (`jarvis_hardware.HEALTH_FIELDS`; an older driver's field
+names are tried next).
+
+## Test it
+
+```
+python3 backend/test_home_control.py
+python3 backend/test_briefing.py
+python3 backend/test_selftest_preflight.py
+python3 backend/test_hardware.py
+python3 backend/test_picture_text.py
+```
+
+## Not checked, said plainly
+
+- **No real Home Assistant was used.** The forecast's shape (`service_response`
+  keyed by the device) and the admin-only template are from Home Assistant's
+  documentation and source as the research read them; the tests use made-up
+  answers in that shape. An older Home Assistant that cannot hand out a
+  forecast this way gets "Not read: ... an older Home Assistant cannot hand
+  out forecasts this way".
+- **The forecast's dates** are taken as Home Assistant writes them
+  (`2026-09-26T...`), not converted between time zones.
+- **nvidia-smi's health field names** (`clocks_event_reasons.*`) are from
+  NVIDIA's documentation, not checked on your driver.
+- **Windows' text recognition was not run.** The PowerShell script
+  (`jarvis_ocr._SCRIPT`) follows the well-known pattern for calling it from
+  Windows PowerShell 5.1, but there is no Windows here: everything around
+  it is tested with a stand-in. The first real screenshot will tell. If it
+  fails, the model is told plainly that the words could not be read.
+- **A follow-up question about the same picture** does not have its words:
+  the apps re-send the conversation's words, never the picture.

@@ -1578,7 +1578,24 @@ def status() -> dict:
         # How the last approval card ended (AP-6): {feature, outcome, why,
         # at}, or null when none has ended since Jarvis started.
         "last": last,
+        # Whether this PC reads the WORDS in a picture when the model
+        # answering cannot see it (jarvis_ocr.py, 2026-09-26): both apps
+        # already read this route before a picture is sent.
+        "picture_text": _picture_text(),
     }
+
+
+def _picture_text() -> dict:
+    """{"available", "engine", "why"} from jarvis_ocr.status(); "not
+    available" when that module is not here. Never raises."""
+    try:
+        import jarvis_ocr
+        st = jarvis_ocr.status()
+        return {"available": st.get("available") is True, "engine": str(st.get("engine") or ""),
+                "why": str(st.get("why") or "")}
+    except Exception:
+        return {"available": False, "engine": "",
+                "why": "The part of Jarvis that reads pictures (jarvis_ocr.py) is not installed."}
 
 
 # --------------------------------------------------------------------------

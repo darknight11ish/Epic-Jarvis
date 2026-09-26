@@ -281,6 +281,12 @@ def reg_text(adapters) -> str:
 
 SMI_2080S = f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6980, 7.5, Enabled\n"
 SMI_PAIR = (SMI_2080S + f"1, {U_2060}, NVIDIA GeForce RTX 2060, 12288, 11650, 7.5, Disabled\n")
+#: The health query's answer (jarvis_hardware.HEALTH_FIELDS), made up in
+#: nvidia-smi's own format: the 2080 SUPER busy and warm; the 2060 idle, its
+#: fan stopped, which some cards report as "[N/A]".
+HEALTH_2080S = f"0, {U_2080S}, 67, 182.40, 250.00, 48, 91, Not Active, Not Active\n"
+HEALTH_PAIR = (f"0, {U_2080S}, 84, 247.10, 250.00, 78, 99, Active, Not Active\n"
+               f"1, {U_2060}, 38, 9.85, 184.00, [N/A], 0, Not Active, Not Active\n")
 LOG_2080S = {"uuid": U_2080S, "library": "CUDA", "compute": "7.5",
              "name": "NVIDIA GeForce RTX 2080 SUPER", "total": "8.0 GiB",
              "available": "6.9 GiB"}
@@ -306,8 +312,9 @@ class World:
 
     def __init__(self, *, smi="", log=None, reg=None, installed=("jarvis-primary",),
                  loaded=(), current="jarvis-primary", windows=True, user_env=None,
-                 shows=None, ollama_up=True, spawn_now=True, gate_waiting=()):
+                 shows=None, ollama_up=True, spawn_now=True, gate_waiting=(), health=""):
         self.smi, self.log, self.reg = smi, log, reg
+        self.health = health
         self.installed, self.loaded = list(installed), [dict(x) for x in loaded]
         self.current, self.windows = current, windows
         self.user_env = dict(user_env or {})
@@ -322,6 +329,8 @@ class World:
         q = args[0] if args else ""
         if q == f"--query-gpu={CP.FIELDS_FULL}":
             return self.smi or None
+        if q == f"--query-gpu={H.HEALTH_FIELDS}":
+            return self.health or None
         return None
 
     def http_json(self, url, payload=None, timeout=2.0):
@@ -423,13 +432,13 @@ def status_cases() -> dict:
     # The owner's PC today: one 2080 SUPER, jarvis-primary (Qwen 3 8B, 16K),
     # the two settings MODEL-TOPOLOGY asks for. Nothing chosen.
     with World(smi=SMI_2080S, log=ollama_log([LOG_2080S]), reg=reg_text([REG_2080S, REG_UHD]),
-               user_env=TODAY_ENV,
+               user_env=TODAY_ENV, health=HEALTH_2080S,
                loaded=[{"name": "jarvis-primary:latest", "size": 6_620_000_000,
                         "size_vram": 6_020_000_000, "context_length": 16384}]):
         out["today_one_card"] = H.status()
     # The planned pair: the 2060 12 GB in, monitor on the 2080 SUPER.
     with World(smi=SMI_PAIR, log=ollama_log([LOG_2080S, LOG_2060]),
-               reg=reg_text([REG_2080S, REG_2060]), user_env=TODAY_ENV):
+               reg=reg_text([REG_2080S, REG_2060]), user_env=TODAY_ENV, health=HEALTH_PAIR):
         out["planned_pair"] = H.status()
     # One card, "Fastest answers" chosen: qwen3:4b is not downloaded yet.
     with World(smi=SMI_2080S, log=ollama_log([LOG_2080S]), reg=reg_text([REG_2080S]),

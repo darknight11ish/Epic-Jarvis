@@ -46,9 +46,20 @@ WHAT IS IN IT - only what Jarvis can already read on this PC
     was read (`read`), exactly as calendar titles do. They are lines
     (`items`), never the summary, so "Hide memory lists and chat history"
     and App lock hide them with the rest; the summary keeps the count.
-  * Weather and news: NOT AVAILABLE. No provider has been chosen, so the
-    briefing says so in a line of its own and fetches nothing from the
-    internet.
+  * The weather (the owner's choice, 2026-09-26, the feasibility audit's
+    I75): only from the owner's OWN Home Assistant, which already fetches a
+    forecast for its weather device - so Jarvis opens no connection to any
+    weather service. Only when Home Assistant is set up for Jarvis
+    (JARVIS_HOME_URL, `home_read` in [tools].enabled) and the gate lets
+    `home_read` run without a person (tier "auto" or "notify", as shipped).
+    jarvis_home.plan_forecast(): two fixed requests to ONE weather device
+    (JARVIS_HOME_WEATHER, or HA's usual weather.forecast_home), never a
+    service call through home_control. The forecast is OUTSIDE text, so a
+    briefing that shows it says Home Assistant was read (`read`). Adds no
+    card, no setting and nothing that speaks unasked: it is one more
+    section of the same briefing.
+  * News: NOT AVAILABLE. No provider has been chosen, so the briefing says
+    so in a line of its own and fetches nothing from the internet.
 
 WHERE IT SHOWS
 Both apps: a notification with only "Jarvis: your morning briefing is
@@ -114,8 +125,24 @@ TITLE = "Morning briefing"
 #: All a lock screen, a Windows toast or a phone notification ever shows.
 LOCK_SCREEN = "Jarvis: your morning briefing is ready."
 
-OUTSIDE_LINE = ("Weather and news: not available. No provider has been chosen, "
-                "so Jarvis fetches nothing from the internet for this.")
+#: The last line of a briefing when the weather is NOT in it (both apps
+#: show this line from an older PC that sends no `outside_line`).
+OUTSIDE_LINE = ("Weather and news: not available. The weather can come only from your own "
+                "Home Assistant, and no news provider has been chosen, so Jarvis fetches "
+                "nothing from the internet for this.")
+#: ... and when the weather IS in it (from the owner's own Home Assistant).
+NEWS_LINE = ("News: not available. No news provider has been chosen, so Jarvis fetches "
+             "nothing from the internet for this.")
+
+#: The weather's line under "What it includes" (sources()), by state.
+WEATHER_ON = "Included: the weather, from your own Home Assistant ({entity})."
+WEATHER_OFF = ("Not included: the weather. It comes only from your own Home Assistant, which "
+               "is not set up for Jarvis on this PC.")
+WEATHER_ASKS = ("Not included: the weather. Your settings ask for a yes each time Jarvis "
+                "reads Home Assistant, and a briefing does not raise a card for that.")
+WEATHER_TITLE = "Weather"
+WEATHER_ACTION = "home_read"
+WEATHER_TOOL = "home_read"
 
 EMPTY = "No briefing yet. Say \"brief me now\", or set one up to arrive each morning."
 
@@ -127,13 +154,14 @@ CARD_NOTE = (
     "  - how many approval cards are waiting",
     "  - how many unread emails you have and who the newest are from (the number "
     "only, if you turned that off), if email is set up",
-    "Weather and news are not included: no provider has been chosen.",
+    "  - the weather, from your own Home Assistant, if it is set up for Jarvis",
+    "News is not included: no provider has been chosen.",
     "It only reads. It changes nothing and approves nothing.",
     "",
-    "It runs on this PC, by this PC's clock. Reading your calendar and email is a "
-    "request to your own calendar and mail servers, the same as asking Jarvis to "
-    "read them, under the same settings. Nothing else is sent anywhere, and nothing "
-    "goes to the AI model.",
+    "It runs on this PC, by this PC's clock. Reading your calendar, email and Home "
+    "Assistant is a request to your own calendar, mail server and Home Assistant, the "
+    "same as asking Jarvis to read them, under the same settings. Nothing else is sent "
+    "anywhere, and nothing goes to the AI model.",
     "The apps say only \"" + LOCK_SCREEN + "\"; the briefing is in the app. It is "
     "read aloud only when you ask (\"read my briefing\").",
 )
@@ -243,6 +271,7 @@ class Deps:
     calendar_fetch: Optional[Callable] = None     # jarvis_calendar.run's `fetch`
     email_search: Optional[Callable] = None       # jarvis_email.count's `search`
     email_senders: Optional[Callable] = None      # jarvis_email.senders's `fetch`
+    home_fetch: Optional[Callable] = None         # jarvis_home.run's `fetch` (the weather)
     senders_on: Callable[[], bool] = lambda: senders_setting()["on"]
     publish: Callable[[str, dict], None] = _publish
     deadline: float = READ_DEADLINE
@@ -335,8 +364,135 @@ def sources(deps: Optional[Deps] = None) -> dict:
                         _calendar_words()),
         "email": _email_source(one(EMAIL_TOOL, EMAIL_ACTION, "JARVIS_IMAP_HOST",
                                    "how many unread emails you have"), deps),
-        "weather": {"state": "not_available", "said": OUTSIDE_LINE},
+        "weather": _weather_source(deps, enabled),
     }
+
+
+def _weather_source(deps: Deps, enabled: set) -> dict:
+    """The weather's line under "What it includes": "on" only when Home
+    Assistant is set up for Jarvis and its reads need no person."""
+    if WEATHER_TOOL not in enabled or not _env(deps, "JARVIS_HOME_URL"):
+        return {"state": "off", "said": WEATHER_OFF}
+    if deps.tier_of(WEATHER_ACTION) not in ("auto", "notify"):
+        return {"state": "asks", "said": WEATHER_ASKS}
+    try:
+        import jarvis_home as HOME
+        entity = HOME.weather_entity()
+    except Exception:
+        entity = "your weather device"
+    return {"state": "on", "said": WEATHER_ON.format(entity=entity)}
+
+
+# --------------------------------------------------------------------------
+#   The weather - from the owner's own Home Assistant, read-only
+# --------------------------------------------------------------------------
+
+def _deg(v, unit: str) -> str:
+    return f"{int(round(v))} {unit}" if unit != "°" else f"{int(round(v))}°"
+
+
+def weather_day_line(label: str, d: dict, unit: str) -> str:
+    """"Today: rain, 9 to 14 °C, 80% chance of rain" - from the numbers and
+    HA's known conditions only, never a free-text field."""
+    bits = []
+    if d.get("condition"):
+        bits.append(d["condition"])
+    hi, lo = d.get("high"), d.get("low")
+    if hi is not None and lo is not None:
+        bits.append(f"{int(round(lo))} to {_deg(hi, unit)}")
+    elif hi is not None:
+        bits.append(f"up to {_deg(hi, unit)}")
+    if d.get("rain_chance") is not None:
+        bits.append(f"{d['rain_chance']}% chance of rain")
+    return f"{label}: " + (", ".join(bits) if bits else "no forecast given")
+
+
+def weather_section(out: dict, now: float) -> dict:
+    """jarvis_home.run()'s answer for a forecast plan, as the briefing's
+    Weather section: "Now 12 °C, cloudy." and a line for today and one for
+    tomorrow (the first two days given, when neither date matches)."""
+    if not out.get("ok"):
+        why = str(out.get("reason") or "Home Assistant did not answer")
+        return _section("weather", WEATHER_TITLE, "failed",
+                        f"Not read: {_clean(why, 200).rstrip('.')}.")
+    unit = out.get("unit") or "°"
+    cur = out.get("now") or {}
+    parts = []
+    if cur.get("temp") is not None:
+        parts.append(_deg(cur["temp"], unit))
+    if cur.get("condition"):
+        parts.append(cur["condition"])
+    summary = ("Now " + ", ".join(parts) + ".") if parts else "The forecast from your Home Assistant."
+    lt = time.localtime(now)
+    today = f"{lt.tm_year:04d}-{lt.tm_mon:02d}-{lt.tm_mday:02d}"
+    y, mo, d = S._add_days(lt.tm_year, lt.tm_mon, lt.tm_mday, 1)
+    tomorrow = f"{y:04d}-{mo:02d}-{d:02d}"
+    days = [x for x in (out.get("days") or []) if isinstance(x, dict)]
+    items = []
+    for label, date in (("Today", today), ("Tomorrow", tomorrow)):
+        hit = next((x for x in days if x.get("date") == date), None)
+        if hit is not None:
+            items.append(weather_day_line(label, hit, unit))
+    if not items:
+        items = [weather_day_line(x.get("date") or "?", x, unit) for x in days[:2]]
+    if not items and not parts:
+        return _section("weather", WEATHER_TITLE, "empty",
+                        "Your Home Assistant gave no forecast.")
+    return _section("weather", WEATHER_TITLE, "ok", summary, items)
+
+
+def _read_weather(now: float, deps: Deps, purpose: str = "the morning briefing") -> dict:
+    """One read of the owner's own Home Assistant's forecast, through the
+    gate as `home_read` - the same action every Home Assistant read uses -
+    and only when it lets it run without a person."""
+    import jarvis_home as HOME
+    p = HOME.plan_forecast()
+    if p.reason_empty:
+        return _section("weather", WEATHER_TITLE, "failed",
+                        f"Not read: {_clean(p.reason_empty, 200).rstrip('.')}.")
+    text = HOME.describe(p)
+    try:
+        v = deps.gate(WEATHER_ACTION, {"text": text, "for": purpose}, text)
+    except Exception:
+        v = None
+    if getattr(v, "allowed", False) is not True:
+        return _section("weather", WEATHER_TITLE, "refused",
+                        "Not read: the approval gate did not let this read run.")
+    return weather_section(HOME.run(p, fetch=deps.home_fetch, approved=True), now)
+
+
+def weather_now(*, now: Optional[float] = None, deps: Optional[Deps] = None) -> dict:
+    """"What's the weather?" - answered without the model (jarvis_quick):
+    {"text", "read": ["home_read"] | []}. The same read, the same gate and
+    the same words as the briefing's Weather section."""
+    deps = deps or Deps()
+    now = time.time() if now is None else float(now)
+    src = _weather_source(deps, deps.tools_enabled())
+    if src["state"] != "on":
+        return {"text": WEATHER_NOT_HERE if src["state"] == "off" else WEATHER_ASKS_NOW,
+                "read": []}
+    # The briefing's own deadline: a Home Assistant that does not answer
+    # must not hold the chat answer for its full timeouts.
+    thread, box = _in_thread(_read_weather, now, deps, "\"what's the weather?\"")
+    thread.join(deps.deadline)
+    if thread.is_alive():
+        return {"text": "Jarvis could not read the weather: your Home Assistant did not answer "
+                        "in time.", "read": []}
+    s = box.get("out") or _section("weather", WEATHER_TITLE, "failed",
+                                   f"Not read: something went wrong ({box.get('error', 'unknown')}).")
+    if s["state"] != "ok":
+        return {"text": f"Jarvis could not read the weather. {s['summary']}", "read": []}
+    lines = [s["summary"]] + [i + "." for i in s["items"]]
+    return {"text": " ".join(lines) + " (From your own Home Assistant.)",
+            "read": [WEATHER_TOOL]}
+
+
+WEATHER_NOT_HERE = ("Jarvis has no weather to tell you: it comes only from your own Home "
+                    "Assistant, which is not set up for Jarvis on this PC, and Jarvis looks "
+                    "nothing up on the internet for it.")
+WEATHER_ASKS_NOW = ("The weather was not read: your settings ask for a yes each time Jarvis "
+                    "reads Home Assistant (\"What asks first\"), and a quick answer does not "
+                    "raise a card for that.")
 
 
 def _email_source(src: dict, deps: Deps) -> dict:
@@ -624,7 +780,7 @@ def render(b: dict) -> str:
         lines.append(f"{s['title']}: {s['summary']}")
         lines.extend(f"- {i}" for i in s["items"])
     if b.get("source") != "missed":
-        lines.append(OUTSIDE_LINE)
+        lines.append(b.get("outside_line") or OUTSIDE_LINE)
     for n in b.get("not_included") or []:
         lines.append(n)
     return "\n".join(lines)
@@ -648,19 +804,25 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
         reads["calendar"] = _in_thread(_read_calendar, now, deps)
     if src["email"]["state"] == "on":
         reads["email"] = _in_thread(_read_email, deps)
+    if src["weather"]["state"] == "on":
+        reads["weather"] = _in_thread(_read_weather, now, deps)
     sections = []
     not_included = []
     if src["calendar"]["state"] != "on":
         not_included.append(src["calendar"]["said"])
     if src["email"]["state"] != "on" and src["email"]["state"] != "off":
         not_included.append(src["email"]["said"])
+    # Weather left out because it would need a person: said, like the
+    # calendar's. Not set up at all: the last line (OUTSIDE_LINE) says so.
+    if src["weather"]["state"] == "asks":
+        not_included.append(src["weather"]["said"])
     today = _today_section(sched, now)
     todo = _todo_section(sched, now)
     approvals = _approvals_section(deps)
     got = {}
     for key, (thread, box) in reads.items():
         thread.join(max(0.0, deps.deadline - (time.time() - started)))
-        title = "Calendar" if key == "calendar" else "Email"
+        title = {"calendar": "Calendar", "weather": WEATHER_TITLE}.get(key, "Email")
         if thread.is_alive():
             got[key] = _section(key, title, "slow", "Not read: it did not answer in time.")
         elif "out" in box:
@@ -668,6 +830,8 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
         else:
             got[key] = _section(key, title, "failed", "Not read: something went wrong "
                                                       f"({box.get('error', 'unknown')}).")
+    if "weather" in got:
+        sections.append(got["weather"])
     if "calendar" in got:
         sections.append(got["calendar"])
     sections.extend([today, todo, approvals])
@@ -692,7 +856,14 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
         # sender wrote), under the email tool's name.
         "read": ([CALENDAR_ACTION] if any(s["key"] == "calendar" and s["items"]
                                           for s in sections) else [])
-        + ([EMAIL_TOOL] if any(s["key"] == "email" and s["items"] for s in sections) else []),
+        + ([EMAIL_TOOL] if any(s["key"] == "email" and s["items"] for s in sections) else [])
+        # The forecast is outside text too (the feasibility audit's I75
+        # guardrail): Home Assistant says whatever its weather device says.
+        + ([WEATHER_TOOL] if any(s["key"] == "weather" and s["state"] == "ok"
+                                 for s in sections) else []),
+        # The last line, from this PC (both apps show it; an older PC sends
+        # none and the apps show their own copy of OUTSIDE_LINE).
+        "outside_line": NEWS_LINE if src["weather"]["state"] == "on" else OUTSIDE_LINE,
         "lock_screen": LOCK_SCREEN,
     }
     b["text"] = render(b)
