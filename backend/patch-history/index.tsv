@@ -64,6 +64,7 @@ web-search.patch	web-search/dcfdbaf.patch	dcfdbafdf25c0944179e6103990326786c11de
 web-search.patch	web-search/7c82046.patch	7c820464c4b614c3305ce54d126772b7e6e09d09	2026-09-25T06:33:24+00:00	Web search: Exa replaces Brave (SearXNG, DuckDuckGo, Exa, Tavily)
 web-search.patch	web-search/4312b46.patch	4312b4686e51299212f51077097d4a49e380ced2	2026-09-25T06:02:46+00:00	Web search in both apps: Settings (desktop) and Mind (phone); docs
 web-search.patch	web-search/22cf8a5.patch	22cf8a5d8dd1f89daab77e7ab81062886118a66b	2026-09-25T05:46:04+00:00	Web search: jarvis_search.py (four providers), the web_search tool, web-search.patch
+wellbeing.patch	wellbeing/31ad726.patch	31ad7269422c87f4eacbae4efa8593cb535f2320	2026-09-26T10:46:58+00:00	Add the crisis help line: a word check, a fixed US help message, never learned
 wiki.patch	wiki/9aaab08.patch	9aaab08a9cdea55259a23a50ee9b1b2e990921fd	2026-09-24T03:29:14+00:00	Wiki builder: jarvis_wiki.py, wiki.patch, and its tests
 rebuilt-patches/approval-notice.patch	rebuilt-patches/approval-notice/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
 rebuilt-patches/bitemporal.patch	rebuilt-patches/bitemporal/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild

@@ -159,6 +159,8 @@ SHIPPED = (
     "jarvis_mcp.py",
     # the crisis help line: the word check, the fixed US help message, the note to the model
     "jarvis_wellbeing.py",
+    # the smartwatch notifications setting (watch-notifications.patch)
+    "jarvis_watch_notify.py",
 )
 
 

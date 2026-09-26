@@ -5,15 +5,24 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Every notification Jarvis posts is local only. Android copies a phone's
- * notifications to a paired smartwatch (and other bridged devices) by
- * default, which would put approval titles, reminders and "tell me when"
- * alerts on a device this app knows nothing about. `setLocalOnly(true)`
- * keeps each one on this phone (2026-09-26).
+ * Every notification Jarvis posts stays on this phone unless the owner
+ * turned on "Show notifications on a compatible watch" (Brain, off by
+ * default; [com.jarvis.client.net.WatchNotify], the owner's decision,
+ * 2026-09-25, reconfirmed 2026-09-27, Q17). Android copies a phone's
+ * notifications to a paired smartwatch by default, which would put approval
+ * titles, reminders and "tell me when" alerts on a device this app knows
+ * nothing about unless something refuses it. `setLocalOnly(true)` refuses
+ * it (2026-09-26); since the setting was added, that call reads
+ * `!JarvisRuntime.watchNotificationsAllowed()` instead - `true` while the
+ * setting is off (the default and every unopened app's starting state),
+ * `false` only once the PC has confirmed the owner turned it on.
  *
  * Reads the source, like the other contract tests: every
- * `NotificationCompat.Builder(` in the app must reach `.setLocalOnly(true)`
- * before its `.build()`.
+ * `NotificationCompat.Builder(` in the app must reach a `.setLocalOnly(...)`
+ * whose argument is exactly `true` or, since the setting, the negation of
+ * [com.jarvis.client.JarvisRuntime.watchNotificationsAllowed] - never a bare
+ * variable this test cannot trace back to that one source of truth - before
+ * its `.build()`.
  */
 class NotificationsStayLocalTest {
 
@@ -37,8 +46,9 @@ class NotificationsStayLocalTest {
                 val end = text.indexOf(".build()", at).let { if (it < 0) text.length else it }
                 val chain = text.substring(at, end)
                 assertTrue(
-                    "${file.name}: a notification is built without setLocalOnly(true)",
-                    ".setLocalOnly(true)" in chain,
+                    "${file.name}: a notification is built without a traceable setLocalOnly",
+                    ".setLocalOnly(true)" in chain ||
+                        ".setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())" in chain,
                 )
                 at = text.indexOf("NotificationCompat.Builder(", at + 1)
             }

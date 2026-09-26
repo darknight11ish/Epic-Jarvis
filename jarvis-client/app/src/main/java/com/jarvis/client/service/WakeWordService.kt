@@ -640,9 +640,10 @@ class WakeWordService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            // Never copied to a paired watch or other device (Android bridges
-            // notifications by default): what Jarvis says stays on this phone.
-            .setLocalOnly(true)
+            // Stays on this phone unless the owner turned on "Show
+            // notifications on a compatible watch" (Brain, off by default) -
+            // Android bridges notifications to a paired device otherwise.
+            .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.wake_listening_title))
             .setContentText(text)

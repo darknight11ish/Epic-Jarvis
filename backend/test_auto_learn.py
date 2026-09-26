@@ -1524,10 +1524,14 @@ def t_the_chat_route_records_before_it_learns():
     try:
         body = {"messages": [{"role": "user", "content": "hi", "provenance": "typed"}],
                 "conversation_id": CID, "device": "phone"}
+        # games-temporary.patch: the snippet calls _temporary_chat(body) now,
+        # not body.get("temporary") directly - the real module always has
+        # that name in scope; this isolated fragment needs it in `env` too.
         env = {"_activity": lambda *a: None, "MEMORY": True, "jarvis_side_memory": False,
                "LEARNER": types.SimpleNamespace(
                    offer=lambda m, origin="unknown", conversation_id=None:
                    order.append(("learn", m, origin, conversation_id))),
+               "_temporary_chat": lambda b: isinstance(b, dict) and b.get("temporary") is True,
                "body": body, "route_header": {"lane": "qwen3:8b"}, "lane": "qwen3:8b",
                "_history": {"turn": None, "at": 1.0}}
         exec(snippet, env)

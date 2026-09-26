@@ -243,6 +243,10 @@
       "title": "Jarvis wants to change your profile"
     },
     {
+      "action": "watch_notifications_enable",
+      "title": "Jarvis wants to let your notifications show on a smartwatch too"
+    },
+    {
       "action": "web_research",
       "title": "Jarvis wants to search GitHub"
     },

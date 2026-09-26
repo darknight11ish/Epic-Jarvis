@@ -682,6 +682,29 @@ Phone: "Temporary chat" above Home's chat box, "End" to leave it
 the voice loop's questions go temporary too. The HUD page (the backend's own
 `jarvis_hud.html`) has no temporary chat.
 
+**Games and role-play run in a temporary chat automatically** (the owner's
+decision, 2026-09-27; `backend/games-temporary.patch`,
+`jarvis_intake.game_or_roleplay`). Neither app sends `"temporary": true` for
+this - it is not a setting and raises no card, the same way "From now on,
+..." applies at once (CLAUDE.md). The backend itself notices: once the
+owner's own words, anywhere in the conversation, ask to play a game or
+start a role-play ("let's play a game", "let's roleplay", "pretend you
+are ...", a text adventure, a D&D-style campaign, "be my dungeon master"),
+`_temporary_chat(body)` returns true for the rest of that conversation even
+though the request never set the flag - so it goes through the exact same
+gate above: no recall, no "Remember:", not kept in chat history, not
+learned from. Only the owner's own messages are read, in English, no model
+and no network - the model's own words playing along never turn this on or
+off, and a game does not "end" partway through a conversation once it has
+started. `X-Jarvis-Route`'s `"temporary": true` and the fixed system line
+appear exactly as for a manually-started one, so an app that shows a
+temporary-chat marker shows it here too, unprompted. The problem this
+solves: with automatic learning on by default (2026-09-24), a made-up
+character or scenario could otherwise be filed as a fact about the owner.
+Without `jarvis_intake.py`, or on any error, nothing is detected and chat
+works exactly as before this patch (fail open, not fail safe - the same
+choice `schedule_command()` makes for a reminder).
+
 **"Used in this answer"** (the owner's decision, 2026-09-25). Both apps
 read `injected_ids` - its `"mem:<id>"` entries, as numbers; `"fact:<n>"`
 (the older word list) has no id and is not listed - and under an answer
@@ -6251,3 +6274,60 @@ nothing here approves or acts - it only adds words to an answer, and no
 card is ever raised for it. `backend/test_wellbeing.py` proves the ordering,
 the no-tools behaviour, the failure path, the repeat line, and the
 learner exclusion, with no model and no network.
+
+## 39. Smartwatch notifications (added 2026-09-27)
+
+The owner's decision (`CLAUDE.md`, 2026-09-25, the competitiveness audit;
+reconfirmed 2026-09-27, Q17): "Smartwatch: every notification stays on the
+phone by default, with a setting to let them all show on a compatible watch
+(turning it on raises a card, turning it off is instant)."
+
+**What this is not.** There is no Jarvis watch app, and none is built here
+- the competitiveness audit says plainly that one would sync through
+Google's own servers (rule 1). Android already copies a phone's
+notifications to a paired, compatible companion device on its own; every
+Jarvis notification builder already refuses that
+(`NotificationCompat.Builder.setLocalOnly(true)`, a 2026-09-26 fix,
+`NotificationsStayLocalTest.kt`). This setting is the one place that
+`true` can now come from `false` instead - nothing more.
+
+**`GET /api/notifications/watch`** - `{"enabled", "waiting", "last", "why"}`.
+`enabled` is the setting (off unless a file says otherwise - the owner's
+default, fail closed, the same shape as automatic learning's, §19). `why` is
+the PC's own sentence when its settings file is damaged (then also read as
+off). `waiting` and `last` are the approval card's own state, the same
+shape as every switch of this kind.
+
+**`POST /api/notifications/watch {"enabled": bool}`** - ON: **202**
+`{"ok": true, "waiting": true, "enabled": false, "message"}` while one
+approval card, action `watch_notifications_enable`, is up; it turns on only
+if that card is approved, on either app. A second ON while one waits: 202,
+no second card. OFF: **200** at once, never a card, and withdraws a waiting
+ON. A tier other than `ask` in `jarvis-framework.toml`: **503** (the module
+refuses to let a config line become the owner's yes, like every switch of
+this shape). The route is wrapped round the running server's handler at
+start-up (`jarvis_watch_notify.install`), like folders (§35) and stop
+everything (§28), rather than added inline - `GET /api/version` carries no
+capability flag for it; a PC without `watch-notifications.patch` answers
+**404**, which the phone reads as "not on this PC's version of Jarvis yet."
+
+**Phone only.** A smartwatch pairs with a phone, never with a Windows PC -
+there is nothing on the desktop for this to mean, so `tools/check_parity.py`
+classifies the route `phone-only` and `docs/ARCHITECTURE.md` §8 says why.
+The setting still lives on the PC, the same as every other approval-card
+switch here, so a stolen or borrowed phone cannot turn it on by itself; only
+the phone ever reads or writes it. The phone keeps a CACHE of the PC's last
+answer (`ClientSettings.watchNotifications`, off unless the PC has said
+otherwise), read by every notification builder
+(`JarvisRuntime.watchNotificationsAllowed()`) so a notification can be built
+without a network round trip; it is refreshed whenever Brain's
+"Notifications" section is read or the switch is changed, and unknown or
+stale reads as off - the safe direction, since staying on the phone leaks
+nothing and showing on a watch that never asked would.
+
+**In the apps.** Brain, "Notifications" (`WatchNotifyPlate.kt`): one switch,
+"Show notifications on a compatible watch", off by default. ON is held
+while the link is down or stale (rule 4) and reads "Waiting for your
+approval" while the card is in the queue - found by its action, so a card
+raised on the desktop counts too. OFF always goes. Desktop: none - see
+`docs/ARCHITECTURE.md` §8, "On the phone, kept off the desktop".

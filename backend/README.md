@@ -126,6 +126,8 @@ on a throwaway copy instead.
 | `manner.patch` | `jarvis_hud.py` | **How Jarvis talks: warm and brief, or plain** (the owner's decision, 2026-09-25). Adds `GET` and `POST /api/manner` - one change at a time, **no approval card either way** (it changes only how answers are worded). Its context is `web-search.patch`'s route blocks. Needs `jarvis_manner.py` - see "How Jarvis talks, and errors in plain words", at the very end. |
 | `documents.patch` | `jarvis_hud.py` | **Folders Jarvis may look in** (the owner's decisions of 2026-09-26: asking about PDFs and Word files, and the Notion import). One call at start-up, `jarvis_documents.install(Handler, ...)`, answers `GET /api/folders` and `POST /api/folders/add` (this PC only, one approval card), `/remove` (at once) and `/import` (a Notion export, this PC only). Last in the list; its context is `stop-all.patch`'s banner lines. Needs `jarvis_documents.py` - see "Documents & email", at the very end. |
 | `wellbeing.patch` | `jarvis_hud.py` | **The crisis help line's one cosmetic flag** (the owner's decision of 2026-09-27). Sets `route_header["wellbeing"] = "crisis"` on `/api/chat` so both apps can draw a calm panel; the safety behaviour itself (no tools, the note, the help message) is in `jarvis_agent.py` and `jarvis_intake.py`, not here. **Unlike every other patch in this table, not verified against a real `jarvis_hud.py`** - see "The crisis help line", at the very end, before relying on it. Needs `jarvis_wellbeing.py`. |
+| `games-temporary.patch` | `jarvis_hud.py` | **Games and role-play run in a temporary chat automatically** (the owner's decision, 2026-09-27; CLAUDE.md, `docs/OWNER-QUESTIONS-2026-09-27.md` Q19). No new route: `_temporary_chat(body)` now also returns true once the owner's own words, anywhere in the conversation, start a game or role-play (`jarvis_intake.game_or_roleplay`), and the two lines in the chat turn's `finally` block that used to read `body.get("temporary")` directly now go through that same function - so a detected game gets no recall, no "Remember:", no chat history and no learning, exactly like a manually-started temporary chat, with no card and no setting. Last in the list; its context is `temporary-chat.patch`'s `_temporary_chat()` function and the two `finally`-block lines. Needs `jarvis_intake.py` (already shipped for `memory-intake.patch`) - without it, or on any error, nothing is detected and chat works exactly as before this patch. See "Games and role-play", at the very end. |
+| `watch-notifications.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Smartwatch notifications, off by default** (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). Adds `GET`/`POST /api/notifications/watch` - ON is one approval card (`watch_notifications_enable`), OFF is instant - wrapped round the running server's handler at start-up, like `documents.patch`, rather than an inline route; `jarvis_gate.py` gains the action on `_NO_RULE_FROM_DENIAL` and `_RISK` (a denial of this switch's card proposes no standing rule, and the notice says it stays on this PC). Android's own, already-built-in notification bridging does the actual copying to a paired watch; there is no Jarvis watch app. Last in the list; its `jarvis_hud.py` context is `documents.patch`'s banner lines, and its `jarvis_gate.py` context is `asks-first.patch`'s `_NO_RULE_FROM_DENIAL` and `_RISK` additions. Needs `jarvis_watch_notify.py` - without it, or on any error, the banner says so and the route is not there. See "Smartwatch notifications", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -11504,3 +11506,188 @@ itself never opens a file, a socket or a log.
   the owner's PC.
 - **`GET /api/wellbeing` is proposed, not confirmed wired** - the same
   caveat as the route flag, for the same reason (see `wellbeing.patch`).
+
+# Games and role-play: `games-temporary.patch` (2026-09-27)
+
+The owner's decision, 2026-09-27 (CLAUDE.md; `docs/OWNER-QUESTIONS-2026-09-27.md`
+Q19): "Games and role-play run in a temporary chat automatically" - the
+recommended option, over leaving it to the owner to switch on temporary chat
+by hand. The problem: with automatic learning on by default (2026-09-24), a
+game or role-play session - invented characters, made-up scenarios - could
+get mistakenly learned as real facts about the owner.
+
+## What it adds
+
+No new route, and no setting. `temporary-chat.patch`'s own
+`_temporary_chat(body)` (see "Temporary chat and Used in this answer", above)
+now also returns true once `jarvis_intake.game_or_roleplay()` finds the owner
+asked to play a game or start a role-play anywhere in the conversation - a
+text adventure, a D&D-style campaign, "let's roleplay", "pretend you are
+...", "be my dungeon master" and the like, matched on the owner's own words
+only, in English, no model and no network (the same size of check as
+`schedule_command()` next to it, not a second copy of `jarvis_sensitive.py`'s
+multi-layer machinery: a missed game is learned like any other conversation,
+unwanted but not private, where a missed sensitive topic would be a card
+that should have been asked). Checked over every owner message seen so far,
+not only the newest one, and once true for a conversation it stays true for
+the rest of it - a game does not "end" partway through, the same way a
+manually-started temporary chat has no way to turn itself off mid-chat.
+
+Two lines in the chat turn's `finally` block used to read
+`body.get("temporary")` directly, bypassing `_temporary_chat()` entirely -
+the point where chat history is kept and the learner is offered the turn.
+Both now call `_temporary_chat(body)` instead, so a detected game is kept
+out of history and learning too, not only a chat the app itself marked
+temporary. Every other place that already called `_temporary_chat(body)`
+(no recall, the fixed system line, `X-Jarvis-Route`'s `"temporary": true`,
+the quick-answer path) picks up the same detection for free.
+
+`jarvis_intake.owner_turns()` - the one place the learner (and jarvis's own
+`eval_learner.py`) reads a conversation from - calls the same
+`game_or_roleplay()` too, independently: the request-level check above
+already stops most turns from reaching it at all, but this is the second,
+belt-and-suspenders place that agrees, for any caller that hands
+`owner_turns()` a conversation directly.
+
+## Why a patched function, not a new route
+
+`jarvis_hud.py`'s real text is not in this repository, so a new patch can
+only touch lines some earlier patch already quotes as context - anything
+else would be a guess at text nobody here can read. `_temporary_chat()`'s
+own definition, and the two `body.get("temporary")` lines next to it, are
+exactly that: fully quoted by `temporary-chat.patch` already. Rewriting the
+one function everything else already calls reaches every gate (recall,
+history, learning, the header) through the change nobody has to repeat.
+
+## What it does not change
+
+Everything else about a temporary chat is unchanged: the same tools, the
+same approval cards, the same local-first routing. **No card, no setting -
+it just happens**, the same way "From now on, ..." applies at once
+(CLAUDE.md). Neither app sends anything different; the backend notices on
+its own. A conversation that never mentions a game is unaffected byte for
+byte.
+
+## Test it
+
+```
+python3 backend/test_games_temp_chat.py
+```
+
+No pytest, no network, no model. Proves `game_or_roleplay()` on its own
+(true and false cases, the owner's words only, a game "sticking" for the
+rest of the conversation), `owner_turns()` excluding a whole game
+conversation while leaving an ordinary one and the other exclusions
+(`schedule_command`, `remember_command`) untouched, `_temporary_chat()`
+detecting a game with no flag set (and failing open, not fail-safe, without
+`jarvis_intake.py`), the `finally` block's chat-log and learner calls both
+skipping a detected game end to end, and that `games-temporary.patch`
+applies to what the earlier patches wrote and reverses cleanly - the same
+technique `test_temporary_chat.py` already uses for its own patch. Every
+check here fails on the code before this change.
+
+## Not checked, said plainly
+
+- **Nothing has run on the owner's PC.** As with every patch here, proved
+  against the whole patch stack's stand-in for `jarvis_hud.py`
+  (`backend/_stack.py`), never the real file.
+- **Non-English phrasing is not matched.** The same limit `schedule_command()`
+  and `remember_command()` already have; a game started in another language
+  is learned like any other conversation, not flagged as private.
+- **A game mentioned only by the model, never by the owner, is not detected**
+  - on purpose (`game_or_roleplay()` reads only `role: "user"` messages), so
+  the model cannot turn this on (or, since a game does not "end" mid-chat,
+  off) by playing along.
+
+# Smartwatch notifications: `jarvis_watch_notify.py`, `watch-notifications.patch` (2026-09-27)
+
+The owner's decision (CLAUDE.md, 2026-09-25, the competitiveness audit;
+reconfirmed 2026-09-27, `docs/OWNER-QUESTIONS-2026-09-27.md` Q17):
+"Smartwatch: every notification stays on the phone by default, with a
+setting to let them all show on a compatible watch (turning it on raises a
+card, turning it off is instant)." A 2026-09-26 fix already made every
+notification builder `.setLocalOnly(true)` - refusing Android's own,
+already-built-in bridging to a paired companion device. What was missing
+was the setting itself: a way to turn that bridging back on, with the same
+permission model every other risky switch here uses.
+
+## What "showing on a watch" actually means
+
+**There is no Jarvis watch app, and none is built here.** The
+competitiveness audit says plainly that one is "not for Jarvis" - a Wear OS
+app would sync through Google's own servers (rule 1). This setting only
+changes what `.setLocalOnly(...)` argument the phone's notification
+builders pass: `true` (the default) refuses Android's own bridging to a
+paired, compatible watch; turning this on simply stops refusing it, and
+Android does the rest, the same as any other app that has not opted out.
+
+## What it adds
+
+`GET`/`POST /api/notifications/watch` - the shape of `jarvis_learning_switch.py`
+(off by default; ON is one approval card, action `watch_notifications_enable`;
+OFF is instant, and withdraws a waiting ON card). See "Smartwatch
+notifications" in `docs/JARVIS-API.md` (section 39) for the exact bodies and
+status codes.
+
+## Why a wrapped route, not an inline one
+
+`jarvis_hud.py`'s real text is not in this repository, so a new patch can
+only touch lines an earlier patch already quotes as context. Rather than
+guess at an inline `if route == ...:` block's surrounding text, this follows
+`jarvis_documents.install()`'s and `jarvis_stop_all.install()`'s own
+pattern: `jarvis_watch_notify.install(handler_cls, ...)` wraps
+`do_GET`/`do_POST` at start-up, right after `documents.patch`'s own
+`jarvis_documents.install(...)` call - a spot every later patch here already
+proves it can anchor on.
+
+## `jarvis_gate.py`: a denial proposes no standing rule
+
+Like every other settings switch of this shape (`learning_enable`,
+`custom_voice`, `loosen_what_asks_first`...), a "no" on this card must not
+turn into a proposed rule ("I do not want Jarvis to X without asking me
+first") - the card always asks anyway, so the proposal would say nothing.
+`watch_notifications_enable` joins `_NO_RULE_FROM_DENIAL`, and its own
+`_RISK` entry says the card stays on this PC, as its own hunk in
+`watch-notifications.patch`, positioned after `asks-first.patch`'s own
+additions to both tables (the same reason those tables have grown a line at
+a time, patch by patch, rather than every addition editing
+`gate-outcome.patch` itself: this patch's hunks only need to anchor on text
+an EARLIER patch already put there).
+
+## Phone only
+
+A smartwatch pairs with a phone, never a Windows PC - `tools/check_parity.py`
+classifies the route `phone-only`, and `docs/ARCHITECTURE.md` §8 says why.
+The setting still lives on the PC, the same as every other approval-card
+switch: only the phone ever reads or writes it, but a stolen or borrowed
+phone still cannot turn it on without a card and (once the approval gap's
+step 2 lands) Windows Hello or the phone's own fingerprint.
+
+## Test it
+
+```
+python3 backend/test_watch_notify.py
+```
+
+No pytest, no network, no model. Real settings files in a temporary folder;
+the gate, the tier and the clock are stand-ins, the same shape
+`test_learning_switch.py` proves that shape with. Also proves `install()`'s
+route wrapping (the shape of `test_documents.py`'s `t_the_routes`), that
+`watch-notifications.patch` is listed after `documents.patch` and applies to
+what the earlier patches wrote (both target files) and reverses cleanly.
+Every check here fails on the code before this change.
+
+## Not checked, said plainly
+
+- **Nothing has run on the owner's PC**, and no real Android notification
+  was posted anywhere - `NotificationsStayLocalTest.kt` (jarvis-client) is a
+  pure-JVM source read, not a running app, and it is unchanged in what it
+  proves: every notification still reaches a traceable `.setLocalOnly(...)`.
+- **No real smartwatch was involved.** Whether Android's own bridging
+  actually reaches a real paired device once `.setLocalOnly(false)` is in
+  effect is Android's own feature, not code in this repository, and is
+  unverified here.
+- **The approval gap's phone half** (a Keystore key needing a fresh
+  fingerprint per risky approval) is not built yet (`docs/APPROVAL-GAP-DESIGN.md`,
+  "more devices") - this switch's card is exactly as protected, and exactly
+  as exposed, as every other risky card on the phone today.

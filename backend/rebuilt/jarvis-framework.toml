@@ -274,6 +274,12 @@ custom_voice              = "ask"
 # Jarvis speaks in a custom voice. Turning it on is one card; off never
 # asks. Must stay "ask", the same as above.
 better_voice_enable       = "ask"
+# Letting Jarvis's notifications show on a paired smartwatch too, instead of
+# staying on the phone only (the owner's decision, 2026-09-25; reconfirmed
+# 2026-09-27, Q17). Off by default. Turning it on is one card; off never
+# asks. Must stay "ask": jarvis_watch_notify.py refuses any other tier
+# rather than let this line become your yes.
+watch_notifications_enable = "ask"
 
 
 # ------------------------------------------------------------------------

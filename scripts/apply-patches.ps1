@@ -483,6 +483,27 @@ $PATCHES = @(
     # certainly means this file has moved since it was written - send the
     # reason back rather than editing it by hand.
     'wellbeing.patch'
+    # Games and role-play run in a temporary chat automatically (the
+    # owner's decision, 2026-09-27, CLAUDE.md / Q19): a game or made-up
+    # scenario, once started by the owner's own words, is put through
+    # _temporary_chat() too, so it recalls no facts, is never kept and is
+    # never learned from - the same as a manually-started temporary chat.
+    # Its context is temporary-chat's _temporary_chat() function and the
+    # two lines in the chat turn's `finally` block that check
+    # body.get("temporary") directly, so it goes after temporary-chat -
+    # last, like every new patch. The detection itself is in the shipped
+    # jarvis_intake.py (game_or_roleplay()); without that module, or on any
+    # error, nothing is detected and chat works exactly as before.
+    'games-temporary.patch'
+    # Smartwatch notifications (the owner's decision, 2026-09-25;
+    # reconfirmed 2026-09-27, Q17): GET and POST /api/notifications/watch -
+    # off by default (every notification stays on the phone), ON is one
+    # approval card (watch_notifications_enable), OFF is instant. Wrapped
+    # round the server's handler at start-up like folders. Its context is
+    # documents's banner lines, so it goes after it - last, like every new
+    # patch. Needs jarvis_watch_notify.py copied in; without it the banner
+    # says so and the route is not there.
+    'watch-notifications.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -593,6 +614,8 @@ $SHIPPED = @(
     'jarvis_mcp.py'              # read-only tools from programs on this PC you list under [mcp]; stdio only; every call asks
     # --- the crisis help line (2026-09-27) ---
     'jarvis_wellbeing.py'        # the word check, the fixed US help message, the note to the model; jarvis_agent.py and jarvis_intake.py call it, no patch needed for the safety behaviour itself
+    # --- the smartwatch notifications setting (2026-09-27) ---
+    'jarvis_watch_notify.py'     # off by default; ON is one approval card, watch_notifications_enable; OFF is instant
 )
 
 # The settings file. Installed only where none exists; never overwritten.
