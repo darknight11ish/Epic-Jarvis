@@ -301,20 +301,20 @@ def arp_tones(name):
 
 # ============================================================ trailer instruments (all synthesised)
 def kick(E, vel=0.9):
-    """Punchy kick: 52 Hz body (not a 44 Hz sub), pitch sweep, band-limited click, soft clip."""
+    """Punchy kick: 56 Hz body (not a 44 Hz sub), pitch sweep, band-limited click, soft clip."""
     n = int(SR * 0.45); t = E.t_axis(n)
-    f = 52 + (95 + 40 * vel) * np.exp(-t / 0.028)
+    f = 56 + (95 + 40 * vel) * np.exp(-t / 0.028)
     body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.2)
     click = E.fft_band(E.rng.standard_normal(n), 1500, 7000) * np.exp(-t / 0.0022) * 0.55 * vel
     return np.tanh(1.8 * (body + click)) * vel * np.clip((t[-1] - t) / 0.06, 0, 1)
 
 def hat(E, vel=0.5, open_=False):
-    """Band-limited noise hat (4.5-12 kHz, rolls off above), varied colour, decay tied to velocity."""
+    """Band-limited noise hat (4.8-10 kHz, rolls off above), varied colour, decay tied to velocity."""
     n = int(SR * (0.2 if open_ else 0.07)); t = E.t_axis(n)
     c = E.rng.uniform(0.92, 1.08)
-    x = E.fft_band(E.rng.standard_normal(n), 4800 * c, 11500 * c)
+    x = E.fft_band(E.rng.standard_normal(n), 4800 * c, 10000 * c)
     x *= np.minimum(1, t / E.rng.uniform(0.001, 0.003)) * np.exp(-t / ((0.07 if open_ else 0.013) * (0.7 + 0.6 * vel)))
-    return x * vel * 0.55 * np.clip((t[-1] - t) / 0.01, 0, 1)
+    return x * vel * 0.42 * np.clip((t[-1] - t) / 0.01, 0, 1)
 
 def clap(E, vel=0.7):
     n = int(SR * 0.35); t = E.t_axis(n)
@@ -326,9 +326,9 @@ def clap(E, vel=0.7):
     return E.fft_band(x, 900, 5500) * vel * 0.5 * np.clip((t[-1] - t) / 0.05, 0, 1)
 
 def impact(E, vel=0.8, size=1.0):
-    """A trailer hit: pitched-down thump (100 -> 48 Hz, never a sub rumble), a knock, a noise burst."""
+    """A trailer hit: pitched-down thump (115 -> 55 Hz, never a sub rumble), a knock, a noise burst."""
     n = int(SR * (0.9 + 0.5 * size)); t = E.t_axis(n)
-    f = 48 + 60 * E.rng.uniform(0.85, 1.15) * np.exp(-t / (0.09 * size))
+    f = 55 + 60 * E.rng.uniform(0.85, 1.15) * np.exp(-t / (0.09 * size))
     drop = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / (0.26 * size))
     knock = np.sin(2 * np.pi * 170 * E.rng.uniform(0.9, 1.1) * t) * np.exp(-t / 0.03) * 0.5
     burst = E.fft_band(E.rng.standard_normal(n), 150, 3200) * np.exp(-t / (0.05 + 0.03 * size)) * 1.2
@@ -431,13 +431,17 @@ def render(timing, kind):
                         (H["report"], 2200), (STOP, 2800), (STOP_END, 3500), (H["hello"], 1400), (H["ok"], 2600),
                         (H["instant"], 450), (H["answer"], 2400), (H["sensitive"], 1600), (H["outro"], 2600),
                         (H["rules"], 3500), (H["logo"], 1500), (dur, 700)])
-        arc = curve([(0, -4), (H["edge"], 0), (H["local"], -1.5), (H["focus"], 0), (STOP_END, 1), (H["asks"], 0),
-                     (H["instant"], -2), (H["answer"], 0), (H["outro"], 0.5), (H["rules"], 1.5), (H["logo"], 0), (dur, -3)])
+        arc = curve([(0, -7), (H["edge"] - 0.01, -4), (H["edge"], 0), (H["local"], -2.5), (H["focus"] - 0.01, -1.5),
+                     (H["focus"], 0), (H["distract"], -3), (H["report"] - 0.01, -3), (H["report"], 0), (H["tell"], -0.5),
+                     (STOP, 0), (STOP_END, 2), (H["asks"] - 0.01, 1), (H["asks"], 0), (H["hello"], -1.5),
+                     (H["ok"] - 0.01, -1.5), (H["ok"], 0), (H["instant"], -4.5), (H["answer"] - 0.01, -4.5),
+                     (H["answer"], -0.5), (H["learn"], 0), (H["sensitive"], -1.5), (H["outro"], 0.5), (H["rules"] - 0.01, 1),
+                     (H["rules"], 3), (H["logo"], 0), (dur, -4)])
     else:
         CHANGES = [(0.0, "Dm"), (H["focus"], "F"), (H["distract"], "C"), (H["report"], "Dm"), (H["tell"], "Bb"),
                    (H["tellOk"], "F"), (STOP_END, "Dm"), (H["asks"], "Bb"), (H["ok"], "F"), (H["outro"], "Bb"),
                    (H["pc"], "C"), (H["rules"], "Dm")]
-        LEVEL = [(0.0, 1), (H["edge"], 2), (H["focus"], 3), (H["distract"], 1), (H["report"], 3), (STOP_END, 4),
+        LEVEL = [(0.0, 0), (H["edge"], 2), (H["focus"], 3), (H["distract"], 1), (H["report"], 3), (STOP_END, 4),
                  (H["asks"], 3), (H["finger"], 2), (H["ok"], 3), (H["outro"], 0)]
         HITS = [("edge", 1.0, 1.2), ("focus", 0.55, 0.8), ("report", 0.85, 1.0), ("tell", 0.55, 0.8),
                 ("stopEnd", 1.0, 1.3), ("asksLine", 0.85, 1.0), ("ok", 0.55, 0.8), ("outro", 0.7, 0.9),
@@ -447,8 +451,10 @@ def render(timing, kind):
         pad_fc = curve([(0, 1200), (H["edge"], 1500), (H["focus"], 2000), (H["distract"], 700), (H["report"], 2200),
                         (STOP, 2800), (STOP_END, 3500), (H["finger"], 1500), (H["ok"], 2600), (H["outro"], 2600),
                         (H["rules"], 3500), (H["logo"], 1800), (dur, 1200), (dur + EXT, 1500)])
-        arc = curve([(0, 0), (STOP_END, 1), (H["asks"], 0), (H["outro"], 0.5), (H["rules"], 1.5), (H["logo"], 0.3),
-                     (dur, 0), (dur + EXT, 0)])
+        arc = curve([(0, -2), (H["edge"] - 0.01, -2), (H["edge"], 0), (H["distract"], -3), (H["report"] - 0.01, -3),
+                     (H["report"], 0), (STOP, 0), (STOP_END, 2), (H["asks"] - 0.01, 1), (H["asks"], 0),
+                     (H["finger"], -1.5), (H["ok"] - 0.01, -1.5), (H["ok"], 0), (H["outro"], 0.5), (H["rules"] - 0.01, 1),
+                     (H["rules"], 3), (H["logo"], 0.5), (dur, -2), (dur + EXT, -2)])
 
     def chord_at(t):
         name = CHANGES[0][1]
@@ -482,7 +488,7 @@ def render(timing, kind):
     f_step = np.zeros(N)
     for at, name in CHANGES:
         r = CH[name][0]
-        f_step[int(at * SR):] = mtof(r if r >= 33 else r + 12)       # A1..D2: 55-73 Hz fundamentals, no sub wall
+        f_step[int(at * SR):] = mtof(r if r >= 36 else r + 12)       # C2..G2: 65-117 Hz fundamentals, no sub wall
     kk = int(0.02 * SR)
     f_line = np.convolve(np.pad(f_step, kk, mode="edge"), np.ones(kk) / kk, mode="same")[kk:-kk]
     lv = np.array([level_at(t) for t in np.arange(0, N) [::480] / SR])
@@ -532,7 +538,7 @@ def render(timing, kind):
 
     # ---------------------------------------------------- hits on the cuts, risers into the big ones
     for name, vel, size in HITS:
-        at = H[name]
+        at = H[name] + (0.020 if name == "stopEnd" else 0.0)     # the re-entry hit rides with the 20 ms resume lag
         E.place(fx, E.pan(impact(E, vel, size), 0), at)
         E.place(hall_extra, E.pan(impact(E, vel * 0.5, size), 0), at, 0.5)
     for a, b_, v in RISERS:
@@ -599,19 +605,21 @@ def render(timing, kind):
     keys, pads = wow(keys, 0.2), wow(pads, 0.35)
 
     drums = drums + 0.12 * E.conv(drums, E.make_ir((0.5, 0.4, 0.25), 0.6, 0.006, 20, seed=3))
-    drums = drums + 0.45 * np.tanh(2.0 * E.compress(drums, -28, 6, 0.001, 0.08))      # parallel squash
+    drums = drums + 0.3 * np.tanh(2.0 * E.compress(drums, -28, 6, 0.001, 0.08))       # parallel squash
     g_arc = dbg(arc(ta))
-    dry = (drums * 0.8 + bass * 0.75 + keys * 0.75 + pads * 0.5 + fx * 0.85 + ui * 0.9) * g_arc
+    dry = (drums * 0.75 + bass * 0.65 + keys * 0.95 + pads * 0.62 + fx * 0.85 + ui * 0.9) * g_arc
     send = (keys * 0.25 + pads * 0.25 + drums * 0.05 + fx * 0.15 + ui * 0.2) * g_arc + hall_extra * 0.5
     send = np.vstack([E.fft_band(c, 250, 8000) for c in send])
 
     # the music (and its reverb) stops 20 ms before the stop frame; only the dry slam plays on the frame
     STOP_LEAD, RAMP = 0.020, 0.008
-    e0 = int((STOP - STOP_LEAD) * SR); r = int(RAMP * SR); s1 = int(STOP_END * SR)
+    RESUME_LAG = 0.020     # the re-entry lands 20 ms after stopEnd (under a frame), so AAC pre-echo stays out of the gap
+    e0 = int((STOP - STOP_LEAD) * SR); r = int(RAMP * SR); s1 = int((STOP_END + RESUME_LAG) * SR)
     gate = np.ones(N)
     gate[e0 - r:e0] = 0.5 + 0.5 * np.cos(np.linspace(0, np.pi, r))
     gate[e0:s1] = 0
     gate[s1:s1 + int(0.003 * SR)] = np.linspace(0, 1, int(0.003 * SR))
+    # (s1 is already RESUME_LAG after stopEnd - see below)
     HALL = E.make_ir((2.2, 1.7, 0.8), 2.6, seed=11)
     pre, post = send * gate, send.copy()
     pre[:, e0:] = 0; post[:, :s1] = 0
@@ -627,7 +635,7 @@ def render(timing, kind):
     Sf *= (1 / (1 + (120 / f) ** 4)) * (1 + 0.25 / (1 + (2000 / f) ** 2))
     mix = np.vstack([np.fft.irfft(Mf, N) + np.fft.irfft(Sf, N), np.fft.irfft(Mf, N) - np.fft.irfft(Sf, N)])
 
-    mix = E.compress(mix, -16, 2.0, 0.008, 0.2)            # glue
+    mix = E.compress(mix, -12, 1.5, 0.008, 0.2)            # light glue
     bias = 0.07
     mix = (np.tanh(1.35 * mix + bias) - np.tanh(bias)) / 1.35
     F = np.fft.rfft(mix, axis=1); F *= 1 / (1 + (18 / f) ** 4); mix = np.fft.irfft(F, N, axis=1)
