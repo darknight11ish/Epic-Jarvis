@@ -48,7 +48,11 @@ allow_free_tier_models_for_research = true
 # ------------------------------------------------------------------------
 # auto = just do it | notify = do it, tell you after | ask = wait for yes,
 # every time | never = refuse; changing this requires editing this file,
-# not asking in conversation.
+# not asking in conversation. The one exception (the owner's decision of
+# 2026-09-26): the apps' "What asks first" page may set seven lines of
+# [autonomy.tiers] to "ask" (from either app, at once), and set them back
+# (on the PC only, one approval card plus Windows Hello). It changes that
+# one line and keeps every other character of this file, comments included.
 [autonomy]
 # Enforcement now EXISTS: jarvis_gate.py reads the tiers below, queues an
 # "ask" action, and blocks the tool call until a human answers in the HUD (or

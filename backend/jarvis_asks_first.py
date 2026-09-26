@@ -88,6 +88,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import tempfile
 import threading
 import time
@@ -438,9 +439,11 @@ def rewrite(text: str, action: str, tier: str) -> str:
         lines.insert(at, f'{action} = "{tier}"{_INSERTED_NOTE}')
     out = nl.join(lines)
     after = _parse(out)
-    want = json.loads(json.dumps(before))
+    # Compared as JSON text: a date in the file (TOML has them) is written
+    # the same way on both sides, and a change anywhere else is a difference.
+    want = json.loads(json.dumps(before, default=str))
     want.setdefault("autonomy", {}).setdefault("tiers", {})[action] = tier
-    if json.loads(json.dumps(after)) != want:
+    if json.loads(json.dumps(after, default=str)) != want:
         raise TierFileError(HAND_EDIT)
     return out
 
@@ -473,6 +476,11 @@ def set_tier(action: str, tier: str, *, path: Optional[Path] = None) -> dict:
                 fh.write(data)
                 fh.flush()
                 os.fsync(fh.fileno())
+            try:
+                # The file's own permissions, not the temporary file's.
+                os.chmod(tmp, stat.S_IMODE(os.stat(p).st_mode))
+            except OSError:
+                pass
             os.replace(tmp, p)
         except OSError as exc:
             try:

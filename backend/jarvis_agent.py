@@ -3859,7 +3859,6 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # the gate and not an approval - nobody is asked, and the audit log
         # says so.
         verdict = _LightsNoCard()
-        _record_lights_no_card(state)
     else:
         # The gate may wait minutes for a person. Say so to the app (after a
         # moment, so a tool the gate lets straight through never flashes it).
@@ -3956,6 +3955,10 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             kwargs["checkpoint"] = (lambda tid=task_id, w=watch:
                                     "stop" if w.stopped() else tc.checkpoint(tid))
         step["ran"] = True
+        if lights_ok:
+            # The audit line for a home change made without a card, written
+            # only when it really runs (LIGHTS_WITHOUT_CARD).
+            _record_lights_no_card(state)
         try:
             result = tool.execute(args, state, **kwargs)
         except Exception as exc:

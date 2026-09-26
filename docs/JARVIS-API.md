@@ -4430,8 +4430,11 @@ then `line`. The words are the PC's; the apps add none.
   lists) and that action's tier in `[autonomy.tiers]`. The six tools the
   loop only ever runs on a person's yes (`NEEDS_A_PERSON`: GitHub, browser,
   computer, phone, commands, Home Assistant changes) say "Yes, every time"
-  whatever the tier; tier `never` is "blocked"; note writes say they ask
-  after outside text; web search says when it asks (23.3).
+  whatever the tier (seven since `send_email`; Home Assistant changes say
+  "Yes, every time - except the lights, plugs and fans you name yourself
+  (your setting)" while "Lights, plugs and fans without a card" is on,
+  section 33); tier `never` is "blocked"; note writes say they ask after
+  outside text; web search says when it asks (23.3).
 - **The cloud model**: the chat route's own `_lane_names()` when the list is
   made inside the server; otherwise the same file it reads
   (`litellm-proxy.yaml`: lane names and the provider part of `model:`
