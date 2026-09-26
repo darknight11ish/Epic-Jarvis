@@ -37,10 +37,10 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 .glow-ink { text-shadow: 0 0 40px rgba(111, 227, 255, 0.25); }
 .center-x { position: absolute; left: 0; right: 0; display: flex; justify-content: center; }
 /* one short readout per beat: the claim, in v2's tag-line style */
-.tl { position: absolute; left: 0; right: 0; text-align: center; font: 500 26px var(--mono); letter-spacing: 0.16em; color: var(--ink); text-transform: uppercase; opacity: 0; }
+.tl { position: absolute; left: 0; right: 0; text-align: center; font: 500 31px var(--mono); letter-spacing: 0.1em; color: var(--ink); text-transform: uppercase; opacity: 0; }
 .tl i { font-style: normal; color: var(--ice); }
 .tl.warn i { color: var(--violet); }
-.chip { display: inline-block; padding: 6px 16px; border: 2px solid currentColor; font: 500 22px var(--mono); letter-spacing: 0.18em; text-transform: uppercase; }
+.chip { display: inline-block; padding: 8px 18px; border: 2px solid currentColor; font: 500 27px var(--mono); letter-spacing: 0.18em; text-transform: uppercase; }
 .shot { position: absolute; display: block; opacity: 0; border-radius: 18px; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7), 0 0 0 1.5px rgba(111, 227, 255, 0.18); }
 .press { position: absolute; border-radius: 14px; border: 4px solid var(--accent); box-shadow: 0 0 24px rgba(56, 240, 255, 0.7); opacity: 0; pointer-events: none; }
 
@@ -65,12 +65,12 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 #tag-mem { left: 1290px; top: 690px; }
 #room-label { position: absolute; left: 900px; width: 780px; top: 950px; text-align: center; font: 500 22px var(--mono); letter-spacing: 0.24em; color: var(--dim); opacity: 0; }
 #tl-local { top: 150px; }
-#tl-net { top: 196px; font-size: 22px; color: var(--dim); }
+#tl-net { top: 198px; font-size: 27px; color: var(--dim); }
 
 /* ---------- 2: focus ---------- */
 #focus-run { left: 110px; top: 280px; width: 820px; }
 #focus-rep { left: 990px; top: 330px; width: 820px; }
-#in-front { position: absolute; left: 110px; top: 196px; color: var(--rose); opacity: 0; }
+#in-front { position: absolute; left: 110px; top: 204px; color: var(--rose); opacity: 0; }
 #tl-focus { top: 150px; }
 
 /* ---------- 3: tell me when ---------- */
@@ -112,8 +112,8 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 
 /* ---------- 5: and it still asks first ---------- */
 #s5 .line { top: 140px; font-size: 96px; }
-#mail-card { left: 110px; top: 320px; width: 880px; }
-#ready-mail { position: absolute; left: 110px; top: 262px; color: var(--violet); opacity: 0; }
+#mail-card { left: 110px; top: 330px; width: 880px; }
+#ready-mail { position: absolute; left: 110px; top: 258px; color: var(--violet); opacity: 0; }
 #hello { position: absolute; left: 1060px; top: 360px; width: 720px; padding: 30px 34px 34px; background: #1f2530; border: 1px solid #3a4452; border-radius: 12px; opacity: 0;
          box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7); font-family: var(--body); }
 #hello .hd { font: 400 18px var(--body); color: var(--dim); }
@@ -149,7 +149,7 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 /* ---------- 8: your rules ---------- */
 #scrim { background: radial-gradient(ellipse 48% 42% at 50% 50%, rgba(4, 7, 12, 0.78), rgba(4, 7, 12, 0.2) 70%, transparent); opacity: 0; }
 .outro { position: absolute; left: 0; right: 0; top: 230px; display: flex; flex-direction: column; align-items: center; gap: 20px; font-size: 150px; }
-#tl-ready { top: 860px; font-size: 24px; color: var(--dim); }
+#tl-ready { top: 850px; font-size: 29px; color: var(--ink); }
 #wordmark { position: absolute; left: 0; right: 0; top: 930px; text-align: center; color: var(--ice); font: 500 34px var(--mono); letter-spacing: 1.1em; padding-left: 1.1em; opacity: 0; }
 
 /* ---------- HUD ---------- */
