@@ -90,6 +90,7 @@ import com.jarvis.client.ui.screens.LockedScreen
 import com.jarvis.client.ui.screens.PairingScreen
 import com.jarvis.client.ui.screens.ReadinessScreen
 import com.jarvis.client.ui.screens.SecurityScreen
+import com.jarvis.client.ui.screens.SettingsScreen
 import com.jarvis.client.ui.screens.VoiceCheckScreen
 import com.jarvis.client.ui.screens.VoiceTrainingScreen
 import com.jarvis.client.ui.screens.VoicesScreen
@@ -1022,7 +1023,7 @@ class MainActivity : FragmentActivity() {
             }
 
             // Pairing outranks the stack: there is nothing to show until there
-            // is somewhere to talk to. Two screens are the exception. Checks,
+            // is somewhere to talk to. A few screens are the exception. Checks,
             // because "why can I not connect" has to be answerable from here.
             // Help, because its first question is "Do I need Tailscale?", and
             // that is asked before pairing, not after.
@@ -1031,9 +1032,13 @@ class MainActivity : FragmentActivity() {
             // the owner can change the desktop or the token.
             // Security too: it is opened from Checks, and its settings are
             // this phone's own, so there is no reason to pair first.
+            // Settings joins them for the same reason (ease-of-use audit row
+            // 16, 2026-09-27): its own Security link must stay reachable
+            // mid-pair, same as Checks's. Its voice and Appearance links stay
+            // null/absent until paired, exactly as they already are on Checks.
             if ((!paired || repairing) &&
                 nav.current != Screen.CHECKS && nav.current != Screen.FAQ &&
-                nav.current != Screen.SECURITY
+                nav.current != Screen.SECURITY && nav.current != Screen.SETTINGS
             ) {
                 val replacing = paired
                 // Leaves re-pairing and keeps the desktop in use. A "refused
@@ -1370,6 +1375,9 @@ class MainActivity : FragmentActivity() {
                                 if (!on) JarvisRuntime.updates.cleared()
                             },
                             onOpenRelease = ::openReleasePage,
+                            // The phone's own Settings screen (ease-of-use
+                            // audit row 16, 2026-09-27).
+                            onOpenSettings = { nav.go(Screen.SETTINGS) },
                         )
                     }
 
@@ -1675,6 +1683,10 @@ class MainActivity : FragmentActivity() {
                             // Chat history on the PC (docs/JARVIS-API.md
                             // section 18): its own screen, opened from here.
                             onOpenHistory = { nav.go(Screen.HISTORY) },
+                            // The phone's own Settings screen (ease-of-use
+                            // audit row 16, 2026-09-27), where the old
+                            // "Settings" group moved to.
+                            onOpenSettings = { nav.go(Screen.SETTINGS) },
                         )
                     }
 
@@ -1716,6 +1728,37 @@ class MainActivity : FragmentActivity() {
                             modifier = root,
                         )
                     }
+
+                    Screen.SETTINGS -> SettingsScreen(
+                        link = link,
+                        stale = stale,
+                        onBack = { nav.back() },
+                        modifier = root,
+                        // Same three ternaries as Screen.CHECKS above: null
+                        // until this phone is paired.
+                        onTrainVoice = if (paired) {
+                            { nav.go(Screen.VOICE) }
+                        } else {
+                            null
+                        },
+                        onVoiceCheck = if (paired) {
+                            { nav.go(Screen.VOICE_CHECK) }
+                        } else {
+                            null
+                        },
+                        onVoices = if (paired) {
+                            { nav.go(Screen.VOICES) }
+                        } else {
+                            null
+                        },
+                        securitySummary = SecurityRules.summary(security),
+                        onOpenSecurity = { nav.go(Screen.SECURITY) },
+                        onOpenAppearance = if (paired) {
+                            { nav.go(Screen.APPEARANCE) }
+                        } else {
+                            null
+                        },
+                    )
 
                     Screen.APPEARANCE -> AppearanceScreen(
                         current = chrome,

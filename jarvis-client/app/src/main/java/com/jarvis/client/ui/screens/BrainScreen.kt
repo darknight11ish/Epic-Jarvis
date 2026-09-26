@@ -214,6 +214,13 @@ fun BrainScreen(
      * docs/JARVIS-API.md section 18). Null draws no way in.
      */
     onOpenHistory: (() -> Unit)? = null,
+    /**
+     * Opens the phone's own Settings screen (ease-of-use audit 2026-09-27,
+     * row 16). Null draws no way in - never expected in practice, since
+     * [com.jarvis.client.MainActivity] always supplies it, but a screen this
+     * plate points at should not be assumed.
+     */
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // The same test ModelsPlate always had, now shared by every control on this
@@ -697,67 +704,16 @@ fun BrainScreen(
                 }
             }
 
-            item(key = "group-settings") { GroupHeading("Settings") }
-
-            // "Web search" (the owner's decisions of 2026-09-25): the four
-            // providers with the PC's "why" lines, "Ask before every web
-            // search", the SearXNG address and Test search
-            // (WebSearchPlate.kt) - the desktop's Settings -> Web search.
-            // No key box: keys are typed on the PC only.
-            item(key = "web-search") {
-                WebSearchSection(canAct = canAct)
-            }
-
-            // "What asks first" (the owner's decisions of 2026-09-26): every
-            // action and whether it asks first, in the PC's words, with "Ask
-            // me first" switches that only make things stricter here - the
-            // desktop's Settings -> What asks first, where loosening lives
-            // (AsksFirstPlate.kt) - and "Lights, plugs and fans without a
-            // card" (ON one card, held on a stale link; OFF at once).
-            item(key = "asks-first") {
-                AsksFirstSection(canAct = canAct)
-            }
-
-            // "What Jarvis can reach" (the Muse audit, 2026-09-25): every way
-            // Jarvis can reach something outside itself, whether each is on,
-            // where it goes and whether it asks first - written by the PC
-            // from its settings, never by the model (ReachPlate.kt) - the
-            // desktop's Settings -> What Jarvis can reach. A read: nothing
-            // to hold on a stale link.
-            item(key = "reach") {
-                ReachSection()
-            }
-
-            // "Sending email" (the owner's decision of 2026-09-25): whether
-            // Jarvis can send email, from which address and through which
-            // server, in the PC's words (EmailSendingPlate.kt) - the desktop's
-            // Settings -> Sending email. Each email is its own approval card.
-            item(key = "email-sending") {
-                EmailSendingSection()
-            }
-
-            // "Folders Jarvis may look in" (the owner's decisions of
-            // 2026-09-26): the folders on the PC Jarvis may find, search and
-            // read files in, in the PC's words, with Remove at once
-            // (FoldersPlate.kt) - the desktop's Settings -> Folders Jarvis may
-            // look in. Adding a folder and the Notion import are the PC's.
-            item(key = "folders") {
-                FoldersSection()
-            }
-
-            // "How Jarvis talks" (the owner's decision of 2026-09-25): warm
-            // and brief, or plain, with the PC's words (MannerPlate.kt) - the
-            // desktop's Settings -> How Jarvis talks. No card either way.
-            item(key = "manner") {
-                MannerSection(canAct = canAct)
-            }
-
-            // The smartwatch notification setting (WatchNotifyPlate.kt): off
-            // by default (every notification stays on this phone), on is
-            // one approval card. Android-only, so nothing like it is on the
-            // desktop (docs/ARCHITECTURE.md section 8).
-            item(key = "watch-notify") {
-                WatchNotifySection(canAct = canAct)
+            // The "Settings" group used to live here in full - "How Jarvis
+            // talks", web search, "What asks first", "What Jarvis can
+            // reach", "Sending email", "Folders Jarvis may look in" and the
+            // smartwatch notification setting. The ease-of-use audit's row
+            // 16 (2026-09-27) moved all seven, whole, into their own
+            // Settings screen (SettingsScreen.kt), alongside voice, security
+            // and appearance - see that file's own doc comment for exactly
+            // what moved and what stayed a separate, only-linked screen.
+            if (onOpenSettings != null) {
+                item(key = "settings-entry") { SettingsEntrySection(onOpen = onOpenSettings) }
             }
 
             item(key = "tail") { Gap(24) }
@@ -1743,11 +1699,37 @@ private fun FlowChips(items: Collection<String>, muted: Boolean = false) {
 }
 
 /**
+ * Brain's way into the new Settings screen (ease-of-use audit row 16,
+ * 2026-09-27) - the same shape as [HistoryEntrySection]'s way into History:
+ * one plate, one line saying what moved, one button.
+ */
+@Composable
+private fun SettingsEntrySection(onOpen: () -> Unit) {
+    val chrome = LocalChrome.current
+    Section("Settings") {
+        Plate {
+            Text(
+                "How Jarvis talks, web search, what asks first, what Jarvis can reach, " +
+                    "sending email, folders it may look in, the smartwatch setting - and, " +
+                    "with voice, security and appearance, everything else that changes how " +
+                    "Jarvis behaves or looks.",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            Gap(8)
+            Quiet("Open Settings", onClick = onOpen)
+        }
+    }
+}
+
+/**
  * A group heading above several [Section]s - "Now", "Memory", "Model and
  * PC", "Settings" (UI-AUDIT-2026-09-26 item 9: this screen was one long
  * scroll of about 33 sections, still called "Mind" when that item was
  * written - the rename to "Brain" had already landed everywhere the owner
  * sees it by the time this item was picked up; only the grouping was left).
+ * "Settings" itself moved into its own screen (ease-of-use audit row 16,
+ * 2026-09-27); the other three group headings are unchanged.
  *
  * Bigger and heavier than a [Section]'s own [Kicker], on purpose - item 8
  * asks for section titles made "stronger by size and weight, never by the
