@@ -447,7 +447,10 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   .inspector{width:calc(100% - 32px);}
 }
 @media (prefers-reduced-motion:reduce){
-  *{animation-duration:.001ms !important; transition-duration:.001ms !important;}
+  /* The bar's own rule (style.css): loops stop, short fades stay. Collapsing
+     the transition too threw colour and opacity away as a channel along
+     with the motion (item 3, UI-AUDIT-2026-09-26.md). */
+  *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:120ms !important;}
 }
 
 /* ---- approval queue -------------------------------------------------- */

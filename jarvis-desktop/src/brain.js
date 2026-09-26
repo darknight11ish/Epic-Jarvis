@@ -40,6 +40,7 @@ import {
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
+import { stepText } from "./step-words.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -4643,34 +4644,8 @@ function pushTrace(frame) {
   dom.trace.scrollTop = dom.trace.scrollHeight;
 }
 
-/**
- * One step of a turn (`step` events, jarvis_agent.py `_step_event`), in plain
- * words. Every field is from the backend's own vocabulary - a tool NAME from
- * its table, never an argument, a result or the model's text - so this can
- * only ever say which tool, not what it saw.
- */
-function stepText(data) {
-  const tool = typeof data.tool === "string" && data.tool ? data.tool : "a tool";
-  const shown = tool === "unknown" ? "a tool Jarvis does not have" : tool;
-  switch (data.phase) {
-    case "model":
-      return Number.isInteger(data.round) && data.round > 1
-        ? `asking the model again (round ${data.round})`
-        : "asking the model";
-    case "tool_started":
-      return `using ${shown}`;
-    case "tool_finished":
-      return data.ok === false ? `${shown} failed` : `${shown} done`;
-    case "tool_refused":
-      return tool === "unknown"
-        ? "the model asked for a tool Jarvis does not have"
-        : `${shown} not allowed`;
-    case "answer":
-      return "writing the answer";
-    default:
-      return "working";
-  }
-}
+// stepText now lives in step-words.js, shared with the Jarvis bar
+// (item 10, UI-AUDIT-2026-09-26.md).
 
 function repaintTrace() {
   dom.trace.replaceChildren();

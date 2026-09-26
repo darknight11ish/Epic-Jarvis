@@ -277,11 +277,19 @@ function write(env) {
  * The Web Audio half the work order names: an AnalyserNode on a playback
  * element, RMS of the time-domain buffer, per animation frame.
  *
- * Nothing in this build plays TTS yet — the backend speaks out of process, so
- * there is no element here to analyse and the synthetic envelope is what
- * actually runs. This is the one call that replaces it the day an `<audio>`
- * element appears, and `attachMicSource` is the same for capture. Written now
- * because the alternative is a hook nobody can find later.
+ * `main.js`'s `playClip` calls this on the `<audio>` element it plays every
+ * spoken reply through (item 1, UI-AUDIT-2026-09-26.md) - the level reaching
+ * `setSpeechLevel()` is the reply actually sounding, not a guess at it. The
+ * synthetic envelope still runs whenever nothing is feeding a real one: a
+ * still render, a browser preview with no audio element, or the ~500ms
+ * before the first level of a clip arrives.
+ *
+ * `attachMicSource` is the same shape for a `getUserMedia` stream, but the
+ * desktop's own microphone is opened in Rust (cpal, `voice.rs`), not the
+ * browser - so `setLevel()` is fed from there instead, over the
+ * `voice-level` event, and this one has no caller yet on the desktop. It is
+ * still what the Android build's own capture would call if it shared this
+ * file, and what a future browser-preview build could call today.
  *
  * Returns a function that detaches and releases the context.
  */
@@ -301,11 +309,24 @@ function attachAnalyser(source, sink, given, kind) {
       ? webkitAudioContext
       : null;
   if (!Ctx || !source) return () => {};
-  const ctx = given || new Ctx();
-  const node = kind === "stream"
-    ? ctx.createMediaStreamSource(source)
-    : ctx.createMediaElementSource(source);
-  const analyser = ctx.createAnalyser();
+  // Never lets a Web Audio failure reach the caller: this is a meter on top
+  // of a reply that must play (or a mic that must still be usable) whether
+  // or not the browser feels like handing out an AnalyserNode today - a
+  // fake `<audio>` element in a test harness, a page not yet allowed audio,
+  // or a media element `createMediaElementSource` was already called on
+  // once (every caller here uses a fresh element, but a future one might
+  // not) would otherwise throw out of `playClip` and silence every reply
+  // after it, not just lose the meter for this one.
+  let ctx, node, analyser;
+  try {
+    ctx = given || new Ctx();
+    node = kind === "stream"
+      ? ctx.createMediaStreamSource(source)
+      : ctx.createMediaElementSource(source);
+    analyser = ctx.createAnalyser();
+  } catch {
+    return () => {};
+  }
   // 1024 samples is ~21ms at 48kHz — inside the 40ms attack, so a syllable's
   // leading edge is not averaged away before the envelope ever sees it.
   analyser.fftSize = 1024;
