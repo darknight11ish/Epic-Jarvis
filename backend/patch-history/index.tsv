@@ -24,6 +24,7 @@ extraction-wiring.patch	extraction-wiring/fcdba5d.patch	fcdba5d698e7c6c0e21f224c
 extraction-wiring.patch	extraction-wiring/a50cbf1.patch	a50cbf1ee96d71ac66e3d7a9bab702dc5b7b8b49	2026-09-15T00:50:38+00:00	backend: give the learning loop a trigger and the review queue a doorbell
 feedback.patch	feedback/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
 feedback.patch	feedback/5d1cfa3.patch	5d1cfa36b3fc94807dae3597d00ffe0d54df5c77	2026-09-23T08:19:29+00:00	Backend: right/wrong mark per answer, helpful/harmful counts, retire card
+focus.patch	focus/3f467d9.patch	3f467d91283363030b92b0399a8f46354fb61406	2026-09-25T23:45:52+00:00	Focus sessions, backend: jarvis_focus.py, focus.patch, the fast-path commands
 gate-outcome.patch	gate-outcome/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44+00:00	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
 gate-outcome.patch	gate-outcome/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53+00:00	Backend: keep chat history on the PC, encrypted (chat-history.patch)
 gate-outcome.patch	gate-outcome/ae434de.patch	ae434de4ffc8c18144aa3a65af57f209dcddc9aa	2026-09-24T08:27:21+00:00	Merge voice-custom: custom voices backend (ZipVoice now, F5 on the second card)
