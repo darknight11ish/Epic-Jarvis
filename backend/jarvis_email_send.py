@@ -334,7 +334,10 @@ def _as_list(value, name: str):
 #: Control characters and the invisible "format" characters (right-to-left
 #: overrides, zero-width joiners) that can make a card read differently
 #: from what is sent. A line break and a tab are allowed in the body.
-_INVISIBLE = ("Cc", "Cf", "Cs", "Co", "Cn")
+#: Zl / Zp are the Unicode line and paragraph separators (U+2028, U+2029):
+#: shown as a new line on a card, they could fake a "Bcc:" line, and the
+#: mail library refuses them after the approval (2026-09-26 bug audit).
+_INVISIBLE = ("Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp")
 
 
 def _hidden_chars(text: str, allow: str = "") -> bool:

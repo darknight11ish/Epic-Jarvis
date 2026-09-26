@@ -368,6 +368,10 @@ def t_addresses_and_caps():
         p = SEND.plan(to, None, "Hello", "Hi")
         check(f"refused: {label}", not p.ready and "not a plain email address" in p.problem,
               p.problem)
+    for sep, name in (("\u2028", "U+2028"), ("\u2029", "U+2029")):
+        p = SEND.plan([ALEX], None, "Hello" + sep + "Bcc: spy@example.net", "Hi")
+        check(f"refused: a {name} line separator in the subject (a fake Bcc line on the card)",
+              not p.ready, p.problem)
     p = SEND.plan([], None, "Hello", "Hi")
     check("refused: nobody to send to", not p.ready and "nobody" in p.problem)
     many = [f"p{i}@example.com" for i in range(11)]

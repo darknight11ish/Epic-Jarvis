@@ -194,6 +194,10 @@ def describe(p: Plan) -> str:
 #   Execution - one connection, then a bounded, honest preview
 # --------------------------------------------------------------------------
 
+#: Seconds for the email-reading tool's one mail connection to answer.
+_FETCH_TIMEOUT = 30.0
+
+
 def _default_fetch_messages(p: Plan) -> list:
     """The real IMAP call. `imaplib` is stdlib - no new dependency. Fetches
     the `limit` most recent matches, newest first, as raw RFC 822 bytes, then
@@ -202,7 +206,10 @@ def _default_fetch_messages(p: Plan) -> list:
 
     user = os.environ.get(USER_ENV, "")
     password = os.environ.get(PASSWORD_ENV, "")
-    conn = imaplib.IMAP4_SSL(p.host, p.port)
+    # A timeout, like the other IMAP calls here: without one, a mail server
+    # that stops answering held the chat answer for ever (2026-09-26 bug
+    # audit, finding 6).
+    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_FETCH_TIMEOUT)
     try:
         conn.login(user, password)
         conn.select(p.mailbox, readonly=True)

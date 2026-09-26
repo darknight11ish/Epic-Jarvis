@@ -1107,6 +1107,27 @@ def t_wired_at_merge():
         jarvis_manner.current = real
 
 
+def t_a_new_session_during_the_end_keeps_its_timer():
+    """2026-09-26 bug audit, finding 1: finish() deleted whatever job id the
+    engine held AFTER letting go of the lock, so a session started while the
+    power switch answered lost its end timer and never ended."""
+    w = World(name="race")
+    w.e.start(10, "", by="a test")
+    first = w.e.job_id
+    real = w.e._restore_power
+    def slow_restore():
+        # A new session starts while the old one is switching power back.
+        w.e.on = False
+        w.e.start(20, "", by="a test")
+        return real()
+    w.e._restore_power = slow_restore
+    w.e.finish(completed=False, speak=False)
+    second = w.e.job_id
+    check("the new session keeps its own end timer", bool(second) and second != first,
+          (first, second))
+    check("... which is still on the scheduler", w.s.job(second) is not None)
+
+
 def main():
     try:
         for name, fn in list(globals().items()):

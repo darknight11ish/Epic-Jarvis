@@ -1398,9 +1398,17 @@ class Engine:
             jid = self.job_id
         # Outside the lock: switching power waits for its answer.
         restore = self._restore_power()
+        # Drop THIS session's job, captured under the lock - never whatever
+        # self.job_id holds now: a new session started while the power
+        # switch answered owns that one (2026-09-26 bug audit, finding 1).
+        with self._lock:
+            if self.job_id == jid:
+                self.job_id = ""
         if not completed and jid:
-            self._drop_timer()
-        self.job_id = ""
+            try:
+                self._sched().act(jid, "delete")
+            except Exception:
+                pass
         rows = read_ledger(self.ledger)
         rows.append(row)
         try:
