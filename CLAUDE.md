@@ -320,6 +320,15 @@ Decided 2026-09-26, after the bug audit (`docs/BUG-AUDIT-2026-09-26-*.md`):
   out of reach, or restarted - it shows a silent notification saying when
   it was missed, instead of ringing as if it were happening now.
 
+Decided 2026-09-26, after the memory research
+(`docs/MEMORY-RESEARCH-2026-09-26.md`):
+- **Build memory ideas 1-4 first, each measured by the memory self-test:**
+  a re-ranker over the top ~20 facts, a bigger self-test, "said again"
+  counts, and real "true from" dates (older news never replaces newer).
+  **Then the overnight tidy** - cards only, never changing memory by itself.
+- **Searching the owner's own past chat words waits** until 1-4 are built
+  and measured; it changes a written rule (ARCHITECTURE section 5).
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
