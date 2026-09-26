@@ -115,6 +115,7 @@ import {
   SWITCH_DETAIL,
   SWITCH_LABEL,
   TAINT_TITLE,
+  whenWords,
 } from "./history-view.js";
 import {
   addPage as addAutoPage,
@@ -122,7 +123,6 @@ import {
   AUTO_OFF,
   CANCEL_LABEL,
   CANCEL_TITLE,
-  cardReason,
   EMPTY as AUTO_EMPTY,
   ERASE_LABEL,
   ERASE_TITLE,
@@ -147,6 +147,12 @@ import {
   VOICE_MARK,
   VOICE_TITLE,
 } from "./auto-learn.js";
+import {
+  cardLines,
+  plainDateOf,
+  statusRows,
+  WORDS as MEMORY_WORDS,
+} from "./memory-words.js";
 import {
   isPinned,
   PIN_LABEL,
@@ -1306,24 +1312,12 @@ function renderMemory() {
   // read path/model/documents/chunks, which status() never sends, so Store
   // and Embedding never showed - and "Facts" was the total, retired ones
   // included, while the pane said nothing about how many were retired.
-  const num = (v) => (Number.isFinite(Number(v)) ? String(v) : undefined);
-  add("Facts in use", num(body.current));
-  add("No longer used", num(body.retired));
-  add("Store", body.db);
-  if (body.embedder) {
-    add("Embedding", body.semantic === false
-      ? `${body.embedder} (matches words only until the real embedding model has downloaded)`
-      : String(body.embedder));
-  }
-  if (body.vector_search === false) {
-    add("Search by meaning", "off - facts are found by keyword");
-  }
-  if (Number(body.unembedded) > 0) add("Waiting to be indexed", String(body.unembedded));
-  if (body.sleep_time) {
-    add("Overnight tidying", body.sleep_time.enabled
-      ? "switched on, but not built yet - nothing runs"
-      : "off (not built yet)");
-  }
+  // The rows are memory-words.js's statusRows, the phone's
+  // MemoryCounts.fields word for word (one fixture holds both, the memory
+  // review's I8): the re-ranker's state and "Said again" are among them.
+  // The store's file path is the PC's own, so only this window shows it.
+  for (const [k, v] of statusRows(body)) add(k, v);
+  if (typeof body.db === "string") add("Store", body.db);
   if (dl.childElementCount) dom.memory.append(dl);
 
   const proposed = Array.isArray(pending.pending) ? pending.pending : [];
@@ -1694,7 +1688,8 @@ function renderLearning() {
     dl.append(el("dt", "", "Last “Remember:”"), el("dd", "", String(last.note)));
   }
   if (setup.near_duplicates_note) {
-    dl.append(el("dt", "", "Repeats"), el("dd", "", String(setup.near_duplicates_note)));
+    dl.append(el("dt", "", MEMORY_WORDS.repeats),
+      el("dd", "", String(setup.near_duplicates_note)));
   }
   dom.memoryLearning.append(dl);
 
@@ -1847,6 +1842,10 @@ function proposalRow(p) {
     ? [
         p.replaces_text || p.replaces ? `The fact: “${p.replaces_text || p.replaces}”` : "",
         "Stopping it does not delete it: the fact stays in Jarvis's history, marked as no longer used.",
+        // The phone shows why this stayed a card on a retire card too
+        // (MemoryCards.from); so does this window now (the memory review's
+        // fit audit, 2026-09-27).
+        ...reasonLines(p),
         ago(p.created),
       ]
     : [
@@ -1865,8 +1864,10 @@ function proposalRow(p) {
         p.source ? `from ${p.source}` : "",
         // Why automatic learning left this one for your yes (section 2 of
         // JARVIS-API.md section 19): "from pasted text", "sensitive:
-        // health"... in the PC's own words.
-        cardReason(p),
+        // health"... in the PC's own words. Then, on its own line, the PC's
+        // "it sounds older than what Jarvis knows" warning with plain dates
+        // (memory-words.js cardLines; the memory review's I9).
+        ...reasonLines(p),
         ago(p.created),
       ];
   const actions = retire
@@ -2158,12 +2159,18 @@ function renderFacts() {
         meta: [
           f.source === "auto" ? "saved automatically"
             : f.source ? `from ${f.source}` : "",
-          current ? "" : "no longer recalled",
+          // One wording in both apps (the memory review's I11): today,
+          // a fact no longer in use is "no longer used", like the count
+          // above; on a past date, "true then" / "no longer true", as the
+          // phone's "What did Jarvis know on this date?" says it.
+          past
+            ? (current ? MEMORY_WORDS.true_then : MEMORY_WORDS.no_longer_true)
+            : (current ? "" : MEMORY_WORDS.no_longer_used),
           // `retired_by` is the column the store writes: the id of the fact
           // that replaced this one. (It used to read `supersedes`, which is
           // an argument to add(), not a column, so this never showed.)
           f.retired_by ? `replaced by #${f.retired_by}` : "",
-          ago(f.valid_from),
+          whenTrue(f),
           // The two axes, and the only place the difference is visible. They
           // are usually the same day and this says nothing; when they are not,
           // it is because the fact was corrected after the fact — "true until
@@ -3450,7 +3457,28 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("private-hidden", rereadProfile);
 }
 
-/** "learned 12d ago" only when that differs from when the fact became true.
+/**
+ * When a fact became true, in words: "true from 1 January 2021" when that is
+ * more than a day away from when Jarvis learned it (the owner's words gave a
+ * date, or history was recorded), else "saved 3 h ago" / "saved 12 Sept
+ * 2026". This used to be a bare `ago(valid_from)` - "2825d ago" on a fact
+ * true since 2019, with nothing saying what the number was (the memory
+ * review's I10).
+ */
+function whenTrue(f) {
+  const learned = Number(f.created);
+  const from = Number(f.valid_from);
+  const has = (v) => Number.isFinite(v) && v > 0;
+  if (has(from) && (!has(learned) || Math.abs(learned - from) >= 86400)) {
+    const day = plainDateOf(from);
+    return day ? `${MEMORY_WORDS.true_from} ${day}` : "";
+  }
+  const saved = whenWords(has(learned) ? learned : from);
+  return saved ? `saved ${saved}` : "";
+}
+
+/** "learned 12 September 2026" only when that differs from when the fact
+ *  became true.
  *
  * valid_from and created are stamped together for anything typed or accepted
  * in the moment, so saying both every time would be noise on every row. A gap
@@ -3461,7 +3489,8 @@ function whenLearned(f) {
   const from = Number(f.valid_from);
   if (!Number.isFinite(learned) || !Number.isFinite(from)) return "";
   if (Math.abs(learned - from) < 86400) return "";
-  return `learned ${ago(learned)}`;
+  const day = plainDateOf(learned);
+  return day ? `learned ${day}` : "";
 }
 
 /** The same gap at the other end: stopped being true then, found out later.
@@ -3475,7 +3504,15 @@ function whenNoticed(f) {
   const noticed = Number(f.retired_at);
   if (!Number.isFinite(until) || !Number.isFinite(noticed)) return "";
   if (Math.abs(noticed - until) < 86400) return "";
-  return `true until ${ago(until)}, noticed ${ago(noticed)}`;
+  const a = plainDateOf(until);
+  const b = plainDateOf(noticed);
+  return a && b ? `true until ${a}, noticed ${b}` : "";
+}
+
+/** A review card's reason and older-news lines, whichever there are. */
+function reasonLines(p) {
+  const { reason, older } = cardLines(p);
+  return [reason || "", older || ""];
 }
 
 /* ==========================================================================

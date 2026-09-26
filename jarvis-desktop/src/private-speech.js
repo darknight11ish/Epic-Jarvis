@@ -36,7 +36,7 @@
  *
  * One step comes before all of that (the owner's decision 13, 2026-09-24:
  * sensitive saved facts stay on screen): an answer that used a SENSITIVE
- * saved fact - health, money, passwords, other people - is kept on screen
+ * saved fact - health, money, passwords, other people's private details - is kept on screen
  * unless the utterance reply said `sensitive_aloud: true` (the owner chose
  * "Read aloud" under "Answers that use sensitive saved facts" and a real
  * voice check passed). That holds even with `private_aloud` or

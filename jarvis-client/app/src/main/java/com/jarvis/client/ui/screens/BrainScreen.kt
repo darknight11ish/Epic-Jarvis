@@ -1627,6 +1627,13 @@ private fun MemoryProposalRow(
             Gap(2)
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
+        // The PC's "it sounds older than what Jarvis knows" warning, on its
+        // own line with plain dates (the memory review's I9) - the desktop
+        // shows it the same way, under the reason.
+        card.olderNewsLine?.let {
+            Gap(2)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
         if (card.checked == false) {
             Gap(2)
             Text(MemoryCards.NOT_CHECKED, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)

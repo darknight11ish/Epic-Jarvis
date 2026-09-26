@@ -595,8 +595,8 @@ class VoiceStrictTest {
             StrictVoice.SENSITIVE_MEMORY.map { it.value },
         )
         assertEquals(
-            "Answers that use a saved fact about your health, money, passwords or other people are shown, " +
-                "not read aloud.",
+            "Answers that use a saved fact about your health, money, passwords or other people's " +
+                "private details are shown, not read aloud.",
             StrictVoice.SENSITIVE_MEMORY[0].detail,
         )
         assertEquals(

@@ -10410,10 +10410,10 @@ that needs a change to a patch for that file - not done here.
   aloud and does not make a web search ask first
   (`jarvis_sensitive.topic()`). Their health, money, address, contact
   details, debts and secrets stay sensitive. The voice card now says
-  "other people's private details". **Not changed here:** both apps' own
-  voice-settings line still says "a saved fact about your health, money,
-  passwords or other people" (`StrictVoice.kt`, `voice-training.js`) - app
-  text, left for the apps' builder.
+  "other people's private details". Both apps' own voice-settings line
+  says the same since the memory review's app pass (B16, 2026-09-27):
+  "a saved fact about your health, money, passwords or other people's
+  private details" (`StrictVoice.kt`, `voice-training.js`).
 
 ## Test it
 
@@ -10421,6 +10421,8 @@ that needs a change to a patch for that file - not done here.
 python3 backend/test_memory_rerank.py
 python3 backend/test_memory_said_again.py
 python3 backend/test_memory_true_from.py
+python3 backend/test_memory_auto_true_from.py   # true_from on /api/memory/auto rows (review I10)
+python3 backend/test_memory_words.py            # both apps' memory words fixture is fresh
 python3 backend/test_memory_recall.py
 python3 backend/eval_memory.py --sizes 0,100 --words-only --reranker stand-in
 ```

@@ -356,6 +356,12 @@ object AutoLearn {
         val device: String?,
         /** Memory idea 3: how often the owner has said it again since (0 = never). */
         val saidAgain: Int = 0,
+        /**
+         * Memory idea 4 (the memory review's I10): "YYYY-MM-DD" when the
+         * owner's own words gave the day it became true ("moved to Leeds in
+         * 2021"), else null. Shown as "true from 1 January 2021".
+         */
+        val trueFrom: String? = null,
     ) {
         /** Said aloud to Jarvis (a verified voice turn), not typed. */
         val aloud: Boolean get() = provenance == Provenance.VOICE
@@ -396,6 +402,8 @@ object AutoLearn {
                 saidAgain = (o["said_again"] as? JsonObject)?.prim("count")
                     ?.takeIf { !it.isString }?.longOrNull
                     ?.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt() ?: 0,
+                // As sent, not trimmed: the desktop reads it the same way.
+                trueFrom = (o["true_from"] as? JsonPrimitive)?.takeIf { it.isString }?.content,
             )
         }
         return Page(facts, mayHaveOlder = (raw?.size ?: 0) >= asked, status = statusFromList(body))
@@ -410,11 +418,16 @@ object AutoLearn {
     /** What "Load older" asks for: facts saved before the oldest one shown. */
     fun olderThan(shown: List<Fact>): Double? = shown.mapNotNull { it.savedAt }.minOrNull()
 
-    /** The small line under a fact: when it was saved, in which app it was said, and how often said again. */
+    /**
+     * The small line under a fact: when it was saved, in which app it was
+     * said, how often said again, and "true from 1 January 2021" when the
+     * owner's words gave that day - the desktop's `factMeta` (auto-learn.js).
+     */
     fun rowLine(fact: Fact, zone: ZoneId, today: LocalDate): String = listOfNotNull(
         ChatLog.whenLine(fact.savedAt?.toLong(), zone, today),
         fromWhere(fact.device),
         saidAgainWords(fact.saidAgain),
+        MemoryWords.trueFromLine(fact.trueFrom),
     ).joinToString(" · ")
 
     /** "said again once" / "said again 3 times" - the desktop's words (auto-learn.js). */

@@ -356,9 +356,10 @@ struct HeardRaw {
     #[serde(default)]
     memory_aloud: bool,
     /// May an answer that uses a SENSITIVE saved fact (health, money,
-    /// passwords, other people) be read aloud? True only when the owner
-    /// chose "Read aloud" for those answers AND a real voice check passed
-    /// (the owner's decision 13). Missing (an older PC) is read as `false`.
+    /// passwords, other people's private details) be read aloud? True only
+    /// when the owner chose "Read aloud" for those answers AND a real voice
+    /// check passed (the owner's decision 13). Missing (an older PC) is read
+    /// as `false`.
     #[serde(default)]
     sensitive_aloud: bool,
 }

@@ -320,7 +320,8 @@ class LearningTest {
         )
         assertEquals(2, notes.size)
         assertTrue(notes[0].contains("already waiting"))
-        assertTrue(notes[1].startsWith("2 proposal(s)"))
+        // Labelled as the desktop labels it (the memory review's I8).
+        assertTrue(notes[1], notes[1].startsWith("Repeated cards dropped: 2 proposal(s)"))
     }
 
     @Test
