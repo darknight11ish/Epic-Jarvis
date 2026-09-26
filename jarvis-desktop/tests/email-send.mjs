@@ -68,6 +68,9 @@ await check("readSending passes the PC's own line on, and a PC without it says s
   assert.equal(readSending(null).available, false);
   assert.equal(readSending({ available: false, said: "Your PC's Jarvis cannot send email yet - run apply-patches.ps1 on the PC." }).said, MISSING);
   assert.equal(isEmailCard({ action: "send_email" }), true);
+  // A draft's card shows the same whole-email shape (JARVIS-API.md section
+  // 40) and needs the same never-Markdown, never-widget-approve treatment.
+  assert.equal(isEmailCard({ action: "draft_email" }), true);
   assert.equal(isEmailCard({ action: "email_read" }), false);
   assert.equal(approvalPlainText({ detail: { text: "x\ny" } }), "x\ny");
 });

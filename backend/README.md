@@ -128,6 +128,7 @@ on a throwaway copy instead.
 | `wellbeing.patch` | `jarvis_hud.py` | **The crisis help line's one cosmetic flag** (the owner's decision of 2026-09-27). Sets `route_header["wellbeing"] = "crisis"` on `/api/chat` so both apps can draw a calm panel; the safety behaviour itself (no tools, the note, the help message) is in `jarvis_agent.py` and `jarvis_intake.py`, not here. **Unlike every other patch in this table, not verified against a real `jarvis_hud.py`** - see "The crisis help line", at the very end, before relying on it. Needs `jarvis_wellbeing.py`. |
 | `games-temporary.patch` | `jarvis_hud.py` | **Games and role-play run in a temporary chat automatically** (the owner's decision, 2026-09-27; CLAUDE.md, `docs/OWNER-QUESTIONS-2026-09-27.md` Q19). No new route: `_temporary_chat(body)` now also returns true once the owner's own words, anywhere in the conversation, start a game or role-play (`jarvis_intake.game_or_roleplay`), and the two lines in the chat turn's `finally` block that used to read `body.get("temporary")` directly now go through that same function - so a detected game gets no recall, no "Remember:", no chat history and no learning, exactly like a manually-started temporary chat, with no card and no setting. Last in the list; its context is `temporary-chat.patch`'s `_temporary_chat()` function and the two `finally`-block lines. Needs `jarvis_intake.py` (already shipped for `memory-intake.patch`) - without it, or on any error, nothing is detected and chat works exactly as before this patch. See "Games and role-play", at the very end. |
 | `watch-notifications.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Smartwatch notifications, off by default** (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). Adds `GET`/`POST /api/notifications/watch` - ON is one approval card (`watch_notifications_enable`), OFF is instant - wrapped round the running server's handler at start-up, like `documents.patch`, rather than an inline route; `jarvis_gate.py` gains the action on `_NO_RULE_FROM_DENIAL` and `_RISK` (a denial of this switch's card proposes no standing rule, and the notice says it stays on this PC). Android's own, already-built-in notification bridging does the actual copying to a paired watch; there is no Jarvis watch app. Last in the list; its `jarvis_hud.py` context is `documents.patch`'s banner lines, and its `jarvis_gate.py` context is `asks-first.patch`'s `_NO_RULE_FROM_DENIAL` and `_RISK` additions. Needs `jarvis_watch_notify.py` - without it, or on any error, the banner says so and the route is not there. See "Smartwatch notifications", at the very end. |
+| `draft-email.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Email drafts, one approval card per draft** (the owner's decision, 2026-09-27). Adds `GET /api/email/drafting` (whether saving a draft is set up - the same shape as sending's Settings line, never the password), and in the gate the notice's words for `draft_email`, `draft_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Same shape as `email-send.patch`, right beside its own lines. Its context is `email-send.patch`'s three blocks; last in the list. Needs `jarvis_email_draft.py` - see "Email drafts", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -11691,3 +11692,115 @@ Every check here fails on the code before this change.
   fingerprint per risky approval) is not built yet (`docs/APPROVAL-GAP-DESIGN.md`,
   "more devices") - this switch's card is exactly as protected, and exactly
   as exposed, as every other risky card on the phone today.
+
+# Email drafts: `jarvis_email_draft.py`, `draft-email.patch` (2026-09-27)
+
+Jarvis can now **save an email draft for you** - one draft per approval
+card, saved to your own Drafts folder, never sent. This is the owner's
+decision (`CLAUDE.md`, 2026-09-27, the answers to
+`docs/OWNER-QUESTIONS-2026-09-27.md`): "Email drafts: a card every time,
+showing the full draft, before any text goes to the owner's Drafts folder."
+`draft_email` was already `"ask"` in the shipped `jarvis-framework.toml`,
+with a comment saying "not built yet; I53" - this is that build.
+
+**What you see.** Ask "draft a reply to Sam saying Friday works". Jarvis
+writes the draft with the model on this PC and shows you a card: From
+(your own address), To, Cc, Subject, and the whole draft word for word,
+then which Drafts folder it goes into. Nothing is saved until you approve.
+**Unlike sending, `to` may be left empty** - "draft a reply to Sam" often
+means the model has a rough subject and text in mind and no confirmed
+address yet; the owner fills that in themselves, in their own mail app,
+before ever sending it. A completely empty draft (no recipient, subject or
+text) is refused before a card is raised. Two drafts are two cards. If
+Jarvis had read something from outside first, the card starts with the
+same plain line an email's card would (§26), with "saved" in place of
+"sent". On the desktop, the widget does not approve drafts either, for the
+same reason as an email: its button opens the Jarvis bar, where the whole
+draft is shown exactly as it will be saved (`email-sending.js`'s
+`isEmailCard` and `email_sending.rs`'s `is_email` now recognise
+`draft_email` alongside `send_email` - one card shape, two actions).
+
+**What leaves the PC.** That one draft, saved by IMAP `APPEND` to the ONE
+mailbox your own mail server calls Drafts - found by asking the server
+(IMAP's `LIST`, which already tells every mailbox its special-use flag;
+Gmail's is `[Gmail]/Drafts`, most other providers' is plainly `Drafts`),
+never a hard-coded name. The account and password are the ones Jarvis
+already reads and sends email with - nothing new to set up. The password
+goes to that server only, inside an encrypted connection, and is never
+written to a file, a log, a card or an answer.
+
+**What it does not do (yet).** No attachments, no Bcc, plain text only, at
+most 10 people, a subject of at most 200 characters, and at most 2,500
+characters of text - the same caps as sending, and for the same reason: a
+card never shows less than everything it saves. It never retries: if the
+connection drops half way, it tells you to check your Drafts folder. It
+cannot yet thread a reply onto an earlier email. A mailbox name outside
+plain ASCII is refused rather than guessed at (modified UTF-7 encoding is
+not implemented in this first version). Neither app has a Settings screen
+for this yet - the route below exists so one can be added later without a
+second backend change.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies `jarvis_email_draft.py` and the
+updated `jarvis_agent.py`, applies `draft-email.patch`), from this
+repository's folder, then quit Jarvis from the tray icon and start it again:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Nothing else to set up** if Jarvis already reads (and can send) your
+email: saving a draft uses the exact same `JARVIS_IMAP_HOST`,
+`JARVIS_IMAP_USER` and `JARVIS_IMAP_PASSWORD` reading already needs.
+
+**3. Let the model use it.** Open your `jarvis-framework.toml`, find the
+`enabled = [...]` line under `[tools]`, and add `"draft_email"` to the
+list, for example `enabled = ["email_check", "web_search", "draft_email"]`.
+In the same file, under `[autonomy.tiers]`, check there is a line
+`draft_email = "ask"` (the shipped file has it; add it if yours does not).
+It must stay `"ask"`: on any other setting every draft is refused, never
+saved unasked, and `"never"` switches drafts off. Restart Jarvis.
+
+**4. Check it.** Ask Jarvis to draft a short email **to yourself**, read
+the card, and approve it in the Jarvis bar. Open your mail provider's
+Drafts folder and check it is there, marked as a draft, not sent.
+
+To stop Jarvis saving drafts: take `"draft_email"` out of `[tools].enabled`
+(it is then not offered at all), or set `draft_email = "never"`.
+
+## What the code does
+
+- `jarvis_email_draft.py` - `plan()` (opens no socket; addresses given ARE
+  checked, but `to`/`cc` may both be empty; the caps; characters that would
+  make the card read differently from what is saved), `describe()` (the
+  card), `run()` (saves that plan once, by finding the account's
+  `\Drafts`-flagged mailbox with `LIST` and appending the message with the
+  standard `\Draft` flag; refuses a plan changed after its card, or
+  settings changed since; never retries), `view()` (the Settings line).
+  Never imports `smtplib` - this module cannot send mail by construction.
+- `jarvis_agent.py` - the tool `draft_email` (offered only when
+  `[tools].enabled` names it), in `NEEDS_A_PERSON` (only a person's yes
+  saves); refused with no card when the turn's model is not on this PC
+  (rule 1), when `draft_email` is not `"ask"`, or when the plan says why
+  nothing can be saved; the plain outside-text line at the top of the card
+  (`DRAFT_EMAIL_*`, the same shape as `SEND_EMAIL_*`). Its own group in the
+  short tool list (`TOOL_GROUPS`), separate from `send_email`'s.
+- `draft-email.patch` - `GET /api/email/drafting` and the gate's words,
+  right beside `email-send.patch`'s own lines (its context).
+- The desktop's `isEmailCard`/`is_email` now cover `draft_email` too, so a
+  draft's card gets the same never-Markdown, never-widget-approve
+  treatment an email's already has - one small, shared fix rather than a
+  second code path.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_email_draft.py
+```
+
+No pytest, no network, no model, no real mail server: a stand-in IMAP
+server on 127.0.0.1, written here with the standard library (LOGIN, LIST
+with and without a server-flagged Drafts mailbox, APPEND, a refused login,
+a dropped connection), proves what is saved and where without ever
+reaching a real account.

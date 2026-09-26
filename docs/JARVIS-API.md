@@ -6331,3 +6331,162 @@ while the link is down or stale (rule 4) and reads "Waiting for your
 approval" while the card is in the queue - found by its action, so a card
 raised on the desktop counts too. OFF always goes. Desktop: none - see
 `docs/ARCHITECTURE.md` §8, "On the phone, kept off the desktop".
+
+---
+
+## 40. Email drafts (added 2026-09-27)
+
+The owner's decision (`CLAUDE.md`, 2026-09-27, the answers to
+`docs/OWNER-QUESTIONS-2026-09-27.md`): "Email drafts: a card every time,
+showing the full draft, before any text goes to the owner's Drafts folder."
+`backend/jarvis_email_draft.py` (shipped whole), `backend/draft-email.patch`
+(one route and the gate's words), and the model tool `draft_email` in
+`backend/jarvis_agent.py`. Built the same shape as §26 (sending), deliberately
+- see that module's own docstring for the reasoning this section only
+summarises. `jarvis_email.py` stays read-only; `jarvis_email_send.py` still
+only sends. This is the first WRITE to the mailbox itself (every read here
+uses `EXAMINE`/`BODY.PEEK` - "No STORE, COPY, MOVE" - §25); see
+`docs/ARCHITECTURE.md` section 4, "saving an email draft".
+
+**Both apps**: every draft is an ordinary approval card in `/api/pending`,
+answered through the same Approve and Deny as every other card (section 3),
+and - like an email's card (§26) - shown word for word, never as Markdown,
+and never approved from the desktop's one-line widget
+(`jarvis-desktop/src/email-sending.js` `isEmailCard` and
+`src-tauri/src/email_sending.rs` `is_email` recognise `draft_email` the same
+way they already recognised `send_email`). The one route below is a Settings
+line, the same shape as sending's (§26.4) - the desktop and phone do not yet
+have a screen for it; the route exists so one can be added without a second
+backend change, `check_parity.py`'s own rule ("the backend is written first,
+then each app builds against it").
+
+### 40.1 The card
+
+Gate action `draft_email`, tier `ask` in the shipped `jarvis-framework.toml`
+(it already was - the comment there used to say "not built yet; I53", now
+it just says why it must stay `ask`). One card per draft; two drafts are
+two cards, each counted toward `CARDS_PER_TURN`. The row's `detail` is
+`{"text": <the card>}`, and the card is the WHOLE draft - never cut: a card
+that would not fit the gate's 4,000 characters is refused before anyone is
+asked. An example, word for word (a draft with no confirmed recipient yet -
+"draft a reply to Sam" often means the model has a rough subject and body
+in mind and no address to check yet):
+
+```
+Save this email draft to your Drafts folder? It is only saved if you approve, exactly as shown - every word is below. Nothing is sent: a draft is never emailed to anyone until you open it yourself and choose to send it.
+
+From: owner@example.com
+To: (not set yet)
+Cc: (nobody)
+Subject: Reply to Sam
+
+---------- the whole draft ----------
+Sam - yes, Friday works. I'll bring the [slides](https://example.com/slides).
+---------- end of the draft ----------
+
+No attachments.
+It is saved to your Drafts folder on imap.gmail.com, port 993, encrypted (IMAP over SSL/TLS). Jarvis logs in there as owner@example.com; your password goes to that server and nowhere else.
+It stays in your Drafts folder until you open it, change it if you like, and send it yourself - or delete it.
+
+If you say no: nothing is saved, and Jarvis tells you it was not saved.
+```
+
+**Unlike sending, `to` and `cc` may both be empty** - the one real
+difference from §26. `plan()` refuses only a completely empty draft (no
+recipient, no subject and no text at all); the tool's own schema still
+requires `body`, so a well-behaved model cannot even reach that refusal in
+ordinary use. Every other cap is unchanged from sending: at most 10 people
+across To and Cc, no Bcc, a subject of at most 200 characters, a body of at
+most 2,500 characters, no attachments, no invisible or control characters.
+
+When outside text shaped the turn, the card starts with the same plain line
+sending's does, with "saving" in place of "sending" (`DRAFT_EMAIL_READ`,
+`DRAFT_EMAIL_NOT_TYPED`, `DRAFT_EMAIL_APP` in `jarvis_agent.py` - the exact
+words §26.1 already quotes for sending, unchanged apart from that one word),
+then the usual "What shaped this request:" list.
+
+### 40.2 When it is refused with no card at all
+
+The model is told why, in words, and nobody is asked - the same list as
+sending's (§26.2), in words about a draft:
+
+- the turn's model is not on this PC (rule 1: a draft is written by the
+  local model only);
+- `draft_email` is not tier `ask` (`auto` or `notify` would save with
+  nobody asked; `never` switches drafts off);
+- the plan says why nothing could be saved: a given address that is not a
+  plain address, more than 10 people in To and Cc, a subject over 200
+  characters or holding a line break, more than 2,500 characters of text,
+  an invisible or control character, a completely empty draft, or saving
+  not set up;
+- the card would not fit whole on one card.
+
+A tool call is offered only when `[tools].enabled` names `draft_email` -
+like `send_email`, it ships opt-in, not on by default (`jarvis-framework.toml`'s
+`[tools]` comment: "`send_email`, `browser_control`, `my_files` and the rest
+stay opt-in").
+
+### 40.3 What is saved, and where
+
+Exactly the plan the card showed: `From` (the owner's account, the same one
+reading and sending use), `To` (if any), `Cc` (if any), `Subject` (if any),
+`Date`, a `Message-ID`, the text as `text/plain; charset=utf-8`, and - for a
+reply (`plan(..., reply_to_message_id=)`, not yet offered by the model's
+tool, same gap as §26.3) - `In-Reply-To`/`References`. No Bcc, no
+attachment, no HTML. Saved by **IMAP APPEND, with the standard `\Draft`
+flag, to the ONE mailbox this account's own server flags `\Drafts`** (RFC
+6154) - found by `LIST`, never a hard-coded name, because a real Drafts
+folder's name differs by provider ("Drafts" on most, "[Gmail]/Drafts" on
+Gmail); a short list of plain names is tried only when no server-flagged
+mailbox is found, and a mailbox name outside plain ASCII is refused rather
+than guessed at. `run()` refuses, and saves nothing, if the plan's
+fingerprint no longer matches or the account or server changed since. It
+saves once and never retries: a connection that drops after the draft was
+handed over is reported as "may have been saved - check your Drafts
+folder". This module never imports `smtplib` and cannot send mail by
+construction, not only by a check.
+
+### 40.4 The route
+
+Needs the pairing token and passes the origin check.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/email/drafting` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_email_draft.py` | A read of the settings only: connects to no mail server and saves nothing. |
+
+```
+{"available": true,
+ "state": "not_set_up" | "tool_off" | "refused" | "off" | "ready",
+ "ready": bool, "said": <the one line both apps would show>,
+ "from": "owner@example.com" | "", "server": "imap.gmail.com", "port": 993,
+ "password_set": bool,          never the password
+ "tool_enabled": bool,          "draft_email" in [tools].enabled
+ "limits": {"recipients": 10, "subject_chars": 200, "body_chars": 2500,
+            "attachments": false}}
+```
+
+The settings are the same environment variables reading and sending email
+already use (`backend/README.md`, "Email drafts"): `JARVIS_IMAP_HOST`,
+`JARVIS_IMAP_PORT`, `JARVIS_IMAP_USER`, `JARVIS_IMAP_PASSWORD`. Nothing new
+to configure for an account that can already read its mail.
+
+### 40.5 Known gaps, said plainly
+
+- **Nothing has reached a real mail server.** Every test uses a stand-in
+  IMAP server on 127.0.0.1 written with the standard library
+  (`backend/test_email_draft.py`): LOGIN, LIST (with and without a
+  server-flagged Drafts mailbox), APPEND, a refused login, a dropped
+  connection. That Gmail flags its Drafts mailbox `\Drafts` in a plain
+  `LIST` (not only with the newer SPECIAL-USE extension) is general
+  knowledge of Gmail's IMAP behaviour - not checked here against a real
+  account.
+- **No mailbox name outside plain ASCII.** IMAP mailbox names with other
+  characters need modified UTF-7 encoding, which this first version does
+  not implement; such a name is refused rather than mis-encoded.
+- **The model cannot thread a reply yet** - the same gap as sending (§26.5):
+  `email_check` does not return a message's `Message-ID`.
+- **Neither app has a Settings screen for this yet** - see §40's own note
+  above; the route is there to build one against.
+- A program already on the PC could approve a card with the pairing token,
+  without Windows Hello - the known limit in `docs/ARCHITECTURE.md` section
+  3, which applies to a draft's card as to every other.

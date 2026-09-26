@@ -504,6 +504,17 @@ $PATCHES = @(
     # patch. Needs jarvis_watch_notify.py copied in; without it the banner
     # says so and the route is not there.
     'watch-notifications.patch'
+    # Email drafts (the owner's decision, 2026-09-27, "a card every time,
+    # showing the full draft"): GET /api/email/drafting (the Settings line,
+    # same shape as email-send's), and in jarvis_gate.py the words for
+    # draft_email, draft_email in _TOOL_ACTIONS, and "a no proposes no
+    # memory rule" for it - all right beside send_email's own lines. Its
+    # jarvis_hud.py context is web-search's route block (the same one
+    # email-send.patch built on); its jarvis_gate.py context is
+    # email-send.patch's three blocks, so it goes after email-send - last,
+    # like every new patch. Needs jarvis_email_draft.py copied in; without
+    # it, or on any error, the route says so.
+    'draft-email.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -596,6 +607,7 @@ $SHIPPED = @(
     'jarvis_email.py'            # tool "email_check"
     'jarvis_mail_mask.py'        # hides one-time codes and sign-in links in everything jarvis_email.py reads
     'jarvis_email_send.py'       # tool "send_email": ONE email per approval card; email-send.patch
+    'jarvis_email_draft.py'      # tool "draft_email": ONE draft per approval card, saved to Drafts only, never sent; draft-email.patch
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch

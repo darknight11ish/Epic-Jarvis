@@ -95,6 +95,7 @@ TOOL_NAMES = {
     "github_search": "GitHub research",
     "web_search": "Web search",
     "send_email": "Send an email (one card each)",
+    "draft_email": "Save an email draft (one card each)",
     "calendar_read": "Reading your calendar",
     "email_check": "Reading your email",
     "notes_search": "Searching your notes",
@@ -132,7 +133,7 @@ _FALLBACK_ACTIONS = {
 #: Tools jarvis_agent.py runs only on a person's yes, if it cannot be read.
 _NEEDS_A_PERSON = frozenset({"github_search", "browser_control", "control_computer",
                              "control_phone", "shell_exec", "home_control",
-                             "send_email"})
+                             "send_email", "draft_email"})
 _NOTE_WRITES = frozenset({"append_logseq_journal", "append_obsidian_daily",
                           "create_joplin_note"})
 

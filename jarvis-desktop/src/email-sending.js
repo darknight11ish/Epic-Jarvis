@@ -22,6 +22,15 @@
 /** The gate action every email is asked under (jarvis_email_send.ACTION). */
 export const SEND_EMAIL_ACTION = "send_email";
 
+/**
+ * The gate action every draft is asked under (jarvis_email_draft.ACTION;
+ * JARVIS-API.md section 40). A draft's card shows the same whole-email
+ * shape (From, To, Cc, Subject, the WHOLE text) as sending's, so it needs
+ * the same never-Markdown, never-widget-approve treatment - `isEmailCard`
+ * below recognises both.
+ */
+export const DRAFT_EMAIL_ACTION = "draft_email";
+
 export const TITLE = "Sending email";
 
 /** Settings' explanation, the same words as the phone's. */
@@ -37,9 +46,12 @@ export const MISSING = "Your PC's Jarvis cannot send email yet - run apply-patch
 export const EMAIL_DETAIL = "An email - open the Jarvis bar to read all of it before approving.";
 export const EMAIL_APPROVE = "Read it in the Jarvis bar";
 
-/** Whether a card is an email. */
+/** Whether a card is an email - sent, or a draft (both show the whole text
+ * word for word and must never be Markdown-rendered or approved from the
+ * widget's one line). */
 export function isEmailCard(approval) {
-  return Boolean(approval) && approval.action === SEND_EMAIL_ACTION;
+  return Boolean(approval)
+    && (approval.action === SEND_EMAIL_ACTION || approval.action === DRAFT_EMAIL_ACTION);
 }
 
 /**
