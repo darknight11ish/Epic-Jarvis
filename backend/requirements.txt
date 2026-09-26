@@ -16,6 +16,7 @@
 
 numpy                                  # voice: reading and checking recorded audio (jarvis_speech.py, rebuilt jarvis_voice.py)
 sherpa-onnx                            # voice: speech-to-text on the PC, and the better "is it your voice" check (jarvis_speech.py, rebuilt jarvis_voice.py)
+sherpa-onnx-core                       # sherpa-onnx's own native library. sherpa-onnx installs it anyway on Windows and Linux; it is named here because not every sherpa-onnx download says so, and the hash-locked list (requirements.lock) must hold it.
 onnxruntime                            # voice: the "hey Jarvis" wake-word spotter (jarvis_wakeword.py) and Smart Turn, "finished or only paused?" (jarvis_turn.py). The voice MODEL files are a separate download: backend\README.md, "Voice that works".
 fastembed                              # memory: finding facts by MEANING, not only by matching words, and the re-ranker that puts the best-matching facts first (rebuilt jarvis_memory.py). Downloads its two models (about 70 MB and 80 MB) the first time they are needed; a fastembed too old to have re-rankers just leaves the re-ranker off.
 sqlite-vec                             # memory: the search index fastembed's numbers are kept in (rebuilt jarvis_memory.py)

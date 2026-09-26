@@ -2366,7 +2366,15 @@ dependency, or need a setup decision only the owner can make:
 What's actually in `jarvis_agent.py` now, because each one reuses
 `jarvis_gate.py`'s existing, already-tiered action names with nothing new to
 configure: `calculator` (auto), `memory_search` (auto, read-only, over the
-real `jarvis_memory.py`), `file_read` (`read_files_readonly`), `shell_exec`
+real `jarvis_memory.py`), `file_read` (`read_files_readonly`; it refuses
+places that hold keys, saved passwords, browser and chat-app data, and
+Jarvis's own data - `_protected_path`, a refusal list widened on 2026-09-26
+after the security review found holes: adb's phone key, Android and Java
+key stores, Thunderbird, the other Chrome and Edge channels, Chromium,
+Discord, Signal, Telegram, Cargo's token, a repository's `.git/config`,
+rclone and gcloud. A refusal list is never complete; the plan is one shared
+list for the backend and the desktop, then the owner's own folder list
+first), `shell_exec`
 (`run_shell_on_host`, tier `ask`), and one tool each for the three modules
 built earlier this session - `control_computer` (native UI control, resolves
 to the `jarvis_ui_control_run` action added by `ui-control-wiring.patch`),
@@ -3921,6 +3929,14 @@ settings folder (`%USERPROFILE%\.openjarvis\` unless you moved it):
 - words per second and tokens per second
 - how much of the model was on the graphics card
 - whether tools were used
+- how big the prompt was, and how much of it Ollama **reused** from the
+  last question instead of reading it again (added 2026-09-26, feasibility
+  audit I03: `prompt_tokens`, `cached_tokens`, and `prompt_rounds` - how
+  many requests the answer made to the model, since a tool turn makes
+  several and the counts are their sum). This is the ruler for later speed
+  work: a shorter tool list or a moved line either keeps the reuse high or
+  it does not. It needs an Ollama new enough to report the reused count;
+  an older one leaves `cached_tokens` out.
 
 **What it never records: any words of the conversation.** Not the question,
 not the answer, not a summary. That is enforced in code: every row goes
@@ -7264,6 +7280,18 @@ the old rule did not catch them.
   control token was not checked; they are removed anyway.
 - The one system line and the labels are a weak defence on their own
   (AgentDojo measured little gain from labels alone). They cost nothing.
+- **A tainted conversation stays tainted after a restart** (fixed
+  2026-09-26, security review G1). Until then "this conversation read
+  outside text" lived only in the backend's memory: after a restart, or once
+  200 newer conversations had pushed it out, the same chat counted as clean,
+  and note writes, web searches with saved facts and "lights without a card"
+  stopped asking. Now a conversation the backend has not met since it
+  started counts as tainted whenever the request carries earlier turns,
+  unless the chat history database holds every one of them and none read
+  outside text. With history off, after a restart every continuing chat
+  counts as tainted until a new one is started. Any error means tainted.
+  `test_chat_log.py`'s `t_taint_*` tests fail against the modules as they
+  were before.
 
 ## Test it
 
@@ -10304,8 +10332,9 @@ section 5, "Memory ideas 1-4".
   history - the newer fact stays in use."
 - **Forget now works on a fact that ends later** (a bug, below).
 - **The re-ranker** you will not see - it only changes which five facts
-  reach the model, and in what order. Its first use downloads about 80 MB
-  (fastembed does this, like the meaning model).
+  reach the model, and in what order. **It is OFF until your PC's self-test
+  shows it helps** (your rule; changed 2026-09-26). The self-test downloads
+  it once, about 80 MB (fastembed does this, like the meaning model).
 
 ## The self-test numbers
 
@@ -10344,14 +10373,27 @@ After search finds its facts, a small model on the processor
 (`Xenova/ms-marco-MiniLM-L-6-v2`, Apache-2.0, English only) reads your
 question and each of the top 20 facts together and puts the best answers
 first; then the first 5 go to the model, as before. It only re-orders: it
-never adds a fact, never changes how many, never touches corrections. It
-never makes a chat wait: it loads in the background, and until it is ready,
-if it cannot load, or if it takes more than 1.5 seconds on a question,
-recall is exactly what it was - and the backend says once, in its window
-and the audit log, why it is off. To turn it off: set
-`JARVIS_MEMORY_RERANK=0`. It was on by default in this build because the
-brief said to use it when it loads; **if the self-test on your PC shows it
-does not help, say so and it goes off by default.**
+never adds a fact, never changes how many, never touches corrections.
+
+**It is off by default** (changed 2026-09-26, your rule that a memory change
+is kept only once the self-test shows it helps - so far it has only been
+measured as a stand-in). The self-test still measures the real model:
+`py -3 backend\eval_memory.py` loads it whatever the setting. If the
+"reranked" line in its report beats the line without it, turn it on with
+this one line, then restart Jarvis:
+
+```powershell
+[Environment]::SetEnvironmentVariable('JARVIS_MEMORY_RERANK', '1', 'User'); Write-Host 'Done. Quit Jarvis from the tray and start it again.'
+```
+
+(To turn it off again, the same line with `'0'`.)
+
+When it is on, a chat DOES wait for it, a little: up to 1.5 seconds per
+question once it is loaded (a question it cannot finish in that time gets
+the old order). It loads in the background - the first question after a
+start is not held up by the load - and if it cannot load, recall is exactly
+what it was, and the backend says once, in its window and the audit log,
+why it is off.
 
 ## 2. A bigger self-test
 

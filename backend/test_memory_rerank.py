@@ -14,10 +14,13 @@ What it proves, with stand-in re-rankers (no model is downloaded here):
    order; one that raises, answers the wrong number of scores or a NaN is
    the old order; one slower than RERANK_BUDGET_S is not waited for; one
    still busy with an earlier question is skipped, not queued.
-4. Loading never blocks a chat: the first question starts the load on a
-   background thread and gets the old order at once. A load that fails is
-   said ONCE (the audit log) and recall stays as it was; status() says why.
-   JARVIS_MEMORY_RERANK=0 turns it off.
+4. It is OFF by default (2026-09-26: kept only once the PC's self-test
+   shows it helps) - nothing is loaded and recall is the merged order -
+   and JARVIS_MEMORY_RERANK=1 turns it on. The self-test still measures it.
+   When on, loading never blocks a chat: the first question starts the load
+   on a background thread and gets the old order at once. A load that
+   fails is said ONCE (the audit log) and recall stays as it was; status()
+   says why.
 5. The model is the one the research named: Xenova/ms-marco-MiniLM-L-6-v2.
 
 WHAT IT DOES NOT PROVE: how much the real model helps, or how fast it is on
@@ -261,7 +264,23 @@ def t_a_slow_one_is_not_waited_for():
 
 # ======================================================== 4. loading ==
 
+class _On:
+    """JARVIS_MEMORY_RERANK=1 for the length of a with-block."""
+
+    def __enter__(self):
+        self.keep = M._RERANK_ON
+        M._RERANK_ON = True
+
+    def __exit__(self, *exc):
+        M._RERANK_ON = self.keep
+
+
 def t_loading_never_blocks_a_chat():
+    with _On():
+        _loading_never_blocks_a_chat()
+
+
+def _loading_never_blocks_a_chat():
     _reset()
     st, ids = store(*FACTS)
     base = ids_of(st.search("tennis", k=3))
@@ -302,6 +321,11 @@ def t_loading_never_blocks_a_chat():
 
 
 def t_a_failed_load_is_said_once():
+    with _On():
+        _a_failed_load_is_said_once()
+
+
+def _a_failed_load_is_said_once():
     _reset()
     st, ids = store(*FACTS)
     base = ids_of(st.search("tennis", k=3))
@@ -330,20 +354,50 @@ def t_a_failed_load_is_said_once():
         _reset()
 
 
-def t_it_can_be_switched_off():
+def t_it_is_off_by_default():
+    """The owner's rule (CLAUDE.md, memory): a memory change is kept only
+    once the self-test on the PC shows it helps. The re-ranker has only been
+    measured as a stand-in, so it is off until JARVIS_MEMORY_RERANK=1."""
+    import subprocess
+    env = dict(os.environ)
+    env.pop("JARVIS_MEMORY_RERANK", None)
+    probe = ("import sys, types; sys.path[:0] = [%r, %r]; "
+             "fw = types.ModuleType('jarvis_framework'); fw.CONFIG_DIR = fw.LOG_DIR = %r; "
+             "fw.audit_log = lambda *a, **k: None; fw.load_framework = lambda *a, **k: {}; "
+             "sys.modules['jarvis_framework'] = fw; import jarvis_memory as M; "
+             "import time; M.FastReranker = lambda: time.sleep(3); "
+             "print(M._RERANK_ON, M.reranker() is None, M.reranker_status()['state'])"
+             % (str(HERE / "rebuilt"), str(HERE), str(_TMP)))
+    for value, want in ((None, "False True off"), ("0", "False True off"),
+                        ("1", "True True loading"), ("yes", "True True loading")):
+        e = dict(env, JARVIS_NO_EMBED="1")
+        if value is not None:
+            e["JARVIS_MEMORY_RERANK"] = value
+        r = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
+                           timeout=120, env=e, cwd=str(_TMP))
+        got = (r.stdout.strip().splitlines() or [""])[-1]
+        check(f"JARVIS_MEMORY_RERANK={value if value is not None else '(not set)'}: "
+              f"on/none-yet/state = {want}", got == want, (got, r.stderr[-400:]))
     _reset()
     keep = M._RERANK_ON
     M._RERANK_ON = False
     try:
-        check("JARVIS_MEMORY_RERANK=0: no re-ranker, and nothing is loaded",
+        st, ids = store(*FACTS)
+        base = ids_of(st.search("tennis", k=3))
+        check("off: no re-ranker, nothing is loaded, recall is the merged order",
               M.reranker() is None and M._rr["state"] == "not started"
-              and M.reranker_status()["state"] == "off")
+              and ids_of(P.recall(st, "tennis", k=3)) == base)
+        s = M.reranker_status()
+        check("off: status() says so, and how to turn it on",
+              s["state"] == "off" and "JARVIS_MEMORY_RERANK=1" in s["why"]
+              and "self-test" in s["why"], s)
+        M.set_reranker(Reverse())
+        check("off: a re-ranker the self-test sets is still used (so it can be measured)",
+              ids_of(P.recall(st, "tennis", k=3)) != base
+              and M.reranker_status()["state"] == "on")
     finally:
         M._RERANK_ON = keep
         _reset()
-    src = (HERE / "rebuilt" / "jarvis_memory.py").read_text(encoding="utf-8")
-    check("the setting is JARVIS_MEMORY_RERANK, on unless 0/off/false/no",
-          'os.environ.get("JARVIS_MEMORY_RERANK", "1")' in src)
 
 
 # ========================================================== 5. model ==
@@ -355,6 +409,34 @@ def t_the_model_is_the_one_the_research_named():
     check("fastembed's own cross-encoder, imported only when it is loaded",
           "from fastembed.rerank.cross_encoder import TextCrossEncoder" in src
           and src.index("from fastembed.rerank") > src.index("class FastReranker"))
+
+
+def t_the_self_test_loads_it_even_though_it_is_off():
+    """`eval_memory.py --reranker auto` (the default) is how the owner finds
+    out whether it helps, so it must load the real model even while the
+    backend keeps it off."""
+    sys.path.insert(0, str(HERE))
+    import eval_memory as E
+
+    class Loaded(M.Reranker):
+        name = "stand-in for the real model"
+
+    real, keep = M.FastReranker, M._RERANK_ON
+    M.FastReranker, M._RERANK_ON = Loaded, False
+    _reset()
+    try:
+        m, what = E._pick_reranker(M, "auto")
+        check("--reranker auto loads the real model while the backend has it off",
+              isinstance(m, Loaded) and what == Loaded.name, (m, what))
+
+        def no_fastembed():
+            raise ImportError("No module named 'fastembed'")
+        M.FastReranker = no_fastembed
+        m, what = E._pick_reranker(M, "auto")
+        check("... and says why when it cannot", m is None and "fastembed" in what, what)
+    finally:
+        M.FastReranker, M._RERANK_ON = real, keep
+        _reset()
 
 
 def t_the_self_test_measures_it():

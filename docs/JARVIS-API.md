@@ -795,7 +795,9 @@ the PC, no app change needed:
 - **A card says what shaped it.** When a tool is proposed after a reading
   tool ran in this answer, or in a conversation that read outside text
   earlier (`jarvis_chat_log.conversation_tainted`, from the request's
-  `conversation_id`), or when the newest message's `provenance` is
+  `conversation_id`; after a backend restart, or for a conversation pushed
+  out of the newest 200, it is tainted unless the history database vouches
+  for every earlier turn - it fails closed, security review G1), or when the newest message's `provenance` is
   `pasted`, `shared` or `clipboard`, the card's `detail.text` ends with:
 
   ```
@@ -1066,7 +1068,11 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/history/conversation?id=` | GET | `brain_history_open` | `JarvisApi.historyConversation` | `chat-history.patch` - **§18**. One kept conversation, read-only: `{id, title, tainted, turns: [{role, text, at, provenance, read_outside, answer_kept} or {role: "assistant", text, at}]}`. `404` if there is no such conversation, `400` for a malformed id, `503` if it cannot be opened (the reason in words). |
 
 **`/api/models` gains `speed`** (`speed-record.patch`), next to `offload`:
-`{"available": true, "recent": [up to 20 answer rows, oldest first],
+`{"available": true, "recent": [up to 20 answer rows, oldest first; since
+2026-09-26 a row may also carry "cached_tokens" (how much of the prompt
+Ollama reused) and "prompt_rounds" (requests to the model in that answer,
+whose "prompt_tokens" and "cached_tokens" are summed) - numbers only, and
+neither app needs to show them],
 "by_model": {"<model>": {"answers", "median_first_word_ms",
 "median_tokens_per_s", "median_words_per_s", "median_on_gpu_percent",
 "last_at"}}, "last_switch": null | {...}, "last_switch_note": null | "<sentence>",
@@ -2923,7 +2929,12 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    request whether or not chat history is on: per live user message, a hash
    of its words (never the words), its provenance, the voice check's facts,
    the conversation id, the app, and whether a tool ran in that turn. The
-   newest 200 turns; a backend restart forgets them.
+   newest 200 turns; a backend restart forgets them. The conversation's
+   TAINT is not forgotten (security review G1, 2026-09-26): a conversation
+   the backend meets for the first time since it started, with earlier
+   turns in the request, is tainted unless the history database holds every
+   one of those turns and none read outside text - so after a restart its
+   next turns are "the conversation read outside text", a card.
    - a turn it did not see arrive (re-sent or made-up history, or older than
      the registry): "from a message this PC did not see arrive ..."
    - no valid `conversation_id` on the request: "the app did not say which
@@ -5502,11 +5513,17 @@ What changed on the PC, and nothing else:
    80 MB, downloaded once like the meaning model) before the first 5 go to
    the model. The same facts, a better order: none added, none that would
    have been among the 20 dropped, `JARVIS_MEMORY_K` and both floors
-   unchanged. It never blocks a chat - loaded on a background thread; not
-   loaded yet, not loadable, or slower than `JARVIS_MEMORY_RERANK_BUDGET`
-   (1.5 s) on a question: that question gets the old order. Said once in the
-   audit log (`memory.rerank_off`) and in `status()`. Off:
-   `JARVIS_MEMORY_RERANK=0`. Pool size: `JARVIS_MEMORY_RERANK_POOL` (20).
+   unchanged. **Off by default** (2026-09-26: kept only once the PC's memory
+   self-test shows it helps); `JARVIS_MEMORY_RERANK=1` turns it on. While it
+   is off, `status()["reranker"]` is `{"state": "off", "why": "off by default
+   until the memory self-test on this PC shows it helps; ..."}`.
+   `eval_memory.py --reranker auto` measures it whatever the setting. When
+   on: loaded on a background thread (the load never holds up a chat), and
+   each chat's recall waits for it up to `JARVIS_MEMORY_RERANK_BUDGET`
+   (1.5 s); not loaded yet, not loadable, or slower than that: that
+   question gets the old order. Said once in the audit log
+   (`memory.rerank_off`) and in `status()`. Pool size:
+   `JARVIS_MEMORY_RERANK_POOL` (20).
 2. **A bigger self-test** - questions that need two facts, questions about
    a time, more "don't know" questions, and a test of the learner (which
    turns it reads, "Remember:", dates, the automatic-learning gate, "said

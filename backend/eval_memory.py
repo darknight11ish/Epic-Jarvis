@@ -533,6 +533,19 @@ def _pick_reranker(M, how: str):
         return None, "this jarvis_memory.py has no re-ranker"
     if how == "stand-in":
         return StandInReranker(M), StandInReranker.name
+    if hasattr(M, "FastReranker"):
+        # Loaded directly, not through reranker(): the backend keeps it off
+        # until this self-test shows it helps (JARVIS_MEMORY_RERANK), and
+        # the self-test is how that is found out.
+        try:
+            m = M.FastReranker()
+        except ImportError as exc:
+            return None, (f"the real model could not be loaded: {type(exc).__name__}: "
+                          f"fastembed is not installed or has no re-ranker")
+        except Exception as exc:
+            return None, (f"the real model could not be loaded: {type(exc).__name__}: "
+                          f"the re-ranking model could not be loaded")
+        return m, getattr(m, "name", "the real model")
     m = M.reranker(wait=True)
     if m is None:
         return None, "the real model could not be loaded: " + str(

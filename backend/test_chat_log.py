@@ -362,6 +362,174 @@ def t_taint_from_a_turn_on():
         w.done()
 
 
+# ------------------------------------------ taint across a restart (G1)
+
+EMAIL_ASKED = {"role": "user", "content": "check my email", "provenance": "typed"}
+EMAIL_ANSWER = {"role": "assistant", "content": "You have 2 new emails."}
+HELLO = {"role": "user", "content": "hello", "provenance": "typed"}
+HI = {"role": "assistant", "content": "Hi."}
+
+
+def _restarted(w):
+    """A new ChatLog on the same files and key: what the backend holds after
+    a restart. Nothing in memory carries over."""
+    log = H.ChatLog(w.dir / "chat-history.db", w.dir / "chat-history.json",
+                    lambda: KEY, clock=w.clock)
+    H.use(log)
+    return log
+
+
+def t_taint_survives_a_restart():
+    """Security review G1 (docs/feasibility-2026-09-26/security.md): the
+    taint lived only in memory, so after a restart a conversation that had
+    read an email counted as clean - note writes, web searches with saved
+    facts and lights without a card stopped asking."""
+    w = World()
+    try:
+        cid = "conv-restart1"
+        w.log.record_turn(req("check my email", cid=cid),
+                          turn=local("You have 2 new emails.", tools=["email_check"]))
+        check("before the restart: tainted", w.log.conversation_tainted(cid))
+        log = _restarted(w)
+        nxt = req("write that down in my notes", cid=cid, history=[EMAIL_ASKED, EMAIL_ANSWER])
+        check("history on: still tainted after a restart (seeded from the database)",
+              log.conversation_tainted(cid, nxt["messages"]) is True)
+        log.record_turn(nxt, turn=local("Done."))
+        third = req("thanks", cid=cid, history=nxt["messages"] + [{"role": "assistant",
+                                                                     "content": "Done."}])
+        check("... and it stays tainted for the turns after it",
+              log.conversation_tainted(cid, third["messages"]) is True)
+        entry = log.live_turn(cid, "write that down in my notes")
+        check("automatic learning sees the seeded taint too (a card, not a saved fact)",
+              entry is not None and entry["tainted"] is True, entry)
+
+        clean = "conv-restart2"
+        w.log.record_turn(req("hello", cid=clean), turn=local("Hi."))
+        log = _restarted(w)
+        check("CONTROL: a conversation the database holds whole, that read nothing, "
+              "is still clean after a restart",
+              log.conversation_tainted(clean, req("and you?", cid=clean,
+                                                  history=[HELLO, HI])["messages"]) is False)
+        check("CONTROL: a brand-new conversation after a restart is clean",
+              log.conversation_tainted("conv-restart3", req("hi")["messages"]) is False)
+    finally:
+        w.done()
+
+
+def t_taint_after_a_restart_with_history_off_or_unreadable():
+    w = World()
+    try:
+        w.log.set_enabled(False)
+        cid = "conv-histoff1"
+        w.log.record_turn(req("check my email", cid=cid),
+                          turn=local("You have 2 new emails.", tools=["email_check"]))
+        log = _restarted(w)
+        msgs = req("write that down", cid=cid, history=[EMAIL_ASKED, EMAIL_ANSWER])["messages"]
+        check("history off: a conversation this backend has not met, with earlier turns, "
+              "counts as tainted", log.conversation_tainted(cid, msgs) is True)
+        check("... through the module function the agent calls, too",
+              H.conversation_tainted("conv-histoff2", msgs) is True)
+        check("CONTROL: history off, a new conversation is clean",
+              H.conversation_tainted("conv-histoff3", req("hello")["messages"]) is False)
+
+        # A gap: the first turn was said while history was off, the second
+        # with it on. The database cannot vouch for the first.
+        gap = "conv-gap00001"
+        w.log.set_enabled(False)
+        w.log.record_turn(req("check my email", cid=gap),
+                          turn=local("You have 2 new emails.", tools=["email_check"]))
+        w.log.set_enabled(True)
+        w.log.record_turn(req("ok", cid=gap, history=[EMAIL_ASKED, EMAIL_ANSWER]),
+                          turn=local("Fine."))
+        log = _restarted(w)
+        msgs = req("note it", cid=gap, history=[EMAIL_ASKED, EMAIL_ANSWER,
+                                                {"role": "user", "content": "ok"},
+                                                {"role": "assistant", "content": "Fine."}])
+        check("a database that is missing earlier turns cannot vouch: tainted",
+              log.conversation_tainted(gap, msgs["messages"]) is True)
+
+        (w.dir / "chat-history.db").write_bytes(b"this is not a database" * 100)
+        log = _restarted(w)
+        check("an unreadable database: tainted",
+              log.conversation_tainted("conv-restart2", req("and you?", cid="conv-restart2",
+                                       history=[HELLO, HI])["messages"]) is True)
+        check("no conversation id and earlier turns: tainted (it cannot be looked up)",
+              log.conversation_tainted(None, req("x", history=[HELLO, HI])["messages"]) is True
+              and log.conversation_tainted("x", req("x", history=[HELLO, HI])["messages"]))
+        check("CONTROL: no conversation id and no earlier turn: clean",
+              log.conversation_tainted(None, req("x")["messages"]) is False)
+    finally:
+        w.done()
+
+
+def t_taint_seeded_by_record_turn_alone():
+    """A turn on a lane with no tool loop never asks conversation_tainted;
+    record_turn must seed the taint itself, or the NEXT turn reads clean."""
+    w = World()
+    try:
+        cid = "conv-cloud001"
+        w.log.record_turn(req("check my email", cid=cid),
+                          turn=local("You have 2 new emails.", tools=["email_check"]))
+        log = _restarted(w)
+        log.record_turn(req("say hi", cid=cid, history=[EMAIL_ASKED, EMAIL_ANSWER]),
+                        lane="cloud", turn=None)
+        check("after a restart, a turn recorded without the tool loop keeps the taint",
+              log.conversation_tainted(cid, req("now write it down", cid=cid, history=[
+                  EMAIL_ASKED, EMAIL_ANSWER, {"role": "user", "content": "say hi"}])["messages"]))
+    finally:
+        w.done()
+
+
+def t_taint_survives_live_max_eviction():
+    """More than LIVE_MAX newer tainted conversations used to push an old
+    one's taint out, and it then read clean."""
+    w = World()
+    try:
+        w.log.set_enabled(False)          # no database to fall back on
+        old = "conv-oldest01"
+        w.log.record_turn(req("check my email", cid=old),
+                          turn=local("You have 2 new emails.", tools=["email_check"]))
+        for i in range(H.LIVE_MAX + 5):
+            w.log.record_turn(req("check my email", cid=f"conv-other-{i:04d}"),
+                              turn=local("Two.", tools=["email_check"]))
+        msgs = req("write it down", cid=old, history=[EMAIL_ASKED, EMAIL_ANSWER])["messages"]
+        check("an old tainted conversation pushed out of memory is still tainted",
+              w.log.conversation_tainted(old, msgs) is True)
+        check("the memory stays bounded", len(w.log._seen) <= H.LIVE_MAX
+              and len(w.log._taint) <= H.LIVE_MAX and len(w.log._live) <= H.LIVE_MAX)
+    finally:
+        w.done()
+
+
+def t_the_agent_fails_closed_when_the_log_breaks():
+    import jarvis_agent as AG
+    real = H.conversation_tainted
+
+    def broken(*_a, **_k):
+        raise RuntimeError("boom")
+
+    H.conversation_tainted = broken
+    try:
+        check("the tool loop: an error with earlier turns means tainted",
+              AG._conversation_tainted("conv-x0000001", [HELLO, HI, HELLO]) is True)
+        check("CONTROL: an error on a first message is still clean",
+              AG._conversation_tainted("conv-x0000001", [HELLO]) is False)
+    finally:
+        H.conversation_tainted = real
+    w = World()
+    try:
+        w.log.record_turn(req("check my email", cid="conv-agent001"),
+                          turn=local("You have 2 new emails.", tools=["email_check"]))
+        _restarted(w)
+        watch = AG._TurnWatch(None, req("write it down", cid="conv-agent001",
+                                        history=[EMAIL_ASKED, EMAIL_ANSWER]))
+        check("after a restart the tool loop's watch is tainted, so a note write asks",
+              watch.tainted is True and watch.note_needs_a_person() == AG.NOTE_AFTER_READING,
+              (watch.tainted, watch.note_needs_a_person()))
+    finally:
+        w.done()
+
+
 def t_off_records_nothing():
     w = World()
     try:

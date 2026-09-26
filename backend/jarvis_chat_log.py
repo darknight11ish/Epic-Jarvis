@@ -21,6 +21,18 @@ LIVE_MAX turns, a hash of each live message (never the words) with its
 provenance, the voice check's facts, the conversation id, the app, and
 whether a tool read outside text in that turn.
 
+TAINT SURVIVES A RESTART (security review G1, 2026-09-26). "Has this
+conversation read outside text?" (conversation_tainted, the tool loop's
+note-write, web-search and lights-without-a-card checks) must not forget
+across a backend restart, nor when a conversation falls out of the newest
+LIVE_MAX. The first time this process meets a conversation that already has
+earlier turns (_seed), it asks the history database's per-turn
+`read_outside` column; that answer counts only when the database holds every
+earlier user message the request carries. Otherwise - history off, the
+database unreadable, a temporary chat, a gap - the conversation counts as
+tainted. It fails CLOSED: a turn this process cannot vouch for asks, as a
+turn automatic learning does not remember already does.
+
 WHAT IS KEPT, per /api/chat request
   - The NEWEST user message only - the live one, never the re-sent history
     (plus, when the phone shared text, the shared message sent just before
@@ -265,6 +277,31 @@ def _live_user_messages(messages) -> list:
     return out
 
 
+def _earlier_user_messages(messages) -> Optional[int]:
+    """How many turns come before the live message(s) in a request: the
+    user messages with words or a picture, the way record_turn counts them -
+    or 1 when there are none of those but an answer or tool turn is there
+    (something earlier happened). None when `messages` is not a list, so it
+    cannot be counted."""
+    if not isinstance(messages, list):
+        return None
+    live = _live_user_messages(messages)
+    start = len(messages)
+    if live:
+        start = next(i for i, m in enumerate(messages) if m is live[0])
+    users, other = 0, False
+    for m in messages[:start]:
+        if not isinstance(m, dict):
+            continue
+        if m.get("role") == "user":
+            text, picture = _text_of(m.get("content"))
+            if text.strip() or picture:
+                users += 1
+        elif m.get("role") in ("assistant", "tool"):
+            other = True
+    return users if users or not other else 1
+
+
 def _norm(text: str) -> str:
     return " ".join(str(text or "").split())
 
@@ -296,6 +333,11 @@ class ChatLog:
         # and tags, never the words.
         self._live: "OrderedDict" = OrderedDict()   # (cid, sha256) -> entry
         self._taint: "OrderedDict" = OrderedDict()  # cid -> seq it was tainted from
+        # The conversations this process has met (_seed), newest used last.
+        # A conversation not in it is "unknown", and is asked about afresh -
+        # after a restart, or after LIVE_MAX newer ones pushed it out.
+        # _taint only ever holds conversations that are in here.
+        self._seen: "OrderedDict" = OrderedDict()   # cid -> True
         self._live_seq = 0
 
     # -- settings ---------------------------------------------------------
@@ -520,7 +562,8 @@ class ChatLog:
         the conversation id, the app, and whether a tool read outside text
         in that turn. The newest LIVE_MAX turns; a restart forgets them all,
         and a turn this PC does not remember is never learned from
-        automatically (it becomes a card instead)."""
+        automatically (it becomes a card instead). Conversation TAINT does
+        not end with a restart: see _seed."""
         with self._lock:
             first = None
             for text, prov, voice_check in rows:
@@ -535,10 +578,75 @@ class ChatLog:
             if read_outside and first is not None and cid not in self._taint:
                 # From this turn on, the whole conversation is tainted.
                 self._taint[cid] = first
+            self._met(cid)
             while len(self._live) > LIVE_MAX:
                 self._live.popitem(last=False)
-            while len(self._taint) > LIVE_MAX:
-                self._taint.popitem(last=False)
+
+    def _met(self, cid: str) -> None:
+        """Mark `cid` as met by this process, newest last. The oldest beyond
+        LIVE_MAX is forgotten WHOLE - its taint and its live turns together -
+        so it is never half-remembered as clean: next time it is unknown, and
+        _seed asks afresh. Under self._lock."""
+        self._seen.pop(cid, None)
+        self._seen[cid] = True
+        while len(self._seen) > LIVE_MAX:
+            old, _ = self._seen.popitem(last=False)
+            self._taint.pop(old, None)
+            for key in [k for k in self._live if k[0] == old]:
+                del self._live[key]
+
+    # -- taint for a conversation this process has not met ------------------
+    def _db_turns(self, cid: str):
+        """(user rows, any turn read outside text) for `cid` in the history
+        database, or None when there is no database or no row for it. Plain
+        columns only: no key is needed. Raises when the file cannot be read."""
+        if not self.db_path.exists():
+            return None
+        with closing(self._connect()) as c:
+            row = c.execute("SELECT SUM(role='user'), MAX(read_outside) FROM turns"
+                            " WHERE conversation_id=?", (cid,)).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return int(row[0] or 0), bool(row[1])
+
+    def _unknown_tainted(self, cid, messages) -> bool:
+        """Is a conversation this process has not met tainted? `messages`:
+        the request as it arrived (None when the caller has none).
+
+        No earlier turn in the request: a new conversation - clean. The
+        history database says a turn read outside text: tainted. The
+        database holds every earlier user message the request carries, and
+        none read outside text: clean. Anything else - no database, history
+        off when those turns were said, a temporary chat, an unreadable file,
+        no messages to count - tainted: this PC cannot vouch for turns it
+        did not see (G1)."""
+        earlier = _earlier_user_messages(messages)
+        if earlier == 0:
+            return False
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+            return True
+        try:
+            db = self._db_turns(cid)
+        except Exception:
+            return True
+        if db is None:
+            return True
+        users, outside = db
+        if outside:
+            return True
+        return earlier is None or users < earlier
+
+    def _seed(self, cid, messages) -> None:
+        """The first time this process meets `cid`: decide its taint from
+        _unknown_tainted and remember it. A tainted one is tainted from before
+        any turn this process saw (seq 0). Under self._lock."""
+        if cid in self._seen:
+            self._seen.move_to_end(cid)
+            return
+        tainted = self._unknown_tainted(cid, messages)
+        self._met(cid)
+        if tainted:
+            self._taint[cid] = 0
 
     def live_turn(self, conversation_id, text) -> Optional[dict]:
         """The registry's entry for this message in this conversation, or
@@ -583,9 +691,16 @@ class ChatLog:
             out["tainted"] = since is not None and since <= out["seq"]
             return out
 
-    def conversation_tainted(self, conversation_id) -> bool:
-        """Has any live turn of this conversation read outside text?"""
+    def conversation_tainted(self, conversation_id, messages=None) -> bool:
+        """Has any earlier turn of this conversation read outside text?
+        `messages`: the request's messages as they arrived, for a
+        conversation this process has not met (see _unknown_tainted). A
+        request with no usable conversation id cannot be looked up: it is
+        tainted when it carries any earlier turn. Fails closed."""
+        if not (isinstance(conversation_id, str) and _CID.fullmatch(conversation_id)):
+            return _earlier_user_messages(messages) != 0
         with self._lock:
+            self._seed(conversation_id, messages)
             return conversation_id in self._taint
 
     # -- recording ----------------------------------------------------------
@@ -630,6 +745,10 @@ class ChatLog:
         # The live-turn registry is written for EVERY request, before the
         # switch is read: automatic learning trusts only turns this PC saw
         # arrive, whether or not history is kept (jarvis_auto_learn.py).
+        # A conversation this process has not met is seeded first - from the
+        # database as it was BEFORE this turn is written (G1).
+        with self._lock:
+            self._seed(cid, body.get("messages"))
         self._note_live(cid, rows, device, read_outside, now)
         if temporary:
             return {"recorded": False, "why": TEMPORARY_WHY}
@@ -885,8 +1004,11 @@ def live_turn_any(text) -> Optional[dict]:
     return _log().live_turn_any(text)
 
 
-def conversation_tainted(conversation_id) -> bool:
-    return _log().conversation_tainted(conversation_id)
+def conversation_tainted(conversation_id, messages=None) -> bool:
+    """For jarvis_agent: has an earlier turn of this conversation read
+    outside text? `messages`: the request's, as they arrived. Fails closed
+    for a conversation this process has not met (G1)."""
+    return _log().conversation_tainted(conversation_id, messages)
 
 
 def status() -> dict:

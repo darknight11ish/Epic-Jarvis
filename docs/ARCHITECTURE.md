@@ -196,7 +196,12 @@ its own (security audit M1, 2026-09-25) - a note write
 `write_notes_after_outside_text`, tier `ask`, and runs only on a person's
 yes, like `NEEDS_A_PERSON`. Not a second approval path: the same gate, the
 same card, one more line on it saying why. `backend/README.md`, "Outside
-text in the tool loop".
+text in the tool loop". "Tainted" survives a backend restart (security
+review G1, 2026-09-26): a conversation the backend has not met since it
+started counts as tainted when the request carries earlier turns, unless
+the chat history database holds all of them and none read outside text
+(`jarvis_chat_log._seed`). It fails closed: an error, history off, or a gap
+means tainted.
 
 One answer raises at most five cards (`jarvis_agent.CARDS_PER_TURN`; the owner confirmed five,
 2026-09-25). A card for several smart-home devices (section 2) counts once. After that, a call that would ask is refused before it is
@@ -732,11 +737,14 @@ fact_repeats  fact_id, said_at, how ("typed" | "voice")   "said again" - NO WORD
   (`Xenova/ms-marco-MiniLM-L-6-v2` through fastembed, Apache-2.0, English
   only) before the first `k` go to the model. It only re-orders - no fact
   added, `k` and both floors unchanged - and never touches `find_one()`,
-  corrections or anything that writes. Loaded on a background thread; until
-  it is ready, if it cannot load, or if one question takes longer than
-  1.5 s, recall is exactly what it was (said once, in the audit log and
-  `status()["reranker"]`). `JARVIS_MEMORY_RERANK=0` turns it off. Its gain
-  is measured only on the PC: the model cannot download in the container.
+  corrections or anything that writes. **Off by default** (2026-09-26: a
+  memory change is kept only once the PC's self-test shows it helps);
+  `JARVIS_MEMORY_RERANK=1` turns it on, and `eval_memory.py` measures it
+  whatever the setting. When on: loaded on a background thread; each chat's
+  recall waits for it up to 1.5 s; until it is ready, if it cannot load, or
+  if one question takes longer than 1.5 s, recall is exactly what it was
+  (said once, in the audit log and `status()["reranker"]`). Its gain is
+  measured only on the PC: the model cannot download in the container.
 - **"Said again"** (idea 3). When the owner says a fact Jarvis already
   keeps, the learner's proposal is still dropped, and one row is kept: the
   fact's id, when the PC saw the turn arrive, typed or voice. Only from the

@@ -437,7 +437,7 @@ def t_values_the_owner_said_are_not_blamed_on_the_email():
 def t_taint_and_pasted_words_are_named_on_cards():
     real = getattr(AG, "_conversation_tainted", None)
     asked = []
-    AG._conversation_tainted = lambda cid: asked.append(cid) or cid == "c-tainted"
+    AG._conversation_tainted = lambda cid, messages=None: asked.append(cid) or cid == "c-tainted"
     fakes = Tools().__enter__()
     try:
         _, _, gate, _ = turn([said(call(1, "shell_exec", {"command": "dir"})), answer()],
@@ -569,7 +569,7 @@ def t_note_writes_after_outside_text_wait_for_a_yes():
     away. Fails on the old jarvis_agent.py, which wrote the note unasked."""
     real_tier, real_taint = AG._tier_of, getattr(AG, "_conversation_tainted", None)
     AG._tier_of = _shipped_tier()
-    AG._conversation_tainted = lambda cid: cid == "c-tainted"
+    AG._conversation_tainted = lambda cid, messages=None: cid == "c-tainted"
     try:
         # Controls: a clean turn, as before.
         for tool in NOTE_TOOLS:

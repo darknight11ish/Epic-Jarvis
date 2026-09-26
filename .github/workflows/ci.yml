@@ -450,3 +450,20 @@ jobs:
         run: |
           cargo fetch --locked
           python3 ../../tools/gen_notices.py --check
+
+  python-advisories:
+    # The backend's Python packages, next to `cargo deny` above (feasibility
+    # audit I111, first half, 2026-09-26): backend/requirements.lock must pin
+    # every package in requirements.txt with a hash, and no pinned release -
+    # on any platform or Python version the lock covers - may have a known
+    # advisory in PyPI's own database. Standard library only, so there is
+    # nothing new to install (or to pin) for the check itself.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.12"
+      - name: Python packages are hash-locked and have no known advisory
+        run: python tools/check_python_advisories.py
