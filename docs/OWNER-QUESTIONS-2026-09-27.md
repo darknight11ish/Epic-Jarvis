@@ -55,6 +55,28 @@ cannot answer still get 1-2 wrong facts each.
 - **a. Yes, but only if the PC test shows it helps** (recommended)
 - b. Keep it only re-ordering
 
+## Ease of use (`docs/EASE-OF-USE-AUDIT-2026-09-27.md`)
+
+**4d. Web search out of the box.** Every tool ships switched off, so the AI
+cannot search the web until you edit a file - even though you chose SearXNG.
+- **a. Ship it with web search on** (recommended - searches from your own question still need no card; after outside text they still ask)
+- b. Leave it off, and make the app say how to turn it on
+
+**4e. A list of past approvals.** Read-only: each card's title, Approved /
+Denied / Timed out, when, from which device. No buttons that decide anything.
+- **a. Build it** (recommended - I first need a look at your PC's `jarvis_gate.py`)
+- b. Not now
+
+**4f. Turning on reading tools from the PC app** (calendar, email, notes,
+home status): an "On" switch on the PC, each raising a card plus Windows Hello.
+- **a. Yes, PC only, those four** (recommended)
+- b. Keep all tools in the settings file
+
+**4g. Searching your own old chats** - a search box in History, just for you.
+Nothing is saved and nothing is handed to the AI.
+- **a. Allow it now** (recommended - the 2026-09-26 "wait" was about Jarvis itself searching your words)
+- b. Wait until the memory work is measured
+
 ## Looks (UI audit)
 
 **5. Build the UI audit's "do first" list?** The desktop face moves with the
