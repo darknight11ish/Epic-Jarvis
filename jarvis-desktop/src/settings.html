@@ -64,6 +64,7 @@
           <a href="#security">Security</a>
           <a href="#voices">Jarvis's voice</a>
           <a href="#web-search">Web search</a>
+          <a href="#account-secrets">Accounts</a>
           <a href="#hardware">Hardware and models</a>
           <a href="#second-card">Second graphics card</a>
           <a href="#big-model">Big model (slow)</a>
@@ -970,6 +971,35 @@
         </div>
       </section>
 
+      <!-- ── Accounts ──────────────────────────────────────────────────────
+           Ease-of-use audit row 15 ("Security G3"): the IMAP username and
+           password, the private calendar link, and the Home Assistant token
+           used to be plain Windows user environment variables only - which
+           Windows itself stores as plain text. account-secrets-settings.js;
+           src-tauri/src/account_secrets.rs, token_store.rs. Same shape as
+           the web search keys above: written straight into Windows
+           Credential Manager on this PC, never sent over HTTP, never shown
+           again. The matching environment variable, if the owner already
+           has one, keeps winning either way - saving here never touches it. -->
+      <section class="card" id="account-secrets">
+        <h2>Accounts</h2>
+        <p class="note">
+          The IMAP username and password (for reading and sending email), the
+          private calendar link, and the Home Assistant token. Typed here,
+          each one goes straight into Windows Credential Manager on this PC -
+          never sent anywhere, and never shown again once saved, the same as
+          the web search keys above. If you already set one of these as a
+          Windows environment variable, that keeps working exactly as
+          before - it is used ahead of anything typed here.
+        </p>
+
+        <div id="as-body"></div>
+
+        <div class="row">
+          <span class="status" id="as-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── Hardware and models ──────────────────────────────────────────
            Read from GET /api/hardware (hardware-panel.js). The graphics
            cards, what runs on them now, and three setups. Nothing changes
@@ -1540,6 +1570,7 @@
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="briefing-settings.js"></script>
     <script type="module" src="web-search-settings.js"></script>
+    <script type="module" src="account-secrets-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>
     <script type="module" src="asks-first-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>

@@ -1105,6 +1105,45 @@ def t_the_weather_from_home_assistant():
                 os.environ[k] = v
 
 
+def t_calendar_source_from_credential_manager_counts_as_set_up():
+    """Ease-of-use audit row 15: the private calendar link can also live in
+    Windows Credential Manager instead of JARVIS_CALENDAR_ICS_SECRET_URL.
+    sources()["calendar"] must say "on" (calendar_read enabled, tier auto)
+    from THAT alone - checking the environment variable by name, as this
+    used to, would wrongly say "not set up". Exercised through
+    jarvis_token_store._STORE_FACTORY, off Windows, never a real store."""
+    import jarvis_calendar as C
+    import jarvis_token_store as TS
+
+    class _FakeStore:
+        def __init__(self, value):
+            self.value = value
+
+        def read(self):
+            return self.value
+
+    saved = os.environ.get(C.ICS_URL_ENV)
+    saved_caldav = os.environ.get("JARVIS_CALDAV_URL")
+    try:
+        os.environ.pop(C.ICS_URL_ENV, None)
+        os.environ.pop("JARVIS_CALDAV_URL", None)
+        TS._STORE_FACTORY = lambda target: _FakeStore(
+            "https://calendar.google.com/private-fake.ics" if target == C.ICS_URL_TARGET else None)
+        out = B.sources(deps())["calendar"]
+        check("sources()['calendar'] is 'on' from Credential Manager alone",
+              out["state"] == "on", out)
+    finally:
+        TS._STORE_FACTORY = None
+        if saved is None:
+            os.environ.pop(C.ICS_URL_ENV, None)
+        else:
+            os.environ[C.ICS_URL_ENV] = saved
+        if saved_caldav is None:
+            os.environ.pop("JARVIS_CALDAV_URL", None)
+        else:
+            os.environ["JARVIS_CALDAV_URL"] = saved_caldav
+
+
 def t_the_routes():
     use_tz("Europe/London")
     B.forget()

@@ -356,6 +356,15 @@ permissions = [
   "allow-test-web-search",
   "allow-save-search-key",
   "allow-forget-search-key",
+  # "Accounts" (ease-of-use audit row 15): the IMAP username and password,
+  # the private calendar link, and the Home Assistant token, written
+  # straight into Credential Manager on this PC by save_account_secret -
+  # never sent to the backend or the phone, never read back to a page. The
+  # matching environment variable, if the owner already has one, keeps
+  # winning on the backend either way. Settings window only - rule 3.
+  "allow-get-account-secrets",
+  "allow-save-account-secret",
+  "allow-forget-account-secret",
   # "What Jarvis can reach": every way Jarvis can reach something outside
   # itself, whether each is on, where it goes (a host only) and whether it
   # asks first - written by the PC from its settings, never by the model.

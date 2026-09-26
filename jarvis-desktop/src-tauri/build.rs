@@ -167,6 +167,14 @@ fn main() {
             "test_web_search",
             "save_search_key",
             "forget_search_key",
+            // Settings' "Accounts" (ease-of-use audit row 15): the IMAP
+            // username and password, the private calendar link, and the
+            // Home Assistant token, written straight into Credential
+            // Manager on this PC - never sent over HTTP, never shown again.
+            // Settings window only.
+            "get_account_secrets",
+            "save_account_secret",
+            "forget_account_secret",
             // Settings' "What Jarvis can reach" (backend/reach.patch): every
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.

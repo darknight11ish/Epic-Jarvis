@@ -740,11 +740,12 @@ def _resp(conn, code: str) -> Optional[int]:
 def _default_email_look(p, base_uid: Optional[int], uidvalidity: Optional[int]) -> dict:
     """ONE connection, read-only. The first look (no base) only notes where
     the mailbox is; later looks read the From line of mail that arrived
-    since. Credentials read fresh from the environment, never kept."""
+    since. Credentials read fresh - the environment, or (ease-of-use audit
+    row 15) Windows Credential Manager - never kept."""
     import imaplib
     import jarvis_email as MAIL
-    user = os.environ.get("JARVIS_IMAP_USER", "")
-    password = os.environ.get("JARVIS_IMAP_PASSWORD", "")
+    user = MAIL.imap_user()
+    password = MAIL.imap_password()
     # The certificate is checked (jarvis_email.tls_context): imaplib alone
     # would hand the password to whoever answered.
     conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=20.0, ssl_context=MAIL.tls_context(p.host))
@@ -1398,10 +1399,10 @@ def _default_idle_connect(p) -> _Imap:
 
 
 def _open(conn: _Imap, p) -> _Imap:
+    import jarvis_email as MAIL
     try:
         conn.greet()
-        conn.login(os.environ.get("JARVIS_IMAP_USER", ""),
-                   os.environ.get("JARVIS_IMAP_PASSWORD", ""))
+        conn.login(MAIL.imap_user(), MAIL.imap_password())
         if not conn.capable():
             raise NoIdle()
         conn.examine(p.mailbox)

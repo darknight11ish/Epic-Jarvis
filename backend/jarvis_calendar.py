@@ -78,6 +78,13 @@ puts the password in a `Plan`, a `Query`, or `describe()`'s output -
 `describe()` says only THAT the request is authenticated, never with what,
 matching `jarvis_research.describe()`'s own auth line.
 
+The private link is a little more careful still (ease-of-use audit row 15):
+`_feed_url()` reads `ICS_URL_ENV` if the owner set it, else Windows
+Credential Manager under `ICS_URL_TARGET` - entered on the PC only, in the
+desktop's Settings ("Accounts") - else "". An installation that already has
+the environment variable set keeps using it unchanged; Credential Manager is
+only ever the fallback, never a second source that could disagree with it.
+
 WHY THE ICS PARSER IS DELIBERATELY MINIMAL
 A real RFC 5545 calendar can nest VALARM, VTIMEZONE, RRULE recurrence, and
 line-folding across a hard 75-octet limit. Depending on a real icalendar
@@ -148,6 +155,13 @@ PASSWORD_ENV = "JARVIS_CALDAV_PASSWORD"
 #: from the log. test_calendar.py checks both.
 ICS_URL_ENV = "JARVIS_CALENDAR_ICS_SECRET_URL"
 
+#: Windows Credential Manager name for the same link, read when the
+#: environment variable above is not set (ease-of-use audit row 15). The
+#: desktop's Settings -> "Accounts" writes it under this same name
+#: (jarvis-desktop/src-tauri/src/token_store.rs, ACCOUNT_SECRET_TARGETS -
+#: test_account_secrets.py checks the text).
+ICS_URL_TARGET = "Jarvis Backend/Calendar iCal link"
+
 # A calendar with hundreds of events in the window asked for is not a
 # reading list, it is a data dump - capped the same way jarvis_agent's
 # _tool_content caps any one tool's result, but here at the source, so the
@@ -181,7 +195,13 @@ _REFUSED = "nothing is read; the calendar stays unknown to Jarvis"
 
 
 def _feed_url() -> str:
-    return os.environ.get(ICS_URL_ENV, "").strip()
+    """The private calendar link: `ICS_URL_ENV` if the owner set it, else
+    Windows Credential Manager under `ICS_URL_TARGET`, else "" - the same
+    order jarvis_token_store.resolve_secret documents (ease-of-use audit
+    row 15). An existing installation with the environment variable already
+    set keeps using it unchanged."""
+    import jarvis_token_store
+    return jarvis_token_store.resolve_secret(ICS_URL_ENV, ICS_URL_TARGET)
 
 
 def _configured() -> bool:
@@ -588,7 +608,8 @@ def _fetch_feed(q: Query) -> str:
     and the link must still point where the card said."""
     feed = _feed_url()
     if not feed:
-        raise _LinkProblem(f"{ICS_URL_ENV} is no longer set, so there is nothing to read")
+        raise _LinkProblem(f"{ICS_URL_ENV} is no longer set (nor saved in Windows "
+                           f"Credential Manager), so there is nothing to read")
     problem = _feed_problem(feed)
     if problem:
         raise _LinkProblem(problem)

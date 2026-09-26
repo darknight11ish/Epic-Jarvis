@@ -143,7 +143,7 @@ from typing import Callable, Optional
 
 #: The account is the one jarvis_email.py reads with - one place for the
 #: names, and the SAME ones jarvis_email_send.py already imports.
-from jarvis_email import HOST_ENV, PASSWORD_ENV, PORT_ENV, USER_ENV
+from jarvis_email import HOST_ENV, PASSWORD_ENV, PORT_ENV, USER_ENV, imap_password, imap_user
 #: Validation shared with sending, so the two never drift apart on what
 #: counts as a plain address or how many people is too many.
 from jarvis_email_send import (MAX_ADDRESS_CHARS, MAX_BODY_CHARS, MAX_RECIPIENTS,
@@ -203,11 +203,11 @@ class Settings:
 
 
 def settings() -> Settings:
-    """How a draft would be saved, from the environment - the same account
-    jarvis_email.py reads with. Never the password - only whether one is
-    set. Opens nothing."""
-    sender = os.environ.get(USER_ENV, "").strip()
-    has_password = bool(os.environ.get(PASSWORD_ENV, ""))
+    """How a draft would be saved - the same account jarvis_email.py reads
+    with (env var, else Windows Credential Manager). Never the password -
+    only whether one is set. Opens nothing."""
+    sender = imap_user()
+    has_password = bool(imap_password())
     host = os.environ.get(HOST_ENV, "").strip()
     raw_port = os.environ.get(PORT_ENV, "").strip()
     port = _DEFAULT_PORT
@@ -228,13 +228,15 @@ def settings() -> Settings:
         return s(f"{HOST_ENV} is not set - saving a draft uses the same account as "
                  f"reading email, and there is none")
     if not sender:
-        return s(f"{USER_ENV} is not set - saving a draft uses the same account as "
-                 f"reading email, and there is none")
+        return s(f"{USER_ENV} is not set, and nothing is saved in Windows Credential "
+                 f"Manager either - saving a draft uses the same account as reading "
+                 f"email, and there is none")
     if not valid_address(sender):
         return s(f"{USER_ENV} is not an email address, so Jarvis cannot tell which "
                  f"address the draft is from")
     if not has_password:
-        return s(f"{PASSWORD_ENV} is not set, so the mail server would refuse the login")
+        return s(f"{PASSWORD_ENV} is not set, and nothing is saved in Windows "
+                 f"Credential Manager either, so the mail server would refuse the login")
     if port_problem:
         return s(port_problem)
     return s("")
@@ -518,7 +520,7 @@ def view(*, tools_enabled: Optional[Callable[[], set]] = None,
         "from": st.sender if valid_address(st.sender) else "",
         "server": st.host,
         "port": st.port,
-        "password_set": bool(os.environ.get(PASSWORD_ENV, "")),
+        "password_set": bool(imap_password()),
         "tool_enabled": on,
         "said": said,
         "limits": {"recipients": MAX_RECIPIENTS, "subject_chars": MAX_SUBJECT_CHARS,
@@ -697,9 +699,11 @@ def run(p: Plan, *, approved: bool = False,
                 "error": "not saved: the account or the mail server settings changed after "
                          "the card was shown, so this is not what was approved. Nothing "
                          "was saved."}
-    password = os.environ.get(PASSWORD_ENV, "")
+    password = imap_password()
     if not password:
-        return {"ok": False, "saved": False, "error": f"not saved: {PASSWORD_ENV} is not set."}
+        return {"ok": False, "saved": False,
+                "error": f"not saved: {PASSWORD_ENV} is not set, and nothing is saved "
+                         f"in Windows Credential Manager either."}
     _register_with_scrubber(p.sender, password)
     data = message(p).as_bytes(policy=SMTP_POLICY)
     phase = ["start"]

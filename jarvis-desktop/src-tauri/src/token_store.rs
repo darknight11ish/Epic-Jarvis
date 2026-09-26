@@ -322,6 +322,130 @@ pub fn delete_search_key(provider: &str) -> Result<(), StoreError> {
     imp::delete(target)
 }
 
+/// The four account secrets email, calendar and Home Assistant used to keep
+/// as plain Windows user environment variables (ease-of-use audit row 15,
+/// "Security G3"; `settings.html` "Accounts"; `account_secrets.rs`).
+///
+/// (short id, the environment variable the backend still reads FIRST if the
+/// owner already set one - `backend/jarvis_token_store.resolve_secret`'s
+/// own rule 2, "someone who set it meant it" - and the Credential Manager
+/// name for the fallback). `test_account_secrets.py` checks the backend
+/// reads under these exact four names.
+pub const ACCOUNT_SECRET_TARGETS: [(&str, &str, &str); 4] = [
+    (
+        "imap_user",
+        "JARVIS_IMAP_USER",
+        "Jarvis Backend/IMAP username",
+    ),
+    (
+        "imap_password",
+        "JARVIS_IMAP_PASSWORD",
+        "Jarvis Backend/IMAP password",
+    ),
+    (
+        "calendar_ics_url",
+        "JARVIS_CALENDAR_ICS_SECRET_URL",
+        "Jarvis Backend/Calendar iCal link",
+    ),
+    (
+        "home_token",
+        "JARVIS_HOME_TOKEN",
+        "Jarvis Backend/Home Assistant token",
+    ),
+];
+
+/// The Credential Manager name for `name`'s secret, or `None` for a name
+/// that is not one of the four.
+pub fn account_secret_target(name: &str) -> Option<&'static str> {
+    ACCOUNT_SECRET_TARGETS
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|(_, _, t)| *t)
+}
+
+/// The environment variable name for `name`'s secret - the one the backend
+/// still reads first, if it is set. Never returns the value.
+pub fn account_secret_env(name: &str) -> Option<&'static str> {
+    ACCOUNT_SECRET_TARGETS
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|(_, e, _)| *e)
+}
+
+/// Whether `name`'s environment variable is set to a non-blank value on
+/// THIS PC, right now - checked fresh (a value set after Jarvis Desktop
+/// started needs a restart to be seen here, same as every other setting in
+/// this file). Never the value, only whether one is there. `None` for a
+/// name that is not one of the four.
+pub fn account_secret_env_set(name: &str) -> Option<bool> {
+    account_secret_env(name).map(|env_name| {
+        std::env::var(env_name)
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false)
+    })
+}
+
+/// Whether `value` can be one of the four secrets, or why not. Deliberately
+/// more permissive than `search_key_problem`: an IMAP password or a Home
+/// Assistant token can hold a space or punctuation a search key never does,
+/// and the calendar link is a whole URL. The reason never quotes it.
+pub fn account_secret_problem(name: &str, value: &str) -> Option<&'static str> {
+    let v = value.trim();
+    if v.is_empty() {
+        return Some("That is empty.");
+    }
+    if v.chars().any(|c| c.is_control()) {
+        return Some("That has a character it should not - copy it again.");
+    }
+    if name == "calendar_ics_url" {
+        if v.len() > 2048 {
+            return Some("That address is too long.");
+        }
+        if !v.starts_with("https://") {
+            return Some(
+                "That does not start with https:// - copy the \"Secret address in iCal \
+                 format\" again.",
+            );
+        }
+        return None;
+    }
+    if v.len() > 1024 {
+        return Some("That is too long.");
+    }
+    None
+}
+
+/// Saves one of the four account secrets, then reads it back to be sure it
+/// landed - the same check `write_search_key` makes.
+pub fn write_account_secret(name: &str, value: &str) -> Result<(), StoreError> {
+    let target = account_secret_target(name)
+        .ok_or_else(|| StoreError::Failed("not one of the four account secrets".into()))?;
+    let value = value.trim();
+    imp::write(target, value)?;
+    match imp::read(target)? {
+        Some(back) if back == value => Ok(()),
+        _ => Err(StoreError::Failed(
+            "the value read back from Credential Manager did not match".into(),
+        )),
+    }
+}
+
+/// Removes one of the four account secrets. Not an error when there was none.
+pub fn delete_account_secret(name: &str) -> Result<(), StoreError> {
+    let target = account_secret_target(name)
+        .ok_or_else(|| StoreError::Failed("not one of the four account secrets".into()))?;
+    imp::delete(target)
+}
+
+/// Whether Credential Manager holds a value for `name` - never the value
+/// itself. `Ok(None)` when `name` is not one of the four.
+pub fn account_secret_saved(name: &str) -> Result<Option<bool>, StoreError> {
+    let Some(target) = account_secret_target(name) else {
+        return Ok(None);
+    };
+    Ok(Some(imp::read(target)?.is_some()))
+}
+
 /// The token the backend made for itself, if Credential Manager holds one.
 ///
 /// Asked every time, not cached: on a first run the backend makes it moments
@@ -413,5 +537,76 @@ mod tests {
             Migration::KeepPlain(why) => assert!(!why.contains("s3cret")),
             other => panic!("expected KeepPlain, got {other:?}"),
         }
+    }
+
+    /// The four account secrets: named the way the backend's
+    /// `jarvis_token_store.resolve_secret` callers expect, and the same
+    /// permissive-but-sane rule for all four (`test_account_secrets.py`
+    /// checks the backend's own targets against this table).
+    #[test]
+    fn account_secrets_have_the_backends_four_names() {
+        use super::{account_secret_env, account_secret_problem, account_secret_target};
+        assert_eq!(
+            account_secret_target("imap_user"),
+            Some("Jarvis Backend/IMAP username")
+        );
+        assert_eq!(
+            account_secret_target("imap_password"),
+            Some("Jarvis Backend/IMAP password")
+        );
+        assert_eq!(
+            account_secret_target("calendar_ics_url"),
+            Some("Jarvis Backend/Calendar iCal link")
+        );
+        assert_eq!(
+            account_secret_target("home_token"),
+            Some("Jarvis Backend/Home Assistant token")
+        );
+        assert_eq!(account_secret_target("not_one_of_them"), None);
+        assert_eq!(account_secret_env("imap_user"), Some("JARVIS_IMAP_USER"));
+        assert_eq!(
+            account_secret_env("imap_password"),
+            Some("JARVIS_IMAP_PASSWORD")
+        );
+        assert_eq!(
+            account_secret_env("calendar_ics_url"),
+            Some("JARVIS_CALENDAR_ICS_SECRET_URL")
+        );
+        assert_eq!(account_secret_env("home_token"), Some("JARVIS_HOME_TOKEN"));
+
+        assert!(account_secret_problem("imap_user", "owner@example.com").is_none());
+        assert!(account_secret_problem("home_token", "a token with no spaces").is_none());
+        for name in [
+            "imap_user",
+            "imap_password",
+            "calendar_ics_url",
+            "home_token",
+        ] {
+            let why = account_secret_problem(name, "").expect(name);
+            assert_eq!(why, "That is empty.");
+            let why = account_secret_problem(name, "   ").expect(name);
+            assert_eq!(why, "That is empty.");
+        }
+        // Only the calendar link must be https:// - a password or token is
+        // free text otherwise, unlike a search key (no "no spaces" rule).
+        assert!(account_secret_problem("imap_password", "correct horse battery staple").is_none());
+        assert!(
+            account_secret_problem("calendar_ics_url", "https://calendar.google.com/x").is_none()
+        );
+        let why = account_secret_problem("calendar_ics_url", "http://calendar.google.com/x")
+            .expect("http rejected");
+        assert!(why.contains("https://"));
+        let why = account_secret_problem("calendar_ics_url", "webcal://calendar.google.com/x")
+            .expect("webcal rejected");
+        assert!(why.contains("https://"));
+        assert!(account_secret_problem("imap_user", &"x".repeat(1025)).is_some());
+        assert!(account_secret_problem(
+            "calendar_ics_url",
+            &format!("https://{}", "x".repeat(2048))
+        )
+        .is_some());
+        let secret = "s3cret-value-nobody-should-see";
+        let why = account_secret_problem("home_token", &format!("bad\ttab{secret}")).unwrap();
+        assert!(!why.contains(secret), "the reason quoted the value: {why}");
     }
 }
