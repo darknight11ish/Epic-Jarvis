@@ -96,6 +96,7 @@ import ast
 import http.client
 import json
 import operator
+import os
 import re
 import socket
 import threading
@@ -196,10 +197,61 @@ def _is_reserved_windows_name(path: str) -> bool:
     return False
 
 
+#: Places file_read never opens, whatever the model asks (2026-09-26,
+#: round 3 research: it opened any path, including ~/.ssh). Keys, saved
+#: passwords and tokens, browser profiles (cookies, saved logins), Windows'
+#: own credential stores, and Jarvis's own data - its databases, settings,
+#: pairing token - which a planted "read this file" could otherwise put in
+#: front of the model. Matched on the resolved path, lower-cased, with
+#: forward slashes, so "..", links and case tricks do not get round it.
+_PROTECTED_DIRS = (
+    "/.ssh/", "/.gnupg/", "/.aws/", "/.azure/", "/.kube/", "/.docker/",
+    "/.tauri/", "/.openjarvis/", "/.config/gh/", "/.config/git/",
+    "/appdata/roaming/microsoft/credentials/", "/appdata/local/microsoft/credentials/",
+    "/appdata/roaming/microsoft/protect/", "/appdata/local/microsoft/vault/",
+    "/appdata/local/google/chrome/user data/", "/appdata/local/microsoft/edge/user data/",
+    "/appdata/local/bravesoftware/", "/appdata/local/vivaldi/",
+    "/appdata/roaming/opera software/", "/appdata/roaming/mozilla/firefox/profiles/",
+    "/appdata/local/tailscale/", "/programdata/tailscale/",
+    "/windows/system32/config/",
+)
+_PROTECTED_NAMES = (".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc",
+                    "hiberfil.sys", "pagefile.sys", "swapfile.sys")
+_PROTECTED_SUFFIXES = (".pem", ".key", ".pfx", ".p12", ".kdbx", ".ppk")
+
+
+def _protected_path(path: str) -> bool:
+    """True when file_read must refuse `path` (see _PROTECTED_DIRS)."""
+    try:
+        real = os.path.realpath(os.path.expanduser(path))
+    except Exception:
+        return True
+    low = real.replace("\\", "/").lower()
+    extra = [os.environ.get("OPENJARVIS_CONFIG_DIR"), os.environ.get("JARVIS_CONFIG_DIR")]
+    for d in extra:
+        if d:
+            dd = os.path.realpath(os.path.expanduser(d)).replace("\\", "/").lower().rstrip("/") + "/"
+            if (low + "/").startswith(dd):
+                return True
+    if any(part in low + "/" for part in _PROTECTED_DIRS):
+        return True
+    name = low.rsplit("/", 1)[-1]
+    if name in _PROTECTED_NAMES or name.endswith(_PROTECTED_SUFFIXES):
+        return True
+    if name == ".env" or name.startswith(".env.") or name.startswith("id_rsa") \
+            or name.startswith("id_ed25519") or name.startswith("id_ecdsa"):
+        return True
+    return False
+
+
 def _run_file_read(args: dict) -> dict:
     path = str(args.get("path", ""))
     if _is_reserved_windows_name(path):
         return {"ok": False, "error": f"{path!r} names a reserved device, not a file"}
+    if _protected_path(path):
+        return {"ok": False, "error": (
+            "Jarvis does not open this file: it is in a place that holds keys, "
+            "saved passwords, browser data or Jarvis's own private data.")}
     try:
         # Binary, capped by actual bytes read, then decoded - not text mode
         # capped by .read(N), which caps CHARACTERS. A file that is mostly

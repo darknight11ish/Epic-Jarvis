@@ -543,6 +543,60 @@ def t_plain_http_never_goes_through_a_proxy():
               and "urllib.request.build_opener(" not in src)
 
 
+# ------------------------------------------------ file_read and private places
+
+def t_file_read_never_opens_keys_passwords_or_jarvis_data():
+    home = Path(tempfile.mkdtemp())
+    real_home = os.environ.get("HOME"), os.environ.get("USERPROFILE")
+    os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)
+
+    def put(rel, text="secret"):
+        f = home / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+        return str(f)
+
+    try:
+        ordinary = put("Documents/notes.txt", "shopping list")
+        r = AG._run_file_read({"path": ordinary})
+        check("CONTROL: an ordinary file still opens",
+              r.get("ok") is not False and "shopping list" in json.dumps(r), r)
+        refused = {
+            "an SSH key": put(".ssh/id_ed25519"),
+            "SSH config, any case": put(".SSH/config"),
+            "Chrome's saved passwords": put(
+                "AppData/Local/Google/Chrome/User Data/Default/Login Data"),
+            "Jarvis's own memory": put(".openjarvis/memory.db"),
+            ".env reached through ..": put(".env") and str(home / "Documents" / ".." / ".env"),
+            "a private key file, any case": put("Documents/server.KEY"),
+            "the updater signing key": put(".tauri/jarvis-desktop.key"),
+            "saved git passwords": put(".git-credentials"),
+        }
+        for what, path in refused.items():
+            r = AG._run_file_read({"path": path})
+            check(f"file_read refuses {what}",
+                  r.get("ok") is False and "secret" not in json.dumps(r), r)
+        cfg = Path(tempfile.mkdtemp())
+        (cfg / "settings.json").write_text("secret", encoding="utf-8")
+        old = os.environ.get("OPENJARVIS_CONFIG_DIR")
+        os.environ["OPENJARVIS_CONFIG_DIR"] = str(cfg)
+        try:
+            r = AG._run_file_read({"path": str(cfg / "settings.json")})
+            check("file_read refuses a file in Jarvis's config folder, wherever it is set",
+                  r.get("ok") is False and "secret" not in json.dumps(r), r)
+        finally:
+            if old is None:
+                os.environ.pop("OPENJARVIS_CONFIG_DIR", None)
+            else:
+                os.environ["OPENJARVIS_CONFIG_DIR"] = old
+    finally:
+        for key, val in zip(("HOME", "USERPROFILE"), real_home):
+            if val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = val
+
+
 # ---------------------------------------------------------------------- L8
 
 def t_no_setting_claims_a_sandbox_that_does_not_exist():
