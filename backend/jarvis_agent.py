@@ -1990,6 +1990,34 @@ def _context_length(ollama_url: str, model: str) -> int:
     return n
 
 
+_TOOLS_CACHE: dict = {}
+
+
+def _model_can_use_tools(ollama_url: str, model: str) -> Optional[bool]:
+    """False when Ollama says this model cannot use tools, True when it says
+    it can, None when it does not say (an older Ollama, or no answer). Read
+    from /api/show's "capabilities" list and cached like the context length.
+    A model without "tools" answers every request that offers tools with
+    HTTP 400 "... does not support tools", so Jarvis offers it none."""
+    now = time.monotonic()
+    hit = _TOOLS_CACHE.get((ollama_url, model))
+    if hit and now - hit[1] < _CTX_TTL:
+        return hit[0]
+    can: Optional[bool] = None
+    try:
+        caps = _get_json(f"{ollama_url}/api/show", {"model": model}).get("capabilities")
+        if isinstance(caps, list) and caps:
+            can = "tools" in caps
+    except Exception:
+        can = None
+    _TOOLS_CACHE[(ollama_url, model)] = (can, now)
+    return can
+
+
+NO_TOOLS_NOTE = ("this model cannot use tools, so Jarvis is answering without them "
+                 "(no searching, notes, reminders or actions this turn)")
+
+
 def estimate_tokens(obj) -> int:
     """A pessimistic count: 3 characters a token (English is nearer 4), a
     few tokens of framing per message, a flat 1,000 for a picture."""
@@ -2088,6 +2116,11 @@ def plain_error(exc: BaseException, model: str, said: Optional[str] = None) -> s
             return (f"The model “{model}” is not installed on this PC. "
                     f"Install it from Models in the desktop app (or run "
                     f"`ollama pull {model}`), or switch to a model you have.")
+        if exc.code == 400 and "does not support tools" in said.lower():
+            return (f"Jarvis's current model ({model}) cannot use tools, so it "
+                    f"cannot answer requests that need them. Switch to a model "
+                    f"that can, from Models in the Brain on the PC or the phone. "
+                    f"Restarting Ollama will not help.")
         return (f"The local model answered with an error (HTTP {exc.code})"
                 + (f": {said}" if said else ".")
                 + " Try again; if it keeps happening, restart Ollama.")
@@ -3454,6 +3487,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # rule 1). The same dict object - `cur.update` below keeps it current.
     watch.lane = cur
     names = [] if cur["feature"] == "vision" else offered_tools(enabled_tools)
+    if names and _model_can_use_tools(cur["url"], cur["model"]) is False:
+        names = []
+        if announce is not None:
+            try:
+                announce(NO_TOOLS_NOTE)
+            except Exception:
+                pass
     tool_schemas = [TOOLS[n].schema(names) for n in names]
     sink = on_step if on_step is not None else _publish_step
     req = request or {}

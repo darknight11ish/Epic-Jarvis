@@ -404,6 +404,8 @@ def t_the_second_ollama():
     # removing GGML_VK_VISIBLE_DEVICES alone left the other card reachable.
     check("lane_env switches Ollama's Vulkan route off (OLLAMA_VULKAN=0)",
           env.get("OLLAMA_VULKAN") == "0" and "GGML_VK_VISIBLE_DEVICES" not in env, env)
+    check("lane_env makes the second Ollama refuse cloud models itself (OLLAMA_NO_CLOUD=1)",
+          env.get("OLLAMA_NO_CLOUD") == "1", env)
     check("...even when the owner's own environment turns it on",
           SC.lane_env(G.U_2060, port=11435, num_ctx=1,
                       base={"OLLAMA_VULKAN": "1"}).get("OLLAMA_VULKAN") == "0")

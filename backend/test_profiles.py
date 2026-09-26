@@ -391,18 +391,21 @@ def t_the_one_line():
           all((line is None) == (undo is None) for _, line, undo, _ in lines))
     pair = next(l for n, l, _, _ in lines if n == "two_2080s_2060_mon8/features")
     check("the planned pair's line, exactly: q8_0, keep-alive, the chat card's id, Vulkan off, "
-          "the 0.75 GB gap (768 MiB)",
+          "the 0.75 GB gap (768 MiB), Ollama's own cloud refusal",
           pair == ("[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); "
                    "[Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); "
                    f"[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', '{G.U_2080S}', "
                    "'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); "
                    "[Environment]::SetEnvironmentVariable('LLAMA_ARG_FIT_TARGET', '768', 'User'); "
-                   "Write-Host 'Saved 5 settings for your Windows user (nothing was written to a "
+                   "[Environment]::SetEnvironmentVariable('OLLAMA_NO_CLOUD', '1', 'User'); "
+                   "Write-Host 'Saved 6 settings for your Windows user (nothing was written to a "
                    "file). Now quit Ollama (right-click its icon by the clock, then Quit Ollama) "
                    "and start it again from the Start menu.'"), pair)
     one = next(l for n, l, _, _ in lines if n == "one_8gb/smart")
     check("one card: no CUDA_VISIBLE_DEVICES (nothing to keep apart)",
           "CUDA_VISIBLE_DEVICES" not in one and "OLLAMA_VULKAN', '0'" in one)
+    check("every layout's line sets OLLAMA_NO_CLOUD=1 (rule 1: Ollama itself refuses cloud models)",
+          all("'OLLAMA_NO_CLOUD', '1'" in l for _n, l, _, _ in lines if l), [n for n, l, _, _ in lines if l and "OLLAMA_NO_CLOUD" not in l])
     smart_pair = json.loads(G.PLAN_FIXTURE.read_text())["cases"]["two_2080s_2060_mon8"][
         "presets"]["smart"]["settings"]
     check("chat on the 2060 (Smartest, the planned pair): the everyday Ollama is pinned to the "

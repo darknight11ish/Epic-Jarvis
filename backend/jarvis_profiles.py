@@ -814,11 +814,12 @@ ALLOWED = {
     "CUDA_VISIBLE_DEVICES": re.compile(r"GPU-[0-9A-Fa-f-]{8,64}"),
     "OLLAMA_VULKAN": re.compile(r"0"),
     "LLAMA_ARG_FIT_TARGET": re.compile(r"\d{1,5}"),
+    "OLLAMA_NO_CLOUD": re.compile(r"1"),
 }
 ORDER = tuple(ALLOWED)
 #: Prints what is set now. Reads only.
 CHECK_LINE = ("foreach ($n in 'OLLAMA_KV_CACHE_TYPE','OLLAMA_KEEP_ALIVE','CUDA_VISIBLE_DEVICES',"
-              "'OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET') { '{0} = {1}' -f $n, "
+              "'OLLAMA_VULKAN','LLAMA_ARG_FIT_TARGET','OLLAMA_NO_CLOUD') { '{0} = {1}' -f $n, "
               "[Environment]::GetEnvironmentVariable($n, 'User') }")
 _RESTART = ("Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it "
             "again from the Start menu.")
@@ -838,6 +839,9 @@ def settings_for(lay: Layout) -> list:
         out.append(("OLLAMA_VULKAN", "0"))
     if abs(lay.gap - LLAMA_DEFAULT_GAP_GIB) > 1e-9:
         out.append(("LLAMA_ARG_FIT_TARGET", str(int(round(lay.gap * 1024)))))
+    # Ollama itself refuses its cloud models and web search (rule 1, a
+    # second lock behind Jarvis's refusal by name).
+    out.append(("OLLAMA_NO_CLOUD", "1"))
     return out
 
 

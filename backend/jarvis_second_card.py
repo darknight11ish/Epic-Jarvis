@@ -58,6 +58,8 @@ this starts `ollama serve` with:
                                      /v1 chat endpoint (no field for it)
     OLLAMA_KEEP_ALIVE=30m            (configurable)
     OLLAMA_VULKAN=0                  no Vulkan route (see below)
+    OLLAMA_NO_CLOUD=1                Ollama itself refuses cloud models and its
+                                     web search - a second lock behind rule 1
 
 and NOT OLLAMA_FLASH_ATTENTION, unless `[second_card] flash_attention` says
 "on". "off" is refused with a plain reason (_flash_refusal): with the q8_0
@@ -785,6 +787,9 @@ def lane_env(uuid: str, *, port: int, num_ctx: int, host: str = HOST,
         # Vulkan is on by default and ignores CUDA_VISIBLE_DEVICES: off, so
         # this Ollama sees the second card only (see the module docstring).
         "OLLAMA_VULKAN": "0",
+        # Ollama's own refusal of its cloud models and web search, behind
+        # Jarvis's refusal by name (rule 1, twice).
+        "OLLAMA_NO_CLOUD": "1",
     })
     if flash == "on":
         env["OLLAMA_FLASH_ATTENTION"] = "1"

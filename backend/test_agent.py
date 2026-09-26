@@ -63,6 +63,7 @@ class NoRealIO:
             raise OSError("no network in this test")
         AG._post, AG._open_stream, AG._get_json = boom_post, boom_stream, no_lookup
         AG._CTX_CACHE.clear()
+        AG._TOOLS_CACHE.clear()
         return self
 
     def __exit__(self, *a):
@@ -1091,6 +1092,46 @@ def t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note():
           first_request(plain, 16384) == plain)
 
 
+def t_a_model_that_cannot_use_tools_is_offered_none_and_told_plainly():
+    import io
+    import urllib.error
+
+    def turn(caps):
+        responses = [{"choices": [{"message": {"role": "assistant", "content": "ok"}}]}]
+        opener, calls = scripted_stream(responses)
+        said = []
+        with NoRealIO():
+            AG._get_json = lambda url, payload=None, timeout=4.0: (
+                {"models": []} if url.endswith("/api/ps") else {"capabilities": caps})
+            AG.run_local_turn(
+                [{"role": "user", "content": "hello"}], "tiny:1b",
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None,
+                gate_check=allow, open_stream=opener, announce=said.append)
+        return calls, said
+
+    calls, said = turn(["completion", "tools"])
+    check("CONTROL: a model Ollama says can use tools is offered them",
+          bool(calls) and calls[0].get("tools"), repr(calls[0].keys() if calls else calls))
+    check("CONTROL: ... and nothing is announced", AG.NO_TOOLS_NOTE not in said, said)
+    calls, said = turn(["completion"])
+    check("a model Ollama says cannot use tools is offered none (no HTTP 400)",
+          bool(calls) and not calls[0].get("tools"), repr(calls))
+    check("... and Jarvis says so in plain words", said == [AG.NO_TOOLS_NOTE], said)
+    calls, said = turn(None)
+    check("an Ollama that does not say keeps today's behaviour (tools offered)",
+          bool(calls) and calls[0].get("tools"), repr(calls))
+
+    body = json.dumps({"error": {"message": 'registry.ollama.ai/library/tiny:1b does not support tools'}})
+    exc = urllib.error.HTTPError("http://o/v1/chat/completions", 400, "Bad Request", {},
+                                 io.BytesIO(body.encode()))
+    msg = AG.plain_error(exc, "tiny:1b")
+    check("the 400 'does not support tools' says the model cannot use tools, not 'restart Ollama'",
+          "cannot use tools" in msg and "Switch to a model" in msg
+          and "will not help" in msg, msg)
+    check("... and is not mistaken for 'model not installed' by the apps' error codes",
+          AG.error_code(msg) is None, AG.error_code(msg))
+
+
 if __name__ == "__main__":
     for fn in (t_no_tool_call_streams_straight_through, t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
@@ -1122,7 +1163,8 @@ if __name__ == "__main__":
                t_a_step_sink_that_raises_never_breaks_the_turn,
                t_the_default_step_sink_is_the_event_bus,
                t_a_second_card_turn_carries_the_jarvis_system_block,
-               t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note):
+               t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note,
+               t_a_model_that_cannot_use_tools_is_offered_none_and_told_plainly):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
