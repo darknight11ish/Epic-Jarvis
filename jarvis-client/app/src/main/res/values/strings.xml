@@ -27,6 +27,10 @@
     <string name="channel_approval_quiet_desc">Approvals that can be undone and stay
         on your desktop, and approvals raised only because a message tried to hurry
         you. Shown without a sound.</string>
+    <string name="channel_alarm_name">Alarms and urgent alerts</string>
+    <string name="channel_alarm_desc">An alarm, or a "tell me when" you marked urgent.
+        Rings and vibrates until you look. It uses the alarm sound, so Do Not Disturb
+        lets it through if your phone allows alarms then.</string>
     <string name="approval_locked">A decision is waiting. Unlock to see it.</string>
     <string name="approvals_waiting">%1$d approvals waiting</string>
     <string name="approval_deny_action">Deny</string>

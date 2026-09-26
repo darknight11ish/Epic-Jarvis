@@ -168,6 +168,13 @@ internal fun ComingUpSection(
                     }
                     shown.jobs.forEach { ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) } }
                     Gap(14)
+                    // "Tell me when" - set up by saying or typing it (one card
+                    // on the PC); its rows are in the list above.
+                    Text(Schedule.TELLME_TITLE, style = MaterialTheme.typography.labelMedium,
+                        color = chrome.textMid)
+                    Text(Schedule.TELLME_HINT, style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo)
+                    Gap(14)
                     Text(Schedule.TODO_TITLE, style = MaterialTheme.typography.labelMedium,
                         color = chrome.textMid)
                     if (shown.todo.isEmpty()) {
@@ -279,7 +286,7 @@ private fun ScheduleRow(job: Schedule.Job, sinceMs: Long, enabled: Boolean, onAc
     Gap(10)
     Column(Modifier.fillMaxWidth()) {
         Text(
-            Schedule.tag(job.kind) + if (job.repeats) ", repeats" else "",
+            Schedule.tagOf(job),
             style = MaterialTheme.typography.labelSmall,
             color = chrome.textLo,
         )

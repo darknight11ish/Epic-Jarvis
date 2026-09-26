@@ -31,6 +31,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   actionsOf,
+  aloudFor,
+  tagOf,
+  TELLME_HINT,
+  TELLME_LOCK_SCREEN,
+  TELLME_TITLE,
+  TIMER_ALOUD,
   COMING_UP_DETAIL,
   COMING_UP_TITLE,
   countdown,
@@ -101,8 +107,12 @@ await check("the section's words are both apps' words, word for word", async () 
   // The PC's own words for a locked screen (jarvis_schedule.KINDS) are these.
   const py = readRepo("backend/jarvis_schedule.py");
   for (const [kind, words] of Object.entries(LOCK_SCREEN)) {
+    if (kind === "tellme") continue;   // its own module; checked below
     assert.ok(py.includes(`register_kind("${kind}"`) && py.includes(`"${words}"`), kind);
   }
+  const tm = readRepo("backend/jarvis_tellme.py");
+  assert.ok(tm.includes('KIND = "tellme"') && tm.includes(`LOCK_SCREEN = "${LOCK_SCREEN.tellme}"`)
+    && tm.includes(`TITLE = "${TOAST_TITLES.tellme}"`));
   // And the Rust toast's.
   const rs = read("src-tauri/src/brain/schedule.rs");
   for (const [kind, title] of Object.entries(TOAST_TITLES)) {
@@ -172,6 +182,54 @@ await check("the standby schedule's words, title, lines and times", async () => 
     && py.includes('edges=("on standby", "awake", ", if the schedule put it on standby")'));
 });
 
+await check("\"tell me when\": its words in both apps, its row, and ringing", async () => {
+  const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt")
+    .replace(/"\s*\+\s*\n?\s*"/g, "");
+  for (const words of [TELLME_TITLE, TELLME_HINT, TELLME_LOCK_SCREEN]) {
+    assert.ok(kt.includes(`"${words.replace(/"/g, '\\"')}"`), `the phone does not say: ${words}`);
+  }
+  assert.ok(read("src/brain.html").includes(`>${TELLME_HINT}</p>`));
+  assert.ok(read("src-tauri/src/brain/schedule.rs").includes(`"${TELLME_LOCK_SCREEN}"`));
+  const job = { id: "s00000000bb", kind: "tellme", text: "an email from Alex arrives",
+    state: "active", due: NOW + 300, when: "12:05 today", repeats: true,
+    repeat: "every 5 minutes", urgent: true,
+    note: "Until Sunday 25 October at 12:00, or the first time it happens. Urgent: rings until you look." };
+  const v = readSchedule({ jobs: [job], todo: [] });
+  assert.equal(titleOf(v.jobs[0]), "When an email from Alex arrives");
+  assert.equal(titleOf({ ...v.jobs[0], hidden: true, text: "" }), TELLME_TITLE);
+  assert.equal(tagOf(v.jobs[0]), "tell me when, urgent");
+  assert.equal(tagOf({ ...v.jobs[0], urgent: false }), "tell me when");
+  assert.deepEqual(metaOf(v.jobs[0]), ["Looks every 5 minutes", job.note]);
+  assert.deepEqual(metaOf({ ...v.jobs[0], state: "paused" }), ["Looks every 5 minutes", "Paused",
+    job.note]);
+  assert.deepEqual(actionsOf(v.jobs[0]), ["pause", "delete"]);
+  assert.equal(tagOf(readSchedule({ jobs: JOBS, todo: [] }).jobs[2]), "reminder, repeats");
+  // Said aloud: a timer going off, only while listening hands-free.
+  const fired = { kind: "schedule", data: { id: "s0000000001", kind: "timer", state: "fired" } };
+  assert.equal(aloudFor(fired, true), TIMER_ALOUD);
+  assert.equal(aloudFor(fired, false), null);
+  assert.equal(aloudFor({ ...fired, data: { ...fired.data, kind: "reminder" } }, true), null);
+  assert.equal(aloudFor({ ...fired, data: { ...fired.data, state: "changed" } }, true), null);
+  assert.equal(aloudFor({ kind: "step", data: {} }, true), null);
+  const main = read("src/main.js");
+  assert.match(main, /const aloud = aloudFor\(frame, state\.autoListening\);/);
+  // The Rust: a match toasts by id, generic words when locked, rings when urgent.
+  const stream = read("src-tauri/src/stream.rs");
+  assert.match(stream, /"schedule" if event\.data\["state"\]\.as_str\(\) == Some\("matched"\) =>/);
+  assert.match(stream, /spawn\(crate::brain::schedule::toast_matched\(/);
+  const rs = read("src-tauri/src/brain/schedule.rs");
+  const fnm = rs.slice(rs.indexOf("pub async fn toast_matched("));
+  const body = fnm.slice(0, fnm.indexOf("\n}\n"));
+  assert.match(body, /read_job\(/);
+  assert.match(body, /security\.app_lock \|\| crate::lock::private_hidden/);
+  assert.match(body, /first_time\(/);
+  assert.match(body, /rings\("tellme", &data\)/);
+  assert.match(rs, /kind == "alarm"\s*\|\| \(kind == "tellme"/);
+  const toast = read("src-tauri/src/winrt_toast.rs");
+  assert.match(toast, /scenario="alarm"/);
+  assert.match(toast, /Notification\.Looping\.Alarm" loop="true"/);
+});
+
 /* ── The Brain window ─────────────────────────────────────────────────── */
 
 const { base, close } = await K.serve();
@@ -213,6 +271,24 @@ await check("the section: title, its line, every job with its own buttons, and t
   for (const b of everyButton) {
     assert.doesNotMatch(b, /\ball\b|clear|everything/i, `a bulk control: ${b}`);
   }
+});
+
+await check("a \"tell me when\" is a row with Pause and Delete, and the hint says how to set one up", async () => {
+  const tell = { id: "s00000000bb", kind: "tellme", text: "an email from Alex arrives",
+    state: "active", due: NOW + 300, repeats: true, repeat: "every 5 minutes", urgent: true,
+    note: "Until Sunday 25 October at 12:00, or the first time it happens." };
+  const page = await workTab({ schedule: { jobs: [tell], todo: [] } });
+  const first = page.locator("#coming-up .row-item").first();
+  const row = await first.textContent();
+  const tag = await first.locator(".row-tag").textContent();
+  const buttons = await first.locator("button").allInnerTexts();
+  const hint = await page.locator("#tellme-hint").innerText();
+  await page.close();
+  assert.ok(row.includes("When an email from Alex arrives"), row);
+  assert.equal(tag, "tell me when, urgent");
+  assert.ok(row.includes("Looks every 5 minutes"), row);
+  assert.deepEqual(buttons.map((b) => b.trim()), ["Pause", "Delete"]);
+  assert.equal(hint.trim(), TELLME_HINT);
 });
 
 await check("a timer counts down on its own, once a second", async () => {

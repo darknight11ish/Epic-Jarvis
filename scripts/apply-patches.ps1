@@ -508,6 +508,7 @@ $SHIPPED = @(
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch
+    'jarvis_tellme.py'           # "tell me when ..." (an email from someone, a device changing): a kind of job on the one scheduler, no patch; NOT a model tool
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -51,8 +51,8 @@ import {
   STANDBY_BAD_TIMES,
   standbyOf,
   standbyTimes,
+  tagOf,
   titleOf,
-  KIND_TAGS,
 } from "./coming-up.js";
 import {
   BUILDING as BRIEFING_BUILDING,
@@ -3544,7 +3544,7 @@ async function addStandby() {
 function scheduleRow(job) {
   const since = Date.now() - upL.readAt;
   const item = row({
-    tag: job.repeats ? `${KIND_TAGS[job.kind] || job.kind}, repeats` : KIND_TAGS[job.kind] || job.kind,
+    tag: tagOf(job),
     state: job.state === "waiting" ? "warn" : job.state === "paused" ? "" : "ok",
     title: titleOf(job),
     meta: metaOf(job, since),

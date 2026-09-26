@@ -293,6 +293,16 @@ These lanes leave the machine. Nothing else may.
 | **the owner's own accounts** - calendar, email, Home Assistant, each only when its settings are filled in on the PC | one request (or one small batch) per plan: to the calendar the owner set up - their CalDAV server with the time range, **or, since 2026-09-25, Google (`calendar.google.com`) through the calendar's private link**, which asks for the whole calendar and has the days picked out on the PC; to their IMAP server; to their Home Assistant. The password, token or private link goes only to the host it belongs to; the private link is also kept off every card, result, error and the log (`test_calendar_link.py`) | each module's `plan()`/`run()` through the gate (`jarvis_calendar`, `jarvis_email`, `jarvis_home`); `jarvis_local_http.plain_http_problem` (plain `http://` only inside the owner's own networks); each module's redirect handler (`_RefuseRedirect`, and for the private link `_FeedRedirect`: https on the same host or between Google's calendar hosts only) |
 | **web search** (2026-09-25) | ONE search's words (at most 300 characters), to the ONE provider the owner chose - SearXNG on the owner's own machine (which asks other engines), DuckDuckGo, Exa, Tavily or Brave - and, for the last three, the owner's key to that service only. Never words that look like a password or key. A card with the exact words whenever the conversation has read email, files, notes, saved memories or other outside text, or the owner chose "Ask before every web search" | `jarvis_search.plan/run` (no socket in `plan`, secret refusal, one provider, no fallback, redirects refused, answers capped) + `jarvis_agent._web_search_call` (when it asks; only a person's yes after that) |
 
+**"Tell me when" uses this row, not a new one** (2026-09-25,
+`jarvis_tellme.py`, JARVIS-API §26): once its ONE card is approved, it
+looks every 5 minutes at the From line of new mail (with PEEK) or every
+minute at ONE named Home Assistant device, each look through the gate as
+`email_read` / `home_read` at tier `auto` only. The name it watches for
+stays on this PC (it is matched here, never sent to the mail server), and
+a match only rings the owner's own apps over the existing link, with words
+built from the owner's own - no telephone call, no outside notification
+service.
+
 The owner's-own-accounts row was not in this table until 2026-09-25, although those reads
 already left the machine; it was written down when the Google Calendar link
 was added. Their settings are environment variables on the PC, and neither
@@ -673,7 +683,13 @@ neither app shows a toast or a notification. Since 2026-09-25 it also says
 `"ready"` for a morning briefing that has been put together
 (`jarvis_briefing.py`); both apps notify a briefing on `ready`, not `fired`,
 with only "Jarvis: your morning briefing is ready.", and read the briefing
-itself from `GET /api/briefing`. JARVIS-API §21 and §22.)
+itself from `GET /api/briefing`. JARVIS-API §21 and §22. And, since
+2026-09-25, `"matched"` for a "tell me when" that happened, `{"id", "kind":
+"tellme", "state": "matched", "urgent"}` (`jarvis_tellme.py`); its looks
+every few minutes ring no doorbell at all. Both apps read its `alert` by
+id - words the PC built from the owner's own, never the email's - and ring
+until seen when it is urgent (desktop `brain/schedule.rs` `toast_matched`,
+phone `JarvisRuntime.onTellMeMatched`). JARVIS-API §26.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. That includes `activity`'s sentence: while Jarvis drives a
@@ -871,6 +887,7 @@ backend routes, in both directions; the rest are listed here only.
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily or Brave key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |
 | The backend's own Windows Hello check before a risky approval (`owner-check.patch`, the approval gap's step 1, 2026-09-25) | Written with the feature. It checks approvals that come FROM the PC, where the desktop is; the phone keeps checking its own fingerprint in the app, as before, and the backend lets a phone approval through without a PC prompt. The phone's half - a key in the phone's Keystore that needs a fresh fingerprint for every risky approval, checked by the backend - is step 2, built with "more devices" (`docs/APPROVAL-GAP-DESIGN.md`). Both apps share the stamp (every approval) and "no lock, no risky approval". |
+| Saying a timer aloud when it goes off ("Your timer is done.", while "Hey Jarvis" listening is on in the Jarvis bar; 2026-09-25) | The owner asked for it on the desktop ("say timers aloud on the desktop when voice is on"). The phone's timer notification rings, and its voice is only switched on for a conversation - a phone in a pocket speaking on its own was not asked for. Alarms and urgent "tell me when"s ring until seen on both apps (JARVIS-API §26.5). |
 | **Update notice** | **Undecided - the owner's call.** The desktop checks GitHub for a newer version and says so in Settings (`update.rs`; it never installs on its own). The phone has no such notice: a new APK is published to the `client-latest` release and installed with adb. Whether the phone should say "a newer version exists" has not been decided. |
 
 **On the phone, kept off the desktop:**
@@ -1235,6 +1252,11 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    clock, the same missed-while-off rule, the same `schedule` event and the
    same Coming up list in both apps. Not a timer thread of its own. And
    anything that repeats is set up by one card, like `schedule_repeat`.
+   A kind that must look more often than hourly ("tell me when",
+   `jarvis_tellme.py`) brings its own rule check (`register_kind(check=)`)
+   with its own floor and an end date; the shared check keeps the hourly
+   floor for everything else. A kind whose runs are not news is `silent`
+   (no doorbell per run) and publishes its own event when there is some.
    Does it OFFER something nobody asked for - a card, a suggestion, a nudge?
    Then it asks `jarvis_backoff.may_offer()` first and reports every "no"
    with `declined()`: a few at most, never mid-conversation, and a "no" is

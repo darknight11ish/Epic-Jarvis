@@ -68,12 +68,28 @@ object ScheduleNotifier {
         lockScreen: String,
         /** A morning briefing: the tap opens Mind, where the briefing is. */
         openBriefing: Boolean = false,
+        /**
+         * Keep ringing until seen: an alarm, or an urgent "tell me when"
+         * ([com.jarvis.client.net.Schedule.rings]). Then it goes on the alarm
+         * channel ([ALARM_CHANNEL_ID]), its sound and vibration repeat
+         * (`FLAG_INSISTENT`) until the notification is opened, pulled down,
+         * tapped, stopped or swiped away. It is marked ongoing, which keeps it
+         * from being swiped away on Android 13; Android 14 and later let any
+         * such notification be swiped away (which also stops it).
+         */
+        ring: Boolean = false,
+        /** Several notices for one job ("every time"): one each, not one replacing the last. */
+        key: String = jobId,
     ) {
         if (!allowed(context)) {
             Log.w(TAG, "POST_NOTIFICATIONS is not granted, so a $kind that went off is not shown")
             return
         }
-        val notificationId = idFor(jobId)
+        val notificationId = idFor(key)
+        if (ring) {
+            postRinging(context, notificationId, kind, title, text, lockScreen, openBriefing)
+            return
+        }
         val n = NotificationCompat.Builder(context, ApprovalNotifier.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
@@ -91,6 +107,67 @@ object ScheduleNotifier {
         runCatching { NotificationManagerCompat.from(context).notify(notificationId, n) }
             .onFailure { Log.w(TAG, "could not post a $kind that went off", it) }
     }
+
+    /**
+     * The one that keeps ringing. Still never a full-screen intent, and still
+     * the lock-screen rule: a locked phone shows only [lockScreen]. Its one
+     * button is Stop - it silences and removes this notification and does
+     * nothing else; nothing here can act on anything.
+     *
+     * Do Not Disturb: nothing here overrides it. The channel's sound is an
+     * ALARM sound (`USAGE_ALARM`) and the notification is `CATEGORY_ALARM`,
+     * and Android lets alarms through Do Not Disturb by default (Settings ->
+     * Do Not Disturb -> Alarms), so it rings unless the owner turned that off.
+     */
+    private fun postRinging(
+        context: Context,
+        notificationId: Int,
+        kind: String,
+        title: String,
+        text: String,
+        lockScreen: String,
+        openBriefing: Boolean,
+    ) {
+        val n = NotificationCompat.Builder(context, ALARM_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(locked(context, lockScreen))
+            .setOngoing(true)
+            .setAutoCancel(true)
+            .setContentIntent(open(context, notificationId, openBriefing))
+            .addAction(0, STOP, stopIntent(context, notificationId))
+            .build()
+        n.flags = n.flags or Notification.FLAG_INSISTENT
+        runCatching { NotificationManagerCompat.from(context).notify(notificationId, n) }
+            .onFailure { Log.w(TAG, "could not post a ringing $kind", it) }
+    }
+
+    /** Stop: to [EventService], which cancels this one notification - nothing else. */
+    private fun stopIntent(context: Context, notificationId: Int): PendingIntent =
+        PendingIntent.getService(
+            context,
+            notificationId,
+            Intent(context, EventService::class.java)
+                .setAction(EventService.ACTION_STOP_RINGING)
+                .putExtra(EXTRA_NOTIFICATION_ID, notificationId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+    /** Stops one ringing notification (the Stop button). Only ids this object hands out. */
+    fun stopRinging(context: Context, notificationId: Int) {
+        if (notificationId !in FIRST_ID until FIRST_ID + SLOTS) return
+        runCatching { NotificationManagerCompat.from(context).cancel(notificationId) }
+    }
+
+    /** The alarm channel (JarvisApp creates it): alarms and urgent "tell me when"s. */
+    const val ALARM_CHANNEL_ID = "jarvis_alarm"
+    const val EXTRA_NOTIFICATION_ID = "com.jarvis.client.NOTIFICATION_ID"
+    const val STOP = "Stop"
 
     private fun locked(context: Context, lockScreen: String): Notification =
         NotificationCompat.Builder(context, ApprovalNotifier.CHANNEL_ID)

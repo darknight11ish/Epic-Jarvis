@@ -75,12 +75,28 @@ export const STANDBY_BAD_TIMES = "Write each time as HH:MM, like 01:00, and pick
 export const STANDBY_DEFAULT_START = "01:00";
 export const STANDBY_DEFAULT_END = "07:00";
 
+/**
+ * "Tell me when" (backend jarvis_tellme.py, 2026-09-25): Jarvis looks every
+ * few minutes for an email from someone, or a Home Assistant device doing
+ * something, and ONLY tells - urgently, ringing until seen, if asked. Set
+ * up by saying or typing it, with ONE approval card on the PC; each sits in
+ * the list above with Pause and Delete, like any repeating job. Both apps'
+ * words (net/Schedule.kt).
+ */
+export const TELLME_TITLE = "Tell me when";
+export const TELLME_HINT =
+  "Say or type \"tell me when an email from Alex arrives\" or \"tell me when the washing " +
+  "machine finishes\" - add \"urgently\" to make it ring until you look. Setting one up asks " +
+  "once with an approval card; when it happens, Jarvis only tells you.";
+export const TELLME_LOCK_SCREEN = "Jarvis: something you asked to be told about happened.";
+
 /** A notification's title, by kind (brain/schedule.rs toast_title). */
 export const TOAST_TITLES = Object.freeze({
   timer: "Timer done",
   alarm: "Alarm",
   reminder: "Reminder",
   todo: "To-do",
+  tellme: TELLME_TITLE,
 });
 
 /** What a locked screen may show, by kind, when the PC did not say. */
@@ -89,6 +105,7 @@ export const LOCK_SCREEN = Object.freeze({
   alarm: "Jarvis: alarm.",
   reminder: "Jarvis: a reminder is due.",
   todo: "Jarvis: a to-do item is due.",
+  tellme: TELLME_LOCK_SCREEN,
 });
 
 /** The tag on a row, by kind. */
@@ -99,7 +116,33 @@ export const KIND_TAGS = Object.freeze({
   todo: "to-do",
   standby: "standby",
   briefing: "briefing",
+  tellme: "tell me when",
 });
+
+/** What the desktop says aloud when a timer goes off while hands-free
+ *  listening ("Hey Jarvis") is on. Never the timer's own words: the room
+ *  may not be private. */
+export const TIMER_ALOUD = "Your timer is done.";
+
+/**
+ * The line to say aloud for a `schedule` event, or null. Only a TIMER
+ * going off, and only while the Jarvis bar is listening hands-free - "when
+ * voice is on" (the owner's decision of 2026-09-25). A kind that notifies
+ * nobody says nothing.
+ */
+export function aloudFor(frame, listening) {
+  if (!listening || !frame || frame.kind !== "schedule") return null;
+  const d = frame.data || {};
+  if (d.state !== "fired" || d.kind !== "timer" || d.notify === false) return null;
+  return TIMER_ALOUD;
+}
+
+/** A row's tag: its kind, "repeats", and "urgent" for an urgent "tell me when". */
+export function tagOf(job) {
+  const kind = KIND_TAGS[job.kind] || job.kind;
+  if (job.kind === "tellme") return job.urgent ? `${kind}, urgent` : kind;
+  return job.repeats ? `${kind}, repeats` : kind;
+}
 
 /** A morning briefing job's title (it has no words of its own; briefing.js). */
 export const BRIEFING_JOB_TITLE = "Morning briefing";
@@ -154,6 +197,8 @@ export function readSchedule(answer) {
     next: Array.isArray(j.next) ? j.next.filter((t) => num(t) !== null) : [],
     missed: text(j.missed),
     note: text(j.note),
+    urgent: j.urgent === true,
+    alert: text(j.alert),
     hidden: j.hidden === true,
   });
   return {
@@ -180,6 +225,10 @@ export function titleOf(job) {
     return words ? `${words} timer` : `${lengthWords(job.duration || 0)} timer`;
   }
   if (job.kind === "briefing") return BRIEFING_JOB_TITLE;
+  if (job.kind === "tellme") {
+    // "When an email from Alex arrives" - the owner's words, what is watched.
+    return job.hidden || !words ? TELLME_TITLE : `When ${words}`;
+  }
   if (words) return words;
   return job.kind === "alarm" ? "Alarm" : job.kind === "todo" ? "To-do" : "Reminder";
 }
@@ -195,6 +244,14 @@ export function metaOf(job, sinceMs = 0) {
   if (job.kind === "timer") {
     const left = leftNow(job, sinceMs);
     out.push(job.state === "paused" ? `Paused - ${countdown(left)} left` : `${countdown(left)} left`);
+    return out;
+  }
+  if (job.kind === "tellme") {
+    // How often it looks, and the PC's line (until when, urgent, how the
+    // last look went) - not the next look's time, which is not news.
+    if (job.repeat) out.push(`Looks ${job.repeat}`);
+    if (job.state === "paused") out.push("Paused");
+    if (job.note) out.push(job.note);
     return out;
   }
   if (job.repeats && job.repeat) out.push(job.repeat);

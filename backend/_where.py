@@ -140,6 +140,8 @@ SHIPPED = (
     "jarvis_mail_mask.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
+    # "tell me when ..." - a kind of job on the one scheduler (not a tool)
+    "jarvis_tellme.py",
 )
 
 

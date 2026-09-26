@@ -45,6 +45,15 @@ import kotlinx.serialization.json.doubleOrNull
  * skips it and Delete turns it off. Its going off tells nobody: the event
  * says `"notify": false`, and [firedFrom] then shows no notification.
  *
+ * "TELL ME WHEN" (backend `jarvis_tellme.py`, 2026-09-25): Jarvis looks
+ * every few minutes for an email from someone, or a Home Assistant device
+ * doing something, and ONLY tells. Set up by saying or typing it (one card on
+ * the PC); a row in the list with Pause and Delete. A match says `"state":
+ * "matched"` ([matchedFrom]); the notification is the job's `alert`, made on
+ * the PC from the owner's own words ("An email from Alex arrived."). An
+ * alarm, and a "tell me when" marked urgent, keep ringing until seen
+ * ([rings]; [com.jarvis.client.service.ScheduleNotifier]).
+ *
  * Pure Kotlin, no Android types, so `ScheduleTest` runs it on a plain JVM.
  */
 object Schedule {
@@ -122,6 +131,15 @@ object Schedule {
     const val STANDBY_DEFAULT_START = "01:00"
     const val STANDBY_DEFAULT_END = "07:00"
 
+    /** "Tell me when" - both apps' words (coming-up.js). */
+    const val TELLME = "tellme"
+    const val TELLME_TITLE = "Tell me when"
+    const val TELLME_HINT =
+        "Say or type \"tell me when an email from Alex arrives\" or \"tell me when the washing " +
+            "machine finishes\" - add \"urgently\" to make it ring until you look. Setting one up asks " +
+            "once with an approval card; when it happens, Jarvis only tells you."
+    const val TELLME_LOCK_SCREEN = "Jarvis: something you asked to be told about happened."
+
     /** A notification's title, by kind. The desktop's toast says the same. */
     fun title(kind: String): String = when (kind) {
         "timer" -> "Timer done"
@@ -129,6 +147,7 @@ object Schedule {
         "reminder" -> "Reminder"
         "todo" -> "To-do"
         Briefing.KIND -> Briefing.TITLE
+        TELLME -> TELLME_TITLE
         else -> "Jarvis"
     }
 
@@ -139,14 +158,29 @@ object Schedule {
         "reminder" -> "Jarvis: a reminder is due."
         "todo" -> "Jarvis: a to-do item is due."
         Briefing.KIND -> Briefing.LOCK_SCREEN
+        TELLME -> TELLME_LOCK_SCREEN
         else -> "Jarvis: something is due."
     }
 
     /** The tag on a row, by kind. */
     fun tag(kind: String): String = when (kind) {
         "todo" -> "to-do"
+        TELLME -> "tell me when"
         else -> kind
     }
+
+    /** A row's tag: its kind, "repeats", and "urgent" for an urgent "tell me when" (coming-up.js tagOf). */
+    fun tagOf(job: Job): String = when {
+        job.kind == TELLME -> if (job.urgent) "${tag(job.kind)}, urgent" else tag(job.kind)
+        job.repeats -> "${tag(job.kind)}, repeats"
+        else -> tag(job.kind)
+    }
+
+    /**
+     * Whether it keeps ringing until it is seen: an alarm going off, and a
+     * "tell me when" the owner marked urgent. The desktop's `rings` says the same.
+     */
+    fun rings(kind: String, urgent: Boolean): Boolean = kind == "alarm" || (kind == TELLME && urgent)
 
     private val ID = Regex("s[0-9a-f]{10}")
 
@@ -170,6 +204,12 @@ object Schedule {
         val firedAt: Double?,
         /** How a kind's last run went, in the PC's words (the standby schedule's). */
         val note: String = "",
+        /** A "tell me when" marked urgent. */
+        val urgent: Boolean = false,
+        /** A "tell me when"'s notice, once it happened ("An email from Alex arrived."). */
+        val alert: String = "",
+        /** When that happened (epoch seconds) - one notification per match. */
+        val alertAt: Double? = null,
     )
 
     data class View(val jobs: List<Job>, val todo: List<Job>, val hidden: Boolean)
@@ -194,6 +234,9 @@ object Schedule {
             lockScreen = o.text("lock_screen") ?: "",
             firedAt = o.num("fired_at"),
             note = o.text("note") ?: "",
+            urgent = o.flag("urgent") == true,
+            alert = o.text("alert") ?: "",
+            alertAt = o.num("alert_at"),
         )
     }
 
@@ -217,8 +260,8 @@ object Schedule {
 
     /** The list with every job's words replaced, for while the lists are hidden. */
     fun hide(v: View): View = View(
-        jobs = v.jobs.map { it.copy(text = "", hidden = true) },
-        todo = v.todo.map { it.copy(text = "", hidden = true) },
+        jobs = v.jobs.map { it.copy(text = "", alert = "", hidden = true) },
+        todo = v.todo.map { it.copy(text = "", alert = "", hidden = true) },
         hidden = true,
     )
 
@@ -261,6 +304,8 @@ object Schedule {
         }
         // A morning briefing has no words of its own (Briefing.kt).
         if (job.kind == Briefing.KIND) return Briefing.TITLE
+        // "When an email from Alex arrives" - what is watched, in the owner's words.
+        if (job.kind == TELLME) return if (job.hidden || words.isEmpty()) TELLME_TITLE else "When $words"
         if (words.isNotEmpty()) return words
         return when (job.kind) {
             "alarm" -> "Alarm"
@@ -280,6 +325,13 @@ object Schedule {
         if (job.kind == "timer") {
             val left = leftNow(job, sinceMs) ?: 0.0
             out += if (job.state == "paused") "Paused - ${countdown(left)} left" else "${countdown(left)} left"
+            return out
+        }
+        if (job.kind == TELLME) {
+            // How often it looks and the PC's line - not the next look's time.
+            if (job.repeat.isNotEmpty()) out += "Looks ${job.repeat}"
+            if (job.state == "paused") out += "Paused"
+            if (job.note.isNotEmpty()) out += job.note
             return out
         }
         if (job.repeats && job.repeat.isNotEmpty()) out += job.repeat
@@ -387,7 +439,9 @@ object Schedule {
         val title = title(kind)
         val fallback = job?.lockScreen?.takeIf { it.isNotEmpty() } ?: lockScreen(kind)
         if (job == null || private) return title to fallback
-        val words = job.text.trim()
+        // A "tell me when" says its alert - made on the PC from the owner's
+        // words - never its text, which is what is watched.
+        val words = (if (kind == TELLME) job.alert else job.text).trim()
         var text = when {
             words.isEmpty() -> fallback
             kind == "timer" -> "The $words timer is done."
@@ -407,6 +461,16 @@ object Schedule {
         if (data.flag("notify") == false) return null
         val id = data.text("id")?.takeIf { validId(it) } ?: return null
         return id to (data.text("kind") ?: "")
+    }
+
+    /**
+     * From a `schedule` event: (id, urgent) when a "tell me when" matched,
+     * else null. It carries no words; the alert is read by id.
+     */
+    fun matchedFrom(data: JsonObject?): Pair<String, Boolean>? {
+        if (data == null || data.text("state") != "matched" || data.text("kind") != TELLME) return null
+        val id = data.text("id")?.takeIf { validId(it) } ?: return null
+        return id to (data.flag("urgent") == true)
     }
 
     /** Whether an answer's route header says it was made without the model. */
