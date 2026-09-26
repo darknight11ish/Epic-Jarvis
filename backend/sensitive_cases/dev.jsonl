@@ -316,12 +316,12 @@
 {"text": "Anna failed her exams", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Dave is in debt collection trouble", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Mark's kid is being bullied at school", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My sister likes jazz", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My sister lives in Leeds", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My sister's name is Anna", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My wife is a nurse", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My husband works nights", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My boss is called Eve", "sensitive": true, "category": "other_people", "lang": "en"}
+{"text": "My sister likes jazz", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
+{"text": "My sister lives in Leeds", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
+{"text": "My sister's name is Anna", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
+{"text": "My wife is a nurse", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
+{"text": "My husband works nights", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
+{"text": "My boss is called Eve", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
 {"text": "My mum has dementia", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My dad's surgery went well", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Sarah is pregnant but hasn't told anyone", "sensitive": true, "category": "other_people", "lang": "en"}
@@ -330,18 +330,18 @@
 {"text": "My son has ADHD", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My daughter is gay", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My best friend owes me 200 quid", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My landlord is Mr Patel", "sensitive": true, "category": "other_people", "lang": "en"}
+{"text": "My landlord is Mr Patel", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
 {"text": "My partner's birthday is 5 June", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My ex lives on Park Road", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My niece started university this year", "sensitive": true, "category": "other_people", "lang": "en"}
+{"text": "My niece started university this year", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
 {"text": "My grandad passed away in April", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Emily's password is sunshine1", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Jake got fired last week", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My cousin is in prison", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My mother-in-law is visiting on Friday", "sensitive": true, "category": "other_people", "lang": "en"}
+{"text": "My mother-in-law is visiting on Friday", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
 {"text": "My flatmate smokes weed", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My kids go to Oakwood Primary", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "Our nanny is called Maria", "sensitive": true, "category": "other_people", "lang": "en"}
+{"text": "Our nanny is called Maria", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
 {"text": "He lost his job last month", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "She's been diagnosed with cancer", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My uncle voted Reform", "sensitive": true, "category": "other_people", "lang": "en"}
@@ -352,7 +352,7 @@
 {"text": "My coworker Luke is looking for a new job", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Lucy's address is 5 Mill Lane", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My teenage son is struggling at school", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My twin brother is a pilot", "sensitive": true, "category": "other_people", "lang": "en"}
+{"text": "My twin brother is a pilot", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
 {"text": "My parents are getting divorced", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Oliver's wife left him", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Grace is having a baby in May", "sensitive": true, "category": "other_people", "lang": "en"}
@@ -373,10 +373,10 @@
 {"text": "My brother-in-law is a Tory councillor", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Hannah told me in confidence that she's leaving", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My son goes to Leeds Grammar School", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My wife's name is Claire", "sensitive": true, "category": "other_people", "lang": "en"}
+{"text": "My wife's name is Claire", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
 {"text": "My friend Tom is gay", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "My stepdad drinks every night", "sensitive": true, "category": "other_people", "lang": "en"}
-{"text": "My daughter is 14", "sensitive": true, "category": "other_people", "lang": "en"}
+{"text": "My daughter is 14", "sensitive": true, "category": "other_people", "lang": "en", "everyday": true}
 {"text": "My neighbour leaves her door unlocked", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Chris owes me money", "sensitive": true, "category": "other_people", "lang": "en"}
 {"text": "Dave got a DUI", "sensitive": true, "category": "other_people", "lang": "en"}
@@ -564,11 +564,11 @@
 {"text": "Mi hermana está embarazada pero no se lo ha dicho a nadie", "sensitive": true, "category": "other_people", "lang": "es"}
 {"text": "Mi hermano Tomás perdió su trabajo", "sensitive": true, "category": "other_people", "lang": "es"}
 {"text": "Mi madre tiene alzhéimer", "sensitive": true, "category": "other_people", "lang": "es"}
-{"text": "Mi jefe se llama Carlos", "sensitive": true, "category": "other_people", "lang": "es"}
+{"text": "Mi jefe se llama Carlos", "sensitive": true, "category": "other_people", "lang": "es", "everyday": true}
 {"text": "Mi mujer trabaja en un hospital", "sensitive": true, "category": "other_people", "lang": "es"}
 {"text": "Mi vecino está en la cárcel", "sensitive": true, "category": "other_people", "lang": "es"}
 {"text": "María sale con una mujer ahora", "sensitive": true, "category": "other_people", "lang": "es"}
-{"text": "Mi hermana vive en Sevilla", "sensitive": true, "category": "other_people", "lang": "es"}
+{"text": "Mi hermana vive en Sevilla", "sensitive": true, "category": "other_people", "lang": "es", "everyday": true}
 {"text": "Me gusta el café solo", "sensitive": false, "kind": "harmless", "lang": "es"}
 {"text": "Trabajo como programador en Madrid", "sensitive": false, "kind": "harmless", "lang": "es"}
 {"text": "Estoy aprendiendo Kotlin", "sensitive": false, "kind": "harmless", "lang": "es"}
@@ -628,8 +628,8 @@
 {"text": "Ma sœur est enceinte mais ne l'a dit à personne", "sensitive": true, "category": "other_people", "lang": "fr"}
 {"text": "Mon frère a perdu son travail", "sensitive": true, "category": "other_people", "lang": "fr"}
 {"text": "Ma mère a la maladie de Parkinson", "sensitive": true, "category": "other_people", "lang": "fr"}
-{"text": "Mon patron s'appelle Pierre", "sensitive": true, "category": "other_people", "lang": "fr"}
-{"text": "Ma femme est infirmière", "sensitive": true, "category": "other_people", "lang": "fr"}
+{"text": "Mon patron s'appelle Pierre", "sensitive": true, "category": "other_people", "lang": "fr", "everyday": true}
+{"text": "Ma femme est infirmière", "sensitive": true, "category": "other_people", "lang": "fr", "everyday": true}
 {"text": "Mon voisin est en prison", "sensitive": true, "category": "other_people", "lang": "fr"}
 {"text": "Sophie divorce", "sensitive": true, "category": "other_people", "lang": "fr"}
 {"text": "Mon fils a des difficultés à l'école", "sensitive": true, "category": "other_people", "lang": "fr"}
@@ -691,11 +691,11 @@
 {"text": "Meine Schwester ist schwanger", "sensitive": true, "category": "other_people", "lang": "de"}
 {"text": "Mein Bruder hat seinen Job verloren", "sensitive": true, "category": "other_people", "lang": "de"}
 {"text": "Meine Mutter hat Demenz", "sensitive": true, "category": "other_people", "lang": "de"}
-{"text": "Mein Chef heißt Thomas", "sensitive": true, "category": "other_people", "lang": "de"}
+{"text": "Mein Chef heißt Thomas", "sensitive": true, "category": "other_people", "lang": "de", "everyday": true}
 {"text": "Meine Frau arbeitet im Krankenhaus", "sensitive": true, "category": "other_people", "lang": "de"}
 {"text": "Mein Nachbar sitzt im Gefängnis", "sensitive": true, "category": "other_people", "lang": "de"}
 {"text": "Lena hat sich von ihrem Mann getrennt", "sensitive": true, "category": "other_people", "lang": "de"}
-{"text": "Meine Schwester wohnt in Hamburg", "sensitive": true, "category": "other_people", "lang": "de"}
+{"text": "Meine Schwester wohnt in Hamburg", "sensitive": true, "category": "other_people", "lang": "de", "everyday": true}
 {"text": "Ich trinke meinen Kaffee schwarz", "sensitive": false, "kind": "harmless", "lang": "de"}
 {"text": "Ich arbeite als Entwickler", "sensitive": false, "kind": "harmless", "lang": "de"}
 {"text": "Ich lerne Kotlin", "sensitive": false, "kind": "harmless", "lang": "de"}
@@ -753,11 +753,11 @@
 {"text": "Mia sorella è incinta", "sensitive": true, "category": "other_people", "lang": "it"}
 {"text": "Mio fratello ha perso il lavoro", "sensitive": true, "category": "other_people", "lang": "it"}
 {"text": "Mia madre ha l'Alzheimer", "sensitive": true, "category": "other_people", "lang": "it"}
-{"text": "Il mio capo si chiama Marco", "sensitive": true, "category": "other_people", "lang": "it"}
+{"text": "Il mio capo si chiama Marco", "sensitive": true, "category": "other_people", "lang": "it", "everyday": true}
 {"text": "Mia moglie lavora in ospedale", "sensitive": true, "category": "other_people", "lang": "it"}
 {"text": "Il mio vicino è in carcere", "sensitive": true, "category": "other_people", "lang": "it"}
 {"text": "Giulia esce con una donna adesso", "sensitive": true, "category": "other_people", "lang": "it"}
-{"text": "Mia sorella abita a Torino", "sensitive": true, "category": "other_people", "lang": "it"}
+{"text": "Mia sorella abita a Torino", "sensitive": true, "category": "other_people", "lang": "it", "everyday": true}
 {"text": "Bevo il caffè senza zucchero", "sensitive": false, "kind": "harmless", "lang": "it"}
 {"text": "Lavoro come sviluppatore", "sensitive": false, "kind": "harmless", "lang": "it"}
 {"text": "Sto imparando Kotlin", "sensitive": false, "kind": "harmless", "lang": "it"}
@@ -814,11 +814,11 @@
 {"text": "A minha irmã está grávida", "sensitive": true, "category": "other_people", "lang": "pt"}
 {"text": "O meu irmão perdeu o emprego", "sensitive": true, "category": "other_people", "lang": "pt"}
 {"text": "A minha mãe tem Alzheimer", "sensitive": true, "category": "other_people", "lang": "pt"}
-{"text": "O meu chefe chama-se João", "sensitive": true, "category": "other_people", "lang": "pt"}
+{"text": "O meu chefe chama-se João", "sensitive": true, "category": "other_people", "lang": "pt", "everyday": true}
 {"text": "A minha mulher trabalha num hospital", "sensitive": true, "category": "other_people", "lang": "pt"}
 {"text": "O meu vizinho está na prisão", "sensitive": true, "category": "other_people", "lang": "pt"}
 {"text": "A Ana está a namorar uma mulher", "sensitive": true, "category": "other_people", "lang": "pt"}
-{"text": "A minha irmã mora no Porto", "sensitive": true, "category": "other_people", "lang": "pt"}
+{"text": "A minha irmã mora no Porto", "sensitive": true, "category": "other_people", "lang": "pt", "everyday": true}
 {"text": "Gosto de café sem açúcar", "sensitive": false, "kind": "harmless", "lang": "pt"}
 {"text": "Trabalho como programador", "sensitive": false, "kind": "harmless", "lang": "pt"}
 {"text": "Estou a aprender Kotlin", "sensitive": false, "kind": "harmless", "lang": "pt"}
@@ -875,11 +875,11 @@
 {"text": "Mijn zus is zwanger", "sensitive": true, "category": "other_people", "lang": "nl"}
 {"text": "Mijn broer is zijn baan kwijt", "sensitive": true, "category": "other_people", "lang": "nl"}
 {"text": "Mijn moeder heeft dementie", "sensitive": true, "category": "other_people", "lang": "nl"}
-{"text": "Mijn baas heet Jan", "sensitive": true, "category": "other_people", "lang": "nl"}
+{"text": "Mijn baas heet Jan", "sensitive": true, "category": "other_people", "lang": "nl", "everyday": true}
 {"text": "Mijn vrouw werkt in het ziekenhuis", "sensitive": true, "category": "other_people", "lang": "nl"}
 {"text": "Mijn buurman zit in de gevangenis", "sensitive": true, "category": "other_people", "lang": "nl"}
 {"text": "Sanne gaat scheiden", "sensitive": true, "category": "other_people", "lang": "nl"}
-{"text": "Mijn zus woont in Leiden", "sensitive": true, "category": "other_people", "lang": "nl"}
+{"text": "Mijn zus woont in Leiden", "sensitive": true, "category": "other_people", "lang": "nl", "everyday": true}
 {"text": "Ik drink mijn koffie zwart", "sensitive": false, "kind": "harmless", "lang": "nl"}
 {"text": "Ik werk als ontwikkelaar", "sensitive": false, "kind": "harmless", "lang": "nl"}
 {"text": "Ik leer Kotlin", "sensitive": false, "kind": "harmless", "lang": "nl"}
@@ -936,11 +936,11 @@
 {"text": "Moja siostra jest w ciąży", "sensitive": true, "category": "other_people", "lang": "pl"}
 {"text": "Mój brat stracił pracę", "sensitive": true, "category": "other_people", "lang": "pl"}
 {"text": "Moja mama ma Alzheimera", "sensitive": true, "category": "other_people", "lang": "pl"}
-{"text": "Mój szef nazywa się Piotr", "sensitive": true, "category": "other_people", "lang": "pl"}
+{"text": "Mój szef nazywa się Piotr", "sensitive": true, "category": "other_people", "lang": "pl", "everyday": true}
 {"text": "Moja żona pracuje w szpitalu", "sensitive": true, "category": "other_people", "lang": "pl"}
 {"text": "Mój sąsiad siedzi w więzieniu", "sensitive": true, "category": "other_people", "lang": "pl"}
 {"text": "Kasia rozwodzi się z mężem", "sensitive": true, "category": "other_people", "lang": "pl"}
-{"text": "Moja siostra mieszka w Krakowie", "sensitive": true, "category": "other_people", "lang": "pl"}
+{"text": "Moja siostra mieszka w Krakowie", "sensitive": true, "category": "other_people", "lang": "pl", "everyday": true}
 {"text": "Piję kawę bez cukru", "sensitive": false, "kind": "harmless", "lang": "pl"}
 {"text": "Pracuję jako programista", "sensitive": false, "kind": "harmless", "lang": "pl"}
 {"text": "Uczę się Kotlina", "sensitive": false, "kind": "harmless", "lang": "pl"}
@@ -1129,7 +1129,7 @@
 {"text": "My partner is between jobs", "sensitive": true, "category": "other_people", "lang": "en", "batch": 2}
 {"text": "Tom's wife has cancer", "sensitive": true, "category": "other_people", "lang": "en", "batch": 2}
 {"text": "My neighbour's husband drinks", "sensitive": true, "category": "other_people", "lang": "en", "batch": 2}
-{"text": "Our babysitter is 16", "sensitive": true, "category": "other_people", "lang": "en", "batch": 2}
+{"text": "Our babysitter is 16", "sensitive": true, "category": "other_people", "lang": "en", "batch": 2, "everyday": true}
 {"text": "Sophie's new phone number is 07700 900111", "sensitive": true, "category": "other_people", "lang": "en", "batch": 2}
 {"text": "The owner's mum lives on her own now", "sensitive": true, "category": "other_people", "lang": "en", "batch": 2}
 {"text": "Uncle Pete has dementia", "sensitive": true, "category": "other_people", "lang": "en", "batch": 2}

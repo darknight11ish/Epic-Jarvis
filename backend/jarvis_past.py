@@ -14,7 +14,12 @@ ordinary question it is exactly the old call and returns exactly the old
 facts. For a question about the past - a strict word check, below - it
 ALSO brings back up to PAST_K retired facts that match, each one with
 "(no longer true since <date>)" on the end, so the model cannot mistake
-history for the present.
+history for the present. When the question names a time ("in February"),
+a CURRENT fact that only became true after it is labelled too - "(true
+since <date>)", or "(known since <date>)" when the date is only the day
+Jarvis was told - so it is not handed over as the answer for then (the
+memory review of 2026-09-27, B1). A fact the owner FORGOT never comes
+back here at all: both apps promise it will not be used again (B15).
 
 And a simple date in the question narrows it: "where did I live in June",
 "what did I believe last year", "back in 2025". A fixed parser turns those
@@ -44,6 +49,7 @@ Standard library only. Nothing here writes anything or logs any words.
 """
 from __future__ import annotations
 
+import json
 import re
 import time
 import unicodedata
@@ -274,6 +280,61 @@ def label(fact: dict) -> str:
     return f"{text} (no longer true since {day})" if day else f"{text} (no longer true)"
 
 
+def _meta(fact: dict) -> dict:
+    m = fact.get("meta")
+    if isinstance(m, str):
+        try:
+            m = json.loads(m or "{}")
+        except (TypeError, ValueError):
+            return {}
+    return m if isinstance(m, dict) else {}
+
+
+def forgotten(fact: dict) -> bool:
+    """Did the owner Forget this fact (or accept a "stop using this fact?"
+    card on it)? jarvis_memory's retire() marks meta["forgotten_at"]. Both
+    apps promise a forgotten fact "will not be used again", so a question
+    about the past never brings it back (the memory review, B15). A fact
+    replaced by a correction, or that simply ended, is not forgotten: it is
+    history, and still recalled, labelled."""
+    return bool(_meta(fact).get("forgotten_at"))
+
+
+def label_since(fact: dict) -> str:
+    """A CURRENT fact's words, with when it became true on the end - for a
+    question about a time before that (the memory review, B1). "(true
+    since <date>)" when the owner's own words gave the date (jarvis_memory
+    true_from, meta "true_from": "said"); otherwise the date is only when
+    Jarvis was told, which says nothing about whether it was true before,
+    so "(known since <date>)"."""
+    text = str(fact.get("text", ""))
+    day = _day(fact.get("valid_from") or fact.get("created"))
+    if not day:
+        return text
+    said = _meta(fact).get("true_from") == "said"
+    return f"{text} ({'true' if said else 'known'} since {day})"
+
+
+def _label_later(hits: list, window) -> list:
+    """`hits` with every current fact that became true only AFTER the
+    window the question names labelled (label_since) and marked
+    `later: True`. A fact that began during the window was true for some
+    of it, and is left alone."""
+    if window is None:
+        return hits
+    end = window[1]
+    out = []
+    for h in hits:
+        vf = h.get("valid_from")
+        if (h.get("current", True) and not h.get("past")
+                and isinstance(vf, (int, float)) and vf >= end):
+            h = dict(h)
+            h["later"] = True
+            h["text"] = label_since(h)
+        out.append(h)
+    return out
+
+
 def past_hits(store, query: str, *, k: int = PAST_K, now: Optional[float] = None,
               exclude=()) -> list:
     """Retired facts that match a question about the past, newest-believed
@@ -292,7 +353,7 @@ def past_hits(store, query: str, *, k: int = PAST_K, now: Optional[float] = None
     skip = set(exclude)
     out = []
     for f in cands:
-        if f.get("current") or f.get("id") in skip:
+        if f.get("current") or f.get("id") in skip or forgotten(f):
             continue
         if window is not None and not is_belief_question(query):
             start, end = window
@@ -350,7 +411,14 @@ def recall(store, query: str, k: int, now: Optional[float] = None) -> list:
     try:
         if not is_past_question(query, now):
             return hits
-        return hits + past_hits(store, query, k=min(PAST_K, k), now=now,
-                                exclude={h.get("id") for h in hits})
+        ids = {h.get("id") for h in hits}
+        # "Where did I live in February?": a fact that only became true
+        # after February is labelled, never handed over bare as if it were
+        # the answer (the memory review, B1).
+        try:
+            hits = _label_later(hits, when(query, now))
+        except Exception:
+            pass
+        return hits + past_hits(store, query, k=min(PAST_K, k), now=now, exclude=ids)
     except Exception:
         return hits

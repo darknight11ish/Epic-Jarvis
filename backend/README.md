@@ -10441,10 +10441,11 @@ card saves it as history and the newer fact stays in use. English only.
 fact?" card did nothing to a fact whose end date is in the future (a lease
 that ends in December) - they only looked for facts with no end date at
 all. They now use the same "still in use" rule everything else uses.
-**One copy of the old rule is left, in your own `jarvis_extract.py`**
+**One copy of the old rule was left, in your own `jarvis_extract.py`**
 (`_accept`, from `memory-safety.patch`): keeping a correction CARD aimed at
-such a fact still saves the new fact without retiring the old one. Fixing
-that needs a change to a patch for that file - not done here.
+such a fact saved the new fact without retiring the old one. *(Fixed by the
+memory review, 2026-09-27 - B12 in "The memory review's fixes", at the very
+end.)*
 
 ## Also in this change
 
@@ -10780,3 +10781,187 @@ python3 backend/test_picture_text.py
   fails, the model is told plainly that the words could not be read.
 - **A follow-up question about the same picture** does not have its words:
   the apps re-send the conversation's words, never the picture.
+
+# The memory review's fixes (2026-09-27)
+
+The backend half of `docs/MEMORY-REVIEW-2026-09-27.md`: bugs B1-B15 and
+B17, and the improvements I1-I7, I12 and I13. (B16, B18 and B19 - app
+wording and two doc lines - are other builders' work.) Every change was
+measured by the memory self-test before it was kept, as your rule says;
+**one improvement (I2) made a number worse and was not kept**. Nothing new
+to switch on, and no new card. API side: `docs/JARVIS-API.md` §19.2 and
+§34.2; the design: `docs/ARCHITECTURE.md` section 5; the running record:
+`docs/MEMORY-SCOREBOARD.md`.
+
+## What you will notice
+
+- **"Where did I live in February?" no longer gets today's address as if
+  it were the answer.** A fact that only became true later comes labelled
+  "(known since 2026-03-01)", beside the old address "(no longer true since
+  ...)".
+- **Forget really forgets.** A forgotten fact no longer comes back when you
+  ask about the past ("what did I use to do on Tuesdays?"). A fact you
+  corrected, or that ended, still does - it is history, labelled.
+- **More cards from automatic learning, for good reasons:** "I live in York
+  now" when Jarvis knows Leeds (the card says it would replace Leeds);
+  "Dana works at Google and I work at Apple" saved as YOUR job at Google;
+  "I lived in Paris for two years" saved as living there now.
+- **Fewer cards for everyday things:** "Owner is a nurse", "my partner Sam
+  is a nurse" (a job is an everyday fact, your decision of 2026-09-26);
+  "I have three cats" saved as "3 cats" by voice.
+- **A private fact about someone, kept after its card, is not read aloud**
+  and makes a web search ask first - even when its words alone look
+  everyday.
+- **"My boss" and "my GP" are found** (as "manager" and "doctor").
+- Your two memory models now live in `~/.openjarvis/models`, not in
+  Windows' temp folder, so a disk clean-up no longer deletes them.
+
+## Owner steps (one line, in PowerShell)
+
+Copy the updated modules in and re-apply the two changed patches (the same
+line as always, from the folder this repository is cloned into):
+
+```
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+It updates `jarvis_memory.py`, `jarvis_past.py`, `jarvis_intake.py`,
+`jarvis_auto_learn.py`, `jarvis_sensitive.py`, `jarvis_search.py` and
+`jarvis_agent.py`, and swaps your applied `memory-safety.patch` and
+`auto-learn.patch` for the new versions (it recognises the old ones from
+`backend/patch-history/`). Then restart the backend. The first start after
+this downloads the meaning model into `~/.openjarvis/models` once, because
+it used to live in the temp folder.
+
+Then the memory self-test, as on the scoreboard page (one line; the result
+lands in `C:\Users\pcadmin\jarvis-memory-eval`, and the folder opens):
+
+```
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\eval_memory.py --learner-model qwen3:8b; explorer "$env:USERPROFILE\jarvis-memory-eval"
+```
+
+## The numbers
+
+Build machine, **words only** (no meaning model), the word-overlap stand-in
+for the re-ranker where it is measured, 71 golden facts plus 0, 100 and
+1,000 filler facts. "Before" is the code before these fixes, scored by the
+new self-test. As a chat turn recalls:
+
+| | Before | After |
+|---|---|---|
+| Recall@5, 71 facts (171 / 1,071 unrelated; 171 / 1,071 same topic) | 78.7% (77.7 / 77.7; 76.6 / 75.5) | **80.9%** (79.8 / 79.8; 78.7 / 77.7) |
+| Recall@1 / MRR, 71 facts | 63.8% / 0.698 | **66.0% / 0.719** |
+| Time questions found, unrelated filler (same topic, 171 / 1,071) | 9/10 (8 / 8) | **10/10** (9 / 9) |
+| Time questions: a fact NOT true then handed over unlabelled | 3 (2 with 171 / 1,071 same-topic) | **0** |
+| Two-fact questions, all facts among those recalled | 6/10 | **7/10** |
+| "Don't know": wrong facts per question (71 ... 1,071 same topic) | 1.47 ... 2.37 | unchanged |
+| "Don't know": none returned | 50.0% ... 42.1% | unchanged |
+| Past questions found and labelled, as-of questions | 8/8, 6/6 | unchanged |
+| Word floor the self-test chooses on half the questions | 0.0 | **0.1** (the default you have) |
+| The learner, all cases | 53/53 old; 60/80 with the 27 new cases | **80/80** |
+| Sensitive check, new probe lines (`sensitive_cases/probes-2026-09-27.jsonl`) | 16/26 found, 1/13 false alarms | **26/26**, 1/13 |
+| Sensitive check, its four older sets (recall; false alarms) | dev 781/783, 0/259; round2 347/353, 4/355; heldout1 623/623, 2/340; heldout2 515/608, 52/373 | unchanged; heldout2 **516**/608 |
+| Sensitive lines read-aloud would call normal (the four sets; everyday facts about people not counted) | 159 | **154** |
+
+`eval_memory.py --against` (I7), run on the code after against the report
+of the code before, found nothing worse.
+
+## Each bug and improvement
+
+Each bug's proof failed on the code before its fix and passes now
+(`test_memory_review.py` unless said otherwise; the learner cases are in
+`backend/eval/learner_cases.jsonl`, and `test_memory_recall.py` needs every
+one right).
+
+| # | What | Done? | Proof, and its numbers |
+|---|---|---|---|
+| B1 | A question about a past time got a current fact that was not true yet, first and unlabelled | done | `jarvis_past.recall` labels it "(true since ...)" (a date from your words) or "(known since ...)" (only the day you told Jarvis, which says nothing about before). The scorer now counts such a fact as a wrong version (q142, q144, q146, q148 list it): 3 -> 0 |
+| B2 | Month names were ignored, so "What phone did I have in June?" found nothing | done, narrowed | Months now count towards the word floor, and are **not** taken out of the framing words names use ("May" is never a name). The first cut measured worse (1,071 same-topic facts: time questions 8 -> 7, as "Viktor's birthday is on 15 June" crowded out "Owner lives in York"), so a hit that matches only the month counts only when its own words say it began that month. Time found 9 -> 10/10; chosen floor 0.0 -> 0.1 |
+| B3 | The learner could not see the fact to correct after chatty messages | done | `candidates()` passes `word_floor=0`; case L-C1 |
+| B4 | Jarvis's `memory_search` tool used a weaker search than chat | done | It calls `jarvis_past.recall`; the tool path now has the people layer (on the self-test's entity line, without -> with it: nickname questions 4/9 -> 9/9, recall@5 73.4% -> 80.9%, I1 included) |
+| B5 | A contradicting fact was saved automatically, the old one staying true | done | Cases L-G1, L-G2 (card), guard L-G3 (saved). The card carries `replaces_id`; nothing is retired until you keep it |
+| B6 | Something about another named person saved as about you | done | L-G4, L-G5 (card), guards L-G6 and g04 (saved) |
+| B7 | Past tense saved as true now | done | L-G7, L-G8 (card), guard L-G9; g01-g04 still saved; "I've lived here" is not the past |
+| B8 | Wrong "true from" dates ("founded in 2010"; "stopped" undated; "next to the park" read as the future) | done | T09-T12; t01-t08 still 8/8 |
+| B9 | "In a month" as a length of time got a future date | done | D07, D08 left alone; d04 ("exam is in two weeks") still dated |
+| B10 | "Remember: I live in Leeds" and "Owner lives in Leeds" never matched | done | S-A1 (0 -> 1); a near-duplicate unit test; s01-s12 still 12/12. (The review's "y04" is not in the repository - nothing to check.) |
+| B11 | "Owner is a nurse" treated as health | done | L-G10, L-G11 saved; g13 (asthma) and "sister is pregnant" still cards; the four sets unchanged |
+| B12 | Keeping a correction card on a fact that ends later left the old one in use | done | `memory-safety.patch` (both copies) and `auto-learn.patch`'s context line; `test_memory_true_from.py`: retired_by = the new fact, not current. The stack stand-in builds with the same log as before |
+| B13 | Private details about other people read aloud once saved | done | The topic is kept with the fact (`meta.sensitive`, a label) and read by `jarvis_sensitive.fact_topic`; "I had a TIA" is now your own health, not an aunt's. Everyday facts about people stay normal |
+| B14 | Common ways of saying suicide attempt, self-harm, domestic violence, stalking, homelessness went unflagged | done | Probe file 16/26 -> 26/26, false alarms 1/13 -> 1/13 (that one, "my boss is killing me", was already flagged for "my boss"); the four sets: recall never down, false alarms never up |
+| B15 | Forgotten facts came back for questions about the past | done | F-1 (absent), F-2 guard (a corrected fact still labelled); past questions 8/8 unchanged. `docs/ARCHITECTURE.md`'s line that said the opposite is corrected |
+| B17 | Both memory models stored in the temp folder | done | `cache_dir` = `~/.openjarvis/models` (or `FASTEMBED_CACHE_PATH`); a test with fastembed stubbed |
+| I1 | "boss" = "manager", "GP" = "doctor" and a few more, on lookup only | **kept** | recall@5 78.7 -> 80.9% at 71 facts (+2.2; the review asked +2), every size +2.1-2.2; don't-know 1.47 unchanged; "my wife" still never finds the partner |
+| I2 | Skip the re-ranker at 5 facts or fewer | **not kept** | Recall@5 identical, as it must be, but with the stand-in re-ranker recall@1 fell at one size (64.9 -> 63.8%) and MRR at five (e.g. 0.711 -> 0.701). The time it would save shows only on the PC |
+| I3 | "three" = "3" when checking your words | **kept** | V01-V03 card -> saved; V04 ("three" vs "4") still a card; g05, g06, g14 still cards |
+| I4 | "Said again" checks the date | **kept** | S-A2 1 -> 0; s01-s12 still 12/12 |
+| I5 | Self-test honesty for sensitive topics | **kept** | `--measure` has a "topic()" line; everyday people lines in `dev.jsonl` / `round2.jsonl` are marked `"everyday": true` rather than relabelled (the pattern layer must still find who they are about, and `test_sensitive.py` checks that); the learner's stand-in model answers from a case's label (P-1..P-3). The line reads 159 (the four sets) before B11/B14 and 154 after - not the review's "55", which counted differently |
+| I6 | Self-test tunes on the path chat uses | **kept** | Both floor sweeps run with the people layer on; "don't know" questions are scored through chat recall; the distance floor is chosen on half and reported on the other half. Chosen word floor 0.1; on the other half it costs 1 right fact (54 -> 53) and removes 1 wrong one (38 -> 37) at 71 facts. The distance floor waits for the PC |
+| I7 | `--against old.json` | **kept** | Against its own earlier report: all "unchanged", exit 0; a worse recall@5, wrong version or learner case exits 1 |
+| I12 | "Said again" times after Erase are a whole day | **kept** | `test_memory_said_again.py`: after Erase every time is a local midnight; the count stays 3 |
+| I13 | One step out from a person | **kept, narrowed** | The first cut (any question) raised don't-know 1.47 -> 1.50 (it added a wrong fact to "Which hospital was I born in?"), so it runs only for a question that asks WHO: two-fact 6 -> 7/10 at every size, don't-know unchanged. Said plainly: it was narrowed on the same questions it is judged on |
+
+## What the code does
+
+- `jarvis_past.py` - `label_since`, `_label_later` (B1); `forgotten` and the
+  skip in `past_hits` (B15).
+- `rebuilt/jarvis_memory.py` - `retire()` marks a Forget `meta.forgotten_at`,
+  and `add(supersedes=)` clears it on a dated correction (B15); months in the
+  word floor, and the month-only rule (B2); `_BEGAN`, `_NEXT_TIME` (B8);
+  `saved_topic`, and `add()` taking a card's topic (B13); `model_cache_dir`
+  (B17); `_SAME_PERSON` in `_query_grams` (I1); `_who_facts`,
+  `ENTITY_WHO_MAX` (I13); `_repeats_to_the_day` in `erase()` (I12).
+- `jarvis_intake.py` - `candidates()` floor off (B3); `_AHEAD` in the
+  "in two weeks" rule (B9); `_OWNER_FORMS` in `shape()` (B10);
+  `_same_dates` in `note_said_again` (I4).
+- `jarvis_auto_learn.py` - `find_contradiction`, `CHANGES_A_FACT` (B5);
+  `_other_clause` (B6); `check_tense` (B7); `_NUMBER_WORDS` (I3);
+  `sensitive_key`, and the `sensitive` column of `auto_learn_notes` (B13).
+- `jarvis_sensitive.py` - the job rule for anyone (B11); new phrasings and
+  "TIA" (B14); `fact_topic`, and "I had a ..." as your own (B13); the
+  `topic()` line in `--measure` (I5).
+- `jarvis_search.py` - `fact_topic` uses the kept topic (B13).
+- `jarvis_agent.py` - `memory_search` through `jarvis_past.recall` (B4).
+- `memory-safety.patch`, `rebuilt-patches/memory-safety.patch`,
+  `auto-learn.patch` - `_accept`'s "still in use" rule (B12); their old
+  texts are in `backend/patch-history/`.
+- `eval_memory.py`, `eval_learner.py` - the scorer (B1), the sweeps (I6),
+  `--against` (I7), a fresh store per learner gate case, and the per-case
+  model answer (I5).
+
+## Test it
+
+```
+python3 backend/test_memory_review.py
+python3 backend/test_memory_true_from.py
+python3 backend/test_memory_said_again.py
+python3 backend/test_memory_recall.py
+python3 backend/jarvis_sensitive.py --measure backend/sensitive_cases/probes-2026-09-27.jsonl
+python3 backend/eval_memory.py --sizes 0,100,1000 --reranker stand-in
+```
+
+## Not checked, said plainly
+
+- **Everything is words only.** Meaning search, the real re-ranker and the
+  real learner model run only on your PC (the scoreboard page lists what
+  that run settles).
+- **B13 covers a card whose reason was the sensitive check**, and facts
+  saved under "Also remember sensitive topics automatically". A card kept
+  for another reason (pasted text, say) that is also sensitive keeps no
+  topic; its words are then all that read-aloud has, as before. With
+  automatic learning off, cards carry no reason at all, so none either.
+- **Under "Also remember sensitive topics automatically", B13 asks the
+  local model** about a fact the patterns flag (someone else, or a
+  sensitive word), in the background learner - never in a chat. A clean
+  fact costs no wait.
+- **B5's "one thing at a time" list is English and fixed** (where you live,
+  work, what you drive, what someone is called, your phone, car, manager
+  ...). A clash it does not know is still saved; one it thinks it sees is
+  only ever a card.
+- **B6 recognises a person by a capital letter.** A clause that starts with
+  a capitalised ordinary word it does not know may make a card it did not
+  need to - the safe side.
+- **B12 changes two patches.** `_stack.py`'s stand-in and `git apply` accept
+  them; `apply-patches.ps1` on your real files is the final proof.
+- **B17: your own backend start-up is outside this repository.** If it sets
+  the models' folder some other way, that is not checked.

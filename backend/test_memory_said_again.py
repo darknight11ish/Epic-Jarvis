@@ -140,6 +140,40 @@ def t_no_words_and_erase_leaves_none():
           not st.said_again(fid, time.time(), "typed"))
 
 
+def t_after_erase_every_time_is_a_whole_day():
+    """The memory review of 2026-09-27, I12: after Erase, a "said again"
+    time can no longer point at one exact chat turn. Failed before (the
+    times were kept to the second)."""
+    st = store()
+    fid = st.add("Owner's secret word is quuxzanzibar", source="auto")
+    made = time.time() - 3 * 86400                      # saved three days ago
+    c = st._connect()
+    try:
+        c.execute("UPDATE facts SET created=?, valid_from=? WHERE id=?", (made, made, fid))
+        c.commit()
+    finally:
+        c.close()
+    for dt in (30, 95, 86400 + 200):         # three turns: two one day, one the next
+        st.said_again(fid, made + dt, "typed")
+    before = st.said_again_counts([fid])[fid]["count"]
+    st.erase(fid)
+    c = st._connect()
+    try:
+        times = [r[0] for r in c.execute("SELECT said_at FROM fact_repeats WHERE fact_id=?",
+                                         (fid,))]
+    finally:
+        c.close()
+
+    def midnight(t):
+        lt = time.localtime(int(t))
+        return (lt.tm_hour, lt.tm_min, lt.tm_sec) == (0, 0, 0)
+    check("I12: after Erase every said-again time is a whole day (local midnight)",
+          times and all(midnight(t) for t in times), times)
+    check("I12: ... and the count shown is unchanged",
+          st.said_again_counts([fid]).get(fid, {}).get("count") == before == 3,
+          st.said_again_counts([fid]))
+
+
 # ======================================================= 3. who counts ==
 
 def t_only_the_owners_own_live_words_count():

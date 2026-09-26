@@ -190,6 +190,18 @@ _HEALTH = {
         r"psycholog\w*", r"(?:a|my|the|his|her) shrink",
         r"mental (?:health|illness|breakdown|disorder)", r"(?:nervous|mental) breakdown",
         r"had a breakdown", r"sectioned", r"self[- ]harm\w*", r"suicid\w*",
+        # The plain ways of saying a suicide attempt or self-harm (the memory
+        # review of 2026-09-27, B14: "I tried to kill myself" got no
+        # category at all). Not "this deadline is killing me".
+        r"(?:tried|try|tries|trying|attempted|attempting|wanted|want|wants) to (?:kill|hang"
+        r"|hurt|harm|drown|poison) (?:myself|himself|herself|themselves|themself)",
+        r"(?:tried|tries|trying|attempted|attempting|wanted) to (?:end|take) (?:my|his|her"
+        r"|their) (?:own )?life", r"took (?:my|his|her|their) own life",
+        r"kill(?:ed|ing|s)? (?:myself|himself|herself|themselves)",
+        r"(?:started|start|keep|kept|been|stop|stopped|used to) (?:cutting|cut|hurting|hurt"
+        r"|harming|harm|burning|burn) (?:myself|himself|herself|themselves)",
+        r"(?:cut|cutting|hurt|hurting|harm|harming|burn|burning) (?:myself|himself|herself"
+        r"|themselves) (?:again|on purpose|deliberately)",
         r"eating disorders?", r"anorexi\w*", r"bulimi\w*", r"binge[- ]eating",
         r"medicat\w*", r"meds", r"medicines?", r"pills?",
         r"(?:taking|take|takes|took|on) (?:\w+ )?tablets", r"tablets? (?:a|per|every|daily|twice)",
@@ -418,6 +430,12 @@ _MONEY = {
         r"money (?:problems|worries|trouble|troubles|issues)", r"(?:tight|short) on (?:money|cash)",
         r"bankrupt\w*", r"insolven\w*", r"iva", r"ccj", r"debt collect\w*", r"bailiffs?",
         r"repossess\w*", r"evict\w*", r"rent (?:arrears|increase)", r"(?:my|our|the) rent",
+        # B14 (the memory review of 2026-09-27): having nowhere to live.
+        # Not "a homeless charity".
+        r"homeless(?:ness)?(?! (?:charit\w*|appeal|shelter volunteers?))", r"sofa[- ]surf\w*",
+        r"couch[- ]surf\w*", r"sleeping rough", r"sleep(?:s|ing)? on the streets?",
+        r"living (?:in|out of) (?:my|his|her|their|our|a|the) (?:car|van|tent)",
+        r"(?:homeless|night) shelter", r"(?:emergency|temporary) accommodation",
         r"universal credit",
         r"(?:on|claim\w*|receiv\w*|get|getting|lost (?:my|his|her)) (?:\w+ )?benefits",
         r"benefits? (?:claim|office|payment|sanction|cap)",
@@ -769,6 +787,9 @@ _SPECIAL = {
             r"in the closet", r"trans(?:gender|sexual)?", r"non-?binary", r"nonbinary", r"enby",
             r"genderqueer", r"genderfluid", r"gender (?:identity|transition|reassignment)",
             r"(?:i'm|i am|he's|she's|is) (?:bi|straight)", r"same-sex",
+            # "bi and my family doesn't know" (B14): "bi" opening the
+            # sentence. Not "bi-weekly" or "bidding".
+            r"^\W*bi(?= and | but |,|\.|$)",
             r"(?:dating|dates|married to|seeing) (?:a|another) (?:woman|man|girl|guy|boy)",
             r"sex", r"sexual(?:ly)?", r"sex life", r"hook(?:ed|ing)? up", r"one[- ]night stands?",
             r"slept with", r"sleeping with", r"(?:an|having an|had an|her|his|their|secret) affairs?",
@@ -959,6 +980,13 @@ _SPECIAL = {
             r"charged with", r"sentenced", r"dui", r"dwi", r"drink[- ]driv\w*",
             r"drunk[- ]driv\w*", r"lawsuit", r"sued", r"suing", r"restraining order",
             r"shoplift\w*", r"assault\w*", r"abus(?:e|ed|ive|er)", r"domestic (?:violence|abuse)",
+            # B14 (the memory review of 2026-09-27): violence at home and
+            # stalking, said plainly. Not "the kids hit the ball".
+            r"(?:he|she|they|husband|wife|partner|boyfriend|girlfriend|dad|father|mum|mother"
+            r"|ex) (?:hits?|beats?|slaps?|slapped|punch(?:es|ed)?|kick(?:s|ed)|chok(?:es|ed)"
+            r"|strangl(?:es|ed)) (?:me|us|her|him)", r"coercive control",
+            r"victim of (?:domestic|abuse|rape|assault|stalking)",
+            r"stalk(?:ed|er|ers)", r"stalking (?:me|us|her|him|them)",
             r"rape\w*", r"sex offenders?", r"register(?:ed)? sex", r"possession (?:of|charge)",
             r"(?:got|given|have) a record",
         ],
@@ -1256,8 +1284,14 @@ _HARMLESS = [
     r"(?:work|works|working|worked|job|jobs|volunteer|volunteers|volunteering|intern|interning"
     r"|placement) (?:at|in|for) (?:a |the )?(?:hospital|hospitals|clinic|pharmacy|gp surgery"
     r"|dental practice|care home|nhs|healthcare|health care|pharma|bank)",
-    r"(?:i'm|i am|im|work as|working as|trained as|training to be|trainee|became|become|becoming"
-    r"|studying to be|want to be|qualified as|retired) (?:a|an) (?:\w+ )?(?:doctor|nurse"
+    # A job, said of anyone: "Owner is a nurse", "my partner Sam is a
+    # nurse", "Jonas works as a nurse" (the memory review of 2026-09-27,
+    # B11 - the owner's decision of 2026-09-26: everyday facts about people
+    # are normal). "Ill", "in hospital", "on medication" are not a job and
+    # stay sensitive.
+    r"(?:i'm|i am|im|work as|works as|worked as|working as|trained as|training to be|trainee"
+    r"|became|become|becomes|becoming|studying to be|want to be|qualified as|retired"
+    r"|(?<=\w )(?:is|was)|(?<=\w)'s) (?:a|an) (?:\w+ )?(?:doctor|nurse"
     r"|dentist|therapist|pharmacist|surgeon|psychologist|psychiatrist|paramedic|midwife|carer"
     r"|counsell?or|physio(?:therapist)?|gp|vet|optician|radiographer|anaesthetist"
     r"|anesthesiologist|social worker|police officer|lawyer|solicitor|barrister|judge"
@@ -2755,6 +2789,10 @@ def patterns(text: str) -> dict:
             hits.append((cat, f"{cat} word (accented)"))
     hits += _shape_hits(v)
     hits += _other_person(v)
+    # "I had a TIA" (a mini-stroke; the memory review, B14): in capitals it
+    # is never the Spanish "tia" (aunt) the relation list knows.
+    if re.search(r"(?<![\w])TIAs?(?![\w])", v.orig):
+        hits.append(("health", "health word (TIA)"))
     if _pet_subject(v):
         # A pet's or a plant's health, and "his skin" meaning the dog's.
         hits = [h for h in hits if h[0] != "health" and h[1] != "he/she"]
@@ -2767,7 +2805,8 @@ def patterns(text: str) -> dict:
                                                   for r in rules)]
     # Whose topic is it? "I came out to my parents" is the owner's sexuality,
     # not the parents'; "my old landlord is suing me" is the owner's court case.
-    owner = bool(_OWNER_SUBJECT.search(v.blank) or _OWNER_OBJECT.search(v.blank))
+    owner = bool(_OWNER_SUBJECT.search(v.blank) or _OWNER_OBJECT.search(v.blank)
+                 or _OWNER_HAD.search(v.blank))
     # EVERYDAY_OTHER: the only thing found is WHO the sentence is about.
     everyday = cats == ["other_people"] and not any(
         _private_other_rule(r) for c, r in hits if c == "other_people")
@@ -2792,6 +2831,12 @@ _OWNER_OBJECT = re.compile(
     r"|fined|cautioned|stopped|searched|evict\w*|deport\w*) (?:me|us)(?![\w])"
     # "I told my boss I'm gay": what was told is about the owner
     r"|(?:told|tell|telling|said|say) (?:\w+ ){1,3}(?:that )?(?:i'?m|i am|i was|i've)(?![\w])")
+
+
+#: "I had a TIA", "I've had a stroke": the owner's own - not "I had a friend
+#: who ...", which is about the friend (the memory review, B13).
+_OWNER_HAD = re.compile(r"^\W*(?:i|i've|ive|i have) (?:had|have had) (?:a|an) "
+                        r"(?!(?:\w+ )?(?:who|that|whose|which)(?![\w]))")
 
 
 def _someone_else(p: dict) -> bool:
@@ -2843,6 +2888,34 @@ def topic(text: str) -> str:
         return ""
     r = reason_for(p["categories"], special=p["special"], other_person=_someone_else(p))
     return r[len("about "):-len(", a sensitive topic")]
+
+
+def fact_topic(text: str) -> str:
+    """topic(), and - when the patterns find nothing - the topic a SAVED fact
+    with these words was saved with (jarvis_memory.saved_topic; the memory
+    review of 2026-09-27, B13). What read-aloud and web search ask of a
+    recalled fact: "Owner's best mate Liam tried to kill himself in May"
+    names only a person, so topic() calls it everyday, but the local model
+    said "health" when it was saved, and that answer is kept with the fact.
+    An everyday fact about someone is still normal: nothing is kept with it.
+    No store open, or no such fact: topic() alone, as before."""
+    t = topic(text)
+    if t:
+        return t
+    M = sys.modules.get("jarvis_memory")
+    fn = getattr(M, "saved_topic", None) if M is not None else None
+    if fn is None:
+        return ""
+    try:
+        key = fn(text)
+    except Exception:
+        return ""
+    if not key:
+        return ""
+    if key in CATEGORIES:
+        r = reason_for([key])
+        return r[len("about "):-len(", a sensitive topic")]
+    return "a topic Jarvis could not check"
 
 
 # ==========================================================================
@@ -3202,7 +3275,7 @@ def _load_cases(path: str) -> list:
                          "lang": str(d.get("lang") or d.get("language") or "?"),
                          "kind": str(d.get("kind") or ("sensitive" if lab else "harmless")),
                          "context": d.get("context") or "", "expect": d.get("expect") or "",
-                         "line": n})
+                         "everyday": bool(d.get("everyday")), "line": n})
     return rows
 
 
@@ -3220,7 +3293,11 @@ def measure(rows: list, *, with_model: bool = False, ask: Optional[Callable] = N
         m = v["layers"]["model"]
         mod = (m["answer"] is True or m["answer"] == "unsure" or m["answer"] is None) \
             if with_model else None
-        results.append(dict(r, flagged=v["sensitive"], by_patterns=pat, by_model=mod,
+        # What read-aloud and web search use on a SAVED fact: topic(), the
+        # patterns alone, where an everyday fact about someone is normal
+        # (the memory review's I5 - saving and using were measured apart).
+        results.append(dict(r, by_topic=bool(topic(r["text"])),
+                            flagged=v["sensitive"], by_patterns=pat, by_model=mod,
                             got=v["categories"], rules=v["layers"]["patterns"]["rules"],
                             model_failure=m.get("failure") if with_model else ""))
     return {"results": results}
@@ -3297,6 +3374,23 @@ def report(res: dict, *, with_model: bool = False, show: bool = False, out=sys.s
             p(f"  [{r['lang']}/{r['kind']}] {r['text']}   <- {', '.join(r['rules']) or 'model'}")
     else:
         p(f"\n{len(missed)} missed, {len(fps)} harmless lines flagged (--show lists them)")
+    # The column for USING a saved fact (the memory review of 2026-09-27,
+    # I5): read-aloud and web search ask topic() alone - the patterns, with
+    # an everyday fact about someone counted as normal. A sensitive line it
+    # calls normal is read aloud once saved, unless the fact keeps its topic
+    # from when it was saved (jarvis_memory meta "sensitive", B13).
+    # Lines marked "everyday": true are an everyday fact about someone ("My
+    # sister likes jazz"): still sensitive for the PATTERNS (layer 1 finds
+    # who it is about; the model then decides), and normal once saved, by
+    # the owner's decision - so they are not counted here.
+    quiet = [r for r in pos if not r.get("by_topic") and not r.get("everyday")]
+    n_use = len([r for r in pos if not r.get("everyday")])
+    p(f"topic() - what read-aloud and web search use: {len(quiet)} sensitive lines look "
+      f"normal ({_pct(len(quiet), n_use).strip()} of {n_use}; everyday facts about people, "
+      f"normal by the owner's decision, not counted)")
+    if show:
+        for r in quiet:
+            p(f"  [{r['lang']}/{r['category']}] {r['text']}")
     key = "flagged" if with_model else "by_patterns"
     return {"recall": line("", pos, key), "recall_core": line("", core, key),
             "fp_harmless": line("", harmless, key), "fp_tricky": line("", tricky, key)}

@@ -854,7 +854,10 @@ def fact_topic(text) -> str:
     when the check cannot run, the fact counts as sensitive."""
     try:
         import jarvis_sensitive
-        return str(jarvis_sensitive.topic(str(text or "")) or "")
+        # fact_topic: the patterns, and - when they find nothing - the topic
+        # the fact was SAVED with (the memory review of 2026-09-27, B13).
+        check = getattr(jarvis_sensitive, "fact_topic", jarvis_sensitive.topic)
+        return str(check(str(text or "")) or "")
     except Exception:
         return "a topic Jarvis could not check"
 

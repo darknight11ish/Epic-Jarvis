@@ -606,7 +606,10 @@ June?") also recalls up to three matching **retired** facts
 listed in `injected_ids` and checked for `injected_sensitive` like any
 other recalled fact. `backend/README.md`, "Memory wave 1", has the details.
 (Since 2026-09-25 both apps can show the facts an answer used - "Used in
-this answer", below.)
+this answer", below.) Since the memory review of 2026-09-27 (§34.2): a
+FORGOTTEN fact is never among them, and a current fact that only became
+true after the time a question names ends "(true since <date>)" or
+"(known since <date>)".
 
 **"Always keep in mind"** (memory wave 2, the owner's decision of
 2026-09-24; `memory-profile.patch`, `rebuilt/jarvis_memory.py`
@@ -3007,9 +3010,30 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    said was a question, and the fact states it as true". A fact that says
    "the owner" from sentences with no I/me/my/we in them is a card too:
    "what you said was not about you, but the fact says it is".
+   **Since the memory review of 2026-09-27** also: the sentence is split
+   into its clauses (commas, "and", "but"), and a fact about the owner taken
+   from the clause about a named someone else ("Dana works at Google and I
+   work at Apple" -> "Owner works at Google") is a card: "that part of what
+   you said was about someone else, and the fact says it is about you" (no
+   name in the reason). A fact that says something is true NOW, from words
+   said only in the past tense ("I lived in Paris" -> "Owner lives in
+   Paris"; "I've lived here since 2019" is fine), is a card: "what you said
+   was in the past tense, and the fact says it is true now". Number words
+   and digits ground each other, one to twenty ("three cats" = "3 cats";
+   "three" never grounds "4").
 8. **Never a correction** (GUARDS L6): a proposal that would replace a stored
    fact (`replaces_id`, or even `replaces` words) is always a card: "it would
-   replace a fact you already have".
+   replace a fact you already have". **And never a fact that contradicts one
+   already stored**, even when the learner's model did not say so (the memory
+   review of 2026-09-27): the same thing a person has one of (where they
+   live, where or as what they work, what they drive, what someone is
+   called, "Owner's phone / car / manager ... is") with a different value,
+   or a change word ("now", "no longer", "any more", "moved", "quit",
+   "stopped", "switched", "left") and two content words in common. The card
+   then carries `replaces_id` and `replaces_text` - the stored fact it would
+   replace, shown as "Would replace: ..." like any correction - and its
+   reason is "it would change a fact you already have - accepting it
+   replaces that one". Nothing is retired unless the owner keeps the card.
 9. **Not sensitive**, unless "Also remember sensitive topics automatically"
    is on (GUARDS L7). **With it on**, only one narrow check runs:
    passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses still wait
@@ -3027,6 +3051,15 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    patterns miss - a plain word with no password word near it, "my
    Netflix is sunflower" - is saved, because only the model would have
    caught it ("my Netflix password is sunflower" still waits).
+   **The topic stays with the fact** (the memory review of 2026-09-27,
+   B13): a card held back for a sensitive topic and then kept, or a fact
+   saved under the switch, keeps its topic as a label in its meta
+   (`"sensitive": "health"` - never words), so reading aloud and a web
+   search's card still treat it as sensitive when its words alone look
+   everyday ("Owner's best mate Liam was in a bad place in May"). Under the
+   switch this asks the local model only about facts the patterns flag
+   (someone else, or a sensitive word); a clean fact costs no wait.
+   Everyday facts about people keep nothing and stay normal.
    **With it off**, `jarvis_sensitive.py` looks at the fact AND at the
    turns it shares words with, in two layers; either one saying "sensitive"
    makes a card:
@@ -5783,6 +5816,55 @@ fails the other app's test. The status cases in it are the real
   true" (the desktop used to say "no longer recalled" in both views).
 - Dates are the same words in every language setting: day, English month
   name, year.
+
+### 34.2 The memory review's fixes (added 2026-09-27)
+
+docs/MEMORY-REVIEW-2026-09-27.md, the backend half; the numbers are in
+backend/README.md, "The memory review's fixes". **No new route, field the
+apps must read, or setting.** What an app can notice:
+
+- **A question about a time labels a fact that became true after it.**
+  "Where did I live in February?" recalls "Owner lives in York (known since
+  2026-03-01)" beside "Owner lives in Harrogate (no longer true since
+  2026-03-01)" - "(true since <date>)" when the owner's own words gave the
+  date. The label is part of the fact's text in the prompt only; stored
+  facts are unchanged.
+- **Forget really forgets** (§6 `/api/memory/forget`, and keeping a "stop
+  using this fact?" card): the fact is marked (`meta.forgotten_at`) and a
+  question about the past no longer brings it back. A fact replaced by a
+  correction, or that ended, still does, labelled. Nothing is deleted; the
+  memory pane's history and "as of" views are unchanged.
+- **More cards from automatic learning, for three new reasons** (§19.2
+  items 7 and 8): a fact that contradicts a stored one (the card carries
+  `replaces_id` / `replaces_text`, like a correction), a fact from the part
+  of a sentence about someone else, and a fact said only in the past tense.
+  Fewer cards for two: a job said of anyone ("Owner is a nurse", "my
+  partner Sam is a nurse") is an everyday fact, and "three" / "3" ground
+  each other.
+- **Keeping a correction card on a fact that ends later now retires it**
+  (memory-safety.patch's `_accept`, and its context line in
+  auto-learn.patch).
+- **A fact kept after a sensitive card is not read aloud** (§19.2 item 9):
+  `X-Jarvis-Route`'s `injected_sensitive` and the web-search card count it.
+- **Jarvis's own `memory_search` tool** recalls what a chat turn recalls
+  (the people layer, and past facts labelled).
+- **Dates:** "in a month" as a length of time ("read the series in a
+  month", "three times in a week") is no longer dated as the future; "my
+  exam is in two weeks" still is. "Founded", "opened" and "launched" no
+  longer give a fact its "true from" date; "stopped", "gave up", "ended",
+  "moved out" and "broke up" now do; "next to the park" is not the future.
+- **"Said again":** a saved "Remember: I live in Leeds" and the learner's
+  "Owner lives in Leeds" are the same fact; "I started yesterday" said on a
+  later day is a new event, not a repeat; after Erase the said-again times
+  are rounded down to the day (the count unchanged).
+- **Recall:** "boss" also finds the manager and "GP" the doctor (and
+  mum/mom/mother, dad/father, flatmate/roommate/housemate,
+  neighbour/neighbor - never partner/husband/wife); month names count
+  towards the word floor ("What phone did I have in June?"); a question
+  that asks WHO may get up to two extra facts saying who the person in the
+  top fact is. `GET /api/memory/status` is unchanged.
+- **The two memory models** are kept in `<config folder>/models`
+  (`FASTEMBED_CACHE_PATH` wins when set), not the system temp folder.
 
 ## 35. Folders Jarvis may look in: PDFs, Word files and a Notion export (added 2026-09-26)
 

@@ -804,6 +804,118 @@ def check_not_correction(row: dict) -> str:
     return ""
 
 
+# ---- a fact that contradicts one already saved (the memory review, B5) ----
+#
+# GUARDS L6 above only sees a correction the learner's MODEL marked ("replaces").
+# A model that leaves it out - "I live in York now" when Jarvis knows "Owner
+# lives in Leeds" - used to be saved automatically, and both stayed true. So
+# before an automatic save the stored facts are read too. A clash makes the
+# proposal a card that names the fact it would replace (replaces_id, as the
+# model's own correction would); it never retires anything by itself -
+# only the owner accepting the card does, as for every correction.
+
+#: Things a person has ONE of at a time: where they live, where and as what
+#: they work, what they drive, what someone or something is called, and
+#: "Owner's phone/car/manager... is". Each pattern gives the slot (who, and
+#: which of these) and the value; two facts with the same slot and different
+#: values contradict each other. "likes", "has", "plays" are not here:
+#: "Owner likes folk" does not replace "Owner likes jazz".
+_SUBJ = r"(?P<who>owner(?:'s(?: [a-z][\w-]*){1,3}?)?)"
+_ONE_VALUE = [
+    ("lives", re.compile(_SUBJ + r" (?:now )?(?:lives|live|is living|is based) (?:in|at|on) "
+                         r"(?P<value>.+)$")),
+    ("works", re.compile(_SUBJ + r" (?:now )?(?:works|work|is working) "
+                         r"(?P<prep>at|for|as) (?P<value>.+)$")),
+    ("drives", re.compile(_SUBJ + r" (?:now )?drives (?P<value>.+)$")),
+    ("called", re.compile(_SUBJ + r" (?:is|are) (?:called|named) (?P<value>.+)$")),
+    ("is", re.compile(r"(?P<who>owner's (?:(?:new|current|favourite|favorite) )?"
+                      r"(?:phone|car|bike|laptop|manager|boss|doctor|gp|dentist|landlord"
+                      r"|landlady|address|postcode|job|employer|team|school|university"
+                      r"|favourite \w+|favorite \w+)) (?:is|are) (?P<value>.+)$")),
+]
+#: Words that say something CHANGED or ended.
+_CHANGE = re.compile(r"\b(?:now|no longer|not any ?more|any ?more|moved|quit|stopped"
+                     r"|switched|left|gave up|no more|used to)\b")
+_FILLER_END = re.compile(r"\s*\b(?:now|currently|these days|any ?more|at the moment)\s*$")
+
+
+def _plain(text: str) -> str:
+    """Lower case, our date brackets off, "the owner" as "owner", one space."""
+    t = str(text or "").lower().replace("’", "'")
+    try:
+        import jarvis_intake
+        t = jarvis_intake._ADDED.sub(" ", t)
+    except Exception:
+        pass
+    t = re.sub(r"\bthe (owner|user)\b", "owner", t)
+    t = re.sub(r"\buser('s)?\b", r"owner\1", t)
+    return " ".join(re.sub(r"[.!?]+$", "", t).split())
+
+
+def _slot(text: str):
+    """(slot, value) for a fact about one of the things a person has one of
+    at a time, else None."""
+    t = _plain(text)
+    for name, rx in _ONE_VALUE:
+        m = rx.match(t)
+        if m:
+            value = _FILLER_END.sub("", m.group("value")).strip(" ,")
+            prep = m.groupdict().get("prep") or ""
+            return (m.group("who"), name, prep), value
+    return None
+
+
+def _shared(a: str, b: str) -> int:
+    """How many content words two facts share, the owner left out."""
+    try:
+        M = sys.modules.get("jarvis_memory")
+        words = M._words if M is not None else None
+    except Exception:
+        words = None
+    if words is None:
+        words = lambda s: set(_words(s)) - _GROUND_STOP     # noqa: E731
+    return len((words(a) - {"owner", "now"}) & (words(b) - {"owner", "now"}))
+
+
+def find_contradiction(fact: str, store) -> Optional[dict]:
+    """The stored CURRENT fact this one would change, or None: the same slot
+    (_ONE_VALUE) with a different value, or a change word ("now", "no
+    longer", "moved", "quit" ...) and two or more content words in common.
+    Never raises: anything that fails is None (and the other checks still
+    run)."""
+    try:
+        mine = _slot(fact)
+        changes = bool(_CHANGE.search(_plain(fact)))
+        if mine is None and not changes:
+            return None
+        try:
+            hits = store.search(fact, k=8, word_floor=0.0)
+        except TypeError:
+            hits = store.search(fact, k=8)
+        low = _plain(fact)
+        for h in hits:
+            if h.get("current") is False:
+                continue
+            other = str(h.get("text") or "")
+            if _plain(other) == low:
+                continue
+            theirs = _slot(other)
+            if mine is not None and theirs is not None and theirs[0] == mine[0] \
+                    and theirs[1] != mine[1]:
+                return h
+            if changes and _shared(fact, other) >= 2:
+                return h
+    except Exception:
+        return None
+    return None
+
+
+#: The card's reason for a contradiction (the fact's words are not in it:
+#: the card itself shows the fact it would replace).
+CHANGES_A_FACT = ("it would change a fact you already have - accepting it replaces "
+                  "that one")
+
+
 # ---- grounding ------------------------------------------------------------
 
 #: Words that carry no fact of their own, plus the ways a fact names the
@@ -876,12 +988,30 @@ def _fact_words(fact: str) -> list:
     return [w for w in _words(fact) if w not in _GROUND_STOP]
 
 
+#: Number words and their digits, one to twenty (the memory review, I3):
+#: "I have three cats" grounds "Owner has 3 cats", and "2 dogs" grounds
+#: "two dogs". Speech-to-text writes either, and so does the model. Only
+#: the SAME number: "three" never grounds "4".
+_NUMBER_WORDS = {w: str(i) for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
+    "fifteen sixteen seventeen eighteen nineteen twenty".split())}
+
+
+def _as_number(w: str) -> str:
+    """The digits a number word means ("three" -> "3"), else the word."""
+    return _NUMBER_WORDS.get(w, w)
+
+
 def ungrounded(fact: str, turns: list) -> list:
     """The fact's words that are NOT in the owner's turns."""
     stems, exact = _pool(turns)
+    numbers = {_as_number(x) for x in exact}
     out = []
     for w in _fact_words(fact):
-        if any(ch.isdigit() for ch in w) or w in _NEGATION:
+        if any(ch.isdigit() for ch in w) or w in _NUMBER_WORDS:
+            if w not in exact and _as_number(w) not in numbers:
+                out.append(w)
+        elif w in _NEGATION:
             if w not in exact:
                 out.append(w)
         elif _stem(w) not in stems and w not in exact:
@@ -1005,9 +1135,119 @@ def source_sentences(fact: str, turns: list) -> list:
     return out or every
 
 
+#: Past forms that do not end in "ed", and the present they belong to.
+_PAST_IRREGULAR = {
+    "went": "go", "drove": "drive", "taught": "teach", "ran": "run", "sang": "sing",
+    "wore": "wear", "ate": "eat", "knew": "know", "grew": "grow", "wrote": "write",
+    "swam": "swim", "spoke": "speak", "rode": "ride", "flew": "fly", "kept": "keep",
+    "slept": "sleep", "built": "build", "bought": "buy", "brought": "bring",
+    "thought": "think", "made": "make", "took": "take", "gave": "give", "held": "hold",
+    "led": "lead", "met": "meet", "paid": "pay", "sold": "sell", "told": "tell",
+    "understood": "understand", "won": "win",
+}
+#: "I've lived here for years" is still true now: a past form after these
+#: is the present perfect, not the past.
+_PERFECT = re.compile(r"\b(?:have|has|'ve|ve|'s|having)\s+(?:\w+\s+){0,2}$")
+
+
+def _past_forms(w: str, turns: list) -> list:
+    """The forms of `w` the owner used, when every one of them is the plain
+    past ("lived", "worked", "went") and none is a present perfect ("I've
+    lived") - else []."""
+    stem = _stem(w)
+    seen = []
+    for t in turns:
+        low = str(t or "").lower().replace("’", "'")
+        for m in re.finditer(r"[a-z]+", low):
+            x = m.group(0)
+            base = _PAST_IRREGULAR.get(x)
+            if _stem(x) != stem and not (base and _stem(base) == stem):
+                continue
+            if x == w:
+                return []                          # the owner said this very form
+            past = x.endswith("ed") or base is not None
+            if not past or _PERFECT.search(low[:m.start()]):
+                return []
+            seen.append(x)
+    return seen
+
+
+def check_tense(fact: str, turns: list) -> str:
+    """"" unless the fact says something is true NOW that the owner only
+    said in the past tense - "I lived in Paris for two years in my
+    twenties" is not "Owner lives in Paris" (the memory review, B7). A fact
+    that keeps the past ("Owner lived in Paris", "Owner moved to York in
+    2024") is fine, and so is the present perfect ("I've lived here since
+    2019")."""
+    for w in _fact_words(fact):
+        if any(ch.isdigit() for ch in w) or w in _NEGATION or w.endswith(("ed", "ing")):
+            continue
+        if w in _PAST_IRREGULAR or len(w) < 3:
+            continue
+        if _past_forms(w, turns):
+            return ("what you said was in the past tense, and the fact says it is true "
+                    "now")
+    return ""
+
+
+#: Capitalised words that open a clause without naming anyone.
+_NOT_A_NAME = {
+    "i", "i'm", "im", "i've", "ive", "i'd", "i'll", "the", "a", "an", "my", "our", "your",
+    "his", "her", "their", "its", "this", "that", "these", "those", "it", "we", "you",
+    "he", "she", "they", "yes", "no", "ok", "okay", "so", "well", "anyway", "honestly",
+    "also", "and", "but", "or", "oh", "hey", "hi", "hello", "today", "tomorrow",
+    "yesterday", "tonight", "now", "then", "actually", "basically", "remember", "note",
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december", "owner", "jarvis", "work", "home",
+    "there", "here", "what", "when", "where", "who", "why", "how", "if", "as", "at", "in",
+    "on", "for", "with", "not", "never", "just", "still", "all", "some", "every", "each",
+}
+_CLAUSE_SPLIT = re.compile(r"\s*[,;:]\s*|\s+(?:and|but|while|whereas|whilst)\s+", re.I)
+
+
+def _other_clause(fact: str, sentences: list) -> str:
+    """The name of someone else when the part of a sentence a fact about the
+    owner came from is about THEM (the memory review, B6): "Dana works at
+    Google and I work at Apple" is split into its clauses, the clause that
+    shares the most of the fact's words is the one it came from, and when
+    that clause names a person the fact leaves out and has no "I" or "my",
+    the fact moved between people. "" otherwise - including when a clause
+    that fits as well is the owner's own."""
+    want = {_stem(w) for w in _fact_words(fact)
+            if not any(ch.isdigit() for ch in w) and w not in _NEGATION}
+    if not want:
+        return ""
+    best, top = [], 0
+    for s in sentences:
+        for c in _CLAUSE_SPLIT.split(str(s or "")):
+            if not c.strip():
+                continue
+            n = len(want & {_stem(w) for w in _words(c)})
+            if n > top:
+                best, top = [c], n
+            elif n == top and n:
+                best.append(c)
+    if not best:
+        return ""
+    if any(set(_meaning_text(c).split()) & _FIRST_PERSON for c in best):
+        return ""
+    in_fact = {w.lower() for w in re.findall(r"[\w'’-]+", str(fact))}
+    for c in best:
+        for m in re.finditer(r"(?<![\w'’])([A-Z][a-z][\w'’-]*)", c):
+            name = re.sub(r"['’]s$", "", m.group(1))
+            if name.lower() in _NOT_A_NAME or name.lower() in in_fact:
+                continue
+            return name
+    return ""
+
+
 def check_meaning(fact: str, turns: list) -> str:
     """"" when the fact keeps every word of its source sentences that
     changes what they mean; else which one it left out, in words."""
+    tense = check_tense(fact, turns)
+    if tense:
+        return tense
     fact_text = _meaning_text(fact)
     fact_words = set(fact_text.split())
     fact_rel = _relations(fact_words)
@@ -1032,6 +1272,11 @@ def check_meaning(fact: str, turns: list) -> str:
     if about_owner and not any(set(_meaning_text(s).split()) & _FIRST_PERSON
                                for s in sentences):
         return "what you said was not about you, but the fact says it is"
+    if about_owner and _other_clause(fact, sentences):
+        # Not the name itself: this reason is kept beside the card, and a
+        # name is the owner's words about someone else.
+        return ("that part of what you said was about someone else, and the fact "
+                "says it is about you")
     return ""
 
 
@@ -1066,7 +1311,9 @@ def sensitivity(text: str) -> str:
         return ""
     try:
         import jarvis_sensitive
-        return jarvis_sensitive.topic(text)
+        # fact_topic: the patterns, and - when they find nothing - the topic
+        # the fact was SAVED with (the memory review, B13).
+        return getattr(jarvis_sensitive, "fact_topic", jarvis_sensitive.topic)(text)
     except Exception:
         return "a topic that could not be checked (jarvis_sensitive.py is missing)"
 
@@ -1079,6 +1326,34 @@ ALWAYS_ASKS = {
     "credentials": "a password, PIN or account number - these always wait for your yes",
     "identity": "an ID number, birth date or contact details - these always wait for your yes",
 }
+
+
+def sensitive_key(fact: str, turns: list) -> str:
+    """The sensitive topic of a fact as a label to keep WITH it - "health",
+    "other_people", "unsure" when the check could not say - or "" (the
+    memory review, B13). Kept so read-aloud and web search still know, once
+    it is saved, what the local model said when it was saved: its words
+    alone can look everyday ("Owner's best mate Liam tried to kill himself
+    in May" names only a person).
+
+    The same check as the card (jarvis_sensitive.classify - the local model
+    included, and its answers are cached, so a card that was just checked
+    is not asked twice). A fact whose words and source turns the patterns
+    find nothing in is "" without asking the model: with "Also remember
+    sensitive topics automatically" on, only those facts cost a model call.
+    Fails closed: a check that cannot run is "unsure"."""
+    try:
+        import jarvis_sensitive as S
+        texts = [fact] + [t for t in turns or [] if isinstance(t, str)]
+        if not any(S.patterns(t)["sensitive"] for t in texts):
+            return ""
+        v = S.classify(fact, context=[t for t in turns or [] if isinstance(t, str)])
+        if not v.get("reason"):
+            return ""
+        cats = [c for c in v.get("categories") or [] if c in S.CATEGORIES]
+        return cats[0] if cats else "unsure"
+    except Exception:
+        return "unsure"
 
 
 def check_sensitive(fact: str, turns: list, allowed: bool) -> str:
@@ -1158,13 +1433,22 @@ def _store():
 
 def _init_notes(c) -> None:
     c.execute("CREATE TABLE IF NOT EXISTS auto_learn_notes ("
-              " proposal_id INTEGER PRIMARY KEY, reason TEXT, provenance TEXT, at REAL)")
+              " proposal_id INTEGER PRIMARY KEY, reason TEXT, provenance TEXT, at REAL,"
+              " sensitive TEXT)")
+    # `sensitive` (the memory review, B13): the topic a card was held back
+    # for - a label ("health"), never words. A table from before it gets
+    # the column.
+    cols = [r[1] for r in c.execute("PRAGMA table_info(auto_learn_notes)")]
+    if "sensitive" not in cols:
+        c.execute("ALTER TABLE auto_learn_notes ADD COLUMN sensitive TEXT")
 
 
-def _note_card(c, pid: int, reason: str, provenance: Optional[str] = None) -> None:
+def _note_card(c, pid: int, reason: str, provenance: Optional[str] = None,
+               sensitive: Optional[str] = None) -> None:
     _init_notes(c)
-    c.execute("INSERT OR REPLACE INTO auto_learn_notes (proposal_id, reason, provenance, at)"
-              " VALUES (?,?,?,?)", (int(pid), reason, provenance, time.time()))
+    c.execute("INSERT OR REPLACE INTO auto_learn_notes (proposal_id, reason, provenance, at,"
+              " sensitive) VALUES (?,?,?,?,?)",
+              (int(pid), reason, provenance, time.time(), sensitive or None))
 
 
 def card_notes(ids) -> dict:
@@ -1287,6 +1571,7 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
         with closing(st._connect()) as c:
             rows = _rows(c, pids)
             decisions = {}
+            topics = {}
             for pid in pids:
                 row = rows.get(pid)
                 if row is None or row.get("state") != "pending":
@@ -1296,20 +1581,41 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 if not why and row.get("source") != "conversation":
                     why = "not from something you said"
                 src = source_turns(fact, texts) if not why else []
-                why = (why or check_not_correction(row) or check_instruction(fact)
-                       or check_sensitive(fact, src, allowed)
-                       or check_grounded(fact, texts))
+                why = why or check_not_correction(row) or check_instruction(fact)
+                sens = ""
+                if not why:
+                    why = check_sensitive(fact, src, allowed)
+                    if why or allowed:
+                        # B13: the topic goes with the card (accepting it
+                        # saves the fact with it) or, under "Also remember
+                        # sensitive topics automatically", with the fact.
+                        sens = sensitive_key(fact, src)
+                why = why or check_grounded(fact, texts)
+                if not why:
+                    # B5: a clash with a stored fact the model did not mark.
+                    # The card then names that fact, as a correction would.
+                    old = find_contradiction(fact, st)
+                    if old is not None:
+                        why = CHANGES_A_FACT
+                        c.execute("UPDATE proposals SET replaces_id=?, replaces_text=?"
+                                  " WHERE id=? AND state='pending' AND replaces_id IS NULL",
+                                  (int(old["id"]), str(old.get("text") or ""), pid))
+                        c.commit()
                 decisions[pid] = why
+                topics[pid] = sens
                 if why and not off:
                     # No reason is noted while automatic learning is off:
                     # then every proposal is a card, as it always was.
-                    _note_card(c, pid, why)
+                    _note_card(c, pid, why, sensitive=sens)
         for pid, why in decisions.items():
             if why:
                 result["cards"][pid] = why
                 continue
+            meta = _meta("conversation", entries, conversation_id)
+            if topics.get(pid):
+                meta["sensitive"] = topics[pid]
             try:
-                fid = _save_fact(pid, _meta("conversation", entries, conversation_id), extract)
+                fid = _save_fact(pid, meta, extract)
             except Exception:
                 fid = None
             if fid is None:

@@ -302,6 +302,47 @@ def t_the_card_says_it_sounds_older_first():
 
 # ======================================================== 5. past questions ==
 
+def t_b12_keeping_a_correction_card_on_a_fact_that_ends_later():
+    """The memory review of 2026-09-27, B12: memory-safety.patch's _accept
+    (as the whole patch stack leaves jarvis_extract.py) dropped the
+    correction's target when its valid_to was set at all - so keeping a
+    correction card on a fact that ENDS later (a lease to December) left
+    the old fact in use beside the new one. Failed before the fix."""
+    from contextlib import closing
+    import eval_learner as E
+    x = E._extract_stand_in(M)
+    st = store()
+    old = lease(st, "Owner rents the flat on Micklegate", ends_in_days=90)
+    with closing(st._connect()) as c:
+        E._proposals_table(c)
+        cur = c.execute("INSERT INTO proposals (text, source, created, replaces_id,"
+                        " replaces_text) VALUES (?,?,?,?,?)",
+                        ("Owner rents the flat on Gillygate", "conversation", time.time(),
+                         old, "Owner rents the flat on Micklegate"))
+        row = dict(c.execute("SELECT * FROM proposals WHERE id=?",
+                             (cur.lastrowid,)).fetchone())
+        new = x._accept(c, st, row)                 # the owner keeps the card
+        c.commit()
+    was = st.get(old)
+    check("B12: the old fact is retired by the correction (retired_by = the new fact)",
+          was["retired_by"] == new, was)
+    check("B12: ... and is no longer in use",
+          old not in [f["id"] for f in st.current_facts()], st.current_facts())
+    ended = st.add("Owner rented a garage on Clifton", source="test")
+    st.retire(ended)
+    with closing(st._connect()) as c:
+        cur = c.execute("INSERT INTO proposals (text, source, created, replaces_id,"
+                        " replaces_text) VALUES (?,?,?,?,?)",
+                        ("Owner rents a garage on Bootham", "conversation", time.time(),
+                         ended, "Owner rented a garage on Clifton"))
+        row = dict(c.execute("SELECT * FROM proposals WHERE id=?",
+                             (cur.lastrowid,)).fetchone())
+        x._accept(c, st, row)
+        c.commit()
+    check("guard: a fact that has already ended is not re-pointed",
+          st.get(ended)["retired_by"] is None, st.get(ended))
+
+
 def t_questions_about_the_past_use_the_real_dates():
     st = store()
     with Clock(day("2025-08-01")):

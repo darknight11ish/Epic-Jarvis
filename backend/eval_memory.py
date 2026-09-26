@@ -4,6 +4,9 @@
     python eval_memory.py --sizes 0,100        # a quick one
     python eval_memory.py --words-only         # as on day one, before fastembed
     python eval_memory.py --out C:\\somewhere   # where the two result files go
+    python eval_memory.py --against old.json   # better / worse than an earlier run;
+                                               # exit 1 if recall@5, a wrong version
+                                               # or a learner case got worse
 
 WHAT IT DOES, IN PLAIN WORDS
 
@@ -42,10 +45,17 @@ WHAT IT MEASURES
   the word floor        every number above twice: with the word-search
                         floor off (the old behaviour) and on - and a sweep
                         that chooses the floor on half the questions and
-                        reports it on the other half
+                        reports it on the other half, run the way a chat
+                        turn recalls (the entity layer on; the memory
+                        review of 2026-09-27, I6)
   the distance floor    a sweep of JARVIS_MEMORY_MAX_DISTANCE from 0.6 to
                         1.2 - only with the real embedder, because without
-                        it there is no meaning search to put a floor on
+                        it there is no meaning search to put a floor on -
+                        chosen on half the questions and reported on the
+                        other half, like the word floor (I6)
+  time questions        "what phone did I have in March?": a fact that was
+                        not true then counts as a wrong version only when it
+                        came back unlabelled (the memory review's B1)
   speed and size        search time (p50 and p95), adding a fact, embedding
                         the backlog, and the database file with its WAL
   "Always keep in mind" a pinned fact on a question that shares no words
@@ -396,7 +406,10 @@ def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False) -> d
     ent = _entity_search(st)
     rr = {"rerank": True} if rerank and _takes(st.search, "rerank") else {}
     for q in qs:
-        if q["type"] in ("past", "time"):
+        # "Don't know" questions through chat recall itself (the memory
+        # review's I6): what a chat turn would put in front of the model,
+        # past facts for a question about the past included.
+        if q["type"] in ("past", "time", "abstain"):
             res = P.recall(st, q["q"], k=K, now=now)
         elif q["type"] == "belief":
             res = st.search(q["q"], k=K, known_at=_day(q["known_at"]))
@@ -407,6 +420,17 @@ def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False) -> d
         got = [gid.get(r["id"], "filler") for r in res]
         ans = set(q["answers"])
         first = next((i for i, g in enumerate(got) if g in ans), None)
+        stale = set(q.get("stale", []))
+        if q["type"] == "time":
+            # "What phone did I have in March?": a fact that was NOT true
+            # then is a wrong version only if it came back as if it were -
+            # unlabelled. A retired one says "(no longer true since ...)",
+            # a later current one "(true since ...)" (jarvis_past, the
+            # memory review's B1); the golden file lists both kinds.
+            wrong = any(g in stale and not (r.get("past") or r.get("later"))
+                        for g, r in zip(got, res))
+        else:
+            wrong = any(g in stale for g in got)
         rows.append({
             "id": q["id"], "type": q["type"], "split": q["split"], "n": len(got),
             "answerable": bool(ans),
@@ -414,7 +438,7 @@ def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False) -> d
             "hit5": bool(ans) and first is not None,
             "rr": 0.0 if first is None else 1.0 / (first + 1),
             "ndcg": ndcg(got, ans, K) if ans else 0.0,
-            "stale": any(g in set(q.get("stale", [])) for g in got),
+            "stale": wrong,
             # "multi": every fact the answer needs is among the five.
             "all5": bool(ans) and ans <= set(got),
             "labelled": q["type"] != "past" or any(
@@ -638,25 +662,42 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
             level["db_bytes"] = _db_bytes(db)
             level["pinned"] = _pin_effect(M, P, st, gid, now)
             out["levels"].append(level)
-            # the word-floor sweep: every floor, both halves of the questions
-            for floor in FLOORS:
-                M._MIN_WORD_SHARE = floor
-                rows = _score(M, P, st, qs, gid, now)
-                out["floor_sweep"].append({
-                    "filler": kind, "filler_facts": size, "floor": floor,
-                    "tune": {"hits": _hits_total(rows, "tune"), **_summary(rows, "tune")},
-                    "test": {"hits": _hits_total(rows, "test"), **_summary(rows, "test")}})
-            M._MIN_WORD_SHARE = configured_floor
-            # the distance-floor sweep: only where there is meaning search
-            if stat["semantic"] and stat["vector_search"]:
-                for dist in DISTANCES:
-                    M._MAX_VEC_DISTANCE = dist
-                    s = _summary(_score(M, P, st, qs, gid, now))
-                    out["distance_sweep"].append({
-                        "filler": kind, "filler_facts": size, "max_distance": dist,
-                        "recall_at_5": s["recall_at_5"],
-                        "dont_know_facts_avg": s["dont_know_facts_avg"],
-                        "dont_know_none_pct": s["dont_know_none_pct"]})
+            # Both sweeps below run on the path a chat turn really uses (the
+            # memory review's I6): the entity layer on, when this memory has
+            # it. They used to run with it off, so the floors were tuned on
+            # a search no chat turn makes.
+            M._ENTITY_RECALL = has_entities
+            try:
+                # the word-floor sweep: every floor, both halves of the questions
+                for floor in FLOORS:
+                    M._MIN_WORD_SHARE = floor
+                    rows = _score(M, P, st, qs, gid, now)
+                    out["floor_sweep"].append({
+                        "filler": kind, "filler_facts": size, "floor": floor,
+                        "tune": {"hits": _hits_total(rows, "tune"), **_summary(rows, "tune")},
+                        "test": {"hits": _hits_total(rows, "test"), **_summary(rows, "test")}})
+                M._MIN_WORD_SHARE = configured_floor
+                # the distance-floor sweep: only where there is meaning
+                # search - and, like the word floor, chosen on the tune half
+                # and reported on the test half (choose_distance).
+                if stat["semantic"] and stat["vector_search"]:
+                    for dist in DISTANCES:
+                        M._MAX_VEC_DISTANCE = dist
+                        rows = _score(M, P, st, qs, gid, now)
+                        s = _summary(rows)
+                        out["distance_sweep"].append({
+                            "filler": kind, "filler_facts": size, "max_distance": dist,
+                            "recall_at_5": s["recall_at_5"],
+                            "dont_know_facts_avg": s["dont_know_facts_avg"],
+                            "dont_know_none_pct": s["dont_know_none_pct"],
+                            "tune": {"hits": _hits_total(rows, "tune"),
+                                     **_summary(rows, "tune")},
+                            "test": {"hits": _hits_total(rows, "test"),
+                                     **_summary(rows, "test")}})
+                    M._MAX_VEC_DISTANCE = configured_distance
+            finally:
+                M._ENTITY_RECALL = False
+                M._MIN_WORD_SHARE = configured_floor
                 M._MAX_VEC_DISTANCE = configured_distance
             ent = level.get("entities") or {}
             print(f"  {kind:<10} {size:>6} filler: recall@5 "
@@ -672,6 +713,9 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
     out["word_floor_configured"] = configured_floor
     out["max_distance_configured"] = configured_distance
     out["word_floor_choice"] = choose_floor(out["floor_sweep"])
+    out["sweeps_with_entities"] = has_entities
+    if out["distance_sweep"]:
+        out["distance_choice"] = choose_distance(out["distance_sweep"])
     # The learner (memory idea 2): its own scratch store, in the same
     # temporary folder. eval_learner.py says what it checks.
     try:
@@ -710,6 +754,40 @@ def choose_floor(sweep: list) -> dict:
              "dont_know_none_after": r["test"]["dont_know_none_pct"]}
             for r in by.get(best, [])]
     return {"chosen": best, "allowed": sorted(f for _, f in allowed), "test_half": test}
+
+
+def choose_distance(sweep: list) -> dict:
+    """JARVIS_MEMORY_MAX_DISTANCE the golden set supports, chosen on the TUNE
+    half only, the same rule as choose_floor (the memory review's I6).
+
+    Allowed: a distance that finds every right fact the loosest one tried
+    finds, at every size and with both fillers. Chosen: of those, the one
+    with the fewest "don't know" facts; the tighter one on a tie. Reported
+    on the TEST half. Only a run with meaning search has this sweep."""
+    by = {}
+    for r in sweep:
+        if "tune" in r:
+            by.setdefault(r["max_distance"], []).append(r)
+    if not by:
+        return {"chosen": None, "allowed": [], "test_half": []}
+    loosest = max(by)
+    base = {(r["filler"], r["filler_facts"]): r for r in by[loosest]}
+    allowed = []
+    for dist, rs in sorted(by.items()):
+        if all(r["tune"]["hits"] >= base[(r["filler"], r["filler_facts"])]["tune"]["hits"]
+               for r in rs):
+            allowed.append((sum(r["tune"]["dont_know_facts_total"] for r in rs), dist))
+    best = min(allowed)[1] if allowed else loosest
+    test = [{"filler": r["filler"], "filler_facts": r["filler_facts"],
+             "hits_loosest": base[(r["filler"], r["filler_facts"])]["test"]["hits"],
+             "hits_chosen": r["test"]["hits"],
+             "dont_know_facts_loosest": base[(r["filler"], r["filler_facts"])]["test"][
+                 "dont_know_facts_total"],
+             "dont_know_facts_chosen": r["test"]["dont_know_facts_total"],
+             "dont_know_none_chosen": r["test"]["dont_know_none_pct"]}
+            for r in by.get(best, [])]
+    return {"chosen": best, "loosest": loosest,
+            "allowed": sorted(d for _, d in allowed), "test_half": test}
 
 
 # ------------------------------------------------------------ the report --
@@ -844,8 +922,10 @@ def markdown(res: dict) -> str:
     lines += [
         "",
         f"**Word floor chosen on half the questions: {ch['chosen']}** "
-        f"(floors that lost no right fact there: {', '.join(map(str, ch['allowed']))}). "
-        "On the other half, which played no part in choosing:",
+        f"(floors that lost no right fact there: {', '.join(map(str, ch['allowed']))}"
+        + ("; swept as chat recall runs, the entity layer on"
+           if res.get("sweeps_with_entities") else "")
+        + "). On the other half, which played no part in choosing:",
         "",
         "| Filler | Facts | Right facts found, floor off -> chosen | Don't-know facts, "
         "off -> chosen | Don't know: none returned |",
@@ -865,6 +945,21 @@ def markdown(res: dict) -> str:
             lines.append(f"| {r['filler']} | {r['filler_facts']:,} | {r['max_distance']} "
                          f"| {r['recall_at_5']}% | {r['dont_know_facts_avg']} "
                          f"| {r['dont_know_none_pct']}% |")
+        dc = res.get("distance_choice") or {}
+        if dc.get("chosen") is not None:
+            lines += ["", f"**Distance floor chosen on half the questions: {dc['chosen']}** "
+                      f"(distances that lost no right fact the loosest, {dc['loosest']}, "
+                      f"found there: {', '.join(map(str, dc['allowed']))}). On the other "
+                      "half, which played no part in choosing:", "",
+                      "| Filler | Facts | Right facts found, loosest -> chosen "
+                      "| Don't-know facts, loosest -> chosen | Don't know: none returned |",
+                      "|---|---|---|---|---|"]
+            for t in dc["test_half"]:
+                lines.append(f"| {t['filler'].replace('_', '-')} | {t['filler_facts']:,} "
+                             f"filler | {t['hits_loosest']} -> {t['hits_chosen']} "
+                             f"| {t['dont_know_facts_loosest']} -> "
+                             f"{t['dont_know_facts_chosen']} "
+                             f"| {t['dont_know_none_chosen']}% |")
     else:
         lines.append("Distance floor sweep: skipped - there is no meaning search without "
                      "the real embedder.")
@@ -888,6 +983,74 @@ def markdown(res: dict) -> str:
     return "\n".join(lines)
 
 
+#: --against: the numbers compared, where they live in a level, and which
+#: way is better. Timings are left out - they vary from run to run.
+#: `gate`: a worse number here makes the run FAIL (exit 1).
+COMPARED = [
+    ("recall@5", ("after", "recall_at_5"), "up", True),
+    ("recall@5, entity layer", ("entities", "recall_at_5"), "up", True),
+    ("recall@1, entity layer", ("entities", "recall_at_1"), "up", False),
+    ("MRR, entity layer", ("entities", "mrr"), "up", False),
+    ("replaced came back", ("after", "replaced_came_back"), "down", True),
+    ("don't know: facts per question", ("entities", "dont_know_facts_avg"), "down", False),
+    ("don't know: none returned", ("entities", "dont_know_none_pct"), "up", False),
+    ("people found", ("entities", "people_found"), "up", False),
+    ("past found", ("after", "past_found"), "up", False),
+    ("as-of found", ("after", "as_of_found"), "up", False),
+    ("two facts: all found", ("entities", "multi_all_found"), "up", False),
+    ("time: found", ("entities", "time_found"), "up", False),
+    ("time: wrong version", ("entities", "time_wrong_version"), "down", True),
+]
+
+
+def _level_value(lv: dict, where: tuple):
+    part, key = where
+    block = lv.get(part) or (lv.get("after") if part == "entities" else None) or {}
+    return block.get(key)
+
+
+def compare(old: dict, new: dict) -> tuple:
+    """(report lines, worse): every COMPARED number of each filler and size
+    both runs have, better / worse / unchanged, and the learner's cases by
+    kind (how many are wrong). `worse` is True when recall@5, "replaced
+    came back", "time: wrong version" or a learner kind got worse - the
+    memory review's I7. Timings are never compared."""
+    lines, worse = [], False
+    olds = {(lv["filler"], lv["filler_facts"]): lv for lv in old.get("levels", [])}
+    for lv in new.get("levels", []):
+        key = (lv["filler"], lv["filler_facts"])
+        was = olds.get(key)
+        if was is None:
+            continue
+        for name, where, better, gate in COMPARED:
+            a, b = _level_value(was, where), _level_value(lv, where)
+            if a is None or b is None:
+                continue
+            if a == b:
+                how = "unchanged"
+            elif (b > a) == (better == "up"):
+                how = "better"
+            else:
+                how = "WORSE"
+                worse = worse or gate
+            lines.append(f"| {key[0].replace('_', '-')} | {key[1]:,} | {name} | {a} | {b} "
+                         f"| {how} |")
+    lo = (old.get("learner") or {}).get("kinds") or {}
+    ln = (new.get("learner") or {}).get("kinds") or {}
+    for kind in sorted(set(lo) & set(ln)):
+        a = lo[kind]["total"] - lo[kind]["right"]
+        b = ln[kind]["total"] - ln[kind]["right"]
+        how = "unchanged" if a == b else ("better" if b < a else "WORSE")
+        worse = worse or how == "WORSE"
+        lines.append(f"| learner | - | {kind}: cases wrong ({ln[kind]['total']} now) | {a} | {b} "
+                     f"| {how} |")
+    head = ["", "**Against an earlier run** (--against): the same numbers, earlier -> now. "
+            "Timings are not compared. A worse recall@5, \"replaced came back\", \"time: "
+            "wrong version\" or learner kind fails the run.", "",
+            "| Filler | Filler facts | Number | Earlier | Now | |", "|---|---|---|---|---|---|"]
+    return head + lines, worse
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--sizes", default="0,100,1000,10000",
@@ -909,7 +1072,18 @@ def main(argv=None) -> int:
                          "stand-in that proves the wiring only; off")
     ap.add_argument("--ollama", default="http://127.0.0.1:11434",
                     help="this PC's Ollama, for --learner-model (loopback only)")
+    ap.add_argument("--against", default=None,
+                    help="an earlier run's memory-eval-*.json: print each number better / "
+                         "worse / unchanged, and exit 1 if recall@5, a wrong version or a "
+                         "learner case got worse (timings are not compared)")
     a = ap.parse_args(argv)
+    earlier = None
+    if a.against:
+        try:
+            earlier = json.loads(Path(a.against).read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(f"--against: could not read {a.against}: {type(exc).__name__}: {exc}")
+            return 2
     sizes = sorted({int(x) for x in a.sizes.split(",") if x.strip()})
     scratch = Path(tempfile.mkdtemp(prefix="jarvis-memory-eval-"))
     real = Path(os.path.expanduser("~")) / ".openjarvis" / "memory.db"
@@ -931,11 +1105,18 @@ def main(argv=None) -> int:
     stamp = time.strftime("%Y%m%d-%H%M%S")
     (out / f"memory-eval-{stamp}.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
     md = markdown(res)
+    worse = False
+    if earlier is not None:
+        extra, worse = compare(earlier, res)
+        md += "\n".join(extra) + "\n"
     (out / f"memory-eval-{stamp}.md").write_text(md, encoding="utf-8")
     print()
     print(md)
     print(f"Saved: {out / f'memory-eval-{stamp}.md'} and the .json beside it "
           f"({res['seconds']} s).")
+    if worse:
+        print("WORSE than the earlier run (see \"Against an earlier run\" above).")
+        return 1
     return 0
 
 

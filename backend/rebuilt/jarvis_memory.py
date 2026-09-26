@@ -139,6 +139,24 @@ DOCS_DB = Path(os.environ.get("JARVIS_MEMORY_DB") or (_config_dir() / "memory.db
 _LOCK = threading.RLock()
 
 
+def model_cache_dir() -> str:
+    """Where fastembed keeps the meaning model and the re-ranker (the
+    memory review of 2026-09-27, B17): FASTEMBED_CACHE_PATH if set, else a
+    "models" folder in Jarvis's own data folder (~/.openjarvis/models).
+
+    Left to itself fastembed uses the system temp folder (%TEMP%\\
+    fastembed_cache on Windows), which a disk clean-up empties - then both
+    models download again, and offline the re-ranker switches off and search
+    falls back to words only, until the next start that can download."""
+    env = os.environ.get("FASTEMBED_CACHE_PATH")
+    path = Path(os.path.expanduser(env)) if env else _config_dir() / "models"
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return str(path)
+
+
 # --------------------------------------------------------------------------
 #   Vectors
 # --------------------------------------------------------------------------
@@ -274,11 +292,23 @@ _FRAME = {
 }
 
 
+#: Month names DO count towards the floor (the memory review of 2026-09-27,
+#: B2). The comment above was true until memory idea 4: since then a fact
+#: carries its month ("... a Pixel 8 in June 2026"), and "What phone did I
+#: have in June?" weighed only "phone" - which that fact does not say - so
+#: the floor dropped the one right answer. They stay in _FRAME itself,
+#: which names and nicknames also read: "May", "June" and "April" must
+#: never become somebody's name.
+_MONTH_NAMES = {"january", "february", "march", "april", "may", "june", "july",
+                "august", "september", "october", "november", "december"}
+_FLOOR_FRAME = _FRAME - _MONTH_NAMES
+
+
 def _floor_terms(terms) -> list:
-    """The question's words that the floor weighs: not frame words, not a
-    bare year."""
+    """The question's words that the floor weighs: not frame words (month
+    names do count - _FLOOR_FRAME), not a bare year."""
     return [t for t in terms
-            if t not in _FRAME and not re.fullmatch(r"(?:19|20)\d\d", t)]
+            if t not in _FLOOR_FRAME and not re.fullmatch(r"(?:19|20)\d\d", t)]
 
 
 def _words(text: str) -> set:
@@ -427,7 +457,7 @@ class FastEmbedder(Embedder):
 
     def __init__(self, model: str = "BAAI/bge-small-en-v1.5") -> None:
         from fastembed import TextEmbedding  # imported lazily and on purpose
-        self._m = TextEmbedding(model_name=model)
+        self._m = TextEmbedding(model_name=model, cache_dir=model_cache_dir())
         self.name = model
         self.dim = len(next(iter(self._m.embed(["probe"]))))
 
@@ -533,7 +563,7 @@ class FastReranker(Reranker):
 
     def __init__(self, model: str = RERANK_MODEL) -> None:
         from fastembed.rerank.cross_encoder import TextCrossEncoder
-        self._m = TextCrossEncoder(model_name=model)
+        self._m = TextCrossEncoder(model_name=model, cache_dir=model_cache_dir())
         self.name = model
         list(self._m.rerank("probe", ["probe"]))      # load it now, not on a question
 
@@ -684,7 +714,7 @@ def _rerank(query: str, facts: list) -> Optional[list]:
 #     "started", "joined", "switched", "got", "bought", "left", "since"...
 #     A fact that only mentions a date ("visited Iceland in 2023",
 #     "passport expires in January 2028") keeps the day it was saved;
-#   * nothing may point at the future: "will", "going to", "next", "plan",
+#   * nothing may point at the future: "will", "going to", "next week", "plan",
 #     "is moving" ... - "I'm moving to Leeds in March" is a plan, true NOW
 #     as a plan, and a true-from date in March would hide it until March;
 #   * exactly ONE date: two ("married in 2019 and moved in 2021") is
@@ -711,15 +741,27 @@ _MONTH_NUM["sept"] = 9
 _MONTH_WORD = r"(?:january|february|march|april|may|june|july|august|september|october" \
               r"|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)"
 
-#: Words that say something changed or began, in the past.
+#: Words that say something changed or began, in the past. Not "founded",
+#: "opened" or "launched" (the memory review of 2026-09-27, B8): they are
+#: nearly always about something ELSE - "Owner works at Initech, which was
+#: founded in 2010" got 2010, and a correction then left the old job in use
+#: and filed the new one as history. "Stopped", "gave up", "ended", "moved
+#: out" and "broke up" are changes too, and had no date.
 _BEGAN = re.compile(
     r"\b(?:moved|relocated|started|began|begun|joined|switched|changed|became|got|bought"
     r"|adopted|took\s+up|left|quit|retired|graduated|married|engaged|divorced|sold"
-    r"|finished|hired|promoted|opened|launched|signed|enrolled|arrived|founded|since"
+    r"|finished|hired|promoted|signed|enrolled|arrived|since|stopped|gave\s+up|given\s+up"
+    r"|ended|moved\s+out|broke\s+up|split\s+up"
     r"|has\s+been|have\s+been|has\s+had|have\s+had|has\s+lived|has\s+worked)\b", re.I)
+#: "next" only as a time ("next week", "next Friday") - never "next to the
+#: park" (B8).
+_NEXT_TIME = (r"next\s+(?:week|weekend|month|year|time|term|season|spring|summer|autumn"
+              r"|fall|winter|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
+              r"|january|february|march|april|may|june|july|august|september|october"
+              r"|november|december|day|morning|evening|night)")
 #: Anything that points at the future, or is only a wish or a maybe.
 _NOT_YET = re.compile(
-    r"\b(?:will|shall|going\s+to|gonna|plans?|planning|planned|next|soon|upcoming"
+    r"\b(?:will|shall|going\s+to|gonna|plans?|planning|planned|" + _NEXT_TIME + r"|soon|upcoming"
     r"|hopes?|hoping|wants?\s+to|wanted\s+to|would|might|could|intends?"
     r"|is\s+(?:moving|starting|joining|switching|leaving|getting|buying)"
     r"|are\s+(?:moving|starting|joining|switching|leaving|getting|buying))\b"
@@ -769,6 +811,30 @@ def said_from(meta) -> bool:
         except Exception:
             return False
     return isinstance(meta, dict) and meta.get("true_from") == TRUE_FROM_SAID
+
+
+def _set_meta(c, fact_id: int, **values) -> None:
+    """Set (or, with None, remove) keys in one fact's meta, inside the
+    caller's transaction. Labels and dates only - never words. Never raises:
+    the change it goes with is what matters, and has already been made."""
+    try:
+        row = c.execute("SELECT meta FROM facts WHERE id=?", (int(fact_id),)).fetchone()
+        if row is None:
+            return
+        try:
+            meta = json.loads(row[0] or "{}")
+        except (TypeError, ValueError):
+            meta = {}
+        if not isinstance(meta, dict):
+            meta = {}
+        for k, v in values.items():
+            if v is None:
+                meta.pop(k, None)
+            else:
+                meta[k] = v
+        c.execute("UPDATE facts SET meta=? WHERE id=?", (json.dumps(meta), int(fact_id)))
+    except Exception:
+        pass
 
 
 def true_from(text: str, now: Optional[float] = None) -> Optional[float]:
@@ -1157,6 +1223,13 @@ class MemoryStore:
             if said is not None:
                 meta["true_from"] = TRUE_FROM_SAID
         with _LOCK, closing(self._connect()) as c:
+            if meta.get("proposal_id") is not None and not meta.get("sensitive"):
+                # A card held back for a sensitive topic, accepted: the fact
+                # keeps the topic, so read-aloud and web search still treat
+                # it as sensitive (saved_topic; the memory review, B13).
+                topic = _card_topic(c, meta.get("proposal_id"))
+                if topic:
+                    meta["sensitive"] = topic
             old = None
             if supersedes:
                 old = c.execute("SELECT valid_from, valid_to, meta FROM facts WHERE id=?",
@@ -1233,6 +1306,10 @@ class MemoryStore:
                     done = c.execute(
                         "UPDATE facts SET retired_by=?"
                         " WHERE id=? AND retired_by IS NULL", (fid, supersedes))
+                    if done.rowcount:
+                        # retire() first, then this: a dated correction, not
+                        # a Forget - it stays recallable history (B15).
+                        _set_meta(c, int(supersedes), forgotten_at=None)
                 if done.rowcount == 0:
                     # The caller believes it filed a correction that retired
                     # the old fact. It did not - the id does not exist, or was
@@ -1307,6 +1384,14 @@ class MemoryStore:
             cur = c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
                             " WHERE id=? AND (valid_to IS NULL OR valid_to > ?)",
                             (vt, ra, replaced_by, fact_id, now))
+            if cur.rowcount and ra is not None and replaced_by is None:
+                # A Forget (the route, or a "stop using this fact?" card):
+                # both apps promise "Jarvis will not use it again", so a
+                # question about the past must not bring it back either
+                # (jarvis_past.forgotten; the memory review, B15). Marked,
+                # never deleted. A correction is not a Forget: add(supersedes=)
+                # clears this mark when it links a fact retired here first.
+                _set_meta(c, int(fact_id), forgotten_at=now)
             if cur.rowcount and ra is not None:
                 # Forget (or a correction) takes the fact's links and the
                 # aliases it taught with it: "sister" stops meaning Priya the
@@ -1483,6 +1568,7 @@ class MemoryStore:
                 # so the scrub below zeroes those bytes too. Not "safely":
                 # an erase that could not take the names out must fail.
                 copies += self._unlink_fact(c, fid, now=now)
+                _repeats_to_the_day(c, fid)
                 c.execute("COMMIT")
             except Exception:
                 try:
@@ -1651,9 +1737,10 @@ class MemoryStore:
         old behaviour is the right thing to degrade to.
         """
         terms = _floor_terms(terms)
-        if floor <= 0 or not rows or not terms:
-            # Nothing left to judge by ("what's my name?" is all frame):
-            # the hits stand, as they always did.
+        if floor <= 0 or not rows or all(t in _MONTH_NAMES for t in terms):
+            # Nothing left to judge by ("what's my name?" is all frame, and
+            # "what did I do in June?" is frame and a month): the hits
+            # stand, as they always did.
             return rows
         try:
             n = c.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
@@ -1671,9 +1758,32 @@ class MemoryStore:
             total = sum(weight.values())
             if total <= 0:
                 return rows
-            return [row for row in rows
+            keep = [row for row in rows
                     if sum(w for t, w in weight.items() if row["rowid"] in has[t]) / total
                     >= floor - 1e-9]
+            months = [t for t in terms if t in _MONTH_NAMES]
+            if not months:
+                return keep
+            # A hit that matches NOTHING but the month ("in June") counts
+            # only when that month is when the fact's own words say it
+            # became true ("... a Pixel 8 in June 2026", memory idea 4):
+            # that is evidence about June. "Viktor's birthday is on 15 June"
+            # is not - measured, a thousand such facts pushed "Owner lives
+            # in York" out of "Where did I live in May?" (B2's first cut).
+            only = [row for row in keep
+                    if not any(row["rowid"] in has[t] for t in terms if t not in months)]
+            if not only:
+                return keep
+            dated = {}
+            ids = [row["rowid"] for row in only]
+            for fid, vf, meta in c.execute(
+                    f"SELECT id, valid_from, meta FROM facts WHERE id IN "
+                    f"({','.join('?' * len(ids))})", ids):
+                if said_from(meta) and isinstance(vf, (int, float)):
+                    dated[fid] = time.localtime(vf).tm_mon
+            want = {_MONTH_NUM[t] for t in months}
+            drop = {row["rowid"] for row in only if dated.get(row["rowid"]) not in want}
+            return [row for row in keep if row["rowid"] not in drop]
         except Exception:
             return rows
 
@@ -1832,11 +1942,67 @@ class MemoryStore:
             out.append(f)
             if len(out) >= (max(k, RERANK_POOL) if rerank else k):
                 break
+        # Asked even when k facts or fewer were found (the memory review's
+        # I2, "skip it then", was measured and not kept: every fact is kept
+        # either way, but the order within them - recall@1 and MRR - got
+        # worse without it; the time it would save shows only on the PC).
         if rerank:
             ranked = _rerank(query, out)
             if ranked is not None:
                 out = ranked
-        return out[:k]
+        out = out[:k]
+        if (entities and _ENTITY_RECALL and ENTITY_WHO_MAX > 0 and out
+                and known_at is None and not include_retired and _ASKS_WHO.search(query)):
+            # One step out from a person (the memory review, I13): the fact
+            # that says WHO someone in the top facts is - only for a
+            # question that asks who ("for whose wedding?"). Measured: for
+            # every question, it added a wrong fact to "Which hospital was I
+            # born in?" (don't-know facts 1.47 -> 1.50); asked only for
+            # "who", it did not.
+            try:
+                out += self._who_facts(out, at)
+            except Exception:
+                pass
+        return out
+
+    def _who_facts(self, top: list, at: float) -> list:
+        """For the people and things the first ENTITY_WHO_FROM of `top`
+        name: the facts that say who they are - the ones that taught an
+        alias ("Owner's sister is called Priya" for "Priya's wedding is in
+        Lisbon") - current, not erased, not already in `top`. At most
+        ENTITY_WHO_MAX, newest first."""
+        have = {f["id"] for f in top}
+        src = [f["id"] for f in top[:ENTITY_WHO_FROM]]
+        with _LOCK, closing(self._connect()) as c:
+            marks = ",".join("?" * len(src))
+            ents = [r[0] for r in c.execute(
+                f"SELECT DISTINCT entity_id FROM fact_entities WHERE fact_id IN ({marks})",
+                src)]
+            group = []
+            for e in ents:
+                for g in self._group(c, self._root(c, e)):
+                    if g not in group:
+                        group.append(g)
+            if not group:
+                return []
+            marks = ",".join("?" * len(group))
+            rows = [dict(r) for r in c.execute(
+                "SELECT DISTINCT f.* FROM entity_aliases a JOIN facts f ON f.id = a.fact_id"
+                f" WHERE a.entity_id IN ({marks}) AND f.erased_at IS NULL"
+                " AND f.valid_from <= ? AND (f.valid_to IS NULL OR f.valid_to > ?)"
+                " ORDER BY f.id DESC", (*group, at, at))]
+        out = []
+        for f in rows:
+            if f["id"] in have:
+                continue
+            f["score"] = 0.0
+            f["current"] = True
+            f["who"] = True
+            out.append(f)
+            have.add(f["id"])
+            if len(out) >= ENTITY_WHO_MAX:
+                break
+        return out
 
     # ---- "said again" (memory idea 3, 2026-09-26) -------------------------
 
@@ -2616,7 +2782,8 @@ ERASED_TEXT = "[erased]"
 #: including keys this list has never heard of: an allowlist, because meta
 #: is free-form and a new key holding words must not survive by default.
 ERASE_KEEPS_META = ("auto", "saved_at", "proposal_id", "proposal_source", "provenance",
-                    "device", "tainted", "confidence", "true_from")
+                    "device", "tainted", "confidence", "true_from", "forgotten_at",
+                    "sensitive")
 
 #: A kept string value must look like a label ("typed", "phone",
 #: "import:claude"), never like a sentence.
@@ -2643,6 +2810,30 @@ def _erased_meta(raw) -> dict:
         elif isinstance(v, str) and _META_LABEL.match(v):
             out[k] = v
     return out
+
+
+def _repeats_to_the_day(c, fid: int) -> None:
+    """An erased fact's "said again" times, rounded down to the day they
+    were said (the memory review of 2026-09-27, I12). Kept to the second,
+    each one pointed at one exact chat turn - and the chat history may still
+    hold that turn's words, so the time was a way back to the words the
+    owner erased. The COUNT stays the same: rows said on the same day keep
+    their order a millisecond apart (the table allows one row per time).
+    Called inside erase()'s transaction, with secure_delete on, so the old
+    times are zeroed in the file, not only replaced."""
+    rows = c.execute("SELECT said_at, how FROM fact_repeats WHERE fact_id=? ORDER BY said_at",
+                     (int(fid),)).fetchall()
+    if not rows:
+        return
+    c.execute("DELETE FROM fact_repeats WHERE fact_id=?", (int(fid),))
+    per_day: dict = {}
+    for said_at, how in rows:
+        lt = time.localtime(float(said_at))
+        day = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+        n = per_day.get(day, 0)
+        per_day[day] = n + 1
+        c.execute("INSERT OR IGNORE INTO fact_repeats (fact_id, said_at, how) VALUES (?,?,?)",
+                  (int(fid), day + n * 0.001, how))
 
 
 def _same_words(a, b: str) -> bool:
@@ -3106,6 +3297,12 @@ ALIAS_MAX_ENTITIES = 2
 #: At most this many entries from one question.
 ENTITY_HITS_MAX = 5
 
+#: "One step out from a person" (the memory review, I13): at most this many
+#: extra facts saying who someone in the first ENTITY_WHO_FROM facts is.
+ENTITY_WHO_MAX = 2
+ENTITY_WHO_FROM = 1
+_ASKS_WHO = re.compile(r"\bwho(?:se|m|'s)?\b", re.I)
+
 #: Graphiti's thresholds (graphiti_core/utils/maintenance/dedup_helpers.py,
 #: Apache-2.0, checked 2026-09-25): names must be at least 6 characters or
 #: two words, with character entropy of at least 1.5, and share at least 90%
@@ -3258,7 +3455,26 @@ def _query_grams(query: str) -> list:
                 out.append(s)
             if len(out) >= 800:
                 return out
+    # Other words for the same person (the memory review, I1): "my boss"
+    # also looks up who "manager" names, "my GP" who "doctor" names. Only
+    # when LOOKING UP - never when saving, so an alias is always the owner's
+    # own word - and never partner/husband/wife, which made "my wife" find
+    # the partner.
+    for t in list(toks):
+        for other in _SAME_PERSON.get(t, ()):
+            if other not in seen and len(out) < 800:
+                seen.add(other)
+                out.append(other)
     return out
+
+
+#: Words for the same relation, for looking up only (I1, above).
+_SAME_PERSON = {}
+for _group in (("boss", "manager"), ("gp", "doctor"), ("mum", "mom", "mother"),
+               ("dad", "father"), ("flatmate", "roommate", "housemate"),
+               ("neighbour", "neighbor")):
+    for _w in _group:
+        _SAME_PERSON[_w] = tuple(x for x in _group if x != _w)
 
 
 #: How many of a question's words the alias lookup reads.
@@ -3488,6 +3704,58 @@ def store(path: Optional[Path] = None) -> MemoryStore:
         if _store is None or (path is not None and Path(path) != _store.path):
             _store = MemoryStore(path)
         return _store
+
+
+#: The labels jarvis_past puts on a recalled fact's words (B1, and the
+#: "(no longer true since ...)" of past recall) - taken off before a fact is
+#: looked up by its words.
+_RECALL_LABEL = re.compile(r"\s*\((?:no longer true(?: since [\d-]+)?|true since [\d-]+"
+                           r"|known since [\d-]+)\)\s*$")
+
+
+def saved_topic(text) -> str:
+    """The sensitive topic a SAVED fact with these exact words was saved
+    with (meta "sensitive": "health", "other_people", ... or "unsure"), or
+    "" - the memory review of 2026-09-27, B13.
+
+    Read-aloud and web search judge a recalled fact by its words alone
+    (jarvis_sensitive.topic), and those can look everyday - "Owner's best
+    mate Liam tried to kill himself in May" names only a person - while the
+    local model said "health" when it was saved. The fact keeps that answer,
+    and this returns it. Only the store already open is read (none is made
+    here); anything that fails is ""."""
+    st = _store
+    if st is None or not isinstance(text, str) or not text.strip():
+        return ""
+    t = _RECALL_LABEL.sub("", " ".join(text.split()))
+    try:
+        with closing(st._connect()) as c:
+            rows = c.execute("SELECT meta FROM facts WHERE text=? AND erased_at IS NULL"
+                             " ORDER BY id DESC LIMIT 20", (t,)).fetchall()
+    except Exception:
+        return ""
+    for (raw,) in rows:
+        try:
+            meta = json.loads(raw or "{}")
+        except (TypeError, ValueError):
+            continue
+        v = meta.get("sensitive") if isinstance(meta, dict) else None
+        if isinstance(v, str) and _META_LABEL.match(v):
+            return v
+    return ""
+
+
+def _card_topic(c, proposal_id) -> str:
+    """The sensitive topic a card was held back for (jarvis_auto_learn's
+    auto_learn_notes, B13), so accepting it saves the fact with that topic.
+    "" when there is none, or no such table."""
+    try:
+        row = c.execute("SELECT sensitive FROM auto_learn_notes WHERE proposal_id=?",
+                        (int(proposal_id),)).fetchone()
+    except Exception:
+        return ""
+    v = row[0] if row else None
+    return v if isinstance(v, str) and _META_LABEL.match(v) else ""
 
 
 def reset() -> None:
