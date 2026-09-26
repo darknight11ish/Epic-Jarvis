@@ -1,4 +1,14 @@
-# Jarvis Mobile
+# Jarvis Mobile (legacy)
+
+> **Legacy - kept for reference only. This app cannot talk to Jarvis.**
+>
+> It speaks an old connection method (a WebSocket at `/api/mobile/ws`) that
+> the Jarvis backend never had, so it cannot connect to it at all. **The phone
+> app to install is `jarvis-client`**, from the
+> [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest).
+> This folder stays so its parts can be borrowed; its useful ones (the
+> approval widget and a quick-link widget) are already in `jarvis-client`.
+> It publishes no release; CI only builds it, so it does not rot.
 
 Native Android companion for a self-hosted Jarvis desktop server reached over
 Tailscale. Kotlin 2.0 / Compose / Material3, `compileSdk` 35, `minSdk` 28.
