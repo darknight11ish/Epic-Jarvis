@@ -4509,7 +4509,7 @@ function renderWatchReport() {
             f.stars !== undefined ? `★ ${f.stars}` : "",
             f.topic ? `topic: ${f.topic}` : "",
             f.archived ? "archived" : "",
-            stated ? "" : "no licence stated — no permission to use it",
+            stated ? "" : "no licence stated - no permission to use it",
           ]
             .filter(Boolean)
             .join(" · "),

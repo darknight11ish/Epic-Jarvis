@@ -741,13 +741,19 @@ body {
 }
 
 
+/* Matches the Jarvis bar's own Approve button (`style.css` `.approval-approve`):
+   the same soft tinted fill, not a solid bright green - so the two can never
+   look like two different controls, and Approve never pulls the eye harder
+   here than it does there. */
 .btn-approve {
-  background: var(--ok);
-  color: var(--text-on-accent);
+  border: 1px solid var(--ok-edge);
+  background: var(--ok-fill);
+  color: var(--ok-text);
 }
 
 .btn-approve:hover:not(:disabled) {
-  filter: brightness(1.1);
+  border-color: var(--ok);
+  background: var(--ok-fill);
 }
 
 .btn-deny {

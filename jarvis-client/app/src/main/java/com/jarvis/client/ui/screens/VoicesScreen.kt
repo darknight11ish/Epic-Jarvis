@@ -150,7 +150,7 @@ fun VoicesScreen(
 
             when (read) {
                 CustomVoices.Read.Loading -> Text(
-                    "Asking your PC...",
+                    "Asking your PC…",
                     style = MaterialTheme.typography.bodyMedium,
                     color = chrome.textMid,
                 )

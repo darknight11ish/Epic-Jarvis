@@ -14,43 +14,66 @@
      was silently rendering in system fonts. The same families are already
      bundled under fonts/ (SIL OFL, latin subset). -->
 <link rel="stylesheet" href="fonts/fonts.css">
+<!--
+  Theme before first paint, the same synchronous read from localStorage every
+  other window does (settings.html, onboarding.html): this page also opens as
+  a plain browser tab against the backend directly, with no Tauri IPC to ask
+  for the theme instead, so it cannot wait on anything more than this. If
+  nothing is stored, or storage is unreadable (private mode, cleared site
+  data), it paints deep-space - the same look this page always had.
+-->
+<script>
+  try {
+    var jarvisHudTheme = localStorage.getItem("jarvis.theme");
+    if (["deep-space", "paper", "high-contrast"].indexOf(jarvisHudTheme) >= 0) {
+      document.documentElement.setAttribute("data-theme", jarvisHudTheme);
+    }
+  } catch (e) {
+    /* private mode, cleared site data - the default theme is correct */
+  }
+</script>
+<link rel="stylesheet" href="theme.css">
 
 <style>
 /* ------------------------------------------------------------------ *
- * A HUD is an instrument, so this commits to one dark visual world
- * rather than shipping a light theme it would never be read in.
- * Every colour is still painted explicitly so it holds on any ground.
+ * 2026-09-27 (UI audit item 11, Q6): this used to commit to its own
+ * "one dark visual world" of about 114 hard-coded colours - "Brains"
+ * and "Projects" painted the same amber as the approval card, labels
+ * measured 2.3-2.6:1 against a 4.5:1 floor, and 12 of the graph's 55
+ * colour pairs failed the colour-blind check. The owner chose to give
+ * this window the app's normal colours instead, so every name below is
+ * now an alias onto `theme.css` - the SAME names stay because this file
+ * is vendored byte-identical from the backend and every rule below
+ * already reaches for them; only the values move. That also means this
+ * window now follows Daylight and High Contrast, not only its old dark
+ * look, and gets `theme.css`'s already-checked contrast for free.
  * ------------------------------------------------------------------ */
 :root{
-  --void:#04070c;
-  --plate:#0a1119;
-  --plate-2:#0e1822;
-  --line:#172836;
-  --line-hot:#24485e;
+  --void:var(--bg-window);
+  --plate:var(--surface-1);
+  --plate-2:var(--surface-2);
+  --line:var(--border);
+  --line-hot:var(--border-accent);
 
-  --ice:#6fe3ff;
-  --ice-deep:#1d5f7a;
-  --gold:#ffb648;
-  --text:#cfe4ee;
-  --dim:#6b8496;
-  --dimmer:#3f5566;
+  --ice:var(--accent);
+  --ice-deep:var(--accent-dim);
+  --gold:var(--warn);
+  --dim:var(--text-muted);
+  --dimmer:var(--text-faint);
 
-  --ok:#5fe0a8;
-  --warn:#ffb648;
-  --crit:#ff6b5e;
+  --crit:var(--bad);
+  /* --text, --ok and --warn are not redeclared: `theme.css` already
+     defines them under this same name on `:root`, and a custom property
+     that referred to itself under its OWN name here would be a cycle -
+     CSS resolves that to invalid, not to the outer value. Every
+     `var(--text)`, `var(--ok)` and `var(--warn)` below already resolves
+     straight from `theme.css`. */
 
-  --g-core:#ffffff;
-  --g-model:#ffb648;
-  --g-cluster:#6fe3ff;
-  --g-tool:#3fa9c9;
-  --g-fact:#8d7bff;
-  --g-source:#4d6b80;
-  --g-document:#5fe0a8;
-  --g-entity:#ff8fb0;
-  --g-project:#ffb648;
-  --g-skill:#c6f24e;
-  --g-persona:#ff6b5e;
-
+  /* Fonts are untouched on purpose: the owner's decision was about this
+     window's COLOURS, and 2026-09-27 (Q8) was a separate, deliberate
+     "leave the fonts alone" - so this stays its own stack rather than
+     picking up `theme.css`'s `--font-ui` (Segoe UI Variable, not IBM
+     Plex Sans). */
   --f-hud:"Chakra Petch", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --f-body:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --f-mono:"IBM Plex Mono", ui-monospace, "Consolas", monospace;
@@ -71,10 +94,10 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   display:grid; height:100dvh;
   grid-template-columns:212px minmax(0,1fr) 248px;
   background:
-    radial-gradient(1100px 620px at 50% 42%, #0a1a26 0%, var(--void) 62%);
+    radial-gradient(1100px 620px at 50% 42%, var(--surface-1) 0%, var(--void) 62%);
 }
 .rail{
-  background:linear-gradient(180deg, var(--plate) 0%, #070d14 100%);
+  background:linear-gradient(180deg, var(--plate) 0%, var(--void) 100%);
   display:flex; flex-direction:column; min-height:0;
 }
 .rail.left{border-right:1px solid var(--line);}
@@ -95,7 +118,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .brand h1{
   margin:0; font-family:var(--f-hud); font-size:15px; font-weight:700;
   letter-spacing:.34em; color:var(--ice);
-  text-shadow:0 0 18px rgba(111,227,255,.35);
+  text-shadow:0 0 18px rgb(var(--accent-rgb) / .35);
 }
 .brand .sub{
   margin-top:5px; font-family:var(--f-mono); font-size:9.5px;
@@ -111,10 +134,10 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   border:1px solid transparent; border-left:2px solid transparent; text-align:left;
   transition:background .15s, color .15s, border-color .15s;
 }
-.mode:hover{color:var(--text); background:rgba(111,227,255,.05);}
+.mode:hover{color:var(--text); background:rgb(var(--accent-rgb) / .05);}
 .mode[aria-selected="true"]{
-  color:var(--ice); background:rgba(111,227,255,.08);
-  border-color:rgba(111,227,255,.2); border-left-color:var(--ice);
+  color:var(--ice); background:rgb(var(--accent-rgb) / .08);
+  border-color:rgb(var(--accent-rgb) / .2); border-left-color:var(--ice);
 }
 .mode .glyph{width:14px; height:14px; flex-shrink:0;}
 
@@ -129,10 +152,10 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .lane:hover{border-color:var(--line-hot); color:var(--text);}
 .lane[aria-pressed="true"]{
   border-color:var(--gold); color:var(--gold);
-  background:linear-gradient(90deg, rgba(255,182,72,.14), rgba(255,182,72,.03));
+  background:linear-gradient(90deg, rgb(var(--warn-rgb) / .14), rgb(var(--warn-rgb) / .03));
 }
 .lane .tag{font-size:9px; letter-spacing:.1em; color:var(--dimmer); text-transform:uppercase;}
-.lane[aria-pressed="true"] .tag{color:rgba(255,182,72,.75);}
+.lane[aria-pressed="true"] .tag{color:rgb(var(--warn-rgb) / .75);}
 
 /* ---------- status LEDs -------------------------------------------- */
 .leds{display:flex; flex-direction:column; gap:7px; margin-top:9px;}
@@ -184,7 +207,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   position:absolute; bottom:-2px; left:50%; transform:translateX(-50%);
   font-family:var(--f-mono); font-size:9.5px; letter-spacing:.28em;
   text-transform:uppercase; color:var(--ice); white-space:nowrap;
-  text-shadow:0 0 14px rgba(111,227,255,.5);
+  text-shadow:0 0 14px rgb(var(--accent-rgb) / .5);
 }
 
 #log{
@@ -209,8 +232,8 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   border-right:2px solid var(--gold); color:var(--text);
 }
 .msg.jarvis .body{
-  background:linear-gradient(180deg, rgba(111,227,255,.055), rgba(111,227,255,.015));
-  border:1px solid rgba(111,227,255,.17); border-left:2px solid var(--ice);
+  background:linear-gradient(180deg, rgb(var(--accent-rgb) / .055), rgb(var(--accent-rgb) / .015));
+  border:1px solid rgb(var(--accent-rgb) / .17); border-left:2px solid var(--ice);
 }
 .msg.system .body{
   background:none; border:1px dashed var(--line); color:var(--dim); font-size:13px;
@@ -219,7 +242,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
    never the ice-blue of a real answer, and labelled as not from Jarvis. */
 .msg.sample .who{color:var(--gold);}
 .msg.sample .body{
-  background:none; border:1px dashed rgba(255,182,72,.45); color:var(--dim); font-size:13px;
+  background:none; border:1px dashed rgb(var(--warn-rgb) / .45); color:var(--dim); font-size:13px;
 }
 .msg .body .cursor{
   display:inline-block; width:7px; height:1em; vertical-align:-2px;
@@ -237,7 +260,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   color:var(--text); font-family:var(--f-body); font-size:14px;
   max-height:132px; line-height:1.45;
 }
-#input:focus{outline:none; border-color:var(--line-hot); background:#0f1a24;}
+#input:focus{outline:none; border-color:var(--line-hot); background:var(--surface-sunken);}
 #input::placeholder{color:var(--dimmer);}
 .act{
   flex-shrink:0; width:44px; height:44px; border-radius:3px;
@@ -246,13 +269,13 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   transition:border-color .15s, color .15s, background .15s; color:var(--dim);
 }
 .act:hover{border-color:var(--line-hot); color:var(--text);}
-.act.primary{border-color:rgba(111,227,255,.3); color:var(--ice);}
-.act.primary:hover{background:rgba(111,227,255,.1);}
+.act.primary{border-color:rgb(var(--accent-rgb) / .3); color:var(--ice);}
+.act.primary:hover{background:rgb(var(--accent-rgb) / .1);}
 .act[aria-pressed="true"]{
-  border-color:var(--crit); color:var(--crit); background:rgba(255,107,94,.12);
+  border-color:var(--crit); color:var(--crit); background:rgb(var(--bad-rgb) / .12);
   animation:hot 1.4s ease-in-out infinite;
 }
-@keyframes hot{50%{box-shadow:0 0 0 4px rgba(255,107,94,.1);}}
+@keyframes hot{50%{box-shadow:0 0 0 4px rgb(var(--bad-rgb) / .1);}}
 .act svg{width:19px; height:19px;}
 
 /* ---------- BRAIN -------------------------------------------------- */
@@ -265,7 +288,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   display:flex; gap:8px; align-items:center; flex-wrap:wrap; max-width:calc(100% - 32px);
 }
 #gsearch{
-  width:210px; max-width:46vw; background:rgba(10,17,25,.92); border:1px solid var(--line);
+  width:210px; max-width:46vw; background:var(--plate-2); border:1px solid var(--line);
   border-radius:3px; padding:8px 11px; color:var(--text);
   font-family:var(--f-mono); font-size:12px;
 }
@@ -273,14 +296,14 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 #gsearch::placeholder{color:var(--dimmer);}
 .ghost{
   padding:7px 11px; border:1px solid var(--line); border-radius:3px;
-  background:rgba(10,17,25,.92); font-family:var(--f-mono); font-size:11px;
+  background:var(--plate-2); font-family:var(--f-mono); font-size:11px;
   color:var(--dim); white-space:nowrap;
 }
 .ghost:hover{border-color:var(--line-hot); color:var(--text);}
 
 .legend{
   position:absolute; bottom:14px; left:16px; z-index:3;
-  background:rgba(6,11,17,.9); border:1px solid var(--line); border-radius:3px;
+  background:var(--surface-sunken); border:1px solid var(--line); border-radius:3px;
   padding:10px 12px; display:flex; flex-direction:column; gap:5px;
   backdrop-filter:blur(6px); max-height:44%; overflow-y:auto;
 }
@@ -293,7 +316,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 
 .inspector{
   position:absolute; top:14px; right:16px; z-index:4; width:290px; max-width:calc(100% - 32px);
-  background:rgba(6,11,17,.95); border:1px solid var(--line-hot); border-radius:3px;
+  background:var(--surface-sunken); border:1px solid var(--line-hot); border-radius:3px;
   padding:14px; backdrop-filter:blur(8px); display:none; max-height:72%; overflow-y:auto;
 }
 .inspector.on{display:block;}
@@ -326,7 +349,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .trace-bar{
   position:absolute; top:56px; left:16px; right:16px; z-index:3;
   display:flex; gap:8px; align-items:center; flex-wrap:wrap;
-  background:rgba(6,11,17,.93); border:1px solid var(--line-hot); border-radius:3px;
+  background:var(--surface-sunken); border:1px solid var(--line-hot); border-radius:3px;
   padding:9px 12px; backdrop-filter:blur(6px);
 }
 .trace-bar.off{display:none;}
@@ -344,7 +367,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 }
 .trail-chip{
   font-family:var(--f-mono); font-size:10.5px; color:var(--dim); text-align:left;
-  background:rgba(6,11,17,.92); border:1px solid var(--line); border-radius:3px;
+  background:var(--surface-sunken); border:1px solid var(--line); border-radius:3px;
   padding:5px 9px; max-width:100%; overflow:hidden; text-overflow:ellipsis;
   white-space:nowrap; cursor:pointer;
 }
@@ -354,7 +377,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .trace-list{
   position:absolute; top:104px; left:16px; z-index:3; width:290px;
   max-width:calc(100% - 32px); max-height:52%; overflow-y:auto;
-  background:rgba(6,11,17,.93); border:1px solid var(--line); border-radius:3px;
+  background:var(--surface-sunken); border:1px solid var(--line); border-radius:3px;
   padding:10px 12px; backdrop-filter:blur(6px);
 }
 .trace-list.off{display:none;}
@@ -365,7 +388,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .trace-list h4.second{margin-top:13px; color:var(--gold);}
 .trace-row{
   display:flex; gap:8px; align-items:baseline; padding:4px 0; cursor:pointer;
-  border-bottom:1px solid rgba(23,40,54,.5);
+  border-bottom:1px solid var(--border);
 }
 .trace-row:hover .t{color:var(--text);}
 .trace-row .s{
@@ -403,13 +426,15 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 }
 .toolchip{
   font-family:var(--f-mono); font-size:9.5px; padding:2px 6px; border-radius:2px;
-  background:rgba(63,169,201,.13); border:1px solid rgba(63,169,201,.3); color:var(--g-tool);
+  /* Same hue the graph paints "tool" nodes with (`--node-h4`), so a used
+     ability reads as the same colour here and in the galaxy view. */
+  background:var(--surface-2); border:1px solid var(--node-h4); color:var(--node-h4);
 }
 
 /* ---------- offline banner ------------------------------------------ */
 #banner{
-  flex-shrink:0; padding:8px 18px; background:rgba(255,182,72,.09);
-  border-bottom:1px solid rgba(255,182,72,.25); color:var(--gold);
+  flex-shrink:0; padding:8px 18px; background:rgb(var(--warn-rgb) / .09);
+  border-bottom:1px solid rgb(var(--warn-rgb) / .25); color:var(--gold);
   font-family:var(--f-mono); font-size:11px; display:none; gap:8px; align-items:center;
 }
 #banner.on{display:flex;}
@@ -422,7 +447,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   .rail.right{
     position:fixed; right:0; top:0; bottom:0; width:248px; z-index:20;
     transform:translateX(100%); transition:transform .22s ease;
-    border-left:1px solid var(--line-hot); box-shadow:-18px 0 44px rgba(0,0,0,.55);
+    border-left:1px solid var(--line-hot); box-shadow:-18px 0 44px rgb(var(--shade-rgb) / .55);
   }
   .rail.right.open{transform:none;}
   .rail-toggle{display:flex;}
@@ -453,8 +478,8 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 /* ---- approval queue -------------------------------------------------- */
 #approvals{ display:flex; flex-direction:column; gap:10px; margin:0 0 14px; }
 .appr{
-  border:1px solid rgba(255,176,64,.55); border-left:3px solid #ffb040;
-  background:linear-gradient(180deg, rgba(255,176,64,.10), rgba(255,176,64,.03));
+  border:1px solid rgb(var(--warn-rgb) / .55); border-left:3px solid var(--warn);
+  background:linear-gradient(180deg, rgb(var(--warn-rgb) / .10), rgb(var(--warn-rgb) / .03));
   border-radius:10px; padding:12px 14px;
 }
 .appr .hdr{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
@@ -462,21 +487,21 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .appr .tier{
   font:600 10px/1 "IBM Plex Mono",monospace; text-transform:uppercase;
   letter-spacing:.12em; padding:3px 7px; border-radius:5px;
-  background:rgba(255,176,64,.18); color:#ffc879;
+  background:rgb(var(--warn-rgb) / .18); color:var(--warn);
 }
 .appr .det{
-  font:12px/1.5 "IBM Plex Mono",monospace; color:rgba(255,255,255,.72);
+  font:12px/1.5 "IBM Plex Mono",monospace; color:var(--text-muted);
   white-space:pre-wrap; word-break:break-word; margin:4px 0 10px;
   max-height:8.5em; overflow:auto;
 }
 /* Why it matters, whether something tried to rush you, how long is left. */
 .appr .raised{
-  border:1px solid rgba(255,127,127,.55); border-radius:7px; padding:7px 9px;
-  margin:4px 0 8px; color:#ffbcbc; font-size:12.5px;
+  border:1px solid rgb(var(--bad-rgb) / .55); border-radius:7px; padding:7px 9px;
+  margin:4px 0 8px; color:var(--diff-remove); font-size:12.5px;
 }
-.appr .raised .quote{ color:rgba(255,255,255,.82); margin-top:4px; }
-.appr .raised .src{ color:rgba(255,255,255,.72); font-size:11.5px; margin-top:3px; }
-.appr .risk, .appr .left{ font-size:12px; color:rgba(255,255,255,.72); margin:0 0 6px; }
+.appr .raised .quote{ color:var(--text); margin-top:4px; }
+.appr .raised .src{ color:var(--text-muted); font-size:11.5px; margin-top:3px; }
+.appr .risk, .appr .left{ font-size:12px; color:var(--text-muted); margin:0 0 6px; }
 .appr .left:empty{ display:none; }
 .appr .yes:disabled{ opacity:.45; cursor:not-allowed; }
 .appr .btns{ display:flex; gap:8px; }
@@ -484,29 +509,31 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   border-radius:7px; padding:7px 15px; font-weight:600; cursor:pointer;
   border:1px solid transparent;
 }
-.appr .yes{ background:#2f7f4f; border-color:#3f9f63; color:#eafff0; }
-.appr .no { background:transparent; border-color:rgba(255,255,255,.28);
-            color:rgba(255,255,255,.82); }
-.appr .yes:hover{ background:#369159; }
-.appr .no:hover { border-color:#ff7f7f; color:#ffbcbc; }
-.appr.settled{ opacity:.45; border-left-color:#666; }
+/* Matches the Jarvis bar's and the widget's own Approve/Deny (Q6, Q7,
+   2026-09-27): the same tokens, so all three read as one control. */
+.appr .yes{ background:var(--ok-fill); border-color:var(--ok-edge); color:var(--ok-text); }
+.appr .no { background:transparent; border-color:var(--border-strong);
+            color:var(--text); }
+.appr .yes:hover{ border-color:var(--ok); }
+.appr .no:hover { border-color:var(--bad); color:var(--diff-remove); }
+.appr.settled{ opacity:.45; border-left-color:var(--text-faint); }
 
 /* ---- initiative & memory cards --------------------------------------- */
 #initiative{ display:flex; flex-direction:column; gap:10px; margin:0 0 14px; }
-.init{ border:1px solid rgba(120,180,255,.45); border-left:3px solid #7fb4ff;
-  background:linear-gradient(180deg, rgba(120,180,255,.08), rgba(120,180,255,.02));
+.init{ border:1px solid rgb(var(--info-rgb) / .45); border-left:3px solid var(--info);
+  background:linear-gradient(180deg, rgb(var(--info-rgb) / .08), rgb(var(--info-rgb) / .02));
   border-radius:10px; padding:12px 14px; }
-.init.alert{ border-color:rgba(255,120,120,.55); border-left-color:#ff7f7f; }
+.init.alert{ border-color:rgb(var(--bad-rgb) / .55); border-left-color:var(--bad); }
 .init .hdr{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
 .init .who{ font-weight:650; }
 .init .kind{ font:600 10px/1 "IBM Plex Mono",monospace; text-transform:uppercase; letter-spacing:.12em;
-  padding:3px 7px; border-radius:5px; background:rgba(120,180,255,.18); color:#bcd8ff; }
-.init .det{ font:12px/1.5 "IBM Plex Sans",sans-serif; color:rgba(255,255,255,.78); white-space:pre-wrap; }
+  padding:3px 7px; border-radius:5px; background:rgb(var(--info-rgb) / .18); color:var(--info); }
+.init .det{ font:12px/1.5 "IBM Plex Sans",sans-serif; color:var(--text-muted); white-space:pre-wrap; }
 .init ul{ margin:6px 0 0 18px; padding:0; }
 .init .btns{ display:flex; gap:8px; margin-top:10px; }
-.init button{ border-radius:7px; padding:6px 13px; font-weight:600; cursor:pointer; border:1px solid rgba(255,255,255,.28);
-  background:transparent; color:rgba(255,255,255,.85); }
-.init button.yes{ background:#2f5f8f; border-color:#3f7fbf; color:#eaf4ff; }
+.init button{ border-radius:7px; padding:6px 13px; font-weight:600; cursor:pointer; border:1px solid var(--border-strong);
+  background:transparent; color:var(--text); }
+.init button.yes{ background:rgb(var(--info-rgb) / .18); border-color:var(--info); color:var(--text); }
 </style>
 
 <div id="shell">
@@ -798,18 +825,93 @@ function newConversationId(){
 }
 
 const GROUPS = {
-  core:     { label:"Core",      color:"#ffffff" },
-  model:    { label:"Brains",    color:"#ffb648" },
-  cluster:  { label:"Ability groups", color:"#6fe3ff" },
-  tool:     { label:"Abilities", color:"#3fa9c9" },
-  fact:     { label:"Facts",     color:"#8d7bff" },
-  source:   { label:"Sources",   color:"#4d6b80" },
-  document: { label:"Documents", color:"#5fe0a8" },
-  entity:   { label:"Knowledge", color:"#ff8fb0" },
-  project:  { label:"Projects",  color:"#ffb648" },
-  skill:    { label:"Skills",    color:"#c6f24e" },
-  persona:  { label:"Personas",  color:"#ff6b5e" }
+  core:     { label:"Core" },
+  model:    { label:"Brains" },
+  cluster:  { label:"Ability groups" },
+  tool:     { label:"Abilities" },
+  fact:     { label:"Facts" },
+  source:   { label:"Sources" },
+  document: { label:"Documents" },
+  entity:   { label:"Knowledge" },
+  project:  { label:"Projects" },
+  skill:    { label:"Skills" },
+  persona:  { label:"Personas" }
 };
+
+/**
+ * 2026-09-27 (UI audit item 11, Q6): the eleven groups above used to carry
+ * their own literal hex, and two of them - "Brains" and "Projects" - were
+ * painted the exact same colour, which was also the approval amber. The
+ * Brain window (`brain.js`) had the same problem with its own ten-colour
+ * map and fixed it by cutting to `theme.css`'s five node hues, each drawn
+ * as either a filled disc or a hollow ring so a colour-blind reader has a
+ * second signal that survives greyscale. This graph reuses that exact
+ * mapping for every group `brain.js` also draws, so the two galaxies read
+ * the same way.
+ *
+ * "project" is the one group `brain.js` does not have. Rather than
+ * quietly doubling up an existing hue+shape pair - which is the very bug
+ * this is fixing, just moved - it shares entity's hue (a project is a
+ * specific kind of tracked knowledge; the demo graph itself links project
+ * nodes straight to entity/repo nodes) but draws as a filled square, so it
+ * is never mistaken for persona (disc) or entity (ring) on that hue.
+ */
+const GROUP_STYLE = {
+  core:     ["--node-h1", "disc"],
+  cluster:  ["--node-h1", "ring"],
+  model:    ["--node-h2", "disc"],
+  source:   ["--node-h2", "ring"],
+  fact:     ["--node-h3", "disc"],
+  document: ["--node-h3", "ring"],
+  tool:     ["--node-h4", "disc"],
+  skill:    ["--node-h4", "ring"],
+  persona:  ["--node-h5", "disc"],
+  entity:   ["--node-h5", "ring"],
+  project:  ["--node-h5", "square"]
+};
+function styleFor(group){ return GROUP_STYLE[group] || GROUP_STYLE.entity; }
+
+/** Resolved theme values, cached: reading a custom property is a forced
+ * style recalc, and this runs per node per frame. This page sets its theme
+ * once at load (see the bootstrap script at the top) and never changes it
+ * without a reload, so unlike `brain.js`'s equivalent cache, nothing here
+ * ever needs to be invalidated. */
+const tokenCache = new Map();
+function tk(name, fallback){
+  let hit = tokenCache.get(name);
+  if(hit !== undefined) return hit;
+  hit = getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  tokenCache.set(name, hit);
+  return hit;
+}
+function colourFor(group){ return tk(styleFor(group)[0], "#888"); }
+
+/** Draws one node in its group's form: a ring is stroked, a square is
+ * filled, everything else is a filled disc. */
+function drawNode(ctx, x, y, r, group, colour){
+  const shape = styleFor(group)[1];
+  if(shape === "ring"){
+    // Stroked inside the radius so a ring and a disc of the same size read
+    // as the same size - otherwise the ring looks like the bigger node.
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = Math.max(1.4, r * 0.42);
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(1, r - ctx.lineWidth / 2), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    return;
+  }
+  if(shape === "square"){
+    ctx.fillStyle = colour;
+    const side = Math.max(2, r * 1.7);
+    ctx.fillRect(x - side / 2, y - side / 2, side, side);
+    return;
+  }
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
 
 const $ = id => document.getElementById(id);
 
@@ -1155,19 +1257,19 @@ const galaxy = (() => {
       const a = proj.get(l.s.id), b = proj.get(l.t.id);
       if(!a || !b) continue;
       let alpha = 0.34;
-      let color = "#356f8c";
+      let color = tk("--edge", "#356f8c");
       if(tracing){
         // A link between two recalled notes is the interesting one: it is
         // why the second one came back at all.
         const a = traceHits.has(l.s.id), b = traceHits.has(l.t.id);
-        if(a && b){ alpha = 0.9; color = "#6fe3ff"; }
-        else if(a || b){ alpha = 0.3; color = "#2f6a86"; }
+        if(a && b){ alpha = 0.9; color = tk("--edge-active", "#6fe3ff"); }
+        else if(a || b){ alpha = 0.3; color = tk("--edge-active", "#2f6a86"); }
         else alpha = 0.03;
       }
       if(focusId){
         const on = l.s.id === focusId || l.t.id === focusId;
         alpha = on ? 0.85 : 0.04;
-        if(on) color = "#6fe3ff";
+        if(on) color = tk("--edge-active", "#6fe3ff");
       }
       if(q) alpha = 0.07;
       ctx.globalAlpha = alpha;
@@ -1183,7 +1285,7 @@ const galaxy = (() => {
 
     for(const n of order){
       const s = proj.get(n.id);
-      const g = GROUPS[n.group] || GROUPS.entity;
+      const colour = colourFor(n.group);
       const hit = q && (n.label||"").toLowerCase().includes(q);
       const isFocus = n.id === focusId;
       const isNear = near && near.has(n.id);
@@ -1201,19 +1303,18 @@ const galaxy = (() => {
 
       if(isFocus || hit || n.group === "core" || isHit || isMiss){
         ctx.globalAlpha = alpha * (isHit ? 0.5 : isMiss ? 0.3 : 0.35);
-        ctx.fillStyle = isHit ? "#6fe3ff" : isMiss ? "#ffb648" : g.color;
+        ctx.fillStyle = isHit ? tk("--accent", "#6fe3ff") : isMiss ? tk("--warn", "#ffb648") : colour;
         ctx.beginPath(); ctx.arc(s.x, s.y, r*(isHit?3.6:3.1), 0, Math.PI*2); ctx.fill();
       }
 
       ctx.globalAlpha = alpha * Math.min(1, 0.35 + s.k*0.9);
-      ctx.fillStyle = g.color;
-      ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2); ctx.fill();
+      drawNode(ctx, s.x, s.y, r, n.group, colour);
 
       // A recalled note wears a ring; a near-miss wears a dashed one. The
       // difference is the whole point of the view.
       if(isHit || isMiss){
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = isHit ? "#6fe3ff" : "#ffb648";
+        ctx.strokeStyle = isHit ? tk("--accent", "#6fe3ff") : tk("--warn", "#ffb648");
         ctx.lineWidth = isHit ? 1.8 : 1;
         if(isMiss) ctx.setLineDash([3, 3]);
         ctx.beginPath(); ctx.arc(s.x, s.y, r + (isHit ? 5 : 3.5), 0, Math.PI*2); ctx.stroke();
@@ -1222,7 +1323,7 @@ const galaxy = (() => {
 
       if(n.id === hoverId || isFocus){
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.2;
+        ctx.strokeStyle = tk("--prose-strong", "#ffffff"); ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.arc(s.x, s.y, r+3, 0, Math.PI*2); ctx.stroke();
       }
 
@@ -1244,7 +1345,7 @@ const galaxy = (() => {
              box.y < b.y + b.h && box.y + box.h > b.y)){
           placed.push(box);
           ctx.globalAlpha = Math.min(1, alpha * 1.1);
-          ctx.fillStyle = priority ? "#ffffff" : "#9fb8c7";
+          ctx.fillStyle = priority ? tk("--prose-strong", "#ffffff") : tk("--text-muted", "#9fb8c7");
           ctx.textAlign = "center";
           ctx.fillText(text, s.x, s.y - r - 7);
         }
@@ -1317,7 +1418,7 @@ const galaxy = (() => {
     camTarget = {x:n.x, y:n.y, z:n.z};
     const g = GROUPS[n.group] || GROUPS.entity;
     $("insp-kind").textContent = g.label;
-    $("insp-kind").style.color = g.color;
+    $("insp-kind").style.color = colourFor(n.group);
     $("insp-title").textContent = n.label || n.id;
     $("insp-meta").textContent = n.meta || `${(adj.get(n.id)||new Set()).size} connections`;
     $("insp-detail").textContent = n.detail || "No stored detail for this node.";
@@ -1328,13 +1429,24 @@ const galaxy = (() => {
     $("inspector").classList.remove("on");
   }
 
+  /** The swatch draws the group's actual shape, not just its colour - the
+   * whole point of the fix (Q6) is that two groups on the same hue are
+   * still told apart without colour, and a legend that only showed a
+   * dot for both would quietly undo that. */
+  function swatchStyle(group){
+    const colour = colourFor(group);
+    const shape = styleFor(group)[1];
+    if(shape === "ring") return `background:transparent; border:2px solid ${colour}; border-radius:50%;`;
+    if(shape === "square") return `background:${colour}; border-radius:2px;`;
+    return `background:${colour}; border-radius:50%;`;
+  }
   function buildLegend(graph){
     const counts = {};
     graph.nodes.forEach(n => counts[n.group] = (counts[n.group]||0)+1);
     $("legend").innerHTML = Object.entries(GROUPS)
       .filter(([k]) => counts[k])
       .map(([k,g]) => `<div class="legend-row">
-          <span class="swatch" style="background:${g.color}"></span>
+          <span class="swatch" style="${swatchStyle(k)}"></span>
           <span>${g.label}</span><span class="n">${counts[k]}</span>
         </div>`).join("");
   }

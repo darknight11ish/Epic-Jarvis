@@ -111,29 +111,37 @@ await check("a light theme actually moves the neutral washes", async () => {
   assert.notEqual(sheen, "255 255 255", "paper still lifts its surfaces with white");
 });
 
-await check("the widget's Approve label survives its new colour", async () => {
-  // Two literals in `widget.css` were stale copies rather than tints: the
-  // Approve button's label was `#04070c`, a near-black chosen by hand, and the
-  // button's cyan was `rgb(111 227 255)` while the theme's accent had moved to
-  // `rgb(56 240 255)`. Both now follow the theme, which changes what they
-  // render as — so the pair is measured here rather than assumed.
-  const luma = (c) => {
-    const ch = (v) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
-    return 0.2126 * ch(c[0]) + 0.7152 * ch(c[1]) + 0.0722 * ch(c[2]);
-  };
+await check("the widget's Approve button matches the Jarvis bar's", async () => {
+  // 2026-09-27 (Q7): the widget's Approve used to be solid bright green
+  // (`background: var(--ok)`, `color: var(--text-on-accent)`), which pulled
+  // the eye harder than the bar's own softer, tinted Approve
+  // (`.approval-approve` in `style.css`: `--ok-edge` / `--ok-fill` /
+  // `--ok-text`). The owner chose to make the widget match the bar, by
+  // reusing that same token triple rather than picking a new colour that
+  // merely looks similar — so this checks the two buttons resolve to
+  // IDENTICAL colours in every theme, not just similar ones. A future edit
+  // that gives either button its own literal, or points it at a different
+  // token, fails here before it ships a drift between the two.
   for (const theme of ["deep-space", "paper", "high-contrast"]) {
-    const page = await K.open(browser, base, "widget.html",
+    const widget = await K.open(browser, base, "widget.html",
       { theme, pending: [K.APPROVAL_PLAIN] }, { width: 320, height: 460 });
-    const pair = await page.evaluate(() => {
-      const el = document.querySelector(".btn-approve");
-      const cs = getComputedStyle(el);
-      const nums = (v) => v.match(/[\d.]+/g).slice(0, 3).map(Number);
-      return { fg: nums(cs.color), bg: nums(cs.backgroundColor) };
+    const widgetColors = await widget.evaluate(() => {
+      const cs = getComputedStyle(document.querySelector(".btn-approve"));
+      return { bg: cs.backgroundColor, fg: cs.color, border: cs.borderColor };
     });
-    await page.close();
-    const [hi, lo] = [luma(pair.fg), luma(pair.bg)].sort((a, b) => b - a);
-    const r = (hi + 0.05) / (lo + 0.05);
-    assert.ok(r >= 4.5, `${theme}: Approve measures ${r.toFixed(2)}:1`);
+    await widget.close();
+
+    const bar = await K.open(browser, base, "index.html",
+      { theme, pending: [K.APPROVAL_RAISED] }, { width: 750, height: 800 });
+    const barColors = await bar.evaluate(() => {
+      const cs = getComputedStyle(document.querySelector(".approval-approve"));
+      return { bg: cs.backgroundColor, fg: cs.color, border: cs.borderColor };
+    });
+    await bar.close();
+
+    assert.equal(widgetColors.bg, barColors.bg, `${theme}: Approve fill drifted from the bar`);
+    assert.equal(widgetColors.fg, barColors.fg, `${theme}: Approve text drifted from the bar`);
+    assert.equal(widgetColors.border, barColors.border, `${theme}: Approve edge drifted from the bar`);
   }
 });
 
