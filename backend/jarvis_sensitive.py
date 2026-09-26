@@ -47,6 +47,24 @@ flagged". "My sister's name is Anna" is flagged too. Not flagged: famous
 people named as a taste ("I'm a fan of Terry Pratchett"), pets and things
 ("My dog is called Max"), and the owner's own name ("My name is Tom").
 
+EVERYDAY FACTS ABOUT PEOPLE (the owner's decision of 2026-09-26, after the
+approvals audit, docs/APPROVALS-AUDIT-2026-09-26.md): "my sister likes jazz"
+is saved without a card. The patterns above still FIND the other person -
+patterns() and topic() are unchanged, so a recalled fact about someone still
+counts as sensitive for reading aloud and web search - but classify() no
+longer treats "someone else is in it" as enough on its own:
+  * `everyday_other` (patterns()): the only thing found is WHO the text is
+    about - a relation word, a name, a title, "he"/"she", "Anna's sister".
+    Anything private about them keeps the card whatever else happens: their
+    health, money, address or contact details (those are their own
+    categories), a break-up, a death, a secret, a debt ("Tom owes me money")
+    or trouble (the private-life words), "Anna's address" or "Anna's salary"
+    (SOMEONE_ELSES_DETAILS), and passwords, PINs, account and ID numbers.
+  * Then the local model is asked, told that an everyday fact about someone
+    is not sensitive, and only its clear "not sensitive" saves the fact. Its
+    "sensitive", "unsure", no answer or no local model at all: a card, as
+    before (fail closed).
+
 ROUND 2 (2026-09-24)
 The first held-out set (sensitive_cases/heldout1.jsonl) caught 86.8% and
 flagged 15.3% of harmless lines. Its misses were turned into general word
@@ -2635,6 +2653,17 @@ def _shape_hits(v: _Views) -> list:
 #   The other-person rule
 # ==========================================================================
 
+#: The rule for "<Name>'s address / phone / salary / diagnosis ...".
+SOMEONE_ELSES_DETAILS = "someone else's private details"
+
+
+def _private_other_rule(rule: str) -> bool:
+    """True for an other-person rule that names something PRIVATE about
+    them (a break-up, a death, a secret, a debt, "Anna's address"), not
+    just who the sentence is about (a relation word, a name, "he"/"she")."""
+    return rule.startswith("other_people private-life word") or rule == SOMEONE_ELSES_DETAILS
+
+
 def _name_hits(v: _Views) -> list:
     hits = []
     for m in re.finditer(r"[^\W\d_]+", v.orig):
@@ -2673,13 +2702,19 @@ def _name_hits(v: _Views) -> list:
                                                      v.orig):
         hits.append(("other_people", "a title and a name"))
     # A capitalised word that is not a name we know, with "'s" and a family
-    # word or something private after it: "Xiomara's husband".
-    if re.search(r"(?<![\w])[A-Z][a-z]+'s (?:wife|husband|partner|kids?|sons?|daughters?|mum|mom"
-                 r"|dad|mother|father|boss|house|home|flat|address|phone|number|job|health"
-                 r"|diagnosis|salary|birthday|password|email|brother|sister|girlfriend"
-                 r"|boyfriend|ex|family|parents|baby|surgery|operation|condition|illness|funeral"
-                 r"|wedding|divorce|death)(?![\w])", v.orig):
-        hits.append(("other_people", "someone else's family or details"))
+    # word or something private after it: "Xiomara's husband". Two rules
+    # since 2026-09-26 (EVERYDAY_OTHER below): a family word only says who
+    # the sentence is about; a private detail ("Xiomara's address") stays
+    # sensitive whatever the local model says.
+    if re.search(r"(?<![\w])[A-Z][a-z]+'s (?:house|home|flat|address|phone|number|health"
+                 r"|diagnosis|salary|birthday|password|email|surgery|operation|condition"
+                 r"|illness|funeral|wedding|divorce|death|debts?|money|bank|pay|wages)(?![\w])",
+                 v.orig):
+        hits.append(("other_people", SOMEONE_ELSES_DETAILS))
+    elif re.search(r"(?<![\w])[A-Z][a-z]+'s (?:wife|husband|partner|kids?|sons?|daughters?|mum"
+                   r"|mom|dad|mother|father|boss|job|brother|sister|girlfriend|boyfriend|ex"
+                   r"|family|parents|baby)(?![\w])", v.orig):
+        hits.append(("other_people", "someone else's family"))
     return hits
 
 
@@ -2707,7 +2742,7 @@ def patterns(text: str) -> dict:
     never the words."""
     if not isinstance(text, str) or not text.strip():
         return {"sensitive": False, "categories": [], "special": [], "rules": [],
-                "owner_subject": False}
+                "owner_subject": False, "everyday_other": False}
     v = _Views(text)
     hits = []
     for cat, _sub, rule, rx in _LISTS:
@@ -2731,8 +2766,11 @@ def patterns(text: str) -> dict:
     # Whose topic is it? "I came out to my parents" is the owner's sexuality,
     # not the parents'; "my old landlord is suing me" is the owner's court case.
     owner = bool(_OWNER_SUBJECT.search(v.blank) or _OWNER_OBJECT.search(v.blank))
+    # EVERYDAY_OTHER: the only thing found is WHO the sentence is about.
+    everyday = cats == ["other_people"] and not any(
+        _private_other_rule(r) for c, r in hits if c == "other_people")
     return {"sensitive": bool(cats), "categories": cats, "special": special, "rules": rules,
-            "owner_subject": owner}
+            "owner_subject": owner, "everyday_other": everyday}
 
 
 #: The sentence is about the owner: it starts with "I", "I'm", "me and",
@@ -2806,7 +2844,7 @@ Sensitive topics (in any language):
 - health: illness, symptoms, diagnoses, medicines or doses, treatment, operations, mental health, addiction or recovery, pregnancy, sexual or reproductive health, disability, weight as a medical matter
 - money: income, salary, savings, debt, benefits, unemployment, tax, bank, card or account details
 - credentials: passwords, PINs, door, alarm, safe or lock codes, wifi keys, logins, security answers, API keys or tokens
-- other_people: anything about a person other than the user
+- other_people: private details about a person other than the user: their health, money, home address, contact details, relationships or break-ups, a death, a secret, trouble with the law, drugs or drink. An everyday fact about someone - what they like, their job, their hobbies, the town they live in - is NOT sensitive.
 - special: sexuality or sex life, religion, politics or union membership, ethnicity, immigration status, arrests, courts or criminal records
 - location: a home or precise address, or routines that show where someone is or when a home is empty
 - identity: passport, ID, tax or health-service numbers, a date of birth with the year, phone numbers, email addresses
@@ -3058,14 +3096,14 @@ def classify(text: str, *, context="", use_model: bool = True, ask: Optional[Cal
                                                       if isinstance(c, str)]
     ctx = [c for c in ctx if c.strip()]
     pats = patterns(text)
+    each = [dict(pats)] + [patterns(c) for c in ctx]
     # The card names the fact's own topic; only when the fact itself is
     # clean does it name the topic of the words it came from. Each text's
     # topic is worked out on its own, so "someone else's" is said only when
     # another person is in the same sentence.
     reason = reason_for(pats["categories"], special=pats["special"],
                         other_person=_someone_else(pats)) if pats["sensitive"] else ""
-    for c in ctx:
-        p = patterns(c)
+    for p in each[1:]:
         if p["sensitive"] and not reason:
             reason = reason_for(p["categories"], special=p["special"],
                                 other_person=_someone_else(p))
@@ -3079,6 +3117,25 @@ def classify(text: str, *, context="", use_model: bool = True, ask: Optional[Cal
     layers = {"patterns": pats, "model": {"asked": False, "answer": None, "category": "",
                                           "failure": "not asked"}}
     cats = list(pats["categories"])
+    # EVERYDAY_OTHER (the owner's decision of 2026-09-26): the patterns found
+    # only WHO a text is about - "my sister likes jazz" - and nothing private
+    # about them. Then the local model decides, told that an everyday fact
+    # about someone is not sensitive; only its clear "not sensitive" saves
+    # it. Without the model (use_model=False, the tests' pattern-only runs)
+    # it stays flagged, as before.
+    everyday = bool(cats) and all(p["everyday_other"] or not p["sensitive"] for p in each)
+    pats["everyday_other"] = everyday
+    if everyday and use_model:
+        m = ask_model(text, " ".join(ctx), ask=ask, ollama=ollama, model=model, timeout=timeout)
+        layers["model"] = m
+        if m["answer"] is False:
+            return {"sensitive": False, "categories": [], "reason": "", "layers": layers}
+        cat = m["category"] if m["answer"] is True and m["category"] in CATEGORIES else ""
+        if cat and cat != "other_people":
+            return {"sensitive": True, "categories": [cat], "layers": layers,
+                    "reason": reason_for([cat], other_person=True)}
+        return {"sensitive": True, "categories": ["other_people"], "layers": layers,
+                "reason": reason_for(["other_people"])}
     if use_model and not (short_circuit and cats):
         m = ask_model(text, " ".join(ctx), ask=ask, ollama=ollama, model=model, timeout=timeout)
         layers["model"] = m
