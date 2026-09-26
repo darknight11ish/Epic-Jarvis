@@ -38,6 +38,28 @@ fun buildVersionCode(): Int =
     providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.trim()
         ?.toIntOrNull()?.takeIf { it in 1..2_100_000_000 } ?: 1
 
+/**
+ * The version people see (Android's app info, and About in the app): the one
+ * version number Jarvis shares across the desktop, the phone and the backend,
+ * read from the VERSION file at the top of the repository (0.2.0), with the
+ * last part replaced by this build's number on CI - the same shape as the
+ * desktop installer's version (desktop-release.yml). So a CI build reads
+ * "0.2.57", and a build made anywhere else reads what VERSION says. Through
+ * `providers`, so the configuration cache knows it depends on the file.
+ */
+fun buildVersionName(): String {
+    val base = providers.fileContents(layout.projectDirectory.file("../../VERSION"))
+        .asText.orNull?.trim().orEmpty()
+    val parts = base.split(".")
+    if (parts.size != 3 || parts.any { it.toIntOrNull() == null }) {
+        throw GradleException(
+            "VERSION at the top of the repository must be major.minor.patch, not '$base'")
+    }
+    val run = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.trim()
+        ?.toIntOrNull()?.takeIf { it in 1..2_100_000_000 }
+    return if (run != null) "${parts[0]}.${parts[1]}.$run" else base
+}
+
 /** When [gitSha]'s commit was made, in seconds since 1970, or 0 when git cannot say. */
 fun gitCommitTime(): Long = runCatching {
     providers.exec {
@@ -57,11 +79,10 @@ android {
         minSdk = 33
         targetSdk = 36
         versionCode = buildVersionCode()
-        // Not "step0" any more. The name is cosmetic - versionCode above is
-        // what Android compares - but a version string naming a step this
-        // app passed long ago is one more thing quietly asserting something
-        // untrue.
-        versionName = "0.1"
+        // Cosmetic - versionCode above is what Android compares - but it is
+        // the number the owner reads in About and quotes in a bug report, so
+        // it is the shared version (buildVersionName), not a fixed "0.1".
+        versionName = buildVersionName()
 
         // There was no instrumentation runner, so there was nowhere to put a
         // test that actually starts the app. That is the gap that let a crash
@@ -194,7 +215,12 @@ android {
     }
 
     packaging {
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        // Two libraries each carry these licence copies at the same path, and
+        // an APK holds only one file per path. They used to be EXCLUDED,
+        // which left the APK with no copy at all; now the first one is kept.
+        // The full notices (every library, with the Apache text) are in
+        // assets/licenses/NOTICES.txt, shown under FAQ -> About.
+        resources { pickFirsts += "/META-INF/{AL2.0,LGPL2.1}" }
         // Compressed in the APK and unpacked at install, rather than stored
         // uncompressed: ONNX Runtime's library is ~15 MB per ABI raw and
         // ~7 MB compressed, and a sideloaded APK's download size is the one

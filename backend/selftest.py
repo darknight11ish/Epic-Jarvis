@@ -1662,11 +1662,24 @@ def run_preflight(live: Live, *, only=None, out=print) -> tuple:
     return n[PASS], n[FAIL], n[WARN], n[SKIP], rows
 
 
+def jarvis_version() -> str:
+    """The one version number Jarvis shares across the desktop app, the phone
+    app and these backend files: VERSION at the top of this copy of the
+    repository (the one apply-patches.ps1 installed from). "unknown" when
+    the file is missing or not major.minor.patch."""
+    try:
+        v = (HERE.parent / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "unknown"
+    return v if re.fullmatch(r"\d+\.\d+\.\d+", v) else "unknown"
+
+
 def preflight_main(argv) -> int:
     print("Preflight: the Jarvis that is running now, every chain end to end.")
     print("Read-only: it approves nothing, sends no email, unloads no model and")
     print("changes no setting. The pairing token is used, never shown.")
-    print(f"\nbackend : {BACKEND}")
+    print(f"\nversion : {jarvis_version()} (this copy of the Jarvis files)")
+    print(f"backend : {BACKEND}")
     live = Live(with_reads="--with-reads" in argv, with_chat="--with-chat" in argv)
     print(f"jarvis  : {live.base}")
     _p, failed, _w, _s, _rows = run_preflight(live)
@@ -1681,7 +1694,8 @@ def preflight_main(argv) -> int:
 
 def main() -> int:
     print(__doc__.split("WHY THIS EXISTS")[0].strip())
-    print(f"\nbackend : {BACKEND}")
+    print(f"\nversion : {jarvis_version()} (this copy of the Jarvis files)")
+    print(f"backend : {BACKEND}")
     print(f"python  : {sys.version.split()[0]}  ({sys.executable})")
 
     if stage_files() and stage_imports():

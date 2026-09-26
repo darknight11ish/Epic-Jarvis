@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -388,7 +389,8 @@ private fun AboutCard() {
         )
         Spacer(Modifier.height(12.dp))
         AboutFact("Version", BuildConfig.VERSION_NAME)
-        AboutFact("License", "MIT — see LICENSE in the source")
+        AboutFact("Made by", "darknight11ish")
+        AboutFact("Licence", "MIT, with third-party parts under their own licences")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Source",
@@ -412,6 +414,34 @@ private fun AboutCard() {
                     context.startActivity(intent)
                 }),
             )
+        }
+        // The parts this app is built from, and their licences - required
+        // with every copy by several of them (MIT, BSD, Apache), and the
+        // wake-word models' non-commercial terms. Read from the APK's own
+        // assets/licenses/NOTICES.txt, only when opened.
+        var showNotices by rememberSaveable { mutableStateOf(false) }
+        Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Notices",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+                modifier = Modifier.width(64.dp),
+            )
+            Text(
+                if (showNotices) "Hide the third-party notices" else "Read the third-party notices",
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalAccent.current,
+                modifier = Modifier.pressable(onClick = { showNotices = !showNotices }),
+            )
+        }
+        if (showNotices) {
+            val notices = remember {
+                runCatching {
+                    context.assets.open("licenses/NOTICES.txt").bufferedReader().use { it.readText() }
+                }.getOrElse { "The notices could not be read from this copy of the app." }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(notices, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
     }
 }

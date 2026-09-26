@@ -444,3 +444,10 @@ jobs:
         with:
           tool: cargo-deny
       - run: cargo deny check licenses advisories
+      # THIRD-PARTY-NOTICES.txt must name every Rust library the Windows
+      # build ships, with its copyright lines (DEPS audit B-22). After adding
+      # or updating a crate: python3 tools/gen_notices.py, and commit the file.
+      - name: Third-party notices are up to date
+        run: |
+          cargo fetch --locked
+          python3 ../../tools/gen_notices.py --check

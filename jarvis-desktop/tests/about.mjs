@@ -23,7 +23,7 @@ const VIEW = { width: 760, height: 1400 };
 const open = (data = {}) => K.open(browser, base, "settings.html", data, VIEW);
 const aboutCard = (page) => page.locator(".card", { hasText: "About Jarvis" });
 
-await check("the About card is present with version, license, and source", async () => {
+await check("the About card is present with version, maker, licence, source and notices", async () => {
   const page = await open();
   const card = aboutCard(page);
   // textContent, not innerText: `dt` is styled uppercase for display, and
@@ -31,7 +31,7 @@ await check("the About card is present with version, license, and source", async
   const facts = await card.locator(".about-fact dt").evaluateAll(
     (els) => els.map((el) => el.textContent.trim()));
   await page.close();
-  assert.deepEqual(facts, ["Version", "License", "Source"]);
+  assert.deepEqual(facts, ["Version", "Made by", "Licence", "Source", "Notices"]);
 });
 
 await check("the version shown is the real running version, not a placeholder", async () => {
@@ -56,17 +56,41 @@ await check("the version updates again after a manual check finds something newe
   assert.equal(version, "1.0.0");
 });
 
-await check("the license names the file it comes from, not a bare claim", async () => {
+await check("the licence names the file it comes from, and says other parts keep theirs", async () => {
   const page = await open();
-  const text = await aboutCard(page).locator(".about-fact", { hasText: "License" }).innerText();
+  const text = await aboutCard(page).locator(".about-fact", { hasText: "Licence" }).innerText();
   await page.close();
   assert.match(text, /MIT/);
   assert.match(text, /LICENSE/);
+  assert.match(text, /third-party parts under their own licences/);
+});
+
+await check("the maker is darknight11ish (owner, 2026-09-26), not an invented company", async () => {
+  const page = await open();
+  const text = await aboutCard(page).locator(".about-fact", { hasText: "Made by" }).innerText();
+  await page.close();
+  assert.match(text, /darknight11ish/);
+});
+
+await check("the notices open externally, and the installed copy is named", async () => {
+  const page = await open();
+  const fact = aboutCard(page).locator(".about-fact", { hasText: "Notices" });
+  const link = fact.locator("a[data-external]");
+  const href = await link.getAttribute("href");
+  const text = await fact.innerText();
+  await link.click();
+  await page.waitForTimeout(150);
+  const calls = await page.evaluate(() => window.__calls || []);
+  await page.close();
+  assert.match(href, /^https:\/\/github\.com\/darknight11ish\/Epic-Jarvis\/.*THIRD-PARTY-NOTICES\.txt$/);
+  assert.ok(calls.some((c) => c[0] === "open_external_url" && c[1]?.url === href),
+    `open_external_url was not invoked with ${href}: ${JSON.stringify(calls)}`);
+  assert.match(text, /THIRD-PARTY-NOTICES\.txt/);
 });
 
 await check("the source link opens externally, never inside the WebView", async () => {
   const page = await open();
-  const link = aboutCard(page).locator("a[data-external]");
+  const link = aboutCard(page).locator(".about-fact", { hasText: "Source" }).locator("a[data-external]");
   const href = await link.getAttribute("href");
   await link.click();
   await page.waitForTimeout(150);
@@ -92,7 +116,7 @@ await check("no NEW page error while About renders", async () => {
   // 'enabled')" on load in this harness, in every scenario, independent of
   // this section - see tests/faq.mjs's identical guard.
   const page = await open();
-  await aboutCard(page).locator("a[data-external]").click();
+  await aboutCard(page).locator("a[data-external]").first().click();
   const errors = page.__errors.filter(
     (e) => !/Cannot read properties of null \(reading 'enabled'\)/.test(e));
   await page.close();
