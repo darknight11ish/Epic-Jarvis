@@ -125,6 +125,8 @@ const dom = {
   backendState: $("backend-state"),
   backendTech: $("backend-tech"),
   backendDetail: $("backend-detail"),
+  findPython: $("find-python"),
+  findPythonStatus: $("find-python-status"),
 
   autostart: $("autostart"),
   autostartNote: $("autostart-note"),
@@ -411,6 +413,23 @@ dom.startBackend.addEventListener("click", () =>
 
 dom.stopBackend.addEventListener("click", () =>
   act(dom.stopBackend, dom.backendStatus, () => invoke("stop_backend"))
+);
+
+// "Find it for me" (ease-of-use audit row 19). Read-only: it never saves
+// anything and never touches the on/off switch above - the owner still
+// checks the box and presses Save, same as if they had typed the path
+// themselves. Filling the field here is safe against the 5-second poll:
+// paintBackend() only overwrites the fields on the page's first load
+// (`fields: true` at boot, above), never on its later ticks.
+dom.findPython.addEventListener("click", () =>
+  act(dom.findPython, dom.findPythonStatus, async () => {
+    const result = await invoke("find_python");
+    if (result.found) {
+      dom.program.value = result.path;
+      return `Found Python ${result.version}, from ${result.source}. Check it, then press Save.`;
+    }
+    return result.hint || "Couldn't find a working Python on this PC.";
+  })
 );
 
 /* ==========================================================================
