@@ -81,6 +81,8 @@ THIRD_PARTY = {
 INDIRECT = {
     "tzdata": "the standard library's zoneinfo reads it on Windows, which has no "
               "time-zone data of its own (jarvis_calendar.py's event times)",
+    "sherpa-onnx-core": "sherpa-onnx loads it (its native library); named so the "
+                        "hash-locked requirements.lock holds it on every platform",
 }
 
 # Files in backend/ that are NOT shipped, on purpose. Tools run from this
@@ -377,11 +379,41 @@ def t_check_backend_knows_what_will_be_copied_in():
           "rebuilt" in s and "_where.py" in s, "it should read SHIPPED from backend/_where.py")
 
 
+def t_the_packages_are_pinned_with_hashes():
+    """backend/requirements.lock (feasibility audit I111, first half,
+    2026-09-26): every package requirements.txt asks for is pinned with ==
+    and a sha256, so pip's hash-checking mode can install it. Offline; CI's
+    python-advisories job also asks PyPI about advisories for every pin."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import check_python_advisories as C
+    pins, problems = C.check_lock()
+    check("requirements.lock: every requirement pinned, every pin hashed",
+          pins and not problems, problems)
+    names = {n for n, _v in pins}
+    check("... sherpa-onnx's native library is in it (its Windows files need it)",
+          "sherpa-onnx-core" in names)
+    # The checker itself, on made-up input: it must catch what pip would refuse.
+    _e, bad = C.lock_entries("foo==1.0 \\\n    --hash=sha256:" + "a" * 64 + "\n"
+                             "bar==2.0\nbaz>=3\n")
+    check("the lock check catches a pin without a hash and a line without ==",
+          any("bar==2.0 has no --hash" in b for b in bad)
+          and any("not pinned" in b for b in bad), bad)
+    fake = {"vulnerabilities": [
+        {"id": "GHSA-x", "aliases": ["CVE-1"], "fixed_in": ["1.1"], "withdrawn": None},
+        {"id": "GHSA-y", "withdrawn": "2026-01-01T00:00:00"}]}
+    got = C.advisories("foo", "1.0", fetch=lambda url: fake)
+    check("an advisory is reported, a withdrawn one is not",
+          [v["id"] for v in got] == ["GHSA-x"], got)
+    check("the advisory request carries a generic User-Agent, nothing of the owner's",
+          "@" not in C.USER_AGENT and "jarvis" not in C.USER_AGENT.lower())
+
+
 if __name__ == "__main__":
     for fn in (t_the_two_lists_are_one_list, t_every_entry_exists, t_every_module_here_is_shipped,
                t_every_import_is_accounted_for, t_the_exemptions_are_real,
                t_no_patch_edits_a_shipped_file, t_the_settings_file_search_matches_the_backend,
-               t_the_settings_diff_reports_what_differs, t_check_backend_knows_what_will_be_copied_in):
+               t_the_settings_diff_reports_what_differs, t_check_backend_knows_what_will_be_copied_in,
+               t_the_packages_are_pinned_with_hashes):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

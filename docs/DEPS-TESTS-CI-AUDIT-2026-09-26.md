@@ -78,6 +78,9 @@ installer you hand out.
 
 ### Backend (`backend/requirements.txt`: **no versions are pinned**, so each install gets the newest)
 
+(Since 2026-09-26 `backend/requirements.lock` pins them all with hashes, and CI checks it for
+advisories; the install does not use it yet - "Python packages pinned with hashes" below.)
+
 | Dependency | Where | Pinned | Latest (PyPI) | Licence (PyPI metadata) | Advisories on latest | OK? |
 |---|---|---|---|---|---|---|
 | numpy | requirements.txt:17 | no | 2.5.3 | BSD-3 AND 0BSD AND MIT AND Zlib AND CC0 | 0 | Yes |
@@ -262,6 +265,66 @@ changes, or by hand.
   fixture used by backend, Rust and phone), the approval row shape
   (test_approval_contract.py fixture), and the Credential Manager token
   store (live on Windows).
+
+### Python packages pinned with hashes (I111, first half - done 2026-09-26, install switch NOT made)
+
+**Done.**
+- `backend/requirements.lock`: every package in `requirements.txt` and
+  everything they pull in, at one exact version, each with the sha256 of
+  every file PyPI has for it. Windows and Linux, Python 3.10 and newer
+  (numpy and onnxruntime get a different version per Python version - the
+  lock says which). Made with `uv pip compile --universal --generate-hashes
+  --exclude-newer 2026-09-19` - the 7-day wait: no release younger than a
+  week. The hashes came from uv, never typed. The command is at the top of
+  the file.
+- `sherpa-onnx-core` is now named in `requirements.txt`. sherpa-onnx's
+  Windows and Linux files need it, but not every sherpa-onnx file says so,
+  and the first lock left it out - found when the lock was tried for
+  Windows, not guessed.
+- Checked here: uv installed the lock, hash-checked, for Windows (Python
+  3.12 and 3.13) and Linux (3.12); real pip installed it in hash-checking
+  mode on Linux (Python 3.11), every package imported, and `pip check`
+  found no conflict. NOT checked: a real install on Windows (there is no
+  Windows here).
+- `tools/check_python_advisories.py` and CI job `python-advisories` (next to
+  `cargo deny`): the lock pins everything with a hash, and no pinned
+  release, on any platform the lock covers, has an advisory in PyPI's own
+  database (the one pip-audit reads). Today: 52 pinned lines, 0 advisories.
+  `pip-audit` itself was not used: it only checks the lines that match the
+  machine it runs on, so the Windows-only packages would be skipped.
+- `backend/test_shipped_modules.py` checks the lock offline on every run.
+
+**Not done, on purpose: `apply-patches.ps1` still installs from
+`requirements.txt`, unpinned.** Installing the lock changes packages that
+are already on your PC to the locked versions, and some of them are shared
+with things this repository does not install. One clash is certain if you
+have the better voice (f5-tts): it uses `transformers`, whose 4.x versions
+need `huggingface-hub` below 1.0 and `tokenizers` at most 0.23.0
+(PyPI metadata for transformers 4.57.1), while the lock pins
+huggingface-hub 1.32.0 and tokenizers 0.23.2 (for fastembed). Your PC's
+installed versions were not checked from here, so switching blind could
+break the better voice.
+
+**The plan, in order:**
+1. You run one line on the PC that installs NOTHING (the second half
+   downloads to pip's cache to work out what would change) and send
+   back the two files it writes:
+   `py -3 -m pip freeze > "$env:USERPROFILE\Desktop\jarvis-pip-freeze.txt"; py -3 -m pip install --dry-run --require-hashes -r backend\requirements.lock > "$env:USERPROFILE\Desktop\jarvis-lock-dry-run.txt" 2>&1; Write-Host "Two files are on your Desktop: jarvis-pip-freeze.txt and jarvis-lock-dry-run.txt"`
+   (run it from the folder this repository is cloned into).
+2. From that: either the lock can be installed as it is, or the backend
+   gets its own Python environment (a "venv", a private copy of Python's
+   package folder just for Jarvis) so its pins cannot touch f5-tts's.
+3. Then `apply-patches.ps1` installs with
+   `pip install --require-hashes -r backend\requirements.lock`, and says in
+   plain words what changed.
+4. Once a month (or when a package is added): make the lock again with the
+   command at its top, and let CI's advisory check pass. Pins that are never
+   updated rot the other way - stuck on old, vulnerable versions.
+
+CI's own backend job still installs its four packages (numpy, sherpa-onnx,
+onnxruntime, cryptography) unpinned: installing the whole lock there would
+also bring fastembed and change which memory tests run, which needs its own
+CI round trip to check.
 
 ## Could not check
 
