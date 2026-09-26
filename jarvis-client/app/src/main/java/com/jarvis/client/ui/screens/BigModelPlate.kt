@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.BigModel
+import com.jarvis.client.ui.parts.FormattedAnswer
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.Plate
@@ -400,9 +401,13 @@ private fun DeepJobRow(job: BigModel.DeepJob, open: Boolean, onToggle: () -> Uni
         if (answer != null) {
             Quiet(if (open) "Hide the answer" else "Show the answer", onClick = onToggle)
             if (open) {
+                // UI-AUDIT-2026-09-26 item 5: the same formatting the chat
+                // reply uses (ui/parts/AnswerFormat.kt) - this is model
+                // output too, and a link's real address matters just as much
+                // in a deep answer as in a chat one.
                 BigModel.paragraphs(answer).forEachIndexed { index, paragraph ->
                     if (index > 0) Gap(10)
-                    Text(paragraph, style = MaterialTheme.typography.bodyLarge, color = chrome.textHi)
+                    FormattedAnswer(paragraph, style = MaterialTheme.typography.bodyLarge, color = chrome.textHi)
                 }
                 Gap(4)
             }

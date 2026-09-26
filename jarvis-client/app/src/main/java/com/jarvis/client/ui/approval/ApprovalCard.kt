@@ -119,6 +119,17 @@ fun ApprovalCard(
     var showAmend by rememberSaveable(item.id) { mutableStateOf(false) }
     var amendText by rememberSaveable(item.id) { mutableStateOf("") }
     var amendSending by remember(item.id) { mutableStateOf(false) }
+    // UI-AUDIT-2026-09-26 item 6: set the instant either button is tapped,
+    // and never cleared - this same composable keeps running, with this same
+    // `remember`, for as long as the card is on screen INCLUDING while it is
+    // sliding away once `item` leaves the list below (Compose keeps a
+    // removed lazy-list item's composition alive to animate its exit). So
+    // this one flag also covers "a tap during the exit animation can't fire
+    // twice or hit the wrong target" - the decision itself is already safe
+    // either way (JarvisRuntime.decide re-checks the pending list right
+    // before sending), but the buttons should look answered the moment they
+    // are, not just be safe if pressed again.
+    var decided by remember(item.id) { mutableStateOf(false) }
 
     val expiry = item.expiresAtMs
     // One state change, at the deadline - not one a second.
@@ -159,10 +170,12 @@ fun ApprovalCard(
     // not a composable context - can call them without one.
     val haptics = LocalHapticFeedback.current
     val approve: () -> Unit = {
+        decided = true
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
         onApprove()
     }
     val deny: () -> Unit = {
+        decided = true
         haptics.performHapticFeedback(HapticFeedbackType.Reject)
         onDeny()
     }
@@ -188,7 +201,7 @@ fun ApprovalCard(
     // decision of EITHER kind could be sent, and only the completed drag
     // decides which direction is honoured.
     val swipeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
-    val swipeModifier = if (canDecide && item.swipeable) {
+    val swipeModifier = if (canDecide && item.swipeable && !decided) {
         Modifier.pointerInput(item.id) {
             detectHorizontalDragGestures(
                 onDragEnd = {
@@ -476,8 +489,8 @@ fun ApprovalCard(
         // docs/ARCHITECTURE.md §3). It is also where this card's swipe goes:
         // right approves, left denies.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Refuse(CardWords.BUTTONS[0], enabled = canDecide, onClick = deny)
-            Affirm(CardWords.BUTTONS[1], enabled = canApprove, onClick = approve)
+            Refuse(CardWords.BUTTONS[0], enabled = canDecide && !decided, onClick = deny)
+            Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
         }
         if (showFooter) {
             Spacer(Modifier.height(8.dp))
