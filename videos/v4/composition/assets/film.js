@@ -205,7 +205,8 @@
 
       // 2: focus
       appear($("focus-run"), t, H.focusCard, { d: 0.45, dy: 60, e: E.back });
-      appear($("in-front"), t, H.distract - 0.15, { d: 0.2, dy: 0, s0: 1.4, e: E.expo });
+      // the real card, running on target, then off target the moment YouTube is in front
+      appear($("focus-drift"), t, H.distract - 0.1, { d: 0.12, dy: 0 });
       slam($("focus-rep"), t, H.report, { from: 1.25, d: 0.35 });
       appear($("tl-focus"), t, H.focusCard + 0.4, { d: 0.3, dy: 10 });
 

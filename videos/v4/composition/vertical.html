@@ -37,21 +37,21 @@
         </section>
         <section id="s2" class="clip" data-start="1.2" data-duration="2.8" data-track-index="3">
           <div class="tl" id="tl-focus"><i>WATCHES THE PC ONLY</i><br />KEEPS COUNTS, NEVER WHAT IT SAW</div>
-          <div class="chip" id="in-front">IN FRONT ▸ YOUTUBE</div>
           <img class="shot" id="focus-run" src="assets/ui/focus-running.png" alt="" />
+          <img class="shot" id="focus-drift" src="assets/ui/focus-drifting.png" alt="" />
           <img class="shot" id="focus-rep" src="assets/ui/focus-report.png" alt="" />
         </section>
         <section id="s3" class="clip" data-start="4" data-duration="2.3" data-track-index="3">
           <div class="tl" id="tl-tell"><i>ONE YES TO SET UP</i><br />RINGS UNTIL YOU LOOK · NEVER REPLIES</div>
           <img class="shot" id="tell-card" src="assets/ui/tellme-card.png" alt="" />
           <div class="chip" id="tell-ok">✓ APPROVED</div>
-          <!-- Redrawn Android phone. The notification's words are jarvis-client's own:
+          <!-- Redrawn Android phone, unlocked (a locked phone shows only "Jarvis: something you asked
+               to be told about happened."). The notification's words are jarvis-client's own:
                Schedule.kt TELLME_TITLE "Tell me when", the backend's "An email from Alex arrived."
                and ScheduleNotifier.kt's "Stop" action on the "Alarms and urgent alerts" channel. -->
           <div class="phone" id="phone-t">
             <div class="ringw" id="ring-a"></div><div class="ringw" id="ring-b"></div>
             <div class="scr"><div class="sb"><span>12:30</span><i class="cam"></i><span>▾ ▮</span></div>
-              <div class="clock">12:30</div>
               <div class="notif" id="notif-t"><div class="app"><b>Jarvis</b> · Alarms and urgent alerts</div>
                 <div class="ti">Tell me when</div><div class="tx">An email from Alex arrived.</div><div class="act">Stop</div></div>
             </div>
@@ -67,7 +67,7 @@
         </section>
         <section id="s5" class="clip" data-start="8" data-duration="3.2" data-track-index="3">
           <div class="center-x line mach"><div class="gt glow-ink" id="asks" data-text="IT STILL ASKS FIRST."></div></div>
-          <div class="chip" id="ready-mail">READY · EMAIL SENDING IS OFF UNTIL YOU TURN IT ON</div>
+          <div class="chip" id="ready-mail">READY · SENDING IS OFF UNTIL YOU TURN IT ON</div>
           <img class="shot" id="mail-card" src="assets/ui/email-card.png" alt="" />
           <!-- Android's own fingerprint sheet (BiometricGate.kt): the card's title, then its "why"
                (email-send.patch's risk line). Fingerprint or PIN is the default. -->

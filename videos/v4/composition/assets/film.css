@@ -68,7 +68,7 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 #tl-net { top: 198px; font-size: 27px; color: var(--dim); }
 
 /* ---------- 2: focus ---------- */
-#focus-run { left: 110px; top: 280px; width: 820px; }
+#focus-run, #focus-drift { left: 110px; top: 280px; width: 820px; }
 #focus-rep { left: 990px; top: 330px; width: 820px; }
 #in-front { position: absolute; left: 110px; top: 204px; color: var(--rose); opacity: 0; }
 #tl-focus { top: 150px; }
@@ -85,14 +85,14 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 .phone .sb { position: absolute; left: 30px; right: 28px; top: 16px; display: flex; justify-content: space-between; font: 500 17px var(--body); color: var(--dim); }
 .phone .sb .cam { position: absolute; left: 50%; top: 0; width: 15px; height: 15px; margin-left: -7px; border-radius: 50%; background: #000; box-shadow: 0 0 0 2px #1a2330; }
 .phone .clock { position: absolute; left: 0; right: 0; top: 90px; text-align: center; font: 600 88px var(--mach); color: var(--ink); }
-.notif { position: absolute; left: 14px; right: 14px; top: 250px; padding: 16px 18px 14px; border-radius: 22px; background: #1b2530; border: 1.5px solid rgba(255, 182, 72, 0.6); opacity: 0; }
+.notif { position: absolute; left: 14px; right: 14px; top: 64px; padding: 16px 18px 14px; border-radius: 22px; background: #1b2530; border: 1.5px solid rgba(255, 182, 72, 0.6); opacity: 0; }
 .notif .app { font: 500 15px var(--body); color: var(--dim); }
 .notif .app b { color: var(--amber); font-weight: 400; }
 .notif .ti { margin-top: 8px; font: 600 24px var(--mach); color: var(--ink); }
 .notif .tx { margin-top: 4px; font: 400 20px var(--body); color: var(--ink); }
 .notif .act { margin-top: 14px; display: inline-block; padding: 8px 22px; border-radius: 18px; background: rgba(255, 182, 72, 0.18); color: var(--amber); font: 600 18px var(--body); }
 .ringw { position: absolute; left: 50%; top: 50%; width: 560px; height: 560px; margin: -280px 0 0 -280px; border-radius: 50%; border: 3px solid var(--amber); opacity: 0; }
-#phone-t { left: 1330px; top: 130px; }
+#phone-t { left: 1380px; top: 220px; }
 #phone-s { left: 1400px; top: 170px; }
 .redbtn { position: absolute; left: 30px; right: 30px; top: 470px; padding: 26px 0; border-radius: 22px; background: #d9364b; color: #fff; text-align: center; font: 600 30px var(--mach); }
 .redhint { position: absolute; left: 30px; right: 30px; top: 580px; font: 400 17px/1.4 var(--body); color: var(--dim); text-align: center; }
@@ -172,3 +172,4 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 #vignette { background: radial-gradient(ellipse 75% 70% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.6)); pointer-events: none; }
 #flash { background: #eaf6ff; opacity: 0; pointer-events: none; }
 #fade { background: #000; opacity: 0; pointer-events: none; }
+.phone .scr { background: radial-gradient(ellipse at 50% 70%, #173049, #0a1420 60%, #070b11); }

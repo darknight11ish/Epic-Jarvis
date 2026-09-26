@@ -38,13 +38,13 @@ FINGERPRINT = '''<svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="54" class
                   <g class="print"><path d="M40 74c0-14 9-24 20-24s20 10 20 24" /><path d="M47 82c-1-4-1-8-1-10 0-9 6-15 14-15s14 6 14 15c0 5-1 9-3 13" />
                   <path d="M54 88c-1-5-1-11-1-15 0-5 3-8 7-8s7 3 7 8c0 7-1 12-3 16" /><path d="M60 72c0 7 0 13-2 19" /><path d="M34 62c4-12 14-20 26-20s22 8 26 20" /></g></svg>'''
 
-PHONE_TELL = '''          <!-- Redrawn Android phone. The notification's words are jarvis-client's own:
+PHONE_TELL = '''          <!-- Redrawn Android phone, unlocked (a locked phone shows only "Jarvis: something you asked
+               to be told about happened."). The notification's words are jarvis-client's own:
                Schedule.kt TELLME_TITLE "Tell me when", the backend's "An email from Alex arrived."
                and ScheduleNotifier.kt's "Stop" action on the "Alarms and urgent alerts" channel. -->
           <div class="phone" id="phone-t">
             <div class="ringw" id="ring-a"></div><div class="ringw" id="ring-b"></div>
             <div class="scr"><div class="sb"><span>12:30</span><i class="cam"></i><span>▾ ▮</span></div>
-              <div class="clock">12:30</div>
               <div class="notif" id="notif-t"><div class="app"><b>Jarvis</b> · Alarms and urgent alerts</div>
                 <div class="ti">Tell me when</div><div class="tx">An email from Alex arrived.</div><div class="act">Stop</div></div>
             </div>
@@ -157,9 +157,9 @@ def land():
         <!-- 2: focus -->
         <section id="s2" class="clip" data-start="5.5" data-duration="4" data-track-index="3">
           <div class="tl" id="tl-focus"><i>WATCHES THE PC ONLY</i> · KEEPS COUNTS, NEVER WHAT IT SAW</div>
-          <div class="chip" id="in-front">IN FRONT ▸ YOUTUBE</div>
           <!-- Real captures: Brain › Work › "Focus session" (brain.js), running, then its report card. -->
           <img class="shot" id="focus-run" src="assets/ui/focus-running.png" alt="" />
+          <img class="shot" id="focus-drift" src="assets/ui/focus-drifting.png" alt="" />
           <img class="shot" id="focus-rep" src="assets/ui/focus-report.png" alt="" />
         </section>
 
@@ -179,7 +179,7 @@ def land():
         <!-- 5: and it still asks first -->
         <section id="s5" class="clip" data-start="15" data-duration="4" data-track-index="3">
           <div class="center-x line mach"><div class="gt glow-ink" id="asks" data-text="AND IT STILL ASKS FIRST."></div></div>
-          <div class="chip" id="ready-mail">READY · EMAIL SENDING IS OFF UNTIL YOU TURN IT ON</div>
+          <div class="chip" id="ready-mail">READY · SENDING IS OFF UNTIL YOU TURN IT ON</div>
           <!-- Real capture: the quick-ask approval card, its text from jarvis_email_send.describe(). -->
           <img class="shot" id="mail-card" src="assets/ui/email-card.png" alt="" />
 ''' + HELLO + '''          <div class="chip" id="approved">✓ APPROVED</div>
@@ -248,8 +248,8 @@ def tall():
         </section>
         <section id="s2" class="clip" data-start="1.2" data-duration="2.8" data-track-index="3">
           <div class="tl" id="tl-focus"><i>WATCHES THE PC ONLY</i><br />KEEPS COUNTS, NEVER WHAT IT SAW</div>
-          <div class="chip" id="in-front">IN FRONT ▸ YOUTUBE</div>
           <img class="shot" id="focus-run" src="assets/ui/focus-running.png" alt="" />
+          <img class="shot" id="focus-drift" src="assets/ui/focus-drifting.png" alt="" />
           <img class="shot" id="focus-rep" src="assets/ui/focus-report.png" alt="" />
         </section>
         <section id="s3" class="clip" data-start="4" data-duration="2.3" data-track-index="3">
@@ -262,7 +262,7 @@ def tall():
 ''' + KEYS + TOAST + '''        </section>
         <section id="s5" class="clip" data-start="8" data-duration="3.2" data-track-index="3">
           <div class="center-x line mach"><div class="gt glow-ink" id="asks" data-text="IT STILL ASKS FIRST."></div></div>
-          <div class="chip" id="ready-mail">READY · EMAIL SENDING IS OFF UNTIL YOU TURN IT ON</div>
+          <div class="chip" id="ready-mail">READY · SENDING IS OFF UNTIL YOU TURN IT ON</div>
           <img class="shot" id="mail-card" src="assets/ui/email-card.png" alt="" />
 ''' + PHONE_FINGER + '''          <div class="chip" id="approved">✓ APPROVED</div>
           <div class="tl" id="tl-asks"><i>FINGERPRINT OR PIN</i> · NO “ALWAYS ALLOW”</div>

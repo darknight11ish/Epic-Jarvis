@@ -10,8 +10,7 @@ body.tall #hud-tc { display: none; }
 body.tall #s0 .line { bottom: auto; top: 1260px; font-size: 118px; }
 
 body.tall #tl-focus, body.tall #tl-tell, body.tall #tl-stop { top: 200px; }
-body.tall #in-front { left: 70px; top: 330px; font-size: 30px; }
-body.tall #focus-run { left: 70px; top: 420px; width: 940px; }
+body.tall #focus-run, body.tall #focus-drift { left: 70px; top: 360px; width: 940px; }
 body.tall #focus-rep { left: 70px; top: 900px; width: 940px; }
 
 body.tall #tell-card { left: 50px; top: 330px; width: 980px; }
