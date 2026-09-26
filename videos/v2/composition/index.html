@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Jarvis v2: It Learns</title>
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script src="assets/audio-data.js"></script>
+    <script src="assets/reactor.js" charset="utf-8"></script>
+    <style>
+      @font-face { font-family: "Chakra Petch"; font-weight: 500; src: url("assets/fonts/chakra-petch-500.woff2") format("woff2"); }
+      @font-face { font-family: "Chakra Petch"; font-weight: 600; src: url("assets/fonts/chakra-petch-600.woff2") format("woff2"); }
+      @font-face { font-family: "Chakra Petch"; font-weight: 700; src: url("assets/fonts/chakra-petch-700.woff2") format("woff2"); }
+      @font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url("assets/fonts/ibm-plex-mono-400.woff2") format("woff2"); }
+      @font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url("assets/fonts/ibm-plex-mono-500.woff2") format("woff2"); }
+      @font-face { font-family: "IBM Plex Sans"; font-weight: 400; src: url("assets/fonts/ibm-plex-sans-400.woff2") format("woff2"); }
+
+      :root {
+        --void: #04070c; --plate: #0a1119; --plate2: #0e1822; --line: #17293a; --line-hot: #22405a;
+        --ink: #dbe7f2; --dim: #8fa3b8; --dimmer: #5c7085;
+        --ice: #6fe3ff; --ember: #ff9b52; --amber: #ffb648; --violet: #ae7bff; --verdant: #5fe0a8; --rose: #ff7b86;
+        --mach: "Chakra Petch", sans-serif; --mono: "IBM Plex Mono", monospace; --body: "IBM Plex Sans", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--void); color: var(--ink); font-family: var(--body); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--void); }
+      .layer { position: absolute; inset: 0; }
+      .clip { position: absolute; inset: 0; }
+
+      #bg {
+        background:
+          radial-gradient(ellipse 60% 55% at 50% 48%, rgba(46, 168, 204, 0.07), transparent 70%),
+          linear-gradient(rgba(34, 64, 90, 0.16) 1px, transparent 1px) 0 0 / 80px 80px,
+          linear-gradient(90deg, rgba(34, 64, 90, 0.16) 1px, transparent 1px) 0 0 / 80px 80px,
+          var(--void);
+      }
+      #hero-wrap { position: absolute; left: 460px; top: 40px; width: 1000px; height: 1000px; }
+      #hero { display: block; width: 1000px; height: 1000px; }
+
+      /* ---------- type ---------- */
+      .mach { font-family: var(--mach); font-weight: 700; text-transform: uppercase; letter-spacing: -0.01em; line-height: 0.95; }
+      .mono { font-family: var(--mono); font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }
+      .gt { position: relative; display: block; }
+      .gt > span { display: block; white-space: nowrap; }
+      .gt > .gr, .gt > .gb { position: absolute; inset: 0; mix-blend-mode: screen; }
+      .gt > .gr { color: #ff6a86; transform: translateX(var(--gr, 0px)); }
+      .gt > .gb { color: #22d3ee; transform: translateX(var(--gb, 0px)); }
+      .gt > .gm { position: relative; }
+      .center-x { position: absolute; left: 0; right: 0; display: flex; justify-content: center; }
+      .glow-ink { text-shadow: 0 0 40px rgba(111, 227, 255, 0.25); }
+      .top-line { top: 118px; font-size: 100px; }
+      .tag-line { position: absolute; left: 0; right: 0; text-align: center; font: 500 24px var(--mono); letter-spacing: 0.26em; color: var(--dim); }
+      .right-col { position: absolute; left: 1060px; top: 250px; display: flex; flex-direction: column; gap: 8px; font-size: 150px; }
+      .left-col { position: absolute; left: 130px; top: 330px; display: flex; flex-direction: column; gap: 8px; }
+
+      /* scene 2-3 */
+      #s2 .line { bottom: 120px; font-size: 150px; }
+      #room { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: visible; }
+      #s3t .col { position: absolute; left: 130px; top: 250px; font-size: 132px; line-height: 1.04; display: flex; flex-direction: column; gap: 14px; }
+      .tag { position: absolute; left: 1290px; top: 540px; width: 0; height: 0; }
+      .tag > b { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); padding: 10px 18px; border: 1.5px solid var(--ice); background: rgba(10, 17, 25, 0.9); color: var(--ice); font: 500 24px var(--mono); letter-spacing: 0.16em; white-space: nowrap; }
+      #room-label { position: absolute; left: 1290px; top: 955px; width: 0; }
+      #room-label > b { position: absolute; transform: translateX(-50%); white-space: nowrap; color: var(--dim); font: 500 22px var(--mono); letter-spacing: 0.3em; }
+
+      /* scene 4: it learns you */
+      #said { position: absolute; left: 1060px; top: 660px; width: 740px; padding: 24px 28px; border: 1.5px solid var(--line-hot); background: rgba(6, 10, 16, 0.86); font: 400 32px var(--mono); line-height: 1.35; }
+      #said .who { display: block; color: var(--ember); font-size: 20px; letter-spacing: 0.26em; margin-bottom: 8px; }
+
+      /* scene 5: proposal */
+      #prop { position: absolute; left: 560px; top: 380px; width: 800px; padding: 34px 40px 32px; border-radius: 26px; background: var(--plate2); border: 2px solid rgba(174, 123, 255, 0.7); box-shadow: 0 0 80px rgba(174, 123, 255, 0.18), 0 40px 120px rgba(0, 0, 0, 0.7); }
+      #prop .kick { font: 500 20px var(--mono); letter-spacing: 0.22em; color: var(--violet); }
+      #prop .title { margin-top: 16px; font: 600 60px var(--mach); color: var(--ink); }
+      #prop .sum { margin-top: 10px; font: 400 26px var(--body); color: var(--dim); }
+      #prop .btns { margin-top: 30px; display: flex; gap: 16px; }
+      #prop .btns span { flex: 1; text-align: center; padding: 18px 0; border-radius: 16px; font: 600 30px var(--mach); }
+      #prop .ok { background: var(--verdant); color: #04130c; }
+      #prop .no { border: 1.5px solid var(--line-hot); color: var(--dim); }
+      #tap { position: absolute; left: 700px; top: 700px; width: 70px; height: 70px; border-radius: 50%; background: rgba(255, 255, 255, 0.28); border: 3px solid rgba(255, 255, 255, 0.9); }
+      #mem-chip { position: absolute; right: 150px; bottom: 150px; padding: 12px 20px; border: 1.5px solid var(--verdant); color: var(--verdant); font: 500 24px var(--mono); letter-spacing: 0.2em; background: rgba(6, 16, 12, 0.9); }
+
+      /* scene 6: memory timeline */
+      #tl { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+      .axis { position: absolute; left: 220px; top: 760px; width: 1480px; height: 2px; background: var(--line-hot); transform-origin: 0 50%; }
+      .tick { position: absolute; top: 776px; width: 0; }
+      .tick b { position: absolute; transform: translateX(-50%); white-space: nowrap; color: var(--dim); font: 500 22px var(--mono); letter-spacing: 0.2em; }
+      .tick i { position: absolute; left: -1px; top: -24px; width: 2px; height: 16px; background: var(--line-hot); }
+      .fact { position: absolute; height: 64px; display: flex; align-items: center; padding: 0 22px; font: 500 28px var(--mono); letter-spacing: 0.04em; white-space: nowrap; border-radius: 10px; transform-origin: 0 50%; }
+      #f-old { left: 220px; top: 540px; width: 1480px; background: rgba(46, 168, 204, 0.16); border: 1.5px solid var(--ice); color: var(--ice); }
+      #f-new { left: 1330px; top: 630px; width: 370px; background: rgba(95, 224, 168, 0.16); border: 1.5px solid var(--verdant); color: var(--verdant); }
+      #f-x { position: absolute; left: 1330px; top: 540px; width: 0; }
+      #f-x b { position: absolute; transform: translate(-50%, -6px); white-space: nowrap; color: var(--rose); font: 500 20px var(--mono); letter-spacing: 0.2em; top: -32px; }
+      #f-x i { position: absolute; left: -2px; top: 0; width: 4px; height: 64px; background: var(--rose); box-shadow: 0 0 16px var(--rose); }
+      #scrub { position: absolute; left: 1700px; top: 470px; width: 0; height: 330px; }
+      #scrub i { position: absolute; left: -2px; top: 0; width: 4px; height: 330px; background: var(--amber); box-shadow: 0 0 20px var(--amber); }
+      #scrub b { position: absolute; left: 14px; top: -6px; white-space: nowrap; color: var(--amber); font: 500 24px var(--mono); letter-spacing: 0.2em; }
+      #then { position: absolute; left: 720px; top: 440px; color: var(--amber); font: 500 24px var(--mono); letter-spacing: 0.22em; }
+
+      /* scene 7: voice */
+      #train { position: absolute; left: 1060px; top: 640px; width: 740px; }
+      #train .lbl { font: 500 22px var(--mono); letter-spacing: 0.26em; color: var(--dim); }
+      #train .bar { margin-top: 14px; height: 12px; background: var(--plate2); border: 1px solid var(--line-hot); }
+      #train .bar i { display: block; width: 100%; height: 100%; background: var(--ember); transform-origin: 0 50%; box-shadow: 0 0 18px var(--ember); }
+      .vrow { margin-top: 22px; padding: 16px 22px; border: 1.5px solid currentColor; font: 500 30px var(--mono); letter-spacing: 0.14em; display: flex; justify-content: space-between; }
+
+      /* scene 8: smart turn */
+      #turn-line { position: absolute; left: 0; right: 0; top: 440px; display: flex; justify-content: center; gap: 26px; font: 600 104px var(--mach); white-space: nowrap; }
+      #turn-b { color: var(--ember); }
+      .tpill { position: absolute; left: 0; right: 0; top: 620px; display: flex; justify-content: center; }
+      .tpill b { padding: 14px 26px; border: 2px solid currentColor; border-radius: 40px; font: 500 28px var(--mono); letter-spacing: 0.2em; }
+
+      /* scene 9: phone */
+      .left-col .big { font-size: 140px; }
+      .left-col .mid { font-size: 118px; }
+      .left-col .sub { margin-top: 28px; color: var(--dim); font: 500 28px var(--mono); letter-spacing: 0.26em; }
+      #phone { position: absolute; left: 1250px; top: 95px; width: 440px; height: 900px; border-radius: 64px; background: #0b1016; border: 2px solid #2a3a4a; box-shadow: 0 0 0 10px #05080c, 0 40px 120px rgba(0, 0, 0, 0.8), 0 0 90px rgba(255, 182, 72, 0.12); }
+      #phone .screen { position: absolute; inset: 14px; border-radius: 52px; background: #05070b; overflow: hidden; }
+      #phone .notch { position: absolute; left: 50%; top: 14px; width: 120px; height: 30px; margin-left: -60px; border-radius: 20px; background: #000; }
+      #phone .link { position: absolute; left: 30px; right: 30px; top: 64px; display: flex; align-items: center; gap: 12px; font: 500 20px var(--mono); letter-spacing: 0.12em; color: var(--amber); }
+      #phone .link i { width: 12px; height: 12px; border-radius: 50%; background: currentColor; display: block; }
+      #phone-face { position: absolute; left: 61px; top: 104px; width: 290px; height: 290px; }
+      #card { position: absolute; left: 22px; right: 22px; top: 420px; padding: 24px 24px 22px; border-radius: 22px; background: var(--plate2); border: 1.5px solid rgba(255, 182, 72, 0.55); }
+      #card .kick { font: 500 16px var(--mono); letter-spacing: 0.2em; color: var(--amber); }
+      #card .title { margin-top: 12px; font: 600 32px var(--mach); color: var(--ink); }
+      #card .sum { margin-top: 6px; font: 400 19px var(--body); color: var(--dim); }
+      #card .risk { margin-top: 16px; font: 400 17px var(--body); color: var(--ink); line-height: 1.35; }
+      #card .risk b { color: var(--verdant); font-weight: 400; margin-right: 6px; }
+      #card .exp { margin-top: 14px; font: 500 19px var(--mono); color: var(--amber); letter-spacing: 0.04em; }
+      #card .btns { margin-top: 18px; display: flex; gap: 12px; }
+      #card .btns span { flex: 1; text-align: center; padding: 13px 0; border-radius: 14px; font: 600 21px var(--mach); }
+      #card .ok { background: var(--verdant); color: #04130c; }
+      #card .no { border: 1.5px solid var(--line-hot); color: var(--dim); }
+      #approved { position: absolute; left: 0; right: 0; top: 540px; display: flex; justify-content: center; }
+      #approved b { padding: 16px 30px; border-radius: 40px; border: 2px solid var(--verdant); color: var(--verdant); font: 600 30px var(--mach); letter-spacing: 0.04em; }
+      #finger { position: absolute; left: 1330px; top: 745px; width: 64px; height: 64px; border-radius: 50%; background: rgba(255, 255, 255, 0.28); border: 3px solid rgba(255, 255, 255, 0.85); }
+
+      /* scene 10: interrupt */
+      #reply { position: absolute; left: 240px; right: 240px; bottom: 100px; padding: 26px 34px; border: 1.5px solid var(--line-hot); background: rgba(6, 10, 16, 0.86); font: 400 36px var(--mono); color: var(--ink); letter-spacing: 0.01em; }
+      #reply .who { color: var(--ice); margin-right: 18px; }
+      #reply .cut { color: var(--rose); margin-left: 14px; font-size: 24px; letter-spacing: 0.2em; }
+      #s10b .line { top: 300px; font-size: 290px; }
+      #s10c .line { bottom: 110px; font-size: 92px; }
+      #speech-tag { position: absolute; left: 0; right: 0; top: 118px; text-align: center; color: var(--dim); font: 500 24px var(--mono); letter-spacing: 0.3em; }
+
+      /* scenes 11-13: the rack */
+      .slot { position: absolute; left: 1060px; width: 700px; height: 150px; border: 2px dashed var(--line-hot); border-radius: 16px; }
+      #slot1 { top: 300px; }
+      #slot2 { top: 480px; }
+      .slot > b { position: absolute; left: 24px; top: 58px; color: var(--dim); font: 500 22px var(--mono); letter-spacing: 0.3em; }
+      .gpu { position: absolute; left: 1060px; width: 700px; height: 150px; border-radius: 16px; background: linear-gradient(90deg, #0d1620, #121f2c); border: 2px solid var(--ice); box-shadow: 0 0 40px rgba(111, 227, 255, 0.2); display: flex; align-items: center; gap: 26px; padding: 0 30px; }
+      .gpu .fan { width: 96px; height: 96px; border-radius: 50%; border: 3px solid rgba(111, 227, 255, 0.55); background: repeating-conic-gradient(rgba(111, 227, 255, 0.35) 0 12deg, transparent 12deg 40deg); }
+      .gpu .spec { margin-left: auto; text-align: right; }
+      .gpu .spec b { display: block; font: 700 42px var(--mach); color: var(--ink); }
+      .gpu .spec i { display: block; font: 500 20px var(--mono); font-style: normal; letter-spacing: 0.24em; color: var(--dim); }
+      #gpu1 { top: 300px; }
+      #gpu2 { top: 480px; border-color: var(--violet); box-shadow: 0 0 50px rgba(174, 123, 255, 0.3); }
+      #gpu2 .fan { border-color: rgba(174, 123, 255, 0.6); background: repeating-conic-gradient(rgba(174, 123, 255, 0.4) 0 12deg, transparent 12deg 40deg); }
+      .status { position: absolute; left: 0; right: 0; top: 236px; display: flex; justify-content: center; }
+      .status b { padding: 8px 18px; border: 1.5px solid currentColor; font: 500 22px var(--mono); letter-spacing: 0.24em; }
+      .tiles { position: absolute; left: 1060px; top: 660px; width: 700px; display: flex; flex-direction: column; gap: 8px; }
+      #tiles > div { padding: 9px 20px; border: 1.5px solid var(--violet); background: rgba(20, 12, 36, 0.85); color: var(--ink); font: 500 24px var(--mono); letter-spacing: 0.14em; display: flex; align-items: center; gap: 14px; }
+      #tiles > div > i { width: 10px; height: 10px; border-radius: 50%; background: var(--violet); box-shadow: 0 0 10px var(--violet); display: block; }
+      .choice { display: flex; align-items: center; gap: 18px; padding: 14px 20px; border: 1.5px solid var(--line-hot); background: rgba(6, 10, 16, 0.9); }
+      .choice b { flex: 0 0 330px; font: 600 27px var(--mach); white-space: nowrap; color: var(--ink); text-transform: uppercase; }
+      .choice .mb { flex: 1; height: 14px; background: var(--plate2); border: 1px solid var(--line-hot); position: relative; }
+      .choice .mb i { position: absolute; inset: 0; background: var(--ice); transform-origin: 0 50%; }
+      .choice .mb.two i { background: var(--violet); }
+
+      /* scene 14 */
+      #scrim { background: radial-gradient(ellipse 48% 42% at 50% 50%, rgba(4, 7, 12, 0.78), rgba(4, 7, 12, 0.2) 70%, transparent); }
+      .outro-stack { position: absolute; left: 0; right: 0; top: 262px; display: flex; flex-direction: column; align-items: center; gap: 20px; font-size: 150px; }
+      #wordmark { position: absolute; left: 0; right: 0; top: 880px; text-align: center; color: var(--ice); font: 500 34px var(--mono); letter-spacing: 1.1em; padding-left: 1.1em; }
+
+      /* ---------- HUD ---------- */
+      #hud { pointer-events: none; }
+      .br { position: absolute; width: 64px; height: 64px; overflow: visible; }
+      .br path { fill: none; stroke: rgba(219, 231, 242, 0.55); stroke-width: 3; }
+      .br.tl { left: 40px; top: 40px; }
+      .br.tr { right: 40px; top: 40px; }
+      .br.bl { left: 40px; bottom: 40px; }
+      .br.brr { right: 40px; bottom: 40px; }
+      .hud-t { position: absolute; font: 500 19px var(--mono); letter-spacing: 0.2em; color: var(--dim); white-space: nowrap; }
+      #hud-tl { left: 64px; top: 56px; }
+      #hud-tl2 { left: 64px; top: 86px; }
+      #hud-tr { right: 64px; top: 56px; text-align: right; }
+      #hud-tr i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 12px; vertical-align: 1px; }
+      #hud-bl { left: 64px; bottom: 58px; }
+      #hud-br { right: 64px; bottom: 58px; }
+
+      #scan { background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px); opacity: 0.35; pointer-events: none; }
+      #vignette { background: radial-gradient(ellipse 75% 70% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.6)); pointer-events: none; }
+      #flash { background: #eaf6ff; opacity: 0; pointer-events: none; }
+      #fade { background: #000; opacity: 0; pointer-events: none; }
+      #grain-overlay .grain-texture {
+        position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+        background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+        opacity: 0.13;
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <filter id="rgbsplit" x="-4%" y="-4%" width="108%" height="108%" color-interpolation-filters="sRGB">
+        <feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r" />
+        <feOffset id="rgb-r" in="r" dx="0" dy="0" result="ro" />
+        <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g" />
+        <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b" />
+        <feOffset id="rgb-b" in="b" dx="0" dy="0" result="bo" />
+        <feBlend in="ro" in2="g" mode="screen" result="rg" />
+        <feBlend in="rg" in2="bo" mode="screen" />
+      </filter>
+    </svg>
+
+    <div id="root" data-composition-id="jarvis-brag-v2" data-start="0" data-width="1920" data-height="1080" data-duration="35">
+      <div id="camera" class="layer">
+        <div id="push" class="layer">
+          <div id="punch" class="layer">
+            <div id="shake" class="layer">
+              <div id="bg" class="layer"></div>
+
+              <div
+                id="flare-host"
+                data-composition-id="vfx-anamorphic-flare"
+                data-composition-src="compositions/vfx-anamorphic-flare.html"
+                data-variable-values='{"tint":"#8a7bff","backdrop":"#04070c","intensity":9,"streakLength":1.8,"emitters":90,"timeScale":0.6}'
+                style="filter: grayscale(1) sepia(0.7) hue-rotate(208deg) saturate(3.2) brightness(1.05)"
+                data-start="30"
+                data-duration="5"
+                data-track-index="1"
+                data-width="1920"
+                data-height="1080"
+              ></div>
+
+              <section id="s3" class="clip" data-start="3.5" data-duration="2" data-track-index="2">
+                <svg id="room" viewBox="0 0 1920 1080">
+                  <circle id="room-ring" cx="1290" cy="540" r="390" fill="none" stroke="#6fe3ff" stroke-width="3" stroke-opacity="0.8" />
+                  <circle id="room-ring2" cx="1290" cy="540" r="404" fill="none" stroke="#6fe3ff" stroke-width="1" stroke-opacity="0.3" stroke-dasharray="4 14" />
+                </svg>
+              </section>
+
+              <!-- The reactor: jarvis-desktop/src/faces.html, drawn every frame. -->
+              <div id="hero-wrap"><canvas id="hero" width="1400" height="1400"></canvas></div>
+
+              <section id="s2" class="clip" data-start="2" data-duration="1.5" data-track-index="3">
+                <div class="center-x line mach"><div class="gt glow-ink" id="hey" data-text="&quot;Hey Jarvis.&quot;"></div></div>
+              </section>
+
+              <section id="s3t" class="clip" data-start="3.5" data-duration="2" data-track-index="3">
+                <div class="tag" id="tag0"><b>EMAIL</b></div>
+                <div class="tag" id="tag1"><b>FILES</b></div>
+                <div class="tag" id="tag2"><b>MEMORY</b></div>
+                <div class="tag" id="tag3"><b>KEYS</b></div>
+                <div id="room-label"><b>THE ROOM = YOUR PC</b></div>
+                <div class="col mach">
+                  <div class="gt" id="n1" data-text="NOTHING"></div>
+                  <div class="gt" id="n2" data-text="LEAVES"></div>
+                  <div class="gt" id="n3" data-text="THE ROOM."></div>
+                </div>
+              </section>
+
+              <!-- 4: it learns you -->
+              <section id="s4" class="clip" data-start="5.5" data-duration="2" data-track-index="3">
+                <div class="right-col mach" id="learns">
+                  <div class="gt" data-text="IT LEARNS"></div>
+                  <div class="gt" style="color: var(--violet)" data-text="YOU."></div>
+                </div>
+                <div id="said"><span class="who">YOU ▸ SAID</span><span id="said-text"></span></div>
+              </section>
+
+              <!-- 5: only what you accept -->
+              <section id="s5" class="clip" data-start="7.5" data-duration="2.5" data-track-index="3">
+                <div class="center-x line mach top-line"><div class="gt glow-ink" id="accept" data-text="Only what you accept."></div></div>
+                <div id="prop">
+                  <div class="kick">JARVIS LEARNED · WAITING FOR YOU</div>
+                  <div class="title">You run on Tuesdays.</div>
+                  <div class="sum">From something you said. Not in memory yet.</div>
+                  <div class="btns"><span class="ok">Keep</span><span class="no">Forget</span></div>
+                </div>
+                <div id="tap"></div>
+                <div id="mem-chip">MEMORY +1</div>
+              </section>
+
+              <!-- 6: it remembers what changed -->
+              <section id="s6" class="clip" data-start="10" data-duration="3" data-track-index="3">
+                <div class="center-x line mach top-line"><div class="gt glow-ink" id="changed" data-text="It remembers what changed."></div></div>
+                <div id="tl">
+                  <div class="axis" id="axis"></div>
+                  <div class="tick" style="left: 220px"><i></i><b>JUN</b></div>
+                  <div class="tick" style="left: 590px"><i></i><b>JUL</b></div>
+                  <div class="tick" style="left: 960px"><i></i><b>AUG</b></div>
+                  <div class="tick" style="left: 1330px"><i></i><b>SEP</b></div>
+                  <div class="tick" style="left: 1700px"><i></i><b>NOW</b></div>
+                  <div class="fact" id="f-old">You run on Mondays</div>
+                  <div class="fact" id="f-new">…on Tuesdays</div>
+                  <div id="f-x"><i></i><b>RETIRED · KEPT</b></div>
+                  <div id="then">AS OF JULY ▸ WHAT IT BELIEVED THEN</div>
+                  <div id="scrub"><i></i><b>AS OF</b></div>
+                </div>
+                <div class="tag-line" style="top: 880px">BI-TEMPORAL MEMORY · NOTHING IS DELETED</div>
+              </section>
+
+              <!-- 7: it learns your voice -->
+              <section id="s7" class="clip" data-start="13" data-duration="2.5" data-track-index="3">
+                <div class="right-col mach" id="voice">
+                  <div class="gt" style="font-size: 130px" data-text="IT LEARNS"></div>
+                  <div class="gt" style="font-size: 130px; color: var(--ember)" data-text="YOUR VOICE."></div>
+                </div>
+                <div id="train">
+                  <div class="lbl">TRAIN MY VOICE ▸ A PRINT PER MICROPHONE</div>
+                  <div class="bar"><i id="train-fill"></i></div>
+                  <div class="vrow" id="v-owner" style="color: var(--verdant)"><span>OWNER</span><span>MATCH ✓</span></div>
+                  <div class="vrow" id="v-other" style="color: var(--rose)"><span>SOMEONE ELSE</span><span>NOT YOU ✗</span></div>
+                </div>
+              </section>
+
+              <!-- 8: it waits while you think -->
+              <section id="s8" class="clip" data-start="15.5" data-duration="1.5" data-track-index="3">
+                <div class="center-x line mach top-line"><div class="gt glow-ink" id="waits" data-text="It waits while you think."></div></div>
+                <div id="turn-line"><span id="turn-a">"Lock the…</span><span id="turn-b">…garage door."</span></div>
+                <div class="tpill" id="p-paused" style="color: var(--amber)"><b>PAUSED · NOT FINISHED</b></div>
+                <div class="tpill" id="p-done" style="color: var(--verdant)"><b>FINISHED ✓</b></div>
+                <div class="tag-line" style="top: 900px">SMART TURN · FINISHED, OR ONLY PAUSED?</div>
+              </section>
+
+              <!-- 9: it asks before it acts -->
+              <section id="s9" class="clip" data-start="17" data-duration="2" data-track-index="3">
+                <div class="left-col mach" id="asks">
+                  <div class="gt big" data-text="IT ASKS"></div>
+                  <div class="gt big" style="color: var(--amber)" data-text="BEFORE"></div>
+                  <div class="gt big" style="color: var(--amber)" data-text="IT ACTS."></div>
+                </div>
+                <div id="phone-rig">
+                  <div id="phone">
+                    <div class="screen">
+                      <div class="notch"></div>
+                      <div class="link" id="phone-link" data-layout-allow-occlusion><i></i><span id="phone-link-text">Waiting on you</span></div>
+                      <canvas id="phone-face" width="360" height="360"></canvas>
+                      <div id="approved"><b>✓ Approved</b></div>
+                      <div id="card">
+                        <div class="kick">APPROVAL · SMART HOME</div>
+                        <div class="title">Lock the garage door</div>
+                        <div class="sum">Home Assistant · garage door</div>
+                        <div class="risk"><b>↔</b>Swipe right to approve, left to deny — it closes the door.</div>
+                        <div class="exp" id="expires">Expires in 0m 47s</div>
+                        <div class="btns"><span class="ok">Approve</span><span class="no">Deny</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div id="finger"></div>
+              </section>
+
+              <!-- 10: interrupt -->
+              <section id="s10" class="clip" data-start="19" data-duration="1.9" data-track-index="3">
+                <div id="speech-tag">SPEECH UNDERSTOOD ON YOUR PC</div>
+                <div id="reply"><span class="who">JARVIS ▸</span><span id="reply-text"></span><span id="reply-cut" class="cut">[INTERRUPTED]</span></div>
+              </section>
+              <section id="s10b" class="clip" data-start="20" data-duration="1" data-track-index="4">
+                <div class="center-x line mach"><div class="gt" id="stop" data-text="&quot;STOP.&quot;"></div></div>
+              </section>
+              <section id="s10c" class="clip" data-start="20.4" data-duration="1.6" data-track-index="3">
+                <div class="center-x line mach"><div class="gt glow-ink" id="interrupt" data-text="Interrupt it mid-sentence."></div></div>
+              </section>
+
+              <!-- 11-13: it scales -->
+              <section id="s11" class="clip" data-start="22" data-duration="8" data-track-index="2">
+                <div class="slot" id="slot1" data-layout-allow-occlusion><b data-layout-allow-occlusion>SLOT 1</b></div>
+                <div class="slot" id="slot2" data-layout-allow-occlusion><b id="empty-lbl" data-layout-allow-occlusion>EMPTY SLOT</b></div>
+                <div class="gpu" id="gpu1"><div class="fan"></div><div class="fan"></div><div class="spec"><b>8 GB</b><i>TODAY'S CARD</i></div></div>
+                <div class="gpu" id="gpu2"><div class="fan"></div><div class="fan"></div><div class="spec"><b>2ND CARD</b><i>DETECTED ▸ SWITCHES ON</i></div></div>
+                <div class="tiles" id="tiles">
+                  <div><i></i>LONGER CONVERSATIONS</div>
+                  <div><i></i>PICTURES</div>
+                  <div><i></i>BACKGROUND LEARNING</div>
+                  <div><i></i>BROWSER CONTROL</div>
+                  <div><i></i>DEEP QUESTIONS · BIG MODEL</div>
+                </div>
+                <div class="tiles" id="choices">
+                  <div class="choice"><b>Fastest answers</b><div class="mb"><i id="c1a"></i></div><div class="mb two"><i id="c1b"></i></div></div>
+                  <div class="choice"><b>Smartest answers</b><div class="mb"><i id="c2a"></i></div><div class="mb two"><i id="c2b"></i></div></div>
+                  <div class="choice"><b>Most features</b><div class="mb"><i id="c3a"></i></div><div class="mb two"><i id="c3b"></i></div></div>
+                </div>
+              </section>
+              <section id="s11t" class="clip" data-start="22" data-duration="2" data-track-index="3">
+                <div class="center-x line mach" style="top: 132px; font-size: 86px"><div class="gt glow-ink" id="today" data-text="Today: one graphics card."></div></div>
+                <div class="status" style="color: var(--verdant)"><b>TODAY</b></div>
+              </section>
+              <section id="s12t" class="clip" data-start="24" data-duration="3" data-track-index="3">
+                <div class="center-x line mach" style="top: 132px; font-size: 86px"><div class="gt glow-ink" id="ready" data-text="Ready for a second card."></div></div>
+                <div class="status" style="color: var(--violet)"><b>READY · BUILT, SWITCHED OFF UNTIL THE HARDWARE IS THERE</b></div>
+              </section>
+              <section id="s13t" class="clip" data-start="27" data-duration="3" data-track-index="3">
+                <div class="center-x line mach" style="top: 132px; font-size: 86px"><div class="gt glow-ink" id="next" data-text="Next: any 8 GB card. Up to two."></div></div>
+                <div class="status" style="color: var(--amber)"><b>NEXT · IN DESIGN</b></div>
+              </section>
+
+              <!-- 14: your rules -->
+              <section id="s14" class="clip" data-start="30" data-duration="5" data-track-index="6">
+                <div id="scrim" class="layer"></div>
+                <div class="outro-stack mach">
+                  <div class="gt glow-ink" id="o1" data-text="YOUR ASSISTANT."></div>
+                  <div class="gt glow-ink" id="o2" data-text="YOUR PC."></div>
+                  <div class="gt glow-ink" id="o3" style="color: #c7b8ff" data-text="YOUR RULES."></div>
+                </div>
+                <div id="wordmark">JARVIS</div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="scan" class="layer"></div>
+      <!-- registry: grain-overlay -->
+      <div id="grain-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100">
+        <div class="grain-texture"></div>
+      </div>
+      <div id="vignette" class="layer"></div>
+      <!-- HUD: attribute-drawn brackets and text-at-time readouts (telemetry-hud technique). -->
+      <div id="hud" class="layer">
+        <svg class="br tl" viewBox="0 0 64 64"><path d="M2 62 L2 2 L62 2" /></svg>
+        <svg class="br tr" viewBox="0 0 64 64"><path d="M2 2 L62 2 L62 62" /></svg>
+        <svg class="br bl" viewBox="0 0 64 64"><path d="M2 2 L2 62 L62 62" /></svg>
+        <svg class="br brr" viewBox="0 0 64 64"><path d="M2 62 L62 62 L62 2" /></svg>
+        <div class="hud-t" id="hud-tl">JARVIS // LOCAL-FIRST · V2</div>
+        <div class="hud-t" id="hud-tl2"></div>
+        <div class="hud-t" id="hud-tr"><i id="hud-dot"></i><span id="hud-state"></span></div>
+        <div class="hud-t" id="hud-bl"></div>
+        <div class="hud-t" id="hud-br"></div>
+      </div>
+      <div id="flash" class="layer"></div>
+      <div id="fade" class="layer"></div>
+
+      <audio id="score" src="assets/music/score.mp3" data-start="0" data-duration="35" data-track-index="20" data-volume="1"></audio>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+        var H = window.TIMING.hits;
+        var AD = window.AUDIO_DATA;
+        var R = window.REACTOR;
+        var FPS = 30;
+        // Render every tween on the seek that reaches it (the capture engine
+        // screenshots before a deferred first render would land).
+        gsap.defaults({ lazy: false });
+        var tl = gsap.timeline({ paused: true });
+
+        /* ---------- glitch-text copies (rgb-glitch-text structure) ---------- */
+        Array.prototype.forEach.call(document.querySelectorAll(".gt[data-text]"), function (el) {
+          var s = el.getAttribute("data-text");
+          ["gr", "gb", "gm"].forEach(function (c) {
+            var sp = document.createElement("span");
+            sp.className = c; sp.textContent = s; el.appendChild(sp);
+          });
+          el.style.setProperty("--gr", "0px"); el.style.setProperty("--gb", "0px");
+          // The red/cyan copies sit exactly under the solid copy by design.
+          el.setAttribute("data-layout-allow-overlap", "");
+          Array.prototype.forEach.call(el.children, function (c) { c.setAttribute("data-layout-allow-overlap", ""); });
+        });
+
+        /* ---------- deterministic helpers ---------- */
+        function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+        function audioAt(t) { var i = clamp(Math.floor(t * AD.fps), 0, AD.low.length - 1); return { low: AD.low[i], rms: AD.rms[i] }; }
+        var GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&*+?<>/";
+        function hashi(n) { n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); return (n ^ (n >>> 16)) >>> 0; }
+        function scramble(text, t0, dur, t, seed) {
+          if (t < t0) return "";
+          var k = clamp((t - t0) / dur, 0, 1);
+          if (k >= 1) return text;
+          var lock = Math.floor(k * text.length), frame = Math.floor(t * FPS), out = "";
+          for (var i = 0; i < text.length; i++) {
+            var ch = text.charAt(i);
+            if (ch === " " || i < lock) out += ch;
+            else out += GLYPHS.charAt(hashi(seed * 977 + i * 131 + frame * 7919) % GLYPHS.length);
+          }
+          return out;
+        }
+        function setAll(el, s) { var c = el.children; for (var i = 0; i < c.length; i++) c[i].textContent = s; }
+        function typed(text, t0, dur, t) { return text.slice(0, Math.floor(clamp((t - t0) / dur, 0, 1) * text.length)); }
+        var el = function (id) { return document.getElementById(id); };
+
+        /* ---------- the reactor schedule: [start, face, state, hardCut] ---------- */
+        var HERO = [
+          [0.0, "arc", "standby", 1], [1.0, "arc", "idle", 0], [H.hey, "arc", "listening", 1], [H.nothing, "arc", "idle", 1],
+          [H.learns, "geodesic", "thinking", 1], [H.propose, "arc", "thinking", 1],
+          [H.voice, "arc", "listening", 1], [H.turn, "arc", "listening", 0],
+          [H.reply, "arc", "speaking", 1], [H.stop, "arc", "idle", 1],
+          [H.today, "arc", "idle", 1], [H.ready, "spiral", "thinking", 1], [H.next, "fullerene", "idle", 1],
+          [H.outro, "arc", "thinking", 1]
+        ];
+        function segIndex(t) { var k = 0; for (var i = 0; i < HERO.length; i++) { if (t >= HERO[i][0]) k = i; else break; } return k; }
+        function heroPhase(t) {
+          var ph = 0, sp = null, dt = 1 / 120;
+          for (var x = 0; x < t; x += dt) {
+            var s = HERO[segIndex(x)];
+            var target = R.speedOf(s[1], s[2]);
+            if (x < 2) target *= 1 + 5 * Math.exp(-x / 0.45);
+            if (sp === null) sp = target;
+            sp += (target - sp) * Math.min(1, dt / 0.22);
+            ph += sp * Math.min(dt, t - x);
+          }
+          return ph;
+        }
+        function micAmp(t) { return clamp(0.3 + 0.6 * Math.abs(Math.sin(t * 6.7)) * (0.55 + 0.45 * Math.sin(t * 2.3 + 1)), 0, 1); }
+        function voiceAmp(t) { return clamp(0.25 + 0.6 * Math.pow(Math.abs(Math.sin(t * 8.9) * Math.sin(t * 3.1 + 0.4)), 0.7), 0, 1); }
+        function ampFor(state, t) {
+          if (state === "listening") return (t >= H.paused && t < H.resume) ? 0.12 : micAmp(t);   // the owner has paused
+          return state === "speaking" ? voiceAmp(t) : 0.2;
+        }
+        function colourAt(i, t) {
+          var s = HERO[i], c = R.colours(s[2], t, ampFor(s[2], t));
+          if (!s[3] && i > 0) {
+            var k = (t - s[0]) / 0.3;
+            if (k < 1) { var p = R.colours(HERO[i - 1][2], t, ampFor(HERO[i - 1][2], t)), e = k * k * (3 - 2 * k); c = { a: R.mix(p.a, c.a, e), b: R.mix(p.b, c.b, e) }; }
+          }
+          return c;
+        }
+        var heroCv = el("hero"), surfaces = {};
+        R.faces.forEach(function (f) { surfaces[f.id] = R.surface(heroCv, f.id); });
+        var phoneS = R.surface(el("phone-face"), "arc");
+        function clearCanvas(s) { s.g.setTransform(1, 0, 0, 1, 0, 0); s.g.clearRect(0, 0, s.canvas.width, s.canvas.height); }
+
+        /* ---------- HUD text ---------- */
+        var CONTEXT = [
+          [0, "HOST ▸ YOUR PC"], [H.hey, "VOICEPRINT ▸ OWNER MATCH"], [H.nothing, "PRIVATE ▸ EMAIL · FILES · MEMORY · KEYS"],
+          [H.learns, "LEARNER ▸ READS WHAT YOU SAID"], [H.propose, "MEMORY ▸ NOTHING KEPT WITHOUT YOU"],
+          [H.timeline, "MEMORY ▸ AS OF ANY PAST DATE"], [H.voice, "VOICE ▸ TRAINED ON YOUR PC"],
+          [H.turn, "SMART TURN ▸ FINISHED, OR ONLY PAUSED?"], [H.phone, "APPROVAL ▸ REQUIRED · NEVER AUTOMATIC"],
+          [H.reply, "SPEECH ▸ UNDERSTOOD ON YOUR PC"], [H.today, "HARDWARE ▸ ONE CARD TODAY"],
+          [H.ready, "SECOND CARD ▸ BUILT · SWITCHED OFF"], [H.next, "HARDWARE PROFILES ▸ IN DESIGN"], [H.outro, "JARVIS ▸ YOUR ASSISTANT"]
+        ];
+        var STATE_LABEL = { standby: "STANDBY", idle: "IDLE", listening: "LISTENING", thinking: "THINKING", speaking: "SPEAKING", approval: "WAITING ON YOU" };
+        var hudTl2 = el("hud-tl2"), hudState = el("hud-state"), hudDot = el("hud-dot"), hudBl = el("hud-bl"), hudBr = el("hud-br");
+        var nLines = [el("n1"), el("n2"), el("n3")];
+        var saidText = el("said-text"), replyText = el("reply-text"), replyCut = el("reply-cut");
+        var expires = el("expires"), phoneLinkText = el("phone-link-text"), phoneLink = el("phone-link");
+        var SAID = "\"I've started running on Tuesdays.\"";
+        var REPLY = "Done, the garage door is locked. And for your Tuesday run, the";
+        var grain = document.querySelector("#grain-overlay .grain-texture");
+
+        function render(t) {
+          var a = audioAt(t);
+          var si = segIndex(t), seg = HERO[si], state = seg[2];
+          var heroOn = t < H.phone || t >= H.reply;
+          if (heroOn) {
+            var active = state !== "idle" && state !== "standby";
+            var s = surfaces[seg[1]];
+            clearCanvas(s);
+            R.draw(s, { t: t, phase: heroPhase(t), state: state, amp: ampFor(state, t), beat: a.low * 0.8,
+                        col: colourAt(si, t), glow: (active ? 0.3 : 0.18) + a.low * 0.45, clear: false, quality: 1.2 });
+          }
+          var approved = t >= H.approved - 0.1;
+          if (t >= H.phone && t < H.reply + 0.2) {
+            var pst = approved ? "idle" : "approval";
+            clearCanvas(phoneS);
+            R.draw(phoneS, { t: t, phase: t * R.speedOf("arc", pst), state: pst, amp: 0.2, beat: a.low * 0.5, glow: 0.35, clear: false, fxAge: t - H.phone });
+            expires.textContent = "Expires in 0m " + (47 - Math.floor(clamp(t - H.phone, 0, 20))) + "s";
+            phoneLinkText.textContent = approved ? "Linked" : "Waiting on you";
+            phoneLink.style.color = approved ? "var(--verdant)" : "var(--amber)";
+          }
+          if (t >= H.nothing && t < H.learns) {
+            ["NOTHING", "LEAVES", "THE ROOM."].forEach(function (w, i) { setAll(nLines[i], scramble(w, H.nothing + i * 0.1, 0.38, t, 11 + i)); });
+          }
+          if (t >= H.learns && t < H.propose) {
+            var said = typed(SAID, H.learns + 0.15, 0.75, t);
+            saidText.textContent = said + (said.length < SAID.length && Math.floor(t * 4) % 2 ? "▌" : "");
+          }
+          if (t >= H.reply && t < H.interrupt + 0.5) {
+            var n = typed(REPLY, H.reply + 0.05, 0.9, t), cut = t >= H.stop;
+            replyText.textContent = n + (cut ? " —" : Math.floor(t * 4) % 2 ? "▌" : " ");
+            replyCut.style.opacity = cut ? "1" : "0";
+            replyText.style.opacity = cut ? "0.4" : "1";
+          }
+
+          /* HUD */
+          var ctx = CONTEXT[0];
+          for (var c2 = 0; c2 < CONTEXT.length; c2++) if (t >= CONTEXT[c2][0]) ctx = CONTEXT[c2];
+          hudTl2.textContent = scramble(ctx[1], ctx[0], 0.35, t, 90 + Math.round(ctx[0] * 10));
+          var label, dotCol;
+          if (heroOn) { label = STATE_LABEL[state]; dotCol = R.colours(state, t, 0.3).a; }
+          else if (!approved) { label = STATE_LABEL.approval; dotCol = R.colours("approval", t, 0.3).a; }
+          else { label = "APPROVED"; dotCol = "#5fe0a8"; }
+          if (t >= H.turn && t < H.phone) label = (t >= H.paused && t < H.resume) ? "LISTENING · PAUSED" : "LISTENING";
+          hudState.textContent = label;
+          hudDot.style.background = dotCol; hudDot.style.boxShadow = "0 0 12px " + dotCol;
+          var fm = null, face = heroOn ? seg[1] : "arc";
+          R.faces.forEach(function (f) { if (f.id === face) fm = f; });
+          hudBl.textContent = "REACTOR ▸ " + fm.name.toUpperCase() + " · " + fm.geo.toUpperCase();
+          var fr = Math.floor(t * FPS + 1e-6), ss = Math.floor(fr / FPS), ff = fr % FPS;
+          hudBr.textContent = "00:00:" + String(ss).padStart(2, "0") + ":" + String(ff).padStart(2, "0") + "  ·  120 BPM";
+          var gh = hashi(fr + 17);
+          grain.style.transform = "translate(" + ((gh % 31) - 15) + "%," + (((gh >>> 8) % 31) - 15) + "%)";
+          applyCamera(t);
+        }
+
+        /* ---------- camera + reactor framing: pure functions of t ---------- */
+        var EASE = { none: function (k) { return k; } };
+        ["expo.out", "power1.out", "power2.out", "sine.in", "sine.out", "sine.inOut"].forEach(function (n) { EASE[n] = gsap.parseEase(n); });
+        var HITS = [
+          [H.hey, 1], [H.nothing, 0.6], [H.learns, 0.6], [H.propose, 0.5], [H.keep, 0.3], [H.timeline, 0.6], [H.retire, 0.4],
+          [H.asof, 0.3], [H.voice, 0.6], [H.match, 0.3], [H.turn, 0.5], [H.resume, 0.35], [H.phone, 0.6], [H.approved, 0.35],
+          [H.stop, 1], [H.today, 0.8], [H.ready, 0.9], [H.next, 0.7], [H.outro, 1], [H.pc, 0.7], [H.rules, 0.85], [H.logo, 0.35]
+        ];
+        var FRAMES = [
+          [0, 2, { x: 0, y: 0, s: 0.55, o: 1 }, { s: 0.8 }, "expo.out"],
+          [H.hey, 1.5, { x: 0, y: -70, s: 0.92, o: 1 }, { s: 0.98 }, "power1.out"],
+          [H.nothing, 2, { x: 330, y: 0, s: 0.4, o: 1 }, { s: 0.43 }, "none"],
+          [H.learns, 2, { x: -430, y: 0, s: 0.85, o: 1 }, { s: 0.92 }, "sine.inOut"],
+          [H.propose, H.voice - H.propose, { x: 0, y: 0, s: 0.95, o: 0.14 }, { s: 1.02 }, "none"],
+          [H.voice, 2.5, { x: -430, y: 0, s: 0.85, o: 1 }, { s: 0.92 }, "sine.inOut"],
+          [H.turn, 1.5, { x: 0, y: -20, s: 0.7, o: 0.3 }, { s: 0.74 }, "none"],
+          [H.phone, 2, { x: 0, y: 0, s: 0.6, o: 0 }, {}, "none"],
+          [H.reply, 1, { x: 0, y: -90, s: 0.72, o: 1 }, { s: 0.78 }, "sine.in"],
+          [H.stop, 2, { x: 0, y: -90, s: 0.64, o: 1 }, { s: 0.66 }, "none"],
+          [H.today, H.outro - H.today, { x: -520, y: 40, s: 0.6, o: 1 }, { s: 0.66 }, "sine.inOut"],
+          [H.outro, 5, { x: 0, y: 0, s: 1.25, o: 1 }, { s: 1.45 }, "sine.inOut"]
+        ];
+        var PUSH = [[0, 2, 1, 1.035, "sine.out"], [H.hey, 3.5, 1, 1, "none"], [H.learns, 4.5, 1, 1.03, "sine.inOut"],
+                    [H.timeline, 12, 1, 1, "none"], [H.today, 8, 1, 1.03, "sine.inOut"], [H.outro, 5, 1, 1.04, "sine.inOut"]];
+        var heroWrap = el("hero-wrap"), camera = el("camera"), pushEl = el("push"), punchEl = el("punch"), shakeEl = el("shake"), flashEl = el("flash");
+        var rgbR = el("rgb-r"), rgbB = el("rgb-b");
+        function lerp(a, b, k) { return a + (b - a) * k; }
+        function applyCamera(t) {
+          var f = FRAMES[0];
+          for (var i = 0; i < FRAMES.length; i++) if (t >= FRAMES[i][0]) f = FRAMES[i];
+          var k = EASE[f[4]](clamp((t - f[0]) / f[1], 0, 1)), a = f[2], b = f[3];
+          var x = lerp(a.x, b.x === undefined ? a.x : b.x, k), y = lerp(a.y, b.y === undefined ? a.y : b.y, k);
+          var sc = lerp(a.s, b.s === undefined ? a.s : b.s, k), op = lerp(a.o, b.o === undefined ? a.o : b.o, k);
+          heroWrap.style.transform = "translate(" + x.toFixed(2) + "px," + y.toFixed(2) + "px) scale(" + sc.toFixed(4) + ")";
+          heroWrap.style.opacity = op.toFixed(3);
+          heroWrap.style.clipPath = t < 1.6 ? "circle(" + (75 * EASE["expo.out"](clamp((t - 0.1) / 1.5, 0, 1))).toFixed(2) + "% at 50% 50%)" : "none";
+          var pu = PUSH[0];
+          for (var j = 0; j < PUSH.length; j++) if (t >= PUSH[j][0]) pu = PUSH[j];
+          pushEl.style.transform = "scale(" + lerp(pu[2], pu[3], EASE[pu[4]](clamp((t - pu[0]) / pu[1], 0, 1))).toFixed(4) + ")";
+          var punch = 1, flash = 0, split = 0, sx = 0, sy = 0;
+          for (var h = 0; h < HITS.length; h++) {
+            var at = HITS[h][0], st = HITS[h][1], d = t - at;
+            if (d < 0 || d > 0.45) continue;
+            punch = Math.max(punch, 1 + 0.05 * st * (1 - EASE["expo.out"](clamp(d / 0.42, 0, 1))));
+            flash = Math.max(flash, 0.2 * st * (1 - EASE["power2.out"](clamp(d / 0.2, 0, 1))));
+            split = Math.max(split, 22 * st * (1 - EASE["power2.out"](clamp(d / 0.3, 0, 1))));
+            if (st >= 0.8) {
+              var fi = Math.floor((d - 0.02) * FPS);
+              if (fi === 0) { sx = 14 * st; sy = -8 * st; } else if (fi === 1) { sx = -10 * st; sy = 6 * st; }
+            }
+          }
+          punchEl.style.transform = "scale(" + punch.toFixed(4) + ")";
+          shakeEl.style.transform = "translate(" + sx.toFixed(1) + "px," + sy.toFixed(1) + "px)";
+          flashEl.style.opacity = flash.toFixed(3);
+          camera.style.filter = split > 0.4 ? "url(#rgbsplit)" : "none";
+          rgbR.setAttribute("dx", (-split).toFixed(2));
+          rgbB.setAttribute("dx", split.toFixed(2));
+        }
+
+        /* ---------- one driver owns every per-frame value ---------- */
+        var clock = { t: 0 };
+        tl.to(clock, { t: 35, duration: 35, ease: "none", onUpdate: function () { render(clock.t); } }, 0);
+
+        /* ---------- HUD brackets ---------- */
+        Array.prototype.forEach.call(document.querySelectorAll(".br path"), function (path, i) {
+          var len = path.getTotalLength();
+          path.setAttribute("stroke-dasharray", String(len));
+          tl.fromTo(path, { attr: { "stroke-dashoffset": len } }, { attr: { "stroke-dashoffset": 0 }, duration: 0.7, ease: "power2.inOut" }, 0.25 + i * 0.08);
+        });
+        tl.fromTo(".hud-t", { opacity: 0 }, { opacity: 1, duration: 0.4, stagger: 0.06, ease: "power1.out" }, 0.5);
+
+        /* ---------- type helpers ---------- */
+        function slam(target, at, opts) {
+          opts = opts || {};
+          tl.fromTo(target, { scale: opts.from || 1.5, opacity: 0, filter: "blur(18px)" },
+                    { scale: 1, opacity: 1, filter: "blur(0px)", duration: opts.dur || 0.32, ease: "expo.out", immediateRender: true }, at);
+        }
+        function glitch(target, at, reach) {
+          reach = reach || 12;
+          tl.fromTo(target, { "--gr": "0px", "--gb": "0px" }, { "--gr": -reach + "px", "--gb": reach + "px", duration: 0.05, repeat: 5, yoyo: true, ease: "steps(1)", immediateRender: true }, at);
+        }
+        function rise(target, at, dx, dy) {
+          tl.fromTo(target, { x: dx || 0, y: dy === undefined ? 30 : dy, opacity: 0 }, { x: 0, y: 0, opacity: 1, duration: 0.3, ease: "power3.out", immediateRender: true }, at);
+        }
+
+        /* 2-3 */
+        slam("#hey", H.hey); glitch("#hey", H.hey + 0.04, 16);
+        nLines.forEach(function (n, i) { rise(n, H.nothing + i * 0.1, -40, 0); });
+        glitch("#n3", H.nothing + 0.55, 10);
+        var RING_LEN = 2 * Math.PI * 390;
+        tl.fromTo("#room-ring", { attr: { "stroke-dasharray": RING_LEN + " " + RING_LEN, "stroke-dashoffset": RING_LEN } }, { attr: { "stroke-dashoffset": 0 }, duration: 0.45, ease: "power2.inOut", immediateRender: true }, H.nothing);
+        tl.fromTo("#room-ring2", { opacity: 0, rotation: 0, svgOrigin: "1290 540" }, { opacity: 1, rotation: 40, duration: 2, ease: "none", immediateRender: true }, H.nothing);
+        var HIT_AT = H.nothing + 0.57;
+        [-140, -40, 40, 140].forEach(function (deg, i) {
+          var r = deg * Math.PI / 180, cx = Math.cos(r), sy = Math.sin(r);
+          tl.fromTo("#tag" + i, { x: 0, y: 0, opacity: 0, scale: 0.6 }, { x: 348 * cx, y: 348 * sy, opacity: 1, scale: 1, duration: 0.45, ease: "power2.in", immediateRender: true }, HIT_AT - 0.45);
+          tl.to("#tag" + i, { x: 238 * cx, y: 238 * sy, duration: 0.7, ease: "expo.out" }, HIT_AT);
+        });
+        tl.fromTo("#room-ring", { attr: { "stroke-width": 12 }, strokeOpacity: 1 }, { attr: { "stroke-width": 3 }, strokeOpacity: 0.8, duration: 0.45, ease: "power2.out", immediateRender: false }, HIT_AT);
+        tl.fromTo("#room-label", { opacity: 0 }, { opacity: 1, duration: 0.3, immediateRender: true }, H.nothing + 0.8);
+
+        /* 4: it learns you */
+        slam("#learns .gt:first-child", H.learns, { from: 1.35 }); slam("#learns .gt:last-child", H.learns + 0.12, { from: 1.35 });
+        glitch("#learns .gt:last-child", H.learns + 0.2, 14);
+        rise("#said", H.learns + 0.05);
+
+        /* 5: only what you accept */
+        slam("#accept", H.propose, { from: 1.25 });
+        tl.fromTo("#prop", { y: 80, opacity: 0, scale: 0.94 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "expo.out", immediateRender: true }, H.propose + 0.05);
+        tl.fromTo("#tap", { opacity: 0, scale: 1.5 }, { opacity: 1, scale: 1, duration: 0.2, ease: "power2.out", immediateRender: true }, H.keep - 0.25);
+        tl.to("#tap", { scale: 0.8, duration: 0.08, ease: "power2.in" }, H.keep);
+        tl.to("#tap", { opacity: 0, scale: 1.2, duration: 0.15 }, H.keep + 0.1);
+        tl.fromTo("#prop .ok", { scale: 1 }, { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1, ease: "power2.inOut", immediateRender: true }, H.keep);
+        tl.to("#prop", { x: 600, y: 330, scale: 0.2, opacity: 0, duration: 0.45, ease: "power3.in" }, H.stash);
+        tl.fromTo("#mem-chip", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)", immediateRender: true }, H.stash + 0.4);
+
+        /* 6: it remembers what changed */
+        slam("#changed", H.timeline, { from: 1.25 });
+        tl.fromTo("#axis", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power3.out", immediateRender: true }, H.timeline);
+        tl.fromTo(".tick", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.25, stagger: 0.06, immediateRender: true }, H.timeline + 0.15);
+        tl.fromTo("#f-old", { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.6, ease: "power3.out", immediateRender: true }, H.timeline + 0.3);
+        // retired, not deleted: the bar stops at September and dims
+        tl.fromTo("#f-old", { clipPath: "inset(0 0% 0 0)" }, { clipPath: "inset(0 25% 0 0)", duration: 0.3, ease: "power2.out", immediateRender: false }, H.retire);
+        tl.to("#f-old", { opacity: 0.5, duration: 0.3 }, H.retire + 0.1);
+        tl.fromTo("#f-x", { opacity: 0, scale: 1.6 }, { opacity: 1, scale: 1, duration: 0.25, ease: "back.out(2)", immediateRender: true }, H.retire);
+        tl.fromTo("#f-new", { scaleX: 0, opacity: 0 }, { scaleX: 1, opacity: 1, duration: 0.4, ease: "power3.out", immediateRender: true }, H.retire + 0.12);
+        // AS OF: slide back to July, the old belief lights up
+        tl.fromTo("#scrub", { x: 0, opacity: 0 }, { opacity: 1, duration: 0.15, immediateRender: true }, H.asof - 0.2);
+        tl.to("#scrub", { x: -1110, duration: 0.6, ease: "power3.inOut" }, H.asof);
+        tl.to("#f-old", { opacity: 1, duration: 0.2 }, H.asof + 0.45);
+        tl.to("#f-new", { opacity: 0.3, duration: 0.2 }, H.asof + 0.45);
+        tl.fromTo("#then", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.25, immediateRender: true }, H.asof + 0.55);
+
+        /* 7: it learns your voice */
+        slam("#voice .gt:first-child", H.voice, { from: 1.35 }); slam("#voice .gt:last-child", H.voice + 0.12, { from: 1.35 });
+        glitch("#voice .gt:last-child", H.voice + 0.2, 14);
+        rise("#train", H.voice + 0.1);
+        tl.fromTo("#train-fill", { scaleX: 0 }, { scaleX: 1, duration: 0.75, ease: "power2.inOut", immediateRender: true }, H.voice + 0.2);
+        rise("#v-owner", H.match, -30, 0); rise("#v-other", H.reject, -30, 0);
+
+        /* 8: it waits while you think */
+        slam("#waits", H.turn, { from: 1.25 });
+        rise("#turn-a", H.turn + 0.05);
+        tl.fromTo("#p-paused", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.2, ease: "back.out(2)", immediateRender: true }, H.paused);
+        tl.to("#p-paused", { opacity: 0.35, duration: 0.12, yoyo: true, repeat: 1 }, H.paused + 0.22);
+        tl.set("#p-paused", { opacity: 0 }, H.resume + 0.12);
+        slam("#turn-b", H.resume, { from: 1.2, dur: 0.25 });
+        tl.fromTo("#p-done", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.2, ease: "back.out(2)", immediateRender: true }, H.resume + 0.12);
+
+        /* 9: it asks before it acts */
+        tl.fromTo("#phone-rig", { y: 760, rotation: 4 }, { y: 0, rotation: 0, duration: 0.6, ease: "expo.out", immediateRender: true }, H.phone);
+        slam("#asks .gt:nth-child(1)", H.phone + 0.05, { from: 1.3 }); slam("#asks .gt:nth-child(2)", H.phone + 0.15, { from: 1.3 });
+        slam("#asks .gt:nth-child(3)", H.phone + 0.25, { from: 1.3 }); glitch("#asks .gt:nth-child(3)", H.phone + 0.35, 12);
+        tl.fromTo("#finger", { opacity: 0, scale: 1.4, x: 0 }, { opacity: 1, scale: 1, duration: 0.2, ease: "power2.out", immediateRender: true }, H.swipe - 0.25);
+        tl.to("#finger", { x: 300, duration: 0.3, ease: "power2.in" }, H.swipe);
+        tl.to("#finger", { opacity: 0, duration: 0.12 }, H.swipe + 0.3);
+        tl.fromTo("#card", { x: 0, rotation: 0, opacity: 1 }, { x: 460, rotation: 9, opacity: 0, duration: 0.35, ease: "power2.in", immediateRender: true }, H.swipe + 0.03);
+        tl.fromTo("#approved", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.25, ease: "back.out(2)", immediateRender: true }, H.approved - 0.05);
+
+        /* 10: interrupt */
+        rise("#reply", H.reply, 0, 40);
+        tl.fromTo("#speech-tag", { opacity: 0 }, { opacity: 1, duration: 0.3, immediateRender: true }, H.reply + 0.1);
+        slam("#stop", H.stop, { from: 1.9, dur: 0.18 }); glitch("#stop", H.stop + 0.02, 26);
+        slam("#interrupt", H.interrupt, { from: 1.2 });
+
+        /* 11-13: it scales */
+        tl.fromTo(".slot", { opacity: 0 }, { opacity: 1, duration: 0.3, stagger: 0.1, immediateRender: true }, H.today);
+        tl.fromTo("#gpu1", { y: -260, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "expo.out", immediateRender: true }, H.today + 0.05);
+        slam("#today", H.today, { from: 1.25 });
+        rise("#s11t .status", H.today + 0.3, 0, 10);
+        tl.to("#empty-lbl", { opacity: 0, duration: 0.15 }, H.ready);
+        tl.fromTo("#gpu2", { x: 900, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "expo.out", immediateRender: true }, H.ready);
+        slam("#ready", H.ready, { from: 1.25 }); glitch("#ready", H.ready + 0.05, 12);
+        rise("#s12t .status", H.ready + 0.3, 0, 10);
+        Array.prototype.forEach.call(document.querySelectorAll("#tiles > div"), function (tile, i) { rise(tile, H.tiles[i], 40, 0); });
+        tl.to("#tiles", { opacity: 0, duration: 0.2 }, H.next);
+        slam("#next", H.next, { from: 1.25 }); glitch("#next", H.next + 0.05, 12);
+        rise("#s13t .status", H.next + 0.3, 0, 10);
+        var FILL = [[0.55, 0.3], [0.95, 0.9], [0.8, 0.75]];
+        Array.prototype.forEach.call(document.querySelectorAll("#choices > .choice"), function (row, i) {
+          var at = H.choices[i];
+          rise(row, at, 40, 0);
+          tl.fromTo("#c" + (i + 1) + "a", { scaleX: 0 }, { scaleX: FILL[i][0], duration: 0.4, ease: "power2.out", immediateRender: true }, at + 0.1);
+          tl.fromTo("#c" + (i + 1) + "b", { scaleX: 0 }, { scaleX: FILL[i][1], duration: 0.4, ease: "power2.out", immediateRender: true }, at + 0.18);
+        });
+
+        /* 14: your rules */
+        tl.fromTo("#scrim", { opacity: 0 }, { opacity: 1, duration: 0.3, immediateRender: true }, H.outro);
+        [["#o1", H.outro], ["#o2", H.pc], ["#o3", H.rules]].forEach(function (o) { slam(o[0], o[1], { from: 1.6, dur: 0.4 }); glitch(o[0], o[1] + 0.03, 14); });
+        tl.fromTo("#wordmark", { opacity: 0, scale: 1.35, filter: "blur(10px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.6, ease: "expo.out", immediateRender: true }, H.logo);
+        tl.fromTo("#fade", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power1.in", immediateRender: false }, H.end - 0.6);
+
+        render(0);
+        window.__timelines["jarvis-brag-v2"] = tl;
+      })();
+    </script>
+  </body>
+</html>

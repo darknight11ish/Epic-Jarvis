@@ -1,0 +1,104 @@
+/* Jarvis v5, "A day with Jarvis": the landscape cut. vertical.css adapts it.
+   Warm and editorial: a serif for the hours and the spoken lines (Fraunces),
+   a plain sans for everything else (Inter). No HUD, no glitch, no grain. */
+@font-face { font-family: "Fraunces"; font-weight: 400; font-style: normal; src: url("fonts/fraunces-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Fraunces"; font-weight: 400; font-style: italic; src: url("fonts/fraunces-latin-400-italic.woff2") format("woff2"); }
+@font-face { font-family: "Fraunces"; font-weight: 600; font-style: normal; src: url("fonts/fraunces-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 400; src: url("fonts/inter-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; src: url("fonts/inter-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; src: url("fonts/inter-latin-600-normal.woff2") format("woff2"); }
+
+:root {
+  --ink: #1d1a17;
+  --ink2: #5a524a;
+  --rule: rgba(29, 26, 23, 0.28);
+  --warm: #c8743a;
+  --serif: "Fraunces", Georgia, serif;
+  --sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: #f4efe6; }
+body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; }
+#stage { position: absolute; inset: 0; overflow: hidden; }
+.layer { position: absolute; inset: 0; }
+.ghost { visibility: hidden; }
+
+/* ---------- sky and the playhead ---------- */
+#sky { background: #f4efe6; }
+#ribbon-line { position: absolute; left: 0; right: 0; top: 118px; height: 2px; background: var(--rule); }
+#ribbon { position: absolute; left: 960px; top: 118px; width: 0; height: 0; }
+.tick { position: absolute; top: -9px; width: 2px; height: 20px; margin-left: -1px; background: var(--rule); }
+.tick.half { top: -5px; height: 12px; }
+.tick span { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); font: 500 22px/1 var(--sans);
+  color: var(--ink2); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; white-space: nowrap; }
+#halo { position: absolute; left: 960px; top: 118px; width: 520px; height: 520px; margin: -260px 0 0 -260px; border-radius: 50%; mix-blend-mode: screen; }
+#sun-wrap { position: absolute; left: 960px; top: 118px; width: 0; height: 0; transform-origin: 0 0; }
+#sun { position: absolute; width: 170px; height: 170px; left: -85px; top: -85px; }
+
+/* ---------- the strip ---------- */
+#world { position: absolute; left: 0; top: 0; width: 0; height: 1080px; }
+.station { position: absolute; top: 0; width: 1920px; height: 1080px; }
+.col { position: absolute; left: 150px; top: 250px; width: 660px; }
+.part { font: 600 24px/1 var(--sans); letter-spacing: 0.18em; text-transform: uppercase; color: var(--warm); }
+.hour { font: 600 172px/0.95 var(--serif); letter-spacing: -0.03em; color: var(--ink); margin-top: 16px; font-variant-numeric: lining-nums; }
+.who { font: 600 22px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink2); margin: 44px 0 12px; }
+.say { font: italic 400 56px/1.14 var(--serif); color: var(--ink); letter-spacing: -0.01em; }
+.say::before { content: "\201C"; }
+.reply { font: 400 36px/1.3 var(--sans); color: var(--ink); margin-top: 8px; }
+.claim { position: absolute; left: 150px; top: 912px; width: 1620px; padding-top: 22px; border-top: 2px solid var(--rule);
+  font: 500 34px/1.25 var(--sans); color: var(--ink); }
+.claim b { font-weight: 600; }
+.tag { display: inline-block; font: 600 22px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 9px 14px 8px; border-radius: 999px; border: 2px solid currentColor; color: var(--warm); vertical-align: 6px; margin-right: 14px; }
+
+/* the real app screens, floating on the sky like paper */
+.shot { position: absolute; left: 840px; top: 262px; width: 960px; height: 610px; }
+.where { position: absolute; left: 2px; top: -42px; font: 600 20px/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink2); white-space: nowrap; }
+.shot img { position: absolute; left: 0; top: 0; max-width: 100%; max-height: 100%;
+  border-radius: 14px; box-shadow: 0 30px 70px rgba(35, 24, 12, 0.22), 0 4px 14px rgba(35, 24, 12, 0.12); }
+.night .shot img { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06); }
+.pressring { position: absolute; border-radius: 12px; border: 4px solid var(--warm); box-shadow: 0 0 0 8px rgba(200, 116, 58, 0.18); opacity: 0; }
+
+/* ---------- the opening and the end ---------- */
+.title { position: absolute; left: 0; right: 0; top: 430px; text-align: center; font: italic 400 110px/1.05 var(--serif); letter-spacing: -0.02em; }
+.subtitle { position: absolute; left: 0; right: 0; top: 580px; text-align: center; font: 500 32px/1.3 var(--sans); color: var(--ink2); }
+.end { position: absolute; left: 0; right: 0; top: 560px; text-align: center; }
+.end .big { font: 600 96px/1.08 var(--serif); letter-spacing: -0.02em; }
+.end .big i { font-style: italic; font-weight: 400; }
+.end .small { font: 500 30px/1.45 var(--sans); color: var(--ink2); margin-top: 36px; }
+.end .word { font: 600 40px/1 var(--sans); letter-spacing: 0.5em; margin-top: 44px; padding-left: 0.5em; }
+#fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+
+/* ---------- the phone (drawn: Android's own notification, words from the code) ---------- */
+.phone { position: absolute; right: -30px; top: -10px; width: 320px; height: 640px; border-radius: 52px; background: #1c1a19;
+  box-shadow: 0 40px 90px rgba(35, 24, 12, 0.35), inset 0 0 0 2px #3a3633; opacity: 0; }
+.phone .scr { position: absolute; inset: 12px; border-radius: 42px; background: linear-gradient(#fbf6ee, #efe6d8); overflow: hidden; }
+.phone .sb { position: absolute; left: 28px; right: 26px; top: 16px; display: flex; justify-content: space-between; font: 600 17px var(--sans); color: #3b352f; }
+.phone .sb .cam { position: absolute; left: 50%; top: 0; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #111; }
+.notif { position: absolute; left: 12px; right: 12px; top: 58px; padding: 16px 18px 16px; border-radius: 22px; background: #fff;
+  box-shadow: 0 10px 30px rgba(35, 24, 12, 0.18); opacity: 0; }
+.notif .app { font: 500 15px var(--sans); color: #6a6158; }
+.notif .app b { color: var(--warm); font-weight: 600; }
+.notif .ti { margin-top: 8px; font: 600 24px var(--sans); color: #1d1a17; }
+.notif .tx { margin-top: 4px; font: 400 21px/1.3 var(--sans); color: #1d1a17; }
+.notif .act { margin-top: 14px; display: inline-block; padding: 8px 22px; border-radius: 18px; background: rgba(200, 116, 58, 0.14); color: var(--warm); font: 600 18px var(--sans); }
+.ringw { position: absolute; left: 50%; top: 22%; width: 400px; height: 400px; margin: -200px 0 0 -200px; border-radius: 50%; border: 3px solid var(--warm); opacity: 0; }
+
+/* the phone at night: jarvis-client's Mind screen, Doing plate (drawn; words from BrainScreen.kt) */
+.phone.night { left: 250px; right: auto; top: 20px; width: 420px; height: 560px; background: #0d0f14;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55), inset 0 0 0 2px #2c3140; }
+.phone.night .scr { background: #12151c; }
+.phone.night .sb { color: #c9cedb; }
+.topbar { position: absolute; left: 24px; right: 24px; top: 54px; }
+.topbar .tb { font: 600 30px var(--sans); color: #eef1f7; }
+.topbar .tbs { font: 400 16px var(--sans); color: #8d95a8; margin-top: 4px; }
+.phone .sec { position: absolute; left: 24px; top: 150px; font: 600 15px var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: #8d95a8; }
+.plate { position: absolute; left: 14px; right: 14px; top: 180px; padding: 16px 16px 18px; border-radius: 18px; background: #1b2029; }
+.field { display: flex; justify-content: space-between; font: 400 19px var(--sans); color: #8d95a8; padding: 8px 2px; }
+.field b { position: relative; font-weight: 600; color: #eef1f7; min-width: 90px; text-align: right; }
+.field b i { font-style: normal; position: absolute; right: 0; top: 0; }
+.btns { position: relative; display: flex; gap: 8px; margin-top: 14px; }
+.btns .q { flex: 1; text-align: center; padding: 11px 0; border-radius: 12px; font: 600 17px var(--sans); color: #eef1f7; background: #2a3140; }
+.btns .q.off { color: #5d6474; background: #20252f; }
+.tap { position: absolute; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; background: rgba(242, 166, 107, 0.55); box-shadow: 0 0 0 3px #f2a66b; opacity: 0; pointer-events: none; }
+.who.later { color: var(--ink); margin-top: 40px; }

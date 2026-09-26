@@ -1,0 +1,13 @@
+{
+  "bpm": 120,
+  "dur": 25,
+  "hits": {
+    "ignite": 0.0, "hey": 2.0, "nothing": 3.5,
+    "montage": [5.5, 6.0, 6.5, 7.0],
+    "listens": 7.5, "thinks": 8.5, "speaks": 9.5,
+    "reply": 10.5, "stop": 11.5, "interrupt": 12.0,
+    "ask": 13.0, "phone": 14.0, "swipe": 15.5, "approved": 16.0,
+    "private": 18.0, "local": 19.5,
+    "outro": 21.0, "pc": 22.0, "rules": 23.0, "logo": 24.0, "end": 25.0
+  }
+}

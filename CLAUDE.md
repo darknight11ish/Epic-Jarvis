@@ -503,6 +503,25 @@ success. `git apply --verbose` writes "Checking patch x..." to stderr every
 time, so the script died on the first of nineteen patches. Wrap native calls:
 save the preference, set `Continue`, restore in a `finally`.
 
+## Launch videos: every version is kept and numbered
+
+The owner's rule, 2026-09-24: never replace a launch video. Each new one is
+the next version, and every version goes on GitHub.
+
+- Finished videos live in `videos/vN/` as `jarvis-launch-vN.mp4` with its
+  poster `jarvis-launch-vN.jpg`, the plan, the brief, the share copy and the
+  Hyperframes project. v1 to v5 are there (v3, v4 and v5 also have a 15 s
+  upright cut, `jarvis-launch-vN-vertical.mp4`); the next one is v6.
+- The `/brag` skill renders into `brag-output/`, which is gitignored scratch.
+  Copy the finished video into `videos/vN/`, add it to the top of
+  `videos/README.md`, point the README's "Launch video" section at it, and
+  post it: push and open a pull request.
+- Keep each `.mp4` under GitHub's 100 MB file limit (re-encode if a render
+  comes out bigger), and check the soundtrack's loudness after rendering:
+  once the renderer's mixer made it 11 dB quieter than the score.
+- A video says only what the code supports. Mark anything built-but-off as
+  "ready" and anything designed-but-not-built as "next".
+
 ## Where everything is written down
 
 - `docs/ARCHITECTURE.md` — **read first.** The invariants, the one permission

@@ -7,6 +7,24 @@ card, so your emails, files and memories never go to a company's servers.
 Version 0.2.0 ([what changed](CHANGELOG.md)). Made by darknight11ish.
 Free and non-commercial: installed by hand, never sold, never on Google Play.
 
+## Launch video
+
+[![Jarvis launch video v5: a day with Jarvis](videos/v5/jarvis-launch-v5.jpg)](videos/v5/jarvis-launch-v5.mp4)
+
+**Tap the picture to watch v5** (34 seconds, sound on; every spoken line is on
+screen). It opens the video file, and GitHub plays it in the browser. On a
+phone held upright, watch [the 16-second cut](videos/v5/jarvis-launch-v5-vertical.mp4).
+
+One day with Jarvis, from the morning briefing to Standby at night, in one
+continuous shot: a focus session, a "Tell me when" alert that rings your phone,
+and a memory that learns from your own words. Every screen is the real desktop
+app, with made-up examples.
+
+Every version is kept in [`videos/`](videos/), with the plan and the project
+needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
+[v2](videos/v2/jarvis-launch-v2.mp4), [v3](videos/v3/jarvis-launch-v3.mp4),
+[v4](videos/v4/jarvis-launch-v4.mp4).
+
 ## The five rules
 
 1. **Private things stay on the PC.** Email, files, passwords and memories
