@@ -124,7 +124,7 @@ object PlainErrors {
         ),
         "model_missing" to Kind(
             "The AI model Jarvis uses isn't installed on your PC.",
-            "Choose a model you have (Models, in the Brain on the PC or in Mind on the phone), or " +
+            "Choose a model you have (Models, in the Brain on the PC or the phone), or " +
                 "install this one.",
             MODELS,
         ),

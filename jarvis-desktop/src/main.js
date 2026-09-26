@@ -1907,6 +1907,9 @@ async function decideApproval(approved, optionId = null) {
     const handled = /409|already/i.test(message);
     dom.approvalHint.textContent = handled
       ? "Already handled somewhere else."
+      // "Nothing was approved. Windows Hello is not set up ..." (lock/rules.rs
+      // not_approved_words) already says what happened and what to do.
+      : /^Nothing was approved\./.test(message) ? message
       : `${message} — nothing was decided. Try again.`;
     // Release the latch. It exists to stop a SECOND decision racing a
     // successful first one; a decision that never reached the server is not a
@@ -3285,9 +3288,13 @@ function stopSpeaking() {
    an answer is being spoken is dropped - the next drift says it again.
    "Stop" (stopSpeaking) silences it too. It opens no microphone.
 
-   STOP-EVERYTHING HOOK: the "stop everything" hotkey, built at the same
-   time as this, can call stopFocusCallout() (stopSpeaking already does). */
+   "Stop everything" silences one that is playing (stopSpeaking), and one
+   still on its way is dropped: Rust drops a sound that was being made when
+   the stop came (focus.rs play_callout), and this page ignores any callout
+   for a few seconds after a stop, in case one was already in flight. */
 let focusAudio = null;
+let focusStoppedAt = 0;
+const FOCUS_STOP_QUIET_MS = 5000;
 
 function stopFocusCallout() {
   if (!focusAudio) return;
@@ -3300,6 +3307,7 @@ function playFocusCallout(payload) {
   const uri = payload && typeof payload.uri === "string" ? payload.uri : "";
   if (!uri.startsWith("data:audio/wav;base64,")) return;
   if (jarvisTalking() || focusAudio) return;
+  if (focusStoppedAt && Date.now() - focusStoppedAt < FOCUS_STOP_QUIET_MS) return;
   const audio = new Audio(uri);
   focusAudio = audio;
   audio.onended = () => {
@@ -3983,6 +3991,7 @@ listen("focus-input", () => {
 // and then calls POST /api/stop_all itself, and says in a notification what
 // was stopped. The answer on screen stays as far as it got.
 listen("stop-everything", () => {
+  focusStoppedAt = Date.now();
   stopSpeaking();
 });
 

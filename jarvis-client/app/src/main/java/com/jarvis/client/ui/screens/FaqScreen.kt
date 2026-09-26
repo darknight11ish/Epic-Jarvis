@@ -141,9 +141,11 @@ private val FAQS = listOf(
         "Yes, in Platform checks, then Lock and fingerprint settings. Lock " +
             "Jarvis makes opening the app need your fingerprint or phone PIN, " +
             "and you choose how long it can be out of sight before it asks " +
-            "again. Hide memory lists and chat history keeps Mind's memory lists, the wiki's " +
-            "list of your notes and your chat history hidden until you tap " +
-            "Show and confirm. Chat " +
+            "again. Hide memory lists and chat history keeps the Brain's memory lists, the wiki's " +
+            "list of your notes, your chat history and deep questions, the words of your " +
+            "timers, reminders and lists, the morning briefing's lines and what a focus " +
+            "session is on hidden until you tap Show and confirm; their notifications " +
+            "say only what kind of thing is due. Chat " +
             "answers are not hidden, because your PC does not say which ones " +
             "used your email, calendar, notes or memory. Fingerprint only " +
             "leaves out the PIN; only a fingerprint or face that Android rates " +
@@ -156,7 +158,7 @@ private val FAQS = listOf(
         "Are my chats kept anywhere?",
         "On your PC, encrypted, and nowhere else - including what you say by " +
             "voice. This phone keeps none of it. To read, delete or stop " +
-            "keeping them, open Mind, then Chat history. Turning keeping back " +
+            "keeping them, open the Brain, then Chat history. Turning keeping back " +
             "on asks you first, with an approval card; turning it off is " +
             "instant, and what is already kept stays until you delete it. " +
             "Text you share into Jarvis from another app is sent, and kept, " +

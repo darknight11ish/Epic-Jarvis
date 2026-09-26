@@ -25,7 +25,7 @@ tests fail if a word differs from this file:
     their source. An action is an id each app turns into its own place:
     "retry" (ask again), "reconnect" (the link), "connection" (the
     connection settings: the desktop's Settings -> Connection, the phone's
-    Checks), "models" (the desktop's Brain, the phone's Mind -> Model).
+    Checks), "models" (the desktop's Brain, the phone's Brain -> Model).
   * `statuses` - the words for a wait: "Thinking…", and "Waking up the
     model…" when the PC says the model is still loading (jarvis_agent's
     "loading" status word), "Answering…" once words arrive.
@@ -140,7 +140,7 @@ KINDS = {
         "retry"),
     "model_missing": (
         "The AI model Jarvis uses isn't installed on your PC.",
-        "Choose a model you have (Models, in the Brain on the PC or in Mind on the phone), "
+        "Choose a model you have (Models, in the Brain on the PC or the phone), "
         "or install this one.",
         "models"),
     "model_not_running": (

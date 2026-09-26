@@ -43,6 +43,9 @@ export const POLL_MS = 15000;
 /** The backend's own limit, used until `limits.question_chars` says. */
 export const QUESTION_CHARS = 4000;
 
+/** A question's line while the private lists are hidden. */
+export const QUESTION_HIDDEN = "Question hidden";
+
 /** A job state, in words and a tag colour (brain.css `.row-tag`). */
 export const STATES = {
   queued: { tag: "queued", tone: "present" },
@@ -68,6 +71,9 @@ export function readDeep(answer) {
   const jobs = Array.isArray(a.jobs) ? a.jobs : [];
   return {
     available: a.available === true,
+    // "Hide memory lists and chat history" is on: Rust took the questions
+    // and answers out (commands.rs redact_deep); the rows keep their state.
+    hidden: a.hidden === true,
     why: text(a.why).trim(),
     enabled: a.enabled === true,
     update: !Array.isArray(a.jobs),
@@ -84,6 +90,7 @@ export function readDeep(answer) {
       tokensPerS: num(j.tokens_per_s),
       queued: num(j.queued),
       answer: j.state === "done" ? text(j.answer) : "",
+      hidden: j.hidden === true,
     })),
   };
 }
@@ -163,7 +170,7 @@ export function renderAnswer(node, markdown) {
  * the last read failed, and the job whose answer is open. `ui` is the Brain's
  * own `el` and `row` helpers.
  */
-export function renderJobs(container, plate, { el, row }) {
+export function renderJobs(container, plate, { el, row, hiddenNode }) {
   container.replaceChildren();
   const v = plate.view;
   if (!v) {
@@ -176,11 +183,15 @@ export function renderJobs(container, plate, { el, row }) {
     if (!v.update) container.append(el("p", "empty", "No deep questions yet."));
     return;
   }
+  // Hidden with the memory lists: each row keeps its state and time, and a
+  // Show button (the Brain's own, Windows Hello first) brings the words back.
+  if (v.hidden && hiddenNode) container.append(hiddenNode(0, "words"));
   const list = el("div", "rows deep-jobs");
   const newestDone = v.jobs.find((j) => j.state === "done");
   for (const job of v.jobs) {
     const st = STATES[job.state] || { tag: job.state || "?", tone: "" };
-    const item = row({ tag: st.tag, state: st.tone, title: job.question,
+    const item = row({ tag: st.tag, state: st.tone,
+      title: job.hidden || v.hidden ? QUESTION_HIDDEN : job.question,
       meta: [job.why, speedLine(job)], actions: [] });
     item.dataset.id = job.id;
     item.dataset.state = job.state;

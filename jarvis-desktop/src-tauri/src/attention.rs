@@ -77,6 +77,7 @@ pub async fn refresh(app: &AppHandle, base: &str) {
 /// scanner exists to catch.
 #[tauri::command]
 pub async fn get_digest(app: AppHandle) -> Result<serde_json::Value, String> {
+    commands::require_base_allowed(&app)?;
     let base = commands::jarvis_base(&app);
     match get_json_status(&app, &base, "/api/digest").await {
         Ok(body) => Ok(body),

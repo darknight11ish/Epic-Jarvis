@@ -46,6 +46,7 @@ import {
   clock as focusClock,
   driftWords,
   FOCUS_MISSING,
+  INTENT_HIDDEN as FOCUS_INTENT_HIDDEN,
   LABELS as FOCUS_LABELS,
   LAST_TITLE as FOCUS_LAST_TITLE,
   leftNow as focusLeftNow,
@@ -1569,7 +1570,11 @@ async function revealPrivate() {
     return;
   }
   await refreshMemory();
+  // The deep questions, on the Memory tab, come back with the lists.
+  deep.at = 0;
+  fx.at = 0;
   if (state.view !== "memory") render(state.view);
+  else loadDeep();
 }
 
 // Settings changed, or the owner was away long enough that a Show ended:
@@ -2316,7 +2321,7 @@ function paintDeep() {
       if (open) deep.openId = id;
       else if (deep.openId === id || deep.openId === undefined) deep.openId = null;
     },
-  }, { el, row });
+  }, { el, row, hiddenNode });
 }
 
 function paintDeepCount() {
@@ -3595,6 +3600,7 @@ function paintFocus() {
     wrap.dataset.tone = focusToneOf(v);
     wrap.append(el("span", "focus-clock mono", focusClock(focusLeftNow(v, Date.now() - fx.readAt))));
     if (v.intent) wrap.append(el("p", "note", `On: ${v.intent}`));
+    else if (v.intentHidden) wrap.append(el("p", "note", FOCUS_INTENT_HIDDEN));
     wrap.append(el("p", "focus-line", v.line));
     wrap.append(el("p", "note", driftWords(v.drifts)));
     if (v.note) wrap.append(el("p", "note", v.note));
@@ -3940,6 +3946,20 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   };
   TAURI.event.listen("security-changed", rereadSchedule);
   TAURI.event.listen("private-hidden", rereadSchedule);
+  // The deep questions are hidden with the lists too (commands.rs get_deep).
+  const rereadDeep = () => {
+    deep.at = 0;
+    if (state.view === "memory") loadDeep();
+  };
+  TAURI.event.listen("security-changed", rereadDeep);
+  TAURI.event.listen("private-hidden", rereadDeep);
+  // And what a focus session is on (brain/focus.rs hide_intent).
+  const rereadFocus = () => {
+    fx.at = 0;
+    if (state.view === "work") loadFocus();
+  };
+  TAURI.event.listen("security-changed", rereadFocus);
+  TAURI.event.listen("private-hidden", rereadFocus);
 }
 
 /* ==========================================================================

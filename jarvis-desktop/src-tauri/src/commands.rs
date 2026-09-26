@@ -142,19 +142,41 @@ pub const DEFAULT_BASE: &str = "http://127.0.0.1:4719";
 /// Read rather than baked in, because the port is configuration — the last
 /// resync turned on a wrong one having been hardcoded.
 ///
-/// **A configured address that [`validate_base`] refuses is never used**
-/// (CLAUDE.md, decided 2026-09-26: the owner's own networks only). One saved
-/// by an older version, or set in `JARVIS_HUD_BASE`, that points at the open
-/// internet would otherwise get the token with every request. It falls back
-/// to [`DEFAULT_BASE`], this PC, so nothing ever goes to the refused
-/// address - and not silently: [`base_problem`] says why, the event stream
-/// stays offline with that sentence as its reason (`stream.rs`), which every
-/// window shows the way it shows any other connection error, and Settings
-/// shows it in red under the field.
+/// **A configured address that [`validate_base`] refuses is never used, and
+/// nothing is used in its place** (CLAUDE.md, decided 2026-09-26: the
+/// owner's own networks only; "while a refused address is saved, the
+/// desktop does nothing over the network ... it does not quietly fall back
+/// to this PC"). One saved by an older version, or set in
+/// `JARVIS_HUD_BASE`, that points at the open internet would otherwise get
+/// the token with every request. The base is then EMPTY: a request to
+/// `"/api/..."` is refused by reqwest while it is being built (a relative
+/// URL), before anything touches the network, and [`jarvis_headers`] -
+/// which every request to Jarvis takes - refuses first anyway with the
+/// sentence [`base_problem`] gives. The event stream stays offline with that
+/// sentence as its reason (`stream.rs`), which every window shows the way it
+/// shows any other connection error, and Settings shows it in red under the
+/// field. The same sentence, everywhere.
 pub fn jarvis_base(app: &AppHandle) -> String {
-    match configured_base(app) {
+    base_from(configured_base(app))
+}
+
+/// [`jarvis_base`]'s rule, pure: the configured address when it is allowed,
+/// NOTHING (empty) when it is refused, this PC when none is configured.
+pub(crate) fn base_from(configured: Option<String>) -> String {
+    match configured {
         Some(base) if validate_base(&base).is_ok() => base,
-        _ => DEFAULT_BASE.to_string(),
+        Some(_) => String::new(),
+        None => DEFAULT_BASE.to_string(),
+    }
+}
+
+/// `Err(the red sentence)` while a refused address is saved: for the few
+/// callers that do not send the token, and so would not be stopped by
+/// [`jarvis_headers`].
+pub(crate) fn require_base_allowed(app: &AppHandle) -> Result<(), String> {
+    match base_problem(app) {
+        Some(problem) => Err(problem),
+        None => Ok(()),
     }
 }
 
@@ -1495,6 +1517,9 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
         .build()
         .map_err(|e| format!("unable to build the HTTP client: {e}"))?;
 
+    // A refused address: Jarvis is not asked at all (the probe below would
+    // only fail on the empty base), and the sentence says why.
+    require_base_allowed(&app)?;
     let (jarvis, ollama, litellm) = tokio::join!(
         probe(
             &client,
@@ -1602,6 +1627,9 @@ pub(crate) fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::
 
 /// `X-Jarvis-Client` and, when configured, `X-Jarvis-Token`.
 pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, String> {
+    // Nothing goes anywhere while a refused address is saved - not to it,
+    // and not to this PC instead (see `jarvis_base`).
+    require_base_allowed(app)?;
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "X-Jarvis-Client",
@@ -2210,7 +2238,9 @@ async fn answer_approval(
     if approved {
         match from {
             AnsweredFrom::Window(window) => {
-                let send = crate::lock::check_approval(&app, window, id, APPROVAL_TIMEOUT).await?;
+                let send = crate::lock::check_approval(&app, window, id, APPROVAL_TIMEOUT)
+                    .await
+                    .map_err(|e| crate::lock::not_approved_words(&e))?;
                 if send.backend_may_ask {
                     wait = send.wait;
                     crate::lock::let_backend_prompt_forward();
@@ -2252,7 +2282,7 @@ async fn answer_approval(
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
     if let Some(said) = owner_check_refusal(status.as_u16(), &body) {
-        return Err(said);
+        return Err(crate::lock::not_approved_words(&said));
     }
     if !status.is_success() {
         return Err(format!(
@@ -2393,6 +2423,9 @@ pub async fn stop_task(app: AppHandle) -> Result<serde_json::Value, String> {
 /// opposite), not by App lock, not by a waiting card. It approves nothing
 /// and starts nothing; the route cannot either.
 pub fn stop_everything_now(app: &AppHandle) {
+    // First: a focus line still being made on the PC is dropped when it
+    // arrives (brain/focus.rs `play_callout`).
+    crate::brain::focus::note_stop_everything();
     crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
     // The HUD window is the backend's own page and speaks through the
     // browser's speech engine; a fixed line, no payload.
@@ -2414,11 +2447,42 @@ pub fn stop_everything_now(app: &AppHandle) {
 pub const STOP_EVERYTHING_TITLE: &str = "Stop everything";
 
 async fn post_stop_all(app: &AppHandle) -> Result<serde_json::Value, String> {
-    post_task_control(app, "/api/stop_all", serde_json::json!({})).await
+    const PATH: &str = "/api/stop_all";
+    let base = jarvis_base(app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .post(format!("{base}{PATH}"))
+        .headers(jarvis_headers(app)?)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        // The plain words both apps use for a PC that did not answer - never
+        // the address or the library's text (continuity audit 2026-09-26).
+        .map_err(|e| crate::plain_errors::unreachable_words(e.is_connect(), e.is_timeout()))?;
+    let status = response.status();
+    let detail = response.text().await.unwrap_or_default();
+    if status.is_success() {
+        return Ok(serde_json::from_str(&detail).unwrap_or(serde_json::Value::Null));
+    }
+    if status.as_u16() == 404 {
+        return Err(format!(
+            "this Jarvis backend has no `{PATH}` route - apply the backend \
+             patches (task-control.patch) to turn it on"
+        ));
+    }
+    Err(server_sentence(status.as_u16(), PATH, &detail))
 }
+
+/// Always true by the time the PC answers: speech stopped here first. The
+/// phone's `StopEverything.SPEECH` - the same words.
+pub const STOP_SPEECH: &str = "Stopped speaking.";
+/// The PC answered without a sentence of its own (`StopEverything.PC_SILENT`).
+pub const STOP_PC_SILENT: &str = "Jarvis stopped what it was doing.";
+/// The PC could not be asked (`StopEverything.NOT_REACHED`); why follows.
+pub const STOP_NOT_REACHED: &str = "Nothing else could be stopped.";
 
 /// What the notification says: speech is always stopped (that happened
 /// here), then the PC's own sentence - or why the PC could not be asked.
+/// The same sentences as the phone's button (`StopEverything.kt`).
 pub fn stop_everything_words(result: Result<serde_json::Value, String>) -> String {
     match result {
         Ok(v) => {
@@ -2427,24 +2491,57 @@ pub fn stop_everything_words(result: Result<serde_json::Value, String>) -> Strin
                 .and_then(|m| m.as_str())
                 .map(str::trim)
                 .filter(|m| !m.is_empty())
-                .unwrap_or("Jarvis stopped what it was doing.");
-            format!("Stopped speaking. {said}")
+                .unwrap_or(STOP_PC_SILENT);
+            format!("{STOP_SPEECH} {said}")
         }
         Err(e) if e.contains("has no `/api/stop_all` route") => {
-            "Stopped speaking. This PC's Jarvis cannot stop anything else yet - run \
-             apply-patches.ps1 on the PC (stop-all.patch). The Stop button on a running \
-             task still works."
-                .to_string()
+            format!(
+                "{STOP_SPEECH} This PC's Jarvis cannot stop anything else yet - run \
+                 apply-patches.ps1 on the PC (stop-all.patch). The Stop button on a running \
+                 task still works."
+            )
         }
         Err(e) => {
-            format!("Stopped speaking. Jarvis could not be reached to stop anything else: {e}")
+            let why = e.trim();
+            let mut why = why.to_string();
+            if let Some(first) = why.get(0..1) {
+                let upper = first.to_uppercase();
+                why.replace_range(0..1, &upper);
+            }
+            if !why.is_empty() && !why.ends_with(['.', '!', '?']) {
+                why.push('.');
+            }
+            format!("{STOP_SPEECH} {STOP_NOT_REACHED} {why}")
+                .trim_end()
+                .to_string()
         }
     }
 }
 
 #[tauri::command]
-pub async fn inject_task_note(app: AppHandle, note: String) -> Result<serde_json::Value, String> {
+pub async fn inject_task_note(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    note: String,
+) -> Result<serde_json::Value, String> {
+    refuse_widget_note_when_locked(&app, &window)?;
     post_task_control(&app, "/api/task/note", serde_json::json!({ "note": note })).await
+}
+
+/// App lock covers notes too (the owner's decision of 2026-09-26): the
+/// widget sits outside the lock, and a note steers what Jarvis does next,
+/// so with App lock on a note - to a running task or kept with a card - is
+/// added in the Jarvis bar, which asks Windows Hello first. Checked here,
+/// in the command, not only by the widget hiding its note rows.
+fn refuse_widget_note_when_locked(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
+    let from_widget = window.label() == windows::WIDGET_LABEL;
+    if crate::lock::widget_note_refused(from_widget, crate::lock::current(app).app_lock) {
+        return Err(crate::lock::WIDGET_NOTES_IN_BAR.to_string());
+    }
+    Ok(())
 }
 
 /// Asks the backend to switch power mode - `POST /api/power`
@@ -2508,9 +2605,11 @@ fn encode_path_segment(raw: &str) -> String {
 #[tauri::command]
 pub async fn amend_approval(
     app: AppHandle,
+    window: tauri::WebviewWindow,
     id: String,
     note: String,
 ) -> Result<serde_json::Value, String> {
+    refuse_widget_note_when_locked(&app, &window)?;
     let encoded = encode_path_segment(&id);
     post_task_control(
         &app,
@@ -3764,6 +3863,7 @@ pub async fn wiki_ingest_status(app: AppHandle, id: String) -> Result<serde_json
 /// A folder, never a file: the same reasoning as [`open_log_folder`].
 #[tauri::command]
 pub async fn wiki_open_folder(app: AppHandle) -> Result<(), String> {
+    require_base_allowed(&app)?;
     if !base_is_loopback(&jarvis_base(&app)) {
         return Err(
             "the wiki folder is on the PC Jarvis runs on, not this one - open it there".to_string(),
@@ -4215,7 +4315,38 @@ pub async fn get_deep(app: AppHandle) -> Result<serde_json::Value, String> {
         .map_err(|e| second_card_unreachable(&e, &base))?;
     let status = response.status().as_u16();
     let body = response.text().await.unwrap_or_default();
-    deep_answer(status, &body)
+    let answer = deep_answer(status, &body)?;
+    // The questions and answers are the owner's own words, like the memory
+    // lists and chat history: hidden with them (bug audit 2026-09-26,
+    // Gemini finding checked; the phone does the same).
+    Ok(if crate::lock::private_hidden(&app) {
+        redact_deep(answer)
+    } else {
+        answer
+    })
+}
+
+/// A deep-questions list with every question and answer taken out, for
+/// while "Hide memory lists and chat history" hides them. States, times and
+/// speeds stay (they say nothing about the owner), and so does `why` - the
+/// backend's own sentence for a refusal or a failure.
+pub(crate) fn redact_deep(mut answer: serde_json::Value) -> serde_json::Value {
+    let mut count = 0usize;
+    if let Some(obj) = answer.as_object_mut() {
+        if let Some(serde_json::Value::Array(jobs)) = obj.get_mut("jobs") {
+            for job in jobs.iter_mut() {
+                if let Some(o) = job.as_object_mut() {
+                    count += 1;
+                    o.insert("question".into(), serde_json::json!(""));
+                    o.insert("answer".into(), serde_json::json!(""));
+                    o.insert("hidden".into(), serde_json::json!(true));
+                }
+            }
+        }
+        obj.insert("hidden".into(), serde_json::json!(true));
+        obj.insert("hidden_count".into(), serde_json::json!(count));
+    }
+    answer
 }
 
 /// "Ask slowly": `POST /api/deep/ask` with `{"question"}`, built here from
@@ -5523,6 +5654,33 @@ mod turn_tests {
 }
 
 #[cfg(test)]
+mod deep_hidden_tests {
+    use super::redact_deep;
+
+    #[test]
+    fn hidden_deep_questions_keep_their_state_and_lose_their_words() {
+        let out = redact_deep(serde_json::json!({
+            "available": true,
+            "jobs": [
+                {"id": "d1", "question": "Is my rash serious?", "state": "done",
+                 "answer": "It may be...", "seconds": 90},
+                {"id": "d2", "question": "Plan my budget", "state": "failed",
+                 "why": "The big model stopped."}
+            ]
+        }));
+        let text = out.to_string();
+        for private in ["rash", "It may be", "budget"] {
+            assert!(!text.contains(private), "{private} is still in {text}");
+        }
+        assert_eq!(out["hidden"], true);
+        assert_eq!(out["hidden_count"], 2);
+        assert_eq!(out["jobs"][0]["state"], "done");
+        assert_eq!(out["jobs"][0]["seconds"], 90);
+        assert_eq!(out["jobs"][1]["why"], "The big model stopped.");
+    }
+}
+
+#[cfg(test)]
 mod stop_everything_tests {
     use super::*;
 
@@ -5547,11 +5705,20 @@ mod stop_everything_tests {
         ));
         assert!(old.contains("stop-all.patch"), "{old}");
         assert!(old.starts_with("Stopped speaking."), "{old}");
-        let down = stop_everything_words(Err(
-            "could not reach the Jarvis server at http://127.0.0.1:4719".to_string(),
-        ));
-        assert!(down.contains("could not be reached"), "{down}");
-        assert!(down.starts_with("Stopped speaking."), "{down}");
+        let down = stop_everything_words(Err(crate::plain_errors::unreachable_words(true, false)));
+        assert_eq!(
+            down,
+            format!(
+                "Stopped speaking. Nothing else could be stopped. {}",
+                crate::plain_errors::unreachable_words(true, false)
+            )
+        );
+        assert!(!down.contains("127.0.0.1"), "{down}");
+        let refused = stop_everything_words(Err("jarvis's address is refused".to_string()));
+        assert!(
+            refused.ends_with("Nothing else could be stopped. Jarvis's address is refused."),
+            "{refused}"
+        );
     }
 
     #[test]
@@ -5565,9 +5732,27 @@ mod stop_everything_tests {
 #[cfg(test)]
 mod own_network_tests {
     use super::{
-        own_network_host, own_network_message, own_network_problem, validate_base,
-        OWN_NETWORK_MESSAGE,
+        base_from, own_network_host, own_network_message, own_network_problem, validate_base,
+        DEFAULT_BASE, OWN_NETWORK_MESSAGE,
     };
+
+    #[test]
+    fn a_refused_address_means_nothing_is_used_not_this_pc() {
+        assert_eq!(base_from(Some("https://abc123.ngrok-free.app".into())), "");
+        assert_eq!(base_from(Some("http://203.0.113.9:4719".into())), "");
+        assert_eq!(
+            base_from(Some("http://192.168.1.20:4719".into())),
+            "http://192.168.1.20:4719"
+        );
+        assert_eq!(base_from(None), DEFAULT_BASE);
+        // An empty base cannot be dialled: the URL is refused while it is
+        // built, before anything touches the network.
+        assert!(reqwest::Url::parse(&format!(
+            "{}/api/version",
+            base_from(Some("https://abc123.ngrok-free.app".into()))
+        ))
+        .is_err());
+    }
 
     /// The backend's real verdicts, written by `tools/gen_own_network_cases.py`
     /// from `backend/jarvis_local_http.py`; `backend/test_own_network_cases.py`

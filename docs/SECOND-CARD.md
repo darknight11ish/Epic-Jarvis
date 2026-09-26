@@ -126,7 +126,7 @@ is using the second card. Windows sometimes does not tell `nvidia-smi` which
 program uses which card, so a "yes" is a good sign, not a guarantee.
 
 **Since 2026-09-25 there is a fuller command.** Settings, "Hardware and
-models" (Mind, "Hardware" on the phone) offers three setups for your cards,
+models" (Brain, "Hardware" on the phone) offers three setups for your cards,
 and each comes with its own one-line command: the two settings above, plus
 the conversation format, keep-alive and the owner's 0.75 GB gap - and an
 undo line that puts back what was there before. **Once you choose a setup,
@@ -146,7 +146,7 @@ everyday Ollama, which the switches could not do before
    card that says which card, which model, how much memory, and that nothing
    leaves the PC. Say yes on the PC or the phone.
 
-**On the phone:** open Mind (the button on Home), then the "Second graphics
+**On the phone:** open the Brain (the button on Home), then the "Second graphics
 card" section, under Model. It shows what Jarvis found, the main switch and
 one switch per feature. Turning one on raises the approval card; the switch
 says "Waiting for your approval. Approve it on your PC or on this phone's
@@ -192,7 +192,7 @@ so), and it never falls back to the second card by itself.
    Other kinds of file (PDF, Word, pictures) are not read yet; they show as
    "can't read", with the reason.
 3. **Press Add to wiki.** On the PC: Brain window, Memory tab, the Wiki card.
-   On the phone: Mind, the Wiki section. The document's line says what is
+   On the phone: Brain, the Wiki section. The document's line says what is
    happening: the model is reading it (a minute or two for a long one), then
    an approval card appears.
 4. **Read the card and answer it.** It lists every page it would create or

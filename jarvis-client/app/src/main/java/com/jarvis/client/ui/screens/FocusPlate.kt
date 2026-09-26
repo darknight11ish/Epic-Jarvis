@@ -53,7 +53,7 @@ import kotlinx.coroutines.launch
  * not - they only make Jarvis do less.
  */
 @Composable
-internal fun FocusSection(canAct: Boolean) {
+internal fun FocusSection(canAct: Boolean, privateHidden: Boolean = false) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     val tick by JarvisRuntime.focusTick.collectAsState()
@@ -131,8 +131,10 @@ internal fun FocusSection(canAct: Boolean) {
                         color = if (v.drifting && !v.excused) chrome.warnInk else chrome.textHi,
                     )
                     if (v.intent.isNotEmpty()) {
-                        Text("On: ${v.intent}", style = MaterialTheme.typography.bodySmall,
-                            color = chrome.textMid)
+                        // What it is on is the owner's own words, like a
+                        // reminder's: hidden with the private lists.
+                        Text(if (privateHidden) Focus.INTENT_HIDDEN else "On: ${v.intent}",
+                            style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                     }
                     Text(v.line, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                     Text(

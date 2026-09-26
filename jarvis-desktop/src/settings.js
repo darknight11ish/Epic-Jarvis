@@ -221,8 +221,9 @@ async function loadConnection() {
   const problems = [];
   if (settings.baseProblem) {
     problems.push(`The Jarvis address above is not being used. ${settings.baseProblem} ` +
-      "Nothing is sent to it: until you change it, the connection stays offline and " +
-      "approving is blocked.");
+      "Nothing is sent to it, and nothing is sent to this PC instead: until you change " +
+      "it, Jarvis does nothing over the network - no chat, no reads - and approving is " +
+      "blocked.");
   }
   if (settings.bindAddressProblem) {
     problems.push(`The phone address above is not being used: ${settings.bindAddressProblem}`);

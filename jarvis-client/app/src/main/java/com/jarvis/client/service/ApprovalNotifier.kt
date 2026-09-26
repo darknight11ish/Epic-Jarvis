@@ -262,6 +262,9 @@ object ApprovalNotifier {
         val channel = if (item.shouldInterrupt) CHANNEL_ID else QUIET_CHANNEL_ID
 
         return NotificationCompat.Builder(context, channel)
+            // Never copied to a paired watch or other device (Android bridges
+            // notifications by default): what Jarvis says stays on this phone.
+            .setLocalOnly(true)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body.lineSequence().first())
@@ -320,6 +323,9 @@ object ApprovalNotifier {
 
     private fun redacted(context: Context): Notification =
         NotificationCompat.Builder(context, CHANNEL_ID)
+            // Never copied to a paired watch or other device (Android bridges
+            // notifications by default): what Jarvis says stays on this phone.
+            .setLocalOnly(true)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.approval_locked))
@@ -328,6 +334,9 @@ object ApprovalNotifier {
 
     private fun summary(context: Context, count: Int, loud: Boolean): Notification =
         NotificationCompat.Builder(context, if (loud) CHANNEL_ID else QUIET_CHANNEL_ID)
+            // Never copied to a paired watch or other device (Android bridges
+            // notifications by default): what Jarvis says stays on this phone.
+            .setLocalOnly(true)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.approvals_waiting, count))

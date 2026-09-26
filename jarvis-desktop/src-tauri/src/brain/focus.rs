@@ -54,6 +54,28 @@ pub(crate) const HELD_WHEN_STALE: &[&str] = &["resume", "extend", "lock"];
 /// How long the fetch of one spoken line may take (the PC makes the sound).
 const CALLOUT_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// How many times "Stop everything" has been pressed since the app started.
+/// A callout notes it before asking the PC for the sound, and drops the
+/// sound if a stop happened while it was being made (bug audit 2026-09-26,
+/// #1): the PC takes the line first and synthesises it after, so a stop in
+/// between found nothing playing yet, and the line played a second later.
+static STOPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Called by `commands::stop_everything_now` before anything else.
+pub fn note_stop_everything() {
+    STOPS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+}
+
+fn stops_so_far() -> u64 {
+    STOPS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Whether a callout started when `before` stops had been counted may
+/// still play now.
+fn still_wanted(before: u64, now: u64) -> bool {
+    before == now
+}
+
 fn parsed(body: &str) -> Option<serde_json::Value> {
     serde_json::from_str::<serde_json::Value>(body)
         .ok()
@@ -146,7 +168,30 @@ pub async fn focus_status(app: AppHandle) -> Result<serde_json::Value, String> {
         .map_err(|e| commands::backend_unreachable(&e, &base))?;
     let status = response.status().as_u16();
     let body = response.text().await.unwrap_or_default();
-    status_answer(status, &body)
+    let answer = status_answer(status, &body)?;
+    // What the session is "on" is the owner's own words, like a reminder's:
+    // hidden with the private lists (continuity audit 2026-09-26, #10).
+    Ok(if crate::lock::private_hidden(&app) {
+        hide_intent(answer)
+    } else {
+        answer
+    })
+}
+
+/// The status with its `intent` taken out and `intent_hidden` set, when
+/// there was one to hide.
+pub(crate) fn hide_intent(mut answer: serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = answer.as_object_mut() {
+        let had = obj
+            .get("intent")
+            .and_then(|v| v.as_str())
+            .is_some_and(|s| !s.trim().is_empty());
+        if had {
+            obj.insert("intent".into(), serde_json::json!(""));
+            obj.insert("intent_hidden".into(), serde_json::json!(true));
+        }
+    }
+    answer
 }
 
 /// Start a session. Held on a stale link.
@@ -202,6 +247,7 @@ pub async fn play_callout(app: AppHandle, base: String, data: serde_json::Value)
     let Some(seq) = callout_seq(&data) else {
         return;
     };
+    let stops_before = stops_so_far();
     if !crate::voice::is_loopback_base(&base) {
         return;
     }
@@ -229,6 +275,9 @@ pub async fn play_callout(app: AppHandle, base: String, data: serde_json::Value)
     if bytes.len() < 44 || &bytes[..4] != b"RIFF" {
         return;
     }
+    if !still_wanted(stops_before, stops_so_far()) {
+        return;
+    }
     let uri = format!(
         "data:audio/wav;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(&bytes)
@@ -243,6 +292,24 @@ pub async fn play_callout(app: AppHandle, base: String, data: serde_json::Value)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn what_a_session_is_on_is_hidden_with_the_private_lists() {
+        let out = hide_intent(serde_json::json!({"on": true, "intent": "the tax return"}));
+        assert_eq!(out["intent"], "");
+        assert_eq!(out["intent_hidden"], true);
+        let none = hide_intent(serde_json::json!({"on": true, "intent": ""}));
+        assert!(none.get("intent_hidden").is_none());
+    }
+
+    #[test]
+    fn a_stop_while_the_sound_was_being_made_drops_it() {
+        assert!(still_wanted(3, 3));
+        assert!(!still_wanted(3, 4));
+        let before = stops_so_far();
+        note_stop_everything();
+        assert!(!still_wanted(before, stops_so_far()));
+    }
 
     #[test]
     fn the_status_is_passed_on_and_an_older_backend_says_so() {

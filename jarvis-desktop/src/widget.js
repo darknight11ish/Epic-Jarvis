@@ -259,7 +259,8 @@ if (typeof ResizeObserver !== "undefined") {
    bar (focus.rs play_callout), not here.
    ========================================================================== */
 
-const focus = { view: null, readAt: 0, timer: null, loading: false, again: false, readOnce: false };
+const focus = { view: null, readAt: 0, triedAt: 0, timer: null, loading: false, again: false,
+  readOnce: false };
 const FOCUS_WORDS = { drift: "off target", paused: "paused", settling: "settling in",
   on: "on target" };
 
@@ -270,6 +271,7 @@ async function loadFocus() {
     return;
   }
   focus.loading = true;
+  focus.triedAt = Date.now();
   try {
     const got = await invoke("focus_status");
     if (got) {
@@ -293,7 +295,9 @@ function focusTickOnce() {
   if (!v || !v.on) return;
   const left = focusLeftNow(v, Date.now() - focus.readAt);
   dom.focusClock.textContent = focusClock(left);
-  if (left <= 0 && !focus.loading) loadFocus();
+  // At zero, ask the PC whether it has ended - every 2 s at most, like the
+  // Brain, not every second (bug audit 2026-09-26, "possible" list).
+  if (left <= 0 && !focus.loading && Date.now() - focus.triedAt > 2000) loadFocus();
 }
 
 function syncFocusButtons() {
@@ -630,6 +634,7 @@ function applyAppLock(on) {
   // Repaint the card on screen under the new rule. Same id, so nothing is
   // announced again and a half-typed note is kept.
   if (state.approval) openApproval(state.approval);
+  syncTaskControls();
 }
 
 /** Whether App lock is on. Fails closed: a read that fails is treated as on,
@@ -888,7 +893,8 @@ async function decide(approved, optionId = null) {
     // stays. Releasing in `finally` instead would release it on SUCCESS too,
     // which is the whole thing the latch exists to prevent.
     if (!handled) state.decided = null;
-    flash(handled ? "Already handled elsewhere." : `${message} — nothing was decided.`,
+    flash(handled ? "Already handled elsewhere."
+      : /^Nothing was approved\./.test(message) ? message : `${message} — nothing was decided.`,
           handled ? null : "bad");
   } finally {
     state.deciding = false;
@@ -1075,6 +1081,11 @@ function syncTaskControls() {
   dom.btnTaskStop.disabled = state.taskActionBusy;
   dom.taskNoteInput.disabled = state.taskNoteBusy;
   dom.btnTaskNoteSend.disabled = state.taskNoteBusy;
+  // App lock covers task notes too (the owner's decision of 2026-09-26),
+  // like the card's note: a note steers what Jarvis does next, so it waits
+  // for the unlocked Jarvis bar. Rust refuses it from this window as well.
+  const taskNoteRow = dom.taskNoteInput.closest(".task-note-row");
+  if (taskNoteRow) taskNoteRow.hidden = state.appLock;
 }
 
 /**
@@ -1128,7 +1139,7 @@ async function sendTaskAction(kind) {
  */
 async function sendTaskNote() {
   const note = dom.taskNoteInput.value.trim();
-  if (!note || state.taskNoteBusy) return;
+  if (!note || state.taskNoteBusy || state.appLock) return;
 
   state.taskNoteBusy = true;
   syncTaskControls();

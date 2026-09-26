@@ -101,6 +101,18 @@ await check("what each lock covers is said plainly, gaps included", async () => 
   assert.match(s.appLockDetail, /Deny still works from the widget/);
   assert.doesNotMatch(s.appLockDetail, /not locked/);
   assert.match(s.privateDetail, /memory lists/);
+  // Continuity audit 2026-09-26: it says everything it hides, in the
+  // phone's words exactly.
+  for (const hid of ["deep questions", "timers, reminders and lists", "morning briefing's lines",
+    "what a focus session is on", "Their notifications say only what kind of thing is due."]) {
+    assert.ok(s.privateDetail.includes(hid), `the description leaves out: ${hid}`);
+  }
+  const kt = readFileSync(join(HERE, "..", "..",
+    "jarvis-client/app/src/main/java/com/jarvis/client/data/Security.kt"), "utf8");
+  const m = kt.match(/const val PRIVATE_HIDES = ([\s\S]*?)\n\n/);
+  assert.ok(m, "the phone's PRIVATE_HIDES is gone");
+  const phone = [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]).join("");
+  assert.ok(s.privateDetail.startsWith(phone), `the two apps say it differently:\n${phone}\n${s.privateDetail}`);
   assert.match(s.privateDetail, /Galaxy picture and answers in the Jarvis bar are not hidden/);
   // Named for what it hides (one wording, 2026-09-24), in its status lines too.
   assert.match(s.all, /Windows Hello for memory lists and chat history/);
@@ -383,7 +395,17 @@ await check("no window can send events to the others (apps security audit M1)", 
     for (const banned of ["core:default", "core:event:default", "core:event:allow-emit", "core:event:allow-emit-to"]) {
       assert.ok(!perms.includes(banned), `${name} holds ${banned}`);
     }
-    assert.ok(perms.includes("core:event:allow-listen"), `${name} can no longer listen`);
+    // Faces and the first-run window listen to nothing, and must not be
+    // able to: in Tauri 2 a page's global listen() hears every event, even
+    // one sent to another window, so listening would mean hearing the
+    // approval queue with an email's full text (bug audit 2026-09-26, #6).
+    const quiet = name === "faces" || name === "onboarding";
+    assert.equal(perms.includes("core:event:allow-listen"), !quiet,
+      quiet ? `${name} can listen to every event` : `${name} can no longer listen`);
+  }
+  for (const quiet of ["faces", "onboarding"]) {
+    const caps = JSON.parse(read(`src-tauri/capabilities/${quiet}.json`)).permissions;
+    assert.ok(!caps.includes("jarvis-link"), `${quiet} can read the approval queue`);
   }
   // And no page tries to: an emit from a page would now be refused, so one
   // appearing here means a feature that silently does nothing.

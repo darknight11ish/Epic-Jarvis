@@ -119,7 +119,8 @@ export function appLockDetail() {
   return "Opening the Jarvis bar, the Brain, Settings or the HUD window needs " +
     "Windows Hello. The widget stays on the desktop, but while this is on it " +
     "shows only a short title for an approval, and its Approve opens the " +
-    "Jarvis bar to approve there. Deny still works from the widget.";
+    "Jarvis bar to approve there. Notes to Jarvis are added in the Jarvis bar " +
+    "too. Deny still works from the widget.";
 }
 
 export function relockNote(settings) {
@@ -143,10 +144,18 @@ export function approvalsNote(where) {
     "never approve.";
 }
 
+/**
+ * What "Hide memory lists and chat history" hides - the SAME sentence as the
+ * phone's `SecurityRules.PRIVATE_HIDES` (continuity audit 2026-09-26, #1;
+ * tests/security.mjs and SecurityRulesTest check each other's copy).
+ */
+export const PRIVATE_HIDES = "Your memory lists, chat history and deep questions, the " +
+  "words of your timers, reminders and lists, the morning briefing's lines and what a " +
+  "focus session is on stay hidden until you confirm it is you. Their notifications say " +
+  "only what kind of thing is due.";
+
 export function privateDetail() {
-  return "The Brain's memory lists - what Jarvis knows about you, and facts " +
-    "waiting for you - and your chat history stay hidden until you press Show " +
-    "and pass Windows Hello. " +
+  return `${PRIVATE_HIDES} Show, in the Brain, asks Windows Hello first. ` +
     "The Galaxy picture and answers in the Jarvis bar are not hidden.";
 }
 

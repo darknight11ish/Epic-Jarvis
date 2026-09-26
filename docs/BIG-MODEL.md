@@ -277,7 +277,7 @@ switches stay greyed out, with the reason written above them, until Jarvis
 has found colibri, Python, a model and enough memory and disk. Deep
 questions are asked in the Brain window, Memory tab, "Deep questions".
 
-**On the phone:** open Mind (the button on Home), then the "Big model
+**On the phone:** open the Brain (the button on Home), then the "Big model
 (slow)" section, under "Second graphics card". It shows what Jarvis found,
 the main switch and one switch per job. Turning a switch on raises the
 approval card; the switch says "Waiting for your approval. Approve it on

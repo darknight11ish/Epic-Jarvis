@@ -206,6 +206,17 @@ object SecurityRules {
             noCheckSentence(s.method, "Risky approvals are refused for now.")
         }
 
+    /**
+     * What "Hide memory lists and chat history" hides - the SAME sentence as
+     * the desktop's `PRIVATE_HIDES` (security-settings.js; continuity audit
+     * 2026-09-26, #1). SecurityRulesTest and the desktop's tests/security.mjs
+     * check each other's copy.
+     */
+    const val PRIVATE_HIDES = "Your memory lists, chat history and deep questions, the " +
+        "words of your timers, reminders and lists, the morning briefing's lines and what a " +
+        "focus session is on stay hidden until you confirm it is you. Their notifications say " +
+        "only what kind of thing is due."
+
     private const val APPROVAL_LEAD = "Nothing was approved."
 
     /**

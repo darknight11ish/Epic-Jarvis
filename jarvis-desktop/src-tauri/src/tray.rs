@@ -93,6 +93,7 @@ const ID_STATUS_POWER: &str = "status-power";
 const ID_APPROVALS: &str = "approvals";
 const ID_WAITING: &str = "waiting";
 const ID_MUTE: &str = "mute";
+const ID_STOP_EVERYTHING: &str = "stop-everything";
 const ID_POWER_ACTIVE: &str = "power-active";
 const ID_POWER_QUIET: &str = "power-quiet";
 const ID_POWER_STANDBY: &str = "power-standby";
@@ -225,6 +226,17 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let mute = MenuItem::with_id(app, ID_MUTE, mute_label(&link), true, None::<&str>)?;
+    // "Stop everything" (continuity audit 2026-09-26): the same as the
+    // hotkey (`commands::stop_everything_now`), for a mouse, or when another
+    // program holds the key. Never greyed: not by a stale link, App lock or
+    // a waiting card - it only makes Jarvis stop.
+    let stop_everything = MenuItem::with_id(
+        app,
+        ID_STOP_EVERYTHING,
+        "Stop everything",
+        true,
+        accel(app, "stop_everything").as_deref(),
+    )?;
 
     // One row that is status and action at once: it says what the backend is
     // and, when there is something to do about it, does it.
@@ -302,6 +314,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &approvals,
             &waiting,
             &mute,
+            &stop_everything,
             &PredefinedMenuItem::separator(app)?,
             // Windows, everyday ones first — the two with hotkeys are the two
             // reached most often, and a hotkey printed beside a row is how the
@@ -1068,6 +1081,9 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             }
             crate::emit_quickbar(app, events::SHOW_APPROVAL, ());
         }
+
+        // Speech first, then the PC; a notification says what was stopped.
+        ID_STOP_EVERYTHING => commands::stop_everything_now(app),
 
         ID_SHOW_HUD => {
             if let Err(err) = windows::show_hud(app) {

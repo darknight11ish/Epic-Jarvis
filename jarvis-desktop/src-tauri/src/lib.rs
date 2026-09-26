@@ -260,6 +260,14 @@ pub fn emit_quickbar<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, 
 }
 
 /// Emits an event to every window.
+///
+/// Which windows HEAR it is decided by their capabilities, not here: in
+/// Tauri 2.11 a page's global `listen()` registers with the target `Any`,
+/// and `match_any_or_filter` (tauri `event/listener.rs`) lets an `Any`
+/// listener through every filter - so even `emit_to` one window reaches a
+/// global listener in any other. The Faces and first-run windows, which
+/// must not hear the approval queue, hold no `core:event:allow-listen`
+/// (bug audit 2026-09-26, #6; `tests/security.mjs`).
 pub fn emit_all<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
     if let Err(err) = app.emit(event, payload) {
         eprintln!("[jarvis] unable to broadcast `{event}`: {err}");
@@ -1196,13 +1204,20 @@ pub fn run() {
             // and kill the process tree if it is still there. Blocking here is
             // deliberate; the alternative is exiting with a model still
             // resident and no window left to say so.
+            // The last event id seen, forced: without it a restart of this
+            // app alone replays the last few seconds of events, and an alarm
+            // that already rang rings again (bug audit 2026-09-26, #4).
+            stream::save_resume_now(app);
             sidecar::stop_on_exit(app);
         }
 
         // A last line of defence for the paths that reach `Exit` without an
         // `ExitRequested` we saw. Stopping twice is a no-op: the owned child is
         // taken out of the state by whichever call gets there first.
-        tauri::RunEvent::Exit => sidecar::stop_on_exit(app),
+        tauri::RunEvent::Exit => {
+            stream::save_resume_now(app);
+            sidecar::stop_on_exit(app);
+        }
 
         _ => {}
     });

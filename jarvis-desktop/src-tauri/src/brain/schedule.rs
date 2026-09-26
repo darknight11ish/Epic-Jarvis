@@ -412,9 +412,72 @@ pub(crate) fn toast_words(
     (title, body)
 }
 
+/// How late (seconds after it went off) this app may still ring for a job
+/// it hears about. Later than this - the app was restarted, or the PC's
+/// event reached it late - it shows a quiet "missed at" notice instead of
+/// ringing as if it were happening now (the owner's decision of
+/// 2026-09-26; the phone's `Schedule.LATE_RING_LIMIT_S`).
+pub(crate) const LATE_RING_LIMIT_S: i64 = 10 * 60;
+
+/// Whether a job that went off at `fired_at` (seconds; 0 = unknown) is heard
+/// too late to ring at `now`. Unknown is not late: the job could not be read,
+/// so it is shown as before.
+pub(crate) fn heard_late(fired_at: i64, now: i64) -> bool {
+    fired_at > 0 && now - fired_at > LATE_RING_LIMIT_S
+}
+
+/// The quiet notice's words: when it went off (the PC's own clock words,
+/// `went_off_at`), then what it was - both apps' words.
+pub(crate) fn missed_words(went_off_at: &str, body: &str) -> String {
+    let at = went_off_at.trim();
+    let head = if at.is_empty() {
+        "Missed earlier.".to_string()
+    } else {
+        format!("Missed at {at}.")
+    };
+    let body = body.trim();
+    if body.is_empty() {
+        head
+    } else {
+        format!("{head} {body}")
+    }
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
 /// The jobs already toasted, by id and the time they went off, so a replayed
 /// event after a reconnect does not toast twice.
 static TOASTED: Mutex<Option<HashSet<(String, i64)>>> = Mutex::new(None);
+
+/// The "shown once" key's time part: when it went off, as read from the
+/// job - or, when the job could not be read (`at` 0), this event's own id
+/// (`_event`, put in by stream.rs), so two failed reads of a repeating job
+/// on different days are not taken for the same firing and the later one
+/// dropped. `None` (neither known): shown, without remembering it.
+pub(crate) fn shown_key(at: i64, data: &serde_json::Value) -> Option<i64> {
+    if at > 0 {
+        return Some(at);
+    }
+    data.get("_event")
+        .and_then(|v| v.as_u64())
+        .and_then(|e| i64::try_from(e).ok())
+        .map(|e| -e)
+}
+
+/// The event's own data, with its id as `_event` - for [`shown_key`]. Only
+/// the copy handed to a toast; the frame the windows get is unchanged.
+pub(crate) fn with_event_id(data: &serde_json::Value, id: Option<u64>) -> serde_json::Value {
+    let mut data = data.clone();
+    if let (Some(obj), Some(id)) = (data.as_object_mut(), id) {
+        obj.insert("_event".to_string(), serde_json::json!(id));
+    }
+    data
+}
 
 pub(crate) fn first_time(id: &str, fired_at: i64) -> bool {
     let mut guard = TOASTED.lock().unwrap_or_else(|e| e.into_inner());
@@ -456,12 +519,26 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
         .and_then(|j| j.get("fired_at"))
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0) as i64;
-    if !first_time(&id, fired_at) {
-        return;
+    if let Some(key) = shown_key(fired_at, &data) {
+        if !first_time(&id, key) {
+            return;
+        }
     }
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
     let (title, body) = toast_words(&kind, job.as_ref(), private);
+    // Heard more than ten minutes after it went off (the app was closed,
+    // or restarted and replayed the event): a quiet notice saying when,
+    // never a ringing alarm as if it were happening now, and no Snooze.
+    if heard_late(fired_at, now_secs()) {
+        let at = job
+            .as_ref()
+            .and_then(|j| j.get("went_off_at"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        show_quiet(&app, &title, &missed_words(at, &body));
+        return;
+    }
     // A timer, alarm or reminder gets a Snooze button (2026-09-25) - on
     // Windows, through winrt_toast.rs; anything else, or anywhere else, the
     // plain toast. The button carries the id only. An alarm also keeps
@@ -490,8 +567,10 @@ pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value
         .and_then(|j| j.get("alert_at"))
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0) as i64;
-    if !first_time(&format!("{id}#match"), at) {
-        return;
+    if let Some(key) = shown_key(at, &data) {
+        if !first_time(&format!("{id}#match"), key) {
+            return;
+        }
     }
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
@@ -516,6 +595,40 @@ fn show(app: &AppHandle, title: &str, body: &str, ring: bool, snooze: Option<(&s
     }
     #[cfg(not(windows))]
     let _ = (ring, snooze);
+    commands::notify(app, title, body);
+}
+
+/// The PC says a job changed (`{"id", "kind", "state": "changed"}`):
+/// snoozed, deleted or done on the phone, by voice or in the Brain. Its
+/// "went off" toast - a ringing alarm's included - goes. Never a "tell me
+/// when": its job ends the moment it matched to tell only once.
+pub(crate) fn on_changed(data: &serde_json::Value) {
+    let Some(id) = data.get("id").and_then(|v| v.as_str()) else {
+        return;
+    };
+    let kind = data.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+    if !removes_on_change(id, kind) {
+        return;
+    }
+    #[cfg(windows)]
+    crate::winrt_toast::remove_fired(id);
+    #[cfg(not(windows))]
+    let _ = id;
+}
+
+/// Whether a `changed` job's toast is taken away: one job id, of a kind
+/// that has a "went off" toast with Snooze.
+pub(crate) fn removes_on_change(id: &str, kind: &str) -> bool {
+    valid_id(id) && SNOOZABLE.contains(&kind)
+}
+
+/// A toast without a sound: a job heard about too late to ring.
+fn show_quiet(app: &AppHandle, title: &str, body: &str) {
+    #[cfg(windows)]
+    {
+        crate::winrt_toast::notify_quiet(app, title, body);
+    }
+    #[cfg(not(windows))]
     commands::notify(app, title, body);
 }
 
@@ -654,6 +767,48 @@ async fn post(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_job_changed_elsewhere_takes_its_toast_away_but_never_a_tell_me_when() {
+        assert!(removes_on_change("s0123456789", "alarm"));
+        assert!(removes_on_change("s0123456789", "reminder"));
+        assert!(!removes_on_change("s0123456789", "tellme"));
+        assert!(!removes_on_change("all", "alarm"));
+    }
+
+    #[test]
+    fn a_job_that_could_not_be_read_is_told_apart_by_its_event() {
+        let data = with_event_id(&serde_json::json!({"id": "s0123456789"}), Some(41));
+        assert_eq!(shown_key(1_700_000_000, &data), Some(1_700_000_000));
+        assert_eq!(shown_key(0, &data), Some(-41));
+        let other = with_event_id(&serde_json::json!({"id": "s0123456789"}), Some(97));
+        assert_ne!(shown_key(0, &data), shown_key(0, &other));
+        assert_eq!(shown_key(0, &serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn a_job_heard_more_than_ten_minutes_late_does_not_ring() {
+        let went = 1_000_000;
+        assert!(
+            !heard_late(went, went + 600),
+            "ten minutes exactly still rings"
+        );
+        assert!(heard_late(went, went + 601));
+        assert!(
+            !heard_late(0, went),
+            "a job that could not be read is shown as before"
+        );
+        assert!(
+            !heard_late(went, went - 5),
+            "a clock a little behind is not late"
+        );
+        assert_eq!(missed_words("07:00", "Wake up"), "Missed at 07:00. Wake up");
+        assert_eq!(
+            missed_words("", "Jarvis: alarm."),
+            "Missed earlier. Jarvis: alarm."
+        );
+        assert_eq!(missed_words("07:00", " "), "Missed at 07:00.");
+    }
 
     #[test]
     fn the_list_is_passed_on_and_an_older_backend_says_so() {

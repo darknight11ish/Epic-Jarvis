@@ -146,10 +146,17 @@ await check("CONTROL: validate_base asks the own-network rule, tested on the sha
 
 await check("CONTROL: a refused configured address is never used, and the stream says why", async () => {
   const rust = read("src-tauri/src/commands.rs");
-  const fn = rust.slice(rust.indexOf("pub fn jarvis_base"));
+  const fn = rust.slice(rust.indexOf("pub(crate) fn base_from"));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(rust, /pub fn jarvis_base\(app: &AppHandle\) -> String \{\s*base_from\(configured_base\(app\)\)\s*\}/);
   assert.match(body, /validate_base\(&base\)\.is_ok\(\)/, "jarvis_base does not check");
-  assert.match(body, /DEFAULT_BASE/, "no fallback to this PC");
+  // The owner's decision of 2026-09-26: nothing over the network while a
+  // refused address is saved - not to it, and not to this PC instead.
+  assert.match(body, /Some\(_\) => String::new\(\)/, "a refused address falls back to something");
+  assert.match(body, /None => DEFAULT_BASE/, "an unset address no longer means this PC");
+  const headers = rust.slice(rust.indexOf("pub fn jarvis_headers("));
+  assert.match(headers.slice(0, headers.indexOf("\n}\n")), /require_base_allowed\(app\)\?;/,
+    "requests to Jarvis are not refused while a refused address is saved");
   const stream = read("src-tauri/src/stream.rs");
   const loop = stream.slice(stream.indexOf("pub fn spawn"));
   const problem = loop.indexOf("commands::base_problem(&app)");

@@ -46,6 +46,33 @@ pub const NOT_SET_UP: &str = "Windows Hello is not set up on this PC, and a lock
 pub const NO_HELLO_NO_RISKY: &str = "Windows Hello is not set up on this PC, so Jarvis cannot \
      check it is you, and risky approvals are refused until it is. Set up Windows Hello in \
      Windows Settings (Accounts, Sign-in options) to approve risky actions - a PIN is enough";
+/// How the refusal starts on screen, as on the phone (`SecurityRules.
+/// NO_SCREEN_LOCK` starts "Nothing was approved."; continuity audit
+/// 2026-09-26, #6). Not part of [`NO_HELLO_NO_RISKY`] itself, which is the
+/// backend's sentence word for word (`jarvis_owner_check.NOT_SET_UP`).
+pub const NOTHING_APPROVED: &str = "Nothing was approved.";
+
+/// A refused approval's sentence as the windows show it: "no lock, no
+/// risky approval" - whether this app or the backend refused - is led by
+/// [`NOTHING_APPROVED`] and ends with a full stop, the phone's shape; any
+/// other sentence is passed on as it is.
+pub fn not_approved_words(said: &str) -> String {
+    let lead = NO_HELLO_NO_RISKY
+        .split(", and")
+        .next()
+        .unwrap_or(NO_HELLO_NO_RISKY);
+    let said = said.trim();
+    if !said.starts_with(lead) {
+        return said.to_string();
+    }
+    let end = if said.ends_with(['.', '!', '?']) {
+        ""
+    } else {
+        "."
+    };
+    format!("{NOTHING_APPROVED} {said}{end}")
+}
+
 /// Turning a lock ON with nothing to check against would lock the owner out:
 /// loosening needs Windows Hello, so there would be no way back.
 pub const TURN_ON_NEEDS_HELLO: &str = "Windows Hello is not set up on this PC, so this lock \
@@ -55,6 +82,17 @@ pub const TURN_ON_NEEDS_HELLO: &str = "Windows Hello is not set up on this PC, s
 /// M3). No "already" in it (see above), and it says what happens instead.
 pub const WIDGET_APPROVES_IN_BAR: &str = "App lock is on, so approvals are made in the Jarvis \
      bar, not the widget. The Jarvis bar is opening - approve it there";
+/// Why the widget did not send a note while App lock is on (the owner's
+/// decision of 2026-09-26: App lock covers task notes too, like approval
+/// notes). A note steers what Jarvis does next, so it waits for the unlocked
+/// Jarvis bar.
+pub const WIDGET_NOTES_IN_BAR: &str = "App lock is on, so notes to Jarvis are added in the \
+     Jarvis bar, not the widget. Open the Jarvis bar and confirm it is you to add one";
+/// Whether a note (to a running task, or kept with a card) is refused
+/// because it came from the widget while App lock is on.
+pub fn widget_note_refused(from_widget: bool, app_lock: bool) -> bool {
+    from_widget && app_lock
+}
 pub const PRIVATE_STILL_HIDDEN: &str = "What Jarvis remembers about you is hidden. Press Show \
      on the Brain's Memory tab and confirm it is you with Windows Hello first.";
 
@@ -408,6 +446,27 @@ pub fn redact_private(section: &str, body: serde_json::Value) -> serde_json::Val
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_lock_no_risky_approval_reads_like_the_phone() {
+        let shown = not_approved_words(NO_HELLO_NO_RISKY);
+        assert!(shown.starts_with("Nothing was approved. Windows Hello is not set up"));
+        assert!(shown.ends_with("a PIN is enough."), "{shown}");
+        // Any other refusal is passed on as it is.
+        assert_eq!(not_approved_words(NOT_CONFIRMED), NOT_CONFIRMED);
+        assert_eq!(not_approved_words(NOT_SET_UP), NOT_SET_UP);
+    }
+
+    #[test]
+    fn a_note_from_the_widget_waits_for_the_unlocked_bar() {
+        assert!(widget_note_refused(true, true));
+        assert!(!widget_note_refused(true, false));
+        assert!(
+            !widget_note_refused(false, true),
+            "the Jarvis bar is behind the lock itself"
+        );
+        assert!(WIDGET_NOTES_IN_BAR.starts_with("App lock is on"));
+    }
     use serde_json::json;
 
     fn classified(reach: &str, reversible: &str) -> serde_json::Value {

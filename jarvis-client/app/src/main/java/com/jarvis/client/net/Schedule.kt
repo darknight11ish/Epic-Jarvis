@@ -634,6 +634,71 @@ object Schedule {
         return id to (data.flag("urgent") == true)
     }
 
+    /**
+     * From a `schedule` event: (id, kind) when the PC says a job CHANGED
+     * (snoozed, deleted, done, paused - on the PC, by voice, or in Coming
+     * up), else null. A ringing notification for it is then taken away (bug
+     * audit 2026-09-26, #1): it was answered somewhere else.
+     */
+    fun changedFrom(data: JsonObject?): Pair<String, String?>? {
+        if (data == null || data.text("state") != "changed") return null
+        val id = data.text("id")?.takeIf { validId(it) } ?: return null
+        return id to data.text("kind")
+    }
+
+    /**
+     * Whether a changed job's notification should go: a timer, alarm or
+     * reminder that went off. Never a "tell me when" match - its job ends
+     * (a `changed` event) the moment it matched to tell only once, and its
+     * notification must stay until it is seen.
+     */
+    fun cancelsOnChange(kind: String?): Boolean = kind == null || kind in SNOOZABLE
+
+    /** The kinds a Snooze moves (jarvis_schedule.SNOOZABLE). */
+    val SNOOZABLE = setOf("timer", "alarm", "reminder")
+
+    /**
+     * How late (seconds after it went off) the phone may still ring for a job
+     * it hears about. Later - it was out of reach, or restarted - it shows a
+     * silent "Missed at HH:MM." notice instead (the owner's decision of
+     * 2026-09-26). The desktop's `LATE_RING_LIMIT_S`.
+     */
+    const val LATE_RING_LIMIT_S = 10 * 60
+
+    /** Whether a job that went off at [firedAt] (seconds) is heard too late to ring at [nowS]. */
+    fun heardLate(firedAt: Double?, nowS: Double): Boolean =
+        firedAt != null && firedAt > 0 && nowS - firedAt > LATE_RING_LIMIT_S
+
+    /** The quiet notice's words - both apps' (`missed_words` on the desktop). */
+    fun missedWords(wentOffAt: String, body: String): String {
+        val at = wentOffAt.trim()
+        val head = if (at.isEmpty()) "Missed earlier." else "Missed at $at."
+        val b = body.trim()
+        return if (b.isEmpty()) head else "$head $b"
+    }
+
+    /**
+     * The "shown once" key for a job that went off: its id and when it went
+     * off - or, when the job could not be read, this event's own id (or,
+     * with none, when it arrived), so two failed reads of a repeating job on
+     * different days are not taken for the same firing (bug audit #6).
+     */
+    fun shownKey(id: String, firedAt: Double?, eventId: String?, arrivedMs: Long, sep: String = "@"): String {
+        val at = firedAt?.takeIf { it > 0 }?.toLong()
+        return when {
+            at != null -> "$id$sep$at"
+            !eventId.isNullOrBlank() -> "$id${sep}ev$eventId"
+            else -> "$id${sep}t$arrivedMs"
+        }
+    }
+
+    /**
+     * Whether a notification tag (ScheduleNotifier tags each by its key) is
+     * [jobId]'s own "went off" notice: the key is the id itself. A "tell me
+     * when" match's key is `id#match@...` and is not.
+     */
+    fun isFiredTag(tag: String?, jobId: String): Boolean = tag == jobId
+
     /** Whether an answer's route header says it was made without the model. */
     fun quickFromRouteHeader(header: String?): Boolean {
         if (header.isNullOrBlank()) return false

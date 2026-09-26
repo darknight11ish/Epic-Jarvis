@@ -29,6 +29,14 @@ permissions = [
   "allow-appearance-colours",
 ]
 
+# Reading the theme and nothing else: the first-run window paints the
+# owner's theme on load, and must not hold `jarvis-link` above for it -
+# that set reads the approval queue (bug audit 2026-09-26, #6).
+[[set]]
+identifier = "theme-read"
+description = "Read the theme. Read-only; nothing else."
+permissions = ["allow-get-theme"]
+
 # Choosing the theme. Two windows offer a picker — settings and the Brain — and
 # `set_theme` fans the choice out to all four surfaces, so a third window
 # holding this grant would gain nothing and widen the surface for no reason.

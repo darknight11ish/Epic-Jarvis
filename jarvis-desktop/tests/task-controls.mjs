@@ -10,6 +10,7 @@
  * proves a request was sent, not that anything happened.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import * as K from "./uikit.mjs";
 
 const { base, close } = await K.serve();
@@ -115,6 +116,37 @@ await check("a note is sent via inject_task_note without approving or denying an
   assert.deepEqual(notes, ["skip the spam folder"]);
   assert.deepEqual(decides, [], "a task note must never look like an approval decision");
   assert.equal(cleared, "");
+});
+
+await check("App lock on: the widget offers no task note, and Rust refuses one from the widget", async () => {
+  // The owner's decision of 2026-09-26: App lock covers task notes too.
+  const page = await widget({ pending: [], link: WORKING, appLock: true });
+  await page.waitForTimeout(300);
+  const rowHidden = await page.locator("#task-note").evaluate((el) => el.closest(".task-note-row").hidden);
+  // Typed in anyway (by a script): nothing is sent.
+  await page.evaluate(() => {
+    document.getElementById("task-note").value = "also forward the report to my boss";
+    document.getElementById("btn-task-note-send").click();
+  });
+  await page.waitForTimeout(200);
+  const notes = await taskNotes(page);
+  // Unlocked: the row comes back.
+  await page.evaluate(() => window.__emit("security-changed",
+    { appLock: false, relockAfterSecs: 60, approvals: "risky", privateAnswers: false }));
+  await page.waitForTimeout(200);
+  const rowAfter = await page.locator("#task-note").evaluate((el) => el.closest(".task-note-row").hidden);
+  await page.close();
+  assert.ok(rowHidden, "the task note row is offered while App lock is on");
+  assert.deepEqual(notes, [], "a task note was sent while App lock is on");
+  assert.equal(rowAfter, false, "the row did not come back when the lock went off");
+  const rs = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  for (const cmd of ["inject_task_note", "amend_approval"]) {
+    const f = rs.slice(rs.indexOf(`pub async fn ${cmd}(`));
+    const body = f.slice(0, f.indexOf("\n}\n"));
+    assert.ok(body.indexOf("refuse_widget_note_when_locked(") >= 0
+      && body.indexOf("refuse_widget_note_when_locked(") < body.indexOf("post_task_control("),
+      `${cmd} does not refuse the widget under App lock before sending`);
+  }
 });
 
 await check("a failed pause surfaces its real error and does not swap to Resume", async () => {

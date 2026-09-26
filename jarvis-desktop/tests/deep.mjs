@@ -155,6 +155,30 @@ await check("done: question, state, why, time and words a second, and the answer
   assert.equal(s.jobs[0].answer, job.answer);
 });
 
+await check("hidden with the private lists: no question, no answer, a Show button; the state stays", async () => {
+  // What Rust sends while "Hide memory lists and chat history" hides them
+  // (commands.rs redact_deep): the words taken out, `hidden` set.
+  const hidden = JSON.parse(JSON.stringify(BM.deep_done));
+  hidden.hidden = true;
+  hidden.hidden_count = hidden.jobs.length;
+  for (const j of hidden.jobs) { j.question = ""; j.answer = ""; j.hidden = true; }
+  const page = await brain({ status: hidden });
+  const s = await plate(page);
+  const show = await page.locator("#deep-jobs .private-hidden button").count();
+  await page.close();
+  const job = BM.deep_done.jobs[0];
+  assert.equal(s.jobs[0].question, "Question hidden");
+  assert.equal(s.jobs[0].tag, "done");
+  assert.equal(s.jobs[0].answer, null, "an answer is offered while hidden");
+  assert.ok(!s.all.includes(job.question), "the question shows while hidden");
+  assert.match(s.list, /Hidden until Windows Hello confirms it is you\./);
+  assert.equal(show, 1, "no Show button");
+  const rs = read("src-tauri/src/commands.rs");
+  const f = rs.slice(rs.indexOf("pub async fn get_deep("));
+  assert.match(f.slice(0, f.indexOf("\n}\n")), /private_hidden\(&app\)[\s\S]*redact_deep\(answer\)/,
+    "get_deep does not hide the words in Rust");
+});
+
 await check("failed, queued, loading, thinking: each in the backend's words, and no answer before done", async () => {
   const want = { deep_failed: ["failed", "done"], deep_queued: ["queued"],
     deep_loading: ["loading"], deep_thinking: ["thinking"] };
