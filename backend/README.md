@@ -10062,7 +10062,7 @@ research', pause and stop by voice. Nothing leaves the PC."
 ## In plain words
 
 Say "focus for 30 minutes" (or press Start - Brain -> Work on the desktop,
-Mind on the phone). Jarvis goes Quiet and starts a timer. Go to what you are
+Brain on the phone). Jarvis goes Quiet and starts a timer. Go to what you are
 working on; after two seconds there it says "Locked on." Switch to YouTube
 and, a second or two later, the PC says "YouTube can wait." - and firmer
 lines if you keep drifting. "I'm doing research" makes that trip not count;

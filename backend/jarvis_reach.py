@@ -779,4 +779,4 @@ def sentence(v: Optional[dict] = None) -> str:
     tail = (" Off or not set up: " + ", ".join(off) + ".") if off else ""
     return (head + tail + " " + EVERYTHING_ELSE + " This list is written by the PC from "
             "its settings, not by the AI model - the full list is in Settings, "
-            "\"What Jarvis can reach\" (Mind on the phone).")
+            "\"What Jarvis can reach\" (Brain on the phone).")
