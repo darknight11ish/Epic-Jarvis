@@ -10,41 +10,5 @@
     "autoProxy": true
   },
   "authoringSkill": "brag",
-  "registryItems": [
-    {
-      "name": "grain-overlay",
-      "type": "hyperframes:component",
-      "target": "compositions/components/grain-overlay.html"
-    },
-    {
-      "name": "rgb-glitch-text",
-      "type": "hyperframes:component",
-      "target": "compositions/components/rgb-glitch-text.html"
-    },
-    {
-      "name": "scramble-reveal",
-      "type": "hyperframes:component",
-      "target": "compositions/components/scramble-reveal.html"
-    },
-    {
-      "name": "telemetry-hud",
-      "type": "hyperframes:component",
-      "target": "compositions/components/telemetry-hud.html"
-    },
-    {
-      "name": "vfx-anamorphic-flare",
-      "type": "hyperframes:block",
-      "target": "compositions/vfx-anamorphic-flare.html"
-    },
-    {
-      "name": "headline-slam",
-      "type": "hyperframes:component",
-      "target": "compositions/components/headline-slam.html"
-    },
-    {
-      "name": "chromatic-aberration-wipe",
-      "type": "hyperframes:component",
-      "target": "compositions/components/chromatic-aberration-wipe.html"
-    }
-  ]
+  "registryItems": []
 }
