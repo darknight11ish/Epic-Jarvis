@@ -187,9 +187,11 @@ shaped this request:" - which tools were read, and which values came from
 that text, not the owner. The card still shows the plan in full; this only
 adds to it. One thing there does change which tools ask (the owner's
 decision of 2026-09-24, after the safety research): in a turn shaped by
-outside text - a reading tool ran, the conversation is tainted, the
+outside text - a reading tool ran (since 2026-09-26 that includes the PC
+reading the words in a picture, JARVIS-API section 35), the conversation is tainted, the
 newest message was not typed or said by the owner (pasted, shared, from the
-clipboard, a picture's caption, or with no tag at all - only `typed` and
+clipboard, a picture's caption - since 2026-09-26 decided by the backend
+from the picture itself, whatever the app's tag - or with no tag at all - only `typed` and
 `voice` are the owner's own words), or the app sent a `system` message of
 its own (security audit M1, 2026-09-25) - a note write
 (Obsidian, Logseq, Joplin) is put to the same gate as
@@ -1484,6 +1486,10 @@ they landed):
   (`qwen3:8b`, via `jarvis-primary.Modelfile`) reads text only. A screenshot
   sent to it is not seen, so the quickbar asks Ollama first
   (`local_model_vision`) and offers to send the words without the picture.
+  Since 2026-09-26 the PC itself reads the WORDS in such a picture
+  (`jarvis_ocr.py`, Windows' own text recognition) and adds them as
+  outside text (JARVIS-API section 35); then the quickbar sends the picture
+  without asking. That is the words only - not what the picture shows.
   The fix is BUILT but off: the second card's "Pictures" switch sends a
   picture turn to `qwen2.5vl:7b` there (`jarvis_second_card.py`, below), and
   nothing changes until that card is installed and the switch approved. The

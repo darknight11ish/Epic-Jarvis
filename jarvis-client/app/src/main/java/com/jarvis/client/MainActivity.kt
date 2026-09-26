@@ -1833,10 +1833,13 @@ class MainActivity : FragmentActivity() {
                             chatWaiting = chatWaiting,
                             answerNote = answerNote,
                             quickNoteOpen = quickNoteOpen.value,
-                            // The second card's Pictures feature, as the PC
-                            // last reported it. The send asks again first.
-                            pictureOffered = SecondCard.visionAvailable(secondCard),
-                            pictureLine = picture.value?.let { ChatPicture.attachedLine(it) },
+                            // The second card's Pictures feature, or the PC
+                            // reading the words in a picture (2026-09-26), as
+                            // the PC last reported it. The send asks again first.
+                            pictureOffered = SecondCard.picturesTaken(secondCard),
+                            pictureLine = picture.value?.let {
+                                ChatPicture.attachedLine(it, wordsOnly = !SecondCard.visionAvailable(secondCard))
+                            },
                             sharedLine = sharedHeld?.let { Provenance.sharedLine(it) },
                             pictureBusy = pictureBusy.value,
                             noteTargets = noteTargets,

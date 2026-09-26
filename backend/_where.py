@@ -151,6 +151,8 @@ SHIPPED = (
     "jarvis_focus.py",
     # "What asks first" and "Lights, plugs and fans without a card" (asks-first.patch)
     "jarvis_asks_first.py",
+    # the words in a picture, read on this PC and marked as outside text (no patch)
+    "jarvis_ocr.py",
 )
 
 

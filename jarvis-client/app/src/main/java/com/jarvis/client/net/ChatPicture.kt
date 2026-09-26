@@ -12,8 +12,11 @@ import java.util.Base64
  *
  * ONLY WHILE PICTURES WORKS. The attach button is offered only while the PC
  * says its second graphics card's Pictures feature is `available`
- * ([SecondCard.visionAvailable]), and the send checks again first. Without it
- * the everyday model gets the picture and cannot see it.
+ * ([SecondCard.visionAvailable]) - or, since 2026-09-26, that it reads the
+ * WORDS in a picture itself ([SecondCard.pictureTextAvailable]; backend
+ * `jarvis_ocr.py`, which marks them as outside text) - and the send checks
+ * again first ([SecondCard.picturesTaken]). Without either the everyday
+ * model gets the picture and cannot see it.
  *
  * PRIVATE. A photo can show anything. It goes to the owner's PC and nowhere
  * else: the PC's router keeps any message with a picture on the local model
@@ -98,16 +101,25 @@ object ChatPicture {
      * picked photo.
      */
     fun sharedRefusal(read: SecondCard.Read): String? {
-        if (SecondCard.visionAvailable(read)) return null
+        if (SecondCard.picturesTaken(read)) return null
         return "The shared picture was not attached: Jarvis takes pictures only while Pictures " +
-            "on the second graphics card is working" +
+            "on the second graphics card is working, or your PC can read the words in them" +
             (notWorkingWhy(read)?.let { " ($it)" } ?: "") + ". Nothing was sent."
     }
 
-    /** The line under the composer while a picture is attached. */
-    fun attachedLine(p: Ready): String =
+    /**
+     * The line under the composer while a picture is attached. [wordsOnly]:
+     * no picture model sees it, and the PC reads the words in it instead
+     * (2026-09-26) - said, so the owner knows only the words are used.
+     */
+    fun attachedLine(p: Ready, wordsOnly: Boolean = false): String =
         "Picture attached (${p.width} × ${p.height}, ${p.jpegBytes / 1024} KB). " +
-            "It goes only to your PC."
+            if (wordsOnly) WORDS_ONLY else "It goes only to your PC."
+
+    /** The PC reads the words in the picture, and nothing else of it. */
+    const val WORDS_ONLY =
+        "It goes only to your PC, which reads the words in it for Jarvis - the layout and " +
+            "anything else in it are not seen. The words count as outside text."
 
     /**
      * The size to decode to: the long edge brought down to [maxLongEdge],

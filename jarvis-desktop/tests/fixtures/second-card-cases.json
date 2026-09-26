@@ -120,6 +120,11 @@
       "last": null,
       "main_ollama_pinned": false,
       "pending": [],
+      "picture_text": {
+        "available": false,
+        "engine": "Windows' own text recognition",
+        "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
+      },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
       "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama."
     },
@@ -244,6 +249,11 @@
       "pending": [
         "long_context"
       ],
+      "picture_text": {
+        "available": false,
+        "engine": "Windows' own text recognition",
+        "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
+      },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
       "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again."
     },
@@ -349,6 +359,11 @@
       "last": null,
       "main_ollama_pinned": null,
       "pending": [],
+      "picture_text": {
+        "available": false,
+        "engine": "Windows' own text recognition",
+        "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
+      },
       "pin_command": null,
       "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
     },
@@ -465,6 +480,11 @@
       "last": null,
       "main_ollama_pinned": false,
       "pending": [],
+      "picture_text": {
+        "available": false,
+        "engine": "Windows' own text recognition",
+        "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
+      },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
       "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama."
     },
@@ -570,6 +590,121 @@
       "last": null,
       "main_ollama_pinned": null,
       "pending": [],
+      "picture_text": {
+        "available": false,
+        "engine": "Windows' own text recognition",
+        "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
+      },
+      "pin_command": null,
+      "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
+    },
+    "one_card_reads_words": {
+      "active": false,
+      "detected": {
+        "capable": false,
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display_active": true,
+            "free_mb": 6120,
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "role": "primary",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+            "why": "everyday chat runs here: a monitor is plugged into it"
+          }
+        ],
+        "primary": {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+        },
+        "second": null,
+        "why": "only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+      },
+      "enabled": false,
+      "features": [
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "long_context",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Longer conversations",
+          "needs": [],
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "vision",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Pictures",
+          "needs": [],
+          "what": "A message with a picture goes to a picture-reading model on the second card, on this PC, so Jarvis can see what you attached.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "learning",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Learning in the background",
+          "needs": [],
+          "what": "Jarvis learns from your conversations on the second card, so it never slows the main card down and does not wait long for a pause.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "browser_control",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Browser control",
+          "needs": [
+            "long_context"
+          ],
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Wiki builder",
+          "needs": [],
+          "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        }
+      ],
+      "lane": {
+        "state": "off",
+        "why": "no capable second card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+      },
+      "last": null,
+      "main_ollama_pinned": null,
+      "pending": [],
+      "picture_text": {
+        "available": true,
+        "engine": "Windows' own text recognition",
+        "why": ""
+      },
       "pin_command": null,
       "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
     },
@@ -692,6 +827,11 @@
       "last": null,
       "main_ollama_pinned": true,
       "pending": [],
+      "picture_text": {
+        "available": false,
+        "engine": "Windows' own text recognition",
+        "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
+      },
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
       "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again."
     }

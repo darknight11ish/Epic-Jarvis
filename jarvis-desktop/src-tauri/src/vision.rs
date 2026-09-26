@@ -37,6 +37,14 @@
 //! names that model. Anything else - the switch off, the model not
 //! installed, an older backend with no such route (404), the module missing
 //! (503), no answer - and the check is exactly what it was before.
+//!
+//! THE WORDS IN A PICTURE (2026-09-26, the owner's "Quick wins"). The same
+//! status says whether the PC reads the words in a picture itself when the
+//! model cannot see it (`picture_text.available`, backend `jarvis_ocr.py`),
+//! and sends them to the model marked as outside text. Then `reads_text` is
+//! true and the quickbar sends the picture without asking: the reading and
+//! the marking happen on the PC, never here, so an app cannot make the words
+//! count as the owner's.
 
 use std::time::Duration;
 
@@ -60,6 +68,23 @@ pub struct VisionCheck {
     pub vision: Option<bool>,
     /// One plain sentence on how that answer was reached, for the notice.
     pub reason: String,
+    /// The PC reads the WORDS in a picture itself when the model cannot see
+    /// it, and sends them to the model marked as outside text
+    /// (`jarvis_ocr.py`, 2026-09-26) - `picture_text.available` in
+    /// `GET /api/second-card`. Only ever true when `vision` is not
+    /// `Some(true)`: then the quickbar sends the picture without asking.
+    pub reads_text: bool,
+}
+
+/// Whether the PC says it reads the words in a picture
+/// (`status()["picture_text"]["available"]`, exactly `true`). An older
+/// backend has no such field: false, and the quickbar asks as before.
+pub fn picture_text_available(status: &serde_json::Value) -> bool {
+    status
+        .get("picture_text")
+        .and_then(|p| p.get("available"))
+        .and_then(|a| a.as_bool())
+        == Some(true)
 }
 
 /// The current model's name out of `/api/models`. `current` is a string on
@@ -119,16 +144,18 @@ pub fn second_card_check(model: String) -> VisionCheck {
         reason: format!("Pictures go to {model} on the second graphics card."),
         model: Some(model),
         vision: Some(true),
+        reads_text: false,
     }
 }
 
-/// Asks the Jarvis server whether the second card is answering pictures.
-/// Every failure is `None` - "not that way" - so the check carries on exactly
-/// as it did before the second card existed.
-async fn read_second_card_picture_model(
+/// Asks the Jarvis server for its second-card status (which also says
+/// whether it reads the words in a picture). Every failure is `None` - "not
+/// that way" - so the check carries on exactly as it did before the second
+/// card existed.
+async fn read_second_card_status(
     app: &AppHandle,
     client: &reqwest::Client,
-) -> Option<String> {
+) -> Option<serde_json::Value> {
     let response = client
         .get(format!("{}{SECOND_CARD_PATH}", jarvis_base(app)))
         .headers(jarvis_headers(app).ok()?)
@@ -138,8 +165,14 @@ async fn read_second_card_picture_model(
     if !response.status().is_success() {
         return None;
     }
-    let body: serde_json::Value = response.json().await.ok()?;
-    second_card_picture_model(&body)
+    response.json().await.ok()
+}
+
+/// The answer about the model, and then whether the PC reads the words in
+/// the picture instead - only when the model is not a clear yes.
+fn with_picture_text(mut check: VisionCheck, status: Option<&serde_json::Value>) -> VisionCheck {
+    check.reads_text = check.vision != Some(true) && status.is_some_and(picture_text_available);
+    check
 }
 
 async fn read_current_model(app: &AppHandle, client: &reqwest::Client) -> Result<String, String> {
@@ -198,19 +231,23 @@ pub async fn local_model_vision(app: AppHandle) -> VisionCheck {
             }
         }
     };
-    if let Some(model) = read_second_card_picture_model(&app, &client).await {
+    let status = read_second_card_status(&app, &client).await;
+    if let Some(model) = status.as_ref().and_then(second_card_picture_model) {
         return second_card_check(model);
     }
     let model = match read_current_model(&app, &client).await {
         Ok(model) => model,
         Err(reason) => {
-            return VisionCheck {
-                reason,
-                ..VisionCheck::default()
-            }
+            return with_picture_text(
+                VisionCheck {
+                    reason,
+                    ..VisionCheck::default()
+                },
+                status.as_ref(),
+            )
         }
     };
-    match read_show(&client, &model).await {
+    let check = match read_show(&client, &model).await {
         Ok(show) => {
             let vision = vision_from_show(&show);
             let reason = match vision {
@@ -226,14 +263,17 @@ pub async fn local_model_vision(app: AppHandle) -> VisionCheck {
                 model: Some(model),
                 vision,
                 reason,
+                reads_text: false,
             }
         }
         Err(reason) => VisionCheck {
             model: Some(model),
             vision: None,
             reason,
+            reads_text: false,
         },
-    }
+    };
+    with_picture_text(check, status.as_ref())
 }
 
 #[cfg(test)]
@@ -372,5 +412,35 @@ mod tests {
             second_card_picture_model(&bare).as_deref(),
             Some("the picture model")
         );
+    }
+
+    /// The PC reads the words in a picture (2026-09-26): read from the real
+    /// status; only exactly `true` counts; and a model that can see pictures
+    /// never needs it.
+    #[test]
+    fn the_pc_reading_the_words_is_read_from_the_real_status() {
+        let doc = second_card_cases();
+        let reads = &doc["cases"]["one_card_reads_words"];
+        let not = &doc["cases"]["one_card"];
+        assert!(picture_text_available(reads));
+        assert!(!picture_text_available(not));
+        assert!(!picture_text_available(
+            &json!({"picture_text": {"available": "yes"}})
+        ));
+        assert!(!picture_text_available(&json!({})), "an older backend");
+        let blind = VisionCheck {
+            model: Some("qwen3:8b".into()),
+            vision: Some(false),
+            reason: String::new(),
+            reads_text: false,
+        };
+        assert!(with_picture_text(blind.clone(), Some(reads)).reads_text);
+        assert!(!with_picture_text(blind.clone(), Some(not)).reads_text);
+        assert!(!with_picture_text(blind, None).reads_text);
+        let sees = VisionCheck {
+            vision: Some(true),
+            ..VisionCheck::default()
+        };
+        assert!(!with_picture_text(sees, Some(reads)).reads_text);
     }
 }

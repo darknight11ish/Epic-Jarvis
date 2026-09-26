@@ -561,6 +561,8 @@ $SHIPPED = @(
     'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
     # --- what asks first (asks-first.patch) ---
     'jarvis_asks_first.py'       # "What asks first": every action and whether it asks; stricter from either app, looser on the PC only; lights without a card
+    # --- the words in a picture (2026-09-26) ---
+    'jarvis_ocr.py'              # reads the words in a picture with Windows' own text recognition, on this PC; jarvis_agent.py marks them as outside text; no patch
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -38,6 +38,7 @@ for p in (BACKEND, BACKEND / "rebuilt"):
         sys.path.insert(0, str(p))
 
 import jarvis_compute as CP  # noqa: E402
+import jarvis_ocr as OCR  # noqa: E402
 import jarvis_second_card as SC  # noqa: E402
 
 FULL = CP.FIELDS_FULL
@@ -94,8 +95,14 @@ class World:
 
     def __init__(self, smi, *, old_driver=None, installed=("qwen3:8b", "qwen3:14b"),
                  foreign_on_port=False, lane_answers=True, spawn_now=True,
-                 user_env=None, windows=False, apps="", tags_answer=True):
+                 user_env=None, windows=False, apps="", tags_answer=True,
+                 reads_words=False):
         self.smi, self.old_driver = smi, old_driver
+        # Whether this PC reads the words in a picture (jarvis_ocr.status()):
+        # fixed here, so the file is the same on every machine that writes it.
+        self.picture_text = ({"available": True, "engine": OCR.ENGINE, "why": ""} if reads_words
+                             else {"available": False, "engine": OCR.ENGINE,
+                                   "why": OCR.NOT_WINDOWS})
         self.installed = list(installed)
         self.foreign_on_port, self.lane_answers = foreign_on_port, lane_answers
         self.spawn_now, self.user_env, self.windows = spawn_now, user_env, windows
@@ -177,6 +184,7 @@ class World:
             # today's behaviour, whatever the settings folder of the PC
             # running this holds.
             (SC, "_preset_lanes"): lambda: None,
+            (SC, "_picture_text"): lambda: dict(self.picture_text),
             # `_sleep` does nothing here, so a start that never answers would
             # spin for the real 30 seconds.
             (SC._LaneProcess, "START_SECONDS"): 0.3,
@@ -225,6 +233,10 @@ def cases() -> dict:
         out["card_missing_but_enabled"] = SC.status()
     with World(SMI["2080s_1080"], windows=True) as w:
         out["not_capable_old_card"] = SC.status()
+    # The owner's PC today, on Windows: no picture model, but the words in a
+    # picture are read on the PC (jarvis_ocr.py, 2026-09-26).
+    with World(SMI["one_card"], windows=True, reads_words=True) as w:
+        out["one_card_reads_words"] = SC.status()
     return out
 
 

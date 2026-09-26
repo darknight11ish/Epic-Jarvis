@@ -10435,12 +10435,15 @@ python3 backend/eval_memory.py --sizes 0,100 --words-only --reranker stand-in
 
 ---
 
-# Quick wins (2026-09-26): the weather from your Home Assistant, both graphics cards' health
+# Quick wins (2026-09-26): the weather from your Home Assistant, the words in a picture, both graphics cards' health
 
 Step 1 of `docs/FEASIBILITY-AUDIT-2026-09-26.md` section 3 - the "Quick
 wins" group you chose. No new patch: every change is in a module
 `apply-patches.ps1` copies whole (`jarvis_home.py`, `jarvis_briefing.py`,
-`jarvis_quick.py`, `jarvis_hardware.py`, `jarvis_reach.py`, `selftest.py`).
+`jarvis_quick.py`, `jarvis_hardware.py`, `jarvis_reach.py`, `selftest.py`,
+`jarvis_agent.py`, `jarvis_second_card.py`, and one new one,
+`jarvis_ocr.py`). The fourth quick win, "Also on my phone", is in the phone
+app only (JARVIS-API section 21.10).
 
 ## The weather in the briefing, from your own Home Assistant
 
@@ -10532,6 +10535,37 @@ for an administrator's token. **WARN** means the token is an
 administrator's. It was read from Home Assistant's source by the research
 (`api/__init__.py`), not checked on your Home Assistant.
 
+## The words in a picture, read on this PC (`jarvis_ocr.py`, new)
+
+**What you get.** A screenshot (Alt+Shift+S on the PC) or a photo from the
+phone, sent to Jarvis while your model cannot see pictures, is no longer
+ignored: the PC reads the WORDS in it with Windows' own text recognition
+and gives them to the model. The layout and anything else in the picture
+are not seen - only the words.
+
+**What it sends, in one sentence.** Nothing leaves the PC: the picture goes
+to Windows' own text recognition on this PC (Windows PowerShell, started by
+its full path with a fixed script, the picture on standard input - never
+written to a file), and the words go to the model on this PC.
+
+**Why it is safe to act on.** The words are marked as OUTSIDE TEXT by the
+backend itself - never by the app, and never merged into your own typed
+words. So, exactly as after reading an email: a note write in that
+conversation asks first, a card says "Proposed after Jarvis read: the words
+in your picture", planted instructions are flagged, and nothing from the
+picture is ever learned as a fact. At most 4,500 characters (about 1,500
+tokens) are sent; the model is told how much was left out.
+
+**Setting it up.** Nothing, usually: Windows 10 and 11 include text
+recognition for your display language. If it is missing, the first picture's
+answer says the words could not be read, and from then until Jarvis
+restarts the apps treat pictures as before (the "can't see pictures"
+notice on the PC, no Photo button on the phone). To fix it, add your language
+again with its optional features in Settings -> Time & language -> Language
+& region (the words of Windows' screens, not checked on your PC), then
+restart Jarvis. No download by Jarvis, no Python package, nothing to switch
+on.
+
 ## Both graphics cards' health
 
 Every card's heat, power, fan and load, and "It is slowing itself down
@@ -10549,6 +10583,7 @@ python3 backend/test_home_control.py
 python3 backend/test_briefing.py
 python3 backend/test_selftest_preflight.py
 python3 backend/test_hardware.py
+python3 backend/test_picture_text.py
 ```
 
 ## Not checked, said plainly
@@ -10563,3 +10598,10 @@ python3 backend/test_hardware.py
   (`2026-09-26T...`), not converted between time zones.
 - **nvidia-smi's health field names** (`clocks_event_reasons.*`) are from
   NVIDIA's documentation, not checked on your driver.
+- **Windows' text recognition was not run.** The PowerShell script
+  (`jarvis_ocr._SCRIPT`) follows the well-known pattern for calling it from
+  Windows PowerShell 5.1, but there is no Windows here: everything around
+  it is tested with a stand-in. The first real screenshot will tell. If it
+  fails, the model is told plainly that the words could not be read.
+- **A follow-up question about the same picture** does not have its words:
+  the apps re-send the conversation's words, never the picture.

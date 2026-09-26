@@ -343,9 +343,10 @@ data class HomeState(
     val quickNoteOpen: Boolean = false,
     /**
      * Offer the Photo button: the PC says its second graphics card's
-     * Pictures feature is working ([com.jarvis.client.net.SecondCard.visionAvailable]).
-     * Hidden otherwise - without it the everyday model would get a picture
-     * it cannot see.
+     * Pictures feature is working, or that it reads the words in a picture
+     * itself ([com.jarvis.client.net.SecondCard.picturesTaken], 2026-09-26).
+     * Hidden otherwise - without either the everyday model would get a
+     * picture it cannot see.
      */
     val pictureOffered: Boolean = false,
     /**

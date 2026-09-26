@@ -103,6 +103,13 @@ object SecondCard {
         val features: List<Feature>,
         /** How the last approval card ended, any switch; null when none has, or an older PC. */
         val last: LastCard? = null,
+        /**
+         * Whether the PC reads the WORDS in a picture itself when the model
+         * cannot see it (backend `jarvis_ocr.py`, 2026-09-26) - null from an
+         * older PC. The PC reads them and marks them as outside text; this
+         * app only decides whether to offer the Photo button.
+         */
+        val pictureText: PictureText? = null,
     ) {
         fun feature(id: String): Feature? = features.firstOrNull { it.id == id }
     }
@@ -117,6 +124,9 @@ object SecondCard {
      * kept as a string, so a word added later is shown, not dropped.
      */
     data class LastCard(val feature: String, val outcome: String, val why: String?)
+
+    /** `status()["picture_text"]`: can the PC read the words in a picture, and why not. */
+    data class PictureText(val available: Boolean, val why: String)
 
     /** How the last read came back. The screen draws each one differently. */
     sealed interface Read {
@@ -166,6 +176,9 @@ object SecondCard {
             pinNote = obj.str("pin_note"),
             hasPinCommand = obj.str("pin_command") != null,
             last = lastCard(obj),
+            pictureText = (obj["picture_text"] as? JsonObject)?.let {
+                PictureText(available = it.bool("available") == true, why = it.str("why").orEmpty())
+            },
             features = features.mapNotNull { el ->
                 val f = el as? JsonObject ?: return@mapNotNull null
                 val id = f.str("id") ?: return@mapNotNull null
@@ -213,6 +226,17 @@ object SecondCard {
     /** True only when the PC said, on the last read, that Pictures is working. */
     fun visionAvailable(read: Read): Boolean =
         (read as? Read.Loaded)?.status?.feature(VISION)?.available == true
+
+    /** True only when the PC said, on the last read, that it reads the words in a picture. */
+    fun pictureTextAvailable(read: Read): Boolean =
+        (read as? Read.Loaded)?.status?.pictureText?.available == true
+
+    /**
+     * Whether a picture sent now is of any use: the second card's picture
+     * model sees it, or the PC reads the words in it (2026-09-26). The Photo
+     * button and every send go by this.
+     */
+    fun picturesTaken(read: Read): Boolean = visionAvailable(read) || pictureTextAvailable(read)
 
     // ------------------------------------------------------------ switches --
 
