@@ -70,147 +70,111 @@ coming). Size: S = a day or so, M = a few days, L = a week or more.
 
 ### 1. "About Jarvis" from settings, and a "you told me" check (S)
 
-- **What.** Questions about Jarvis itself - "who are you", "what model are
-  you", "what can you do", "what do you know about me" - answered without the
-  model, from the same settings "What can you reach?" already uses. And when
-  an answer says "you told me" / "you mentioned" / "I remember" but no saved
-  fact went into that answer, the app adds one line: "No saved fact was used
-  in this answer."
-- **Why.** Models drift away from their instructions as a chat grows, and
-  start to mirror the user (the "persona drift" study, below: noticeable within
-  eight rounds on a large model). Jarvis already fights this the right way -
-  the manner and spoken notes sit next to the newest question
-  (`jarvis_agent.py:3191`, `with_manner_note`), not only at the top. The
-  remaining gap is self-description: the model is told only "You are Jarvis,
-  a private assistant running entirely on this machine"
-  (`backend/jarvis-primary.Modelfile:160`), so "can you read my email?" is
-  a guess.
-- **Plugs into.** `jarvis_quick.py` (`match`, line 608; `_run_reach`, line
-  1420 already answers "what can you reach?" from `jarvis_reach.KINDS`,
-  line 692). The check uses `injected_facts` from the `X-Jarvis-Route` header
-  (`JARVIS-API.md` §4) in `answer-memory.js` and the phone's equivalent.
-- **Rules.** Tightens rule 6 ("nothing is claimed that is not true"). Both
-  apps. Source: [persona_drift](https://github.com/likenneth/persona_drift)
-  (paper 2402.10962; read through its GitHub page and search summary).
+- **What.** "Who are you / what model are you / what can you do / what do you
+  know about me" answered without the model, from the settings "What can you
+  reach?" already reads. And when an answer says "you told me" or "I remember"
+  but no saved fact went into it, the app adds: "No saved fact was used in
+  this answer."
+- **Why.** Models drift from their instructions as a chat grows and start to
+  mirror the user ([persona_drift](https://github.com/likenneth/persona_drift):
+  within eight rounds on a large model). Jarvis already places its manner and
+  spoken notes next to the newest question (`jarvis_agent.py:3191`), which is
+  the right counter. The gap is self-description: the model is told only "You
+  are Jarvis, a private assistant running entirely on this machine"
+  (`jarvis-primary.Modelfile:160`), so "can you read my email?" is a guess.
+- **Plugs into.** `jarvis_quick.py` (`match`, 608; `_run_reach`, 1420, reads
+  `jarvis_reach.KINDS`, `jarvis_reach.py:692`). The check reads
+  `injected_facts` from `X-Jarvis-Route` (`JARVIS-API.md` §4) in
+  `answer-memory.js` and the phone's twin. Tightens rule 6 of ARCHITECTURE §2.
 
 ### 2. "Explain simply" and speaking speed (S)
 
-- **What.** A switch in both apps' settings, beside "How Jarvis talks":
-  **Explain simply** - say what a thing is before using its name, short
-  sentences, one example. It is separate from Warm/Plain (plain AND simple is
-  fine). And a **Speaking speed** choice (slower / normal / faster).
-- **Why.** It is the owner's own standing rule for how things are explained
-  (`CLAUDE.md`, "Explain things simply"), made available for every answer.
-  Speed already exists but only in the settings file: `tts_speed` in `[voice]`
-  (`jarvis_speech.py:1818`); no app shows it (searched both apps for it).
-- **Plugs into.** A second line in `jarvis_manner.py` (`NOTE`, line 72;
-  placed by `with_manner_note`), same "wording only, every rule still
-  applies" test as `test_manner.py`. Speed: a setting both apps write.
-- **Rules.** Wording only; no card either way, like manner. Check custom
-  voices take a speed too (`jarvis_voices.speak`, line 1417, has `speed`).
+- **What.** Beside "How Jarvis talks", a switch **Explain simply**: say what a
+  thing is before naming it, short sentences, one example. Separate from
+  Warm/Plain. And **Speaking speed** (slower / normal / faster).
+- **Why.** It is the owner's own rule (`CLAUDE.md`, "Explain things simply"),
+  for every answer. Speed exists only in the settings file (`tts_speed`,
+  `jarvis_speech.py:1818`); neither app shows it (searched both).
+- **Plugs into.** A second line in `jarvis_manner.py` (`NOTE`, 72), placed by
+  `with_manner_note`, held by `test_manner.py`'s "wording only, every rule
+  still applies". Custom voices take a speed too (`jarvis_voices.speak`, 1417).
+  No card either way, like manner.
 
 ### 3. The face follows the voice's shape (S)
 
-- **What exists.** Loudness already drives every face: the desktop measures
-  it in `voice.js` (`attachAnalyser`, lines 297-335) and the phone in
-  `Speaker.kt:276` (`Wav.rms`), both into `setSpeechLevel`
-  (`faces.html:3282`; `FaceView.kt:80`). The spec calls this out as the
-  audit's biggest finding, now fixed (`faces-spec.js:1956-1971`).
-- **What is new.** The same analyser can split the sound into two or three
-  bands: low energy (open vowels: "ah") and high energy (hiss: "s", "sh").
-  Feed "openness" to the scale push (as now) and "hiss" to a fine sparkle or
-  ring detail. That is most of what lip-sync gives an abstract face, for no
-  model and on every voice (Kokoro, custom voices, the phone fallback). The
-  Spectrum face ("Frequency, standing up", `faces.html:1298`) could show the
-  real bands.
-- **Rules.** None. Must stay inside the photosensitivity limits
-  (`faces-spec.js:631-641`: max 3 opposing changes a second): movement, not
-  brightness flashes. The spec is shared data, so both apps get it.
+- **Exists.** Loudness drives every face: `voice.js` (`attachAnalyser`,
+  297-335) and `Speaker.kt:276` (`Wav.rms`) feed `setSpeechLevel`
+  (`faces.html:3282`, `FaceView.kt:80`; spec `faces-spec.js:1956-1971`).
+- **New.** Split the same sound into bands: low (open vowels, "ah") and high
+  (hiss, "s"). Openness drives the scale push as now; hiss adds fine ring
+  detail. Most of what lip-sync gives an abstract face, with no model, on
+  every voice. The Spectrum face (`faces.html:1298`) could show real bands.
+- **Rules.** Movement, not brightness: inside the flash limits
+  (`faces-spec.js:631-641`). Shared spec data, so both apps.
 
 ### 4. Idle life (S-M)
 
-- **What.** Small, slow, non-repeating behaviour when nothing is happening:
-  a glance (the Iris face - "It is looking back", `faces.html:2231` - is
-  made for this), dozing after a long quiet spell (slower, dimmer, like
-  standby but lighter), a calmer palette in the evening or in quiet hours,
-  and a brief "perk up" when "Hey Jarvis" was heard.
-- **Why.** Every consumer assistant that feels alive does this; Jarvis's idle
-  is a steady "breathe" pattern today (`faces-spec.js`, `state_rules.idle`).
-- **Rules.** Keep the idle frame-rate savings (`state_fps`, line 564) and
-  "reduced motion" (both apps honour it: `JarvisTheme.kt:351`,
-  `prefers-reduced-motion` in `faces.html`). No new state, no attention
-  grabbing: idle must never look like "approval" (the knock-at-the-door ring).
+- **What.** Slow, non-repeating life when nothing happens: a glance (the Iris
+  face, "It is looking back", `faces.html:2231`), dozing after a long quiet
+  spell, a calmer look in the evening or quiet hours, a brief "perk up" when
+  "Hey Jarvis" is heard.
+- **Rules.** Idle is a steady "breathe" today (`state_rules.idle`). Keep the
+  idle frame-rate savings (`state_fps`, `faces-spec.js:564`) and reduced
+  motion (`JarvisTheme.kt:351`; `faces.html`). Never look like "approval".
 
 ### 5. Games and small talk, in a temporary chat (S)
 
-- **What.** "Let's play 20 questions", trivia, riddles, "would you rather",
-  a word of the day, a short story together. A **Play** button (or "let's
-  play ...") that starts a *temporary chat*.
-- **Why it must be temporary.** Automatic learning saves facts from the
-  owner's own typed or said words (`jarvis_auto_learn.py:583`). I searched
-  it and `jarvis_sensitive.py` for anything about games or pretending and
-  found nothing, so "I'm a pirate captain" in a game is the owner's own words
-  and could become a fact. A temporary chat already recalls nothing, learns
-  nothing and keeps nothing (`JARVIS-API.md` §4, `temporary-chat.patch`) -
-  exactly right for play, with no new mechanism.
-- **Rules.** Trivia from an 8B model can be wrong: the rules block still makes
-  it say what is a guess. No game may involve Jarvis pretending to be a real
-  person or company, or asking the owner for personal details. Offers such as
-  "want a riddle?" go through `jarvis_backoff.may_offer` (line 313) with a
-  declared kind, or better, are never offered at all.
+- **What.** 20 questions, trivia, riddles, "would you rather", a story
+  together - started by a **Play** button or "let's play", as a temporary chat.
+- **Why temporary.** Automatic learning saves facts from the owner's own
+  typed or said words (`jarvis_auto_learn.py:583`). I searched it and
+  `jarvis_sensitive.py` for games or pretending and found nothing, so "I'm a
+  pirate captain" in a game could become a fact. A temporary chat already
+  recalls, learns and keeps nothing (`JARVIS-API.md` §4) - no new mechanism.
+- **Rules.** Trivia can be wrong; the rules block still says what is a guess.
+  Jarvis never plays a real person or company, never asks for personal
+  details. No "want a riddle?" offers (or only via `jarvis_backoff`).
 
 ### 6. "Quiz me on this note" with smart review times (M)
 
-- **What.** The owner picks a note (Obsidian); the local model writes 5-10
-  question-and-answer cards; the owner keeps, edits or drops each. Jarvis then
-  asks them again on a schedule that spaces reviews out as you remember them,
-  using **FSRS** (Free Spaced Repetition Scheduler, the algorithm in Anki).
-  Quiz by voice or in either app; "how did I do this week?".
-- **Source.** [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs),
-  **MIT** (LICENSE read). Obsidian plugins already do the card-writing with
-  Ollama ([obsidian-quiz-generator](https://github.com/ECuiDev/obsidian-quiz-generator))
-  - proof it works with local models, not code to take.
-- **Plugs into.** Reading the note: `jarvis_notes.plan`/`run`
-  (`jarvis_notes.py:266`, `536`). Review times: a new kind on the one
-  scheduler (`jarvis_schedule.register_kind`, line 313), `silent` with its
-  own "N cards due" line in Coming up - not a timer of its own
-  (`ARCHITECTURE.md` §12). Cards in their own small database, NOT memory.
-- **Rules.** A note is outside text (notes search marks the turn), so card
-  writing happens in a marked turn; that only matters if it writes back to
-  the vault, which then needs the note-write card. Quiz answers are not facts
-  about the owner: run the quiz as a temporary chat so nothing is learned.
-  Repeating reviews: the owner's decision on repeats applies - a plain
-  reminder repeat has no card (2026-09-26), but this kind reads notes, so by
-  the rule in §12 it asks once, like the briefing.
+- **What.** The owner picks a note; the local model writes 5-10 question
+  cards; the owner keeps, edits or drops each. Jarvis asks them again, spaced
+  out as they are remembered, using **FSRS** (the scheduling maths in Anki):
+  [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs), **MIT**
+  (LICENSE read). Obsidian plugins already do this with Ollama
+  ([obsidian-quiz-generator](https://github.com/ECuiDev/obsidian-quiz-generator)).
+- **Plugs into.** `jarvis_notes.plan`/`run` (`jarvis_notes.py:266`, 536) to
+  read; a new kind on the one scheduler (`jarvis_schedule.register_kind`,
+  313) for "N cards due" in Coming up; cards in their own small database,
+  NOT memory.
+- **Rules.** The note is outside text (it marks the turn). Quizzes run as a
+  temporary chat, so answers are never learned. A new repeating kind asks
+  once by default (ARCHITECTURE §12); whether reviews go without a card, like
+  plain reminders since 2026-09-26, is the owner's call.
 
 ### 7. Summarise an audio file the owner gives (M)
 
-- **What.** Drop a file (MP3/WAV/M4A of a podcast, lecture or voice memo) on
-  the Jarvis bar, or share it from the phone. The PC cuts it into speech
-  pieces with Silero (already there), turns them into text with Parakeet
-  (already there), then the everyday model writes a summary in slices.
-- **Plugs into.** `jarvis_speech._speech_span` (line 380) and `_transcribe`
-  (line 329). The live 30-second cap (`max_seconds`, line 944) is for talking
-  and stays; a file goes through a new background job, not the voice route.
-  Decoding MP3/M4A needs a decoder (e.g. ffmpeg) - a new dependency.
-- **Speed.** A 30-minute podcast in "a handful of seconds" on a 24 GB GPU
-  *(search summary)*; on the processor it will be minutes. Unmeasured here.
-- **Rules.** Speech-to-text runs on the PC, never on the phone (standing
-  rule). The recording is not the owner speaking live, so its words are
-  outside text: they mark the conversation and are never learned as facts.
-  Parakeet v2 is English only; v3 adds 25 European languages (CC-BY-4.0,
-  *search summary*) - see item 9.
+- **What.** Drop a podcast, lecture or voice memo file on the Jarvis bar (or
+  share it from the phone). The PC cuts it into speech pieces with Silero,
+  turns them into text with Parakeet (both already there), and the everyday
+  model summarises in slices.
+- **Plugs into.** `jarvis_speech._speech_span` (380) and `_transcribe` (329)
+  in a background job; the live 30-second cap (`max_seconds`, 944) stays.
+  MP3/M4A needs a decoder such as ffmpeg (new dependency). Seconds on a big
+  GPU *(search summary)*, minutes on the processor; unmeasured.
+- **Rules.** Speech-to-text on the PC only. A recording is not the owner
+  speaking live: its words are outside text, never learned. Parakeet v2 is
+  English only (v3: 25 European languages, CC-BY-4.0, *search summary*).
 
 ### 8. "Translate this" (S, then M)
 
-- **Now (S).** The everyday model (Qwen3 8B) translates common languages
-  reasonably. A fast path: "translate ... into Spanish" goes to the model with
-  a fixed translation instruction, no tools. No download.
+- **Now (S).** The everyday model (Qwen3 8B) with a fixed translation
+  instruction and no tools; no download. Quality not measured here.
 - **Later (M), a dedicated model** if quality is not enough:
 
 | Model | Licence | Size | Notes |
 |---|---|---|---|
-| [Hy-MT2 1.8B](https://github.com/Tencent-Hunyuan/Hy-MT2) (Tencent, May 2026) | **Apache-2.0** (its `LICENSE.txt`, read) | 1.8B; GGUF for llama.cpp | 33 languages. "Surpasses ... Microsoft" *(claim)*. Its smallest 1.25-bit file needs a llama.cpp change not yet merged (README) - use the normal GGUF |
+| [Hy-MT2 1.8B](https://github.com/Tencent-Hunyuan/Hy-MT2) (Tencent, May 2026) | **Apache-2.0** (its `LICENSE.txt`, read) | 1.8B; GGUF for llama.cpp | 33 languages. "Surpasses ... Microsoft" *(claim)*. Its 1.25-bit file needs a special llama.cpp change (PR #22836, merge not checked) - use the normal GGUF |
 | TranslateGemma 4B/12B (Google, Jan 2026) | Gemma Terms of Use (not open source; fine for personal use) | 4B fits 2080S beside nothing else, or CPU | 55 languages; in Ollama's library as `translategemma:4b` *(search summary)* |
 | MADLAD-400 3B (Google) | Apache-2.0 *(search summary)* | 3B | 419 languages; needs a separate runtime (CTranslate2) |
 | NLLB-200 (Meta) | **CC-BY-NC-4.0 - non-commercial only**; allowed under rule 5 | 600M-3.3B | 200 languages; older |
@@ -222,123 +186,96 @@ coming). Size: S = a day or so, M = a few days, L = a week or more.
 ### 9. Language practice (M)
 
 - **What.** "Let's practise French": a short conversation at the owner's
-  level, one gentle correction per turn, and new words sent to the item 6
-  review list (the owner's own choice per word).
-- **Honest limits.** Typed practice works with the everyday model. **Spoken
-  practice does not work yet:** Parakeet v2 hears English only, and Kokoro in
-  sherpa-onnx speaks only English and Chinese *(search summary; the original
-  Kokoro has more languages)*. Spoken practice needs Parakeet v3 (25 European
-  languages, CC-BY-4.0) - a change the voice report advised against for
-  English speed, so it would be a second model loaded only for practice.
-- **Rules.** Temporary chat (nothing learned). The voice check still runs
-  first.
+  level, one gentle correction per turn, new words added to item 6's list
+  only when the owner picks them. Temporary chat, so nothing is learned.
+- **Honest limit.** Typed practice works now. **Spoken practice does not:**
+  Parakeet v2 hears English only, and Kokoro in sherpa-onnx speaks only
+  English and Chinese *(search summary)*. It would need Parakeet v3 loaded
+  just for practice (the voice report keeps v2 for everyday speed).
 
 ### 10. Code helper for a beginner (M)
 
-- **What.** A "Help me understand this" mode: paste an error, or point at a
-  file in a folder the owner chose, and Jarvis explains in plain words
-  (item 2's style), says what to try, and says which file and line. It never
-  edits by itself.
-- **Plugs into.** `file_read` exists (`jarvis_agent.py:199`, capped at
-  200 KB, line 175); `ast-grep` is the chosen way to pull out only the
-  relevant code (`ARCHITECTURE.md` §11, measured 54,490 -> 1,088 bytes).
-  Changing code, if ever wanted: a diff on a card, applied in a git worktree
-  (also §11) - the four steps of §3.
-- **Model.** The everyday model to start. On the 12 GB card,
-  `qwen2.5-coder:14b` (~9 GB, **Apache-2.0**; note its 3B size is under a
-  research-only licence) *(search summary)*; Qwen 3.5 9B (Apache-2.0) is
-  already the 12 GB card's planned model and may be good enough - test first.
-- **No build at all:** VS Code's Continue extension can use the local Ollama
-  directly. It sends usage data by default; set `allowAnonymousTelemetry`
-  to false *(search summary)*.
-- **Rules.** Code is files: rule 1, local only. Never offered to a cloud lane.
+- **What.** "Help me understand this": paste an error or name a file in a
+  folder the owner chose; Jarvis explains in plain words (item 2), says what
+  to try and where. It never edits by itself.
+- **Plugs into.** `file_read` (`jarvis_agent.py:199`, 200 KB cap at 175);
+  `ast-grep` to pull out only the relevant code (`ARCHITECTURE.md` §11).
+  Any edit later: a full diff on a card, applied in a git worktree (§11, §3).
+- **Model.** The everyday model first; on the 12 GB card `qwen2.5-coder:14b`
+  (~9 GB, Apache-2.0 - its 3B size is research-only) *(search summary)*, or
+  the already-planned Qwen 3.5 9B. Test before choosing.
+- **No build at all:** VS Code's Continue extension can use the local Ollama;
+  set `allowAnonymousTelemetry` to false (on by default, *search summary*).
+  Code is files: rule 1, local only.
 
 ### 11. Make and edit pictures (L, 2060)
 
-- **What.** "Draw a birthday card with a cat", "make this photo black and
-  white", "remove the background". Saved to a Jarvis folder on the PC and
-  shown in the app.
-- **Options** (none measured on Turing cards):
+- **What.** "Draw a birthday card with a cat", "remove this photo's
+  background". Saved to a Jarvis folder on the PC, shown in the app.
 
 | Model | Licence | Memory | Notes |
 |---|---|---|---|
-| [FLUX.2 klein 4B](https://github.com/black-forest-labs/flux2) (Jan 2026) | **Apache-2.0** (README) | "fits in ~8GB VRAM" *(claim)*; ~13 GB at full size *(search summary)* | Makes AND edits pictures. Its 9B sibling is non-commercial |
-| Z-Image-Turbo 6B (Alibaba) | **Apache-2.0** (repo LICENSE read) | 14-16 GB full; ~6-8 GB squeezed *(search summary)* | Photo-real; good at text in images |
-| SDXL-Turbo (Stability) | Stability non-commercial / community licence - fine under rule 5 | smaller | Older, 512 px |
+| [FLUX.2 klein 4B](https://github.com/black-forest-labs/flux2) (Jan 2026) | **Apache-2.0** (README's table) | "fits in ~8GB VRAM" *(claim)*; ~13 GB full size *(search summary)* | Makes AND edits. The 9B is non-commercial |
+| Z-Image-Turbo 6B (Alibaba) | code Apache-2.0 (LICENSE read); weights Apache-2.0 *(search summary)* | 14-16 GB full, ~6-8 GB squeezed *(search summary)* | Photo-real; text in images |
+| SDXL-Turbo (Stability) | non-commercial research licence - fine under rule 5 | smaller | Older, 512 px |
 
 - **Engine.** [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)
-  (**MIT**) runs FLUX.2 klein 4B and Z-Image from single files, with a
-  "move parts to the processor" option (`docs/flux2.md`, read). Ollama's own
-  picture-making exists but was macOS-only *(search summary)*.
+  (MIT) runs FLUX.2 klein 4B and Z-Image from single files and can move parts
+  to the processor (`docs/flux2.md`, read). Ollama's picture-making was
+  macOS-only *(search summary)*.
 - **Plugs into.** A sixth switch in `jarvis_second_card.FEATURES`
-  (`jarvis_second_card.py:214`), turned on by one card like the others; run
-  on demand and stopped when idle, like the F5 "better voice".
-- **Honest problems.** (1) The 12 GB card is planned for the 14B
-  long-conversation model (10.4 GiB, `MODEL-TOPOLOGY.md`): both cannot be
-  loaded at once, so making a picture means unloading it first, and the app
-  should say so. (2) Turing cards have no fast bf16 maths; these models are
-  usually shipped in bf16 and may need 16-bit or squeezed files. Unchecked.
-- **Rules.** Editing the owner's photo stays local (rule 1). Refuse editing
-  a real person's face into something else or into someone else - "private
-  details about other people", and it is how fakes are made. Saving to
-  Jarvis's own folder is not writing the owner's files; overwriting an
-  existing photo would be a card.
+  (`jarvis_second_card.py:214`), on by one card; started on demand and
+  stopped when idle, like the F5 "better voice".
+- **Honest problems.** The 12 GB card is planned for the 14B long-conversation
+  model (10.4 GiB, `MODEL-TOPOLOGY.md`): a picture means unloading it first,
+  and the app must say so. Turing cards lack fast bf16 maths, which these
+  models are shipped in. Neither checked.
+- **Rules.** The owner's photos stay local. Refuse turning a real person's
+  face into something or someone else. Overwriting an existing photo would be
+  a card; saving a new file in Jarvis's folder is not.
 
 ### 12. Lip-sync mouth shapes (M, only with a mouth)
 
-- [HeadTTS](https://github.com/met4citizen/HeadTTS) (**MIT**) gives Kokoro
-  timing for each sound and "visemes" (mouth shapes). It uses a different
-  Kokoro build from the one Jarvis runs through sherpa-onnx, runs in
-  JavaScript, is English only, and by default loads voices from
-  huggingface.co - which would have to be a local copy.
-- [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync)
-  (**MIT**) works from any recorded voice and the text, but is built for
-  recordings; real-time use is an open request (its issue #135).
-- Jarvis's call to Kokoro gets only sound back (`jarvis_speech.py:1815`).
-  **Worth it only if the owner wants a face with a mouth**; item 3 gives most
-  of the effect for the current abstract faces.
+[HeadTTS](https://github.com/met4citizen/HeadTTS) (MIT) gives Kokoro mouth
+shapes with timings, but it is a separate JavaScript Kokoro, English only,
+fetching voices from huggingface.co unless copied locally.
+[Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) (MIT)
+works on any recording, but real-time use is an open request (issue #135).
+Jarvis's Kokoro call returns sound only (`jarvis_speech.py:1815`). **Only
+worth it for a face with a mouth**; item 3 covers the abstract faces.
 
 ### 13. Music and sound effects (M-L)
 
-- [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) (**MIT**, LICENSE
-  read): songs with lyrics in 50+ languages, "less than 4GB of VRAM"
-  *(claim)*; its own table suggests 8-12 GB for the full set-up. Has a
-  Windows package. Its XL version needs 12 GB with tricks, 20 GB without.
-- Stable Audio 3.0 Small / Small-SFX (May 2026, 459M): Stability Community
-  licence (free under $1M revenue); made for laptops and phones *(search
-  summary)*.
-- **Value** is mostly fun: a calm loop for a focus session, a custom alarm
-  sound, a birthday song. Output saved locally. Low priority.
+[ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) (README: "licensed
+under MIT"; weights' own page not read): songs with lyrics, "less than 4GB of
+VRAM" *(claim)*, 8-12 GB for the full set-up by its own table; a Windows
+package. Stable Audio 3.0 Small (May 2026, 459M, Stability Community licence,
+for laptops and phones, *search summary*). Mostly fun (a focus-session loop,
+an alarm sound). Low priority.
 
 ---
 
 ## Not for Jarvis, and why
 
 - **Guessing the owner's mood from their voice** (e.g. emotion2vec, MIT).
-  It infers a private, health-like state that the owner never said - memory
-  and behaviour must come from the owner's own words. The research on
-  "personality guessing" was already left out (`RESEARCH-2026-09-24.md` §3).
-  The face already reacts to how loud the owner is, which is enough.
+  It infers a private, health-like state the owner never said; "personality
+  guessing" was already left out (`RESEARCH-2026-09-24.md` §3). The face
+  already reacts to how loud the owner is.
 - **Downloading from YouTube or podcast sites** (yt-dlp and similar). A new
   way out of the PC (`ARCHITECTURE.md` §4) and against YouTube's terms.
   Item 7 takes files the owner gives it.
-- **Photo-real talking heads or face swaps** (a moving human face made from a
-  photo). Too close to impersonation; a face made from a real person's photo
-  is a fake of that person.
+- **Photo-real talking heads or face swaps.** A face made from a real
+  person's photo is a fake of that person.
 - **A persona file the model rewrites** (like Meta Muse's `Soul.md`,
   `COMPETITORS-MUSE-2026-09-25.md`). The model would be changing its own
   instructions with no review.
-- **Companion-style emotional bonding, streaks and guilt nudges**
-  ("you'll lose your 30-day streak!"). Nudges are offers; Jarvis's offers are
-  few and backed off (`jarvis_backoff.py`), and making someone feel bad to
-  keep them engaged is not a helper's job.
+- **Streaks and guilt nudges** ("you'll lose your 30-day streak!"). Offers
+  are few and backed off (`jarvis_backoff.py`); guilt is not a helper's job.
 - **Cloud picture, music or translation services** (Midjourney, Suno, Google
   Translate). Rule 1; local options exist.
-- **Voices copied from other people for games** (a celebrity, a friend). Voice
-  cards already refuse the owner's own voice (`jarvis_voices.py`); someone
-  else's is impersonation.
-- **Flashcards or quizzes made from emails or web pages automatically.**
-  Outside text choosing what Jarvis does; the owner picks the note.
+- **Other people's voices copied for games.** Impersonation.
+- **Quizzes made automatically from emails or web pages.** Outside text
+  choosing what Jarvis does; the owner picks the note.
 
 ---
 
@@ -371,12 +308,6 @@ step aside while a picture is made (about a minute, unmeasured).
 
 ## Sources
 
-- Persona drift: https://github.com/likenneth/persona_drift ; https://arxiv.org/abs/2402.10962 (search summary)
-- FSRS: https://github.com/open-spaced-repetition/py-fsrs (LICENSE: MIT) ; https://github.com/ECuiDev/obsidian-quiz-generator
-- Translation: https://github.com/Tencent-Hunyuan/Hy-MT2 (LICENSE.txt: Apache-2.0) ; https://blog.google/innovation-and-ai/technology/developers-tools/translategemma/ ; https://arxiv.org/pdf/2601.09012 ; https://huggingface.co/facebook/nllb-200-distilled-600M ; https://github.com/google-research/google-research/tree/master/madlad_400
-- Speech: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3 (search summary) ; https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html (search summary)
-- Pictures: https://github.com/black-forest-labs/flux2 (README) ; https://github.com/leejet/stable-diffusion.cpp (LICENSE: MIT; docs/flux2.md) ; https://github.com/Tongyi-MAI/Z-Image (LICENSE: Apache-2.0) ; https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md ; https://ollama.com/blog/image-generation (search summary)
-- Music: https://github.com/ace-step/ACE-Step-1.5 (README, LICENSE: MIT) ; https://stability.ai/news-updates/meet-stable-audio-3-the-model-family-built-for-artistic-experimentation-with-open-weight-models (search summary) ; https://github.com/facebookresearch/audiocraft (LICENSE_weights: CC-BY-NC-4.0)
-- Lip-sync: https://github.com/met4citizen/HeadTTS (README, LICENSE: MIT) ; https://github.com/DanielSWolf/rhubarb-lip-sync (README, LICENSE: MIT) ; https://github.com/DanielSWolf/rhubarb-lip-sync/issues/135
-- Code helper: https://qwenlm.github.io/blog/qwen2.5-coder-family/ (search summary) ; https://www.noze.it/en/insights/continue-ollama-on-prem/ (search summary)
-- Emotion from voice (not used): https://huggingface.co/emotion2vec/emotion2vec_plus_large (search summary)
+Read directly (README or LICENSE on GitHub): [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) · [Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2) · [flux2](https://github.com/black-forest-labs/flux2) · [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) · [Z-Image](https://github.com/Tongyi-MAI/Z-Image) · [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) · [HeadTTS](https://github.com/met4citizen/HeadTTS) · [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) (and [issue #135](https://github.com/DanielSWolf/rhubarb-lip-sync/issues/135)) · [audiocraft weights licence](https://github.com/facebookresearch/audiocraft) (CC-BY-NC-4.0).
+
+Search summaries only: [persona drift paper](https://arxiv.org/abs/2402.10962) and [code](https://github.com/likenneth/persona_drift) · [obsidian-quiz-generator](https://github.com/ECuiDev/obsidian-quiz-generator) · [TranslateGemma](https://blog.google/innovation-and-ai/technology/developers-tools/translategemma/) · [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) · [MADLAD-400](https://github.com/google-research/google-research/tree/master/madlad_400) · [Parakeet v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) · [sherpa-onnx Kokoro](https://k2-fsa.github.io/sherpa/onnx/tts/pretrained_models/kokoro.html) · [SDXL-Turbo licence](https://huggingface.co/stabilityai/sdxl-turbo/blob/main/LICENSE.md) · [Ollama image generation](https://ollama.com/blog/image-generation) · [Stable Audio 3.0](https://stability.ai/news-updates/meet-stable-audio-3-the-model-family-built-for-artistic-experimentation-with-open-weight-models) · [Qwen2.5-Coder](https://qwenlm.github.io/blog/qwen2.5-coder-family/) · [Continue + Ollama telemetry](https://www.noze.it/en/insights/continue-ollama-on-prem/) · [emotion2vec](https://huggingface.co/emotion2vec/emotion2vec_plus_large).
