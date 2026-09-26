@@ -75,9 +75,14 @@ approve with their eyes open, and a card that says "read the whole house"
 is not a request, it is a standing grant.
 
 CREDENTIALS - NEVER STORED HERE, NEVER LOGGED, NEVER ON A CARD
-`JARVIS_HOME_URL` and `JARVIS_HOME_TOKEN` are read fresh from the
-environment on every call. This module never writes the token to disk and
-never puts it in a `Plan`, a `Query`, or `describe()`'s output.
+`JARVIS_HOME_URL` is read fresh from the environment on every call. The
+token is a little more careful still (ease-of-use audit row 15): `_token()`
+reads `JARVIS_HOME_TOKEN` if the owner set it, else Windows Credential
+Manager under `TOKEN_TARGET` - entered on the PC only, in the desktop's
+Settings ("Accounts") - else "". An installation that already has the
+environment variable set keeps using it unchanged. This module never writes
+the token to disk and never puts it in a `Plan`, a `Query`, or `describe()`'s
+output.
 
 TESTING WITHOUT A REAL HOME ASSISTANT
 `run()` takes an injectable `fetch`, exactly the shape
@@ -102,6 +107,13 @@ import jarvis_local_http
 
 URL_ENV = "JARVIS_HOME_URL"
 TOKEN_ENV = "JARVIS_HOME_TOKEN"
+
+#: Windows Credential Manager name for the token, read when TOKEN_ENV is not
+#: set (ease-of-use audit row 15). The desktop's Settings -> "Accounts"
+#: writes it under this same name (jarvis-desktop/src-tauri/src/
+#: token_store.rs, ACCOUNT_SECRET_TARGETS - test_account_secrets.py checks
+#: the text).
+TOKEN_TARGET = "Jarvis Backend/Home Assistant token"
 
 _MAX_ENTITIES = 20
 _MAX_ATTRIBUTES_CHARS = 500
@@ -140,9 +152,19 @@ def _configured() -> bool:
     return bool(os.environ.get(URL_ENV, "").strip())
 
 
+def _token() -> str:
+    """The Home Assistant token: `TOKEN_ENV` if the owner set it, else
+    Windows Credential Manager under `TOKEN_TARGET`, else "" - see
+    jarvis_token_store.resolve_secret for the exact order (ease-of-use audit
+    row 15). An existing installation with the environment variable already
+    set keeps using it unchanged."""
+    import jarvis_token_store
+    return jarvis_token_store.resolve_secret(TOKEN_ENV, TOKEN_TARGET)
+
+
 def authenticated() -> bool:
     """Whether an access token is configured. Never reveals the token."""
-    return bool(os.environ.get(TOKEN_ENV, "").strip())
+    return bool(_token())
 
 
 # An entity id is `<domain>.<object_id>`, and Home Assistant's own rule is
@@ -804,7 +826,7 @@ def _default_fetch(q: Query) -> dict:
     """The real call. Adds the real bearer token fresh from the environment -
     never cached, never logged, never part of a `Query`/`Plan` a card was
     shown for, and never followed onto a redirect (see `_RefuseRedirect`)."""
-    token = os.environ.get(TOKEN_ENV, "")
+    token = _token()
     headers = {"Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -921,7 +943,7 @@ ADMIN_PROBE_BODY = {"template": "ok"}
 def _default_probe(method: str, url: str, body: Optional[dict]) -> int:
     """The HTTP status HA answers - through the same opener as every other
     request here: never a proxy for plain http, never a redirect."""
-    token = os.environ.get(TOKEN_ENV, "")
+    token = _token()
     headers = {"Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"

@@ -858,7 +858,7 @@ Jarvis. On the PC, in this order:
 
 The uninstaller leaves your settings behind, including **the pairing token
 and your keys**, in Windows Credential Manager (Control Panel → Credential
-Manager → Windows Credentials). Jarvis may have made up to seven entries
+Manager → Windows Credentials). Jarvis may have made up to eleven entries
 there; remove each one that is listed (select it, then **Remove**):
 
 | entry | what it is |
@@ -870,6 +870,17 @@ there; remove each one that is listed (select it, then **Remove**):
 | `Jarvis Backend/Tavily key` | your Tavily web search key, if you added one |
 | `Jarvis Backend/Brave Search key` | your Brave Search key, if you added one |
 | `Jarvis Big Model/api key` | the key between Jarvis and the big model's engine, if you switched the big model on |
+| `Jarvis Backend/IMAP username` | your email account's username, if you entered it in Settings, "Accounts" rather than as an environment variable |
+| `Jarvis Backend/IMAP password` | your email account's password, the same way |
+| `Jarvis Backend/Calendar iCal link` | your Google Calendar private link ("Secret address in iCal format"), the same way |
+| `Jarvis Backend/Home Assistant token` | your Home Assistant long-lived access token, the same way |
+
+The last four are only there if you entered them in Settings, "Accounts"
+(added 2026-09-27) instead of - or as well as - a Windows environment
+variable; if you set one of those variables instead, remove it the usual
+way (Windows Settings → search "environment variables" → Environment
+Variables → your user variables → select it → Delete), separately from
+Credential Manager.
 
 A backend older than 2026-09-24 also left the pairing token in plain text
 as `.openjarvis\token` in your user folder. To remove everything else:

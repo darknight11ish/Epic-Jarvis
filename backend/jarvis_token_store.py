@@ -58,6 +58,20 @@ was running on one of these, and `forget` did not unpair anything:
     uses it. It is kept by the desktop, under DESKTOP_TARGET, not here, so
     `forget` cannot remove it: clear it in the desktop app's Settings first.
     All three commands say this, and say when such a token is saved.
+
+FOUR MORE SECRETS, THE SAME STORE, EASE-OF-USE AUDIT ROW 15
+`resolve_secret()` below is the general form of the rule above, minus the
+old-file migration (there is no old file for these - they were only ever a
+plain-text Windows user environment variable, which is the problem):
+  - the IMAP username and password (`jarvis_email.py`, read fresh by
+    `imap_user()` / `imap_password()`);
+  - the private calendar link (`jarvis_calendar.py`'s `ICS_URL_ENV`);
+  - the Home Assistant long-lived token (`jarvis_home.py`'s `TOKEN_ENV`).
+Each keeps its OWN Credential Manager entry (`WindowsStore(target)`, exactly
+like `KEY_TARGETS` already does for the Exa/Tavily/Brave keys in
+`jarvis_search.py`), entered on the PC only, in the desktop's Settings
+("Accounts"), and the matching environment variable - if the owner already
+has one set - still wins, unchanged, so nothing already working breaks.
 """
 
 from __future__ import annotations
@@ -192,14 +206,84 @@ class WindowsStore:
         raise StoreError(f"deleting failed (Windows error {code})")
 
 
-def default_store():
-    """The real store, or the reason there is none (a StoreError instance)."""
+#: Tests replace this with a factory of stand-in stores (target -> object
+#: with read()/write()/delete()) instead of touching real Credential Manager -
+#: the same shape `jarvis_search._STORE_FACTORY` uses for the web search keys.
+_STORE_FACTORY: Optional[Callable[[str], object]] = None
+
+
+def default_store(target: str = TARGET):
+    """The real store for `target`, or the reason there is none (a
+    StoreError instance). `target` defaults to the pairing token's own name
+    so existing callers of `default_store()` are unaffected; every other
+    named secret (see `resolve_secret` below) passes its own."""
+    if _STORE_FACTORY is not None:
+        return _STORE_FACTORY(target)
     try:
-        return WindowsStore()
+        return WindowsStore(target)
     except StoreError as e:
         return e
     except Exception as e:                       # ctypes itself failed to load
         return StoreError(f"Credential Manager could not be opened ({type(e).__name__})")
+
+
+# --------------------------------------------------------- named secrets
+
+def resolve_secret(env_name: str, target: str, *, environ=None, store=None) -> str:
+    """One named secret that can live in Credential Manager instead of a
+    plain-text Windows environment variable - a smaller, read-only cousin of
+    `resolve()` above, for the IMAP password, the private calendar link and
+    the Home Assistant token (ease-of-use audit row 15, "Security G3"). Every
+    caller passes its OWN `target`, so one Credential Manager entry per
+    secret, the same way `jarvis_search.KEY_TARGETS` files the Exa, Tavily
+    and Brave keys each under their own name.
+
+    UNLIKE `resolve()`: there is no old plain-text FILE to move in here -
+    these four secrets were never written to one, only ever typed into a
+    Windows user environment variable (which IS plain text; that is the
+    whole problem this exists to fix) - so there is nothing to migrate and
+    nothing to delete. And unlike the pairing token, none of these is
+    required for the backend to run at all, so a store that cannot be
+    reached is simply treated as empty; there is no "this run only" state
+    and nothing is ever made up.
+
+    ORDER (`resolve()`'s own rule 2, unchanged - "someone who set it meant
+    it"):
+      1. `env_name` in the environment, if set to a non-blank value.
+      2. Otherwise, Credential Manager, under `target`.
+      3. Otherwise "" - simply not configured.
+
+    Never raises. A value that came from the ENVIRONMENT is left for
+    `jarvis_scrub` to find the way it already does - by `env_name`'s own
+    NAME, scanned fresh each time (`_secret_name`), same as before this
+    module existed. A value read from Credential Manager instead is handed
+    to `jarvis_scrub.register_secret`, because there is no environment
+    variable NAME there for that scan to catch - without this call such a
+    value would reach the log in clear text the moment it left the
+    environment for Credential Manager, the opposite of the point of moving
+    it. (This is also why env and store are never both registered: a secret
+    that is only sometimes in the environment must not be remembered as
+    "known" - and so redacted by value rather than by the shape that also
+    reveals nothing sensitive - for the rest of the process's life once it
+    briefly was.)"""
+    env = os.environ if environ is None else environ
+    value = env.get(env_name, "").strip()
+    if value:
+        return value
+    st = store if store is not None else default_store(target)
+    if isinstance(st, StoreError):
+        return ""
+    try:
+        value = (st.read() or "").strip()
+    except StoreError:
+        return ""
+    if value:
+        try:
+            import jarvis_scrub
+            jarvis_scrub.register_secret(value)
+        except Exception:
+            pass
+    return value
 
 
 # ------------------------------------------------------------------ resolve

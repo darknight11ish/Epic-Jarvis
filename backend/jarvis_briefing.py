@@ -337,15 +337,38 @@ def _calendar_words() -> str:
         return "your calendar"
 
 
+def _calendar_configured() -> bool:
+    """Whether either calendar source is set up - `jarvis_calendar.source()`
+    itself, not a plain environment-variable check, because the private
+    link can also live in Windows Credential Manager instead (ease-of-use
+    audit row 15): checking `JARVIS_CALENDAR_ICS_SECRET_URL` alone would say
+    "not set up" for an account configured that way."""
+    try:
+        import jarvis_calendar as CAL
+        return bool(CAL.source())
+    except Exception:
+        return False
+
+
 def sources(deps: Optional[Deps] = None) -> dict:
     """What a briefing would include, without reading anything: for the
     apps' settings ("Your calendar: included"). Opens no socket."""
     deps = deps or Deps()
     enabled = deps.tools_enabled()
 
-    def one(tool: str, action: str, env_names, what: str) -> dict:
-        names = (env_names,) if isinstance(env_names, str) else tuple(env_names)
-        if tool not in enabled or not any(_env(deps, n) for n in names):
+    def one(tool: str, action: str, configured, what: str) -> dict:
+        """`configured` is either one or more environment variable names
+        (any set at all counts), or a zero-argument callable answering
+        whether the account is set up - used for calendar, whose private
+        link can also live in Windows Credential Manager (ease-of-use audit
+        row 15, `_calendar_configured`), which a plain environment-variable
+        check alone would miss."""
+        if callable(configured):
+            is_set = bool(configured())
+        else:
+            names = (configured,) if isinstance(configured, str) else tuple(configured)
+            is_set = any(_env(deps, n) for n in names)
+        if tool not in enabled or not is_set:
             return {"state": "off",
                     "said": f"Not included: {what} is not set up for Jarvis on this PC."}
         tier = deps.tier_of(action)
@@ -359,8 +382,7 @@ def sources(deps: Optional[Deps] = None) -> dict:
         # Either calendar source counts (jarvis_calendar.source()); the words
         # name the one in use - "your Google Calendar (private link)" - and
         # never the link itself.
-        "calendar": one(CALENDAR_TOOL, CALENDAR_ACTION,
-                        ("JARVIS_CALDAV_URL", "JARVIS_CALENDAR_ICS_SECRET_URL"),
+        "calendar": one(CALENDAR_TOOL, CALENDAR_ACTION, _calendar_configured,
                         _calendar_words()),
         "email": _email_source(one(EMAIL_TOOL, EMAIL_ACTION, "JARVIS_IMAP_HOST",
                                    "how many unread emails you have"), deps),

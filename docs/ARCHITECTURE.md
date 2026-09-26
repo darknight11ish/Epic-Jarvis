@@ -521,17 +521,26 @@ environment; the text goes only to the model on this PC.
 
 The owner's-own-accounts row was not in this table until 2026-09-25, although those reads
 already left the machine; it was written down when the Google Calendar link
-was added. Their settings are environment variables on the PC, and neither
-app has a screen to enter them. For the private calendar link that is on
-purpose (2026-09-25): a link typed on the phone would be one more place to
-keep a password safe. Only the morning briefing's settings line says which
-calendar is read ("your Google Calendar (private link)"), in both apps.
+was added. Their settings were environment variables on the PC only until
+2026-09-27 (the ease-of-use audit's row 15, "Security G3"): the IMAP
+username and password, the private calendar link, and the Home Assistant
+token can now also be entered once in the desktop's Settings, "Accounts",
+which writes each straight into Windows Credential Manager on this PC
+(`backend/jarvis_token_store.resolve_secret`, JARVIS-API.md section 44) -
+never over HTTP, never to the phone. An environment variable the owner
+already set still wins, unchanged. **The phone still has no screen to enter
+any of them** - that stays on purpose (2026-09-25): a value typed on the
+phone would have to travel over the link to the PC first, one more place to
+keep a password safe, the same reasoning §8 gives for the web search keys.
+Only the morning briefing's settings line says which calendar is read
+("your Google Calendar (private link)"), in both apps.
 
 **Which of these lanes is on right now is listed by code, in both apps**
 (the Muse audit, 2026-09-25): "What Jarvis can reach" (`GET /api/reach`,
 `backend/jarvis_reach.py`, JARVIS-API.md section 24) is written from the
 same settings this table's code reads - `[tools].enabled`, the tiers, the
-accounts' environment variables, the web search settings, the cloud lanes -
+accounts' credentials (an environment variable or Credential Manager, either
+way), the web search settings, the cloud lanes -
 never by the model, and names hosts only, never a key or a link. "What can
 you reach?" is answered from it without the model (`jarvis_quick.py`).
 
@@ -1266,6 +1275,7 @@ backend routes, in both directions; the rest are listed here only.
 | A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). |
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily or Brave key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |
+| "Accounts" (Settings -> Accounts, `save_account_secret`/`forget_account_secret`; ease-of-use audit row 15, 2026-09-27, JARVIS-API §44) | Same reasoning as the web search key row above, for the IMAP username and password, the private calendar link, and the Home Assistant token: each is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3), and CLAUDE.md's standing rule keeps deep config editing off the phone besides. The desktop writes each straight into Credential Manager on the PC - never over HTTP, no backend route takes one. An environment variable the owner already set still wins (`jarvis_token_store.resolve_secret`); this only adds a second place to set one, never a second source that could disagree once one is chosen. |
 | The backend's own Windows Hello check before a risky approval (`owner-check.patch`, the approval gap's step 1, 2026-09-25) | Written with the feature. It checks approvals that come FROM the PC, where the desktop is; the phone keeps checking its own fingerprint in the app, as before, and the backend lets a phone approval through without a PC prompt. The phone's half - a key in the phone's Keystore that needs a fresh fingerprint for every risky approval, checked by the backend - is step 2, built with "more devices" (`docs/APPROVAL-GAP-DESIGN.md`). Both apps share the stamp (every approval) and "no lock, no risky approval". |
 | Saying a timer aloud when it goes off ("Your timer is done.", while "Hey Jarvis" listening is on in the Jarvis bar; 2026-09-25) | The owner asked for it on the desktop ("say timers aloud on the desktop when voice is on"). The phone's timer notification rings, and its voice is only switched on for a conversation - a phone in a pocket speaking on its own was not asked for. Alarms and urgent "tell me when"s ring until seen on both apps (JARVIS-API §30.5). |
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |

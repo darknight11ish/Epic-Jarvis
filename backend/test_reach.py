@@ -459,6 +459,52 @@ def _const(src: str, name: str) -> str:
                                                              m.group(1))).replace("\\$", "$")
 
 
+def t_account_secrets_from_credential_manager_show_too():
+    """Ease-of-use audit row 15: the IMAP username/password, the private
+    calendar link and the Home Assistant token can also live in Windows
+    Credential Manager instead of an environment variable. `_env`'s
+    DEFAULT (not a test's own override, which every other test here passes)
+    must read that fallback too, or "What Jarvis can reach" would wrongly
+    say "not set up" for an account configured that way. Exercised through
+    `jarvis_token_store._STORE_FACTORY`, off Windows, never a real store."""
+    import jarvis_token_store as TS
+
+    class _FakeStore:
+        def __init__(self, value):
+            self.value = value
+
+        def read(self):
+            return self.value
+
+    for env_name, cred_target in (
+        ("JARVIS_IMAP_USER", "Jarvis Backend/IMAP username"),
+        ("JARVIS_IMAP_PASSWORD", "Jarvis Backend/IMAP password"),
+        ("JARVIS_CALENDAR_ICS_SECRET_URL", "Jarvis Backend/Calendar iCal link"),
+        ("JARVIS_HOME_TOKEN", "Jarvis Backend/Home Assistant token"),
+    ):
+        saved = os.environ.get(env_name)
+        try:
+            os.environ.pop(env_name, None)
+            # A store for any OTHER target reads empty - proves the target
+            # name is the right one, not just "something is set anywhere".
+            TS._STORE_FACTORY = lambda target, _want=cred_target: _FakeStore(
+                "from-credential-manager" if target == _want else None)
+            got = R._env(env_name)
+            check(f"{env_name}: R._env falls back to Credential Manager, under its own name",
+                  got == "from-credential-manager", got)
+        finally:
+            TS._STORE_FACTORY = None
+            if saved is None:
+                os.environ.pop(env_name, None)
+            else:
+                os.environ[env_name] = saved
+    # An unrelated environment variable is never routed through a module -
+    # `_env` must still be a plain, direct read for everything else.
+    with Env({"JARVIS_CALDAV_URL": FAKE_CALDAV}):
+        check("an unrelated variable is read directly, not through a module",
+              R._env("JARVIS_CALDAV_URL") == FAKE_CALDAV)
+
+
 def t_both_apps_say_the_same_words():
     js = (REPO / "jarvis-desktop" / "src" / "reach.js").read_text(encoding="utf-8")
     kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" /
@@ -474,7 +520,8 @@ if __name__ == "__main__":
     for fn in (t_rows_and_order, t_no_secret_anywhere, t_asks_follows_the_rules,
                t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
                t_never_raises, t_cloud_lanes_are_the_servers_own, t_the_quick_answer,
-               t_the_patch, t_both_apps_say_the_same_words):
+               t_the_patch, t_account_secrets_from_credential_manager_show_too,
+               t_both_apps_say_the_same_words):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

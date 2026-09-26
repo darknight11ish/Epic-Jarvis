@@ -3099,10 +3099,10 @@ environment before it can do anything at all:
 
 | integration | environment variables |
 |---|---|
-| calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` (the URL `https://`, or plain `http://` only inside your own networks - this PC, the home network, Tailscale or NordVPN Meshnet - security audit L7, 2026-09-25); **or** `JARVIS_CALENDAR_ICS_SECRET_URL`, a private calendar link such as Google Calendar's "Secret address in iCal format" (since 2026-09-25; it wins when both are set - see "Google Calendar, by its private link", at the end of this file) |
-| email | `JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` (default 993), `JARVIS_IMAP_USER`, `JARVIS_IMAP_PASSWORD`, `JARVIS_IMAP_MAILBOX` (default `INBOX`) |
+| calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` (the URL `https://`, or plain `http://` only inside your own networks - this PC, the home network, Tailscale or NordVPN Meshnet - security audit L7, 2026-09-25); **or** `JARVIS_CALENDAR_ICS_SECRET_URL`, a private calendar link such as Google Calendar's "Secret address in iCal format" (since 2026-09-25; it wins when both are set - see "Google Calendar, by its private link", at the end of this file) - **or, since 2026-09-27, entered once in the desktop's Settings, "Accounts" instead of typed as an environment variable at all** (see `account-secrets-wiring` below); the environment variable, if you already set one, keeps winning |
+| email | `JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` (default 993), `JARVIS_IMAP_USER`, `JARVIS_IMAP_PASSWORD`, `JARVIS_IMAP_MAILBOX` (default `INBOX`) - the username and password may also be entered in Settings, "Accounts" (2026-09-27), same rule |
 | notes | `JARVIS_OBSIDIAN_VAULT` or `[notes.obsidian] vault_directory` (the vault read as a folder - no key; used first when set, since 2026-09-24), `JARVIS_NOTES_BACKEND` (`"vault"`, `"joplin"` or `"obsidian"`, optional - otherwise the vault, then whichever token is set), `JARVIS_JOPLIN_URL`/`JARVIS_JOPLIN_TOKEN`, `JARVIS_OBSIDIAN_URL`/`JARVIS_OBSIDIAN_API_KEY` |
-| home | `JARVIS_HOME_URL`, `JARVIS_HOME_TOKEN` (the same rule for the URL as the calendar's) |
+| home | `JARVIS_HOME_URL`, `JARVIS_HOME_TOKEN` (the same rule for the URL as the calendar's) - the token may also be entered in Settings, "Accounts" (2026-09-27), same rule |
 
 Turning one on with nothing configured is safe - `plan()`/`plan_states()`/
 `plan_service()` all notice and return a plan that only ever explains why it
@@ -3135,6 +3135,103 @@ is provable without any of that - but proof without it is not a real run.
 Point each one at a real account deliberately, read what `describe()` prints
 before approving anything, and watch the first real result before adding it
 to `[tools].enabled`.
+
+---
+
+# `account-secrets-wiring` — email, calendar and Home Assistant secrets into Credential Manager (2026-09-27)
+
+The ease-of-use audit's "Then" table, row 15 ("Security G3"): "Email,
+calendar and Home Assistant secrets into Credential Manager, entered in a
+PC-only box like the web search keys. Today they are Windows user
+environment variables, which Windows stores as plain text." Four secrets
+move: the IMAP username and password (`jarvis_email.py`, also read by
+`jarvis_email_send.py` and `jarvis_email_draft.py`), the private calendar
+link (`jarvis_calendar.py`), and the Home Assistant long-lived access token
+(`jarvis_home.py`). No new patch and no new module: `jarvis_token_store.py`
+(the pairing token's own store, above) gained one general function,
+`resolve_secret(env_name, target)`, and each of the three modules gained one
+or two small functions that call it under their own Credential Manager
+target.
+
+**The order - `resolve_secret`'s own rule, the pairing token's rule 2
+unchanged:**
+
+1. The environment variable, if you already set one - it still wins,
+   unchanged. **Nothing that already works breaks**: an installation
+   relying on the variable keeps using it, and Credential Manager is never
+   even asked.
+2. Otherwise Windows Credential Manager, under the secret's own target
+   (below) - entered once in the desktop's Settings, "Accounts"
+   (`account-secrets-settings.js`; `src-tauri/src/account_secrets.rs`),
+   exactly the same shape as the Exa/Tavily/Brave web search keys just
+   above in this file, and never sent over HTTP to the backend or the
+   phone.
+3. Otherwise `""` - simply not configured. Unlike the pairing token, none
+   of these four is required for the backend to run at all, so nothing is
+   ever made up.
+
+| secret | module / function | environment variable | Credential Manager target |
+|---|---|---|---|
+| IMAP username | `jarvis_email.imap_user()` | `JARVIS_IMAP_USER` | `Jarvis Backend/IMAP username` |
+| IMAP password | `jarvis_email.imap_password()` | `JARVIS_IMAP_PASSWORD` | `Jarvis Backend/IMAP password` |
+| Private calendar link | `jarvis_calendar._feed_url()` | `JARVIS_CALENDAR_ICS_SECRET_URL` | `Jarvis Backend/Calendar iCal link` |
+| Home Assistant token | `jarvis_home._token()` | `JARVIS_HOME_TOKEN` | `Jarvis Backend/Home Assistant token` |
+
+A store that cannot be reached, refuses, or is not there at all (any
+platform but Windows) is treated as empty, exactly like an unset
+environment variable - never raised, never made up. A value read from
+Credential Manager is registered with `jarvis_scrub` (there is no
+environment-variable NAME there for its usual name-based scan to catch it
+by); a value read from the environment is left to that existing scan,
+unchanged - registering it too would make `jarvis_scrub` remember it as
+"known" for the rest of the process's life even after the variable is
+unset, swallowing harmless surrounding text (a host name) a shape-based
+rule alone would have let through.
+
+**`jarvis_email_send.py` and `jarvis_email_draft.py`** call
+`jarvis_email.imap_user()` / `imap_password()` rather than reading
+`JARVIS_IMAP_USER` / `JARVIS_IMAP_PASSWORD` from the environment themselves,
+so sending and drafting agree with reading about where the account's
+credentials come from. Their "not set up" messages now say plainly when
+neither source holds a value.
+
+**Three other places already asked "is this account set up?" from the
+environment variable directly, and were found and fixed to match** - each
+would otherwise have wrongly said "not set up" for an account configured
+only in Credential Manager: `jarvis_reach.py`'s "What Jarvis can reach"
+(`_env`, for these four names only), `jarvis_briefing.sources()`'s calendar
+row (now `jarvis_calendar.source()` instead of the two calendar
+environment-variable names), and `jarvis_tellme.py`'s "tell me when" IMAP
+connections (`_default_email_look`, `_open`, now `jarvis_email.imap_user()`/
+`imap_password()`). `test_reach.py` and `test_briefing.py` each gained a
+test proving the Credential-Manager-only case.
+
+**What this does not cover, on purpose.** `JARVIS_CALDAV_USER` /
+`JARVIS_CALDAV_PASSWORD` (a fifth and sixth calendar secret) stay
+environment-variable-only: the audit and `CLAUDE.md` rule 3 both call out
+the private iCal link by name, so only that one moved for calendar - a
+follow-up, not an oversight.
+
+**Desktop only** (`CLAUDE.md`: no deep config editing on the phone,
+`docs/ARCHITECTURE.md` §8): there is no equivalent box in `jarvis-client`,
+and `save_account_secret` / `forget_account_secret` refuse to run anywhere
+but the Settings window.
+
+### Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_account_secrets.py
+```
+
+Every branch of `resolve_secret` against a stand-in store (env wins, falls
+back to the store, neither configured, a store that refuses or is not
+there), each of the three modules' own functions falling back the same way
+and the environment variable still winning, that only a store-sourced value
+is registered with `jarvis_scrub`, and that the desktop's
+`ACCOUNT_SECRET_TARGETS` names the same four Credential Manager targets the
+backend reads. On Windows it also does a live round trip through the real
+Credential Manager, under a throwaway target name, never a real secret (CI's
+`credential-manager` job runs this on every push).
 
 ---
 
@@ -5528,6 +5625,10 @@ synced profile folder, or a file search. The phone's token was already
 encrypted (Android Keystore, `TokenStore.kt`). Other keys the backend uses —
 `JARVIS_GITHUB_TOKEN`, `JARVIS_JOPLIN_TOKEN`, `JARVIS_CALDAV_PASSWORD` and the
 like — are read from environment variables, which the app never writes.
+(Four exceptions since 2026-09-27: the IMAP username and password, the
+private calendar link, and the Home Assistant token can also live in
+Credential Manager instead — see `account-secrets-wiring`, below, which
+reuses this same module's `resolve_secret`.)
 
 **Order.** After `token-file`, `loopback-too` and `bind-wildcard`: its context
 is `_resolve_token` and the banner, with their lines around it. Nothing else

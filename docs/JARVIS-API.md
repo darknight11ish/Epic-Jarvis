@@ -6878,3 +6878,123 @@ that is not one of the four.
   (harmless) and can raise the ON card; approving it still needs Windows
   Hello at the backend. Step 1's known limits (`docs/ARCHITECTURE.md`
   section 3) apply.
+
+## 44. Accounts: email, calendar and Home Assistant secrets into Credential Manager (added 2026-09-27)
+
+The ease-of-use audit's "Then" table, row 15 ("Security G3"): "Email,
+calendar and Home Assistant secrets into Credential Manager, entered in a
+PC-only box like the web search keys. Today they are Windows user
+environment variables, which Windows stores as plain text." Four secrets
+moved: the IMAP username and password (`backend/jarvis_email.py`, read by
+both `jarvis_email_send.py` and `jarvis_email_draft.py`), the private
+calendar link (`backend/jarvis_calendar.py`), and the Home Assistant
+long-lived access token (`backend/jarvis_home.py`). **Desktop only**
+(`CLAUDE.md`: no deep config editing on the phone) - see
+`docs/ARCHITECTURE.md` section 8.
+
+**The mechanism** is `backend/jarvis_token_store.resolve_secret(env_name,
+target)` - the general form of §23.4's Exa/Tavily/Brave key pattern, added
+to the same module that already keeps the pairing token in Credential
+Manager (`jarvis_token_store.WindowsStore`, parametrized by `target` rather
+than hard-coded to the pairing token's own name). For each of the four:
+
+1. The environment variable, if the owner already set one - unchanged, and
+   still wins: `resolve_secret`'s rule 2, "someone who set it meant it".
+   **Backward compatibility**: an installation that already relies on the
+   variable keeps working exactly as before, and Credential Manager is
+   never even asked.
+2. Otherwise Windows Credential Manager, under the secret's own named
+   target (below).
+3. Otherwise `""` - simply not configured. Unlike the pairing token, none
+   of these four is required for the backend to run at all, so nothing is
+   ever made up and there is no "this run only" state.
+
+A store that cannot be reached, refuses, or is not there at all (any
+platform but Windows) is treated as empty, never raises. A value read from
+Credential Manager is registered with `jarvis_scrub` (there is no
+environment-variable NAME there for its usual name-based scan to catch); a
+value read from the environment is left to that existing scan, unchanged.
+
+| Secret | Module | Environment variable | Credential Manager target |
+|---|---|---|---|
+| IMAP username | `jarvis_email.imap_user()` | `JARVIS_IMAP_USER` | `Jarvis Backend/IMAP username` |
+| IMAP password | `jarvis_email.imap_password()` | `JARVIS_IMAP_PASSWORD` | `Jarvis Backend/IMAP password` |
+| Private calendar link | `jarvis_calendar._feed_url()` | `JARVIS_CALENDAR_ICS_SECRET_URL` | `Jarvis Backend/Calendar iCal link` |
+| Home Assistant token | `jarvis_home._token()` | `JARVIS_HOME_TOKEN` | `Jarvis Backend/Home Assistant token` |
+
+`jarvis_email_send.py` and `jarvis_email_draft.py` call
+`jarvis_email.imap_user()` / `imap_password()` rather than reading
+`JARVIS_IMAP_USER` / `JARVIS_IMAP_PASSWORD` themselves, so all three modules
+agree on where the account's credentials come from.
+
+### 44.1 Entering a secret: the desktop, PC only
+
+Settings, "Accounts" (`account-secrets-settings.js`;
+`src-tauri/src/account_secrets.rs`, `token_store.rs`
+`ACCOUNT_SECRET_TARGETS`) - one box per secret, the same shape as the web
+search keys' own boxes (§23.4): typed once, saved straight into Windows
+Credential Manager on this PC, and never shown again - only whether one is
+saved. **No backend route is involved**: both the write and the "is one
+already set" check happen entirely on this PC, exactly as the Exa/Tavily/
+Brave keys never touch the backend's HTTP API either.
+
+Three Tauri commands, Settings window only:
+
+| Command | Args | Answers | Notes |
+|---|---|---|---|
+| `get_account_secrets` | - | `{"secrets": [{"name", "env_set": bool, "saved": bool\|null}, ...]}`, all four, in the table's order | A read. `env_set` is checked fresh on this PC (`std::env::var`) - never the value. `saved` is Credential Manager's own answer, asked only when `env_set` is false (matching what the backend actually does - the variable, if set, is never overridden by anything saved here). |
+| `save_account_secret` | `{"name", "value"}` | `{"ok": true, "said"}`; refused (a plain sentence) for an unknown `name`, an empty value, one with a control character, or (the calendar link only) anything not starting with `https://` | Written straight into Credential Manager (`token_store::write_account_secret`, read back to confirm it landed - the same check `write_search_key` makes). Never returns the value. |
+| `forget_account_secret` | `{"name"}` | `{"ok": true, "said"}` | Removes it from Credential Manager. Never touches an environment variable of the same name - there is no way to unset another program's environment variable from here, and the page says so plainly (a box stays disabled while the variable is set). |
+
+The page disables a secret's box while `env_set` is true (saving there would
+do nothing until the variable is removed, so the page does not pretend
+otherwise) and shows Remove only once `saved` is true. `save_account_secret`
+and `forget_account_secret` are **not** held on a stale link - a value goes
+into this PC's Credential Manager, not over the connection to the backend,
+exactly like the web search keys.
+
+### 44.2 What every secret's box says, and never says
+
+Never shown again once saved: the box empties itself the instant it is
+sent, whatever the answer. No card - unlike a setting that changes what
+Jarvis does or asks, saving an account's own credentials is the owner
+configuring their own accounts, the same judgement call §23.4 already makes
+for the web search keys. Every existing "not set" refusal in
+`jarvis_email.py`, `jarvis_email_send.py`, `jarvis_email_draft.py` and
+`jarvis_calendar.py` now says plainly when NEITHER the environment variable
+NOR Credential Manager holds a value, rather than naming only the
+environment variable as before.
+
+**Every other place that already asked "is this account set up?" was found
+and fixed to match**, so a secret saved only in Credential Manager is never
+wrongly reported as "not set up": `jarvis_reach.py`'s "What Jarvis can
+reach" (§24, `_env`) now asks the owning module
+(`jarvis_email.imap_user()`/`imap_password()`, `jarvis_calendar._feed_url()`,
+`jarvis_home._token()`) for these four names instead of reading the
+environment variable directly; the morning briefing's "what it includes"
+(`jarvis_briefing.sources()`) now checks `jarvis_calendar.source()` for the
+calendar row instead of the two environment-variable names; and
+`jarvis_tellme.py`'s "tell me when" IMAP connections (§30) now call
+`jarvis_email.imap_user()`/`imap_password()` instead of reading
+`JARVIS_IMAP_USER`/`JARVIS_IMAP_PASSWORD` themselves.
+
+### 44.3 Known gaps, said plainly
+
+- **Not run on Windows.** Every Credential Manager write, read-back and
+  delete for these four secrets is proven against a stand-in store
+  (`backend/test_account_secrets.py`, `token_store.rs`'s own unit tests);
+  the real ctypes/Win32 calls run live only in CI's `credential-manager`
+  job, on a throwaway target name, same as the pairing token.
+  `resolve_secret`'s env-wins / store-fallback / unconfigured branches are
+  all exercised against that stand-in too.
+- **A CalDAV username and password** (`JARVIS_CALDAV_USER`,
+  `JARVIS_CALDAV_PASSWORD`) are a fifth and sixth calendar secret this row
+  does not cover: the audit and `CLAUDE.md` rule 3 both call out the private
+  iCal link by name, so only that one moved for calendar. CalDAV's own
+  username and password stay environment-variable-only for now - a
+  follow-up, not a silent gap, since `backend/README.md`'s own table still
+  lists them as plain environment variables.
+- **A backup taken before this feature ran** still has these four (if set)
+  as plain environment variables in the owner's own Windows profile, which
+  this feature does not touch or clean up - only new reads move to
+  Credential Manager first.
