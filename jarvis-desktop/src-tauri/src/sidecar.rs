@@ -348,6 +348,13 @@ pub async fn ensure_backend(app: &AppHandle) -> Result<String, String> {
     if !read_supervise(app) {
         return Ok("Supervision is off; Jarvis Desktop will not start a backend.".to_string());
     }
+    // A refused address is saved: nothing is started in its place either
+    // (CLAUDE.md, 2026-09-26 - no quiet fallback to this PC).
+    if let Some(problem) = commands::base_problem(app) {
+        return Ok(format!(
+            "Jarvis Desktop will not start a backend. {problem}"
+        ));
+    }
 
     // One start or stop at a time. Held across every await below, so the
     // liveness check and the port probe cannot be overtaken between them.

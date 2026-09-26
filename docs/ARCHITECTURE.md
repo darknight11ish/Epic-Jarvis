@@ -67,10 +67,14 @@ it works.
    not on your own networks, so this app will not send your pairing key
    there: use this PC (localhost), your home network (...), Tailscale (...)
    or NordVPN Meshnet (...)."* An address saved before the rule (or set in
-   `JARVIS_HUD_BASE`) is not used: the desktop sends its requests to this PC
-   instead and keeps the event stream offline with that sentence as the
-   reason, and Settings shows it in red (`jarvis_base`, `base_problem`,
-   `stream.rs`); the phone treats it as no address at all, opens the pairing
+   `JARVIS_HUD_BASE`) is not used, and nothing is used in its place (owner,
+   2026-09-26): the desktop does nothing over the network - no chat, no
+   reads, no requests to this PC instead, no backend started - until an
+   allowed address is entered. Every request to Jarvis is refused with that
+   sentence (`jarvis_headers` asks `require_base_allowed` first; the base is
+   empty, so a request cannot be built either), the event stream stays
+   offline with it as the reason, and Settings shows it in red
+   (`jarvis_base`/`base_from`, `base_problem`, `stream.rs`); the phone treats it as no address at all, opens the pairing
    screen with the sentence, and says it wherever it would say any other
    connection failure (`OwnNetwork.kt`, `ClientSettings.baseUrl`). One case
    table, `tools/gen_own_network_cases.py`, made from the backend's real

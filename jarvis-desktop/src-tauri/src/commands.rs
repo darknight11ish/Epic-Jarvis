@@ -142,19 +142,41 @@ pub const DEFAULT_BASE: &str = "http://127.0.0.1:4719";
 /// Read rather than baked in, because the port is configuration — the last
 /// resync turned on a wrong one having been hardcoded.
 ///
-/// **A configured address that [`validate_base`] refuses is never used**
-/// (CLAUDE.md, decided 2026-09-26: the owner's own networks only). One saved
-/// by an older version, or set in `JARVIS_HUD_BASE`, that points at the open
-/// internet would otherwise get the token with every request. It falls back
-/// to [`DEFAULT_BASE`], this PC, so nothing ever goes to the refused
-/// address - and not silently: [`base_problem`] says why, the event stream
-/// stays offline with that sentence as its reason (`stream.rs`), which every
-/// window shows the way it shows any other connection error, and Settings
-/// shows it in red under the field.
+/// **A configured address that [`validate_base`] refuses is never used, and
+/// nothing is used in its place** (CLAUDE.md, decided 2026-09-26: the
+/// owner's own networks only; "while a refused address is saved, the
+/// desktop does nothing over the network ... it does not quietly fall back
+/// to this PC"). One saved by an older version, or set in
+/// `JARVIS_HUD_BASE`, that points at the open internet would otherwise get
+/// the token with every request. The base is then EMPTY: a request to
+/// `"/api/..."` is refused by reqwest while it is being built (a relative
+/// URL), before anything touches the network, and [`jarvis_headers`] -
+/// which every request to Jarvis takes - refuses first anyway with the
+/// sentence [`base_problem`] gives. The event stream stays offline with that
+/// sentence as its reason (`stream.rs`), which every window shows the way it
+/// shows any other connection error, and Settings shows it in red under the
+/// field. The same sentence, everywhere.
 pub fn jarvis_base(app: &AppHandle) -> String {
-    match configured_base(app) {
+    base_from(configured_base(app))
+}
+
+/// [`jarvis_base`]'s rule, pure: the configured address when it is allowed,
+/// NOTHING (empty) when it is refused, this PC when none is configured.
+pub(crate) fn base_from(configured: Option<String>) -> String {
+    match configured {
         Some(base) if validate_base(&base).is_ok() => base,
-        _ => DEFAULT_BASE.to_string(),
+        Some(_) => String::new(),
+        None => DEFAULT_BASE.to_string(),
+    }
+}
+
+/// `Err(the red sentence)` while a refused address is saved: for the few
+/// callers that do not send the token, and so would not be stopped by
+/// [`jarvis_headers`].
+pub(crate) fn require_base_allowed(app: &AppHandle) -> Result<(), String> {
+    match base_problem(app) {
+        Some(problem) => Err(problem),
+        None => Ok(()),
     }
 }
 
@@ -1495,6 +1517,9 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
         .build()
         .map_err(|e| format!("unable to build the HTTP client: {e}"))?;
 
+    // A refused address: Jarvis is not asked at all (the probe below would
+    // only fail on the empty base), and the sentence says why.
+    require_base_allowed(&app)?;
     let (jarvis, ollama, litellm) = tokio::join!(
         probe(
             &client,
@@ -1602,6 +1627,9 @@ pub(crate) fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::
 
 /// `X-Jarvis-Client` and, when configured, `X-Jarvis-Token`.
 pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, String> {
+    // Nothing goes anywhere while a refused address is saved - not to it,
+    // and not to this PC instead (see `jarvis_base`).
+    require_base_allowed(app)?;
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "X-Jarvis-Client",
@@ -3790,6 +3818,7 @@ pub async fn wiki_ingest_status(app: AppHandle, id: String) -> Result<serde_json
 /// A folder, never a file: the same reasoning as [`open_log_folder`].
 #[tauri::command]
 pub async fn wiki_open_folder(app: AppHandle) -> Result<(), String> {
+    require_base_allowed(&app)?;
     if !base_is_loopback(&jarvis_base(&app)) {
         return Err(
             "the wiki folder is on the PC Jarvis runs on, not this one - open it there".to_string(),
@@ -5591,9 +5620,27 @@ mod stop_everything_tests {
 #[cfg(test)]
 mod own_network_tests {
     use super::{
-        own_network_host, own_network_message, own_network_problem, validate_base,
-        OWN_NETWORK_MESSAGE,
+        base_from, own_network_host, own_network_message, own_network_problem, validate_base,
+        DEFAULT_BASE, OWN_NETWORK_MESSAGE,
     };
+
+    #[test]
+    fn a_refused_address_means_nothing_is_used_not_this_pc() {
+        assert_eq!(base_from(Some("https://abc123.ngrok-free.app".into())), "");
+        assert_eq!(base_from(Some("http://203.0.113.9:4719".into())), "");
+        assert_eq!(
+            base_from(Some("http://192.168.1.20:4719".into())),
+            "http://192.168.1.20:4719"
+        );
+        assert_eq!(base_from(None), DEFAULT_BASE);
+        // An empty base cannot be dialled: the URL is refused while it is
+        // built, before anything touches the network.
+        assert!(reqwest::Url::parse(&format!(
+            "{}/api/version",
+            base_from(Some("https://abc123.ngrok-free.app".into()))
+        ))
+        .is_err());
+    }
 
     /// The backend's real verdicts, written by `tools/gen_own_network_cases.py`
     /// from `backend/jarvis_local_http.py`; `backend/test_own_network_cases.py`
