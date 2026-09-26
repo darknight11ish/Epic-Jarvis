@@ -316,7 +316,7 @@ def t_ordinary_questions_are_unchanged():
           P.recall(st, "Where did I live before?", k=0, now=NOW) == [])
     class Boom:
         def search(self, q, k=8, **kw):
-            if set(kw) - {"entities"}:
+            if set(kw) - {"entities", "rerank"}:
                 raise RuntimeError("the past half broke")
             return [{"id": 1, "text": "Owner lives in York", "current": True}]
     check("if the past half fails, the current facts still come back",
@@ -415,10 +415,20 @@ def t_the_golden_set_is_made_up_and_complete():
     qs = [json.loads(x) for x in (HERE / "eval" / "golden_questions.jsonl")
           .read_text(encoding="utf-8").splitlines() if x.strip()]
     ids = {f["id"] for f in facts}
-    check("about 60 facts", 55 <= len(facts) <= 70, len(facts))
-    check("about 140 questions", 115 <= len(qs) <= 150, len(qs))
-    check("about 25 'don't know' questions",
-          sum(q["type"] == "abstain" for q in qs) >= 25)
+    check("about 70 facts", 60 <= len(facts) <= 80, len(facts))
+    check("about 165 questions", 150 <= len(qs) <= 185, len(qs))
+    check("at least 35 'don't know' questions",
+          sum(q["type"] == "abstain" for q in qs) >= 35)
+    # Memory idea 2 (2026-09-26): questions that need two facts, and
+    # questions about a time ("what phone did I have in June?").
+    check("at least 10 questions that need two or more facts, all of them golden",
+          sum(q["type"] == "multi" and len(q["answers"]) >= 2 for q in qs) >= 10)
+    check("at least 10 questions about a time",
+          sum(q["type"] == "time" for q in qs) >= 10)
+    told = {f["id"]: f["told"] for f in facts}
+    check("a replaced fact is retired on the day its replacement was told (the self-test "
+          "adds the replacement through add(supersedes=...) on that day)",
+          all(f["retired"] == told[f["replaced_by"]] for f in facts if f.get("retired")))
     check("past-belief questions carry a known_at date",
           all(q.get("known_at") for q in qs if q["type"] == "belief")
           and sum(q["type"] == "belief" for q in qs) >= 5)
@@ -481,6 +491,20 @@ def t_the_self_test_runs_on_a_scratch_store_only():
           res["distance_sweep"] == [] and "skipped" in md[0].read_text(encoding="utf-8"))
     check("the home folder's .openjarvis was never written to",
           list((home / ".openjarvis").iterdir()) == [])
+    # Memory idea 2: the bigger self-test and the learner test.
+    for key in ("multi_questions", "multi_all_found", "time_questions", "time_found",
+                "time_wrong_version"):
+        check(f"measures {key}", key in lv["after"])
+    le = res.get("learner") or {}
+    check("the learner test ran, with no model", le.get("available")
+          and not le["model_part"]["ran"], le.get("why"))
+    for kind in ("reads", "remember", "dates", "gate", "said_again", "true_from"):
+        k = (le.get("kinds") or {}).get(kind) or {}
+        check(f"the learner test: every {kind} case right", k and k["right"] == k["total"],
+              [c for c in le.get("cases", []) if c["kind"] == kind and not c["ok"]])
+    check("... and the report has both new sections", "The bigger self-test" in
+          md[0].read_text(encoding="utf-8") and "The learner" in md[0].read_text(
+              encoding="utf-8"))
 
 
 def t_listed_where_it_must_be():

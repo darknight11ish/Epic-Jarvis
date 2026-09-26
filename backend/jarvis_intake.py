@@ -30,6 +30,11 @@ WHAT IS IN HERE (numbers are the items in docs/LEARNING-RESEARCH-2026-09-23.md)
   9  planted instructions   injection_flags(), annotate()
   10 who started a turn     owner_turns(), mark_jarvis_authored()
 
+And from the memory research of 2026-09-26 (docs/MEMORY-RESEARCH-2026-09-26.md):
+
+  idea 3  "said again"      note_said_again()
+  idea 4  "older news"      older_news_note(), in annotate()
+
 THE RULES THIS FILE KEEPS, and where each is enforced
 
   * Nothing here writes a fact. Every path ends in the review queue, and a
@@ -327,6 +332,14 @@ def remember_from_turn(messages, *, extract=None, when: Optional[float] = None) 
         else:
             res = dict(fn(anchor_dates(said, _valid_when(when) or time.time()),
                           source="remember"))
+    if res.get("reason") == "already_known":
+        # "Said again" (memory idea 3): "Remember: X" when X is already a
+        # fact. Recorded like any other repeat - only from the owner's own
+        # live words (note_said_again checks the turn).
+        try:
+            note_said_again([said], [content])
+        except Exception:
+            pass
     res.setdefault("reason", "queued" if res.get("queued") else "unavailable")
     res["at"] = time.time()
     res["note"] = _REMEMBER_WHY.get(res["reason"], res["reason"])
@@ -755,12 +768,34 @@ def prepare_llm(llm: Callable, messages, *, when=None, store=None) -> Callable:
         if not isinstance(out, str):
             return out
         try:
+            wrapped.proposed = proposed_texts(out)
+        except Exception:
+            wrapped.proposed = []
+        try:
             return rewrite_answer(out, cands)
         except Exception:
             return out
 
     wrapped.candidates = cands      # for tests and for anyone debugging a pass
+    wrapped.proposed = []           # what the model proposed; "said again" reads it
     return wrapped
+
+
+def proposed_texts(raw: str) -> list:
+    """The facts a model answer proposes, as text - never a correction
+    (one that says what it "replaces"). For "said again": a proposal that
+    only repeats a stored fact is dropped by the learner's own checks, so
+    it is read here, before that."""
+    doc = _find_json(raw)
+    facts = doc.get("facts") if isinstance(doc, dict) else doc if isinstance(doc, list) else None
+    out = []
+    for f in facts if isinstance(facts, list) else []:
+        if not isinstance(f, dict) or f.get("replaces") not in (None, ""):
+            continue
+        t = " ".join(str(f.get("text") or "").split())
+        if t:
+            out.append(t)
+    return out
 
 
 def resolve_target(f: dict, replaces, store) -> Optional[dict]:
@@ -798,7 +833,17 @@ def propose(extract, messages, llm, *, source: str = "conversation",
         pass
     wrapped = prepare_llm(llm, messages, when=when, store=store)
     with conversation_at(when):
-        return extract.propose(messages, llm=wrapped, source=source)
+        out = extract.propose(messages, llm=wrapped, source=source)
+    # "Said again" (memory idea 3): a proposal that only repeats a fact
+    # Jarvis already keeps was dropped above; the day the owner said it is
+    # recorded instead. Never lets a failure here touch the learning pass.
+    try:
+        note_said_again(getattr(wrapped, "proposed", None) or [],
+                        [m.get("content") for m in messages or []
+                         if isinstance(m, dict) and m.get("role") == "user"], store)
+    except Exception:
+        pass
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -827,7 +872,9 @@ def propose(extract, messages, llm, *, source: str = "conversation",
 # still reaches you as a card to discard.
 #
 # Every drop is counted (status()), for the life of the process, the same as
-# the full-queue counter decide-once.patch added.
+# the full-queue counter decide-once.patch added. That count is only how many
+# PROPOSALS were dropped; the owner saying a known fact again is recorded for
+# good, by day, in the memory file (note_said_again, below: memory idea 3).
 
 NEAR_DUP_MIN = float(os.environ.get("JARVIS_NEAR_DUP_MIN") or 0.90)
 
@@ -939,6 +986,112 @@ def near_duplicate(text: str, f: dict, store) -> bool:
             _near_last = time.time()
         return True
     return False
+
+
+# --------------------------------------------------------------------------
+#   Memory idea 3: "said again" (docs/MEMORY-RESEARCH-2026-09-26.md)
+# --------------------------------------------------------------------------
+#
+# When the owner says something Jarvis already knows, the learner's
+# proposal is dropped (above: the exact dedupe in jarvis_extract, and
+# near_duplicate()), and that used to be all - a counter that a restart
+# forgot. Now the DAY is kept: one row per time, in the memory file
+# (MemoryStore.said_again), and both apps show "said again 3 times" under a
+# fact saved automatically.
+#
+# The same checks as learning, because a repeat is only a repeat if the
+# owner said it:
+#   * the words are the owner's own turn, typed or a voice turn checked at
+#     its strictest (jarvis_auto_learn's check_provenance and check_voice),
+#     in a conversation that had read no outside text (check_taint), and
+#     seen arriving live by this PC (jarvis_chat_log's registry) - a pasted,
+#     shared, re-sent or tool-tainted turn is never counted;
+#   * the turn holds every word of the repeated fact, and leaves out
+#     nothing that changes it ("I don't eat meat" never repeats "eats
+#     meat": jarvis_auto_learn.ungrounded and check_meaning);
+#   * the fact it repeats is a CURRENT stored fact that says the same thing
+#     in the same words (undated() equal, or shape() equal - the near-
+#     duplicate rule without the embedder); a correction is never a repeat;
+#   * the turn came AFTER the fact was saved, and the same turn is one row
+#     however often the learner re-reads the conversation.
+# Nothing is saved that was not already saved: no words, only the fact's
+# id, the time and typed/voice.
+
+_said_lock = threading.Lock()
+_said_noted = 0
+
+
+def _repeats_of(text: str, store) -> list:
+    """The current stored facts `text` says again (usually one; two when
+    the same thing was saved twice)."""
+    want = undated(text)
+    key = shape(want)
+    if not want:
+        return []
+    out = []
+    for h in store.search(text, k=5, word_floor=0.0):
+        if h.get("current") is False:
+            continue
+        other = undated(h.get("text"))
+        if other == want or (len(key[0]) >= 2 and shape(other) == key):
+            out.append(h)
+    return out
+
+
+def _says(fact: str, turn: str, A) -> bool:
+    """Does this owner turn say every word of `fact`, leaving out nothing
+    that changes it?"""
+    if A is None:
+        words = {w for w in re.findall(r"[a-z0-9]+", _ADDED.sub(" ", fact.lower()))
+                 if w not in _STOP}
+        have = set(re.findall(r"[a-z0-9]+", turn.lower()))
+        return bool(words) and words <= have
+    return not A.ungrounded(fact, [turn]) and not A.check_meaning(fact, [turn])
+
+
+def _trusted(entry: Optional[dict], A) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if A is None:
+        return (entry.get("provenance") == "typed" and not entry.get("tainted")
+                and not entry.get("read_outside"))
+    return not (A.check_provenance(entry) or A.check_voice(entry) or A.check_taint(entry))
+
+
+def note_said_again(proposed, turns, store=None) -> int:
+    """Record each proposal that only repeats a stored fact, against the
+    owner turn(s) that said it (see above). Returns how many rows were
+    written. Never raises."""
+    global _said_noted
+    try:
+        st = _live_store(store)
+        if st is None or not hasattr(st, "said_again"):
+            return 0
+        import jarvis_chat_log as H
+        try:
+            import jarvis_auto_learn as A
+        except Exception:
+            A = None
+        n = 0
+        turns = [t for t in turns or [] if isinstance(t, str) and t.strip()]
+        for text in proposed or []:
+            if not isinstance(text, str) or not text.strip():
+                continue
+            for fact in _repeats_of(text, st):
+                for turn in turns:
+                    if not _says(str(fact["text"]), turn, A):
+                        continue
+                    entry = H.live_turn_any(turn)
+                    if not _trusted(entry, A):
+                        continue
+                    if st.said_again(int(fact["id"]), entry.get("at"),
+                                     entry.get("provenance")):
+                        n += 1
+        with _said_lock:
+            _said_noted += n
+        return n
+    except Exception:
+        return 0
 
 
 # --------------------------------------------------------------------------
@@ -1060,7 +1213,57 @@ def annotate(rows: list) -> list:
         jarvis_auto_learn.annotate(rows)
     except Exception:
         pass
+    # Memory idea 4: a correction that sounds OLDER than the fact it names
+    # says so, in the line both apps already show under a card (its
+    # reason) - keeping it saves it as history and the newer fact stays.
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        try:
+            note = older_news_note(r)
+        except Exception:
+            note = ""
+        if note:
+            r["older_news"] = True
+            why = str(r.get("auto_reason") or "").strip().rstrip(".")
+            r["auto_reason"] = f"{why}. {note}" if why else note
     return rows
+
+
+#: The card's words for older news (memory idea 4, Graphiti's rule).
+OLDER_NEWS = ("It sounds older than what Jarvis knows: your words date it from {new}, "
+              "and the fact it would replace is true from {old}. Keeping it saves it "
+              "as history - the newer fact stays in use")
+
+
+def older_news_note(row: dict, store=None) -> str:
+    """"" - or, for a correction card whose words date it BEFORE the fact it
+    would replace (both dates from the owner's words), the sentence saying
+    so. The same rule add() applies when the card is kept, read the same
+    way: jarvis_memory.true_from and said_from. No model."""
+    rid = row.get("replaces_id") if isinstance(row, dict) else None
+    if not rid or row.get("source") == RETIRE_CARD_SOURCE:
+        return ""
+    Mm = sys.modules.get("jarvis_memory")
+    if Mm is None or not hasattr(Mm, "true_from") or not hasattr(Mm, "said_from"):
+        return ""
+    st = _live_store(store)
+    if st is None:
+        return ""
+    target = st.get(int(rid))
+    if not target or not Mm.said_from(target.get("meta")):
+        return ""
+    now = time.time()
+    if target.get("valid_to") is not None and float(target["valid_to"]) <= now:
+        return ""
+    try:
+        at = float(row.get("created") or now)
+    except (TypeError, ValueError):
+        at = now
+    new = Mm.true_from(str(row.get("text") or ""), min(at, now))
+    if new is None or new >= float(target["valid_from"]):
+        return ""
+    return OLDER_NEWS.format(new=_iso(_day(new)), old=_iso(_day(float(target["valid_from"]))))
 
 
 # --------------------------------------------------------------------------
@@ -1084,6 +1287,16 @@ def status(store=None) -> dict:
             "same thing, in the same words, as a fact you keep or a card "
             "already waiting or discarded, and were not queued again. Stored "
             "facts are never touched by this.")
+    try:
+        n = int(st.status().get("said_again") or 0) if st is not None else 0
+        if n:
+            out["said_again"] = n
+            out["said_again_note"] = (
+                f"{n} time(s) you said something Jarvis already knew - kept by day, "
+                "in the memory file, and shown as \"said again\" under a fact. "
+                "No words are kept for these.")
+    except Exception:
+        pass
     if _remember_last:
         out["remember_last"] = dict(_remember_last)
     return out

@@ -207,7 +207,9 @@ repeating alarm, reminder or standby schedule has no card (the briefing and
 "tell me when" keep `schedule_repeat`); a light, plug or fan the owner named
 can run with no card when the owner's lights setting is on (above,
 `jarvis_agent` LIGHTS_WITHOUT_CARD); an everyday fact about someone the owner
-mentions saves without a memory card (section 5); and the "What asks first"
+mentions saves without a memory card, and once saved it is a normal fact
+everywhere - it may be read aloud and does not make a web search ask
+(section 5, `jarvis_sensitive.topic()`); and the "What asks first"
 page in both apps shows every action's tier, makes one stricter at once, and
 - on the PC only - loosens one of seven with a card that needs Windows Hello
 (`jarvis_owner_check.PC_ONLY_ACTIONS`). Each one is a place where no card is
@@ -703,6 +705,59 @@ things", hidden like every memory list, with Forget (and on the desktop
 **"Current" is `valid_to IS NULL OR valid_to > now`, never `valid_to IS
 NULL`.** A lease that ends in December is true today. Three places computed
 this and one of them got it wrong, directly below a line that got it right.
+The writers had it wrong too until 2026-09-26: `retire()`,
+`add(supersedes=...)` and `edit()` matched `valid_to IS NULL` only, so a
+fact that ends later could never be forgotten, corrected, reworded or
+retired by a "stop using this fact?" card (`test_memory_true_from.py`, the
+checks marked "the bug"). One copy of the old rule is still in the owner's
+own `jarvis_extract._accept` (memory-safety.patch): a correction CARD
+aimed at a fact that ends later is saved without retiring it - a later
+patch to that file, not done here.
+
+**Memory ideas 1-4** (the owner's decision of 2026-09-26, after
+docs/MEMORY-RESEARCH-2026-09-26.md; backend/README.md "Memory ideas 1-4"
+has the self-test numbers; docs/JARVIS-API.md §34):
+
+```
+fact_repeats  fact_id, said_at, how ("typed" | "voice")   "said again" - NO WORDS
+```
+
+- **The re-ranker** (idea 1). Chat recall only (`jarvis_past.recall` ->
+  `search(rerank=True)`): the top 20 facts that pass every filter are
+  re-ordered by a small cross-encoder on the processor
+  (`Xenova/ms-marco-MiniLM-L-6-v2` through fastembed, Apache-2.0, English
+  only) before the first `k` go to the model. It only re-orders - no fact
+  added, `k` and both floors unchanged - and never touches `find_one()`,
+  corrections or anything that writes. Loaded on a background thread; until
+  it is ready, if it cannot load, or if one question takes longer than
+  1.5 s, recall is exactly what it was (said once, in the audit log and
+  `status()["reranker"]`). `JARVIS_MEMORY_RERANK=0` turns it off. Its gain
+  is measured only on the PC: the model cannot download in the container.
+- **"Said again"** (idea 3). When the owner says a fact Jarvis already
+  keeps, the learner's proposal is still dropped, and one row is kept: the
+  fact's id, when the PC saw the turn arrive, typed or voice. Only from the
+  owner's own live words, by automatic learning's own checks (typed or
+  strictly checked voice, seen live, no outside text read, every word said
+  and no "not" dropped), only after the fact was saved, one row per turn
+  however often the learner re-reads it. Nothing reads the count to decide
+  anything, so it can never make a fact harder to forget, correct or erase;
+  Erase keeps the rows (ids and dates, like the fact's own dates). Shown as
+  "said again 3 times" in both apps' "Saved automatically" list (the one
+  list both apps read from a shipped module; the full memory list is the
+  owner's `jarvis_hud` route and does not carry it yet).
+- **Real "true from" dates** (idea 4). `add()` sets `valid_from` from the
+  owner's own words when they say when something changed ("I moved to Leeds
+  in January", told in March -> 1 January; `true_from()`: fixed English
+  rules, one date only, a change word, nothing that points at the future,
+  NEVER a future date), marked `meta.true_from = "said"`. A correction
+  with such a date ends the old fact on that date. **Older news never
+  replaces newer news** (Graphiti's rule): when both facts' dates come from
+  the owner's words and the correction's is earlier, the old fact stays in
+  use and the correction is stored as history, true until the newer one
+  began, linked to it by `retired_by` (so its history and Erase reach it);
+  the correction card says so first ("It sounds older than what Jarvis
+  knows..."), in the reason line both apps already show. Corrections still
+  always get a card; no model is involved.
 
 **Never compress facts or transcripts** with a keep/drop token dropper
 (LLMLingua and relatives). They are negation-blind, and this store is

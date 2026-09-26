@@ -258,8 +258,16 @@ valid_at      when the fact became true      (valid time)
 invalid_at    when the fact stopped being true (valid time)
 ```
 
-**Jarvis has `valid_from` / `valid_to` — valid time only.** The missing axis
-matters for exactly the case Jarvis is built for: *"I told it in March that I
+*Out of date since this was written (2026-09-15):* this section said "Jarvis
+has `valid_from` / `valid_to` — valid time only". It no longer is. Jarvis now
+keeps **both pairs of dates**, like Graphiti: `valid_from` / `valid_to` (when
+a fact was true) and `created` / `retired_at` (when Jarvis believed it) -
+`bitemporal.patch`, then the rebuilt `jarvis_memory.py` (docs/ARCHITECTURE.md
+section 5). And since memory idea 4 (2026-09-26) `valid_from` is the date the
+owner's own words give when they give one ("I moved to Leeds in January",
+told in March, is true from 1 January - `jarvis_memory.true_from`), and older
+news never replaces newer news (Graphiti's ordering rule, in `add()`). The
+reason the second axis was needed still stands: *"I told it in March that I
 moved in January."* One axis cannot represent a late-accepted review-queue
 item or a retroactive correction.
 

@@ -49,10 +49,12 @@ people named as a taste ("I'm a fan of Terry Pratchett"), pets and things
 
 EVERYDAY FACTS ABOUT PEOPLE (the owner's decision of 2026-09-26, after the
 approvals audit, docs/APPROVALS-AUDIT-2026-09-26.md): "my sister likes jazz"
-is saved without a card. The patterns above still FIND the other person -
-patterns() and topic() are unchanged, so a recalled fact about someone still
-counts as sensitive for reading aloud and web search - but classify() no
-longer treats "someone else is in it" as enough on its own:
+is saved without a card. The patterns above still FIND the other person
+(patterns() reports it), but "someone else is in it" is no longer enough on
+its own - neither when saving (classify()) nor when a saved fact is used
+(topic(), below: the owner's decision of 2026-09-26, after the approvals
+build, "treated as normal everywhere" - an everyday fact about someone may
+be read aloud and does not make a web search ask first):
   * `everyday_other` (patterns()): the only thing found is WHO the text is
     about - a relation word, a name, a title, "he"/"she", "Anna's sister".
     Anything private about them keeps the card whatever else happens: their
@@ -2826,9 +2828,18 @@ def reason_for(categories, *, special=(), other_person: Optional[bool] = None) -
 def topic(text: str) -> str:
     """"" or the topic in plain words ("health", "religion", "someone else's
     money"), from the patterns alone - no model, so it is cheap enough to
-    run on every recalled fact. jarvis_auto_learn.sensitivity() is this."""
+    run on every recalled fact. jarvis_auto_learn.sensitivity() is this, and
+    so is jarvis_search.fact_topic(): whether an answer that used the fact
+    may be read aloud, and whether a web search asks first.
+
+    An EVERYDAY fact about someone ("Owner's sister Priya likes jazz",
+    `everyday_other`) is "" - normal, like any other fact (the owner's
+    decision of 2026-09-26: everyday facts about people are treated as
+    normal everywhere, not only when saving). Anything private about them -
+    their health, money, address, contact details, a debt, a secret, a
+    break-up - is still found, and still named."""
     p = patterns(text)
-    if not p["sensitive"]:
+    if not p["sensitive"] or p["everyday_other"]:
         return ""
     r = reason_for(p["categories"], special=p["special"], other_person=_someone_else(p))
     return r[len("about "):-len(", a sensitive topic")]

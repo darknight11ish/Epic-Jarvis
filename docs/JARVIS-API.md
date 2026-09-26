@@ -2069,7 +2069,7 @@ uses a sensitive saved fact stays on screen by default, even under "Read
 aloud" for memories): `sensitive_on_screen` is the default and the strict
 value, and applies at once. `sensitive_aloud` is the looser one and raises
 the voice card, which reads: "Let Jarvis read answers that use a saved fact
-about your health, money, passwords or other people aloud, when you ask by
+about your health, money, passwords or other people's private details aloud, when you ask by
 voice? / Anyone near the speaker will hear them. / If you did not just do
 this, say no. / If you say no: nothing changes - those answers stay on your
 screen." A missing, damaged or unreadable value reads as
@@ -3021,9 +3021,12 @@ ALL of these, or it stays a card. The words in quotes are what the card's
      details (their own topics), a break-up, a death, a secret, a debt or
      trouble ("my brother owes me money", the private-life words),
      "<Name>'s address / salary / diagnosis ...", and passwords, PINs,
-     account and ID numbers. `patterns()` and `topic()` still see the
-     other person, so a recalled fact about someone still counts as
-     sensitive for reading aloud and for web search (section 23);
+     account and ID numbers. `patterns()` still sees the other person, but
+     since the owner's later decision of 2026-09-26 ("treated as normal
+     everywhere") `topic()` calls an everyday fact about someone normal
+     too: a recalled "my sister likes jazz" may be read aloud and does not
+     make a web search ask first (section 23). Their private details stay
+     sensitive there as well;
    - **the learner's own local model**, asked only when the patterns find
      nothing (or only another person, above), for a one-line JSON verdict. Its "unsure", an answer that is
      not that JSON, no answer within 8 seconds, Ollama not reachable, no
@@ -3174,6 +3177,10 @@ the last row's `saved_at`. It may carry a fraction; it is floored, and means
 "strictly older seconds". **A page never splits a second** - rows sharing
 the last row's second come with it - so nothing is skipped or repeated.
 `provenance` is `"typed"` or `"voice"` (show a small "said aloud" mark).
+A fact the owner has said again since it was saved also carries
+`"said_again": {"count": 3, "last": 1790000900}` (memory idea 3, §34);
+both apps add "said again 3 times" to the row's small line. No field when
+it was never said again.
 
 `POST /api/memory/forget {"id": <fact id>}` - unchanged (§6): one fact per
 request, retired, not deleted. Now **also called by the phone**, for this
@@ -4314,9 +4321,14 @@ this question, so it asks before searching ...". **The honest limit:** a
 fact said in other words ("vegetarian" saved, "meat-free" searched) is not
 caught by comparing words; sensitive facts ask whatever the words say, and
 the test suite pins this limit so it is not forgotten
-(`test_web_search.t_saved_facts_ask_only_when_repeated_or_sensitive`). A
-fact about another person is a sensitive topic, so a PINNED fact about
-someone else still makes every search in the answer ask.
+(`test_web_search.t_saved_facts_ask_only_when_repeated_or_sensitive`). An
+everyday fact about another person ("Owner's sister Priya likes jazz") is a
+normal fact (the owner's decision of 2026-09-26: everyday facts about people
+are normal everywhere): it asks only when the search words repeat it, like
+any other. A fact about someone's health, money, address, contact details,
+debts or secrets is still sensitive, so a PINNED fact like that still makes
+every search in the answer ask (`test_sensitive.
+t_everyday_people_facts_are_normal_when_used`).
 
 **"Ask before every web search"**: turning it ON is immediate; turning it
 OFF is ONE approval card, **`stop_asking_before_every_web_search`** (tier `ask`; any other
@@ -5419,3 +5431,66 @@ is on. A card for lights (the setting off, or a condition failed) is still
 unclassified in the gate, so it still asks Windows Hello from the PC - the
 safe side (the audit's item 7: no risk entry was added for `home_control`,
 so locks keep theirs).
+
+## 34. Memory ideas 1-4: a re-ranker, "said again", real "true from" dates (added 2026-09-26)
+
+The owner's decision of 2026-09-26, after docs/MEMORY-RESEARCH-2026-09-26.md:
+build ideas 1-4, each measured by the memory self-test
+(`backend/eval_memory.py`; the numbers are in backend/README.md, "Memory
+ideas 1-4"). **No new route and no new setting in either app.** What the
+apps can see:
+
+- `GET /api/memory/auto` - a fact said again carries `said_again`
+  `{count, last}` (§19). Both apps show "said again once" / "said again 3
+  times" in the row's small line.
+- A correction card that sounds OLDER than the fact it would replace has
+  `older_news: true`, and its `auto_reason` (the line both apps already show
+  as "Not saved automatically: ...") ends with: "It sounds older than what
+  Jarvis knows: your words date it from 2026-01-01, and the fact it would
+  replace is true from 2026-03-01. Keeping it saves it as history - the
+  newer fact stays in use". Keep, Discard and "Both are true" are
+  unchanged.
+- `GET /api/memory/status` has two more fields: `reranker`
+  `{"state": "on" | "loading" | "off" | "not started", "model", "why",
+  "used", "slow"?}` and `said_again` (how many repeats are recorded).
+  Setup status (`jarvis_intake.status`) says the same count in words.
+
+What changed on the PC, and nothing else:
+
+1. **The re-ranker.** Chat recall re-orders the top 20 facts search found
+   with a small cross-encoder on the processor
+   (`Xenova/ms-marco-MiniLM-L-6-v2` through fastembed, Apache-2.0, about
+   80 MB, downloaded once like the meaning model) before the first 5 go to
+   the model. The same facts, a better order: none added, none that would
+   have been among the 20 dropped, `JARVIS_MEMORY_K` and both floors
+   unchanged. It never blocks a chat - loaded on a background thread; not
+   loaded yet, not loadable, or slower than `JARVIS_MEMORY_RERANK_BUDGET`
+   (1.5 s) on a question: that question gets the old order. Said once in the
+   audit log (`memory.rerank_off`) and in `status()`. Off:
+   `JARVIS_MEMORY_RERANK=0`. Pool size: `JARVIS_MEMORY_RERANK_POOL` (20).
+2. **A bigger self-test** - questions that need two facts, questions about
+   a time, more "don't know" questions, and a test of the learner (which
+   turns it reads, "Remember:", dates, the automatic-learning gate, "said
+   again", "true from"). Offline; `--learner-model NAME` also runs the real
+   learner with the PC's local model.
+3. **"Said again".** When the owner says something Jarvis already keeps,
+   one row: the fact's id, when this PC saw the turn arrive, typed or voice
+   - no words. Only from the owner's own live words, with automatic
+   learning's checks; only after the fact was saved; once per turn. Erase
+   keeps these rows (no words in them); nothing uses them to decide
+   anything.
+4. **Real "true from" dates.** A fact whose words say when it changed ("I
+   moved to Leeds in January", told in March) is true from that date - never
+   a future one, never from a plan ("I'm moving in March"), never from two
+   dates. A correction with such a date ends the old fact on it. **Older
+   news never replaces newer news:** when both dates come from the owner's
+   words and the correction's is earlier, keeping the card saves it as
+   history and the newer fact stays in use (the audit log says
+   `memory.older_news`, ids only). Questions about the past ("what phone did
+   I have in June?") then use the real dates.
+
+Also fixed with idea 4: `retire()`, `add(supersedes=...)` and `edit()`
+treated only `valid_to IS NULL` as "still in use", so a fact that ends in
+the future could not be forgotten, corrected or reworded. They now use
+`valid_to IS NULL OR valid_to > now`, like every reader (§6 Forget and the
+"stop using this fact?" card now work on such a fact).

@@ -361,7 +361,7 @@ def t_every_caller_goes_through_the_check():
           run.index("local_model_ok(X)") < run.index("X.propose("))
     intake = (HERE / "jarvis_intake.py").read_text(encoding="utf-8")
     check("jarvis_intake.propose calls the module it is handed",
-          "return extract.propose(messages, llm=wrapped, source=source)" in intake)
+          "out = extract.propose(messages, llm=wrapped, source=source)" in intake)
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     order = re.findall(r"^\s*'([\w-]+\.patch)'", ps1[ps1.index("$PATCHES = @("):
                                                      ps1.index("$REBUILT_SUPERSEDES")], re.M)

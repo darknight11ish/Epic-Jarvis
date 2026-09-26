@@ -354,6 +354,8 @@ object AutoLearn {
         val savedAt: Double?,
         val provenance: String?,
         val device: String?,
+        /** Memory idea 3: how often the owner has said it again since (0 = never). */
+        val saidAgain: Int = 0,
     ) {
         /** Said aloud to Jarvis (a verified voice turn), not typed. */
         val aloud: Boolean get() = provenance == Provenance.VOICE
@@ -391,6 +393,9 @@ object AutoLearn {
                 savedAt = o.prim("saved_at")?.takeIf { !it.isString }?.doubleOrNull?.takeIf { it.isFinite() },
                 provenance = o.str("provenance"),
                 device = o.str("device"),
+                saidAgain = (o["said_again"] as? JsonObject)?.prim("count")
+                    ?.takeIf { !it.isString }?.longOrNull
+                    ?.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt() ?: 0,
             )
         }
         return Page(facts, mayHaveOlder = (raw?.size ?: 0) >= asked, status = statusFromList(body))
@@ -405,11 +410,19 @@ object AutoLearn {
     /** What "Load older" asks for: facts saved before the oldest one shown. */
     fun olderThan(shown: List<Fact>): Double? = shown.mapNotNull { it.savedAt }.minOrNull()
 
-    /** The small line under a fact: when it was saved, and in which app it was said. */
+    /** The small line under a fact: when it was saved, in which app it was said, and how often said again. */
     fun rowLine(fact: Fact, zone: ZoneId, today: LocalDate): String = listOfNotNull(
         ChatLog.whenLine(fact.savedAt?.toLong(), zone, today),
         fromWhere(fact.device),
+        saidAgainWords(fact.saidAgain),
     ).joinToString(" · ")
+
+    /** "said again once" / "said again 3 times" - the desktop's words (auto-learn.js). */
+    fun saidAgainWords(n: Int): String? = when {
+        n <= 0 -> null
+        n == 1 -> "said again once"
+        else -> "said again $n times"
+    }
 
     /** Which app the owner's words were said in, in History's words; nothing for one the PC did not name. */
     fun fromWhere(device: String?): String? = when (device) {

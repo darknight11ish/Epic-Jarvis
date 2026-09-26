@@ -136,3 +136,32 @@
 {"id": "q136", "q": "How old is my nephew?", "answers": ["f09"], "type": "person", "split": "tune"}
 {"id": "q137", "q": "What does my sister do for a living?", "answers": [], "type": "abstain", "split": "test"}
 {"id": "q138", "q": "When is my cat's next vet appointment?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q139", "q": "Which choir was I in in June?", "answers": ["f65"], "type": "time", "split": "tune", "stale": ["f64"]}
+{"id": "q140", "q": "Which choir was I in last year?", "answers": ["f64"], "type": "time", "split": "test", "stale": []}
+{"id": "q141", "q": "What phone did I have in June?", "answers": ["f67"], "type": "time", "split": "tune", "stale": ["f66"]}
+{"id": "q142", "q": "What phone did I have in March?", "answers": ["f66"], "type": "time", "split": "test", "stale": []}
+{"id": "q143", "q": "Where was my team based back in March?", "answers": ["f69"], "type": "time", "split": "tune", "stale": ["f68"]}
+{"id": "q144", "q": "Where was my team based last year?", "answers": ["f68"], "type": "time", "split": "test", "stale": []}
+{"id": "q145", "q": "Which allotment plot do I have?", "answers": ["f70"], "type": "time", "split": "tune", "stale": ["f71"]}
+{"id": "q146", "q": "Which allotment plot did I have in February?", "answers": ["f71"], "type": "time", "split": "test", "stale": []}
+{"id": "q147", "q": "Where did I live in May?", "answers": ["f11"], "type": "time", "split": "tune", "stale": ["f10"]}
+{"id": "q148", "q": "Where did I live in February?", "answers": ["f10"], "type": "time", "split": "test", "stale": []}
+{"id": "q149", "q": "Who is my sister and where is her wedding?", "answers": ["f01", "f02"], "type": "multi", "split": "tune"}
+{"id": "q150", "q": "What's my partner's name and what does he do?", "answers": ["f03", "f04"], "type": "multi", "split": "test"}
+{"id": "q151", "q": "What instrument am I learning and who teaches me?", "answers": ["f23", "f24"], "type": "multi", "split": "tune"}
+{"id": "q152", "q": "Where did I grow up and where did I go to university?", "answers": ["f52", "f53"], "type": "multi", "split": "test"}
+{"id": "q153", "q": "Which evenings do I play football and go climbing?", "answers": ["f25", "f54"], "type": "multi", "split": "tune"}
+{"id": "q154", "q": "What is my cat called and what is it scared of?", "answers": ["f13", "f14"], "type": "multi", "split": "test"}
+{"id": "q155", "q": "Which company do I work for and what shifts do I work?", "answers": ["f22", "f21"], "type": "multi", "split": "tune"}
+{"id": "q156", "q": "Which language am I learning, and for whose wedding?", "answers": ["f59", "f01"], "type": "multi", "split": "test"}
+{"id": "q157", "q": "What food should I avoid?", "answers": ["f16", "f17", "f18"], "type": "multi", "split": "tune"}
+{"id": "q158", "q": "Which city do I live in and which street is my flat on?", "answers": ["f11", "f12"], "type": "multi", "split": "test"}
+{"id": "q159", "q": "Which choir does my sister sing in?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q160", "q": "What phone does my partner have?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q161", "q": "Where did I live in 2019?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q162", "q": "What's my allotment neighbour called?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q163", "q": "When is my sister's birthday?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q164", "q": "What instrument does my partner play?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q165", "q": "Which depot does my brother work at?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q166", "q": "Who is my dentist?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q167", "q": "What's my partner's phone number?", "answers": [], "type": "abstain", "split": "test"}

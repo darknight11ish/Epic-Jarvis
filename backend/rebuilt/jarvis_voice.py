@@ -579,8 +579,10 @@ MEMORY_ALOUD = "memory_aloud"
 MEMORY_ON_SCREEN = "memory_on_screen"
 MEMORY = (MEMORY_ALOUD, MEMORY_ON_SCREEN)
 #: Answers that use a SENSITIVE saved fact - health, money, passwords and
-#: account details, other people (jarvis_auto_learn.sensitivity(); the chat
-#: route's `injected_sensitive`) - asked by voice. The owner's decision,
+#: account details, other people's private details (jarvis_auto_learn.
+#: sensitivity(); the chat route's `injected_sensitive`) - asked by voice.
+#: An everyday fact about someone ("my sister likes jazz") is not one: the
+#: owner's decision of 2026-09-26 treats those as normal everywhere. The owner's decision,
 #: 2026-09-24: kept on screen by default, EVEN when memory answers or
 #: private answers are read aloud; `sensitive_aloud` lets them be read aloud
 #: after a real voice check, and choosing it raises the voice approval card.
