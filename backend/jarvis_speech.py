@@ -1777,6 +1777,28 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     return wav
 
 
+def tts_speed(voices_module=None) -> float:
+    """How fast the built-in voice speaks: the owner's speaking-speed setting
+    (jarvis_voices.speed(), both apps' "How fast Jarvis speaks"), or - with
+    an older jarvis_voices.py, or none - `[voice] tts_speed`, as before."""
+    V = voices_module
+    if V is None:
+        try:
+            import jarvis_voices as V
+        except Exception:
+            V = None
+    if V is not None and hasattr(V, "speed"):
+        try:
+            return float(V.speed())
+        except Exception:
+            pass
+    try:
+        v = float(_cfg("tts_speed", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        return 1.0
+    return v if 0.5 <= v <= 2.0 else 1.0
+
+
 def _synthesise(text: str, *, start_better: bool = True) -> tuple:
     """The sound for `text`, and nothing else - no timing row, nothing
     remembered: (samples | None, sample_rate, engine, voice, fallback, note,
@@ -1815,7 +1837,7 @@ def _synthesise(text: str, *, start_better: bool = True) -> tuple:
         audio = engine.generate(
             text,
             sid=int(_cfg("tts_speaker_id", 0) or 0),
-            speed=float(_cfg("tts_speed", 1.0) or 1.0),
+            speed=tts_speed(jarvis_voices),
         )
     except Exception:
         return None, 0, "none", voice, fallback, note, "Kokoro failed"

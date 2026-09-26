@@ -160,6 +160,30 @@ F5-TTS (SWivid), code MIT - https://github.com/SWivid/F5-TTS
   Nothing of either is shipped here; the owner downloads them
   (backend/README.md, "The better voice").
 
+Pocket TTS (Kyutai), code MIT - https://github.com/kyutai-labs/pocket-tts
+  The candidate voice-copying engine of the voice bake-off
+  (backend/jarvis_voices.py, jarvis_bakeoff.py, 2026-09-26); built but not
+  switched on. The owner downloads sherpa-onnx's package of it,
+  sherpa-onnx-pocket-tts-int8-2026-01-26 (tts-models release; ONNX export
+  by KevinAHM, https://github.com/KevinAHM/pocket-tts-onnx-export). Its
+  weights are Creative Commons Attribution 4.0 International (the
+  package's LICENSE), and its README adds "It is for non-commercial" -
+  which this build is (rule 5). Kyutai's terms forbid "voice impersonation
+  or cloning without explicit and lawful consent"; Jarvis copies only the
+  voices its custom-voice card let in, which asks for exactly that, and
+  refuses the owner's own. Nothing of it is shipped here.
+
+livekit-wakeword (LiveKit), Apache-2.0 -
+https://github.com/livekit/livekit-wakeword
+  The tool the owner may run on the PC (tools/train_wakeword.py, commit
+  95448a7559c453fcd87645bd67b247ffb45f85b0, in its own Python) to train a
+  candidate "hey Jarvis" detector for the bake-off. Not shipped, and not
+  imported by Jarvis. Its two front-end files are byte-identical to
+  openWakeWord's above. A detector it trains learns from synthetic Piper
+  voices (LibriTTS-R, CC BY 4.0) and openWakeWord's general-speech
+  numbers, so it is treated as non-commercial like the model above; if it
+  ever replaces today's, it will be listed here with its hash.
+
 Smart Turn v3.2 (Daily / Pipecat), BSD 2-Clause -
 https://github.com/pipecat-ai/smart-turn
   smart-turn-v3.2-cpu.onnx, "finished speaking, or only paused?". Shipped

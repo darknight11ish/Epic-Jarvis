@@ -312,6 +312,37 @@ class CustomVoicesTest {
     }
 
     @Test
+    fun `how fast Jarvis speaks - the PC's choices and words, no card`() {
+        val sp = requireNotNull(status("empty").speed) { "no speed block" }
+        assertEquals(listOf("slower", "normal", "faster"), sp.choices.map { it.id })
+        assertEquals(listOf("Slower", "Normal", "Faster"), sp.choices.map { it.label })
+        assertEquals("normal", sp.choice)
+        assertEquals(CustomVoices.SPEED_TITLE, sp.title)
+        assertTrue(sp.detail, sp.detail.contains("never asks first"))
+        assertEquals("", sp.note)
+        assertEquals("faster", status("speed_faster").speed?.choice)
+        assertEquals("{\"speed\":\"faster\"}", CustomVoices.speedBody("faster"))
+        val a = answer("speed_faster")
+        assertTrue(a.accepted)
+        assertFalse("no card for the speed", a.pending)
+        assertEquals("Jarvis now speaks faster.", CustomVoices.answerLine(a))
+        assertEquals("The speed must be slower, normal or faster.", CustomVoices.answerLine(answer("speed_bad")))
+        // A PC too old to have it sends no `speed`: nothing is shown.
+        assertNull(CustomVoices.parse(JsonObject(raw("empty") - "speed"))?.speed)
+    }
+
+    @Test
+    fun `Pocket TTS, if it ever replaces ZipVoice, is named in ZipVoice's place`() {
+        assertEquals("Pocket TTS, on your PC's processor", CustomVoices.engineWords("pocket"))
+        val s = status("fallback")
+        val swapped = s.copy(engines = s.engines - "zipvoice" + ("pocket" to CustomVoices.Engine(true, "")))
+        val lines = CustomVoices.engineLines(swapped)
+        assertEquals("Pocket TTS, on your PC's processor: ready.", lines[1])
+        assertFalse(lines.any { it.contains("ZipVoice") })
+        assertEquals(3, lines.size)
+    }
+
+    @Test
     fun `engine words`() {
         assertEquals("ZipVoice, on your PC's processor", CustomVoices.engineWords("zipvoice"))
         assertTrue(CustomVoices.engineWords("f5").contains("second graphics card"))

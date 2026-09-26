@@ -12,7 +12,8 @@
  * immediate. The better voice on the second graphics card is its own
  * switch: ON a card, OFF at once. A recording that sounds like the owner
  * is refused - Jarvis speaking in the owner's voice could pass its own "is
- * it the owner?" check.
+ * it the owner?" check. How fast every voice speaks (Slower / Normal /
+ * Faster) is the PC's `speed` block: no card either way.
  *
  * The server's sentences (`why`, `error`, `fallback`) are written for the
  * owner and are shown as they are, first letter raised.
@@ -34,9 +35,37 @@ export function sentence(text) {
 export const ENGINES = Object.freeze({
   kokoro: "the built-in voice",
   zipvoice: "the chosen voice, made on this PC's processor",
+  // Pocket TTS is built but not switched on: it would REPLACE ZipVoice if
+  // the owner's bake-off says so (jarvis_voices.PROCESSOR_ENGINE), and it
+  // is the same thing to the owner - so the same words, never a new row.
+  pocket: "the chosen voice, made on this PC's processor",
   f5: "the better voice, made on the second graphics card",
   none: "nothing - no voice could speak",
 });
+
+/**
+ * "How fast Jarvis speaks": `{show, choice, choices: [{id, label}], title,
+ * detail, note}` from the PC's own `speed` block. The choices and every
+ * word are the PC's (a new choice needs no app release); `show` is false on
+ * a PC too old to have it. No card either way.
+ */
+export function speedView(status) {
+  const sp = obj(obj(status).speed);
+  const choices = (Array.isArray(sp.choices) ? sp.choices : [])
+    .filter((c) => c && typeof c.id === "string" && c.id && typeof c.label === "string" && c.label)
+    .map((c) => ({ id: c.id, label: c.label }));
+  if (!choices.length) {
+    return { show: false, choice: "", choices: [], title: "", detail: "", note: "" };
+  }
+  return {
+    show: true,
+    choice: typeof sp.choice === "string" ? sp.choice : "",
+    choices,
+    title: String(sp.title || "How fast Jarvis speaks"),
+    detail: String(sp.detail || ""),
+    note: String(sp.note || ""),
+  };
+}
 
 /** Which voice Jarvis speaks in, and what makes the next sentence. */
 export function speakingLine(status) {

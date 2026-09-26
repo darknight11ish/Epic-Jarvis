@@ -1927,6 +1927,16 @@ object JarvisRuntime {
         return postCustomVoice(CustomVoices.BETTER_PATH, CustomVoices.betterBody(on))
     }
 
+    /**
+     * How fast every voice on the PC speaks - one of the ids the PC offered.
+     * No card either way (it trusts nothing more), but held on a stale link
+     * like every change sent to the PC (rule 4).
+     */
+    suspend fun setVoiceSpeed(id: String): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.SPEED_PATH, CustomVoices.speedBody(id))
+    }
+
     private val _customVoiceNote = MutableStateFlow<String?>(null)
 
     /** The last thing a Voices request came to, in words, for the screen to show. */

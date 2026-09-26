@@ -30,13 +30,12 @@
          if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
                      "/api/compute", "/api/memory/facts", "/api/memory/export"):
              if not _origin_ok(self):
-@@ -2414,6 +2437,52 @@
+@@ -2414,6 +2437,49 @@
                  code, out = jarvis_big_model.handle_deep_post(body)
              return self._send(code, out)
  
 +        if route in ("/api/voice/voices/create", "/api/voice/voices/active",
-+                     "/api/voice/voices/delete", "/api/voice/voices/better",
-+                     "/api/voice/voices/speed"):
++                     "/api/voice/voices/delete", "/api/voice/voices/better"):
 +            # voices.patch - custom voices (jarvis_voices.py).
 +            #   create {"name", "clip": "<base64 WAV>", "transcript"} and
 +            #   active {"voice": "<id>"} each raise ONE approval card
@@ -49,8 +48,6 @@
 +            #   better {"enabled": true|false}: the better voice (F5-TTS) on
 +            #   the second card - ON one card (better_voice_enable), OFF at
 +            #   once.
-+            #   speed {"speed": "slower"|"normal"|"faster"}: how fast every
-+            #   voice speaks - no card either way (it trusts nothing more).
 +            # The recording never leaves this PC and is never logged: an
 +            # error here names the exception, never its message.
 +            if not _origin_ok(self):

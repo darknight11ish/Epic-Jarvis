@@ -424,6 +424,9 @@ permissions = [
   "allow-set-active-voice",
   "allow-delete-custom-voice",
   "allow-set-better-voice",
+  # How fast every voice speaks (Slower / Normal / Faster): no card either
+  # way; held on a stale link in Rust, like the manner setting.
+  "allow-set-voice-speed",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",

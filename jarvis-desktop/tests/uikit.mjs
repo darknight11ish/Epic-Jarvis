@@ -858,7 +858,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "create_custom_voice":
           case "set_active_voice":
           case "delete_custom_voice":
-          case "set_better_voice": {
+          case "set_better_voice":
+          case "set_voice_speed": {
             const v = window.__vt;
             if (cmd !== "voice_sample_level") v.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
             if (v.fails[cmd]) throw new Error(v.fails[cmd]);
@@ -907,6 +908,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(v.del));
               case "set_better_voice":
                 return JSON.parse(JSON.stringify(args.enabled ? v.betterOn : v.betterOff));
+              case "set_voice_speed":
+                return JSON.parse(JSON.stringify(v.speed));
               default:
                 return null;
             }
@@ -1832,6 +1835,7 @@ export async function open(browser, base, file, data, viewport) {
       del: TRAINING.answer(TRAINING.voice_posts.delete),
       betterOn: TRAINING.answer(TRAINING.voice_posts.better_on_pending),
       betterOff: TRAINING.answer(TRAINING.voice_posts.better_off),
+      speed: TRAINING.answer(TRAINING.voice_posts.speed_faster),
       ...(data && data.vt),
     },
   });

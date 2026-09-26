@@ -520,6 +520,10 @@ def voices_cases():
         keep(w, "better_no_card", post("/api/voice/voices/better", {"enabled": True}, **kw),
              posts)
         keep(w, "better_off", post("/api/voice/voices/better", {"enabled": False}), posts)
+        # The speaking speed: at once, no card either way.
+        keep(w, "speed_faster", post("/api/voice/voices/speed", {"speed": "faster"}), posts)
+        keep(w, "speed_chosen", VO.status(), statuses)
+        keep(w, "speed_bad", post("/api/voice/voices/speed", {"speed": "warp"}), posts)
 
     # A custom voice chosen, but ZipVoice's files are not on this PC: the
     # built-in voice speaks, and says why.

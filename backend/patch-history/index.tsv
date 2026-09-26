@@ -60,6 +60,7 @@ temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a50393
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27+00:00	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47+00:00	backend: jarvis_agent.py - the model can finally use a tool, local lane only
 voice-503.patch	voice-503/8d2c6f6.patch	8d2c6f615e4db690c28465fc892805f3d74a70a0	2026-09-15T01:07:41+00:00	The voice routes were telling four different stories, and one was a leak
+voices.patch	voices/ca3f625.patch	ca3f62575069f0b741ace3645b33729f9c2c7d9c	2026-09-24T08:14:23+00:00	Custom voices, backend: jarvis_voices.py, voices.patch, and the better voice
 web-search.patch	web-search/dcfdbaf.patch	dcfdbafdf25c0944179e6103990326786c11de38	2026-09-25T06:49:40+00:00	Web search: Brave back as the fifth option, and its line says it can cost money
 web-search.patch	web-search/7c82046.patch	7c820464c4b614c3305ce54d126772b7e6e09d09	2026-09-25T06:33:24+00:00	Web search: Exa replaces Brave (SearXNG, DuckDuckGo, Exa, Tavily)
 web-search.patch	web-search/4312b46.patch	4312b4686e51299212f51077097d4a49e380ced2	2026-09-25T06:02:46+00:00	Web search in both apps: Settings (desktop) and Mind (phone); docs

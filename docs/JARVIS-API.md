@@ -1748,7 +1748,7 @@ routes changes.
 `backend/jarvis_f5_worker.py` for the better voice). Jarvis can speak in a
 voice the owner recorded: 3 to 10 seconds of someone reading a sentence
 Jarvis shows (so the words are exact), or an uploaded clip with its words
-typed in. **Both apps call all five** (desktop Settings -> Jarvis's voice,
+typed in. **Both apps call all six** (desktop Settings -> Jarvis's voice,
 `voice_training.rs`; phone Checks -> Jarvis's voice, `VoicesScreen.kt`) -
 `ported` in `tools/check_parity.py`. How it works,
 and the owner's install lines, are in `backend/README.md`, "Custom voices".
@@ -1762,6 +1762,22 @@ fallback:
   only when Jarvis speaks in a custom voice, stopped after idle minutes, in
   standby and when switched off. While it loads, ZipVoice speaks in the same
   voice.
+
+A third engine, **Pocket TTS** (also sherpa-onnx, also on the processor), is
+built and hash-pinned but **not switched on** (2026-09-26): it is a
+candidate to REPLACE ZipVoice if the owner's bake-off (`jarvis_bakeoff.py`,
+`backend/README.md` "Voice upgrades: the bake-off") says so. Then `engines`
+carries a `pocket` row **instead of** the `zipvoice` one and
+`speaking_with` / timing rows say `"pocket"` - never both. Both apps already
+have words for it.
+
+**How fast Jarvis speaks** (2026-09-26): Slower, Normal or Faster, for every
+voice made on the PC (the built-in one, custom voices, the better voice, and
+the "One moment." clip). `status()` carries the choices and every word
+(`speed`, below); `POST /api/voice/voices/speed` sets it. **No card either
+way** - it trusts nothing more (like the manner setting, section 27) - but,
+like every change, held on a stale link. Before the owner first chooses,
+`[voice] tts_speed` in `jarvis-framework.toml` still applies.
 
 **Where the audio goes: nowhere.** The recording is held in the PC's memory
 until the card is answered; approved, it is kept in
@@ -1780,7 +1796,7 @@ any voice print changes.
 All routes: token + origin, like every other write. A client sends
 `X-Jarvis-Client: hud` as always. **Hold on a stale link (rule 4) every
 POST that raises a card** - adding a voice, switching to a custom one,
-better voice ON. Deleting a voice, going back to the built-in one and
+better voice ON - and the speed (a change, though it raises none). Deleting a voice, going back to the built-in one and
 better voice OFF only take something away and always go (both apps). Show every `error` and `why` word for word: they are written for the
 owner.
 
@@ -1790,6 +1806,7 @@ owner.
 | `POST /api/voice/voices/create` | `{"name": "<1-40 characters>", "clip": "<base64 of one WAV>", "transcript": "<exactly what is said in it>"}` | **202** `{"ok": true, "pending": true, "voice": "<id>", "name", "seconds": 5.3, "message"}` - ONE card is up (action `custom_voice`), **nothing is saved yet**; **400** `{"ok": false, "error"}` - the clip, words or name (see limits); **409** `{"ok": false, "refused": "owner_voice", "error"}` - it sounds like the owner (no card); **409** `{"ok": false, "refused": "owner_check_failed" \| "no_voice_check", "error"}` - it could not be checked, so it is refused; **409** `{"ok": false, "pending": true, "error"}` - a voice card already waits; **409** `{"ok": false, "error"}` - that name exists, or there are already 20 voices; **409** `{"ok": false, "pending": false, "error"}` - `custom_voice` is not tier `ask` (no card); **503** module missing | The WAV: 16- or 24-bit PCM, 8-48 kHz, mono or stereo, at most 2.9 MB; 3-10 s of speech once silence at the ends is trimmed; not silent. The words must fit the length (0.5-8 words a second). Approving saves it; Jarvis does **not** start speaking in it - that is `active`, its own card. |
 | `POST /api/voice/voices/active` | `{"voice": "<id>"}` or `{"voice": "builtin"}` | `builtin`: **200** `{"ok": true, "active": "builtin", "pending": false, "message"}` at once, no card (it also withdraws a waiting switch card and stops the better voice). A custom voice: **202** `{"ok": true, "pending": true, "voice": "<id>", "message"}` - ONE card (`custom_voice`); **200** `{"ok": true, "active": "<id>", "pending": false, "message"}` if already active; **404** unknown id; **409** as for create (`refused: "owner_voice"`, a card waiting, tier not `ask`, or its recording unreadable) | Nothing changes until the card is approved. |
 | `POST /api/voice/voices/delete` | `{"voice": "<id>"}` | **200** `{"ok": true, "deleted": "<id>", "active": "<id>" \| "builtin"}` at once, no card; **400** for `builtin`; **404** unknown id; 500 `{"ok": false, "error"}` if the folder could not be removed | Deletes the folder. If Jarvis was speaking in it, it goes back to the built-in voice (`active` says so). |
+| `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
 Errors from the route itself (not the module): **400** `{"error": "the
@@ -1805,6 +1822,7 @@ request.
  "active": "builtin" | "<id>",
  "active_name": "Built-in voice" | "<name>",
  "speaking_with": "kokoro" | "zipvoice" | "f5",   what the NEXT sentence would use
+                                                  ("pocket" in zipvoice's place, only if the bake-off replaced it)
  "fallback": "" | "<why the built-in voice is used instead of the chosen one>",
  "voices": [
    {"id": "builtin", "name": "Built-in voice", "builtin": true, "ready": bool, "why": str},
@@ -1826,6 +1844,13 @@ request.
                   "need_mb": 3072, "need_mb_measured": false,
                   "last": {"outcome": "enabled"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",
                            "at", "why"} | null},
+ "speed": {"choice": "slower" | "normal" | "faster" | "custom",   "custom": set by hand in the toml
+           "value": 1.0,                  the number every voice is given
+           "default": "normal",
+           "title": "How fast Jarvis speaks", "detail": str, "note": str,   show all three as they are
+           "choices": [{"id": "slower", "label": "Slower"},
+                       {"id": "normal", "label": "Normal"},
+                       {"id": "faster", "label": "Faster"}]},        absent on an older PC: show nothing
  "pending": {"kind": "create" | "switch", "voice": "<id>", "name": str, "expires_in": <seconds>} | null,
  "last": {"kind": "create" | "switch", "voice": "<id>",
           "outcome": "created"|"switched"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",
@@ -1850,8 +1875,8 @@ desktop, the phone). Never the text.
 
 **The event.** When a card ends, a voice is deleted, the voice goes back to
 the built-in one, or the better voice is switched off, the stream carries
-kind `voices` with `{"what": "create" | "switch" | "delete" | "better",
-"outcome": "<as in last.outcome, or builtin / deleted / off>"}` - a doorbell,
+kind `voices` with `{"what": "create" | "switch" | "delete" | "better" | "speed",
+"outcome": "<as in last.outcome, or builtin / deleted / off / set>"}` - a doorbell,
 never a name or words. On it, read `GET /api/voice/voices` again.
 
 **What an app should build** (suggested, for both): a "Voices" list with the

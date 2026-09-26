@@ -26,6 +26,9 @@ import java.util.Locale
  *   confirmation on the phone.
  * - THE BETTER VOICE: ON is a card (only offered when a capable second card
  *   is there); OFF is at once.
+ * - HOW FAST JARVIS SPEAKS: Slower, Normal or Faster - the PC's own choices
+ *   and words (`speed`), no card either way; like every change sent to the
+ *   PC, held on a stale link.
  *
  * Every card-raising request is held on a stale link (rule 4); the ones
  * that only narrow (built-in voice, delete, better voice off) always go.
@@ -42,6 +45,10 @@ object CustomVoices {
     const val ACTIVE_PATH = "/api/voice/voices/active"
     const val DELETE_PATH = "/api/voice/voices/delete"
     const val BETTER_PATH = "/api/voice/voices/better"
+    const val SPEED_PATH = "/api/voice/voices/speed"
+
+    /** The speed plate's heading when the PC sends none - the desktop's words. */
+    const val SPEED_TITLE = "How fast Jarvis speaks"
 
     const val BUILTIN = "builtin"
 
@@ -68,6 +75,21 @@ object CustomVoices {
     )
 
     data class Pending(val kind: String, val voice: String, val name: String, val expiresIn: Int)
+
+    /** One speaking speed the PC offers: its id, and the word shown. */
+    data class SpeedChoice(val id: String, val label: String)
+
+    /**
+     * "How fast Jarvis speaks": the PC's own choices and words (a new choice
+     * needs no phone release). [note] is the PC's extra line, or "".
+     */
+    data class Speed(
+        val choice: String = "",
+        val choices: List<SpeedChoice> = emptyList(),
+        val title: String = SPEED_TITLE,
+        val detail: String = "",
+        val note: String = "",
+    )
 
     /** One engine on the PC: can it speak, and why not. */
     data class Engine(val available: Boolean, val why: String)
@@ -101,7 +123,7 @@ object CustomVoices {
         val speakingWith: String = "kokoro",
         val fallback: String = "",
         val voices: List<Voice> = emptyList(),
-        /** "kokoro", "zipvoice", "f5". */
+        /** "kokoro", the processor's engine ("zipvoice", or "pocket" if it replaced it), "f5". */
         val engines: Map<String, Engine> = emptyMap(),
         val better: Better = Better(),
         val pending: Pending? = null,
@@ -109,6 +131,8 @@ object CustomVoices {
         val timings: List<Timing> = emptyList(),
         val sentences: List<String> = emptyList(),
         val limits: Limits = Limits(),
+        /** Null on a PC too old to have the speaking-speed setting: nothing is shown. */
+        val speed: Speed? = null,
     ) {
         val custom: List<Voice> get() = voices.filter { !it.builtin }
     }
@@ -212,6 +236,25 @@ object CustomVoices {
                     maxVoices = lim.int("max_voices").takeIf { it > 0 } ?: 20,
                 )
             },
+            speed = o.obj("speed")?.let { parseSpeed(it) },
+        )
+    }
+
+    /** The `speed` block, or null when it offers no choice this phone can show. */
+    private fun parseSpeed(sp: JsonObject): Speed? {
+        val choices = (sp["choices"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val c = e as? JsonObject ?: return@mapNotNull null
+            val id = c.str("id").ifBlank { return@mapNotNull null }
+            val label = c.str("label").ifBlank { return@mapNotNull null }
+            SpeedChoice(id, label)
+        }
+        if (choices.isEmpty()) return null
+        return Speed(
+            choice = sp.str("choice"),
+            choices = choices,
+            title = sp.str("title").ifBlank { SPEED_TITLE },
+            detail = sp.str("detail"),
+            note = sp.str("note"),
         )
     }
 
@@ -256,6 +299,9 @@ object CustomVoices {
     fun deleteBody(id: String): String = "{\"voice\":" + JarvisApi.quote(id) + "}"
 
     fun betterBody(on: Boolean): String = "{\"enabled\":$on}"
+
+    /** `{"speed": "<id>"}` - one of the ids the PC offered. */
+    fun speedBody(id: String): String = "{\"speed\":" + JarvisApi.quote(id) + "}"
 
     // ------------------------------------------------------------ answers --
 
@@ -454,6 +500,9 @@ object CustomVoices {
     fun engineWords(engine: String): String = when (engine) {
         "kokoro" -> "the built-in voice (Kokoro, on your PC)"
         "zipvoice" -> "ZipVoice, on your PC's processor"
+        // Built, not switched on: it would REPLACE ZipVoice if the owner's
+        // bake-off says so - then the PC names it here, never beside ZipVoice.
+        "pocket" -> "Pocket TTS, on your PC's processor"
         "f5" -> "the better voice (F5-TTS, on the second graphics card)"
         "none" -> "nothing - no voice could speak"
         "" -> "not known"
@@ -496,9 +545,11 @@ object CustomVoices {
             val e = s.engines[key] ?: return "$label: not reported by your PC."
             return "$label: " + if (e.available) "ready." else sentence(e.why.ifBlank { "not available" })
         }
+        // The one engine on the processor the PC reports: ZipVoice today.
+        val processor = if ("pocket" in s.engines) "pocket" else "zipvoice"
         return listOf(
             line("Built-in voice (Kokoro)", "kokoro"),
-            line("ZipVoice, on your PC's processor", "zipvoice"),
+            line(engineWords(processor), processor),
             "Better voice (F5-TTS), on the second graphics card: " +
                 sentence(s.better.stateWhy.ifBlank { s.better.state }),
         )
@@ -527,6 +578,7 @@ object CustomVoices {
     private fun engineName(engine: String): String = when (engine) {
         "kokoro" -> "Built-in voice"
         "zipvoice" -> "ZipVoice"
+        "pocket" -> "Pocket TTS"
         "f5" -> "Better voice (F5-TTS)"
         else -> engine.replaceFirstChar { it.uppercase() }
     }

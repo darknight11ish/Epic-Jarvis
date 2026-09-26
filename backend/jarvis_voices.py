@@ -22,6 +22,14 @@ voice:
 If the custom voice is missing, fails or is too slow, say() uses the normal
 Kokoro voice and status() says why (`fallback`).
 
+A third engine, Pocket TTS (also sherpa-onnx, also on the processor), is
+built below and hash-pinned but NOT switched on: it is a candidate to
+REPLACE ZipVoice if the owner's bake-off (jarvis_bakeoff.py) says so -
+never a third engine beside it (PROCESSOR_ENGINE).
+
+How fast every voice speaks - the built-in one too - is the owner's
+speaking-speed setting (speed(), below): three choices, no card.
+
 THE ROUTES (voices.patch):
 
     GET  /api/voice/voices           status()
@@ -29,6 +37,7 @@ THE ROUTES (voices.patch):
     POST /api/voice/voices/active    {"voice": "<id>" | "builtin"}
     POST /api/voice/voices/delete    {"voice": "<id>"}
     POST /api/voice/voices/better    {"enabled": true | false}
+    POST /api/voice/voices/speed     {"speed": "slower" | "normal" | "faster"}
 
 THE PERMISSION MODEL (docs/ARCHITECTURE.md section 3). Creating a voice and
 switching Jarvis to one each raise ONE approval card through jarvis_gate,
@@ -37,7 +46,9 @@ answer; only "ask" + "approved" does anything). Switching back to the
 built-in voice and deleting a voice are immediate: both only narrow what
 Jarvis does. The better-voice switch is its own action,
 `better_voice_enable`, the same shape as the second card's switches: ON is a
-card, OFF is immediate. Nothing here auto-approves (rule 4).
+card, OFF is immediate. The speaking speed is no action at all - it trusts
+nothing more, so neither direction asks (like the manner setting). Nothing
+here auto-approves (rule 4).
 
 WHERE THE AUDIO GOES (rule 1). Nowhere. The uploaded clip is held in this
 process's memory until the card is answered; approved, it is written to
@@ -156,6 +167,20 @@ F5_RETRY_SECONDS = 300.0
 F5_MODEL = "F5TTS_v1_Base"
 F5_CHECKPOINT = "model_1250000.safetensors"
 
+#: Which engine makes a custom voice on the PROCESSOR. "zipvoice" today.
+#: Pocket TTS ("pocket", below) is built and hash-pinned but NOT switched
+#: on: the owner's bake-off (jarvis_bakeoff.py) measures it against
+#: ZipVoice on his PC and says "replace" or "keep what we have" by rules
+#: written before it ran. Only a "replace" changes this line - and then
+#: Pocket REPLACES ZipVoice (one processor engine, never a third engine on
+#: screen: docs/FEASIBILITY-AUDIT-2026-09-26.md section 4, guardrails 2
+#: and 3). There is deliberately no setting for it: an owner cannot judge
+#: an engine by its name, only by the measured result.
+PROCESSOR_ENGINE = "zipvoice"
+PROCESSOR_ENGINES = ("zipvoice", "pocket")
+ENGINE_NAMES = {"kokoro": "Kokoro", "zipvoice": "ZipVoice", "pocket": "Pocket TTS",
+                "f5": "F5-TTS"}
+
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 
 #: Sentences for the owner to read when recording, shown by the apps. Short
@@ -249,7 +274,80 @@ def _f5_idle_minutes() -> int:
 
 
 def _speed() -> float:
+    return speed()
+
+
+# --------------------------------------------------------------------------
+#   How fast Jarvis speaks (the speaking-speed setting, 2026-09-26)
+# --------------------------------------------------------------------------
+#
+# Three choices, set from either app (POST /api/voice/voices/speed), kept in
+# voices/state.json beside the chosen voice. NO CARD EITHER WAY: the speed
+# trusts nothing more, shows nothing more and sends nothing anywhere (the
+# manner setting's rule, jarvis_manner.py). The words both apps show come
+# from here, in GET /api/voice/voices `speed`, so a new choice needs no app
+# release. Before the owner first chooses, `[voice] tts_speed` in
+# jarvis-framework.toml still applies, as it always did.
+#
+# The ONE place the speed is read: jarvis_speech's built-in voice (Kokoro),
+# the custom voices here, and the "One moment." clip's cache key
+# (jarvis_voice_flow.moment_key) all call speed().
+
+SPEEDS = (("slower", 0.85), ("normal", 1.0), ("faster", 1.15))
+SPEED_VALUE = dict(SPEEDS)
+SPEED_DEFAULT = "normal"
+SPEED_LABEL = {"slower": "Slower", "normal": "Normal", "faster": "Faster"}
+SPEED_TITLE = "How fast Jarvis speaks"
+SPEED_DETAIL = ("Every voice made on your PC speaks at this speed. It changes nothing "
+                "else, so it never asks first.")
+SPEED_SAID = {"slower": "Jarvis now speaks more slowly.",
+              "normal": "Jarvis now speaks at its normal speed.",
+              "faster": "Jarvis now speaks faster."}
+
+
+def speed() -> float:
+    """The speed every voice on this PC speaks at: the owner's choice, else
+    `[voice] tts_speed` (0.5-2.0, default 1.0). Never raises."""
+    choice = _read_state().get("speed")
+    if choice in SPEED_VALUE:
+        return SPEED_VALUE[choice]
     return _num("tts_speed", 1.0, 0.5, 2.0)
+
+
+def speed_view() -> dict:
+    """GET /api/voice/voices `speed`: the choice, and every word the apps show."""
+    choice = _read_state().get("speed")
+    value = speed()
+    note = ""
+    if choice not in SPEED_VALUE:
+        choice = next((k for k, v in SPEEDS if abs(v - value) < 1e-9), "custom")
+        if choice == "custom":
+            note = (f"Set by hand on your PC to {value:g} times the normal speed "
+                    f"([voice] tts_speed in jarvis-framework.toml). Choosing one here "
+                    f"replaces it.")
+    if PROCESSOR_ENGINE == "pocket":
+        note = (note + " " if note else "") + (
+            "Custom voices made on your PC's processor (Pocket TTS) always speak at "
+            "normal speed; the built-in voice and the better voice follow this.")
+    return {"choice": choice, "value": value, "default": SPEED_DEFAULT,
+            "title": SPEED_TITLE, "detail": SPEED_DETAIL, "note": note,
+            "choices": [{"id": k, "label": SPEED_LABEL[k]} for k, _ in SPEEDS]}
+
+
+def set_speed(body) -> tuple:
+    """POST /api/voice/voices/speed {"speed": "slower" | "normal" | "faster"}:
+    at once, no card either way (see above)."""
+    if not isinstance(body, dict) or set(body) != {"speed"} \
+            or not isinstance(body["speed"], str) or body["speed"] not in SPEED_VALUE:
+        # Plain words: both apps show this sentence as it is.
+        return 400, {"ok": False, "error": "the speed must be slower, normal or faster"}
+    choice = body["speed"]
+    err = _write_state(speed=choice)
+    if err:
+        return 500, {"ok": False, "error": err}
+    _audit("voices.speed", {"speed": choice})
+    _publish({"what": "speed", "outcome": "set"})
+    return 200, {"ok": True, "message": SPEED_SAID[choice], "speed": speed_view()}
 
 
 def _audit(event: str, detail: dict) -> None:
@@ -296,9 +394,10 @@ _STATE_LOCK = threading.RLock()
 
 
 def _read_state() -> dict:
-    """{"active": id, "better_voice": bool}. Missing or broken is the
-    built-in voice and the better voice off - the safe reading."""
-    out = {"active": BUILTIN, "better_voice": False}
+    """{"active": id, "better_voice": bool, "speed": choice or None}. Missing
+    or broken is the built-in voice, the better voice off and no speed chosen
+    - the safe reading."""
+    out = {"active": BUILTIN, "better_voice": False, "speed": None}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -309,6 +408,9 @@ def _read_state() -> dict:
     if isinstance(a, str) and (a == BUILTIN or _ID_RE.match(a)):
         out["active"] = a
     out["better_voice"] = raw.get("better_voice") is True
+    sp = raw.get("speed")
+    if isinstance(sp, str) and sp in SPEED_VALUE:
+        out["speed"] = sp
     return out
 
 
@@ -846,9 +948,12 @@ def _zipvoice():
 
 
 def reload() -> None:
-    """Forget the loaded ZipVoice (a new model folder takes effect next call)."""
+    """Forget the loaded ZipVoice and Pocket TTS (a new model folder takes
+    effect next call)."""
     with _ZIP_LOCK:
         _ZIP.update(engine=None, why="", built=False)
+    with _POCKET_LOCK:
+        _POCKET.update(engine=None, why="", built=False)
     with _CLIP_LOCK:
         _CLIP_CACHE.clear()
 
@@ -939,6 +1044,239 @@ def zipvoice_generate(text: str, v: Voice, speed: float = 1.0):
     if not parts:
         raise Unavailable("ZipVoice made no sound for that text")
     return np.concatenate(parts), rate, took
+
+
+# --------------------------------------------------------------------------
+#   Pocket TTS, on the processor (sherpa-onnx) - the bake-off candidate
+# --------------------------------------------------------------------------
+#
+# Kyutai's Pocket TTS (github.com/kyutai-labs/pocket-tts): about 100 million
+# numbers, runs on the processor, copies a voice from a short recording and
+# needs no transcript of it. Run here through sherpa-onnx, the library the
+# voice already uses (its OfflineTtsPocketModelConfig and GenerationConfig's
+# reference_audio - checked in sherpa-onnx's own python-api-examples/
+# pocket-tts.py at commit 040afe3, 2026-09-22).
+#
+# NOT SWITCHED ON: PROCESSOR_ENGINE above says which processor engine
+# speaks. Until the owner's bake-off says "replace", only jarvis_bakeoff.py
+# calls pocket_generate().
+#
+# PINNED. The package is sherpa-onnx's release of it,
+# POCKET_RELEASE["archive"]; its SHA-256 and each file's below were measured
+# from the real download on 2026-09-26 (github.com release asset, fetched
+# for this). Every file is checked against its pin before the model is
+# loaded; one that does not match is refused - never loaded "anyway" - and
+# status says which (fail closed).
+#
+# THE LICENCE, as the package says it: the weights are CC BY 4.0 (its
+# LICENSE file) and its README adds "It is for non-commercial" - this build
+# is non-commercial (CLAUDE.md rule 5). Kyutai's code is MIT. Kyutai's
+# "Prohibited use" forbids "voice impersonation or cloning without explicit
+# and lawful consent" - which is what the existing custom-voice card already
+# asks for, and the owner-voice refusal still applies: Pocket speaks only
+# the voices that card let in. Recorded in THIRD-PARTY-NOTICES.txt.
+#
+# KNOWN, from sherpa-onnx's source (sherpa-onnx/csrc/offline-tts-pocket-
+# impl.h at 040afe3): it takes no speed - GenerationConfig.speed is not
+# read for Pocket - so a Pocket voice speaks at its normal speed whatever the
+# speaking-speed setting says; and it makes each sentence's sound whole
+# before handing out the first piece, so its "first sound" is that
+# sentence's making time. Both are measured by the bake-off, not assumed.
+# (Checked here with sherpa-onnx 1.13.8: the same sentence with the same
+# seed came out sample-for-sample identical at speed 1.0 and 1.15.)
+
+POCKET_RELEASE = {
+    "publisher": ("Kyutai (Pocket TTS, the model); KevinAHM (the ONNX export); "
+                  "k2-fsa/sherpa-onnx (the package)"),
+    "version": "sherpa-onnx-pocket-tts-int8-2026-01-26",
+    "archive": "sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2",
+    "url": ("https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/"
+            "sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2"),
+    "archive_sha256": "2f3b88823cbbb9bf0b2477ec8ae7b3fec417b3a87b6bb5f256dba66f2ad967cb",
+    "licence": ("weights CC BY 4.0, non-commercial per the package README; code MIT; "
+                "no voice copying without the speaker's explicit, lawful consent"),
+}
+#: role -> (file name, SHA-256). Measured from the real archive above.
+POCKET_FILES = {
+    "lm_flow": ("lm_flow.int8.onnx",
+                "8d627d235c44a597da908e1085ebe241cbbe358964c502c5a5063d18851a5529"),
+    "lm_main": ("lm_main.int8.onnx",
+                "bfc0c7e7e3d72864fa3bb2ee499f62f21ddc1474b885f5f3ca570f8be73e787e"),
+    "encoder": ("encoder.onnx",
+                "e8f2f6d301ffb96e398b138a7dc6d3038622d236044636b73d920bab85890260"),
+    "decoder": ("decoder.int8.onnx",
+                "12b0857402d31aead94df19d6783b4350d1f740e811f3a3202c70ad89ae11eea"),
+    "text_conditioner": ("text_conditioner.onnx",
+                         "0b84e837d7bfaf2c896627b03e3f080320309f37f4fc7df7698c644f7ba5e6b1"),
+    "vocab_json": ("vocab.json",
+                   "6fb646346cf931016f70c4921aab0900ce7a304b893cb02135c74e294abfea01"),
+    "token_scores_json": ("token_scores.json",
+                          "5be2f278caf9b9800741f0fd82bff677f4943ec764c356f907213434b622d958"),
+}
+#: sherpa-onnx's own example uses 5 steps for Pocket.
+POCKET_STEPS = 5
+
+
+def pocket_dir() -> Path:
+    return Path(str(_cfg("pocket_dir", "") or (_models_dir() / "pocket-tts")))
+
+
+def pocket_files() -> dict:
+    d = pocket_dir()
+    return {role: str(d / name) for role, (name, _sha) in POCKET_FILES.items()}
+
+
+_HASHES: dict = {}          # (path, size, mtime_ns) -> sha256
+_HASH_LOCK = threading.Lock()
+
+
+def file_sha256(path) -> str:
+    """The file's SHA-256, remembered per (path, size, modified time) so a
+    200 MB model is read once, not on every status call."""
+    p = Path(path)
+    st = p.stat()
+    key = (str(p), st.st_size, st.st_mtime_ns)
+    with _HASH_LOCK:
+        if key in _HASHES:
+            return _HASHES[key]
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    out = h.hexdigest()
+    with _HASH_LOCK:
+        _HASHES[key] = out
+    return out
+
+
+def pocket_state(verify: bool = True) -> tuple:
+    """(available, why). File checks, and - with `verify` - every file's
+    SHA-256 against its pin (fail closed). Loads no model."""
+    if sherpa_onnx is None:
+        return False, ("the sherpa-onnx package is not installed in the Python that runs "
+                       "Jarvis (py -3 -m pip install sherpa-onnx)")
+    if not hasattr(sherpa_onnx, "OfflineTtsPocketModelConfig") or \
+            not hasattr(sherpa_onnx, "GenerationConfig"):
+        return False, ("this sherpa-onnx has no Pocket TTS (1.12.26 and newer have it; this "
+                       "was tested with 1.13.8): py -3 -m pip install --upgrade sherpa-onnx")
+    f = pocket_files()
+    missing = [POCKET_FILES[k][0] for k, p in f.items() if not Path(p).is_file()]
+    if missing:
+        return False, (f"the Pocket TTS files are not on this PC (missing "
+                       f"{', '.join(missing)} in {pocket_dir()}); backend/README.md, "
+                       f"\"Voice upgrades: the bake-off\", has the one-line install")
+    if verify:
+        for role, p in f.items():
+            try:
+                got = file_sha256(p)
+            except OSError as exc:
+                return False, f"{POCKET_FILES[role][0]} could not be read ({type(exc).__name__})"
+            if got != POCKET_FILES[role][1]:
+                return False, (f"{POCKET_FILES[role][0]} in {pocket_dir()} is not the file this "
+                               f"Jarvis was checked with (its SHA-256 is different), so Pocket "
+                               f"TTS is not used. Install it again with the line in "
+                               f"backend/README.md")
+    return True, "ready"
+
+
+_POCKET = {"engine": None, "why": "", "built": False}
+_POCKET_LOCK = threading.Lock()     # building, and one generate() at a time
+
+
+def _pocket():
+    """(engine, why). Built once, on first use, only after every pin matched."""
+    with _POCKET_LOCK:
+        if _POCKET["built"]:
+            return _POCKET["engine"], _POCKET["why"]
+        ok, why = pocket_state(verify=True)
+        eng = None
+        if ok:
+            f = pocket_files()
+            try:
+                pc = sherpa_onnx.OfflineTtsPocketModelConfig(
+                    lm_flow=f["lm_flow"], lm_main=f["lm_main"], encoder=f["encoder"],
+                    decoder=f["decoder"], text_conditioner=f["text_conditioner"],
+                    vocab_json=f["vocab_json"], token_scores_json=f["token_scores_json"])
+                mc = sherpa_onnx.OfflineTtsModelConfig(
+                    pocket=pc, num_threads=int(_num("pocket_threads", 2, 1, 16)))
+                eng = sherpa_onnx.OfflineTts(sherpa_onnx.OfflineTtsConfig(model=mc))
+                why = "ready"
+            except Exception as exc:
+                eng, why = None, f"Pocket TTS could not be loaded ({type(exc).__name__})"
+        _POCKET.update(engine=eng, why=why, built=True)
+        return eng, why
+
+
+def pocket_generate(text: str, v: Voice, speed: float = 1.0,
+                    first_audio: Optional[Callable[[], None]] = None,
+                    seed: Optional[int] = None):
+    """(samples, sample_rate, seconds taken), like zipvoice_generate.
+    `first_audio`, if given, is called once, the moment the first piece of
+    sound exists (the bake-off's "time to first sound"). `speed` is passed
+    on, and - see above - not followed by this engine. `seed` fixes its
+    random choices (it samples, so two runs differ in length otherwise): the
+    bake-off's speed test uses it so a length difference can only come from
+    the speed."""
+    eng, why = _pocket()
+    if eng is None:
+        raise Unavailable(why)
+    prompt = _clip_samples(v)
+    if prompt is None:
+        raise Unavailable(f"the recording for \"{v.name}\" could not be read")
+    prompt_list = prompt.tolist()
+    fired = [first_audio is None]
+
+    def on_audio(samples, progress):
+        if not fired[0]:
+            fired[0] = True
+            try:
+                first_audio()
+            except Exception:
+                pass
+        # 1 = keep generating, 0 = stop (sherpa-onnx's python-api-examples/
+        # pocket-tts-play.py; its binding's docstring says the opposite).
+        return 1
+
+    parts, rate, took = [], SAMPLE_RATE, 0.0
+    for piece in chunks(text):
+        gc = sherpa_onnx.GenerationConfig()
+        gc.reference_audio = prompt_list
+        gc.reference_sample_rate = SAMPLE_RATE
+        gc.speed = float(speed)
+        gc.num_steps = POCKET_STEPS
+        if seed is not None:
+            gc.extra = {"seed": str(int(seed))}
+        with _POCKET_LOCK:
+            t = _mono()
+            audio = eng.generate(piece, gc, on_audio)
+            took += _mono() - t
+        s = np.asarray(getattr(audio, "samples", []), dtype=np.float32)
+        if s.size:
+            rate = int(getattr(audio, "sample_rate", SAMPLE_RATE))
+            if parts:
+                parts.append(np.zeros(int(0.15 * rate), dtype=np.float32))
+            parts.append(s)
+    if not parts:
+        raise Unavailable("Pocket TTS made no sound for that text")
+    return np.concatenate(parts), rate, took
+
+
+def processor_state() -> tuple:
+    """(available, why) of PROCESSOR_ENGINE, from what is already known."""
+    if PROCESSOR_ENGINE == "pocket":
+        if _POCKET["built"]:
+            return _POCKET["engine"] is not None, _POCKET["why"]
+        return pocket_state(verify=True)
+    if _ZIP["built"]:
+        return _ZIP["engine"] is not None, _ZIP["why"]
+    return zipvoice_state()
+
+
+def processor_generate(text: str, v: Voice, speed: float = 1.0):
+    """PROCESSOR_ENGINE's generate: (samples, sample_rate, seconds taken)."""
+    if PROCESSOR_ENGINE == "pocket":
+        return pocket_generate(text, v, speed)
+    return zipvoice_generate(text, v, speed)
 
 
 # --------------------------------------------------------------------------
@@ -1192,7 +1530,8 @@ class _F5Engine:
         self.card = sc["name"]
         self.state, self.since, self.load_seconds = "loading", time.time(), None
         self.last_used = _mono()
-        self.why = (f"loading F5-TTS on the {sc['name']} - Jarvis speaks with ZipVoice, in "
+        self.why = (f"loading F5-TTS on the {sc['name']} - Jarvis speaks with "
+                    f"{ENGINE_NAMES[PROCESSOR_ENGINE]}, in "
                     f"the same voice, until it is ready")
         proc, lines = self.proc, self.lines
         threading.Thread(target=self._read, args=(proc, lines), daemon=True,
@@ -1451,7 +1790,7 @@ def speak(text: str, speed: Optional[float] = None, *,
     if slow:
         return Spoken(voice=vid, why=slow, note=note)
     try:
-        samples, rate, took = zipvoice_generate(text, v, speed)
+        samples, rate, took = processor_generate(text, v, speed)
     except Unavailable as exc:
         return Spoken(voice=vid, why=str(exc), note=note)
     except Exception as exc:
@@ -1460,7 +1799,7 @@ def speak(text: str, speed: Optional[float] = None, *,
     audio = len(samples) / float(rate)
     if audio > 0:
         _note_speed(took / audio)
-    return Spoken(voice=vid, samples=samples, sample_rate=rate, engine="zipvoice",
+    return Spoken(voice=vid, samples=samples, sample_rate=rate, engine=PROCESSOR_ENGINE,
                   seconds=round(took, 3), note=note)
 
 
@@ -1512,10 +1851,8 @@ def _predict(st: dict, voices: list) -> tuple:
     slow = _slow_now()
     if slow:
         return "kokoro", slow
-    if _ZIP["built"]:
-        return ("zipvoice", "") if _ZIP["engine"] is not None else ("kokoro", _ZIP["why"])
-    ok, why = zipvoice_state()
-    return ("zipvoice", "") if ok else ("kokoro", why)
+    ok, why = processor_state()
+    return (PROCESSOR_ENGINE, "") if ok else ("kokoro", why)
 
 
 def _better_row(st: dict) -> dict:
@@ -1561,10 +1898,7 @@ def status() -> dict:
     voices = list_voices()
     engine, fallback = _predict(st, voices)
     k_ok, k_why = _kokoro_state()
-    if _ZIP["built"]:
-        z_ok, z_why = _ZIP["engine"] is not None, _ZIP["why"]
-    else:
-        z_ok, z_why = zipvoice_state()
+    z_ok, z_why = processor_state()
     active_name = BUILTIN_NAME
     for r in voices:
         if r["id"] == st["active"]:
@@ -1586,12 +1920,15 @@ def status() -> dict:
                     "why": "" if k_ok else k_why}] + voices,
         "engines": {
             "kokoro": {"available": k_ok, "why": "" if k_ok else k_why},
-            "zipvoice": {"available": z_ok, "why": "" if z_ok else z_why,
-                         "where": "this PC's processor"},
+            # The ONE processor engine that speaks (PROCESSOR_ENGINE), under
+            # its own name - never a row for a candidate that is not in use.
+            PROCESSOR_ENGINE: {"available": z_ok, "why": "" if z_ok else z_why,
+                               "where": "this PC's processor"},
             "f5": {"available": _F5.state == "ready", "why": _F5.why,
                    "where": "the second graphics card"},
         },
         "better_voice": _better_row(st),
+        "speed": speed_view(),
         "pending": pending,
         "last": last,
         "timings": _timings(),
@@ -1700,7 +2037,7 @@ def describe_create(name: str, vid: str, seconds: float, transcript: str, chk: d
 
 
 def describe_switch(v: Voice, current: str, chk: dict, st: dict) -> str:
-    how = "on this PC's processor (ZipVoice)"
+    how = f"on this PC's processor ({ENGINE_NAMES[PROCESSOR_ENGINE]})"
     if st.get("better_voice"):
         how += (", or on the second graphics card (F5-TTS, the better voice) once that "
                 "has loaded")
@@ -2116,7 +2453,8 @@ def _decide_better(pid: str, gate: Callable) -> None:
 # --------------------------------------------------------------------------
 
 ROUTES = {"/api/voice/voices/create": create, "/api/voice/voices/active": switch,
-          "/api/voice/voices/delete": delete, "/api/voice/voices/better": set_better}
+          "/api/voice/voices/delete": delete, "/api/voice/voices/better": set_better,
+          "/api/voice/voices/speed": set_speed}
 
 
 def handle_post(route: str, body) -> tuple:
