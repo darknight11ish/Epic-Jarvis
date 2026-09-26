@@ -259,7 +259,8 @@ if (typeof ResizeObserver !== "undefined") {
    bar (focus.rs play_callout), not here.
    ========================================================================== */
 
-const focus = { view: null, readAt: 0, timer: null, loading: false, again: false, readOnce: false };
+const focus = { view: null, readAt: 0, triedAt: 0, timer: null, loading: false, again: false,
+  readOnce: false };
 const FOCUS_WORDS = { drift: "off target", paused: "paused", settling: "settling in",
   on: "on target" };
 
@@ -270,6 +271,7 @@ async function loadFocus() {
     return;
   }
   focus.loading = true;
+  focus.triedAt = Date.now();
   try {
     const got = await invoke("focus_status");
     if (got) {
@@ -293,7 +295,9 @@ function focusTickOnce() {
   if (!v || !v.on) return;
   const left = focusLeftNow(v, Date.now() - focus.readAt);
   dom.focusClock.textContent = focusClock(left);
-  if (left <= 0 && !focus.loading) loadFocus();
+  // At zero, ask the PC whether it has ended - every 2 s at most, like the
+  // Brain, not every second (bug audit 2026-09-26, "possible" list).
+  if (left <= 0 && !focus.loading && Date.now() - focus.triedAt > 2000) loadFocus();
 }
 
 function syncFocusButtons() {
