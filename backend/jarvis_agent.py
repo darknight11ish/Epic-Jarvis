@@ -277,10 +277,17 @@ def _run_file_read(args: dict) -> dict:
     path = str(args.get("path", ""))
     if _is_reserved_windows_name(path):
         return {"ok": False, "error": f"{path!r} names a reserved device, not a file"}
-    if _protected_path(path):
+    # Checked and opened as ONE resolved path: checking the resolved path but
+    # opening the original let a link changed in between point elsewhere.
+    try:
+        real = os.path.realpath(os.path.expanduser(path))
+    except Exception:
+        real = ""
+    if not real or _protected_path(real):
         return {"ok": False, "error": (
             "Jarvis does not open this file: it is in a place that holds keys, "
             "saved passwords, browser data or Jarvis's own private data.")}
+    path = real
     try:
         # Binary, capped by actual bytes read, then decoded - not text mode
         # capped by .read(N), which caps CHARACTERS. A file that is mostly

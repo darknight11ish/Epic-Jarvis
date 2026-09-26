@@ -647,6 +647,35 @@ def t_file_read_never_opens_keys_passwords_or_jarvis_data():
                 os.environ[key] = val
 
 
+def t_file_read_opens_the_path_it_checked():
+    home = Path(tempfile.mkdtemp())
+    real_home = os.environ.get("HOME"), os.environ.get("USERPROFILE")
+    os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)
+    try:
+        (home / "Documents").mkdir()
+        (home / "Documents" / "notes.txt").write_text("shopping list", encoding="utf-8")
+        r = AG._run_file_read({"path": "~/Documents/notes.txt"})
+        check("a ~/ path to an ordinary file opens (the checked, resolved path is the one read)",
+              r.get("ok") is not False and "shopping list" in json.dumps(r), r)
+        (home / ".ssh").mkdir()
+        (home / ".ssh" / "id_ed25519").write_text("secret", encoding="utf-8")
+        link = home / "Documents" / "innocent.txt"
+        try:
+            link.symlink_to(home / ".ssh" / "id_ed25519")
+        except (OSError, NotImplementedError):
+            check("(symlinks not available here - link case skipped)", True)
+            return
+        r = AG._run_file_read({"path": str(link)})
+        check("a harmless-looking link to an SSH key is refused",
+              r.get("ok") is False and "secret" not in json.dumps(r), r)
+    finally:
+        for key, val in zip(("HOME", "USERPROFILE"), real_home):
+            if val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = val
+
+
 # ---------------------------------------------------------------------- L8
 
 def t_no_setting_claims_a_sandbox_that_does_not_exist():
