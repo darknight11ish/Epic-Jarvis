@@ -430,7 +430,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing, emailSending, focus }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing, emailSending, focus }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
@@ -498,6 +498,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { base: s.base, hasToken: s.hasToken === false ? false : Boolean(source),
                      tokenSource: s.hasToken === false ? null : source,
                      bindAddress: window.__apiSettings.bindAddress,
+                     baseProblem: window.__apiSettings.baseProblem || null,
                      bindAddressProblem: window.__apiSettings.bindAddressProblem || null,
                      store: "C:\\Users\\pcadmin\\AppData\\Roaming\\jarvis-desktop.json" };
           }
@@ -512,6 +513,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (window.__bindAddressRefuses && "bindAddress" in args &&
                 args.bindAddress && window.__bindAddressRefuses.includes(args.bindAddress)) {
               throw new Error(window.__bindAddressRefusalMessage || "refused");
+            }
+            // commands.rs validate_base: an address off the owner's own
+            // networks is refused before anything is written. Keyed by the
+            // address, with the sentence Rust would give (own-network.mjs
+            // fills it from the shared case table).
+            if (window.__baseRefusals && args.base && window.__baseRefusals[args.base]) {
+              throw window.__baseRefusals[args.base];
             }
             // commands.rs refuses the whole save when Credential Manager
             // refuses the token - it never falls back to a plain-text copy.
@@ -1611,6 +1619,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__bindAddressRefuses = bindAddressRefuses || null;
   window.__tokenSaveRefuses = tokenSaveRefuses || null;
   window.__bindAddressRefusalMessage = bindAddressRefusalMessage || null;
+  window.__baseRefusals = baseRefusals || null;
   // Unset, the PC as it is today: one graphics card (the real `one_card`).
   window.__secondCard = { reads: 0, changes: [], getFails: null, setFails: null,
                           unavailable: false, ...(secondCard || {}) };
@@ -1771,7 +1780,7 @@ export async function open(browser, base, file, data, viewport) {
     noteTargets: NOTE_TARGETS.all,
     heard: null, captureFails: null, speakFails: null, autoListenFails: null, speakDelayMs: 0,
     memoryRefuses: null, learningFloor: false, learningWaits: false, apiSettings: null, tokenSaveRefuses: null,
-    bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
+    bindAddressRefuses: null, bindAddressRefusalMessage: null, baseRefusals: null, chatReplies: null,
     vision: null,
     emailSending: EMAIL_SENDING.cases.tool_off,
     secondCard: { status: SECOND_CARD.one_card },

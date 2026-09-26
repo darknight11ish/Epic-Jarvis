@@ -141,8 +141,17 @@ class ClientSettings(context: Context) {
      * The base URL. `http` rather than `https`: the desktop serves plain HTTP
      * over the tailnet, which is why the network security config exists at all.
      * A name typed without a port gets Jarvis's, 4719 - see [BaseUrl].
+     *
+     * Null, too, for an address off the owner's own networks ([OwnNetwork],
+     * CLAUDE.md 2026-09-26) - one an older version saved included - so
+     * nothing, the token above all, is ever sent there. Not silently:
+     * [baseProblem] says why, and every request and the event stream show
+     * that sentence where they would show any other connection failure.
      */
-    fun baseUrl(): String? = BaseUrl.normalise(_host.value)
+    fun baseUrl(): String? = BaseUrl.normalise(_host.value)?.takeIf { OwnNetwork.problem(it) == null }
+
+    /** Why the saved address is not used, in one plain sentence, or null. */
+    fun baseProblem(): String? = BaseUrl.normalise(_host.value)?.let { OwnNetwork.problem(it) }
 
     private companion object {
         const val PREFS = "jarvis_client"

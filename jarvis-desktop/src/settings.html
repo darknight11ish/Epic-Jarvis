@@ -60,6 +60,12 @@
           <input id="base" type="text" spellcheck="false" autocomplete="off"
                  placeholder="http://127.0.0.1:4719" />
         </label>
+        <p class="note" id="base-note">
+          Only an address on your own networks is accepted: this PC, your
+          home network, Tailscale or NordVPN Meshnet. An address on the open
+          internet, a public tunnel such as ngrok or Cloudflare included, is
+          refused, so your token is never sent there.
+        </p>
 
         <label class="field">
           <span class="label">Token <span class="hint" id="token-state">not set</span></span>
