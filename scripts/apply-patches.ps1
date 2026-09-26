@@ -734,10 +734,31 @@ if (-not $UseGit -and -not (Get-Command patch -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+# --- a log of this run -------------------------------------------------------
+#
+# Everything this script prints also goes to a file (ease-of-use audit
+# 2026-09-27, #8i: the only record of a run used to be a window that was
+# closed afterwards). One file per run, in _jarvis-logs inside the backend
+# folder, beside the _jarvis-backup-<date> folders. It holds what is printed
+# here and nothing else - no token or key is ever printed by this script.
+# The transcript ends when this PowerShell process does (the INSTALL line
+# runs the script in a process of its own, with -File).
+$RunLog = $null
+try {
+    $logDir = Join-Path $BackendPath '_jarvis-logs'
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    $RunLog = Join-Path $logDir "apply-patches-$Stamp.txt"
+    Start-Transcript -LiteralPath $RunLog -Append | Out-Null
+} catch {
+    $RunLog = $null
+}
+
 Say ""
 Say "Backend : $BackendPath"
 Say "Patches : $PatchDir"
 Say "Tool    : $(if ($UseGit) { 'git apply' } else { 'patch' })"
+if ($RunLog) { Say "Log     : $RunLog (a copy of everything printed here)" }
+else { Say "Log     : none - the log file could not be started, so copy this window if you need a record" Yellow }
 
 # --- substitute the split patches, if the rebuilt modules are installed ------
 if ($UsingRebuilt) {

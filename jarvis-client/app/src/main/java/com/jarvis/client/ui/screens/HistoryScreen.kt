@@ -484,6 +484,13 @@ private fun Conversation(
                         color = chrome.textLo,
                     )
                 }
+                if (mine && !turn.answerKept) {
+                    Text(
+                        ChatLog.NOT_KEPT_LINE,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                }
             }
         }
         item(key = "tail") { Gap(24) }

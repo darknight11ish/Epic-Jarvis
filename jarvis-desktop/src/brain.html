@@ -68,7 +68,7 @@
             <button class="rail-item" role="tab" id="tab-faculties" data-goto="faculties"
                     aria-selected="false" aria-controls="view-faculties" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">◆</span>
-              <span class="rail-label">Faculties</span>
+              <span class="rail-label">Model</span>
             </button>
           </li>
           <li>
@@ -355,6 +355,11 @@
                 wiped from your PC for good, and only its dates stay - on a
                 forgotten fact too.
               </p>
+              <!-- Filters the list already loaded (ease-of-use audit #7); asks
+                   the PC nothing. Outside #memory-facts so a repaint keeps it. -->
+              <input class="field search memory-facts-filter" id="memory-facts-filter" type="search"
+                     placeholder="Filter this list…" spellcheck="false" autocomplete="off"
+                     aria-label="Filter what Jarvis knows about you" />
               <div id="memory-facts"></div>
             </div>
             <!-- The wiki builder (backend/wiki.patch; wiki.js). -->
@@ -378,8 +383,9 @@
                 Ask one question you want a careful answer to. The big model
                 answers it in the background on this PC, with no tools, no
                 internet and no memory of your other conversations. It is
-                slow: expect minutes, not seconds. Nothing leaves this PC, and
-                the answer is kept on it for you to read here.
+                slow: expect minutes, not seconds. Nothing leaves this PC. The
+                answer stays here for you to read until Jarvis stops or
+                restarts; it is never written to disk.
               </p>
               <p class="deep-state" id="deep-state" role="status">Reading…</p>
               <div class="deep-ask" id="deep-ask" hidden>
@@ -485,7 +491,7 @@
               <p class="note">When it arrives each morning is in Settings, under Morning briefing.</p>
             </div>
             <div class="card card-wide">
-              <h2>Long Fuse jobs</h2>
+              <h2>Background jobs</h2>
               <p class="note">
                 Each job's capability set was frozen when it was created and
                 cannot grow. A finished job never makes a sound — it adds a

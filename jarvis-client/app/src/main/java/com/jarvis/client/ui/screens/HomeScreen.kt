@@ -1089,7 +1089,7 @@ private fun StatusLine(
     // showing "thinking" at a desktop that went away ten minutes ago.
     val (dot, label) = when {
         !linked -> chrome.badMark to (state.linkDetail ?: "Offline")
-        state.stale -> chrome.warnMark to "Stale — reconnecting"
+        state.stale -> chrome.warnMark to "Catching up…"
         else -> when (state.activity) {
             Activity.LISTENING -> chrome.warnMark to "Listening"
             Activity.THINKING, Activity.WORKING -> accent to "Thinking"
@@ -1097,9 +1097,9 @@ private fun StatusLine(
             Activity.SPEAKING -> accent to "Speaking"
             Activity.ERROR -> chrome.badMark to "Error on the desktop"
             else -> chrome.okMark to when (state.power) {
-                "quiet" -> "Linked · quiet"
-                "standby" -> "Linked · standby"
-                else -> "Linked"
+                "quiet" -> "Connected · quiet"
+                "standby" -> "Connected · standby"
+                else -> "Connected"
             }
         }
     }
@@ -1566,7 +1566,7 @@ private fun FaceBlock(
                 if (showCaption && opensMind) {
                     Gap(2)
                     Text(
-                        "State of mind →",
+                        "Open the Brain →",
                         style = MaterialTheme.typography.labelSmall,
                         color = wellChrome.textLo,
                         modifier = Modifier

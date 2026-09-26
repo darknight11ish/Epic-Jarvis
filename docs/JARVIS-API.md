@@ -1088,7 +1088,7 @@ conversation text. **Android** does exactly those three things in the Brain's Mo
 section (`ModelSpeed.from` in `ApiModels.kt`, drawn by `BrainScreen.kt`'s
 `ModelsPlate`); `by_model` is matched to the running model by name, treating
 `name` and `name:latest` as the same. **The desktop** does the same three
-since 2026-09-23 (Brain → Faculties → Models, `brain.js` `modelSpeed`, a
+since 2026-09-23 (Brain → Model → Models, `brain.js` `modelSpeed`, a
 line-for-line port); before that it ignored the block. Both apps can also
 **install** a model there now - a typed name, one approval card, no
 catalogue.
@@ -2807,6 +2807,13 @@ empty and `why_not` says why.
 
 `404` if there is no such conversation. `answer_kept: false` on a user turn
 means its answer was not kept (a cloud answer, or one that did not finish).
+Both apps say so under that question (ease-of-use audit 2026-09-27, #1d),
+in one sentence: "Jarvis's answer to this was not kept: it came from a cloud
+model, or it did not finish." The PC does not say which of the two it was,
+so neither do the apps. A missing field (an older PC) is read as kept.
+Dates in History carry the weekday ("Tue 22 Sept 2026" on the desktop,
+"Tue 22 Sep 18:30" on the phone), and deleting a conversation says that it
+does not forget facts Jarvis learned from it.
 
 `POST /api/history/delete {"id": "..."}` - `200 {"ok": true}` or `404`. One
 conversation per request. **There is no "delete all" route**: irreversible
@@ -2935,7 +2942,7 @@ memory (`gate-outcome.patch`'s list). Only the newest card may change what
 (the existing `/api/memory/learning` switch) is on. `GET
 /api/memory/learning` says both; when learning is off, its `note` - and both
 apps - say "Background learning is off, so nothing is saved automatically.
-Start learning above to use this."
+Start background learning above to use this."
 
 A damaged settings file reads as off, and `why` says: "the automatic
 learning settings file is damaged, so nothing is saved automatically. Turn
@@ -5596,6 +5603,22 @@ asking", section 21), and "Switch lights, plugs and fans you name" (section
 33). Every action an approval card can name (`jarvis_card_words.TITLES`) is
 on the page, in ten groups; a line in the owner's file that no group names is
 added under "Other", never hidden.
+
+**Web search's row tells the truth** (ease-of-use audit 2026-09-27, #1a).
+With `search_the_web = "ask"` it does NOT say "Asks you first, every time",
+because a search straight from the owner's own question runs without a card
+(section 23). It says "Asks only when something private could slip in", with
+a note naming when it does ask (after outside text in the chat, a pasted or
+shared message, search words that repeat a saved fact, a sensitive saved
+fact used) and that "Ask before every web search" makes it ask every time.
+With that setting on (`jarvis_search.settings()["ask_every_time"]`), the row
+says "Asks you first, every time". `never` and a looser line read as before.
+
+**One "Read your calendar" row.** `read_calendar` is an older name for
+`calendar_read` (the name the calendar tool is decided under), so it is
+folded into that row (`OLDER_NAMES`) and never listed on its own or under
+"Other". When the file's `read_calendar` line differs from `calendar_read`,
+the row's note names it.
 
 ### 32.3 The loosening card
 

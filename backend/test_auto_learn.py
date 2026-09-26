@@ -421,7 +421,7 @@ def t_bad_input_and_routes():
         check("with background learning off it says so", out["enabled"] is False
               and out["auto_active"] is False and out["note"] == (
                   "Background learning is off, so nothing is saved automatically. "
-                  "Start learning above to use this."), out)
+                  "Start background learning above to use this."), out)
         code, out = A.handle_get("/api/memory/auto", "limit=5")
         check("GET /api/memory/auto carries the two switches",
               code == 200 and out["facts"] == [] and out["auto"] is True
@@ -1823,7 +1823,7 @@ def t_fit_the_words_the_apps_show():
         A.settings_path().unlink()
         check("fit 10: the learning-off note is the desktop's sentence",
               A.learning_status(False)["note"] == "Background learning is off, so nothing is "
-              "saved automatically. Start learning above to use this.")
+              "saved automatically. Start background learning above to use this.")
         for verdict, outcome, message in (
                 (V("approved", tier="auto"), "refused",
                  "Your PC's settings do not let this be approved, so it stayed off."),

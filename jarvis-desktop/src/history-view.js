@@ -83,6 +83,17 @@ export const TAINT_TITLE =
   "In this conversation Jarvis read text that did not come from you - a web " +
   "page, a file, an email or another tool's output - from the marked message on.";
 
+/** Under a question whose answer the PC did not keep (`answer_kept: false`):
+ *  a cloud model's answer, or one that did not finish. The PC does not say
+ *  which, so neither does this. The phone's ChatLog.NOT_KEPT_LINE. */
+export const NOT_KEPT_LINE =
+  "Jarvis's answer to this was not kept: it came from a cloud model, or it did not finish.";
+
+/** Said with Delete, in both apps (ease-of-use audit 2026-09-27, #7). The
+ *  phone's ChatLog.DELETE_KEEPS_FACTS. */
+export const DELETE_KEEPS_FACTS =
+  "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain.";
+
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const text = (v) => (typeof v === "string" ? v : "");
 
@@ -193,6 +204,8 @@ export function readConversation(answer) {
         // Only user turns carry one. Missing on a user turn is "unknown".
         provenance: t.role === "user" ? text(t.provenance) || "unknown" : "",
         readOutside: t.read_outside === true,
+        // Only the PC's "false" says so; an older PC sends nothing.
+        answerKept: t.answer_kept !== false,
       })),
   };
 }
@@ -212,7 +225,8 @@ export function olderThan(rows) {
   return times.length ? Math.min(...times) : null;
 }
 
-/** When, in plain words: "just now", "5 min ago", "3 h ago", or the date. */
+/** When, in plain words: "just now", "5 min ago", "3 h ago", or the date
+ *  with its weekday ("Tue 22 Sept 2026"), so "Tuesday's chat" can be found. */
 export function whenWords(epochSeconds, nowMs = Date.now()) {
   const t = num(epochSeconds);
   if (t === null || t <= 0) return "";
@@ -220,11 +234,10 @@ export function whenWords(epochSeconds, nowMs = Date.now()) {
   if (s < 60) return "just now";
   if (s < 3600) return `${Math.round(s / 60)} min ago`;
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-  return new Date(t * 1000).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const d = new Date(t * 1000);
+  const day = d.toLocaleDateString("en-GB", { weekday: "short" });
+  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return `${day} ${date}`;
 }
 
 /** One row's meta line: when it was last added to, and how many turns. */
@@ -252,7 +265,7 @@ export function notRecordingLine(v) {
 export function deleteQuestion(c) {
   return (
     `Delete this conversation?\n\n${c.title || "(no title)"}\n\n` +
-    "It is removed from this PC. This cannot be undone."
+    `It is removed from this PC. This cannot be undone.\n\n${DELETE_KEEPS_FACTS}`
   );
 }
 
@@ -301,6 +314,9 @@ export function renderTranscript(box, conv, { el }) {
     }
     item.append(head);
     item.append(el("p", "history-text", t.text));
+    if (t.role === "user" && t.answerKept === false) {
+      item.append(el("p", "history-not-kept", NOT_KEPT_LINE));
+    }
     list.append(item);
   }
   box.append(list);

@@ -215,7 +215,7 @@ def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
     want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
             "gate", "stop_all", "scheduler", "folders", "instant_email", "events", "voice",
-            "reach", "home", "credentials"]
+            "reach", "home", "sleep", "credentials"]
     check("every check the owner asked for is registered, in order", keys == want, keys)
     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
     try:
@@ -618,6 +618,61 @@ def t_desktop_version_and_a_broken_check():
     check("a check that raises is its own FAIL",
           any(k == "broken_for_test" and st == S.FAIL for k, st, *_ in rows), rows)
     check("and the checks after it still run", _rows(rows, "events")[0][0] == S.PASS)
+
+
+def t_sleep_on_mains_power_is_a_warning():
+    """Ease-of-use audit 2026-09-27 #8d: alarms ring on the PC, so a PC that
+    sleeps on mains power is a WARN (never a FAIL - a laptop may want it)."""
+    # powercfg's block, in two languages: only the numbers are read.
+    english = ("Power Setting GUID: 29f6c1db-86da-48c5-9fdb-f2b67b1f44da  (Sleep after)\n"
+               "  Minimum Possible Setting: 0x00000000\n"
+               "  Maximum Possible Setting: 0xffffffff\n"
+               "  Possible Settings increment: 0x00000001\n"
+               "  Possible Settings units: Seconds\n"
+               "Current AC Power Setting Index: 0x00000708\n"
+               "Current DC Power Setting Index: 0x00000384\n")
+    german = english.replace("Current AC Power Setting Index", "Aktueller Wechselstromindex") \
+                    .replace("Current DC Power Setting Index", "Aktueller Gleichstromindex")
+    check("30 minutes on mains power is read, in any language",
+          S.sleep_after_on_mains(english) == 1800 and S.sleep_after_on_mains(german) == 1800)
+    rows = S.pf_sleep(S.Live(power=lambda: english))
+    check("... and is a WARN with the one line that keeps it awake",
+          rows[0][0] == S.WARN and "30 minute" in rows[0][1]
+          and "powercfg /change standby-timeout-ac 0" in rows[0][2], rows)
+    never = english.replace("0x00000708", "0x00000000")
+    check("never sleeping on mains power: PASS", S.pf_sleep(S.Live(power=lambda: never))[0][0] == S.PASS)
+    check("not Windows: SKIP", S.pf_sleep(S.Live(power=lambda: None))[0][0] == S.SKIP)
+    check("an answer it cannot read: WARN, never a FAIL",
+          S.pf_sleep(S.Live(power=lambda: "nothing here"))[0][0] == S.WARN)
+
+
+def t_a_folder_without_jarvis_hud_says_so_once():
+    """Ease-of-use audit 2026-09-27 #8b: the wrong folder is ONE message
+    with the line to run, not a FAIL per check."""
+    empty = Path(tempfile.mkdtemp(prefix="jarvis-not-backend-"))
+    try:
+        said = S.wrong_folder(empty, "--preflight")
+        check("a folder without jarvis_hud.py: one message, with the one line to run",
+              "jarvis_hud.py is not in" in said and "Nothing was checked" in said
+              and "$env:JARVIS_BACKEND" in said and "selftest.py --preflight" in said
+              and "py -3" in said and "python " not in said, said)
+        (empty / "jarvis_hud.py").write_text("# stand-in", encoding="utf-8")
+        check("... and nothing to say once it is there", S.wrong_folder(empty) == "")
+        keep = S.BACKEND
+        S.BACKEND = empty / "nowhere"
+        try:
+            import contextlib
+            import io
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = S.preflight_main(["--preflight"])
+            out = buf.getvalue()
+        finally:
+            S.BACKEND = keep
+        check("preflight stops before any check, with exit code 2",
+              code == 2 and "FAIL" not in out and "pass," not in out, (code, out))
+    finally:
+        shutil.rmtree(empty, ignore_errors=True)
 
 
 def t_readme_line_is_one_line():

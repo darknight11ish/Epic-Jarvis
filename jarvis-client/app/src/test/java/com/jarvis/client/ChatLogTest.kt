@@ -107,7 +107,7 @@ class ChatLogTest {
                    {"role":"user","text":"an article","at":1790000000,"provenance":"shared","read_outside":false},
                    {"role":"user","text":"what is it about?","at":1790000001,"provenance":"typed","read_outside":false},
                    {"role":"assistant","text":"Teeth.","at":1790000004},
-                   {"role":"user","text":"look it up","at":1790000010,"provenance":"voice","read_outside":true},
+                   {"role":"user","text":"look it up","at":1790000010,"provenance":"voice","read_outside":true,"answer_kept":false},
                    {"text":"no role"}
                 ]}""",
             ),
@@ -119,6 +119,8 @@ class ChatLogTest {
         assertEquals(listOf("user", "user", "assistant", "user"), t.turns.map { it.role })
         assertEquals(listOf("shared", "typed", null, "voice"), t.turns.map { it.provenance })
         assertEquals(listOf(false, false, false, true), t.turns.map { it.readOutside })
+        // Only the PC's "false" says the answer was not kept; missing is kept (an older PC).
+        assertEquals(listOf(true, true, true, false), t.turns.map { it.answerKept })
         assertEquals(1790000004L, t.turns[2].at)
         assertNull(ChatLog.transcript(obj("""{"turns":[]}""")))
     }
@@ -268,8 +270,8 @@ class ChatLogTest {
         val noon = today.atStartOfDay(zone).plusHours(12).toEpochSecond()
         assertEquals("Today 12:00", ChatLog.whenLine(noon, zone, today))
         assertEquals("Yesterday 12:00", ChatLog.whenLine(noon - 86_400, zone, today))
-        assertEquals("12 Sep 12:00", ChatLog.whenLine(noon - 12 * 86_400, zone, today))
-        assertEquals("3 Jan 2025", ChatLog.whenLine(LocalDate.of(2025, 1, 3).atStartOfDay(zone).toEpochSecond(), zone, today))
+        assertEquals("Sat 12 Sep 12:00", ChatLog.whenLine(noon - 12 * 86_400, zone, today))
+        assertEquals("Fri 3 Jan 2025", ChatLog.whenLine(LocalDate.of(2025, 1, 3).atStartOfDay(zone).toEpochSecond(), zone, today))
         assertEquals("When unknown", ChatLog.whenLine(null, zone, today))
         val row = ChatLog.page(obj(listBody)).conversations[1]
         assertEquals("PC", ChatLog.deviceWord(row.device))

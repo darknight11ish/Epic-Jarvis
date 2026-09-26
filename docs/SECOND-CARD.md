@@ -49,7 +49,7 @@ everyday chat is never slowed by it.
 
 **If a model is not installed**, the switch can still be on; the feature just
 waits, and its status line says which model to install. Install it the usual
-way: Brain window, Faculties, Models (the Install box), or `ollama pull <name>` in a terminal (for example
+way: Brain window, Model, Models (the Install box), or `ollama pull <name>` in a terminal (for example
 `ollama pull qwen3:8b`).
 
 ## What happens when a switch is on

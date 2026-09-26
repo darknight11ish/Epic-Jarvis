@@ -3,7 +3,7 @@
 A native **Windows 11** client for the Jarvis stack: a Rust (Tauri v2) backend
 driving a WebView2 frontend.
 
-* **Quickbar** — a 750×80 frameless, transparent, always-on-top spotlight bar
+* **The Jarvis bar** (the code calls it the quickbar) — a 750×80 frameless, transparent, always-on-top spotlight bar
   summoned with `Alt+Space`. Streams answers from the local Jarvis server into
   an expandable card that the native window grows to fit.
 * **HUD** — a 1280×820 frameless window pointed at `http://127.0.0.1:4719`.
@@ -63,7 +63,7 @@ widget.
 | `Alt` + `Space` | Toggle the quickbar. On show it is centred, focused, and the frontend receives `focus-input`. |
 | `Win` + `Shift` + `J` | Read the clipboard and inject it into the quickbar as context. |
 | `Alt` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
-| `Alt` + `Shift` + `N` | Summon the bar pre-armed for a note (`#log `, or the first note app the PC is set up for). |
+| `Alt` + `Shift` + `N` | Open the Jarvis bar pre-armed for a note (`#log `, or the first note app the PC is set up for). |
 | `Ctrl` + `+` / `-` / `0` | Text size, per window. Not a global hotkey — the window must have focus. |
 
 Every global combination in that table is a **default**, not a constant. They

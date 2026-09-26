@@ -122,17 +122,18 @@ await check("the quick-note hotkey is called Quick note, not Quick note to Logse
     "the handler no longer picks the first set-up note app - the label may be wrong again");
 });
 
-// F8: Models is inside the Brain's Faculties tab.
-await check("the slow-model FAQ points at Brain window → Faculties → Models, which exists", async () => {
+// F8: Models is inside the Brain's Model tab (called Faculties until the
+// ease-of-use audit's wording pass, 2026-09-27).
+await check("the slow-model FAQ points at Brain window → Model → Models, which exists", async () => {
   const page = await open();
   const answer = squash(await faqAnswer(page, "Jarvis suddenly got slow"));
   await page.close();
-  assert.match(answer, /Brain window → Faculties → Models/);
+  assert.match(answer, /Brain window → Model → Models/);
   const brain = src("src/brain.html");
-  assert.match(brain, /id="tab-faculties"[\s\S]*?<span class="rail-label">Faculties<\/span>/);
+  assert.match(brain, /id="tab-faculties"[\s\S]*?<span class="rail-label">Model<\/span>/);
   const faculties = brain.slice(brain.indexOf('id="view-faculties"'));
   assert.ok(faculties.indexOf('id="models"') > -1 &&
-    faculties.indexOf('id="models"') < faculties.indexOf("</section>"), "Models is not in Faculties");
+    faculties.indexOf('id="models"') < faculties.indexOf("</section>"), "Models is not in the Model tab");
 });
 
 await check("no NEW page error while the FAQ renders", async () => {

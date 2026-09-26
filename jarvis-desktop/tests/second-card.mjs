@@ -150,7 +150,7 @@ await check("each feature says its model, whether it is installed, the exact nam
   await page.close();
   const vision = row(s, "vision").text;
   assert.match(vision, /Model: qwen2\.5vl:7b, not installed yet\./);
-  assert.match(vision, /open the Brain window, go to Faculties, then Models, type qwen2\.5vl:7b in the Install box/);
+  assert.match(vision, /open the Brain window, go to Model, then Models, type qwen2\.5vl:7b in the Install box/);
   assert.match(vision, /Uses about 7\.2 GB of the second card's memory\./);
   const long = row(s, "long_context").text;
   assert.match(long, /Model: qwen3:8b, installed\./);

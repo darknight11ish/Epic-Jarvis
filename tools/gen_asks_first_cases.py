@@ -60,9 +60,11 @@ SHIPPED = {
 }
 
 
-def _with(tiers: dict, *, lights=False, lights_waiting=False, loosen_waiting=None):
+def _with(tiers: dict, *, lights=False, lights_waiting=False, loosen_waiting=None,
+          search_every=False):
     AF._reset_for_tests()
     AF._tier = lambda a: tiers.get(a, "ask")
+    AF._search_asks_every_time = lambda: search_every
     AF._file_tiers = lambda: dict(tiers)
     AF._config_dir = lambda: _TMP
     f = _TMP / "asks_first.json"
@@ -83,7 +85,7 @@ def cases() -> dict:
     out["phone_shipped"] = AF.view(here=False)
     stricter = dict(SHIPPED, calendar_read="ask", create_joplin_note="ask",
                     email_read="never", send_email="auto")
-    _with(stricter, lights=True)
+    _with(stricter, lights=True, search_every=True)
     out["pc_stricter_lights_on"] = AF.view(here=True)
     _with(stricter, lights_waiting=True, loosen_waiting="calendar_read")
     out["phone_cards_waiting"] = AF.view(here=False)
@@ -98,6 +100,7 @@ def cases() -> dict:
             "waiting": AF.WAITING, "pc_only": AF.PC_ONLY, "not_on_list": AF.NOT_ON_LIST,
             "lights_label": AF.LIGHTS_LABEL, "lights_detail": AF.LIGHTS_DETAIL,
             "lights_waiting": AF.LIGHTS_WAITING, "says": dict(AF.SAYS),
+            "says_search": AF.SAYS_SEARCH,
         },
     }
 

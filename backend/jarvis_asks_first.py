@@ -149,6 +149,27 @@ NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell
              "which cannot stop to ask.")
 NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
 
+#: The web search row (the owner's decisions of 2026-09-25 and 2026-09-26;
+#: jarvis_agent.py WEB_SEARCH_* are the reasons a search asks). It does not
+#: ask every time, so "Asks you first, every time" was untrue (ease-of-use
+#: audit 2026-09-27, #1a).
+SAYS_SEARCH = "Asks only when something private could slip in"
+NOTE_SEARCH = ("A search straight from your own question runs without a card. It asks "
+               "first, showing the exact search words, after Jarvis has read an email, a "
+               "file, a note, a web page or other outside text in the chat, when your "
+               "message was pasted or shared, when the search words repeat something you "
+               "told Jarvis, or when it used a sensitive saved fact. \"Ask before every web "
+               "search\" (web search settings) makes it ask every time.")
+NOTE_SEARCH_EVERY = ("\"Ask before every web search\" is on, so every search waits for your "
+                     "yes. Turning it off (web search settings) takes an approval card.")
+#: An older name in the settings file for the same thing as another row. The
+#: page shows one row, under the name the tool is decided by (jarvis_reach.py
+#: _FALLBACK_ACTIONS; backend/README.md's jarvis_gate.py table), so "Read
+#: your calendar" is not listed twice.
+OLDER_NAMES = {"read_calendar": "calendar_read"}
+NOTE_OLDER = ("Your settings file also has an older line for this, {old} = \"{tier}\". "
+              "The calendar tool follows this row ({new}).")
+
 # ---------------------------------------------------------------------------
 # The lists
 # ---------------------------------------------------------------------------
@@ -207,7 +228,7 @@ MUST_ASK = frozenset({
 #: row (FIXED) has no tier: the owner decided it and the code does it.
 GROUPS = (
     ("Reading your own things", ["calendar_read", "email_read", "notes_search", "home_read",
-                                 "read_files_readonly", "read_calendar", "read_joplin_note",
+                                 "read_files_readonly", "read_joplin_note",
                                  "read_logseq_page"]),
     ("Writing your notes", ["append_obsidian_daily", "append_logseq_journal",
                             "create_joplin_note", "create_logseq_page", "edit_joplin_note",
@@ -255,6 +276,16 @@ def _tier(action: str) -> str:
     except Exception:
         return "ask"
     return t if t in SAYS else "ask"
+
+
+def _search_asks_every_time() -> bool:
+    """"Ask before every web search" (jarvis_search.settings - a damaged
+    file reads as on there). False when web search is not on this PC."""
+    try:
+        import jarvis_search
+        return bool(jarvis_search.settings().get("ask_every_time"))
+    except Exception:
+        return False
 
 
 def _file_tiers() -> dict:
@@ -329,6 +360,11 @@ def _row(action: str, *, here: bool) -> dict:
     tier = _tier(action)
     row = {"id": action, "action": action, "title": _title(action), "tier": tier,
            "says": SAYS[tier], "fixed": False}
+    if action == "search_the_web" and tier == "ask":
+        every = _search_asks_every_time()
+        row["says"] = SAYS["ask"] if every else SAYS_SEARCH
+        row["note"] = NOTE_SEARCH_EVERY if every else NOTE_SEARCH
+        return row
     if action in MUST_ASK:
         if tier in ("auto", "notify"):
             row["says"] = SAYS_REFUSED
@@ -341,6 +377,10 @@ def _row(action: str, *, here: bool) -> dict:
         row["note"] = NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE
         if tier == "ask" and not here:
             row["note"] += " " + PHONE_LOOSEN
+        for old, new in OLDER_NAMES.items():
+            had = _file_tiers().get(old) if new == action else None
+            if had is not None and str(had) != tier:
+                row["note"] += " " + NOTE_OLDER.format(old=old, tier=had, new=new)
         return row
     row["note"] = NOTE_FILE
     return row
@@ -354,7 +394,7 @@ def view(*, here: bool = False) -> dict:
         rows = [_row(a, here=here) for a in ids]
         seen.update(ids)
         groups.append({"title": title, "rows": rows})
-    extra = sorted(a for a in _file_tiers() if a not in seen)
+    extra = sorted(a for a in _file_tiers() if a not in seen and a not in OLDER_NAMES)
     if extra:
         # A line in the owner's file that no group names: shown, never hidden.
         groups[-1]["rows"].extend(_row(a, here=here) for a in extra)

@@ -147,7 +147,7 @@ SENSITIVE_TEXT = ("Health, money, and private details about other people. When t
 #: The note under "Learn automatically" while background learning is off -
 #: the desktop's sentence, which both apps now show (fit audit item 10).
 NEEDS_LEARNING = ("Background learning is off, so nothing is saved automatically. "
-                  "Start learning above to use this.")
+                  "Start background learning above to use this.")
 
 
 # --------------------------------------------------------------------------

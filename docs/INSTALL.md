@@ -25,7 +25,7 @@ breaks the error usually names the wrong one.
 | | what it is | who starts it |
 |---|---|---|
 | **The backend** | `jarvis_hud.py` — a Python program. This *is* Jarvis: the model, the memory, the approval queue. | you, or the desktop app |
-| **Jarvis Desktop** | the Windows app: the spotlight bar, the tray icon, the widget, the Brain. A **client**. | you |
+| **Jarvis Desktop** | the Windows app: the Jarvis bar (Alt+Space), the tray icon, the widget, the Brain. A **client**. | you |
 | **The phone app** | `jarvis-client`. Also a client. | you |
 
 Both clients are windows onto the backend. If the backend is not running,
@@ -147,6 +147,12 @@ In order, it:
    search by meaning, the voice features). A minute or two the first time.
 6. **Runs the test suites** against your backend and prints a summary.
 
+**Everything it prints is also saved**, one file per run, in a
+`_jarvis-logs` folder inside your backend folder
+(`_jarvis-logs\apply-patches-<date>.txt`); the `Log` line near the top of
+what it prints gives the exact file. Send that file back if a run goes
+wrong - no token or key is ever printed by the script.
+
 It is safe to run again - after a `git pull`, run the same line. It works out
 what is already done and does the rest.
 
@@ -256,6 +262,47 @@ want the browser page, copy `jarvis-desktop\src\jarvis_hud.html` into your
 backend folder; without it that address returns an error (a 500) while
 everything else works.
 
+**After every restart of the PC, Jarvis is off again** until you run this
+line again - or until the desktop app starts it for you (step 2.5, "Let
+Jarvis Desktop start and stop Jarvis", together with "Start Jarvis Desktop
+when Windows starts").
+
+### 1.9 Keep the PC awake
+
+**Alarms, reminders and "tell me when" go off on the PC, by the PC's clock.**
+While Windows has the PC asleep, nothing goes off, and the phone cannot reach
+Jarvis either; when the PC wakes, anything that was due goes off once and
+says when it was missed (backend/README.md, "Timers, alarms, reminders").
+
+To keep the PC awake while it is plugged in, one line in PowerShell (the
+screen can still turn itself off; this changes only the sleep timer on mains
+power, and writes no file):
+
+```powershell
+powercfg /change standby-timeout-ac 0
+```
+
+To undo it, the same line with a number of minutes instead of `0`, or
+Windows Settings → System → Power → Screen and sleep. The live check
+(below) warns when the PC sleeps on mains power.
+
+### 1.10 Check that it all works
+
+With Jarvis running, open a **second** PowerShell window in this
+repository's folder (`cd "$env:USERPROFILE\Epic-Jarvis"`) and run this one
+line, with your backend folder - the one holding `jarvis_hud.py` - between
+the first quotes. It checks the running Jarvis end to end and ends with
+"N pass, N fail, N warn"; the result is also saved as `preflight.txt` on
+your Desktop:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:PYTHONIOENCODING = "utf-8"; py -3 backend\selftest.py --preflight | Tee-Object -FilePath "$env:USERPROFILE\Desktop\preflight.txt"; Write-Host "Saved to $env:USERPROFILE\Desktop\preflight.txt"
+```
+
+It changes nothing. Each FAIL says what to do. If it says `jarvis_hud.py is
+not in ...`, the folder between the first quotes is not your backend
+folder.
+
 ---
 
 ## Part 2 — The desktop app
@@ -305,7 +352,7 @@ The README used to say the app has no window at startup. **It does.** Expect:
 The HUD window will say **"demo · not connected"** and show a banner telling you
 to run `py -3 jarvis_hud.py`. If you already did that in Part 1, ignore it —
 that page is the backend's own browser page and does not know the desktop app
-exists. The surfaces that tell you the truth are the tray and the spotlight bar.
+exists. The surfaces that tell you the truth are the tray and the Jarvis bar.
 
 ### 2.4 The hotkeys, which may not work
 
@@ -316,7 +363,7 @@ login, and Jarvis starts after them, so Jarvis loses.
 If a key was refused you get a toast saying so. If the toast fails you get
 nothing at all, because release builds have no console.
 
-**The fallback, worth memorising now:** right-click the tray icon → **Settings**
+**The fallback, worth memorising now:** right-click the tray icon → **Settings and help…**
 → **Shortcuts**. Every binding is editable and each shows whether Windows
 accepted it.
 
@@ -325,21 +372,28 @@ or more layouts installed.
 
 ### 2.5 Point it at the backend
 
-Tray → **Settings** → **Backend**.
+Tray → **Settings and help…** → **Connection**.
 
-- Leave the URL at `http://127.0.0.1:4719`.
-- **Supervision** is off by default and that is deliberate: with it on, the app
-  adopts and kills the backend, which would kill a backend you started in a
-  terminal. Turn it on only if you want the app to own the backend's lifetime.
+- Leave **Jarvis's address on this computer** at `http://127.0.0.1:4719`.
+- **Letting the app start Jarvis for you** is under **More options** (the
+  closed box near the end of Settings) → **Starting Jarvis for you** →
+  **Let Jarvis Desktop start and stop Jarvis**. It is off by default and
+  that is deliberate: with it on, the app starts Jarvis when it opens and
+  stops it when it quits. A Jarvis you started yourself in PowerShell is
+  never taken over and never stopped. Its **Start** button is greyed out
+  until this switch is on.
 - If you do turn it on, set **Program** to the full path of the real
   `python.exe` — not `python`, which may be the Store shortcut from step 1.1.
   This one line prints it:
   `py -3 -c "import sys; print(sys.executable)"` (typically
   `C:\Users\<you>\AppData\Local\Programs\Python\Python312\python.exe`).
   Set **Arguments** to the full path of `jarvis_hud.py`.
+- **Start Jarvis Desktop when Windows starts** (More options → Startup and
+  logs) starts the app, not Jarvis. Jarvis starts with it only when "Let
+  Jarvis Desktop start and stop Jarvis" is on too.
 
-**Know the trade:** with supervision on, quitting Jarvis Desktop also stops the
-backend, and therefore stops the phone from reaching anything.
+**Know the trade:** with that switch on, quitting Jarvis Desktop also stops
+Jarvis, and therefore stops the phone from reaching anything.
 
 ---
 
@@ -516,6 +570,38 @@ same tailnet, with MagicDNS on) or **NordVPN Meshnet** (both devices on your
 Meshnet). The owner's setup uses Meshnet, with names like
 `marioirelan11-alps.nord`. A private mesh between two devices you own is not a
 public tunnel; nothing is exposed to the internet.
+
+**You need one even at home, on the same Wi-Fi.** The phone app can only
+reach the PC by its Tailscale name (ending in `.ts.net`) or its Meshnet name
+(ending in `.nord`): Android lets this app use plain `http://` only to those
+names (`jarvis-client/app/src/main/res/xml/network_security_config.xml`),
+so a home-network address such as `192.168.1.20` does not work from the
+phone, even though it is on your own network. (The phone does not refuse
+such an address with its own message - it simply cannot connect; its
+Platform checks screen says so.)
+
+**Tailscale, step by step** (Meshnet works the same way, in the NordVPN app):
+
+1. **On the PC**, one line in PowerShell, then open **Tailscale** from the
+   Start menu and sign in (a Google, Microsoft or GitHub account; the free
+   plan is enough):
+
+   ```powershell
+   winget install --id Tailscale.Tailscale -e
+   ```
+
+2. **On the phone**, install **Tailscale** from the Play Store, open it,
+   sign in with the **same** account, and switch it on.
+3. In a browser, open Tailscale's admin page, **DNS**
+   (`https://login.tailscale.com/admin/dns`), and check **MagicDNS** is on -
+   that is what gives the PC a name.
+4. **The PC's name** is in the admin page's **Machines** list. It ends in
+   `.ts.net`, for example `desktop.tail1234.ts.net`. That name, followed by
+   `:4719`, is what the phone's Pairing screen asks for (step 3.3).
+5. Then step 3.2 below: the PC side, which lets the phone in.
+
+Both devices must be signed in and switched on in Tailscale whenever the
+phone talks to Jarvis - at home too.
 
 ### 3.2 Reaching a supervised backend from the phone
 
@@ -700,28 +786,92 @@ into both apps too).
 
 ### 3.4 When it fails
 
-The phone says: *"Cannot reach the desktop… Check your private network
-(Tailscale or NordVPN Meshnet) is up on both ends."* **This message is usually
-wrong.** A loopback-bound backend refuses the connection identically to an
-absent private network. Check the bind first — it is the
-more likely cause.
+The phone says one of these (the desktop app uses the same words):
 
-*"The desktop refused that token"* can also mean the **server has no token at
-all**: when its banner says `token NONE`, the server accepts only callers on
-the PC itself, so your phone gets a 401 that looks like a token mismatch.
-(Normally the backend makes and saves a token for itself; `NONE` almost
-always means `jarvis_token_store.py` is missing - see step 1.8. The lines
-under it say why.)
+- *"Your PC isn't answering."* Nothing answered at all. The PC may be asleep
+  or switched off (step 1.9), or Tailscale or Meshnet may be off at one end.
+  Windows Firewall blocking the port looks the same (step 3.2, the firewall
+  line).
+- *"Jarvis isn't running on your PC."* The PC answered, but nothing was
+  listening for the phone. Either Jarvis is not started - start it (step
+  1.8, or the desktop app's Settings → More options → Starting Jarvis for
+  you → Start) - or **it is running but listens on this PC only**
+  (`127.0.0.1`, no bind address), which looks exactly the same from the
+  phone. If Jarvis is running on the PC, check the bind next (step 3.2).
+- *"This device can't find your PC by its name."* The name is wrong, or
+  Tailscale or Meshnet is off on the phone.
+- *"Your PC didn't accept this app's pairing key."* The key is wrong - or the
+  **server has no key at all**: when its banner says `token NONE`, the
+  server accepts only callers on the PC itself, so the phone is refused as
+  if the key were wrong. (Normally the backend makes and saves a key for
+  itself; `NONE` almost always means `jarvis_token_store.py` is missing -
+  see step 1.8. The lines under it say why.)
+
+Every message has a **Details** line under it for a bug report, with keys
+and passwords taken out. It can be selected and copied by hand.
+
+---
+
+## Updating everything
+
+When this repository changes (the apps say "run apply-patches.ps1" when
+your PC's Jarvis is too old for something), update all three parts:
+
+1. **The backend.** Stop Jarvis (close its PowerShell window, or quit the
+   desktop app if it starts Jarvis for you). Then one line in PowerShell -
+   it gets the newest copy of this repository and runs the patch script
+   again, which keeps your settings file and backs up everything it
+   replaces; its log lands in `_jarvis-logs` inside your backend folder:
+
+   ```powershell
+   cd "$env:USERPROFILE\Epic-Jarvis"; git pull; powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+   ```
+
+   Then start Jarvis again (step 1.8).
+2. **The desktop app.** Until the update signing key exists (Known rough
+   edges, "The updater is off"), build it again (step 2.1's second line)
+   and run the new installer over the old one. Your settings stay.
+3. **The phone app.** Download the newest `.apk` from the `client-latest`
+   release and install it over the old one (step 3.3, 1-2). It stays
+   paired: an update signed with the same key keeps the app's data.
+4. **Check** with the live check (step 1.10).
+
+---
+
+## If you lose your phone
+
+The phone holds the pairing key, so whoever has it unlocked can use
+Jarvis. On the PC, in this order:
+
+1. **Take the phone off your private network**: Tailscale's admin page,
+   **Machines** → the phone → **Remove** (or remove it from your Meshnet
+   in the NordVPN app). From then on it cannot reach the PC at all.
+2. **Make a new pairing key**, so the old one stops working: follow
+   "To get a new token" in step 3.2 (`py -3 jarvis_token_store.py forget`
+   in the backend folder, after clearing a token typed into the desktop
+   app and any `HUD_TOKEN`), then start Jarvis again.
+3. **Pair your other devices again** with the new key (step 3.3).
 
 ---
 
 ## Uninstalling
 
-The uninstaller leaves your settings behind, including **the pairing token**,
-in Windows Credential Manager (Control Panel → Credential Manager → Windows
-Credentials): "Jarvis Backend/pairing token" (the one Jarvis made) and, if you
-ever typed a token into Settings, "Jarvis Desktop/pairing token". Select each
-and press Remove. A backend older than 2026-09-24 also left it in plain text
+The uninstaller leaves your settings behind, including **the pairing token
+and your keys**, in Windows Credential Manager (Control Panel → Credential
+Manager → Windows Credentials). Jarvis may have made up to seven entries
+there; remove each one that is listed (select it, then **Remove**):
+
+| entry | what it is |
+|---|---|
+| `Jarvis Backend/pairing token` | the pairing key Jarvis made |
+| `Jarvis Desktop/pairing token` | a pairing key you typed into the desktop app's Settings |
+| `Jarvis Backend/chat history key` | the key your kept chats are encrypted with. **Remove it only if you are also deleting your chats** (the `.openjarvis` folder below): without it they can never be read again |
+| `Jarvis Backend/Exa key` | your Exa web search key, if you added one |
+| `Jarvis Backend/Tavily key` | your Tavily web search key, if you added one |
+| `Jarvis Backend/Brave Search key` | your Brave Search key, if you added one |
+| `Jarvis Big Model/api key` | the key between Jarvis and the big model's engine, if you switched the big model on |
+
+A backend older than 2026-09-24 also left the pairing token in plain text
 as `.openjarvis\token` in your user folder. To remove everything else:
 
 ```
@@ -734,14 +884,22 @@ as `.openjarvis\token` in your user folder. To remove everything else:
 
 ## When something goes wrong
 
-Open **Settings → Startup and logs → Open the log folder**. Two files:
+Open **Settings → More options → Startup and logs → Open the log folder**.
+Two files:
 
 - `jarvis-desktop.log` — the app itself: what it started, what failed.
 - `backend.log` — everything the Python backend printed, including the reason
-  it refused to start.
+  it refused to start. **It exists only when the desktop app starts Jarvis
+  for you** (step 2.5); a Jarvis you start in PowerShell prints to that
+  window instead.
 
-Both roll over at 4 MB, keeping one previous copy as `.1`. Neither is
-redacted, so read before you share.
+Both roll over at 4 MB, keeping one previous copy as `.1`. Jarvis takes
+passwords, keys and the pairing key out of what it writes to `backend.log`
+(`log-scrub.patch`), but a list of patterns never catches everything, and
+`jarvis-desktop.log` has no such pass - so read either before you share it.
+
+The patch script keeps its own log of each run in `_jarvis-logs` inside your
+backend folder (step 1.5).
 
 **"Cannot reach" errors while everything is running: check for a proxy.**
 A proxy is a go-between server some workplaces, VPNs or "privacy" apps set
@@ -765,7 +923,7 @@ proxy there. Jarvis's calls to programs on this PC (the backend, Ollama) are
 being changed to never use a proxy at all; until that is done, a proxy set in
 any of these places can get between them.
 
-**"Jarvis got slow."** Open the Brain → Faculties → Models. If the model has fallen off
+**"Jarvis got slow."** Open the Brain → Model → Models. If the model has fallen off
 the graphics card onto the CPU, there is now a yellow line at the top of that
 list saying so, with the percentage. Nothing used to say it — Ollama reports
 the model as loaded and healthy either way.
@@ -777,15 +935,19 @@ the model as loaded and healthy either way.
 Things you will hit that are already on the list, so you know they are known
 rather than your fault.
 
-- ~~No autostart.~~ Fixed. Settings → Startup and logs → **Start Jarvis when
-  Windows starts**. It still loses the `Alt+Space` race, though: every startup
+- ~~No autostart.~~ Fixed. Settings → More options → Startup and logs →
+  **Start Jarvis Desktop when Windows starts**. It starts the app; Jarvis
+  itself starts with it only when "Let Jarvis Desktop start and stop Jarvis"
+  is on too. It still loses the `Alt+Space` race, though: every startup
   program asks for its shortcuts at once and whoever asks first wins, so being
   present after a reboot is not the same as owning the key.
-- ~~No log file.~~ Fixed. Settings → Startup and logs → **Open the log
-  folder**. `jarvis-desktop.log` is the app, `backend.log` is everything the
-  Python side printed — which used to go to a closed handle, which is why the
-  advice was to run it in a terminal. Both are **plain text and nothing in
-  them is scrambled or hidden**, so read one before sending it anywhere.
+- ~~No log file.~~ Fixed. Settings → More options → Startup and logs →
+  **Open the log folder**. `jarvis-desktop.log` is the app, `backend.log` is
+  everything the Python side printed when the app started it — which used to
+  go to a closed handle, which is why the advice was to run it in a
+  terminal. Both are plain text; `backend.log` has passwords, keys and the
+  pairing key taken out, `jarvis-desktop.log` does not, and neither catches
+  everything - so read one before sending it anywhere.
 - **The updater is off.** No signing key exists, so the in-app updater is inert
   and reports itself unsupported. Updating means building and installing again.
 - **Where the token is kept, honestly.** Two places.

@@ -88,6 +88,7 @@ import {
   saveFaceTuning,
   SPEEDS,
 } from "./face-tuning.js";
+import { PLACE_FRESH_MS, SETTINGS_PLACE_KEY, START_PLACE } from "./plain-errors.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -662,6 +663,42 @@ $("open-faces").addEventListener("click", async () => {
     report($("faces-status"), String((error && error.message) || error), "bad");
   }
 });
+
+/**
+ * "Show me where" (plain-errors.js): the quickbar left a place under
+ * SETTINGS_PLACE_KEY. Taken once, and only while fresh; "More options" is
+ * opened and the place scrolled to. Nothing is changed - the owner still
+ * presses Start themselves.
+ */
+function goToPlace() {
+  let left = null;
+  try {
+    left = JSON.parse(localStorage.getItem(SETTINGS_PLACE_KEY) || "null");
+    if (left) localStorage.removeItem(SETTINGS_PLACE_KEY);
+  } catch {
+    return;
+  }
+  if (!left || left.place !== START_PLACE) return;
+  if (!(Date.now() - Number(left.at) < PLACE_FRESH_MS)) return;
+  const more = $("more-options");
+  const card = $("start-jarvis");
+  if (!more || !card) return;
+  more.open = true;
+  // After the page has loaded and laid out: a scroll made earlier is undone
+  // by the browser putting the page back where it was.
+  const go = () => requestAnimationFrame(() => {
+    card.scrollIntoView({ block: "start" });
+    const first = dom.startBackend && !dom.startBackend.disabled ? dom.startBackend : dom.supervise;
+    if (first) first.focus({ preventScroll: true });
+  });
+  if (document.readyState === "complete") go();
+  else window.addEventListener("load", go, { once: true });
+}
+goToPlace();
+window.addEventListener("storage", (e) => {
+  if (e.key === SETTINGS_PLACE_KEY && e.newValue) goToPlace();
+});
+window.addEventListener("focus", goToPlace);
 
 startLink();
 // "Open the card": one line while an approval card waits (card-link.js).
@@ -1494,7 +1531,7 @@ function scModelLine(feature) {
   if (feature.model_installed === true) return `Model: ${model}, installed.`;
   if (feature.model_installed === false) {
     return `Model: ${model}, not installed yet. To install it, open the Brain window, go to ` +
-      `Faculties, then Models, type ${model} in the Install box and press Install. ` +
+      `Model, then Models, type ${model} in the Install box and press Install. ` +
       "Nothing downloads until you approve that card too.";
   }
   return `Model: ${model}. Jarvis could not check whether it is installed.`;

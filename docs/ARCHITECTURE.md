@@ -63,10 +63,19 @@ it works.
    (`3232235777`) is judged as the address it dials, and both the address as
    written and the host each app's own HTTP library parses must pass, so a
    user name in the address (`http://127.0.0.1@evil.com`) cannot fool it.
-   Refused in one sentence, the same on both apps: *"Jarvis's address X is
-   not on your own networks, so this app will not send your pairing key
-   there: use this PC (localhost), your home network (...), Tailscale (...)
-   or NordVPN Meshnet (...)."* An address saved before the rule (or set in
+   Refused in one sentence: *"Jarvis's address X is not on your own
+   networks, so this app will not send your pairing key there: use this PC
+   (localhost), your home network (...), Tailscale (...) or NordVPN Meshnet
+   (...)."* on the desktop. The phone's sentence ends differently: *"...
+   there: on this phone, use your PC's Tailscale name (ending in .ts.net)
+   or its NordVPN Meshnet name (ending in .nord)."* (ease-of-use audit
+   2026-09-27, #1e), because the phone can only connect in plain http:// to
+   those names and to itself - `network_security_config.xml` allows no
+   other cleartext host, and cannot list an address range. **A known gap,
+   written down for the owner:** the phone ACCEPTS a home-network address
+   (192.168.x.x, `.local`) under the rule above, but cannot connect to it
+   (`PlatformReadiness` says so on the checks screen). Making the phone
+   reach the home network is the owner's call, not done here. An address saved before the rule (or set in
    `JARVIS_HUD_BASE`) is not used, and nothing is used in its place (owner,
    2026-09-26): the desktop does nothing over the network - no chat, no
    reads, no requests to this PC instead, no backend started - until an
@@ -1215,6 +1224,9 @@ backend routes, in both directions; the rest are listed here only.
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | The voice upgrades' bake-off (`backend/jarvis_bakeoff.py`, 2026-09-26) | Written with it. It is a program the owner runs on the PC, not an app screen: it measures the PC's own voice engines, the PC's graphics-card memory and the room through the PC's microphone. Its verdict decides a later change that reaches both apps (the phone's wake-word file, the engine name both apps show). |
 | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
+| "Show me where" under "Jarvis isn't running on your PC." (ease-of-use audit 2026-09-27, #2) | Written with the change. It opens the desktop's own Settings at "Starting Jarvis for you", with More options open. The phone has no Settings for the PC to open: it shows the same words (the shared plain-errors list), which name that place, and its "Try again". |
+| A filter box on "What Jarvis knows about you" (ease-of-use audit #7) | That list - every fact, forgotten ones too - is on the desktop only (the Forget and Erase rows above), so its filter is too. |
+| "I lost my phone. What do I do?" in the FAQ (ease-of-use audit #8h) | Everything it says is done on the PC and in Tailscale's or NordVPN's own pages, and the phone it is about is the one that is gone. docs/INSTALL.md, "If you lose your phone", has the steps. "How do I update Jarvis?" is in both FAQs. |
 
 | Adding a folder to "Folders Jarvis may look in" (`POST /api/folders/add`) and bringing in a Notion export (`POST /api/folders/import`) (the owner's decisions of 2026-09-26; the feasibility audit's guardrail 1: "one folder list, PC only, empty by default") | Written with the feature. Both are about files on the PC: the desktop opens the Windows folder picker (or the file picker, for the export's `.zip`) in Rust, and only the path the owner chose is sent; adding then raises ONE approval card (`change_own_config`). A phone has no view of the PC's folders to pick from, and a path typed on the phone would be a guess. The backend refuses both routes from any device but the PC (`jarvis_owner_check.from_this_pc`), not only the apps. Everything else is on both apps: the list in the PC's words and Remove on each folder (at once, never held on a stale link - it only lets Jarvis see less; `/api/folders` and `/api/folders/remove`, `ported` in `tools/check_parity.py`), and asking about the files, which is ordinary chat from either app (the `my_files` tool runs on the PC, with the model on the PC). |
 

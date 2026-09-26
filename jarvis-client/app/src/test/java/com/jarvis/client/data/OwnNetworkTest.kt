@@ -38,12 +38,16 @@ class OwnNetworkTest {
             text to o["own"]!!.jsonPrimitive.boolean
         }
 
-    private val message: String get() = cases["message"]!!.jsonPrimitive.content
+    /** The phone's sentence: it names only the names this phone can connect to. */
+    private val message: String get() = cases["phone_message"]!!.jsonPrimitive.content
 
     @Test
     fun `the words are the shared ones`() {
         assertEquals(message, OwnNetwork.MESSAGE)
-        assertEquals(cases["message_unshown"]!!.jsonPrimitive.content, OwnNetwork.message("http://me:pw@evil.com"))
+        assertEquals(cases["phone_message_unshown"]!!.jsonPrimitive.content, OwnNetwork.message("http://me:pw@evil.com"))
+        // The same first half as the desktop's sentence.
+        val desktop = cases["message"]!!.jsonPrimitive.content
+        assertEquals(desktop.substringBefore(": use "), message.substringBefore(": on this phone"))
     }
 
     /** Every host, exactly as the backend's `_own_network` judges it. */

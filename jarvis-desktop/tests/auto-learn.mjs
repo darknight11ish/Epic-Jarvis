@@ -508,7 +508,7 @@ await check("the empty list, on and off, and the History line under Saved automa
   assert.equal(HISTORY_NOTE,
     "Deleting a conversation from History does not forget facts learned from it - use Forget here.");
   assert.equal(LEARNING_OFF_NOTE,
-    "Background learning is off, so nothing is saved automatically. Start learning above to use this.");
+    "Background learning is off, so nothing is saved automatically. Start background learning above to use this.");
 });
 
 await check("saves while the Brain was closed are counted: Rust hands them over, and opening the list clears both", async () => {

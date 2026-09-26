@@ -350,6 +350,13 @@ body {
   flex: none;
 }
 
+/* "What Jarvis knows about you": filters the loaded list (brain.js renderFacts). */
+.memory-facts-filter {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 8px;
+}
+
 .field {
   padding: 6px 10px;
   border: var(--stroke-hair) solid var(--border-strong);
@@ -1552,6 +1559,14 @@ body {
   color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* A question whose answer the PC did not keep (history-view.js NOT_KEPT_LINE). */
+.history-not-kept {
+  margin: 2px 0 0;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-faint);
 }
 
 /* "Open the card" (card-link.js): one line while an approval card waits. */

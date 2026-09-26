@@ -91,8 +91,12 @@ SAMPLE = (
 
 def t_the_page_lists_every_action():
     ids = [a for _, rows in AF.GROUPS for a in rows]
+    # An older name is folded into the row of the name its tool uses.
+    shown = set(ids) | set(AF.OLDER_NAMES)
     check("every action a card can name is on the page",
-          not [a for a in W.TITLES if a not in ids], [a for a in W.TITLES if a not in ids])
+          not [a for a in W.TITLES if a not in shown], [a for a in W.TITLES if a not in shown])
+    check("an older name's row is on the page, and the older name is not",
+          all(new in ids and old not in ids for old, new in AF.OLDER_NAMES.items()))
     check("each is listed once", len(ids) == len(set(ids)))
     v = AF.view(here=False)
     rows = {r["id"]: r for g in v["groups"] for r in g["rows"]}
@@ -124,6 +128,52 @@ def t_the_page_lists_every_action():
               r["says"] == AF.SAYS_REFUSED, r)
     finally:
         AF._tier = keep
+
+
+def t_the_web_search_row_tells_the_truth():
+    """Ease-of-use audit 2026-09-27 #1a: a search from the owner's own
+    question needs no card, so "Asks you first, every time" was untrue - it
+    is true only with "Ask before every web search" on."""
+    keep_t, keep_e, keep_f = AF._tier, AF._search_asks_every_time, AF._file_tiers
+    try:
+        AF._tier = lambda a: "ask"
+        AF._search_asks_every_time = lambda: False
+        r = AF._row("search_the_web", here=True)
+        check("by default: asks only when something private could slip in",
+              r["says"] == AF.SAYS_SEARCH and r["note"] == AF.NOTE_SEARCH
+              and "switch" not in r, r)
+        check("... and the note names every reason jarvis_agent asks",
+              all(w in AF.NOTE_SEARCH for w in ("your own question", "outside text",
+                                                "pasted or shared", "repeat",
+                                                "sensitive saved fact",
+                                                "Ask before every web search")))
+        AF._search_asks_every_time = lambda: True
+        r = AF._row("search_the_web", here=False)
+        check("with \"Ask before every web search\" on: asks every time",
+              r["says"] == AF.SAYS["ask"] and r["note"] == AF.NOTE_SEARCH_EVERY, r)
+        AF._tier = lambda a: "never"
+        r = AF._row("search_the_web", here=True)
+        check("\"never\": switched off", r["says"] == AF.SAYS["never"], r)
+        AF._tier = lambda a: "auto"
+        r = AF._row("search_the_web", here=True)
+        check("set looser in the file: refused, as before",
+              r["says"] == AF.SAYS_REFUSED and r["note"] == AF.NOTE_ALWAYS, r)
+        # One "Read your calendar" row, and a differing older line is said.
+        AF._tier = lambda a: {"calendar_read": "ask"}.get(a, "auto")
+        AF._file_tiers = lambda: {"calendar_read": "ask", "read_calendar": "auto"}
+        v = AF.view(here=True)
+        titles = [r["title"] for g in v["groups"] for r in g["rows"]]
+        check("\"Read your calendar\" is listed once", titles.count("Read your calendar") == 1,
+              titles)
+        rows = {r["id"]: r for g in v["groups"] for r in g["rows"]}
+        check("... and the older line, when it differs, is named on it",
+              "read_calendar" not in rows and 'read_calendar = "auto"' in rows["calendar_read"]["note"],
+              rows["calendar_read"]["note"])
+        AF._file_tiers = lambda: {"calendar_read": "ask", "read_calendar": "ask"}
+        check("... and not when it agrees",
+              "read_calendar" not in AF._row("calendar_read", here=True)["note"])
+    finally:
+        AF._tier, AF._search_asks_every_time, AF._file_tiers = keep_t, keep_e, keep_f
 
 
 def t_the_safe_list_never_meets_the_hard_limits():

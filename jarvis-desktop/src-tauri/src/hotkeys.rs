@@ -55,9 +55,9 @@ pub struct Action {
 pub const ACTIONS: &[Action] = &[
     Action {
         id: "toggle_quickbar",
-        label: "Summon Jarvis",
+        label: "Show or hide the Jarvis bar",
         default: "Alt+Space",
-        hint: "Show or hide the spotlight bar from anywhere.",
+        hint: "From anywhere, whatever program is in front.",
     },
     Action {
         id: "ingest_clipboard",
@@ -80,7 +80,7 @@ pub const ACTIONS: &[Action] = &[
         // (main.js, "quick-note-summon").
         label: "Quick note",
         default: "Alt+Shift+N",
-        hint: "Summon the bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
+        hint: "Open the Jarvis bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
     },
     Action {
         id: "toggle_widget",
@@ -404,7 +404,7 @@ mod tests {
             .collect();
         set.insert("quick_note".into(), "Alt+Space".into());
         let err = validate(&set).expect_err("two actions on one combination were accepted");
-        assert!(err.contains("Summon Jarvis"), "{err}");
+        assert!(err.contains("Show or hide the Jarvis bar"), "{err}");
         assert!(err.contains("Quick note"), "{err}");
     }
 

@@ -200,16 +200,17 @@ private val FAQS = listOf(
             "using one that phones home.",
     ),
     Faq(
-        "It says \"Cannot reach the desktop.\" Now what?",
-        "Check that your private network (Tailscale, or NordVPN's Meshnet) " +
-            "is actually running on both the phone and the desktop first — " +
-            "that is the most common cause by far. Open " +
-            "Platform checks from Home to see exactly what this phone thinks " +
-            "is wrong. One known rough edge worth knowing about: a desktop " +
-            "that is simply asleep or has its lid closed currently looks " +
-            "identical to a real error on this screen, rather than a calmer " +
-            "\"it's just asleep\" message — so before assuming something " +
-            "broke, check whether the desktop itself is actually awake.",
+        "It says \"Your PC isn't answering\" or \"Jarvis isn't running on your PC\". Now what?",
+        "\"Your PC isn't answering\" means nothing answered at all: the PC may be " +
+            "asleep or switched off, or your private network (Tailscale, or " +
+            "NordVPN's Meshnet) may be off at one end. Wake the PC first, then " +
+            "check the private network is running on both the phone and the PC. " +
+            "\"Jarvis isn't running on your PC\" means the PC answered but nothing " +
+            "was listening for the phone: Jarvis is not started (on the PC, start " +
+            "it the way you set it up, or in Jarvis Desktop's Settings, More " +
+            "options, Start), or it is running but listens on the PC only - " +
+            "then fill in \"Let my phone reach this\" in the desktop app's Settings. " +
+            "Open Platform checks from Home to see what this phone thinks is wrong.",
     ),
     Faq(
         "Why does Jarvis want an exception from battery optimisation?",
@@ -260,6 +261,20 @@ private val FAQS = listOf(
             "about you or Jarvis. To stop it, open Platform checks and turn " +
             "off Check for new versions on the This app card; that card also " +
             "says if the last check failed.",
+    ),
+    Faq(
+        // The one answer the "run apply-patches.ps1" messages point to
+        // (ease-of-use audit 2026-09-27, #8e). The desktop's FAQ says the same.
+        "How do I update Jarvis?",
+        "Three parts, in this order. Jarvis on your PC: stop it, then in " +
+            "PowerShell, in your copy of the Jarvis files, get the newest files " +
+            "(git pull) and run apply-patches.ps1 again - it keeps your settings " +
+            "file, backs up what it replaces and saves a log of the run in " +
+            "_jarvis-logs in your Jarvis folder - then start Jarvis again. The " +
+            "desktop app: build and install it again (there is no automatic " +
+            "update yet). This app: install the newest file from the release " +
+            "page over the old one; it stays paired. docs/INSTALL.md, \"Updating " +
+            "everything\", has each step as one line to copy.",
     ),
 )
 
@@ -385,7 +400,8 @@ private fun AboutCard() {
                 "internet. Only small sound models run on this phone, and " +
                 "none of them turns speech into words; there is no " +
                 "approve-all anywhere in this app, and " +
-                "every action still stops and asks first, one at a time.",
+                "anything risky still asks first, one at a time. " +
+                "\"What asks first\" on Brain lists exactly what asks and what does not.",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textMid,
         )

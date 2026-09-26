@@ -49,6 +49,7 @@ import com.jarvis.client.ui.theme.LocalRadii
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
@@ -752,11 +753,17 @@ fun Notice(
             }
         }
         if (hasDetails && open) {
-            Text(
-                details.orEmpty(),
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textLo,
-            )
+            // Selectable, so it can be copied by hand into a bug report
+            // (ease-of-use audit 2026-09-27, #6). No Copy button: the
+            // desktop's clipboard can sync off the PC, and one wording and
+            // one way for both apps.
+            SelectionContainer {
+                Text(
+                    details.orEmpty(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo,
+                )
+            }
         }
     }
 }

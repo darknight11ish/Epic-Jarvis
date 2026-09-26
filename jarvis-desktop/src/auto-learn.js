@@ -146,7 +146,7 @@ export function stillOffLine(which) {
 
 /** "Learn automatically" has meaning only while background learning is on. */
 export const LEARNING_OFF_NOTE =
-  "Background learning is off, so nothing is saved automatically. Start learning above to use this.";
+  "Background learning is off, so nothing is saved automatically. Start background learning above to use this.";
 
 /** The quiet line on a `memory_saved` event: "Jarvis remembered 2 things". */
 export function rememberedLine(n) {

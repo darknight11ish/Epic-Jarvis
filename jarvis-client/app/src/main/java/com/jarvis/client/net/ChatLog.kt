@@ -64,7 +64,10 @@ object ChatLog {
     const val KEEP_TITLE = "Delete conversations older than"
     const val WAITING = "Waiting for your approval to turn chat history on. ${Approvals.WHERE}"
     const val EMPTY = "No conversations are kept on your PC."
-    const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone."
+    /** Under Delete, in both apps: deleting a chat is not forgetting (ease-of-use audit #7). */
+    const val DELETE_KEEPS_FACTS =
+        "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain."
+    const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone. $DELETE_KEEPS_FACTS"
 
     // ----------------------------------------------------------- paths ---
 
@@ -116,6 +119,8 @@ object ChatLog {
         val at: Long?,
         val provenance: String?,
         val readOutside: Boolean,
+        /** False on a user turn whose answer the PC did not keep (a cloud answer, or one that did not finish). */
+        val answerKept: Boolean = true,
     )
 
     data class Transcript(val id: String, val title: String, val tainted: Boolean, val turns: List<Turn>)
@@ -174,6 +179,8 @@ object ChatLog {
                 at = o.whole("at"),
                 provenance = o.str("provenance"),
                 readOutside = o.flag("read_outside") == true,
+                // Only "false" from the PC says so; an older PC sends nothing.
+                answerKept = o.flag("answer_kept") != false,
             )
         }
         return Transcript(id, body.str("title") ?: UNTITLED, body.flag("tainted") == true, turns)
@@ -292,10 +299,11 @@ object ChatLog {
     // --------------------------------------------------------- showing ---
 
     private val TIME = DateTimeFormatter.ofPattern("HH:mm")
-    private val DAY = DateTimeFormatter.ofPattern("d MMM", Locale.US)
-    private val DAY_YEAR = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
+    // With the weekday, so "Tuesday's chat" can be found (ease-of-use audit #7).
+    private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
+    private val DAY_YEAR = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.US)
 
-    /** "Today 14:05", "Yesterday 09:12", "12 Sep 18:30", "3 Jan 2025". */
+    /** "Today 14:05", "Yesterday 09:12", "Sat 12 Sep 18:30", "Fri 3 Jan 2025". */
     fun whenLine(epochSeconds: Long?, zone: ZoneId, today: LocalDate): String {
         if (epochSeconds == null) return "When unknown"
         val at = Instant.ofEpochSecond(epochSeconds).atZone(zone)
@@ -345,6 +353,13 @@ object ChatLog {
         "voice_unverified" -> "said aloud, but not confirmed by this PC"
         else -> UNKNOWN_MARK
     }
+
+    /**
+     * Under a question whose answer the PC did not keep (`answer_kept: false`):
+     * a cloud model's answer, or one that did not finish. The PC does not say
+     * which, so neither does this. The same sentence as the desktop's.
+     */
+    const val NOT_KEPT_LINE = "Jarvis's answer to this was not kept: it came from a cloud model, or it did not finish."
 
     const val UNKNOWN_MARK = "not known where from"
     const val VOICE_MARK = "voice"

@@ -322,16 +322,17 @@ await check("choosing the same face again clears the choice", async () => {
 });
 
 await check("the window says where a face choice actually lands", async () => {
-  // Nothing on this desktop draws a spec face — the tray is a disc and the
-  // spotlight has its own SVG reactor — so a chosen face reaches the phone
-  // and changes nothing here. Saying so is the difference between a feature
-  // and a lie.
+  // The widget's open panel and the HUD window wear the chosen face here
+  // (widget.js postFace, feed=parent), and so does the phone. The page used
+  // to say "nothing on this desktop draws one yet", which the widget made
+  // untrue (ease-of-use audit 2026-09-27, #5).
   const page = await open();
   await page.waitForTimeout(1500);
   const text = await page.evaluate(() => document.body.innerText);
   await page.close();
-  assert.match(text, /nothing on this desktop draws one yet/i,
-    "the page does not say that a chosen face does not apply here");
+  assert.match(text, /face is worn by the widget's open panel and the HUD window on this PC,\s*and by the phone/i,
+    "the page does not say where a chosen face is worn");
+  assert.doesNotMatch(text, /nothing on this desktop draws one/i);
 });
 
 await check("CONTROL: the tray reads the saved bindings, not just the spec", async () => {

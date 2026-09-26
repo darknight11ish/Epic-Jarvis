@@ -29,7 +29,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   addPage,
+  DELETE_KEEPS_FACTS,
+  deleteQuestion,
   deviceTag,
+  NOT_KEPT_LINE,
   keepConfirm,
   keepNeedsConfirm,
   keepReply,
@@ -44,6 +47,7 @@ import {
   rowMeta,
   SWITCH_DETAIL,
   SWITCH_LABEL,
+  whenWords,
 } from "../src/history-view.js";
 import * as K from "./uikit.mjs";
 
@@ -449,6 +453,24 @@ await check("which app, and the tainted line: the words both apps use", async ()
     ["PC", "HUD", "phone", "unknown", "unknown"]);
   assert.equal(TAINT_TITLE, "In this conversation Jarvis read text that did not come from you - a web page, " +
     "a file, an email or another tool's output - from the marked message on.");
+});
+
+await check("dates say the weekday; an answer not kept and a delete say so, in the phone's words", async () => {
+  // Noon UTC on Tuesday 22 September 2026, read a week later.
+  const tue = Date.UTC(2026, 8, 22, 12) / 1000;
+  assert.match(whenWords(tue, (tue + 7 * 86400) * 1000), /^Tue 22 Sept? 2026$/);
+  const conv = readConversation({ id: "c", turns: [
+    { role: "user", text: "a", at: 1, provenance: "typed", answer_kept: false },
+    { role: "user", text: "b", at: 2, provenance: "typed", answer_kept: true },
+    { role: "user", text: "c", at: 3, provenance: "typed" },
+  ] });
+  assert.deepEqual(conv.turns.map((t) => t.answerKept), [false, true, true]);
+  assert.ok(deleteQuestion({ title: "x" }).endsWith(DELETE_KEEPS_FACTS));
+  const kt = read("../jarvis-client/app/src/main/java/com/jarvis/client/net/ChatLog.kt")
+    .replace(/"\s*\+\s*\n\s*"/g, "");
+  for (const w of [NOT_KEPT_LINE, DELETE_KEEPS_FACTS]) {
+    assert.ok(kt.includes(JSON.stringify(w).slice(1, -1).replace(/\\'/g, "'")), `the phone says: ${w}`);
+  }
 });
 
 await check("the keep choice sends one keep_days and says how many went", async () => {

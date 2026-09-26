@@ -73,15 +73,6 @@
        "title": "Read files on this PC"
       },
       {
-       "action": "read_calendar",
-       "fixed": false,
-       "id": "read_calendar",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Does it without asking",
-       "tier": "auto",
-       "title": "Read your calendar"
-      },
-      {
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
@@ -309,8 +300,8 @@
        "action": "search_the_web",
        "fixed": false,
        "id": "search_the_web",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
+       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
+       "says": "Asks only when something private could slip in",
        "tier": "ask",
        "title": "Search the web"
       },
@@ -686,7 +677,7 @@
        "action": "calendar_read",
        "fixed": false,
        "id": "calendar_read",
-       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. Your settings file also has an older line for this, read_calendar = \"auto\". The calendar tool follows this row (calendar_read).",
        "says": "Asks you first, every time",
        "switch": {
         "asks": true,
@@ -741,15 +732,6 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read files on this PC"
-      },
-      {
-       "action": "read_calendar",
-       "fixed": false,
-       "id": "read_calendar",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Does it without asking",
-       "tier": "auto",
-       "title": "Read your calendar"
       },
       {
        "action": "read_joplin_note",
@@ -979,7 +961,7 @@
        "action": "search_the_web",
        "fixed": false,
        "id": "search_the_web",
-       "note": "Always asks. This cannot be changed from an app.",
+       "note": "\"Ask before every web search\" is on, so every search waits for your yes. Turning it off (web search settings) takes an approval card.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Search the web"
@@ -1356,7 +1338,7 @@
        "action": "calendar_read",
        "fixed": false,
        "id": "calendar_read",
-       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello. Your settings file also has an older line for this, read_calendar = \"auto\". The calendar tool follows this row (calendar_read).",
        "says": "Asks you first, every time",
        "switch": {
         "asks": true,
@@ -1411,15 +1393,6 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read files on this PC"
-      },
-      {
-       "action": "read_calendar",
-       "fixed": false,
-       "id": "read_calendar",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Does it without asking",
-       "tier": "auto",
-       "title": "Read your calendar"
       },
       {
        "action": "read_joplin_note",
@@ -1649,8 +1622,8 @@
        "action": "search_the_web",
        "fixed": false,
        "id": "search_the_web",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
+       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
+       "says": "Asks only when something private could slip in",
        "tier": "ask",
        "title": "Search the web"
       },
@@ -2092,15 +2065,6 @@
        "title": "Read files on this PC"
       },
       {
-       "action": "read_calendar",
-       "fixed": false,
-       "id": "read_calendar",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Does it without asking",
-       "tier": "auto",
-       "title": "Read your calendar"
-      },
-      {
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
@@ -2328,8 +2292,8 @@
        "action": "search_the_web",
        "fixed": false,
        "id": "search_the_web",
-       "note": "Always asks. This cannot be changed from an app.",
-       "says": "Asks you first, every time",
+       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
+       "says": "Asks only when something private could slip in",
        "tier": "ask",
        "title": "Search the web"
       },
@@ -2728,6 +2692,7 @@
    "never": "Never - your settings file switches it off",
    "notify": "Does it, then tells you"
   },
+  "says_search": "Asks only when something private could slip in",
   "switch_label": "Ask me first",
   "title": "What asks first",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."

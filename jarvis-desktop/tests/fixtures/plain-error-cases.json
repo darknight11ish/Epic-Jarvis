@@ -249,7 +249,7 @@
   "backend_too_old": {
    "action": "none",
    "button": "",
-   "fix": "Update it: on the PC, run apply-patches.ps1, then restart Jarvis.",
+   "fix": "Update it: on the PC, run apply-patches.ps1, then restart Jarvis. The steps are in Help: \"How do I update Jarvis?\"",
    "says": "Your PC's Jarvis is too old for this."
   },
   "connection_dropped": {
@@ -267,13 +267,13 @@
   "feature_off": {
    "action": "none",
    "button": "",
-   "fix": "Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it.",
+   "fix": "Restart Jarvis on the PC. If it stays off, update it - the steps are in Help: \"How do I update Jarvis?\"",
    "says": "That part of Jarvis isn't running on your PC right now."
   },
   "jarvis_not_running": {
    "action": "retry",
    "button": "Try again",
-   "fix": "The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start Jarvis), then try again.",
+   "fix": "The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, then More options, and press Start under \"Starting Jarvis for you\" (it needs \"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in PowerShell, the way you set it up. Then try again.",
    "says": "Jarvis isn't running on your PC."
   },
   "key_store_refused": {
@@ -369,7 +369,7 @@
   "unreadable": {
    "action": "none",
    "button": "",
-   "fix": "Update both: run apply-patches.ps1 on the PC, and install the latest app.",
+   "fix": "Update both: run apply-patches.ps1 on the PC, and install the latest app. The steps are in Help: \"How do I update Jarvis?\"",
    "says": "Your PC answered in a way this app can't read."
   }
  },

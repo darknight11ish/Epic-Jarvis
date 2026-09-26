@@ -32,15 +32,18 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 object OwnNetwork {
 
     /**
-     * What the owner sees when an address is refused - one sentence, the
-     * desktop's words too (both are checked against `message` in the shared
-     * table). `{address}` is the address as saved.
+     * What the owner sees when an address is refused - one sentence, checked
+     * against `phone_message` in the shared table. `{address}` is the address
+     * as saved. Its first half is the desktop's; its ending names only what
+     * this phone can connect to: network_security_config.xml allows plain
+     * http:// only to .ts.net and .nord names (and the phone itself), so a
+     * home-network address that passes [problem] still cannot be reached
+     * (ease-of-use audit 2026-09-27, #1e; PlatformReadiness says so for one).
      */
     const val MESSAGE =
         "Jarvis's address {address} is not on your own networks, so this app will not " +
-            "send your pairing key there: use this PC (localhost), your home network (an " +
-            "address like 192.168.x.x or 10.x.x.x, or a name ending in .local), Tailscale " +
-            "(a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord)."
+            "send your pairing key there: on this phone, use your PC's Tailscale name " +
+            "(ending in .ts.net) or its NordVPN Meshnet name (ending in .nord)."
 
     /** Name endings only the owner's own networks answer - the backend's `_OWN_SUFFIXES`. */
     private val OWN_SUFFIXES = listOf(".local", ".lan", ".home.arpa", ".ts.net", ".nord")

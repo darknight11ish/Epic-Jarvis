@@ -115,6 +115,10 @@
           this computer alone, which is the default and the safe choice. This
           never opens Jarvis to the whole internet, or even to your home
           Wi-Fi — only to your own devices on that private network.
+          <strong>It works only when this app starts Jarvis for you</strong>
+          (Settings, More options, "Let Jarvis Desktop start and stop
+          Jarvis"): that is how the address reaches Jarvis. A Jarvis you start
+          yourself in PowerShell does not read it.
         </p>
         <p class="note" id="phone-address-note">
           <strong>On the phone, type this computer's name, not the number.</strong>
@@ -295,7 +299,7 @@
           hold each one, so if a shortcut says <em>in use</em>, another
           program took it first — <code>Alt+Space</code> is often taken by
           PowerToys Run or the Copilot app. Pick a different one and press
-          Save shortcuts. Summon Jarvis, the widget and Stop everything are
+          Save shortcuts. The Jarvis bar, the widget and Stop everything are
           also in the tray menu.
         </p>
         <p class="note">
@@ -1054,12 +1058,18 @@
           <details class="faq-item">
             <summary class="faq-q">Does anything I say to Jarvis leave this computer?</summary>
             <p class="faq-a">
-              No, not on its own. Jarvis answers using a language model that
-              runs on this machine. It only reaches the internet for
-              something specific, and only after it explains what it needs
-              and you say yes — there is no standing permission to go
-              online, and this program never opens a public tunnel to
-              itself.
+              Only along a few named routes. Jarvis answers using a
+              language model that runs on this machine. It reaches the
+              internet for a web search, and for your own calendar, email
+              and Home Assistant once you have set them up on this PC. A
+              search that comes straight from your own question goes
+              without asking; after Jarvis has read an email, a file or
+              other outside text, or when the search words would repeat
+              something private, it shows you the exact words and waits
+              for your yes. Sending an email, or a question to a cloud
+              model, always asks first. "What Jarvis can reach" (above)
+              lists which routes are on right now, and this program never
+              opens a public tunnel to itself.
             </p>
           </details>
 
@@ -1141,7 +1151,7 @@
           <details class="faq-item">
             <summary class="faq-q">Jarvis suddenly got slow. What happened?</summary>
             <p class="faq-a">
-              Open the Brain window → Faculties → Models. If the language model has
+              Open the Brain window → Model → Models. If the language model has
               fallen off the graphics card onto the processor instead,
               there is a yellow line at the top of that list saying so,
               with the percentage. That is almost always the cause — a
@@ -1211,6 +1221,39 @@
               which moves it into Credential Manager.
             </p>
           </details>
+
+          <!-- The one answer the "run apply-patches.ps1" messages point to
+               (ease-of-use audit 2026-09-27, #8e). The phone's FAQ says the
+               same. -->
+          <details class="faq-item">
+            <summary class="faq-q">How do I update Jarvis?</summary>
+            <p class="faq-a">
+              Three parts, in this order. Jarvis on this PC: stop it, then in
+              PowerShell, in your copy of the Jarvis files, get the newest
+              files (<code>git pull</code>) and run
+              <code>apply-patches.ps1</code> again - it keeps your settings
+              file, backs up what it replaces and saves a log of the run in
+              <code>_jarvis-logs</code> in your Jarvis folder - then start
+              Jarvis again. This app: build and install it again (there is no
+              automatic update yet). The phone app: install the newest file
+              from the release page over the old one; it stays paired.
+              docs/INSTALL.md, "Updating everything", has each step as one
+              line to copy.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">I lost my phone. What do I do?</summary>
+            <p class="faq-a">
+              Whoever has it unlocked could use Jarvis with the pairing key
+              it holds. First take the phone off your private network
+              (Tailscale's admin page, Machines, the phone, Remove - or remove
+              it from your NordVPN Meshnet), so it cannot reach this PC at
+              all. Then make a new pairing key, which stops the old one
+              working: docs/INSTALL.md, "If you lose your phone", has the
+              steps. Your other devices then pair again with the new key.
+            </p>
+          </details>
         </div>
       </section>
 
@@ -1224,7 +1267,7 @@
           <span class="more-detail">Letting this app start Jarvis, starting with Windows, and the log files.</span>
         </summary>
 
-        <section class="card">
+        <section class="card" id="start-jarvis">
           <h2>Starting Jarvis for you</h2>
           <p class="note">
             Off unless you turn it on here. With it on, this app starts Jarvis
@@ -1282,20 +1325,27 @@
         <section class="card">
           <h2>Startup and logs</h2>
           <p class="note">
-            Jarvis writes what it is doing to a file. If Jarvis refuses to
-            start, the reason is in <code>backend.log</code>. Both files are
-            plain text and <strong>nothing in them is hidden or
-            scrambled</strong>, so read one before you send it to anybody.
+            Jarvis Desktop writes what it is doing to
+            <code>jarvis-desktop.log</code>. When this app starts Jarvis for
+            you (above), Jarvis's own output goes to <code>backend.log</code>
+            beside it, with the reason if Jarvis refuses to start; a Jarvis
+            you start yourself in PowerShell prints to that window instead,
+            and there is no <code>backend.log</code>. Jarvis takes passwords,
+            keys and the pairing key out of what it writes there, but a list
+            of patterns never catches everything, and both files are plain
+            text - so read one before you send it to anybody.
           </p>
 
           <label class="toggle">
             <input id="autostart" type="checkbox" />
-            <span>Start Jarvis when Windows starts</span>
+            <span>Start Jarvis Desktop when Windows starts</span>
           </label>
           <p class="note" id="autostart-note">
-            Jarvis will be running after a restart. It does not promise to be
-            <em>first</em> — other startup programs are racing it for the
-            <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and whoever asks first wins.
+            This starts this app, not Jarvis itself. Jarvis starts with it only
+            if "Let Jarvis Desktop start and stop Jarvis" (above) is on. It
+            does not promise to be <em>first</em> — other startup programs are
+            racing it for the <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and
+            whoever asks first wins.
           </p>
 
           <div class="row">
@@ -1322,8 +1372,9 @@
           runs here rather than in a data centre somewhere else. Nothing
           private leaves this machine on its own, there is no public tunnel
           into this program, there are no API keys built into it, and there
-          is no "approve everything" control anywhere in it — every action
-          Jarvis wants to take stops and asks first, one action at a time.
+          is no "approve everything" control anywhere in it — anything
+          risky Jarvis wants to do asks first, one action at a time, and
+          "What asks first" lists exactly what asks and what does not.
         </p>
         <dl class="about-facts">
           <div class="about-fact">

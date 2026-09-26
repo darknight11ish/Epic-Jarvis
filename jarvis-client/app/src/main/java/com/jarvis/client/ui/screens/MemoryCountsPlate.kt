@@ -105,7 +105,7 @@ internal fun MemoryCountsSection(
             val on = learning
             if (on != null && !cardWaiting) {
                 Quiet(
-                    if (on) "Stop learning" else "Start learning",
+                    if (on) "Pause background learning" else "Start background learning",
                     enabled = !busy,
                     onClick = {
                         busy = true

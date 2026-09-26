@@ -80,13 +80,27 @@ needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
   whether it asks you, with switches to make it stricter.
 - **Your own networks only**: the apps connect to Jarvis only on this PC,
   your home network, Tailscale or NordVPN Meshnet. Anything else is refused.
-- A live check of the whole setup: `python backend\selftest.py --preflight`.
+- A live check of the whole setup, "N pass, N fail, N warn". Run this one
+  line in PowerShell from this repository's folder, with your own backend
+  folder (the one holding `jarvis_hud.py`) between the first quotes; the
+  result is also saved as `preflight.txt` on your Desktop:
+
+  ```powershell
+  $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:PYTHONIOENCODING = "utf-8"; py -3 backend\selftest.py --preflight | Tee-Object -FilePath "$env:USERPROFILE\Desktop\preflight.txt"; Write-Host "Saved to $env:USERPROFILE\Desktop\preflight.txt"
+  ```
 
 **Look how you like**
 - An animated face shows what Jarvis is doing (20 designs), with themes and
   colours that match on the PC and the phone.
 
 ## Install it
+
+**Read this first: the backend is not public.** The Python program that
+does the work (`jarvis_hud.py` and a few files beside it) is not in this
+repository and has no download anywhere - only the owner's PC has it
+(INSTALL.md, step 1.3). This repository holds changes for it, the rebuilt
+parts and the two apps. Without those files the apps have nothing to
+connect to, so check you have them before installing anything else.
 
 Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
 

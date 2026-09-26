@@ -143,7 +143,14 @@ import {
 // The renderer the answer card and the approval preview use - see markdown.js.
 import { escapeHtml, renderMarkdown } from "./markdown.js";
 import { approvalPlainText, isEmailCard } from "./email-sending.js";
-import { fromChatFailure, fromStreamError, shown, STATUSES } from "./plain-errors.js";
+import {
+  fromChatFailure,
+  fromStreamError,
+  SETTINGS_PLACE_KEY,
+  shown,
+  STATUSES,
+  WHERE_KINDS,
+} from "./plain-errors.js";
 import {
   boxTagAfter,
   commitExchange,
@@ -301,6 +308,7 @@ const dom = {
   // A failed answer's fix button and "Details" (plain-errors.js).
   problem: $("answer-problem"),
   problemAction: $("problem-action"),
+  problemWhere: $("problem-where"),
   problemDetails: $("problem-details"),
   problemDetailsText: $("problem-details-text"),
   cardBody: $("card-body"),
@@ -795,6 +803,12 @@ function paintProblem(problem, details) {
     dom.problemAction.textContent = problem ? problem.button : "";
     dom.problemAction.dataset.action = action;
   }
+  if (dom.problemWhere) {
+    const place = problem ? WHERE_KINDS[problem.kind] || "" : "";
+    dom.problemWhere.hidden = !place;
+    dom.problemWhere.dataset.place = place;
+    if (place) dom.problem.hidden = false;
+  }
   if (dom.problemDetails) {
     dom.problemDetails.hidden = !details;
     dom.problemDetails.open = false;
@@ -819,6 +833,19 @@ function runProblemAction(action) {
 if (dom.problemAction) {
   dom.problemAction.addEventListener("click", () =>
     runProblemAction(dom.problemAction.dataset.action || "none"));
+}
+
+/** "Show me where": Settings, at the place the fix names (plain-errors.js). */
+if (dom.problemWhere) {
+  dom.problemWhere.addEventListener("click", () => {
+    const place = dom.problemWhere.dataset.place || "";
+    try {
+      localStorage.setItem(SETTINGS_PLACE_KEY, JSON.stringify({ place, at: Date.now() }));
+    } catch {
+      /* no storage: Settings opens at the top, and the fix's words say where */
+    }
+    invoke("open_fix_place", { place: "settings" });
+  });
 }
 
 /* ==========================================================================

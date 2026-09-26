@@ -36,7 +36,9 @@ Three lists:
            app must refuse every one the backend refuses, and MAY refuse
            more, because each app also checks the address's shape.
 
-The wording (`message`) lives here, in one place, for both apps. It is one
+The wording (`message`, and the phone's `phone_message`, which names only
+the private-network names the phone can connect to) lives here, in one
+place, for both apps. It is one
 sentence on purpose: the desktop's link line shows only the first sentence
 of a reason ("Offline - <sentence>"), and the phone shows it as it is.
 """
@@ -66,6 +68,19 @@ MESSAGE = ("Jarvis's address {address} is not on your own networks, so this app 
            "address like 192.168.x.x or 10.x.x.x, or a name ending in .local), Tailscale "
            "(a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord).")
 MESSAGE_UNSHOWN = MESSAGE.replace("{address} ", "")
+
+#: The phone's own ending (ease-of-use audit 2026-09-27, #1e). The phone
+#: judges the address by the same rule, but it can only CONNECT in plain
+#: http:// to a name ending in .ts.net or .nord (and to itself):
+#: jarvis-client/app/src/main/res/xml/network_security_config.xml allows no
+#: other cleartext host, and a network security config cannot list an
+#: address range. So the phone's sentence names only what it can reach -
+#: suggesting 192.168.x.x or a .local name there would send the owner to an
+#: address that fails. The first half is MESSAGE's, word for word.
+PHONE_MESSAGE = ("Jarvis's address {address} is not on your own networks, so this app will not "
+                 "send your pairing key there: on this phone, use your PC's Tailscale name "
+                 "(ending in .ts.net) or its NordVPN Meshnet name (ending in .nord).")
+PHONE_MESSAGE_UNSHOWN = PHONE_MESSAGE.replace("{address} ", "")
 
 HOSTS = [
     # this PC
@@ -143,6 +158,8 @@ def build() -> dict:
                      "Do not edit by hand."),
         "message": MESSAGE,
         "message_unshown": MESSAGE_UNSHOWN,
+        "phone_message": PHONE_MESSAGE,
+        "phone_message_unshown": PHONE_MESSAGE_UNSHOWN,
         "hosts": [{"host": h, "own": L._own_network(h)} for h in HOSTS],
         "origins": [{"url": u, "own": backend_own(u)} for u in ORIGINS],
         "tricky": [{"url": u, "own": backend_own(u), "why": why} for u, why in TRICKY],

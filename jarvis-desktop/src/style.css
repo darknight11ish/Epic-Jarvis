@@ -1412,6 +1412,11 @@ html[data-state="error"] .pulse {
   word-break: break-word;
   font-size: 11px;
   color: var(--text-muted);
+  /* Selectable, so it can be copied by hand into a bug report (ease-of-use
+     audit #6). No Copy button: Windows' clipboard can sync off this PC. */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 .answer-used-line { color: var(--text-muted); }
 .answer-used-list { margin-top: 6px; }

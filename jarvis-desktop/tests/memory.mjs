@@ -165,11 +165,33 @@ await check("a retired fact offers no Forget or Reword - only Erase the words", 
   assert.deepEqual(buttons, ["Erase the words"], "a retired fact should offer only Erase");
 });
 
+await check("the filter box narrows the loaded list by its words, and asks the PC nothing", async () => {
+  // Ease-of-use audit 2026-09-27 #7.
+  const page = await memoryTab();
+  const before = await page.locator("#memory-facts .row-item").count();
+  await page.locator("#memory-facts-filter").fill("powershell");
+  await page.waitForTimeout(100);
+  const titles = await page.locator("#memory-facts .row-item .row-title").allInnerTexts();
+  await page.locator("#memory-facts-filter").fill("zzz-nothing");
+  await page.waitForTimeout(100);
+  const none = await page.locator("#memory-facts").innerText();
+  await page.locator("#memory-facts-filter").fill("");
+  await page.waitForTimeout(100);
+  const after = await page.locator("#memory-facts .row-item").count();
+  const sent = await writes(page);
+  await page.close();
+  assert.equal(before, 3);
+  assert.deepEqual(titles.map((t) => t.trim()), ["Prefers explicit PowerShell cmdlets over aliases."]);
+  assert.match(none, /No fact on this list has those words/);
+  assert.equal(after, 3);
+  assert.deepEqual(sent, []);
+});
+
 /* ── The switch renders the answer, not the request ──────────────────────── */
 
 await check("the learning switch reflects what the server said", async () => {
   const page = await memoryTab();
-  await page.getByRole("button", { name: "Stop learning" }).click();
+  await page.getByRole("button", { name: "Pause background learning" }).click();
   await page.waitForTimeout(300);
   const sent = await writes(page);
   await page.close();
@@ -183,11 +205,11 @@ await check("turning learning on waits for its approval card, and says so", asyn
   // pane used to read any non-enabled answer as "Learning is off."
   const brain = { ...K.BRAIN, memory_facts: { ...K.BRAIN.memory_facts, learning: false } };
   const page = await memoryTab({ brain, learningWaits: true });
-  await page.getByRole("button", { name: "Start learning" }).click();
+  await page.getByRole("button", { name: "Start background learning" }).click();
   await page.waitForTimeout(400);
   const toast = await page.locator("#toast").innerText();
   const line = await page.locator("#memory-learning .learning-waiting").innerText();
-  const still = await page.getByRole("button", { name: "Start learning" }).count();
+  const still = await page.getByRole("button", { name: "Start background learning" }).count();
   const sent = await writes(page);
   await page.close();
   assert.equal(sent.length, 1);
@@ -225,7 +247,7 @@ await check("when the environment overrides the switch, the toast says so", asyn
   // and still refuses, so a pane that rendered its own request would show
   // "off" while the learner kept running.
   const page = await memoryTab({ learningFloor: true });
-  await page.getByRole("button", { name: "Stop learning" }).click();
+  await page.getByRole("button", { name: "Pause background learning" }).click();
   await page.waitForTimeout(400);
   const toast = await page.locator("#toast").innerText();
   await page.close();
@@ -377,7 +399,7 @@ const STATUS = realPython(
   + "st.add('The owner lives in Leeds', source='extracted', supersedes=a)\n"
   + "print(json.dumps(st.status()))");
 
-await check("the Faculties memory card shows what the real store reports", async () => {
+await check("the Model tab's memory card shows what the real store reports", async () => {
   const memory = { available: true, ...STATUS, sleep_time: { enabled: false, remind: true } };
   const page = await K.open(browser, base, "brain.html", { brain: { ...K.BRAIN, memory } }, SIZE);
   await page.locator("#tab-faculties").click();

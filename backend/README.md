@@ -661,7 +661,7 @@ neighbour, with a prompt that shows the owner the note and says it will be read
 every time the skill runs; and `cards()` returns `notes`, so anything steering
 an answer is on a screen the owner can reach.
 
-That screen is the Brain window's Faculties view: each skill's notes are
+That screen is the Brain window's Model view (called Faculties before the ease-of-use audit's wording pass): each skill's notes are
 listed under it as "Jarvis's note: ..." (`brain.js` `renderSkills`, since
 2026-09-23 - before that, the notes were sent and nothing drew them).
 
@@ -9988,7 +9988,7 @@ same short sentence, then one thing to do, with one button - for example:
 |---|---|
 | Phone: "Cannot reach the desktop: failed to connect to /100.64.1.2 (port 8765) after 10000ms. Check your private network ..." | "Your PC isn't answering. It may be asleep or switched off, or Tailscale or NordVPN Meshnet may be off at one end. Wake the PC, check the private network on both, then try again." [Try again] |
 | Phone: "The desktop answered 503." | "That part of Jarvis isn't running on your PC right now. Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it." |
-| Desktop: "could not reach the Jarvis server at http://127.0.0.1:8765. Is it running?" | "Jarvis isn't running on your PC. The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start Jarvis), then try again." [Try again] |
+| Desktop: "could not reach the Jarvis server at http://127.0.0.1:8765. Is it running?" | "Jarvis isn't running on your PC. The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, then More options, and press Start under "Starting Jarvis for you" (it needs "Let Jarvis Desktop start and stop Jarvis" on). Or start it in PowerShell, the way you set it up. Then try again." [Try again] (desktop also: [Show me where], ease-of-use audit 2026-09-27 #2) |
 | Desktop answer card: "Streaming" and "42 chunks · 3.4s" | "Answering…", nothing in the corner |
 | "Thinking…" for 10-20 seconds after standby | "Waking up the model - the first answer after standby takes a little longer." |
 
@@ -10069,7 +10069,15 @@ chat even while tools are switched on.
 | the event stream | it does not open, or sends no hello |
 | the voice models | speech-to-text or the voice is not installed (a WARN only - typing works without them) |
 | calendar, email, web search | calendar and email: says whether each is set up, and reads nothing unless `--with-reads`. Web search: tested ONLY when it is switched on and a provider is chosen, and then through the Test search button's own route (one search for the word "wikipedia") |
+| the PC stays awake | Windows puts the PC to sleep on mains power (a WARN only: alarms, reminders and "tell me when" go off by the PC's clock, and nothing goes off while it sleeps). Read with `powercfg /query` (read-only); the WARN gives the one line that keeps it awake while plugged in, `powercfg /change standby-timeout-ac 0`. Skipped off Windows (ease-of-use audit 2026-09-27, #8d) |
 | Windows Credential Manager | it does not answer |
+
+**The wrong folder is one message, not a FAIL per check** (ease-of-use
+audit 2026-09-27, #8b). Before anything is checked, `selftest.py` (both
+modes) looks for `jarvis_hud.py` in the backend folder - `JARVIS_BACKEND`,
+or this repository's own `backend` folder when that is not set. When it is
+not there, it prints one message with the line to run and stops (exit code
+2), instead of a FAIL for every check.
 
 **Read-only.** It never approves or denies a card, never sends an email,
 never unloads a model, never changes a setting, and never presses Stop

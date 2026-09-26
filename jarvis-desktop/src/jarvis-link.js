@@ -397,12 +397,12 @@ export function linkWords(state = link) {
   if (s.stale !== false) {
     return {
       tone: "warn",
-      short: "Stale — reconnecting",
-      text: "Stale — reconnecting. Nothing can be approved until it catches up.",
+      short: "Catching up…",
+      text: "Catching up… Nothing can be approved until it has.",
       canAct: false,
     };
   }
-  return { tone: "ok", short: "Linked", text: "Linked", canAct: true };
+  return { tone: "ok", short: "Connected", text: "Connected", canAct: true };
 }
 
 /** The interruption budget as last reported. */

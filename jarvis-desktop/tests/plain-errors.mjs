@@ -214,6 +214,11 @@ await check("a failure: the plain words, ONE fix button, the PC's sentence behin
   assert.ok(got.answer.includes(CASES.kinds.model_missing.fix), got.answer);
   assert.equal(got.button, "Choose a model");
   assert.ok(got.details.includes("qwen3:14b"), got.details);
+  // Selectable for a bug report (ease-of-use audit #6); the rest of the bar is not.
+  const select = await page.evaluate(() => [
+    getComputedStyle(document.getElementById("problem-details-text")).userSelect,
+    getComputedStyle(document.body).userSelect]);
+  assert.deepEqual(select, ["text", "none"]);
   await page.locator("#problem-action").click();
   const opened = await page.evaluate(() => window.__opened);
   await page.close();
@@ -256,6 +261,59 @@ await check("Try again sends the same question, with the same tag", async () => 
   assert.equal(asked[0], asked[1], "the same words and the same provenance");
   assert.ok(after.includes("Back."), after);
   assert.ok(problemHidden, "the old fix button stays after a good answer");
+});
+
+await check("\"Jarvis isn't running\": a second button opens Settings at Starting Jarvis for you", async () => {
+  // Ease-of-use audit 2026-09-27 #2: the fix names the real place, and the
+  // desktop opens it - "More options" open, the card scrolled to.
+  const line = ERROR_LINE_PREFIX + JSON.stringify({ network: "refused", detail: "x" });
+  const page = await K.open(browser, base, "index.html", {}, { width: 750, height: 600 });
+  await page.evaluate((l) => {
+    window.__opened = [];
+    const core = window.__TAURI__.core;
+    const inner = core.invoke;
+    core.invoke = async (cmd, args) => {
+      if (cmd === "stream_chat") throw new Error(l);
+      if (cmd === "open_fix_place") { window.__opened.push(args.place); return null; }
+      return inner(cmd, args);
+    };
+  }, line);
+  await page.locator("#prompt").fill("hi");
+  await page.locator("#prompt").press("Enter");
+  await page.waitForTimeout(300);
+  const said = await page.locator("#answer").textContent();
+  assert.ok(said.includes("More options") && said.includes("Starting Jarvis for you"), said);
+  assert.equal(await page.locator("#problem-action").textContent(), "Try again");
+  assert.equal(await page.locator("#problem-where").isVisible(), true);
+  await page.locator("#problem-where").click();
+  const opened = await page.evaluate(() => window.__opened);
+  const left = await page.evaluate(() => JSON.parse(localStorage.getItem("jarvis.settings.place")));
+  await page.close();
+  assert.deepEqual(opened, ["settings"]);
+  assert.equal(left.place, "start-jarvis");
+
+  const sp = await K.open(browser, base, "settings.html", {}, { width: 900, height: 900 });
+  await sp.evaluate(() => localStorage.setItem("jarvis.settings.place",
+    JSON.stringify({ place: "start-jarvis", at: Date.now() })));
+  await sp.reload();
+  await sp.waitForTimeout(400);
+  const got = await sp.evaluate(() => ({
+    open: document.getElementById("more-options").open,
+    top: document.getElementById("start-jarvis").getBoundingClientRect().top,
+    kept: localStorage.getItem("jarvis.settings.place"),
+  }));
+  await sp.close();
+  assert.equal(got.open, true, "More options opens");
+  assert.ok(got.top >= -2 && got.top < 200, `the card is in view (top ${got.top})`);
+  assert.equal(got.kept, null, "the place is taken once");
+});
+
+await check("another failure shows no \"Show me where\"", async () => {
+  const body = "data: " + JSON.stringify({ error: { message: "x", type: "jarvis", code: "model_missing" } });
+  const { page } = await ask([body]);
+  const where = await page.locator("#problem-where").isVisible();
+  await page.close();
+  assert.equal(where, false);
 });
 
 /* ── Settings -> How Jarvis talks ─────────────────────────────────────── */

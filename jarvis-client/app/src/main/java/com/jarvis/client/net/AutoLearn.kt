@@ -273,7 +273,7 @@ object AutoLearn {
      * learning is off.
      */
     const val LEARNING_OFF_NOTE =
-        "Background learning is off, so nothing is saved automatically. Start learning above to use this."
+        "Background learning is off, so nothing is saved automatically. Start background learning above to use this."
 
     const val SENSITIVE_NEEDS_AUTO = "\"Learn automatically\" is off, so this changes nothing until it is on."
 

@@ -418,13 +418,13 @@ The direction is the signal — colour alone fails for one man in twelve.`;
 // ---- the stub bridge -----------------------------------------------------
 
 export const HOTKEYS = [
-  { id: "toggle_quickbar", label: "Summon Jarvis", hint: "Show or hide the spotlight bar from anywhere.",
+  { id: "toggle_quickbar", label: "Show or hide the Jarvis bar", hint: "From anywhere, whatever program is in front.",
     accelerator: "Alt+Space", default: "Alt+Space", registered: true, error: null },
   { id: "ingest_clipboard", label: "Attach the clipboard", hint: "Put whatever is on the clipboard into the bar as context.",
     accelerator: "Super+Shift+J", default: "Super+Shift+J", registered: true, error: null },
   { id: "capture_screen", label: "Attach a screen capture", hint: "Not Win+Shift+S — the Snipping Tool owns that at the shell level.",
     accelerator: "Alt+Shift+S", default: "Alt+Shift+S", registered: true, error: null },
-  { id: "quick_note", label: "Quick note", hint: "Summon the bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
+  { id: "quick_note", label: "Quick note", hint: "Open the Jarvis bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
     accelerator: "Alt+Shift+N", default: "Alt+Shift+N", registered: true, error: null },
   { id: "toggle_widget", label: "Show or hide the widget", hint: "The desktop pane with the meters and the gates.",
     accelerator: "Alt+Shift+W", default: "Alt+Shift+W", registered: true, error: null },

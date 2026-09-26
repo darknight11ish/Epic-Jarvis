@@ -352,7 +352,7 @@ class EventService : Service() {
             activity == Activity.WORKING -> "Working"
             activity == Activity.PAUSED -> "Paused"
             activity == Activity.ERROR -> "Something went wrong"
-            else -> "Linked"
+            else -> "Connected"
         }
 
         val notification: Notification =

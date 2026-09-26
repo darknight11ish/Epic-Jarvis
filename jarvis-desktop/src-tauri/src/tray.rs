@@ -255,7 +255,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let toggle_spotlight = MenuItem::with_id(
         app,
         ID_TOGGLE_SPOTLIGHT,
-        "Show or hide Spotlight",
+        "Show or hide the Jarvis bar",
         true,
         // Read, not hardcoded. The tray is the fallback surface for exactly
         // the case where a hotkey was refused or rebound, so a tray that
@@ -289,7 +289,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         false,
         None::<&str>,
     )?;
-    let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings…", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings and help…", true, None::<&str>)?;
     let status_check = MenuItem::with_id(
         app,
         ID_STATUS_CHECK,
@@ -1076,7 +1076,11 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_APPROVALS => {
             if let Err(err) = windows::show_quickbar(app) {
                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
-                commands::notify(app, "Jarvis", &format!("Quickbar unavailable: {err}"));
+                commands::notify(
+                    app,
+                    "Jarvis",
+                    &format!("The Jarvis bar could not open: {err}"),
+                );
                 return;
             }
             crate::emit_quickbar(app, events::SHOW_APPROVAL, ());
@@ -1125,7 +1129,11 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_WAITING => {
             if let Err(err) = windows::show_quickbar(app) {
                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
-                commands::notify(app, "Jarvis", &format!("Quickbar unavailable: {err}"));
+                commands::notify(
+                    app,
+                    "Jarvis",
+                    &format!("The Jarvis bar could not open: {err}"),
+                );
                 return;
             }
             crate::emit_quickbar(app, events::SHOW_DIGEST, ());

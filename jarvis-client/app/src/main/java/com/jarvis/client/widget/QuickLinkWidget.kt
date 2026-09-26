@@ -88,7 +88,7 @@ class QuickLinkWidget : GlanceAppWidget() {
                 Spacer(GlanceModifier.width(8.dp))
                 Text(
                     text = when (link) {
-                        LinkState.CONNECTED -> "Linked"
+                        LinkState.CONNECTED -> "Connected"
                         LinkState.RECONNECTING -> "Reconnecting"
                         LinkState.OFFLINE -> "Offline"
                     },

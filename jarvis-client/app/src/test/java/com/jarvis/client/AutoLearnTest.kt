@@ -145,7 +145,7 @@ class AutoLearnTest {
         // "Learn automatically" means nothing while background learning is
         // off, and says so - in the desktop's sentence (fit audit item 10).
         assertEquals(
-            "Background learning is off, so nothing is saved automatically. Start learning above to use this.",
+            "Background learning is off, so nothing is saved automatically. Start background learning above to use this.",
             AutoLearn.LEARNING_OFF_NOTE,
         )
         assertTrue(AutoLearn.stateLine(Which.AUTO, Switch.ON, false, true).endsWith(" " + AutoLearn.LEARNING_OFF_NOTE))

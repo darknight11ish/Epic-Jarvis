@@ -44,7 +44,7 @@ await check("every bindable action is listed", async () => {
   const list = await rows(page);
   await page.close();
   assert.equal(list.length, 6, `${list.length} rows, expected 6`);
-  assert.equal(list[0].name, "Summon Jarvis");
+  assert.equal(list[0].name, "Show or hide the Jarvis bar");
   assert.equal(list[0].key, "Alt + Space");
   // "Stop everything" (2026-09-25): listed like the others, so it can be
   // moved off Alt+Shift+X if something else on the PC needs that.
@@ -66,7 +66,7 @@ await check("Stop everything is in the tray menu too, the same command, never gr
   // And Settings' promise about the tray is true of what it names.
   const html = read("src/settings.html");
   assert.doesNotMatch(html, /Everything here is also in the tray menu/);
-  assert.match(html.replace(/\s+/g, " "), /Summon Jarvis, the widget and Stop everything are also in the tray menu\./);
+  assert.match(html.replace(/\s+/g, " "), /The Jarvis bar, the widget and Stop everything are also in the tray menu\./);
   for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything"]) {
     assert.match(tray, new RegExp(`accel\\(app, "${id}"\\)`), `${id} has no tray row`);
   }
@@ -124,7 +124,7 @@ await check("a refused binding says so, and does not say working", async () => {
   });
   const list = await rows(page);
   await page.close();
-  const summon = list.find((r) => r.name === "Summon Jarvis");
+  const summon = list.find((r) => r.name === "Show or hide the Jarvis bar");
   assert.equal(summon.bound, "false");
   assert.match(summon.state, /in use/i, `said "${summon.state}"`);
   assert.doesNotMatch(summon.state, /working/i);
@@ -259,7 +259,7 @@ await check("each field says which action it belongs to", async () => {
   await page.close();
   // Without this every one of the five announces as a bare combination.
   assert.ok(labels.every((l) => l && l.length > 12), `got ${JSON.stringify(labels)}`);
-  assert.match(labels[0], /Summon Jarvis/);
+  assert.match(labels[0], /Show or hide the Jarvis bar/);
 });
 
 await check("a refused row is not marked by colour alone", async () => {

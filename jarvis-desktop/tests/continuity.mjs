@@ -95,8 +95,14 @@ await check("linkWords: offline, connecting, stale and linked", async () => {
   const stale = link.linkWords({ connected: true, stale: true });
   assert.equal(stale.tone, "warn");
   assert.equal(stale.canAct, false);
-  assert.match(stale.text, /^Stale — reconnecting/);
+  assert.match(stale.text, /^Catching up… Nothing can be approved/);
   assert.equal(link.linkWords({ connected: true, stale: false }).canAct, true);
+  // One wording in both apps (ease-of-use audit 2026-09-27 #5): the phone's
+  // Home line says the same two words.
+  assert.equal(link.linkWords({ connected: true, stale: false }).text, "Connected");
+  const home = readFileSync(new URL("../../jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt", import.meta.url), "utf8");
+  assert.ok(home.includes('"Catching up…"') && home.includes('"Connected"'), "the phone's words");
+  assert.ok(!/"Linked|Stale — reconnecting/.test(home), "the phone's old words are gone");
 });
 
 /* ── The owner's colours in the chrome ───────────────────────────────────── */
@@ -176,7 +182,7 @@ await check("Settings: text size buttons, the face section closed, and Open Face
 
 await check("Settings: the connection line and the FAQ say Meshnet, and the mic FAQ is current", async () => {
   const page = await K.open(browser, base, "settings.html", { link: { stale: true } }, { width: 760, height: 1400 });
-  assert.match(await page.locator("#link-text").textContent(), /Stale — reconnecting/);
+  assert.match(await page.locator("#link-text").textContent(), /Catching up…/);
   const html = read("src/settings.html");
   assert.match(html, /NordVPN Meshnet/);
   assert.match(html, /\.nord/);
@@ -225,7 +231,7 @@ await check("the quickbar shows stale in amber, and keeps saying nothing runs un
   const page = await K.open(browser, base, "index.html", { pending: [K.APPROVAL_PLAIN], link: { stale: true } });
   assert.equal(await page.locator("#offline").isVisible(), true);
   assert.equal(await page.locator("#offline").getAttribute("data-tone"), "warn");
-  assert.match(await page.locator("#offline-text").textContent(), /Stale/);
+  assert.match(await page.locator("#offline-text").textContent(), /Catching up…/);
   assert.match(await page.locator(".approval-reassure").textContent(), /Nothing runs until you decide/);
   assert.match(await page.locator("#mic-label").textContent(), /Space or Enter/);
   await page.close();
@@ -242,7 +248,7 @@ await check("Brain: a failed read is amber with a Retry, a missing module is gre
   assert.equal(await page.locator("#memory-facts .empty button").count(), 0);
   // The rush latch is on every view now, not only behind Advanced > Trust.
   assert.equal(await page.locator("#rush-strip").isVisible(), true);
-  assert.match(await page.locator("#link-text").textContent(), /Stale/);
+  assert.match(await page.locator("#link-text").textContent(), /Catching up…/);
   assert.match(await page.locator("#freshness").textContent(), /last known/);
   await page.close();
 });

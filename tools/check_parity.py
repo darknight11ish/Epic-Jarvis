@@ -185,7 +185,7 @@ CLASSIFICATION = {
     "/api/show": ("not-backend", "Ollama's /api/show on loopback: does the model take pictures (vision.rs)."),
     "/api/shutdown": ("deliberate", "Shutting the backend down from a phone is a foot-gun: the phone would then have nothing to reach and no way to undo it."),
     "/api/skills": ("ported", "Brain screen, read-only."),
-    "/api/skills/decide": ("ported", "Removing a skill, after an are-you-sure, as on the desktop (Brain, Faculties, Skills). Phone: Brain, Skills (SkillsPlate.kt, net/Skills.kt). Never held on a stale link; a card the PC raises is shown as waiting. Removal only - no app can install a skill."),
+    "/api/skills/decide": ("ported", "Removing a skill, after an are-you-sure, as on the desktop (Brain, Model, Skills). Phone: Brain, Skills (SkillsPlate.kt, net/Skills.kt). Never held on a stale link; a card the PC raises is shown as waiting. Removal only - no app can install a skill."),
     "/api/status": ("ported", ""),
     "/api/tags": ("not-backend", "Ollama's /api/tags on loopback: the installed model list (commands.rs). Not a Jarvis route."),
     "/api/task/note": ("ported", ""),

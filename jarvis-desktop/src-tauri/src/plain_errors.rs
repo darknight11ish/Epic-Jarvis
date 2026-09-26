@@ -34,8 +34,10 @@ use crate::commands::{
 
 /// `jarvis_not_running`: nothing listens at the address (connection refused).
 pub(crate) const NOT_RUNNING_SAYS: &str = "Jarvis isn't running on your PC.";
-pub(crate) const NOT_RUNNING_FIX: &str = "The PC is on, but Jarvis is not started. Start it \
-     from the desktop app (Settings, Start Jarvis), then try again.";
+pub(crate) const NOT_RUNNING_FIX: &str = "The PC is on, but Jarvis is not started. On the PC, \
+     open Jarvis Desktop's Settings, then More options, and press Start under \"Starting Jarvis \
+     for you\" (it needs \"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in \
+     PowerShell, the way you set it up. Then try again.";
 /// `timeout`: connected, then no answer in time.
 pub(crate) const TIMEOUT_SAYS: &str = "Jarvis took too long to answer.";
 pub(crate) const TIMEOUT_FIX: &str =

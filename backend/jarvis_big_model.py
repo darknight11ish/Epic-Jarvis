@@ -173,7 +173,8 @@ JOB_WHAT = {
              "of the second graphics card. Much slower; for when you want a bigger model "
              "to write the pages, or have no second card."),
     "deep_questions": ("Ask a question that deserves a careful answer. It is answered in "
-                       "the background by the big model and kept for you to read later."),
+                       "the background by the big model, and the answer stays for you to "
+                       "read until Jarvis stops or restarts."),
 }
 
 UNVERIFIED = ("None of colibri's speed figures have been checked on this PC. The numbers "

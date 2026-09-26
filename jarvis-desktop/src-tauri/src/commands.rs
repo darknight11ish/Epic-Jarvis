@@ -1086,9 +1086,10 @@ fn validate_base(base: &str) -> Result<(), String> {
 // Judged by spelling alone: nothing is looked up, no DNS, no network call.
 
 /// What the owner sees when an address is refused - one sentence, so the
-/// link line ("Offline — <first sentence>") shows all of it. The same words
-/// as the phone's `OwnNetwork.MESSAGE`; both are checked against the
-/// `message` in own-network-cases.json.
+/// link line ("Offline — <first sentence>") shows all of it. Checked against
+/// the `message` in own-network-cases.json. The phone's `OwnNetwork.MESSAGE`
+/// (`phone_message` there) shares its first half and names only the .ts.net
+/// and .nord names, the only ones the phone can connect to.
 pub(crate) const OWN_NETWORK_MESSAGE: &str = "Jarvis's address {address} is not on your own \
      networks, so this app will not send your pairing key there: use this PC (localhost), your \
      home network (an address like 192.168.x.x or 10.x.x.x, or a name ending in .local), \

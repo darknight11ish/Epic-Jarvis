@@ -298,7 +298,7 @@
           <ul class="primer-list">
             <li>
               <span class="primer-keys" data-hotkey="toggle_quickbar"><kbd>Alt</kbd>+<kbd>Space</kbd></span>
-              <span>Summon or dismiss this bar, from anywhere</span>
+              <span>Show or hide the Jarvis bar, from anywhere</span>
             </li>
             <li>
               <span class="primer-keys" data-hotkey="capture_screen"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></span>
@@ -310,7 +310,7 @@
             </li>
             <li>
               <span class="primer-keys" data-hotkey="quick_note"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span>
-              <span>Summon the bar ready to file a note (Logseq, or the first note app that is set up)</span>
+              <span>Open the Jarvis bar ready to file a note (Logseq, or the first note app that is set up)</span>
             </li>
             <li>
               <span class="primer-keys" data-hotkey="toggle_widget"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></span>
@@ -357,9 +357,9 @@
                memory injection pins a turn local and latches it, and a cloud
                turn drops every role but the user's own words. -->
           <p class="primer-foot">
-            Nothing runs without you. Every action Jarvis wants to take stops
-            here first. Anything private stays on the local model — watch the
-            route badge, which says where each answer came from.
+            Anything risky waits here for your yes first. Anything private
+            stays on the local model — the small Local or Cloud label says
+            where each answer came from.
           </p>
         </section>
 
@@ -620,6 +620,9 @@
                  (plain-errors.js; the phone shows the same words). -->
             <div class="answer-problem" id="answer-problem" hidden>
               <button class="text-button" type="button" id="problem-action" hidden></button>
+              <!-- "Jarvis isn't running" only (ease-of-use audit #2): opens
+                   Settings at "Starting Jarvis for you", More options open. -->
+              <button class="text-button" type="button" id="problem-where" hidden>Show me where</button>
               <details class="problem-details" id="problem-details" hidden>
                 <summary>Details</summary>
                 <pre class="problem-details-text" id="problem-details-text"></pre>

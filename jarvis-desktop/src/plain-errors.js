@@ -38,7 +38,7 @@ const TABLE = {
   ],
   jarvis_not_running: [
     "Jarvis isn't running on your PC.",
-    "The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start Jarvis), then try again.",
+    "The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, then More options, and press Start under \"Starting Jarvis for you\" (it needs \"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in PowerShell, the way you set it up. Then try again.",
     "retry",
   ],
   name_not_found: [
@@ -78,12 +78,12 @@ const TABLE = {
   ],
   backend_too_old: [
     "Your PC's Jarvis is too old for this.",
-    "Update it: on the PC, run apply-patches.ps1, then restart Jarvis.",
+    "Update it: on the PC, run apply-patches.ps1, then restart Jarvis. The steps are in Help: \"How do I update Jarvis?\"",
     "none",
   ],
   feature_off: [
     "That part of Jarvis isn't running on your PC right now.",
-    "Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it.",
+    "Restart Jarvis on the PC. If it stays off, update it - the steps are in Help: \"How do I update Jarvis?\"",
     "none",
   ],
   server_error: [
@@ -93,7 +93,7 @@ const TABLE = {
   ],
   unreadable: [
     "Your PC answered in a way this app can't read.",
-    "Update both: run apply-patches.ps1 on the PC, and install the latest app.",
+    "Update both: run apply-patches.ps1 on the PC, and install the latest app. The steps are in Help: \"How do I update Jarvis?\"",
     "none",
   ],
   timeout: [
@@ -134,6 +134,21 @@ const TABLE = {
   // The PC said what is wrong in its own sentence: shown as it is.
   pc_said: ["", "", "none"],
 };
+
+/**
+ * "Show me where" (desktop only, ease-of-use audit 2026-09-27 #2): under
+ * "Jarvis isn't running on your PC." the quickbar offers a second button
+ * that opens Settings at "Starting Jarvis for you", with "More options"
+ * open. The quickbar leaves the place under this key (both windows share
+ * one origin), Settings takes it and removes it. A convenience only: when
+ * storage is unavailable, Settings simply opens at the top.
+ */
+export const SETTINGS_PLACE_KEY = "jarvis.settings.place";
+export const START_PLACE = "start-jarvis";
+/** The kinds that offer "Show me where". */
+export const WHERE_KINDS = Object.freeze({ jarvis_not_running: START_PLACE });
+/** How long a left place is still taken, in milliseconds. */
+export const PLACE_FRESH_MS = 60_000;
 
 /** kind -> { says, fix, action, button } */
 export const KINDS = Object.freeze(

@@ -55,8 +55,10 @@ object PlainErrors {
         ),
         "jarvis_not_running" to Kind(
             "Jarvis isn't running on your PC.",
-            "The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start " +
-                "Jarvis), then try again.",
+            "The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, " +
+                "then More options, and press Start under \"Starting Jarvis for you\" (it needs " +
+                "\"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in PowerShell, the " +
+                "way you set it up. Then try again.",
             RETRY,
         ),
         "name_not_found" to Kind(
@@ -98,12 +100,12 @@ object PlainErrors {
         ),
         "backend_too_old" to Kind(
             "Your PC's Jarvis is too old for this.",
-            "Update it: on the PC, run apply-patches.ps1, then restart Jarvis.",
+            "Update it: on the PC, run apply-patches.ps1, then restart Jarvis. The steps are in Help: \"How do I update Jarvis?\"",
             NONE,
         ),
         "feature_off" to Kind(
             "That part of Jarvis isn't running on your PC right now.",
-            "Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it.",
+            "Restart Jarvis on the PC. If it stays off, update it - the steps are in Help: \"How do I update Jarvis?\"",
             NONE,
         ),
         "server_error" to Kind(
@@ -114,7 +116,7 @@ object PlainErrors {
         ),
         "unreadable" to Kind(
             "Your PC answered in a way this app can't read.",
-            "Update both: run apply-patches.ps1 on the PC, and install the latest app.",
+            "Update both: run apply-patches.ps1 on the PC, and install the latest app. The steps are in Help: \"How do I update Jarvis?\"",
             NONE,
         ),
         "timeout" to Kind(

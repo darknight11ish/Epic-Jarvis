@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 """First-run self test: does this Jarvis backend actually work?
 
-    python backend\\selftest.py
-    python backend\\selftest.py --preflight      the Jarvis that is RUNNING now
+From this repository's folder, naming your backend folder (the one holding
+jarvis_hud.py) first - one PowerShell line:
+
+    $env:JARVIS_BACKEND = "C:\\...\\Desktop program"; py -3 backend\\selftest.py
+    ... py -3 backend\\selftest.py --preflight      the Jarvis that is RUNNING now
+
+Without JARVIS_BACKEND it looks in this repository's own backend folder,
+which holds no jarvis_hud.py; it then says so in one message and stops,
+rather than printing a FAIL for every check (ease-of-use audit 2026-09-27).
 
 WHY THIS EXISTS
 
@@ -853,7 +860,7 @@ class Live:
 
     def __init__(self, *, port=None, http=None, stream_head=None, ollama=None,
                  ollama_post=None, ollama_base=None, tokens=None, backend=None, repo=None, env=None, with_reads=False,
-                 with_chat=False, log_dir=None, token_store=None, reads=None, home=None):
+                 with_chat=False, log_dir=None, token_store=None, reads=None, home=None, power=None):
         self.env = os.environ if env is None else env
         p = port or (self.env.get("JARVIS_HUD_PORT") or "").strip() or DEFAULT_PORT
         try:
@@ -878,6 +885,7 @@ class Live:
         self.token_store = token_store  # target -> store, for the Credential Manager check
         self.reads = reads              # {"email": fn, "calendar": fn} stand-ins
         self.home = home                # {"check": fn, "weather": fn} stand-ins
+        self.power = power              # () -> powercfg's text or None, for the sleep check
         self.token = None
         self.token_where = None
         self.up = False
@@ -1737,6 +1745,49 @@ def pf_home(live: Live) -> list:
                      str((out or {}).get("reason") or "no reason given")[:200]))
     return rows
 
+def _powercfg_sleep() -> "str | None":
+    """`powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE`'s text, or None
+    when this is not Windows or it cannot be asked. Read-only."""
+    if os.name != "nt":
+        return None
+    try:
+        r = subprocess.run(["powercfg", "/query", "SCHEME_CURRENT", "SUB_SLEEP", "STANDBYIDLE"],
+                           capture_output=True, text=True, timeout=15)
+    except Exception:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def sleep_after_on_mains(text: str) -> "int | None":
+    """Seconds until Windows sleeps on mains power (0: never), or None when
+    the text cannot be read. powercfg's words are in the PC's own language,
+    so only the numbers are read: its block ends with the current mains (AC)
+    value, then the battery (DC) value, each a 0x... number."""
+    hexes = re.findall(r"0x([0-9a-fA-F]{8})\b", str(text or ""))
+    if len(hexes) < 2:
+        return None
+    return int(hexes[-2], 16)
+
+
+@preflight_check("sleep", "Does this PC stay awake for alarms and reminders?")
+def pf_sleep(live: Live) -> list:
+    text = (live.power or _powercfg_sleep)()
+    if text is None:
+        return [(SKIP, "the sleep setting, because this is not Windows or powercfg did not answer")]
+    secs = sleep_after_on_mains(text)
+    if secs is None:
+        return [(WARN, "the sleep setting could not be read",
+                 "powercfg answered in a way this check does not know. Look in Windows "
+                 "Settings -> System -> Power -> Screen and sleep.")]
+    if secs == 0:
+        return [(PASS, "Windows never puts this PC to sleep while it is plugged in")]
+    mins = max(1, round(secs / 60))
+    return [(WARN, f"Windows puts this PC to sleep after {mins} minute(s) on mains power",
+             "Alarms, reminders and \"tell me when\" ring on the PC's clock: while it sleeps "
+             "nothing goes off, and the phone cannot reach Jarvis. To keep it awake while "
+             "plugged in (the screen can still turn off), run this one line in PowerShell: "
+             "powercfg /change standby-timeout-ac 0")]
+
 
 @preflight_check("credentials", "Is Windows Credential Manager reachable?")
 def pf_credentials(live: Live) -> list:
@@ -1805,7 +1856,31 @@ def jarvis_version() -> str:
     return v if re.fullmatch(r"\d+\.\d+\.\d+", v) else "unknown"
 
 
+#: The one line to run it, with the owner's folder as the example.
+RUN_LINE = ('$env:JARVIS_BACKEND = "C:\\Users\\pcadmin\\Documents\\Claude\\Open jarvis files'
+            '\\Desktop program"; py -3 backend\\selftest.py')
+
+
+def wrong_folder(backend: Path, mode: str = "") -> str:
+    """"" when `backend` holds jarvis_hud.py, else ONE message saying what to
+    do - instead of a FAIL for every check, which reads as "everything is
+    broken" when only the folder is wrong."""
+    if (Path(backend) / "jarvis_hud.py").is_file():
+        return ""
+    line = RUN_LINE + (f" {mode}" if mode else "")
+    return (f"jarvis_hud.py is not in {backend}, so that is not your backend folder, and\n"
+            "every check would fail for that reason alone. Nothing was checked.\n\n"
+            "Open PowerShell in this repository's folder (cd \"$env:USERPROFILE\\Epic-Jarvis\")\n"
+            "and run this one line, with YOUR backend folder - the one holding\n"
+            "jarvis_hud.py - between the first quotes:\n\n"
+            f"    {line}\n")
+
+
 def preflight_main(argv) -> int:
+    wrong = wrong_folder(BACKEND, "--preflight")
+    if wrong:
+        print(wrong)
+        return 2
     print("Preflight: the Jarvis that is running now, every chain end to end.")
     print("Read-only: it approves nothing, sends no email, unloads no model and")
     print("changes no setting. The pairing token is used, never shown.")
@@ -1824,6 +1899,10 @@ def preflight_main(argv) -> int:
 # ==========================================================================
 
 def main() -> int:
+    wrong = wrong_folder(BACKEND)
+    if wrong:
+        print(wrong)
+        return 2
     print(__doc__.split("WHY THIS EXISTS")[0].strip())
     print(f"\nversion : {jarvis_version()} (this copy of the Jarvis files)")
     print(f"backend : {BACKEND}")

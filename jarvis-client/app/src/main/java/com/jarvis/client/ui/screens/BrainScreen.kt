@@ -241,9 +241,10 @@ fun BrainScreen(
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
         // Titled "Brain", the word on Home's button that opens it and the
         // PC's name for the same place (the owner's decision of 2026-09-26:
-        // "Mind" became "Brain" to match the desktop), with the old title
-        // kept underneath (screens-15) - the same as Help does.
-        TopBar("Brain", onBack, subtitle = "State of mind") {
+        // "Mind" became "Brain" to match the desktop). The old subtitle,
+        // "State of mind", was dropped in the ease-of-use audit's wording
+        // pass (2026-09-27): one name for one place.
+        TopBar("Brain", onBack) {
             Quiet(
                 if (brain.refreshing) "Refreshing…" else "Refresh",
                 enabled = !brain.refreshing,

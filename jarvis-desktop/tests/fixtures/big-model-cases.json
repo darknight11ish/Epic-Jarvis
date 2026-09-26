@@ -322,7 +322,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "Working: DeepSeek V4 Flash is loaded."
         }
       ],
@@ -421,7 +421,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "On. [big_model] cuda is \"on\", but there is no capable second card (only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)). colibri is never put on the main card: that one is everyday chat."
         }
       ],
@@ -505,7 +505,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "Off. Turn on the big model itself first."
         }
       ],
@@ -604,7 +604,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "On. DeepSeek V4 Flash is loading."
         }
       ],
@@ -688,7 +688,7 @@
           "model": "qwen36",
           "model_name": "Qwen3.6-35B-A3B",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "Needs the big model set up: Qwen3.6-35B-A3B: the folder D:\\models\\qwen36_i4_gs64 does not exist."
         }
       ],
@@ -787,7 +787,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "Needs the big model set up: Python 3 was not found. colibri's launcher is a Python script: install Python 3 from python.org and tick \"Add python.exe to PATH\"."
         }
       ],
@@ -886,7 +886,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "On. Usable, but not right now: it needs 16 GB of free memory to start and 12.4 GB is free. Close something big, or wait."
         }
       ],
@@ -985,7 +985,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "Needs the big model set up: [big_model] coli_path is C:\\colibri, but there is no coli.cmd in that folder. It must be the folder you unpacked colibri's release into."
         }
       ],
@@ -1084,7 +1084,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "On. DeepSeek V4 Flash starts when this job next has work, and stops 10 minutes after."
         }
       ],
@@ -1185,7 +1185,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "Off. Turn on the big model itself first."
         }
       ],
@@ -1284,7 +1284,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "Off. Turn on the big model itself first."
         }
       ],
@@ -1383,7 +1383,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "Working: DeepSeek V4 Flash is loaded."
         }
       ],
@@ -1482,7 +1482,7 @@
           "model": "dsv4-flash",
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
           "why": "Off. Turn on the big model itself first."
         }
       ],

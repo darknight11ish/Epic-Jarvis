@@ -222,7 +222,7 @@ const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 const VIEWS = {
   memory: { title: "Memory", sub: "what Jarvis has learned about you" },
   history: { title: "History", sub: "your conversations, kept on this PC" },
-  faculties: { title: "Faculties", sub: "models, compute, skills, memory" },
+  faculties: { title: "Model", sub: "models, compute, skills, memory" },
   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
   galaxy: { title: "Galaxy", sub: "what Jarvis knows" },
   live: { title: "Live", sub: "what Jarvis is doing" },
@@ -299,6 +299,7 @@ const dom = {
   memoryLearning: $("memory-learning"),
   memoryProposals: $("memory-proposals"),
   memoryFacts: $("memory-facts"),
+  memoryFactsFilter: $("memory-facts-filter"),
   memoryAuto: $("memory-auto"),
   memoryAutoList: $("memory-auto-list"),
   memorySavedLine: $("memory-saved-line"),
@@ -1701,7 +1702,7 @@ function renderLearning() {
   }
   const box = el("div", "row-actions");
   box.append(
-    button(on ? "Stop learning" : "Start learning", async () => {
+    button(on ? "Pause background learning" : "Start background learning", async () => {
       const waitingBefore = new Set(
         (currentQueue().items || []).map((item) => item && item.id).filter(Boolean)
       );
@@ -2072,9 +2073,15 @@ function renderFacts() {
     return;
   }
   const past = memoryAsOf !== null;
-  const facts = past
+  const loaded = past
     ? (memoryAsOfRows || [])
     : (Array.isArray(body.facts) ? body.facts : []);
+  // The filter box (ease-of-use audit #7): the list already loaded, by its
+  // words. An erased fact has no words left, so a filter never matches it.
+  const needle = (dom.memoryFactsFilter?.value || "").trim().toLowerCase();
+  const facts = needle
+    ? loaded.filter((f) => erasedAt(f) === null && String(f.text || "").toLowerCase().includes(needle))
+    : loaded;
   // `rows()` calls replaceChildren on whatever it is given, so the banner
   // cannot share a parent with it. The list goes in its own box and the pane
   // is assembled afterwards.
@@ -2186,9 +2193,11 @@ function renderFacts() {
       // in use, in today's view only (the links are today's).
       return current && !past && erased === null ? withLinks(item, f) : item;
     },
-    past
-      ? "Jarvis knew nothing on that date."
-      : "Nothing yet. Facts arrive from the queue above, once you keep one."
+    needle && loaded.length
+      ? "No fact on this list has those words."
+      : past
+        ? "Jarvis knew nothing on that date."
+        : "Nothing yet. Facts arrive from the queue above, once you keep one."
   );
   if (past) {
     // Before the list, not after it: the difference between "these are your
@@ -4213,7 +4222,7 @@ function renderJobs() {
           : [],
       });
     },
-    "No Long Fuse jobs."
+    "No background jobs."
   );
 }
 
@@ -5566,6 +5575,8 @@ dom.graphRefit.addEventListener("click", () => {
 });
 
 dom.inspectorClose.addEventListener("click", () => select(null));
+
+dom.memoryFactsFilter?.addEventListener("input", () => renderFacts());
 
 dom.graphSearch.addEventListener("input", () => {
   const q = dom.graphSearch.value.trim().toLowerCase();
