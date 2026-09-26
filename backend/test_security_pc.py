@@ -348,6 +348,16 @@ def t_phone_control_never_taps_inside_the_jarvis_app():
                 run_adb=adb, approved=True)
     check("the phone does not say which app is in front: nothing is sent",
           adb.input == [] and "could not tell" in out["reason"], out)
+    for label, focus in (
+            ("focus is null (a window opening, the shade pulled down)",
+             b"  mCurrentFocus=null\n  mFocusedApp=null\n"),
+            ("only a popup's title, no package",
+             b"  mCurrentFocus=Window{9f u0 PopupWindow:3c1e}\n")):
+        adb = _Adb(focus)
+        out = A.run(A.plan("PHONE1", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}]),
+                    run_adb=adb, approved=True)
+        check(f"{label}: nothing is sent", adb.input == [] and "could not tell" in out["reason"],
+              out)
     adb = _Adb(_dumpsys("com.jarvis.client"))
     out = A.run(A.plan("PHONE1", "look", [{"action": "screenshot", "why": "see"}]),
                 run_adb=adb, approved=True)

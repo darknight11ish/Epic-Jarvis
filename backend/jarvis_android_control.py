@@ -253,13 +253,16 @@ _PACKAGE = re.compile(r"\b([A-Za-z][\w]*(?:\.[\w]+)+)/")
 
 
 def foreground_packages(text: str) -> Optional[list]:
-    """The packages `dumpsys window` names as focused; None when it has no
-    focus line at all (the command failed, or the phone words it some other
-    way)."""
+    """The packages `dumpsys window` names as focused; None when it names
+    none - no focus line at all (the command failed, or the phone words it
+    some other way), or only lines with no package in them
+    (`mCurrentFocus=null` while a window opens or the shade is pulled down,
+    a popup's window title). None is "could not tell", and nothing is
+    tapped: an empty list used to read as "Jarvis is not in front"
+    (2026-09-26, outside audit finding 5)."""
     lines = _FOCUS_LINE.findall(text or "")
-    if not lines:
-        return None
-    return [m for _key, rest in lines for m in _PACKAGE.findall(rest)]
+    pkgs = [m for _key, rest in lines for m in _PACKAGE.findall(rest)]
+    return pkgs or None
 
 
 def jarvis_in_front(device: str, run_adb: Callable) -> str:
