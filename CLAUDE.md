@@ -280,6 +280,27 @@ Decided 2026-09-26, after checking a Gemini audit finding:
   a public tunnel such as ngrok or Cloudflare - is refused with a plain
   message saying why, so the pairing key never travels through one.
 
+Decided 2026-09-26, after the approvals audit
+(`docs/APPROVALS-AUDIT-2026-09-26.md`) - small, low-risk things stop asking:
+- **Plain repeating reminders, alarms and the standby schedule need no
+  card.** Only the owner's own words can set one, and deleting is instant.
+  The morning briefing and "tell me when" keep their one card (they read
+  email or the calendar). This replaces "anything that repeats asks once"
+  for those three kinds.
+- **Lights, plugs and fans: a setting, off by default,** lets Jarvis switch
+  devices the owner names without a card. Turning it on raises a card;
+  turning it off is immediate. Never after outside text in the turn. Locks,
+  doors, alarms and covers always keep a card of their own.
+- **Everyday facts about people the owner mentions save automatically**
+  ("my sister likes jazz"). Their health, money, address and contact
+  details, and passwords/PINs/account/ID numbers, still wait for a yes.
+- **A "What asks first" page in both apps** lists every action and whether
+  it asks, in plain words, with "make stricter" switches. On the PC only,
+  the owner may also loosen a short safe list (note writes, the wiki,
+  reading their own calendar, email, notes and home status) - one card plus
+  Windows Hello per change. Nothing outside that list can be loosened from
+  an app.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
