@@ -762,6 +762,19 @@ resumable checklist: start Jarvis, the model answers, your voice, pair your
 phone (QR), web search provider, "what leaves this PC". Size M. Sources:
 R2-EXP #5; COM-C line 229 and COM-OS line 11 (guided setup). Status: new.
 
+**I119 update (ease-of-use audit #21, 2026-09-27).** Four steps the checklist
+was missing, added in place: "can your phone reach this PC?" (right before
+pairing, so a Tailscale or Meshnet problem is caught before the owner is
+asked to type a token), "tools" and "email/calendar" (turning on the
+reading tools the PC app can switch on, once there is a PC to switch them
+from), and "Jarvis starts by itself" (last, so finishing the checklist also
+means not having to start Jarvis by hand again). The full, updated order:
+start Jarvis, the model answers, your voice, can your phone reach this PC?,
+pair your phone (QR), tools, email/calendar, web search provider, "what
+leaves this PC", Jarvis starts by itself. Still Size M, and still **Later**,
+after QR pairing (I102) lands - this is the design gaining its missing
+steps, not a decision to build it now.
+
 **I120. "Send to -> Jarvis" on the PC, and one rule for all shell entries.**
 Right-click a file, Send to, Jarvis: the file lands in the text box tagged
 as outside text ("shared") and waits for Enter. Size S-M. Source: R2-EXP

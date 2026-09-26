@@ -66,6 +66,98 @@ body {
   margin-bottom: 16px;
 }
 
+/* Ease-of-use audit #10: a map at the top of a ~21-card page, so finding a
+   setting does not mean scrolling past everything before it. Each link is
+   an in-page anchor to a card's own id; clicking one just jumps there, it
+   changes nothing. */
+.settings-jump {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 8px;
+}
+
+.settings-jump-title {
+  margin: 0 0 8px;
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.settings-jump-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.settings-jump-group:last-child { margin-bottom: 0; }
+
+.settings-jump-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 68px;
+}
+
+.settings-jump-group a {
+  color: var(--cyan);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.settings-jump-group a:hover,
+.settings-jump-group a:focus-visible {
+  text-decoration: underline;
+}
+
+/* The one-line pointer to Brain: chat history and background learning are
+   controlled there, not on this page, and this page has no card for either. */
+.settings-brain-note {
+  margin: 0 0 20px;
+}
+
+/* Everyday / Rare / Read-only dividers between groups of cards. Deliberately
+   not `.card h2` (uppercase, bold, boxed) - this is a page-level divider,
+   not a card title, so it gets its own smaller, quieter style. */
+.settings-group-heading {
+  margin: 24px 0 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.settings-group-heading:first-of-type {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Ease-of-use audit #18: the pairing key shown in groups of 4, purely for
+   reading it back - the real value (settings.js `dom.pairingToken.value`)
+   never has spaces added, so nothing that ever reads that field back gets a
+   different string than Jarvis issued. */
+.pairing-token-display {
+  display: inline-block;
+  padding: 7px 9px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: 0.03em;
+  word-break: break-all;
+}
+
 /* Stronger by size and weight, not colour - `--cyan` is this file's own
    name for the accent (theme.css), which elsewhere here means focus or an
    active control, not a card's title (item 8, UI-AUDIT-2026-09-26.md). */
