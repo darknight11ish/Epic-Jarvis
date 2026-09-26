@@ -31,7 +31,8 @@
 export const COMING_UP_TITLE = "Coming up";
 export const COMING_UP_DETAIL =
   "Timers, alarms and reminders, kept on your PC. They go off on both apps " +
-  "while they are connected. Anything that repeats waits for your yes on an approval card.";
+  "while they are connected. A repeating reminder or alarm is set up at once, with no " +
+  "card; a repeating briefing or \"tell me when\" waits for your yes on an approval card.";
 export const TODO_TITLE = "To-do list";
 
 /** Nothing on a list. */
@@ -79,9 +80,10 @@ export const DONE_LINE = "Done - answered on this PC without the AI model.";
 /**
  * The standby schedule (backend jarvis_standby_schedule.py): Standby - the
  * same Standby as the tray's Change power mode - on a timetable, every day.
- * Setting it up is one approval card on the PC (schedule_repeat); it then
- * sits in the list above like any repeating job, where Pause skips it and
- * Delete turns it off. Both apps' words.
+ * Since 2026-09-26 (the owner's decision after the approvals audit) setting
+ * it up needs no approval card: it is set up at once and sits in the list
+ * above like any repeating job, where Pause skips it and Delete turns it
+ * off. Both apps' words.
  */
 export const STANDBY_TITLE = "Standby schedule";
 export const STANDBY_DETAIL =
@@ -89,7 +91,7 @@ export const STANDBY_DETAIL =
   "schedule put it on standby: if you chose Standby yourself, it stays on until you choose " +
   "Active. Standby unloads its models and frees the graphics card; waking loads the chat " +
   "model again, so the first answer is quick. Timers and reminders still go off. Setting " +
-  "it up asks once with an approval card.";
+  "it up needs no approval card, and Delete turns it off at once.";
 export const STANDBY_START_LABEL = "Standby at";
 export const STANDBY_END_LABEL = "Wake at";
 export const STANDBY_ADD = "Set up";

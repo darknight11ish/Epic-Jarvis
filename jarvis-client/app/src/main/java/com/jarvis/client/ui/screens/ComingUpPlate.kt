@@ -67,9 +67,9 @@ import kotlinx.coroutines.launch
  *
  * Under the to-do list, the standby schedule ([Schedule.STANDBY_TITLE]):
  * Standby - the same one as the buttons under Doing - every day from one
- * time to another. Two times and Set up, which asks the PC; the PC raises
- * ONE approval card, because it repeats ([JarvisRuntime.addStandbySchedule],
- * held on a stale link). Once there is one, it is a row in the list above
+ * time to another. Two times and Set up, which the PC sets up at once, with
+ * no card since 2026-09-26 ([JarvisRuntime.addStandbySchedule], held on a
+ * stale link). Once there is one, it is a row in the list above
  * (Pause, Delete) and the times are not offered again - the desktop's
  * Brain -> Work -> Coming up does the same.
  */

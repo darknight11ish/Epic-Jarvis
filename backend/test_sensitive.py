@@ -373,7 +373,10 @@ def t_the_card_says_it_in_plain_words():
                      "about ID numbers, birth dates or contact details, a sensitive topic"),
         "special": ("I'm Jewish", "about religion, a sensitive topic"),
         "location": ("I live at 14 Elm Road", "about where someone can be found, a sensitive topic"),
-        "other_people": ("My sister likes jazz", "about another person, a sensitive topic"),
+        # A break-up is private whatever the model says (the private-life
+        # words); "my sister likes jazz" is not - see t_everyday_facts_*.
+        "other_people": ("My sister broke up with her boyfriend",
+                         "about another person, a sensitive topic"),
     }
     for cat, (text, want) in cases.items():
         got = S.card_reason(text, [], ask=lambda p: '{"sensitive": false}')
@@ -389,6 +392,66 @@ def t_the_card_says_it_in_plain_words():
     check("topic() is the reason's middle", S.topic("I have lupus") == "health"
           and S.topic("My mum has dementia") == "someone else's health"
           and S.topic("I like tea") == "")
+
+
+# ============================ 3b. everyday facts about people (2026-09-26)
+
+def t_everyday_facts_about_people_save_private_ones_still_ask():
+    """The owner's decision of 2026-09-26: "my sister likes jazz" saves
+    without a card; their health, money, address and contact details, and
+    passwords/PINs/account/ID numbers, still wait for a yes."""
+    no = lambda p: '{"sensitive": false, "category": "none"}'   # noqa: E731
+    for text in ("my sister likes jazz", "My sister works at Google", "Anna loves climbing",
+                 "She plays the cello", "My boss is called Priya",
+                 "The owner's brother supports Leeds United"):
+        check(f"saves (the model says no): {text!r}", S.card_reason(text, [text], ask=no) == "",
+              S.classify(text, context=[text], ask=no))
+        check(f"... the patterns still see another person: {text!r}",
+              S.patterns(text)["everyday_other"] and S.topic(text) == "another person",
+              S.patterns(text))
+    for text, want in (
+            ("my sister's phone number is 07700 900123", "someone else's ID numbers"),
+            ("my friend's email is anna@example.com", "someone else's ID numbers"),
+            ("my dad has diabetes", "someone else's health"),
+            ("my brother owes me money", "someone else's money"),
+            ("my friend lives at 12 Oak Road", "where someone can be found"),
+            ("Anna's address is on the fridge", "where someone can be found"),
+            ("My sister's PIN is 4471", "someone else's passwords"),
+            ("my sister is pregnant", "someone else's health"),
+            ("My mum and dad got divorced", "another person"),
+            ("Xiomara's salary is huge", "someone else's money"),
+            ("Xiomara's wedding is in May", "another person"),
+            ("Tom owes me 50 quid", "money")):
+        got = S.card_reason(text, [text], ask=no)
+        check(f"still asks, whatever the model says: {text!r} -> {want}", want in got, got)
+    # The model decides only the everyday ones, and only its clear "no" saves.
+    for answer, want in (('{"sensitive": true, "category": "health"}',
+                          "about someone else's health, a sensitive topic"),
+                         ('{"sensitive": true, "category": "other_people"}',
+                          "about another person, a sensitive topic"),
+                         ('{"sensitive": "unsure"}', "about another person, a sensitive topic"),
+                         ("not json", "about another person, a sensitive topic")):
+        got = S.card_reason("my sister likes jazz", ["my sister likes jazz"],
+                            ask=lambda p, a=answer: a)
+        check(f"the model answering {answer!r}: a card ({want!r})", got == want, got)
+    keep = S.ASK_MODEL
+    S.ASK_MODEL = None
+    try:
+        got = S.card_reason("my sister likes jazz", [], ollama="http://127.0.0.1:9", model="",
+                            timeout=0.5)
+        check("no local model at all: a card (fail closed)",
+              got == "about another person, a sensitive topic", got)
+    finally:
+        S.ASK_MODEL = keep
+    v = S.classify("my sister likes jazz", use_model=False)
+    check("patterns only (no model): still flagged, as before", v["sensitive"], v)
+    # A clean fact from a turn that says something private about someone.
+    got = S.card_reason("The owner's sister likes jazz", ["my sister likes jazz and is in debt"],
+                        ask=no)
+    check("an everyday fact from words with a private detail in them: a card", got != "", got)
+    prompt, _ = S.build_prompt("my sister likes jazz")
+    check("the model is told an everyday fact about someone is not sensitive",
+          "An everyday fact about someone" in prompt and "NOT sensitive" in prompt)
 
 
 # ====================================================== 4. the model layer

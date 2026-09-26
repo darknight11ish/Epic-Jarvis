@@ -496,7 +496,7 @@
   "type": "function",
   "function": {
    "name": "set_reminder",
-   "description": "Set a reminder or alarm on this PC, once or repeating. `when` is plain English, e.g. \"tomorrow at 6pm\" or \"in 20 minutes\". A repeat waits for the owner's yes on a card.",
+   "description": "Set a reminder or alarm on this PC, once or repeating. `when` is plain English, e.g. \"tomorrow at 6pm\" or \"in 20 minutes\".",
    "parameters": {
     "type": "object",
     "properties": {

@@ -381,6 +381,14 @@ data class PendingItem(
     val needsChoice: Boolean get() = options.size > 1
 
     /**
+     * Whether this card may only be approved on the PC: loosening "What asks
+     * first" (the owner's decision of 2026-09-26) - one card plus Windows
+     * Hello, on the PC. The PC refuses its approval from any other device
+     * (jarvis_owner_check.PC_ONLY_ACTIONS). Denying still works here.
+     */
+    val pcOnly: Boolean get() = action == AsksFirst.LOOSEN_ACTION
+
+    /**
      * Whether a swipe may decide this item.
      *
      * `swipe_ok` and nothing else — except that an item carrying [raised] is

@@ -857,10 +857,20 @@ def t_sensitive_topics_wait_unless_allowed():
         res = w.learn(["The owner is learning Kotlin"])
         check("a plain fact from a turn that also says something sensitive: a card",
               carded(res, "about money, a sensitive topic"), res)
+        # The owner's decision of 2026-09-26: an everyday fact about someone
+        # saves (the local model, here a "no", decides); anything private
+        # about them is still a card.
         w.say("my sister's name is Ana")
         res = w.learn(["The owner's sister is named Ana"])
-        check("a fact about another person: a card (the other-person rule)",
+        check("an everyday fact about another person: saved (2026-09-26)", saved(res), res)
+        w.say("my sister broke up with her boyfriend")
+        res = w.learn(["The owner's sister broke up with her boyfriend"])
+        check("something private about another person: a card",
               carded(res, "about another person, a sensitive topic"), res)
+        w.say("my dad has diabetes")
+        res = w.learn(["The owner's dad has diabetes"])
+        check("another person's health: a card",
+              carded(res, "about someone else's health, a sensitive topic"), res)
         A.set_sensitive(True)
         res = w.learn(["The owner takes insulin every morning"])
         check("with 'Also remember sensitive topics' on: saved", saved(res), res)

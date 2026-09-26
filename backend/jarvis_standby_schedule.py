@@ -37,14 +37,16 @@ WHAT IS REUSED, AND WHAT IS NEW
     window, {"every": "day", "at": "01:00", "until": "07:00"}. It goes off
     at both ends.
 
-SETTING IT UP IS ONE APPROVAL CARD; TURNING IT OFF IS IMMEDIATE
-It repeats, so it is the scheduler's own `schedule_repeat` card, listing the
-next three nights in full (the owner's rule: anything that repeats asks
-once, with a card listing the next run times). Nothing happens until that
-card is approved. Deleting it (either app's Coming up, Delete) is immediate
-and needs no card - it only makes Jarvis do less. Pause skips it until
-Resume. There is only ever one standby schedule; to change the times,
-delete it and set up a new one (a new card).
+SETTING IT UP NEEDS NO CARD; TURNING IT OFF IS IMMEDIATE
+Since 2026-09-26 (the owner's decision after the approvals audit): plain
+repeating reminders, alarms and the standby schedule need no card - only
+the owner's own taps can set one, it acts only on this PC, and deleting is
+instant. So it is on the list at once (jarvis_schedule.Kind.plain_repeat),
+and the answer says the next night in full ("Next: Saturday 26 September,
+01:00 to 07:00"). Until then it was the scheduler's `schedule_repeat` card.
+Deleting it (either app's Coming up, Delete) is immediate - it only makes
+Jarvis do less. Pause skips it until Resume. There is only ever one standby
+schedule; to change the times, delete it and set up a new one.
 
 Deleting or pausing it does NOT wake Jarvis if it is on standby now: that
 is what Active is for. It only stops the next start and end.
@@ -289,7 +291,7 @@ S.register_kind(
     has_text=False, on_fire=on_fire, owner_listed=True,
     notify=False, window=True, single=True,
     edges=("on standby", "awake", ", if the schedule put it on standby"), about=ABOUT,
-    note=note,
+    note=note, plain_repeat=True,
 )
 
 

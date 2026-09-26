@@ -213,7 +213,7 @@ def t_snoozing_a_repeat_moves_only_that_one_time():
           and after["state"] == "active", after)
     check("... the copy is a one-off at 07:15", out["job"]["repeats"] is False
           and wall(out["job"]["due"]) == (2026, 9, 25, 7, 15))
-    check("... the only card was the one that set the repeat up", w.cards == ["schedule_repeat"])
+    check("... and no card at all: a plain repeat needs none (2026-09-26)", w.cards == [])
     w.clock.t = local(2026, 9, 28, 7, 0)
     w.s.tick()
     check("when the repeat goes off again, it can be snoozed afresh",
@@ -328,9 +328,9 @@ def t_cancel_that_for_a_repeat_a_list_and_a_snooze():
     w = World(now, name="undokinds", spawn_now=False)      # the card stays up
     say(w, "remind me every weekday at 7 to take my pills")
     r = say(w, "cancel that")
-    check("a repeat still waiting for its card: withdrawn, and the card will set nothing up",
+    check("a repeat (set up at once, no card since 2026-09-26): cancelled, off the list",
           r.reply == "Cancelled: the repeating reminder (every weekday (Monday to Friday) at 07:00)."
-          " Its approval card will set nothing up." and w.s.listed() == [], r.reply)
+          and w.s.listed() == [], r.reply)
     say(w, "add milk, eggs and bread to the shopping list")
     r = say(w, "cancel that")
     check("three items added in one go: all three taken back",

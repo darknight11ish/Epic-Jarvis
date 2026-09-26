@@ -119,7 +119,8 @@ on a throwaway copy instead.
 | `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing`, `POST /api/briefing/now` and `POST /api/briefing/senders` ("Show who new emails are from": off at once, on through one approval card), makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
 | `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of five providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
 | `owner-check.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The approval gap, step 1** (docs/APPROVAL-GAP-DESIGN.md, the owner's decisions of 2026-09-25). `POST /api/approve` asks Windows Hello itself - showing the card's own title - before it accepts a RISKY approval that comes from this PC, refuses one on a PC with no Windows Hello, and stamps every approval it accepts; the gate believes no "approved" row this running backend did not stamp, so "approved" written straight into `approvals.db` is refused. Last in the list; its context is `gate-outcome.patch`'s approved branches and `log-scrub.patch`'s banner line. Needs `jarvis_owner_check.py` - without it EVERY approval is refused. See "The approval gap, step 1", at the very end. |
-| `focus.patch` | `jarvis_hud.py` | **Focus sessions** (the owner's decision of 2026-09-25). Adds `GET /api/focus` (the countdown, booleans and counts, the report card), `/api/focus/diag` (booleans only) and `/api/focus/callout` (the spoken line as sound, to this PC only), and `POST /api/focus/start` and `/api/focus/act`. No approval card. Last in the list; its context is `reach.patch`'s GET block and `power-mode.patch`'s POST block. Needs `jarvis_focus.py` - see "Focus sessions", at the very end. |
+| `focus.patch` | `jarvis_hud.py` | **Focus sessions** (the owner's decision of 2026-09-25). Adds `GET /api/focus` (the countdown, booleans and counts, the report card), `/api/focus/diag` (booleans only) and `/api/focus/callout` (the spoken line as sound, to this PC only), and `POST /api/focus/start` and `/api/focus/act`. No approval card. Its context is `reach.patch`'s GET block and `power-mode.patch`'s POST block. Needs `jarvis_focus.py` - see "Focus sessions", near the end. |
+| `asks-first.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **What asks first, and lights without a card** (the owner's decisions of 2026-09-26, after the approvals audit). Adds `GET /api/asks_first` (every action and whether it asks, in plain words), `POST /api/asks_first/tier` (stricter at once from either app; looser only from this PC, one approval card plus Windows Hello, and only for a short safe list) and `POST /api/asks_first/lights` ("Lights, plugs and fans without a card": on is one card, off at once), and in `jarvis_gate.py` the words for `loosen_what_asks_first` and `schedule_repeat` (plain repeats no longer have a card). Last in the list; its context is `focus.patch`'s GET and POST blocks and the gate lines of `briefing.patch` and `email-send.patch`. Needs `jarvis_asks_first.py` - see "What asks first", at the very end. |
 | `stop-all.patch` | `jarvis_hud.py` | **Stop everything** (the owner's decision of 2026-09-25). `POST /api/stop_all` - the desktop's Alt+Shift+X and the phone's "Stop everything" button - stops a running task before its next step, makes the answer being written use no more tools, and tells every registered stopper (focus sessions) to stop; it never approves or starts anything and needs no card. Last in the list; its context is `owner-check.patch`'s banner lines. Needs `jarvis_stop_all.py` - see "Stop everything", at the very end. |
 | `email-send.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Sending email, one approval card per email** (the owner's decision, 2026-09-25, after the Muse audit). Adds `GET /api/email/sending` (whether sending is set up - the Settings line in both apps, never the password), and in the gate the notice's words for `send_email`, `send_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Its context is `web-search.patch`'s route block and gate lines and `note-capture.patch`'s `_TOOL_ACTIONS` lines. Needs `jarvis_email_send.py` - see "Sending email", at the very end. |
 | `manner.patch` | `jarvis_hud.py` | **How Jarvis talks: warm and brief, or plain** (the owner's decision, 2026-09-25). Adds `GET` and `POST /api/manner` - one change at a time, **no approval card either way** (it changes only how answers are worded). Its context is `web-search.patch`'s route blocks. Needs `jarvis_manner.py` - see "How Jarvis talks, and errors in plain words", at the very end. |
@@ -3007,6 +3008,15 @@ through:
 
 - Five new `_RISK` entries: `calendar_read`, `email_read`, `notes_search`,
   `home_read`, `home_control`.
+  **Careful with `home_control` (checked 2026-09-26, the approvals audit's
+  item 7):** no patch here adds its entry, so on a PC without one its card
+  counts as "unclassified", which is risky - Windows Hello is asked, for a
+  light as for a lock. That is the safe side, and it is left that way. If
+  you add an entry by hand, rate it as risky (`"no"` for undoable, or
+  `"outbound"`): one entry covers locks and doors too, and rating it "local
+  and undoable" would drop Windows Hello for a door. Lights that should not
+  ask at all are the "Lights, plugs and fans without a card" setting ("What
+  asks first", at the very end), not a lower rating here.
 - `_TOOL_ACTIONS` gains `jarvis_calendar_read_run -> calendar_read`,
   `jarvis_email_read_run -> email_read`,
   `jarvis_notes_search_run -> notes_search`,
@@ -6178,10 +6188,19 @@ a card.
    - The **other-person rule**: any fact about someone other than you -
      a relation word ("sister", "my boss", "mi hermano", "meine Frau"),
      one of about 840 common first names, a title ("Mr Patel"), or
-     "he"/"she". **Decided, and broad on purpose:** "My sister likes jazz"
-     and "My sister's name is Anna" are flagged too - harmless, but still
-     facts about someone who never agreed to be remembered, and your rule
-     is "when unsure: flagged". Not flagged: a famous name as a taste ("I'm
+     "he"/"she". **Changed 2026-09-26 (your decision after the approvals
+     audit):** someone else being in a fact is no longer a card on its own.
+     "My sister likes jazz" and "My sister's name is Anna" go to the local
+     model (layer 2), which is told an everyday fact about someone is not
+     sensitive, and only its clear "not sensitive" saves them - "unsure",
+     no answer, or no local model is still a card. Anything PRIVATE about
+     them stays a card whatever the model says: their health, money,
+     address or contact details, a break-up, a death, a secret, a debt or
+     trouble ("my brother owes me money"), "<Name>'s address / salary /
+     diagnosis", and passwords, PINs, account and ID numbers. The patterns
+     still SEE the other person (`patterns()`, `topic()`), so a recalled
+     fact about someone still counts as sensitive when Jarvis decides what
+     to read aloud or whether a web search asks first. Not flagged: a famous name as a taste ("I'm
      a fan of Terry Pratchett"), pets and things ("My dog is called Max"),
      and your own name ("My name is Tom"). Since round 2, a group with no
      "my" in front ("cooking for friends") is not flagged either; "my
@@ -8097,11 +8116,16 @@ desktop's Brain, Work tab; the phone's Mind), each item with its own Pause,
 Resume, Delete or Done, and both show a notification when it goes off.
 
 **What asks first, and what does not.** A timer, an alarm or a reminder that
-goes off ONCE needs no approval card (the owner's decision). Anything that
-REPEATS - "remind me every weekday at 7 to take my pills" - is ONE approval
-card, `schedule_repeat`, which lists the next three times it will go off;
-nothing is set up until you approve the card. Deleting or pausing anything is
-immediate, one item at a time. There is no "delete all".
+goes off ONCE needs no approval card (the owner's decision). **Since
+2026-09-26 a plain REPEATING alarm or reminder needs none either** - "remind
+me every weekday at 7 to take my pills" is set up at once, and the answer
+says when it next goes off ("Reminder set up, every weekday (Monday to
+Friday) at 07:00. Next: 07:00 on Monday, 07:00 on Tuesday and 07:00 on
+Wednesday. Delete it under Coming up to stop it."). Only a repeat that reads
+your email or calendar - the morning briefing, "tell me when" - is ONE
+approval card, `schedule_repeat`, which lists the next three times. Deleting
+or pausing anything is immediate, one item at a time. There is no "delete
+all".
 
 **Where it goes off.** On the PC, by the PC's clock (its own time zone,
 clock changes included). The apps show a job going off while they are
@@ -8382,9 +8406,10 @@ overnight memory tidy (`jarvis_sleep.py`, `[memory.sleep_time]`) does the
 opposite, and your `jarvis-framework.toml` warns about that name clash.
 
 **What asks first, and what does not.**
-- Setting it up **asks once**, with an approval card (it repeats, so it is
-  the same `schedule_repeat` card as a repeating reminder). The card lists
-  the next three nights in full. Nothing happens until you approve it.
+- Setting it up **needs no approval card** since 2026-09-26 (the owner's
+  decision after the approvals audit; until then it was the
+  `schedule_repeat` card). It is set up at once, and the answer names the
+  next night in full ("Next: Saturday 26 September, 01:00 to 07:00").
 - Going on standby and waking at those times go through the same gate as
   the Standby and Active buttons (`power_manage`, which your settings file
   sets to `auto` - no card). If you have changed `power_manage` to `ask`, a
@@ -10115,3 +10140,142 @@ On the PC, with the backend running, `GET /api/focus/diag` (JARVIS-API
 - The lines follow the warm / plain setting, and "Stop everything"
   (Alt+Shift+X, or the phone's button) pauses a running session - "resume
   focus" picks it up.
+
+
+# What asks first: `jarvis_asks_first.py`, `asks-first.patch` (2026-09-26)
+
+The owner's four decisions of 2026-09-26, after the approvals audit
+(`docs/APPROVALS-AUDIT-2026-09-26.md`, `CLAUDE.md`): small, low-risk things
+stop asking. `docs/JARVIS-API.md` sections 21, 32 and 33 have the routes,
+the words and the known gaps.
+
+## In plain words
+
+1. **Plain repeating reminders, alarms and the standby schedule need no
+   card.** "Remind me every weekday at 7 to take my pills" is set up at once,
+   and Jarvis says when it next goes off. The morning briefing and "tell me
+   when" still ask once (they read your email or calendar).
+2. **Lights, plugs and fans without a card** - a switch, off until you turn
+   it on (turning it on shows you one approval card; turning it off is
+   instant). With it on, "turn off the kitchen light" just happens - but
+   only for lights, plugs and fans you named yourself in that message, and
+   never after Jarvis has read an email, a web page or a file in the chat.
+   Locks, doors, alarms, covers and garage doors always get a card of their
+   own.
+3. **Everyday facts about people you mention save automatically** ("my
+   sister likes jazz"). Their health, money, address and contact details,
+   and passwords, PINs, account and ID numbers, still wait for your yes.
+   (`jarvis_sensitive.py`, "The sensitive-topic check" above.)
+4. **A "What asks first" page in both apps** - desktop: Settings, What asks
+   first; phone: Mind, What asks first. It lists everything Jarvis can do that
+   might need your OK, grouped, and whether it asks first, in plain words.
+   "Ask me first" makes one of seven things ask every time, at once, from
+   either app. Letting one of those seven go ahead without asking again is
+   on the PC only, and takes one approval card plus Windows Hello. The seven:
+   reading your own calendar, email, notes and home status, and adding to
+   your Obsidian daily note, Logseq journal or a new Joplin note. Nothing
+   else can be loosened from an app - the backend refuses it, not only the
+   apps.
+
+**Said plainly - one thing on your list could not be done: the wiki.** You
+asked for the wiki to be loosenable. Since the security audit, the wiki is
+written only when a person says yes, whatever its line in your settings
+file says (`jarvis_wiki.py`, "security audit L1"). So a looser line would
+switch "Add to wiki" off rather than stop it asking. The page shows the wiki
+as "Always asks" and says why. The settings file's old comment that said
+"you may lower it" was wrong, and is corrected in this repository's copy.
+
+## What changes in your settings file
+
+Only what you do on the page. Each "Ask me first" switch changes ONE line
+under `[autonomy.tiers]` in your `jarvis-framework.toml` - its value, nothing
+else - and every other character of the file is kept as it was, comments
+included. If the file has no line for it, one line is added at the end of
+that table, marked `# set in the app's "What asks first" page`. If the file
+is written in a way the page cannot change safely, nothing is changed and
+the page says to edit it by hand in Notepad.
+
+The card that loosens a line is named `loosen_what_asks_first`. Your file
+does not need a line for it (a missing line means "ask", which is what it
+must be); this repository's copy has `loosen_what_asks_first = "ask"`.
+
+## Owner steps (one line each, in PowerShell)
+
+1. Copy the new module in and apply the new patch (the same line as always,
+   from the folder this repository is cloned into):
+
+```
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+   It copies `jarvis_asks_first.py` beside `jarvis_hud.py`, updates
+   `jarvis_schedule.py`, `jarvis_standby_schedule.py`, `jarvis_quick.py`,
+   `jarvis_agent.py`, `jarvis_home.py`, `jarvis_sensitive.py`,
+   `jarvis_owner_check.py`, `jarvis_reach.py` and `jarvis_card_words.py`, and
+   applies `asks-first.patch`. It also prints where your settings file is
+   ("jarvis-framework.toml - yours (...)").
+
+2. (Optional, before you first loosen anything) keep a copy of your settings
+   file. In the backend folder, one line; the copy lands next to the file,
+   named `jarvis-framework.toml.before-asks-first`:
+
+```
+$f = (py -3 -c "import jarvis_framework as f; print(f.config_path())").Trim(); Copy-Item $f "$f.before-asks-first"; Write-Host "Copied to $f.before-asks-first"
+```
+
+3. Restart the backend, then open the desktop's Settings, What asks first.
+
+To see the page's answer on the PC (one line, in the backend folder; it
+prints in the same window; 4719 is the usual port):
+
+```
+$t = (py -3 jarvis_token_store.py show).Trim(); (Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:4719/api/asks_first -Headers @{"X-Jarvis-Token"=$t; "X-Jarvis-Client"="hud"}).Content
+```
+
+## What the code does
+
+- `jarvis_asks_first.py` - the page (`view`), the one-line writer
+  (`rewrite`, `set_tier`: parse, change one line, parse again and compare,
+  write to a temporary file, move it into place), stricter and looser
+  (`request_tier`), the lights setting (`request_lights`, `asks_first.json`
+  in the Jarvis settings folder), and `lights_without_card`, which
+  `jarvis_agent.py` asks before it puts a `home_control` call to the gate.
+- `asks-first.patch` - the three routes in `jarvis_hud.py`; in
+  `jarvis_gate.py` the risk words for `loosen_what_asks_first` (and no
+  standing rule from a "no" to it) and the new words for `schedule_repeat`.
+- `jarvis_owner_check.py` - `PC_ONLY_ACTIONS`: a loosening card is approved
+  on this PC only, and always with Windows Hello, even though it is not
+  "risky"; its approval from the phone or any other device is refused.
+- `jarvis_schedule.py` - `Kind.plain_repeat` (alarms, reminders, the
+  standby schedule): set up at once; `repeat_set_words` says the next times.
+- `jarvis_home.py` - `everyday_problem`: light, switch or fan; on, off or
+  toggle; nothing that stands alone; a short list of brightness, colour and
+  fan-speed settings.
+- `jarvis_sensitive.py` - `everyday_other` and the narrowed model question.
+
+## Test it
+
+```
+python3 backend/test_asks_first.py
+```
+
+(in the dev container; on the PC, `py -3 backend\test_asks_first.py` from
+the repository folder). Also `test_schedule.py`, `test_standby_schedule.py`,
+`test_quick_wins.py`, `test_sensitive.py` and `test_auto_learn.py`.
+
+## Not checked, said plainly
+
+- **Nothing here has run on Windows.** The loosening card's Windows Hello
+  prompt is the approval gap's step 1 (`jarvis_owner_check.py`), itself not
+  yet run on Windows. If the prompt cannot be shown, the card is refused -
+  nothing is loosened.
+- **The lights setting has not met a real Home Assistant.** The tests send
+  every request to a recorder. "Named in your own words" compares the words
+  of the device's id ("light.kitchen_ceiling") with your message, not its
+  friendly name in Home Assistant: a device whose id does not match what you
+  call it still gets a card.
+- **The phone code compiles only in CI** (there is no local Android build
+  here). It was re-read by hand; CI is the proof.
+- **A recalled fact about someone still counts as sensitive** for reading
+  aloud and for web search asking first - only saving changed. Say if you
+  want those to follow the new rule too.

@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.net.AsksFirst
 import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.ui.parts.Affirm
@@ -148,7 +149,7 @@ fun ApprovalCard(
     // and the phone's approve route carries none yet (AUTONOMY-PROPOSALS §3b's
     // decide route is not built on any backend). So approving is refused here
     // and the card says where to choose. Denying needs no option and stays.
-    val canApprove = canDecide && !item.needsChoice
+    val canApprove = canDecide && !item.needsChoice && !item.pcOnly
 
     // A decision on this screen is felt, not just seen - a swipe is answered
     // with no visual confirmation until the card has already animated off
@@ -246,6 +247,7 @@ fun ApprovalCard(
         item.needsChoice ->
             "This proposal offers ${item.options.size} options, and no Jarvis client " +
                 "can pick one yet. Deny still works here."
+        item.pcOnly -> AsksFirst.APPROVE_ON_PC
         else -> null
     }
 

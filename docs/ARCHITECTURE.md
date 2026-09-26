@@ -118,6 +118,25 @@ at most ten, never cut - and a yes sends exactly those and nothing else
 alarms, doors, covers and the other entities in `jarvis_home._stands_alone`
 are never part of such a set: each still gets a card of its own.
 
+**A standing setting the owner chose, for one named kind of thing, is not an
+approve-all either - the same test as the Obsidian daily note at `auto`**
+(the owner's decisions of 2026-09-26, after the approvals audit). Two such
+settings exist, each off unless the owner turns it on with a card, each
+immediate to turn off, and neither raises a card that something else answers:
+- **"Lights, plugs and fans without a card"** (`jarvis_asks_first.py`,
+  JARVIS-API §33): only `light`, `switch` and `fan` on, off or toggle; only
+  devices the owner's own newest words named; never in a turn shaped by
+  outside text; never a lock, door, alarm, cover, gate, valve, camera,
+  scene, script or button (`jarvis_home.everyday_problem`). `home_control`
+  stays in `NEEDS_A_PERSON`; everything else is its card as before.
+- **Loosening one line of "What asks first"** (JARVIS-API §32): only seven
+  actions (reading the owner's own calendar, email, notes and home status;
+  the three note writes), on the PC only, one card plus Windows Hello each.
+  The backend refuses anything else - NEEDS_A_PERSON's actions and the
+  hard-limit list included.
+No approval card is ever answered for the owner, and no control approves
+more than one card.
+
 It also means Jarvis never drives its own approval surfaces. "Control the
 computer" refuses every window of Jarvis's own, and "control the phone"
 stops before any tap while a Jarvis app is in front (security audit M3,
@@ -181,6 +200,18 @@ put to anyone, and the answer says so. A flood of cards is how a planted
 instruction tries to wear a person into pressing Approve without reading.
 The limit is a refusal, never a grant. `backend/README.md`, "The approval
 gate, tightened".
+
+**What changed on 2026-09-26** (the approvals audit,
+`docs/APPROVALS-AUDIT-2026-09-26.md`; the owner's four decisions): a plain
+repeating alarm, reminder or standby schedule has no card (the briefing and
+"tell me when" keep `schedule_repeat`); a light, plug or fan the owner named
+can run with no card when the owner's lights setting is on (above,
+`jarvis_agent` LIGHTS_WITHOUT_CARD); an everyday fact about someone the owner
+mentions saves without a memory card (section 5); and the "What asks first"
+page in both apps shows every action's tier, makes one stricter at once, and
+- on the PC only - loosens one of seven with a card that needs Windows Hello
+(`jarvis_owner_check.PC_ONLY_ACTIONS`). Each one is a place where no card is
+RAISED, by the owner's choice; none is a card answered for them.
 
 **Stopping is never gated.** Stop, Pause and "Stop everything"
 (`/api/task/stop`, `/api/task/pause`, `/api/stop_all`) need no card and are
@@ -716,9 +747,11 @@ on every request, history on or off), no sign of pasted or hidden text, every
 word of the fact in those turns - and no "not", "used to", "if", relation
 word or he/she/they of theirs left out of the fact - never a correction,
 nothing sensitive unless the owner allowed it (`jarvis_sensitive.py`: word
-lists in eight languages, number and token shapes, any fact about another
-person, then the learner's own local model - its "unsure" or no answer is a
-card too; and passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses are a card even when
+lists in eight languages, number and token shapes, anything private about
+another person - since 2026-09-26 an everyday fact about someone ("my sister
+likes jazz") is not a card on its own: the local model decides it, and only
+its clear "not sensitive" saves it - then the learner's own local model; its
+"unsure" or no answer is a card too; and passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses are a card even when
 the owner allowed sensitive topics, by the patterns alone,
 `jarvis_sensitive.always_asks`), and a local model by address AND name. Anything else is the same
 card as before, with the reason on it. Saved facts are `source = "auto"` and
@@ -1030,6 +1063,7 @@ backend routes, in both directions; the rest are listed here only.
 | The backend's own Windows Hello check before a risky approval (`owner-check.patch`, the approval gap's step 1, 2026-09-25) | Written with the feature. It checks approvals that come FROM the PC, where the desktop is; the phone keeps checking its own fingerprint in the app, as before, and the backend lets a phone approval through without a PC prompt. The phone's half - a key in the phone's Keystore that needs a fresh fingerprint for every risky approval, checked by the backend - is step 2, built with "more devices" (`docs/APPROVAL-GAP-DESIGN.md`). Both apps share the stamp (every approval) and "no lock, no risky approval". |
 | Saying a timer aloud when it goes off ("Your timer is done.", while "Hey Jarvis" listening is on in the Jarvis bar; 2026-09-25) | The owner asked for it on the desktop ("say timers aloud on the desktop when voice is on"). The phone's timer notification rings, and its voice is only switched on for a conversation - a phone in a pocket speaking on its own was not asked for. Alarms and urgent "tell me when"s ring until seen on both apps (JARVIS-API §26.5). |
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (Mind, Focus session; Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
+| Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
 | **Update notice** | **Undecided - the owner's call.** The desktop checks GitHub for a newer version and says so in Settings (`update.rs`; it never installs on its own). The phone has no such notice: a new APK is published to the `client-latest` release and installed with adb. Whether the phone should say "a newer version exists" has not been decided. |
 
 **On the phone, kept off the desktop:**
@@ -1208,9 +1242,11 @@ they landed):
   reminder, to-do, the standby schedule below - and `register_kind` for the
   briefing and the overnight tidy still to come) in `schedule.db`, the PC's local time with
   both clock changes handled, a job missed while the PC was off going off
-  once, late. A one-off needs no card; anything that repeats is ONE card
-  (`schedule_repeat`, the same four steps as section 3, listing the next
-  three times). Stopping or deleting is immediate, one job at a time; there
+  once, late. A one-off needs no card; since 2026-09-26 (the approvals
+  audit) neither does a plain repeating alarm or reminder - it is set up at
+  once and the answer says its next three times. A repeat that reads (the
+  briefing, "tell me when") is ONE card (`schedule_repeat`, the same four
+  steps as section 3, listing the next three times). Stopping or deleting is immediate, one job at a time; there
   is no delete-all (the one bulk change is clearing a NAMED list, below). `jarvis_quick.py` answers the plain sentences ("set a
   timer for 10 minutes", "remind me at 6 to call Mum") WITHOUT the model, so
   they work when it is slow, unloaded or asleep - English only; anything
@@ -1231,8 +1267,9 @@ they landed):
   at 07:00, every day" - named after it so the owner sees one thing.
   `jarvis_standby_schedule.py` registers kind `standby` on the one
   scheduler: a window job that goes off at both ends, one at a time, set up
-  by ONE `schedule_repeat` card listing the next three nights; Pause and
-  Delete are immediate and do not wake Jarvis. Each end is
+  at once with no card since 2026-09-26 (until then ONE `schedule_repeat`
+  card listing the next three nights); Pause and Delete are immediate and
+  do not wake Jarvis. Each end is
   `jarvis_power_switch.set_mode` through `power_manage`, like the buttons;
   which end it is comes from the clock, so a night the PC was off agrees. A
   start is skipped while a task runs. The end wakes Jarvis only if the
@@ -1452,7 +1489,10 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    (`jarvis_schedule.register_kind`), with its own `on_fire`: the same
    clock, the same missed-while-off rule, the same `schedule` event and the
    same Coming up list in both apps. Not a timer thread of its own. And
-   anything that repeats is set up by one card, like `schedule_repeat`.
+   anything that repeats is set up by one card, like `schedule_repeat` -
+   unless the owner decided otherwise for that kind: since 2026-09-26 plain
+   alarms, reminders and the standby schedule have none
+   (`register_kind(plain_repeat=True)`; a new kind asks by default).
    A kind that must look more often than hourly ("tell me when",
    `jarvis_tellme.py`) brings its own rule check (`register_kind(check=)`)
    with its own floor and an end date; the shared check keeps the hourly

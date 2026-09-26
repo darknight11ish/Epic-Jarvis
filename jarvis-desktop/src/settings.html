@@ -932,6 +932,26 @@
         </div>
       </section>
 
+      <!-- ── What asks first ────────────────────────────────────────────────
+           The owner's decisions of 2026-09-26, after the approvals audit
+           (asks-first-settings.js; asks_first.rs get_asks_first,
+           set_asks_first, set_lights_without_card; backend
+           jarvis_asks_first.py). Every action and whether it asks first, in
+           the PC's words. "Ask me first" on the short safe list: on is at
+           once and never held; off is one approval card that needs Windows
+           Hello, on the PC only, held on a stale link. "Lights, plugs and
+           fans without a card": on is one card, off at once. The phone's
+           Mind shows the same page, with stricter switches only. -->
+      <section class="card" id="asks-first">
+        <h2>What asks first</h2>
+        <p class="note">Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. "Ask me first" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.</p>
+        <p class="state" id="af-state" role="status">Asking Jarvis…</p>
+        <div id="af-body" hidden>
+          <div id="af-groups"></div>
+          <span class="status" id="af-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── What Jarvis can reach ─────────────────────────────────────────
            The Muse audit, 2026-09-25 (reach-settings.js; reach.rs get_reach;
            backend jarvis_reach.py). Every way Jarvis can reach something
@@ -1317,6 +1337,7 @@
     <script type="module" src="briefing-settings.js"></script>
     <script type="module" src="web-search-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>
+    <script type="module" src="asks-first-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
   </body>

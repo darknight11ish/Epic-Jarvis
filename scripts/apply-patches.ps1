@@ -447,6 +447,19 @@ $PATCHES = @(
     # and power-mode's POST block, so it goes after both. Needs
     # jarvis_focus.py copied in; without it the routes answer 503.
     'focus.patch'
+    # "What asks first" (the owner's decisions of 2026-09-26, after the
+    # approvals audit): GET /api/asks_first (every action and whether it
+    # asks, from this PC's own settings), POST /api/asks_first/tier (stricter
+    # at once from either app; looser only from this PC, one card plus
+    # Windows Hello, and only for a short safe list) and POST
+    # /api/asks_first/lights ("Lights, plugs and fans without a card"), and in
+    # jarvis_gate.py the words for loosen_what_asks_first and schedule_repeat
+    # (plain repeats no longer have a card). Its context is focus's GET and
+    # POST blocks and briefing's and email-send's jarvis_gate.py lines, so it
+    # goes after focus - last, like every new patch. Needs
+    # jarvis_asks_first.py copied in; without it the routes answer 503 and
+    # every change in the home still asks.
+    'asks-first.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -546,6 +559,8 @@ $SHIPPED = @(
     'jarvis_tellme.py'           # "tell me when ..." (an email from someone, a device changing): a kind of job on the one scheduler, no patch; NOT a model tool
     # --- focus sessions (focus.patch) ---
     'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
+    # --- what asks first (asks-first.patch) ---
+    'jarvis_asks_first.py'       # "What asks first": every action and whether it asks; stricter from either app, looser on the PC only; lights without a card
 )
 
 # The settings file. Installed only where none exists; never overwritten.

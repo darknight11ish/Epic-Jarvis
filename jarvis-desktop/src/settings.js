@@ -5,7 +5,10 @@
  * whether Jarvis Desktop may start one. Everything the desktop will show in
  * build order step 5 — models, memory, the enforced config, skills — is
  * read-only by design, and `POST /api/config` answers 501 on purpose, so this
- * page is deliberately not the beginning of a control panel.
+ * page is deliberately not the beginning of a control panel. (The one narrow
+ * exception since 2026-09-26 is "What asks first", asks-first-settings.js:
+ * seven named tier lines through their own route and card, never
+ * /api/config.)
  *
  * The token field is write-only. `get_api_settings` reports whether one is
  * set, and where it came from, and never returns it, so a blank field means

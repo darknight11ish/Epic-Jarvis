@@ -1494,6 +1494,52 @@ object JarvisRuntime {
     /** `GET /api/reach`. A read: never held. */
     suspend fun reach(): ApiResult<JsonObject> = api.reach()
 
+    // ------------------------------------------------------ what asks first ----
+    // The owner's decisions of 2026-09-26 - see [com.jarvis.client.net.AsksFirst]
+    // and ui/screens/AsksFirstPlate.kt. Stricter from the phone; looser on
+    // the PC only.
+
+    /** `GET /api/asks_first`. A read: never held. */
+    suspend fun asksFirst(): ApiResult<JsonObject> = api.asksFirst()
+
+    /**
+     * "Ask me first" ON for ONE action - the desktop's `set_asks_first` with
+     * `ask: true`. Never held on a stale link: it only makes Jarvis ask more.
+     * @return the sentence to show.
+     */
+    suspend fun makeAskFirst(action: String): String {
+        val r = api.makeAskFirst(action)
+        return when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.AsksFirst.said(r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.AsksFirst.missing(r.error)) {
+                    com.jarvis.client.net.AsksFirst.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * "Lights, plugs and fans without a card" - the desktop's
+     * `set_lights_without_card`. ON is held on a stale link (rule 4) and
+     * raises ONE approval card on the PC; OFF is never held.
+     * @return the sentence to show.
+     */
+    suspend fun setLightsWithoutCard(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        val r = writeNoticingCards { api.setLightsWithoutCard(on) }
+        return when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.AsksFirst.said(r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.AsksFirst.missing(r.error)) {
+                    com.jarvis.client.net.AsksFirst.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
     /**
      * `GET /api/email/sending` - Mind's "Sending email" line
      * ([com.jarvis.client.net.EmailSending], ui/screens/EmailSendingPlate.kt).
@@ -2478,6 +2524,14 @@ object JarvisRuntime {
         // approving one at all - from this call, whatever screen, widget, or
         // future surface reaches it - would silently apply whichever plan
         // the server defaults to.
+        if (approve && item.pcOnly) {
+            // Loosening "What asks first" (the owner's decision of 2026-09-26):
+            // approved on the PC only, with Windows Hello. The PC refuses it
+            // from here too; this says so before anything is sent.
+            val msg = com.jarvis.client.net.AsksFirst.APPROVE_ON_PC
+            _notice.value = msg
+            return ApiResult.Failed(ApiError.Unreachable(msg))
+        }
         if (approve && item.needsChoice) {
             val msg = "This proposal offers ${item.options.size} options, and no " +
                 "Jarvis client can pick one yet. Deny still works."
@@ -3120,8 +3174,8 @@ object JarvisRuntime {
 
     /**
      * The standby schedule: every day from [start] to [end] ("HH:MM"). The PC
-     * raises ONE approval card (it repeats) and sets nothing up until it is
-     * approved - the desktop's `brain_schedule_add_standby`. Held on a stale
+     * sets it up at once, with no card (since 2026-09-26; the answer says the
+     * next night) - the desktop's `brain_schedule_add_standby`. Held on a stale
      * link, like every change. @return whether the PC took it, and the
      * sentence to show.
      */

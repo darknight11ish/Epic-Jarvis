@@ -353,6 +353,15 @@ permissions = [
   # asks first - written by the PC from its settings, never by the model.
   # A read: it changes nothing, and no key or private link is in it.
   "allow-get-reach",
+  # "What asks first" (backend/asks-first.patch, 2026-09-26): every action
+  # and whether it asks first, in the PC's words (a read); "Ask me first" on
+  # ONE action of the short safe list - stricter at once, looser only as one
+  # approval card that needs Windows Hello on the PC, held on a stale link in
+  # Rust; and "Lights, plugs and fans without a card" (ON one card, OFF at
+  # once). Rust refuses any action off the list before sending; so does the PC.
+  "allow-get-asks-first",
+  "allow-set-asks-first",
+  "allow-set-lights-without-card",
   # "Sending email": whether it is set up, from which address and through
   # which server (GET /api/email/sending). A read: it sends nothing and
   # never carries the password. Each email is its own approval card.

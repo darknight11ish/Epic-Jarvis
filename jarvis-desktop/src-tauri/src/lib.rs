@@ -19,6 +19,7 @@
 
 pub mod aec;
 pub mod appearance;
+pub mod asks_first;
 pub mod attention;
 pub mod autostart;
 pub mod brain;
@@ -811,6 +812,9 @@ pub fn run() {
             web_search::save_search_key,
             web_search::forget_search_key,
             reach::get_reach,
+            asks_first::get_asks_first,
+            asks_first::set_asks_first,
+            asks_first::set_lights_without_card,
             email_sending::get_email_sending,
             plain_errors::get_manner,
             plain_errors::set_manner,

@@ -420,6 +420,16 @@ fun BrainScreen(
                 WebSearchSection(canAct = canAct)
             }
 
+            // "What asks first" (the owner's decisions of 2026-09-26): every
+            // action and whether it asks first, in the PC's words, with "Ask
+            // me first" switches that only make things stricter here - the
+            // desktop's Settings -> What asks first, where loosening lives
+            // (AsksFirstPlate.kt) - and "Lights, plugs and fans without a
+            // card" (ON one card, held on a stale link; OFF at once).
+            item(key = "asks-first") {
+                AsksFirstSection(canAct = canAct)
+            }
+
             // "What Jarvis can reach" (the Muse audit, 2026-09-25): every way
             // Jarvis can reach something outside itself, whether each is on,
             // where it goes and whether it asks first - written by the PC

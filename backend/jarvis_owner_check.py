@@ -102,6 +102,16 @@ GONE = ("This request stopped waiting while Windows Hello was open (it ran out o
 QUEUE_UNREADABLE = ("The approval queue could not be read, so Jarvis cannot tell "
                     "whether this approval needs Windows Hello. Nothing was approved")
 
+#: Cards that are approved on THIS PC only, and always with Windows Hello,
+#: whatever their risk says: loosening "What asks first" (jarvis_asks_first.
+#: py, the owner's decision of 2026-09-26 - "on the PC only ... one card plus
+#: Windows Hello per change"). An approval of one from another device - the
+#: phone, or anything on the owner's network pretending to be it - is
+#: refused (403), so a stolen token used elsewhere cannot loosen anything.
+PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first"})
+PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
+           "approved")
+
 #: The shipped approval_timeout_seconds, used when a row carries no
 #: `expires_in` (a backend without approval-expiry.patch).
 DEFAULT_TIME_LEFT = 180.0
@@ -593,6 +603,9 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
       time, or was denied - is refused (409).
     - Anything else (not risky, or from another device, which checks its
       own) is stamped straight away.
+    - Except a card in PC_ONLY_ACTIONS (loosening "What asks first",
+      2026-09-26): refused from another device, and always Windows Hello
+      from this PC, risky or not.
     """
     pending = pending or _pending_rows
     request_id = body.get("id") if isinstance(body, dict) else None
@@ -605,7 +618,11 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
     if row is None:
         return None
     action = row.get("action")
-    if is_risky(row) and from_this_pc(peer, local, own):
+    here = from_this_pc(peer, local, own)
+    if action in PC_ONLY_ACTIONS and not here:
+        # Approved on the PC only, with Windows Hello (PC_ONLY_ACTIONS).
+        return 403, {"ok": False, "error": PC_ONLY, "owner_check": "pc_only"}
+    if (is_risky(row) or action in PC_ONLY_ACTIONS) and here:
         left = _time_left(row)
         if left <= 0:
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}

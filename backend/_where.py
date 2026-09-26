@@ -149,6 +149,8 @@ SHIPPED = (
     "jarvis_tellme.py",
     # focus sessions (focus.patch): a kind of job on the one scheduler
     "jarvis_focus.py",
+    # "What asks first" and "Lights, plugs and fans without a card" (asks-first.patch)
+    "jarvis_asks_first.py",
 )
 
 

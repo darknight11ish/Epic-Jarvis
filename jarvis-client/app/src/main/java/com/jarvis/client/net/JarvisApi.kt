@@ -893,6 +893,32 @@ class JarvisApi(
     suspend fun reach(): ApiResult<JsonObject> = probe(Reach.PATH)
 
     /**
+     * `GET /api/asks_first` - "What asks first": every action and whether it
+     * asks, in the PC's words ([AsksFirst.parse]). A read. A 404 is an older
+     * backend ([AsksFirst.missing]).
+     */
+    suspend fun asksFirst(): ApiResult<JsonObject> = probe(AsksFirst.PATH)
+
+    /**
+     * `POST /api/asks_first/tier {"action", "ask": true}` - make ONE action of
+     * the short safe list ask first. At once, no card. The phone sends only
+     * this direction: loosening is the PC's alone ([AsksFirst]).
+     */
+    suspend fun makeAskFirst(action: String): ApiResult<DesktopWrite.Outcome> {
+        val body = AsksFirst.stricterBody(action)
+            ?: return ApiResult.Failed(ApiError.Unreachable("That cannot be changed from the phone."))
+        return postWrite(AsksFirst.TIER_PATH, body)
+    }
+
+    /**
+     * `POST /api/asks_first/lights {"enabled"}` - "Lights, plugs and fans
+     * without a card". OFF is done at once; ON is 202 while ONE approval card
+     * waits on the PC.
+     */
+    suspend fun setLightsWithoutCard(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(AsksFirst.LIGHTS_PATH, AsksFirst.lightsBody(on))
+
+    /**
      * `GET /api/email/sending` - whether sending email is set up, from which
      * address and through which server, in the PC's own words
      * ([EmailSending.parse]). A read; never the password. A 404 or 503 is a

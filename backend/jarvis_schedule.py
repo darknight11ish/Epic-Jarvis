@@ -11,7 +11,14 @@ THE OWNER'S DECISIONS (2026-09-25, CLAUDE.md)
     through KIND_MODULES): a kind may repeat through the same one card
     (`repeatable`) and put its own lines on it (`card_note`).
   * A plain timer or a one-time reminder needs no approval card. Anything
-    that repeats asks once, with a card that lists the next run times.
+    that repeats asks once, with a card that lists the next run times -
+    REPLACED on 2026-09-26 (below) for plain repeats.
+  * 2026-09-26, after the approvals audit (docs/APPROVALS-AUDIT-2026-09-26.
+    md): plain repeating alarms and reminders, and the standby schedule,
+    need NO card (Kind.plain_repeat). Only the owner's own words or taps can
+    set one, and deleting is instant. The next times are in the answer
+    (repeat_set_words) and under the job in Coming up. The morning briefing
+    and "tell me when" keep their ONE card: they read email or the calendar.
   * Simple commands like timers are answered without the AI model
     (jarvis_quick.py), so they work when the model is slow, unloaded or
     asleep. Nothing in this file talks to a model or opens a socket.
@@ -73,10 +80,13 @@ off and "changed" when the list changed (added, paused, deleted, a card
 decided). The apps read the words by id: `GET /api/schedule?id=<id>`.
 
 REPEATING JOBS AND THE CARD
-One approval card, action `schedule_repeat`, tier "ask" (anything else is
-refused: a config line must not become the owner's yes). The card says what
-it is, when, and the next three times it will go off, in plain words. The
-job waits, doing nothing, until the card is approved. Denied, timed out or
+A plain alarm, reminder or standby schedule (Kind.plain_repeat, 2026-09-26)
+is on the list at once, with no card: the answer says its next three times.
+Any other kind that repeats (the briefing, "tell me when") has one approval
+card, action `schedule_repeat`, tier "ask" (anything else is refused: a
+config line must not become the owner's yes). The card says what it is,
+when, and the next three times it will go off, in plain words. The job
+waits, doing nothing, until the card is approved. Denied, timed out or
 refused: the job is removed. Deleting it while the card waits withdraws it.
 Stopping or deleting any job is immediate - it only makes things quieter.
 
@@ -85,9 +95,9 @@ The first is the standby schedule (jarvis_standby_schedule.py, 2026-09-25):
 a WINDOW - {"every": "day", "at": "01:00", "until": "07:00"} - that goes
 off at both ends, one of its kind at a time, and notifies nobody (its event
 says "notify": false, so neither app shows a toast or a notification at
-01:00). It is set up by the same schedule_repeat card, listing the next
-three windows, and deleted like any job. KIND_MODULES below imports it
-before the loop first starts.
+01:00). Since 2026-09-26 it is set up at once with no card (plain_repeat),
+and deleted like any job. KIND_MODULES below imports it before the loop
+first starts.
 
 "Tell me when" (jarvis_tellme.py, 2026-09-25) is a kind that LOOKS every
 few minutes and tells the owner only when something happened. It brings
@@ -217,7 +227,7 @@ class Kind:
                  card: Optional[Callable] = None, silent: bool = False,
                  add: Optional[Callable] = None, first_now: bool = False,
                  fields: Optional[Callable[[str], dict]] = None, what: str = "",
-                 leaves: bool = False):
+                 leaves: bool = False, plain_repeat: bool = False):
         self.name = name
         self.noun = noun                 # "timer", "reminder"
         self.lock_screen = lock_screen   # what a locked phone may show
@@ -278,6 +288,15 @@ class Kind:
         self.fields = fields
         self.what = what
         self.leaves = leaves
+        # True: a repeating job of this kind is set up at once, with NO
+        # card (the owner's decision of 2026-09-26, after the approvals
+        # audit): plain alarms and reminders, and the standby schedule.
+        # Only the owner's own words or taps can set one, it acts only on
+        # this PC, and deleting it is immediate. False (the default, so a
+        # kind added later asks): ONE schedule_repeat card, as before - the
+        # morning briefing and "tell me when", which read email or the
+        # calendar.
+        self.plain_repeat = plain_repeat
 
 
 KINDS: dict = {}
@@ -300,7 +319,7 @@ def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = Fa
                   card: Optional[Callable] = None, silent: bool = False,
                   add: Optional[Callable] = None, first_now: bool = False,
                   fields: Optional[Callable[[str], dict]] = None, what: str = "",
-                  leaves: bool = False) -> Kind:
+                  leaves: bool = False, plain_repeat: bool = False) -> Kind:
     """Add a kind of job. For the features still to come (briefing, tidy,
     sleep): their job goes off through the same loop, the same missed-while-
     off rule and the same event; `on_fire(job_id)` is called after the event,
@@ -316,7 +335,8 @@ def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = Fa
              owner_listed=owner_listed, notify=notify, window=window, single=single,
              edges=edges, about=about, note=note, repeatable=repeatable,
              card_note=card_note, check=check, card=card, silent=silent, add=add,
-             first_now=first_now, fields=fields, what=what, leaves=leaves)
+             first_now=first_now, fields=fields, what=what, leaves=leaves,
+             plain_repeat=plain_repeat)
     KINDS[name] = k
     return k
 
@@ -327,8 +347,9 @@ def _repeatable(kind: str) -> bool:
 
 
 register_kind("timer", "timer", "Jarvis: your timer is done.", has_text=True)
-register_kind("alarm", "alarm", "Jarvis: alarm.", has_text=True)
-register_kind("reminder", "reminder", "Jarvis: a reminder is due.", has_text=True)
+register_kind("alarm", "alarm", "Jarvis: alarm.", has_text=True, plain_repeat=True)
+register_kind("reminder", "reminder", "Jarvis: a reminder is due.", has_text=True,
+              plain_repeat=True)
 register_kind("todo", "to-do", "Jarvis: a to-do item is due.", has_text=True)
 
 # --------------------------------------------------------------------------
@@ -694,6 +715,42 @@ def rule_words(rule: Optional[dict]) -> str:
     return ""
 
 
+def next_words(rule: Optional[dict], after: float, n: int = NEXT_SHOWN) -> str:
+    """A repeating rule's next times in words, where the card used to list
+    them (2026-09-26: plain repeats have no card): "07:00 tomorrow, 07:00 on
+    Tuesday and 07:00 on Wednesday"; for a window, the next one in full,
+    "Saturday 26 September, 01:00 to 07:00". "" when it cannot be worked out."""
+    if not rule:
+        return ""
+    try:
+        if rule.get("until"):
+            a, b = next_windows(rule, after, 1)[0]
+            return window_words(a, b)
+        said = [when_words(t, after) for t in next_runs(rule, after, n)]
+    except Exception:
+        return ""
+    if len(said) <= 1:
+        return "".join(said)
+    return ", ".join(said[:-1]) + " and " + said[-1]
+
+
+#: What the answer says when a plain repeat is set up (no card): the apps'
+#: route and the fast path (jarvis_quick.py) both use it.
+REPEAT_SET = "{noun} set up, {rule}. Next: {next}. Delete it under Coming up to stop it."
+
+
+def repeat_set_words(job: dict, now: float) -> str:
+    """"Reminder set up, every weekday (Monday to Friday) at 07:00. Next:
+    07:00 on Monday, 07:00 on Tuesday and 07:00 on Wednesday. Delete it
+    under Coming up to stop it." - for a job add_repeat set up at once."""
+    k = KINDS.get(str(job.get("kind") or ""))
+    noun = (k.noun if k is not None else "repeat")
+    rule = job.get("rule") if isinstance(job.get("rule"), dict) else None
+    nxt = next_words(rule, now) or "see Coming up"
+    return REPEAT_SET.format(noun=noun[:1].upper() + noun[1:], rule=rule_words(rule) or "repeating",
+                             next=nxt)
+
+
 def _digest(text: str) -> str:
     norm = " ".join(str(text or "").lower().split())
     return hashlib.sha256(norm.encode("utf-8")).hexdigest()
@@ -777,7 +834,7 @@ def _audit(event: str, detail: dict) -> None:
         pass
 
 
-CARD_REFUSED_WORDS = ("Your PC's settings do not let a repeating reminder be approved, "
+CARD_REFUSED_WORDS = ("Your PC's settings do not let this repeat be approved, "
                       "so it was not set up.")
 LAST_WORDS = {
     "approved": "You approved the card, so it is set up.",
@@ -943,7 +1000,9 @@ class Scheduler:
         return self.job(jid)
 
     def add_repeat(self, kind: str, rule, text: str = "", source: str = "app") -> dict:
-        """A repeating job. It WAITS until one approval card is approved."""
+        """A repeating job. A plain alarm, reminder or standby schedule
+        (Kind.plain_repeat) is set up at once, with no card; any other kind
+        WAITS until one approval card is approved."""
         k = KINDS.get(kind)
         window = bool(k is not None and k.window)
         if not _repeatable(kind) and not window:
@@ -973,6 +1032,14 @@ class Scheduler:
                         same = False
                     if same:
                         raise ValueError(f"a {k.noun} {rule_words(rule)} is already set up")
+        if k.plain_repeat:
+            # No card (Kind.plain_repeat): on the list at once, due at its
+            # first time. The next times are in the answer (repeat_set_words)
+            # and under the job in Coming up, where the card used to list them.
+            due = now if k.first_now else next_run(rule, now)
+            jid = self._insert(kind, text=text, state="active", due=due, rule=rule,
+                               duration=None, source=source)
+            return self.job(jid)
         jid = self._insert(kind, text=text, state="waiting", due=None, rule=rule,
                            duration=None, source=source)
         # Read BEFORE the card is raised: a card answered at once (or a
@@ -1724,8 +1791,11 @@ def handle_add(body: dict) -> tuple:
       {"kind": "todo", "text", "list"?}            a to-do item (on a named list)
       {"kind": "timer", "seconds", "text"?}        a timer
       {"kind": "alarm"|"reminder", "at", "text"?}  once, at an epoch time
-      {"kind": "alarm"|"reminder", "repeat": {...}, "text"?}   repeating: a card
-    200 {"ok", "job"}, 202 {"ok", "waiting": true, "job"} for a repeat."""
+      {"kind": "alarm"|"reminder", "repeat": {...}, "text"?}   repeating: no card
+      {"kind": "standby", "repeat": {"every", "at", "until"}}  no card
+      {"kind": "briefing", "repeat": {...}}        repeating: ONE card
+    200 {"ok", "job"} (a plain repeat also has `said`, with its next times),
+    202 {"ok", "waiting": true, "job"} for a repeat that waits for its card."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "need a JSON object"}
     kind = str(body.get("kind") or "").strip().lower()
@@ -1745,18 +1815,16 @@ def handle_add(body: dict) -> tuple:
             if body.get("repeat") is not None:
                 job = s.add_repeat(kind, body.get("repeat"), body.get("text") or "",
                                    source="app")
-                return 202, {"ok": True, "waiting": True, "job": job,
-                             "said": "It repeats, so it waits for your yes on the card."}
+                return _repeat_answer(job, s.now())
             job = s.add_at(kind, _num(body.get("at")), body.get("text") or "", source="app")
         elif kind in KINDS and KINDS[kind].window:
             # The standby schedule: {"kind": "standby", "repeat": {"every":
-            # "day", "at": "01:00", "until": "07:00"}}. It repeats, so it is
-            # one card, like any repeat.
+            # "day", "at": "01:00", "until": "07:00"}}. Since 2026-09-26 it is
+            # set up at once, with no card (Kind.plain_repeat).
             if not isinstance(body.get("repeat"), dict):
                 return 400, {"ok": False, "error": f"A {KINDS[kind].noun} needs its two times."}
             job = s.add_repeat(kind, body.get("repeat"), "", source="app")
-            return 202, {"ok": True, "waiting": True, "job": job,
-                         "said": "It repeats, so it waits for your yes on the card."}
+            return _repeat_answer(job, s.now())
         else:
             names = ["todo", "timer", "alarm", "reminder"] + sorted(
                 n for n, k in KINDS.items() if k.window or k.repeatable)
@@ -1766,6 +1834,19 @@ def handle_add(body: dict) -> tuple:
     except (ValueError, TypeError) as exc:
         return 400, {"ok": False, "error": _sentence(exc)}
     return 200, {"ok": True, "job": job}
+
+
+#: A repeat that waits for its card (the briefing): the apps' words.
+WAITS_FOR_CARD = "It repeats, so it waits for your yes on the card."
+
+
+def _repeat_answer(job: dict, now: float) -> tuple:
+    """(code, body) for a repeat just added: 202 {"waiting": true} while its
+    card is up (the briefing), 200 with the next times in `said` for a plain
+    repeat set up at once (2026-09-26, no card)."""
+    if job.get("state") == "waiting":
+        return 202, {"ok": True, "waiting": True, "job": job, "said": WAITS_FOR_CARD}
+    return 200, {"ok": True, "waiting": False, "job": job, "said": repeat_set_words(job, now)}
 
 
 def handle_act(body: dict) -> tuple:

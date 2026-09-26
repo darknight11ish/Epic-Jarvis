@@ -256,6 +256,19 @@ def action_of(tool: str, ctx: Ctx) -> str:
     return _FALLBACK_ACTIONS.get(lookup, lookup)
 
 
+#: home_control while the owner's "Lights, plugs and fans without a card" is on.
+ASK_LIGHTS = ("Yes, every time - except the lights, plugs and fans you name yourself "
+              "(your setting)")
+
+
+def _lights_on() -> bool:
+    try:
+        import jarvis_asks_first
+        return bool(jarvis_asks_first.lights_on())
+    except Exception:
+        return False
+
+
 def _needs_a_person(tool: str) -> bool:
     ag = _agent()
     try:
@@ -273,6 +286,10 @@ def asks(tool: str, ctx: Ctx, *, after_outside: bool = False) -> tuple:
         tier = "ask"
     if tier == "never":
         return tier, ASK_NEVER
+    if tool == "home_control" and _lights_on():
+        # "Lights, plugs and fans without a card" (jarvis_asks_first.py,
+        # 2026-09-26): on, and off by default.
+        return tier, ASK_LIGHTS
     if _needs_a_person(tool) or tier == "ask":
         return tier, ASK_EVERY
     if after_outside:
