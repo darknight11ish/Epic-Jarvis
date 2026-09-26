@@ -1266,7 +1266,7 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
         Row(Modifier.fillMaxWidth()) {
             NavItem(
                 icon = { MindIcon(chrome.textMid) },
-                label = "Mind",
+                label = "Brain",
                 onClick = actions.onOpenBrain,
                 modifier = Modifier.weight(1f),
             )
@@ -1510,7 +1510,7 @@ private fun FaceBlock(
                         )
                         .then(
                             if (opensMind) {
-                                Modifier.tapThrough(label = "Open Mind", onTap = actions.onOpenBrain)
+                                Modifier.tapThrough(label = "Open the Brain", onTap = actions.onOpenBrain)
                             } else {
                                 Modifier
                             },

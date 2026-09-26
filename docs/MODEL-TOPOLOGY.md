@@ -33,7 +33,7 @@ Its section 3 lists each item with the evidence; section 2.2 cites the
 llama.cpp lines for the flash-attention change.
 
 *Since 2026-09-25* the desktop's Settings, "Hardware and models" (and the
-phone's Mind, "Hardware") works this out for whatever cards the PC has, and
+phone's Brain, "Hardware") works this out for whatever cards the PC has, and
 offers three setups made at the owner's 0.75 GB gap. Choosing one is what
 applies the 0.75 GB (as `LLAMA_ARG_FIT_TARGET=768` in its one command);
 until then the 1 GB default above stands. Its **Measure** button does the

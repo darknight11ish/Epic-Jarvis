@@ -703,7 +703,7 @@ fun AppearanceScreen(
                                 Choices(
                                     options = listOf(true, false),
                                     isSelected = { it == look.tapFaceOpensMind },
-                                    label = { if (it) "Opens Mind" else "Does nothing" },
+                                    label = { if (it) "Opens the Brain" else "Does nothing" },
                                     onPick = { onLookChange(look.copy(tapFaceOpensMind = it)) },
                                 )
                             }

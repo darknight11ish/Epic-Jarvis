@@ -179,9 +179,9 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written (`voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
-| `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on Mind; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
-| `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed" \| "ready", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on) - except for a briefing, whose toast comes on `ready` (`brain/briefing.rs` `toast_ready`, always only "Jarvis: your morning briefing is ready.", section 22); the Brain reads Coming up again, and the briefing too for kind `briefing` (`brain.js`) | Mind's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`). For kind `briefing`: Mind's Morning briefing reads itself again, and on `ready` (not `fired`) a notification with only the fixed words, which opens Mind (`JarvisRuntime.onBriefingReady`) |
-| `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | Mind's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
+| `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on the phone's Brain screen; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
+| `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed" \| "ready", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on) - except for a briefing, whose toast comes on `ready` (`brain/briefing.rs` `toast_ready`, always only "Jarvis: your morning briefing is ready.", section 22); the Brain reads Coming up again, and the briefing too for kind `briefing` (`brain.js`) | the Brain's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`). For kind `briefing`: the Brain's Morning briefing reads itself again, and on `ready` (not `fired`) a notification with only the fixed words, which opens the Brain (`JarvisRuntime.onBriefingReady`) |
+| `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | the Brain's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
@@ -1033,7 +1033,7 @@ path ever appears in it (`routes.rs:67-101`).
 | Endpoint | Method | Desktop | Android | Notes |
 |---|---|---|---|---|
 | `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§28). `started` (2026-09-25) is when the server process started, in epoch seconds (§29). The desktop falls back to `/api/status` for anything an older server leaves out. |
-| `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Mind screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
+| `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Brain screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
 | `/api/graph` | GET | `routes.rs:15` | **no — by rule** | The memory graph stays off the phone. Gets its own longer timeout (`brain.rs:97`). |
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |
 | `/api/compute` | GET | `routes.rs:18` | via `probe` | GPU/VRAM plan. Shape undocumented — see below. |
@@ -1057,11 +1057,11 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
-| `/api/history?limit=&before=` | GET | `brain/history.rs` `brain_history_list` (Brain, History) | `JarvisApi.history` (Mind, Chat history) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. Token + origin. The switch's state (`enabled`, `recording`, `why_not`, `waiting`, `keep_days`, `encrypted`) and `conversations`, newest first: `[{id, title, started, updated, turns, device, has_voice, tainted}]`. `limit` 1-100 (default 30); `before=<updated>` pages to older ones. `503 {"available": false, "error", "reason"}` if `jarvis_chat_log.py` is missing. |
+| `/api/history?limit=&before=` | GET | `brain/history.rs` `brain_history_list` (Brain, History) | `JarvisApi.history` (Brain, Chat history) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. Token + origin. The switch's state (`enabled`, `recording`, `why_not`, `waiting`, `keep_days`, `encrypted`) and `conversations`, newest first: `[{id, title, started, updated, turns, device, has_voice, tainted}]`. `limit` 1-100 (default 30); `before=<updated>` pages to older ones. `503 {"available": false, "error", "reason"}` if `jarvis_chat_log.py` is missing. |
 | `/api/memory/learning` | GET | `brain_memory_learning_status` (`brain/auto_learn.rs`) | `JarvisApi.autoLearnSettings` | `auto-learn.patch`, `jarvis_auto_learn.py`, 2026-09-24 - **§19**. Token + origin. The learning switches in one read: `{"enabled", "auto", "auto_sensitive", "auto_waiting", "sensitive_waiting", "auto_last", "sensitive_last", ...}` (`enabled` is background learning's own switch). Before this, only the POST existed. `503 {"available": false, "error", "reason"}` if `jarvis_auto_learn.py` is missing. |
 | `/api/memory/auto?limit=&before=` | GET | `brain_memory_auto_list` (hidden with the other memory lists under Windows Hello) | `JarvisApi.autoFacts` (hidden under "Hide memory lists and chat history") | `auto-learn.patch` - **§19**. "Saved automatically": `{"facts": [{id, text, saved_at, provenance, device}], "auto", "auto_sensitive"}`, current facts only, newest first; `limit` 1-100 (default 30); `before=<saved_at>` pages to older ones (floored to whole seconds; a page never splits a second). |
 | `/api/memory/profile` | GET | `brain_memory_profile` (`brain/profile.rs`; hidden with the other memory lists under Windows Hello) | `JarvisApi.memoryProfile` / `JarvisRuntime.memoryProfile` (hidden under "Hide memory lists and chat history") | **"Always keep in mind"** (the owner's decision, 2026-09-24; `memory-profile.patch`, `rebuilt/jarvis_memory.py`). Token + origin. The facts the owner pinned, which every local chat question reads word for word (§4): `{"facts": [{"id", "text", "added"}], "chars", "limit"}`, oldest pin first. `chars` is how many characters the listed facts' words use; `limit` is 1,200 (`PROFILE_LIMIT`). Only facts still current are listed: a pinned fact that is forgotten, corrected, runs out or is erased leaves the list by itself. Both apps show "N of 1,200 characters used". `501` from a PC whose `jarvis_memory.py` is older (both apps then say the list is not there yet), `503` memory not running. |
-| `/api/memory/used?ids=` | GET | `memory_used` (`brain/used.rs`; the quickbar's "Used 2 memories", the Brain's "Jarvis remembered N things" and, since memory wave 3, its "About <name>"; facts taken out in Rust while Windows Hello hides the memory lists) | `JarvisApi.memoryUsed` / `JarvisRuntime.memoryUsed` (Home's "Used 2 memories", Mind's "Jarvis remembered N things"; hidden under "Hide memory lists and chat history") | **"Used in this answer"** (the owner's decision, 2026-09-25; `temporary-chat.patch`, `rebuilt/jarvis_memory.py` `used_view()`). Token + origin, like every memory read. `ids` is 1 to 100 comma-separated whole numbers above 0 (`"mem:12"` is read as 12); anything else - `fact:3`, a name, a fraction - is a `400` in words. `200 {"facts": [{"id", "text", "current", "pinned", "created", "valid_to", "erased_at"}], "missing": [id, ...]}`, in the order asked. `current` is the usual rule (`valid_to` empty or ahead) and false for an erased fact; a fact that is no longer current still has its words (an answer about the past may have used it); an **erased** fact never has words - `text` is `""`, never the `[erased]` marker. An id with no fact at all is in `missing`. `501` from an older `jarvis_memory.py` (both apps then say they cannot show which facts these were yet), `503` memory not running. A read: nothing here acts on memory. |
+| `/api/memory/used?ids=` | GET | `memory_used` (`brain/used.rs`; the quickbar's "Used 2 memories", the Brain's "Jarvis remembered N things" and, since memory wave 3, its "About <name>"; facts taken out in Rust while Windows Hello hides the memory lists) | `JarvisApi.memoryUsed` / `JarvisRuntime.memoryUsed` (Home's "Used 2 memories", the Brain's "Jarvis remembered N things"; hidden under "Hide memory lists and chat history") | **"Used in this answer"** (the owner's decision, 2026-09-25; `temporary-chat.patch`, `rebuilt/jarvis_memory.py` `used_view()`). Token + origin, like every memory read. `ids` is 1 to 100 comma-separated whole numbers above 0 (`"mem:12"` is read as 12); anything else - `fact:3`, a name, a fraction - is a `400` in words. `200 {"facts": [{"id", "text", "current", "pinned", "created", "valid_to", "erased_at"}], "missing": [id, ...]}`, in the order asked. `current` is the usual rule (`valid_to` empty or ahead) and false for an erased fact; a fact that is no longer current still has its words (an answer about the past may have used it); an **erased** fact never has words - `text` is `""`, never the `[erased]` marker. An id with no fact at all is in `missing`. `501` from an older `jarvis_memory.py` (both apps then say they cannot show which facts these were yet), `503` memory not running. A read: nothing here acts on memory. |
 | `/api/memory/entities` | GET | `routes.rs` (`memory_entities`; hidden with the other memory lists under Windows Hello, `lock/rules.rs` PRIVATE_LISTS) | **no - by rule** (the memory graph stays off the phone; ARCHITECTURE.md section 8) | **"Who is my sister?"** (memory wave 3, 2026-09-25; `memory-entities.patch`, `rebuilt/jarvis_memory.py` `entities_view()`). Token + origin. The people, pets, places and things saved facts are linked to: `{"entities": [{"id", "name", "kind", "also": [other names joined to it], "aliases": ["sister"], "fact_ids": [newest first], "facts": n}], "count", "limit"}` - one entry per group (a merge is followed), only entries with at least one current, unerased fact, most facts first, at most 500. Names and aliases exactly as the facts wrote them (aliases lower-cased); no fact's words and no summary. `kind` is `person`, `pet`, `place`, `organisation`, `project`, `thing` or null. An app reads the facts' words by id with `/api/memory/used`. The desktop draws the names under each fact in "Saved automatically" and "What Jarvis knows about you", each opening "About <name>" - that entry's facts, word for word (`brain.js` `paintAbout`, `memory-entities.js`). `501` on a PC whose `jarvis_memory.py` predates it. |
 | `/api/history/conversation?id=` | GET | `brain_history_open` | `JarvisApi.historyConversation` | `chat-history.patch` - **§18**. One kept conversation, read-only: `{id, title, tainted, turns: [{role, text, at, provenance, read_outside, answer_kept} or {role: "assistant", text, at}]}`. `404` if there is no such conversation, `400` for a malformed id, `503` if it cannot be opened (the reason in words). |
 
@@ -1075,7 +1075,7 @@ path ever appears in it (`routes.rs:67-101`).
 line for `by_model[current]`; show `note` as a warning line only when
 `slowdown.slower` is true; show `last_switch_note` word for word beside the
 rollback button when `last_switch` is set. Numbers only - nothing in it is
-conversation text. **Android** does exactly those three things in Mind's Model
+conversation text. **Android** does exactly those three things in the Brain's Model
 section (`ModelSpeed.from` in `ApiModels.kt`, drawn by `BrainScreen.kt`'s
 `ModelsPlate`); `by_model` is matched to the running model by name, treating
 `name` and `name:latest` as the same. **The desktop** does the same three
@@ -1213,10 +1213,10 @@ neither app says it would.
 | `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | `brain.rs` `brain_memory_keep_both` | `JarvisApi.kt:439` (`keepBothMemory`) | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
 | `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | `commands.rs` `mark_answer` (quickbar, and the HUD page through `hud_bootstrap.js`, which holds no token) | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | `JarvisApi.forgetFact`, from the "Saved automatically" list (§19) and, since 2026-09-25, from "Used in this answer" and "Jarvis remembered N things" (§4, §19.5), after a confirm, held on a stale link | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. Since the owner's decision of 2026-09-24 (automatic learning, §19) the phone calls it too, for automatically saved facts - one fact per request, held on a stale link, like the desktop. Rewording (`/api/memory/edit`) stays desktop-only. |
-| `/api/memory/erase` | POST | `{"id": <int>}` and nothing else | `brain.rs` `brain_memory_erase` (Saved automatically, and every fact in What Jarvis knows about you - forgotten ones too; since 2026-09-25 also beside Forget under the quickbar's "Used in this answer" and the Brain's "Jarvis remembered N things"), after a confirm, held on a stale link | `JarvisApi.eraseFact` / `JarvisRuntime.eraseAutoFact` (Mind, Saved automatically), after a confirm, held on a stale link | **"Erase the words"** (the owner's decision, 2026-09-24; `memory-erase.patch`, `rebuilt/jarvis_memory.py` `erase()`). Wipes ONE fact's words for good and keeps its row and dates: `text` becomes `[erased]`, `erased_at` is set, the word-search row and meaning vector are deleted, meta keeps only dates, ids and where it came from (no message hash, no conversation id), a current fact is retired as Forget retires it, and copies of the words in the review queue go too (a card still waiting with exactly those words, or a "retire this?" card about the fact, is turned down). Then the file is cleaned: the word index compacted, freed space zeroed, `memory.db-wal` emptied. Works on an already-forgotten fact. Same token and origin checks as forget and, like forget, **no approval card** - both apps ask first ("Erase the words of this fact from your PC for good? Jarvis keeps only the date it was saved, so its history shows something was erased here. This cannot be undone.") and say "Erased.". **The earlier wordings go too** (security audit L3, 2026-09-25): every fact this one replaced - an edit (`/api/memory/edit`) or a correction - and every fact THOSE replaced is erased the same way; never a later one. `200 {"ok": true, "id", "erased_at", "already_erased", "retired_now", "file_clean", "copies", "earlier", "note"}` (`earlier`: the ids of the earlier wordings erased with it, newest first) - **never the words** (forget's reply has a `was`; this has not). `file_clean: false`: something was reading the file, so an old copy may stay in `memory.db-wal` until the next erase. `400` for anything but one integer `id` (a list, a string, `true`, an extra key); `404 {"ok": false, "reason": "no_such_fact"}` - an app tells this apart from a PC without the route (a plain 404, or `501` from an older `jarvis_memory.py`), where nothing was erased; `503` memory not running. **No event** - forget sends none either, so the other app's list shows the change on its next read. |
-| `/api/memory/profile` | POST | `{"id": <int>, "pinned": true \| false}` and nothing else | `brain/profile.rs` `brain_memory_pin` (Pin / Unpin on every current fact in Saved automatically and What Jarvis knows about you, and Unpin in Always keep in mind), held on a stale link | `JarvisApi.pinFact` / `JarvisRuntime.pinFact` (Pin / Unpin in Mind, Saved automatically; Unpin in Always keep in mind), held on a stale link | **"Always keep in mind"** - pin or unpin ONE fact (the owner's decision, 2026-09-24). Only the id is stored (a `profile(fact_id, added, how)` table in memory.db); the words stay the fact's own, never summarised or rewritten. **No approval card and no confirm**: it is the owner's own tap on a fact they can see, like Forget, and Unpin takes it back. Pinning a sensitive fact is allowed - only the owner's tap can put one there. Same token and origin checks as forget. `200 {"ok": true, "id", "pinned", "changed", "chars", "limit", "note"}` (pinning a pinned fact, or unpinning one that is not, is `changed: false`); **`409`** `{"ok": false, "reason", "error", "chars", "limit"}` with `reason` `"too_long"` ("That would make the list too long - unpin something first"), `"fact_too_long"` (one fact over 1,200 characters on its own) or `"not_current"` (forgotten or erased) - both apps show `error` word for word; `404 {"ok": false, "reason": "no_such_fact"}` (told apart from a PC without the route, as for erase); `400` for anything but one integer `id` and one boolean `pinned`; `501` older `jarvis_memory.py`; `503` memory not running. The reply never has the words. Audit log: `memory.pinned` / `memory.unpinned` with the id only. **No event** - forget and erase send none either; each app reads the list again after its own memory writes and when Memory / Mind is shown. |
+| `/api/memory/erase` | POST | `{"id": <int>}` and nothing else | `brain.rs` `brain_memory_erase` (Saved automatically, and every fact in What Jarvis knows about you - forgotten ones too; since 2026-09-25 also beside Forget under the quickbar's "Used in this answer" and the Brain's "Jarvis remembered N things"), after a confirm, held on a stale link | `JarvisApi.eraseFact` / `JarvisRuntime.eraseAutoFact` (Brain, Saved automatically), after a confirm, held on a stale link | **"Erase the words"** (the owner's decision, 2026-09-24; `memory-erase.patch`, `rebuilt/jarvis_memory.py` `erase()`). Wipes ONE fact's words for good and keeps its row and dates: `text` becomes `[erased]`, `erased_at` is set, the word-search row and meaning vector are deleted, meta keeps only dates, ids and where it came from (no message hash, no conversation id), a current fact is retired as Forget retires it, and copies of the words in the review queue go too (a card still waiting with exactly those words, or a "retire this?" card about the fact, is turned down). Then the file is cleaned: the word index compacted, freed space zeroed, `memory.db-wal` emptied. Works on an already-forgotten fact. Same token and origin checks as forget and, like forget, **no approval card** - both apps ask first ("Erase the words of this fact from your PC for good? Jarvis keeps only the date it was saved, so its history shows something was erased here. This cannot be undone.") and say "Erased.". **The earlier wordings go too** (security audit L3, 2026-09-25): every fact this one replaced - an edit (`/api/memory/edit`) or a correction - and every fact THOSE replaced is erased the same way; never a later one. `200 {"ok": true, "id", "erased_at", "already_erased", "retired_now", "file_clean", "copies", "earlier", "note"}` (`earlier`: the ids of the earlier wordings erased with it, newest first) - **never the words** (forget's reply has a `was`; this has not). `file_clean: false`: something was reading the file, so an old copy may stay in `memory.db-wal` until the next erase. `400` for anything but one integer `id` (a list, a string, `true`, an extra key); `404 {"ok": false, "reason": "no_such_fact"}` - an app tells this apart from a PC without the route (a plain 404, or `501` from an older `jarvis_memory.py`), where nothing was erased; `503` memory not running. **No event** - forget sends none either, so the other app's list shows the change on its next read. |
+| `/api/memory/profile` | POST | `{"id": <int>, "pinned": true \| false}` and nothing else | `brain/profile.rs` `brain_memory_pin` (Pin / Unpin on every current fact in Saved automatically and What Jarvis knows about you, and Unpin in Always keep in mind), held on a stale link | `JarvisApi.pinFact` / `JarvisRuntime.pinFact` (Pin / Unpin in Brain, Saved automatically; Unpin in Always keep in mind), held on a stale link | **"Always keep in mind"** - pin or unpin ONE fact (the owner's decision, 2026-09-24). Only the id is stored (a `profile(fact_id, added, how)` table in memory.db); the words stay the fact's own, never summarised or rewritten. **No approval card and no confirm**: it is the owner's own tap on a fact they can see, like Forget, and Unpin takes it back. Pinning a sensitive fact is allowed - only the owner's tap can put one there. Same token and origin checks as forget. `200 {"ok": true, "id", "pinned", "changed", "chars", "limit", "note"}` (pinning a pinned fact, or unpinning one that is not, is `changed: false`); **`409`** `{"ok": false, "reason", "error", "chars", "limit"}` with `reason` `"too_long"` ("That would make the list too long - unpin something first"), `"fact_too_long"` (one fact over 1,200 characters on its own) or `"not_current"` (forgotten or erased) - both apps show `error` word for word; `404 {"ok": false, "reason": "no_such_fact"}` (told apart from a PC without the route, as for erase); `400` for anything but one integer `id` and one boolean `pinned`; `501` older `jarvis_memory.py`; `503` memory not running. The reply never has the words. Audit log: `memory.pinned` / `memory.unpinned` with the id only. **No event** - forget and erase send none either; each app reads the list again after its own memory writes and when Memory / Brain is shown. |
 | `/api/memory/edit` | POST | object | `brain.rs` `brain_memory_edit` | **no** | Refused while the stream is stale. Rewording supersedes (a new fact, the old one retired), so a pinned fact that is reworded leaves "Always keep in mind" - pin the new wording. |
-| `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | `JarvisApi.setLearning` (Mind, "What Jarvis remembers") | **ON asks first** (`learning-asks.patch`, `jarvis_learning_switch.py`, 2026-09-24): **202** `{"ok": true, "waiting": true, "enabled": false, "message"}` while one approval card under the action `learning_enable` waits; it turns on (and starts the learner) only when that card is approved. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, and it withdraws a waiting ON. Both apps hold ON (not OFF) while the stream is stale, and say "waiting" until the card leaves the queue. A "Remember:" message makes a card even while learning is off. |
+| `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | `JarvisApi.setLearning` (Brain, "What Jarvis remembers") | **ON asks first** (`learning-asks.patch`, `jarvis_learning_switch.py`, 2026-09-24): **202** `{"ok": true, "waiting": true, "enabled": false, "message"}` while one approval card under the action `learning_enable` waits; it turns on (and starts the learner) only when that card is approved. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, and it withdraws a waiting ON. Both apps hold ON (not OFF) while the stream is stale, and say "waiting" until the card leaves the queue. A "Remember:" message makes a card even while learning is off. |
 | `/api/memory/learning/auto` | POST | `{"enabled": bool}` | `brain_memory_learning_auto` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Learn automatically" (on by default). The shape of `/api/memory/learning`: **OFF** 200 at once, never a card, withdraws a waiting ON; **ON** 202 `{"waiting": true, ...}` and ONE approval card, action `learning_auto_enable`; on only when it is approved. Already on: 200, no card. A second ON while one waits: 202, no second card. Tier other than `ask`: **503**. Bad body: `400`. Every reply carries the `GET /api/memory/learning` fields (not `enabled`). |
 | `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | `brain_memory_learning_sensitive` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted. Anything else: `400`. Every reply carries the `/api/history` status fields. |
@@ -1455,7 +1455,7 @@ outside text"). This route is not affected.
 | `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?, "still_loaded"?, "also"?, "note"?, "warm_up"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs, or while another power card waits; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model, and (2026-09-24) stops the second card's Ollama and the big model when they run: `also` is one sentence per engine that had something to say, and each sentence is appended to `message`, so an app that shows `message` shows them. The second card then stays stopped - status reads do not restart it - until the owner uses a second-card feature or Jarvis leaves standby; background learning does not wake it. A big-model job already under way is left to finish. |
 
 The mode clients show still comes from `/api/status` and the `power` event.
-Desktop: tray → Change power mode (`commands::set_power_mode`). Phone: Mind
+Desktop: tray → Change power mode (`commands::set_power_mode`). Phone: Brain
 screen buttons (`JarvisRuntime.setPower`). Both hold **waking** on a stale
 link and let going quieter through.
 
@@ -1506,7 +1506,7 @@ link and let going quieter through.
 
 `backend/second-card.patch` and `backend/jarvis_second_card.py`. The owner's
 guide is `docs/SECOND-CARD.md`. **Both apps call both** (2026-09-24). The
-phone: Mind screen, "Second graphics card" (`SecondCardPlate.kt` /
+phone: Brain screen, "Second graphics card" (`SecondCardPlate.kt` /
 `net/SecondCard.kt`), and chat's photo button. The desktop: Settings, "Second
 graphics card" (`get_second_card` / `set_second_card` in `commands.rs`,
 granted to the settings window only), and `vision.rs`, which reads it before
@@ -1595,7 +1595,7 @@ graphics card (<model>)" when `second_card` is in the route header.
 `backend/wiki.patch` and `backend/jarvis_wiki.py`; the owner's guide is
 `docs/SECOND-CARD.md`, "Wiki builder". Both apps call these routes: the
 desktop from the Brain's Memory tab (`src/wiki.js`, the `wiki_*` commands in
-`commands.rs`), the phone from Mind (`net/Wiki.kt`, `WikiPlate.kt`).
+`commands.rs`), the phone from Brain (`net/Wiki.kt`, `WikiPlate.kt`).
 `tools/check_parity.py` records both as `ported`.
 
 | Route | Body | Answers | Notes |
@@ -1635,7 +1635,7 @@ chat, voice or approvals. **Both apps call all three** (2026-09-24). The
 desktop: Settings, "Big model (slow)" (`get_big_model` / `set_big_model` in
 `commands.rs`, granted to the settings window only), and the Brain's Memory
 tab, "Deep questions" (`get_deep` / `ask_deep`, the `brain-deep` set, Brain
-window only; `src/deep.js`). The phone: Mind screen, "Big model (slow)" and
+window only; `src/deep.js`). The phone: Brain screen, "Big model (slow)" and
 "Deep questions" (`BigModelPlate.kt` / `net/BigModel.kt`).
 `tools/check_parity.py` records all three as `ported`.
 
@@ -2795,7 +2795,7 @@ so no chats are kept", "reason"}` - and chat keeps working, keeping nothing.
 ### 18.4 What each app shows
 
 Both apps (parity rule): a **History** view - desktop, a History section in
-the Brain window next to Memory; phone, a History screen next to Mind's
+the Brain window next to Memory; phone, a History screen next to the Brain's
 other sections. (The HUD page sends `conversation_id`, `device: "hud"` and
 `provenance` too, but has no History view of its own.)
 
@@ -2866,7 +2866,7 @@ an ordinary card, with the reason on it.
 Backend: `backend/auto-learn.patch` (last in the patch order) and
 `backend/jarvis_auto_learn.py` (shipped whole); a live-turn registry in
 `jarvis_chat_log.py`. **Both apps have it**: desktop Brain -> Memory
-(`brain/auto_learn.rs`, `auto-learn.js`), phone Mind -> What Jarvis remembers
+(`brain/auto_learn.rs`, `auto-learn.js`), phone's Brain -> What Jarvis remembers
 and Saved automatically (`net/AutoLearn.kt`, `AutoLearnPlate.kt`); `ported`
 in `tools/check_parity.py`.
 Every route needs the pairing token and passes the origin check.
@@ -3205,7 +3205,7 @@ waits for your yes", "reason"}` - and nothing is ever saved without a card.
 
 ### 19.5 What each app shows (both apps - parity rule)
 
-Where the learning switch lives today (desktop: Brain -> Memory; phone: Mind
+Where the learning switch lives today (desktop: Brain -> Memory; phone: Brain
 -> "What Jarvis remembers"):
 
 - **"Learn automatically"**, with: "Jarvis saves facts about you and your
@@ -3238,7 +3238,7 @@ Where the learning switch lives today (desktop: Brain -> Memory; phone: Mind
   same confirm; the desktop adds "Erase the words"), then "Show everything
   saved automatically" for the whole list. Hidden like the other memory
   lists. Desktop: Brain -> Memory (`brain.js` `openSavedList`); phone:
-  Mind (`MemoryCountsPlate.kt`, `JarvisRuntime.autoRememberedIds`).
+  Brain (`MemoryCountsPlate.kt`, `JarvisRuntime.autoRememberedIds`).
 - Cards that stayed cards show `auto_reason` as one quiet line.
 
 The approval cards read "Turn on automatic learning. ..." and "Also remember
@@ -3296,7 +3296,7 @@ arithmetic and the words, no I/O). The design is
 [`HARDWARE-PROFILES.md`](HARDWARE-PROFILES.md). **Both apps call all four
 routes.** The desktop: Settings, "Hardware and models" (`hardware-panel.js`,
 `hardware.rs`: `get_hardware`, `apply_hardware`, `hardware_step`,
-`measure_hardware`, settings window only). The phone: Mind, "Hardware"
+`measure_hardware`, settings window only). The phone: Brain, "Hardware"
 (`HardwarePlate.kt`, `net/Hardware.kt`). `tools/check_parity.py` records all
 four as `ported`.
 
@@ -3418,7 +3418,7 @@ all three routes.** The desktop: the Brain's Work tab, "Coming up"
 (`coming-up.js`, `brain/schedule.rs`: `brain_schedule`,
 `brain_schedule_act`, `brain_schedule_add_todo`, Brain window only), and a
 Windows toast when a job goes off (`stream.rs` -> `toast_fired`). The phone:
-Mind, "Coming up" (`ComingUpPlate.kt`, `net/Schedule.kt`), and a
+Brain, "Coming up" (`ComingUpPlate.kt`, `net/Schedule.kt`), and a
 notification when a job goes off (`JarvisRuntime.onScheduleEvent` ->
 `ScheduleNotifier`). `tools/check_parity.py` records all three as `ported`.
 
@@ -3554,8 +3554,10 @@ apps (30.5). On `"fired"`:
   `went_off_at`), with no Snooze.
 - **Answered elsewhere**: on `"changed"` for a timer, alarm or reminder
   (snoozed, deleted or done on the PC, by voice or in Coming up) the phone
-  takes that job's notification away, ringing or not. A "tell me when"
-  match's stays: its job ends the moment it matched.
+  takes that job's notification away, ringing or not, and the desktop takes
+  its "went off" toast away (tagged with the job id; a looping alarm stops -
+  `winrt_toast.rs` `remove_fired`). A "tell me when" match's stays: its job
+  ends the moment it matched.
 
 ### 21.5 Answered without the model - `/api/chat`
 
@@ -3619,7 +3621,7 @@ skips a sentence the grammar matches, and one the model set a reminder
 from (the scheduler keeps its digest, never its words). The chat history
 keeps the turn like any other (encrypted, and not for a temporary chat).
 While the private lists are hidden, the desktop's Rust takes the words out
-of Coming up before the page sees them, and the phone hides them on Mind;
+of Coming up before the page sees them, and the phone hides them on the phone's Brain screen;
 the times stay, so a timer still counts down.
 
 ### 21.7 Known gaps, said plainly
@@ -3881,9 +3883,9 @@ the Brain's Work tab, "Morning briefing" (`brain/briefing.rs`
 `brain_briefing`, `brain_briefing_now`, Brain only) and Settings, "Morning
 briefing" (`get_briefing_setup`, `set_briefing`, `stop_briefing`, Settings
 only); a Windows toast when one is ready (`stream.rs` -> `toast_ready`). The
-phone: Mind, "Morning briefing" (`BriefingPlate.kt`, `net/Briefing.kt`) -
-on the phone, settings for a PC feature live on Mind, like the second
-card's switches; a notification when one is ready, which opens Mind.
+phone: Brain, "Morning briefing" (`BriefingPlate.kt`, `net/Briefing.kt`) -
+on the phone, settings for a PC feature live on the phone's Brain screen, like the second
+card's switches; a notification when one is ready, which opens the Brain.
 
 ### 22.1 What it is
 
@@ -3983,7 +3985,7 @@ so it is late.)".
   summaries - counts only - stay. The email senders are lines, so they go
   too ("3 unread emails." stays).
 - **"Show who new emails are from"** - the desktop's Settings -> Morning
-  briefing, the phone's Mind -> Morning briefing, in the same words
+  briefing, the phone's Brain -> Morning briefing, in the same words
   (`briefing.js`, `net/Briefing.kt`, checked by `tests/briefing.mjs`): "The
   briefing lists who your newest unread emails are from (up to 5), next to
   how many there are. Off: the number only. Turning it on shows you an
@@ -4095,7 +4097,7 @@ offer as a remembered preference; that part was not taken.
   if it were in this PC's time zone.
 - **The desktop toast does not open the briefing**: it is the same plain
   toast the timers use; the briefing is on the Brain's Work tab. The
-  phone's notification opens Mind.
+  phone's notification opens the Brain.
 - **English only**, like the timers.
 - **One briefing is kept - the latest.** "Brief me now" on one app replaces
   it; the other app shows the new one at its next read (Refresh, or opening
@@ -4146,7 +4148,7 @@ briefing.
   stays on screen under the apps' private-answer rule, like the briefing.
 - **Both apps**: "What did I miss?" next to "Brief me now" in the Morning
   briefing part (desktop Brain -> Work, `brain_briefing_now {missed: true}`;
-  phone Mind, `JarvisRuntime.briefingMissed`) -> `POST /api/briefing/now
+  phone's Brain, `JarvisRuntime.briefingMissed`) -> `POST /api/briefing/now
   {"missed": true}` -> `{"ok": true, "briefing": <the answer>}`. A read, so not
   held on a stale link. Shown in place of the briefing, with "Since you last
   talked to Jarvis, on either app: ... Put together on your PC without the AI
@@ -4196,8 +4198,8 @@ and the model tool `web_search` in `backend/jarvis_agent.py`. **Both apps
 call all three routes**: the desktop's Settings, "Web search"
 (`web_search.rs`: `get_web_search`, `set_web_search`, `test_web_search`,
 Settings window only; `web-search-settings.js`, `web-search.js`), and the
-phone's Mind, "Web search" (`WebSearchPlate.kt`, `net/WebSearch.kt`) - on the
-phone, settings for a PC feature live on Mind. `ported` in
+phone's Brain, "Web search" (`WebSearchPlate.kt`, `net/WebSearch.kt`) - on the
+phone, settings for a PC feature live on the phone's Brain screen. `ported` in
 `tools/check_parity.py`. The contract file both apps build against is
 `tests/fixtures/web-search-cases.json` / `contract/web-search-cases.json`,
 written by `tools/gen_web_search_cases.py` from the real code.
@@ -4383,7 +4385,7 @@ says only `key_saved: true|false`.
   Windows system proxy is not checked; Jarvis passes it none. `ddgs` cannot
   tell "no results" from "blocked for a while", so the answer says both.
 - The phone learns of a setting changed on the desktop at its next read
-  (Refresh or opening Mind) - there is no event for it.
+  (Refresh or opening the Brain) - there is no event for it.
 - "Saved memories were read" is judged on THIS turn (the FACTS block, or
   `memory_search`); an earlier turn's recalled facts are not tracked, so a
   later search in the same conversation that has read nothing else runs
@@ -4397,7 +4399,7 @@ from the PC's own settings, never by the model. `backend/jarvis_reach.py`
 (shipped whole) and `backend/reach.patch` (the route). **Both apps show
 it**: the desktop's Settings, "What Jarvis can reach" (`reach.rs`
 `get_reach`, Settings window only; `reach-settings.js`, `reach.js`), and the
-phone's Mind, "What Jarvis can reach" (`ReachPlate.kt`, `net/Reach.kt`).
+phone's Brain, "What Jarvis can reach" (`ReachPlate.kt`, `net/Reach.kt`).
 `ported` in `tools/check_parity.py`. The contract file both apps build
 against is `tests/fixtures/reach-cases.json` /
 `contract/reach-cases.json`, written by `tools/gen_reach_cases.py` from the
@@ -4544,7 +4546,7 @@ read-only. A new way out of the PC: docs/ARCHITECTURE.md section 4,
 answered through the same Approve and Deny as every other card (section 3).
 The one route below is the Settings line: the desktop's Settings, "Sending
 email" (`email_sending.rs` `get_email_sending`, Settings window only;
-`email-sending-settings.js`, `email-sending.js`), and the phone's Mind,
+`email-sending-settings.js`, `email-sending.js`), and the phone's Brain,
 "Sending email" (`EmailSendingPlate.kt`, `net/EmailSending.kt`). `ported` in
 `tools/check_parity.py`. The contract file both apps build against is
 `tests/fixtures/email-sending-cases.json` /
@@ -4746,7 +4748,7 @@ answers are worded as before.
 ### 27.3 In the apps
 
 Desktop: Settings, "How Jarvis talks" (two choices with the PC's words).
-Phone: Mind, "How Jarvis talks". The same words in both, checked against
+Phone: Brain, "How Jarvis talks". The same words in both, checked against
 `plain-error-cases.json` (`manner`).
 
 ### 27.4 Known gaps, said plainly
@@ -5199,7 +5201,7 @@ pause, resume, extend, snooze, research and lock - not every second.
 
 | | Desktop | Phone |
 |---|---|---|
-| any `focus` | The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`) | Mind's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`) |
+| any `focus` | The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`) | the Brain's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`) |
 | `callout` | Rust fetches `GET /api/focus/callout?seq=` from this PC only (loopback) and hands the sound to the Jarvis bar, which plays it unless Jarvis is talking; "stop" silences it (`brain/focus.rs` `play_callout`, `main.js` `playFocusCallout`) | Nothing - the line is the PC's alone |
 
 ### 31.6 What is kept, and where
@@ -5266,7 +5268,7 @@ that list can be loosened from an app.**
 `backend/jarvis_asks_first.py` (shipped whole). Desktop: Settings, "What asks
 first" (`asks-first.js`, `asks-first-settings.js`, `asks_first.rs`:
 `get_asks_first`, `set_asks_first`, `set_lights_without_card`, Settings
-window only). Phone: Mind, "What asks first" (`AsksFirstPlate.kt`,
+window only). Phone: Brain, "What asks first" (`AsksFirstPlate.kt`,
 `net/AsksFirst.kt`). Both read `tests/fixtures/asks-first-cases.json` /
 `contract/asks-first-cases.json`, written by `tools/gen_asks_first_cases.py`
 from the real `view()`. `tools/check_parity.py` records all three routes as

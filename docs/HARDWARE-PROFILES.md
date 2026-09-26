@@ -1130,7 +1130,7 @@ today's "Second graphics card" section):
 5. **Details** (collapsed) - every number with its arithmetic, as in 8.2.
 6. The existing five lane switches stay, under "Extra features".
 
-**Phone (Mind → "Hardware")**: your cards (names and memory only), the
+**Phone (Brain → "Hardware")**: your cards (names and memory only), the
 current preset and whether it is measured, the recommended preset, and
 **Apply**, which asks the PC to start the steps in 4.5 - each still an
 approval card the owner answers on the PC or the phone. The phone shows
@@ -1331,7 +1331,7 @@ Order matters: the measurement first, because it may change the numbers.
 9. **Desktop** - Settings "Hardware and models" (4.6), folding in today's
    "Second graphics card" section. Rust checked with the Windows-target
    `cargo check`/`clippy` per CLAUDE.md.
-10. **Phone** - the Hardware plate on Mind (4.6), from the fixture;
+10. **Phone** - the Hardware plate on the phone's Brain screen (4.6), from the fixture;
     `ApiContractTest` entries for the three routes. CI is the only compiler
     for it (CLAUDE.md).
 11. **Docs** - MODEL-TOPOLOGY.md's stale items (section 3) rewritten from
