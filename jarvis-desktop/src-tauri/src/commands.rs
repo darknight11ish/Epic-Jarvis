@@ -2576,16 +2576,20 @@ pub fn open_approval_in_quickbar(app: AppHandle, id: Option<String>) -> Result<(
     Ok(())
 }
 
-/// Whether the waiting approval `id` is an email (action `send_email`), as
-/// this process last read the queue.
+/// Whether the widget's Approve for `id` must go to the Jarvis bar instead:
+/// the card is an email (action `send_email`), OR this process has not read
+/// that card at all yet - an id it cannot see might be an email, so it
+/// fails closed, the same way the Windows Hello check treats an unknown card
+/// as risky (2026-09-26 bug audit, desktop finding 5).
 fn waiting_email(app: &AppHandle, id: &str) -> bool {
-    app.state::<crate::stream::StreamState>()
-        .pending()
+    let pending = app.state::<crate::stream::StreamState>().pending();
+    let card = pending
         .iter()
-        .any(|item| {
-            crate::stream::approval_id(item).as_deref() == Some(id)
-                && crate::email_sending::is_email(item)
-        })
+        .find(|item| crate::stream::approval_id(item).as_deref() == Some(id));
+    match card {
+        Some(item) => crate::email_sending::is_email(item),
+        None => true,
+    }
 }
 
 /// [`open_approval_in_quickbar`] from inside `answer_approval`, where a
