@@ -1902,6 +1902,37 @@ def _heartbeat(out: _Out, stop: threading.Event, every: float, delay: float) -> 
 REASONING_OFF = {"reasoning_effort": "none"}
 _reasoning_field_refused = False
 
+# --------------------------------------------------------------------------
+#   How much of each prompt Ollama reused (feasibility audit I03, 2026-09-26)
+# --------------------------------------------------------------------------
+#
+# Ollama keeps the start of the last prompt it read and reuses it when the
+# next one starts the same way; its OpenAI endpoint says how much in
+# `usage.prompt_tokens_details.cached_tokens` (ollama openai/openai.go),
+# sent in a stream only when the request asks for it with
+# `stream_options: {"include_usage": true}` - as a last chunk whose
+# `choices` is empty. Every streamed round asks. The per-turn totals go to
+# the speed record (jarvis_speed.note_prompt: numbers only, a file on this
+# PC, never words), so a later change - a shorter tool list, a moved system
+# line - can be measured by what it costs each turn, not guessed. An Ollama
+# that does not know the field ignores it (unknown JSON fields are skipped)
+# and nothing is recorded.
+PROMPT_USAGE = {"stream_options": {"include_usage": True}}
+
+
+def _note_prompt_use(prompt_tokens: Optional[int], cached_tokens: Optional[int],
+                     rounds: int) -> None:
+    """Hand one turn's prompt totals to the speed record. Never raises: it
+    is bookkeeping and must never cost an answer."""
+    if prompt_tokens is None and cached_tokens is None:
+        return
+    try:
+        import jarvis_speed
+        jarvis_speed.note_prompt(prompt_tokens=prompt_tokens, cached_tokens=cached_tokens,
+                                 rounds=rounds)
+    except Exception:
+        pass
+
 
 class _ThinkStripper:
     """Removes `<think>...</think>` from text that arrives in pieces. A tag
@@ -3097,6 +3128,12 @@ class _Round:
         self.ended = False
         self.id = ""
         self.created = 0
+        # Ollama's own count of this request's prompt, and how much of it
+        # it reused from the last request instead of reading it again
+        # (usage.prompt_tokens_details.cached_tokens). Numbers only; None
+        # when Ollama did not say (an older Ollama sends no cached count).
+        self.prompt_tokens: Optional[int] = None
+        self.cached_tokens: Optional[int] = None
 
     def add_calls(self, deltas) -> None:
         """Tool calls as they arrive. Ollama sends each call whole in one
@@ -3137,6 +3174,17 @@ def _read_chunk(obj: dict, rnd: _Round, on_text: Callable[[str], None]) -> None:
         raise kind(f"The local model stopped with an error: {msg}")
     rnd.id = rnd.id or str(obj.get("id") or "")
     rnd.created = rnd.created or int(obj.get("created") or 0)
+    usage = obj.get("usage")
+    if isinstance(usage, dict):
+        # The last chunk of a stream asked for with PROMPT_USAGE (its
+        # `choices` is empty), or a whole non-streamed reply.
+        pt = usage.get("prompt_tokens")
+        details = usage.get("prompt_tokens_details")
+        ct = details.get("cached_tokens") if isinstance(details, dict) else None
+        if isinstance(pt, int) and not isinstance(pt, bool) and pt >= 0:
+            rnd.prompt_tokens = pt
+        if isinstance(ct, int) and not isinstance(ct, bool) and ct >= 0:
+            rnd.cached_tokens = ct
     choice = (obj.get("choices") or [{}])[0] or {}
     delta = choice.get("delta") or choice.get("message") or {}
     text = delta.get("content")
@@ -3571,6 +3619,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     created = int(time.time())
     finish: Optional[str] = None
     rounds = 0
+    # Ollama's prompt counts, summed over this turn's rounds (PROMPT_USAGE).
+    prompt_use: dict = {"prompt": None, "cached": None}
 
     def say_step(phase: str, tool: Optional[str] = None, **kw) -> None:
         try:
@@ -3610,7 +3660,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             room -= estimate_tokens({"role": "system", "content": CUT_OFF_NOTE.format(
                 said=watch.cut_off)})
         body = {"model": cur["model"], "messages": fit_messages(msgs, room),
-                "stream": True, **opts}
+                "stream": True, **PROMPT_USAGE, **opts}
         if manner_msg is not None:
             # The owner's manner (warm or plain): wording only, never first,
             # and before the spoken note so that one is nearer the question.
@@ -3644,6 +3694,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
         if post is not None:
             whole = dict(body, stream=False)
+            # Only a stream takes stream_options; a whole reply has `usage`.
+            whole.pop("stream_options", None)
             resp = post(chat_url(), whole)
             _read_chunk(resp, rnd, on_text)
             rnd.ended = True
@@ -3697,6 +3749,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 first["text"] = False
                 say_step("answer")
             emit(tail)
+        for key, got in (("prompt", rnd.prompt_tokens), ("cached", rnd.cached_tokens)):
+            if got is not None:
+                prompt_use[key] = (prompt_use[key] or 0) + got
         return rnd
 
     def fail(message: str) -> None:
@@ -3842,10 +3897,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 recorder(steps)
             except Exception:
                 pass
+        # Numbers only, to the speed record (PROMPT_USAGE). Before
+        # jarvis_hud's own speed.finish(), which writes the row.
+        _note_prompt_use(prompt_use["prompt"], prompt_use["cached"], rounds)
     return {"finish_reason": finish, "client_gone": out.gone, "rounds": rounds,
             "answer": "".join(answer),
             "tools_ran": [s["tool"] for s in steps if s.get("ran")],
-            "outside_flags": sorted(watch.flags)}
+            "outside_flags": sorted(watch.flags),
+            "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}
 
 
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,

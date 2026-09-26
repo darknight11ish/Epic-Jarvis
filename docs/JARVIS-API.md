@@ -1068,7 +1068,11 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/history/conversation?id=` | GET | `brain_history_open` | `JarvisApi.historyConversation` | `chat-history.patch` - **§18**. One kept conversation, read-only: `{id, title, tainted, turns: [{role, text, at, provenance, read_outside, answer_kept} or {role: "assistant", text, at}]}`. `404` if there is no such conversation, `400` for a malformed id, `503` if it cannot be opened (the reason in words). |
 
 **`/api/models` gains `speed`** (`speed-record.patch`), next to `offload`:
-`{"available": true, "recent": [up to 20 answer rows, oldest first],
+`{"available": true, "recent": [up to 20 answer rows, oldest first; since
+2026-09-26 a row may also carry "cached_tokens" (how much of the prompt
+Ollama reused) and "prompt_rounds" (requests to the model in that answer,
+whose "prompt_tokens" and "cached_tokens" are summed) - numbers only, and
+neither app needs to show them],
 "by_model": {"<model>": {"answers", "median_first_word_ms",
 "median_tokens_per_s", "median_words_per_s", "median_on_gpu_percent",
 "last_at"}}, "last_switch": null | {...}, "last_switch_note": null | "<sentence>",

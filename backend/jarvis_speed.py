@@ -66,6 +66,10 @@ _NUMBER_FIELDS = {
     # one answer
     "first_word_ms", "total_ms", "words", "words_per_s", "tokens",
     "tokens_per_s", "prompt_tokens", "on_gpu_percent",
+    # how much of the prompt Ollama reused rather than read again (I03,
+    # 2026-09-26): summed over the answer's requests to the model, and how
+    # many requests that was (note_prompt)
+    "cached_tokens", "prompt_rounds",
     # one speed measurement of one model (measure())
     "probes", "load_ms",
     # one model switch (SwitchSpeed)
@@ -249,6 +253,8 @@ class Meter:
         self.deltas = 0             # content pieces - roughly one per token
         self.usage_tokens = None    # OpenAI `usage.completion_tokens`
         self.prompt_tokens = None
+        self.cached_tokens = None   # `usage.prompt_tokens_details.cached_tokens`
+        self.noted = None           # note_prompt()'s totals, for a tool-loop answer
         self.ollama = None          # Ollama's own final timings, if sent
         self._done = False
 
@@ -320,10 +326,25 @@ class Meter:
                 self.usage_tokens = ct
             if isinstance(pt, int) and not isinstance(pt, bool):
                 self.prompt_tokens = pt
+            details = usage.get("prompt_tokens_details")
+            cached = details.get("cached_tokens") if isinstance(details, dict) else None
+            if isinstance(cached, int) and not isinstance(cached, bool):
+                self.cached_tokens = cached
         if obj.get("done") is True:
             t = timing_from_reply(obj)
             if t:
                 self.ollama = t
+
+    def note_prompt(self, *, prompt_tokens=None, cached_tokens=None, rounds=None) -> None:
+        """The chat tool loop's own count (jarvis_agent.PROMPT_USAGE): the
+        prompt tokens of every request this answer made to the model, and
+        how many of them Ollama reused instead of reading again. The loop
+        re-writes the stream the client sees, so those counts never pass
+        through feed(). Numbers only; anything else is ignored."""
+        def num(v):
+            return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+        self.noted = {"prompt_tokens": num(prompt_tokens), "cached_tokens": num(cached_tokens),
+                      "prompt_rounds": num(rounds)}
 
     # -- the row -------------------------------------------------------------
 
@@ -376,7 +397,12 @@ class Meter:
             "tokens": tokens,
             "tokens_per_s": tps,
             "token_source": source,
-            "prompt_tokens": (self.ollama or {}).get("prompt_tokens", self.prompt_tokens),
+            "prompt_tokens": (self.ollama or {}).get(
+                "prompt_tokens", self.prompt_tokens
+                if self.prompt_tokens is not None else (self.noted or {}).get("prompt_tokens")),
+            "cached_tokens": (self.cached_tokens if self.cached_tokens is not None
+                              else (self.noted or {}).get("cached_tokens")),
+            "prompt_rounds": (self.noted or {}).get("prompt_rounds"),
         })
 
     def finish(self, model: Optional[str] = None, *, tools: Optional[bool] = None,
@@ -392,6 +418,8 @@ class Meter:
         if self._done:
             return None
         self._done = True
+        if getattr(_current, "meter", None) is self:
+            _current.meter = None
         try:
             row = self.row(model, tools=tools)
         except Exception:
@@ -417,13 +445,37 @@ class Meter:
         return row
 
 
+#: The Meter start() made on this thread, until it finishes: where
+#: note_prompt() puts the chat tool loop's counts. jarvis_hud.py calls
+#: start(), jarvis_agent.run_local_turn and finish() on the one request
+#: thread, so this links them without a change to jarvis_hud.py.
+_current = threading.local()
+
+
 def start(model: str = "", *, tools: bool = False) -> Optional[Meter]:
     """For the hook in jarvis_hud.py: a Meter, or None if anything at all
     goes wrong. Timing is bookkeeping and must never cost an answer."""
     try:
-        return Meter(model, tools=tools)
+        m = Meter(model, tools=tools)
+        _current.meter = m
+        return m
     except Exception:
         return None
+
+
+def note_prompt(*, prompt_tokens=None, cached_tokens=None, rounds=None) -> bool:
+    """jarvis_agent's prompt counts for the answer being timed on this
+    thread (Meter.note_prompt). False, and nothing kept, when no answer is
+    being timed here. Never raises."""
+    try:
+        m = getattr(_current, "meter", None)
+        if m is None or m._done:
+            return False
+        m.note_prompt(prompt_tokens=prompt_tokens, cached_tokens=cached_tokens,
+                      rounds=rounds)
+        return True
+    except Exception:
+        return False
 
 
 def _same_model(a: str, b: str) -> bool:

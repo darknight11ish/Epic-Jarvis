@@ -3929,6 +3929,14 @@ settings folder (`%USERPROFILE%\.openjarvis\` unless you moved it):
 - words per second and tokens per second
 - how much of the model was on the graphics card
 - whether tools were used
+- how big the prompt was, and how much of it Ollama **reused** from the
+  last question instead of reading it again (added 2026-09-26, feasibility
+  audit I03: `prompt_tokens`, `cached_tokens`, and `prompt_rounds` - how
+  many requests the answer made to the model, since a tool turn makes
+  several and the counts are their sum). This is the ruler for later speed
+  work: a shorter tool list or a moved line either keeps the reuse high or
+  it does not. It needs an Ollama new enough to report the reused count;
+  an older one leaves `cached_tokens` out.
 
 **What it never records: any words of the conversation.** Not the question,
 not the answer, not a summary. That is enforced in code: every row goes

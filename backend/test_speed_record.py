@@ -146,6 +146,121 @@ def t_no_words_ever_reach_the_file():
               | set(S._ENUM_FIELDS) for r in log.tail()))
 
 
+def t_prompt_reuse_is_recorded():
+    """I03 (feasibility audit step 0, 2026-09-26): how much of each prompt
+    Ollama reused instead of reading again - numbers only."""
+    log = tmplog()
+    with NoNetwork():
+        # A relayed stream that carries OpenAI's usage chunk (choices empty).
+        m = S.Meter("m", clock=Clock())
+        for c in chop(sse(["Hi", " there"], usage={
+                "prompt_tokens": 900, "completion_tokens": 2,
+                "prompt_tokens_details": {"cached_tokens": 850}}), 9):
+            m.feed(c)
+        row = m.finish(log=log, gpu=lambda n: None, background=False)
+    check("a relayed stream's reused prompt tokens are recorded",
+          row and row.get("prompt_tokens") == 900 and row.get("cached_tokens") == 850, row)
+
+    # The chat tool loop: start() on the request thread, the loop's own
+    # totals through note_prompt(), then the hook's finish().
+    with NoNetwork():
+        m = S.start("jarvis-primary")
+        ok = S.note_prompt(prompt_tokens=4200, cached_tokens=3900, rounds=2)
+        m.feed(sse(["Done", "."]))
+        row = m.finish(log=log, gpu=lambda n: None, background=False)
+    check("note_prompt() reaches the answer being timed on this thread", ok is True)
+    check("... and its row has the turn's prompt, reused and request counts",
+          row and row.get("prompt_tokens") == 4200 and row.get("cached_tokens") == 3900
+          and row.get("prompt_rounds") == 2, row)
+    check("after finish, nothing is being timed here: note_prompt() keeps nothing",
+          S.note_prompt(prompt_tokens=1, cached_tokens=1, rounds=1) is False)
+    m2 = S.start("x")
+    S.note_prompt(prompt_tokens="a secret sentence", cached_tokens=-4, rounds=True)
+    m2.feed(sse(["ok", "ay"]))
+    bad = m2.finish(log=log, gpu=lambda n: None, background=False)
+    check("anything but a whole number is dropped, never written",
+          bad and "prompt_tokens" not in bad and "cached_tokens" not in bad
+          and "prompt_rounds" not in bad, bad)
+    raw = log.path.read_text(encoding="utf-8")
+    check("no words in the file", "secret" not in raw and "there" not in raw)
+
+
+def t_the_tool_loop_asks_for_and_hands_over_prompt_reuse():
+    """jarvis_agent asks Ollama for the usage chunk on every streamed round,
+    sums prompt and reused tokens over the turn's rounds, returns them, and
+    hands them to the answer being timed on this thread."""
+    require_shipped("jarvis_agent.py")
+    import jarvis_agent as AG
+
+    class Fake:
+        def __init__(self, body):
+            self._chunks = [body, b""]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, _n=1024):
+            return self._chunks.pop(0) if self._chunks else b""
+
+    def chunk(delta, finish=None):
+        return {"id": "c1", "object": "chat.completion.chunk", "created": 1,
+                "model": "m", "choices": [{"index": 0, "delta": delta,
+                                           "finish_reason": finish}]}
+
+    def body(chunks, prompt, cached):
+        lines = [json.dumps(c) for c in chunks]
+        lines.append(json.dumps({"id": "c1", "choices": [], "usage": {
+            "prompt_tokens": prompt, "completion_tokens": 3,
+            "prompt_tokens_details": {"cached_tokens": cached}}}))
+        return ("".join(f"data: {x}\n\n" for x in lines) + "data: [DONE]\n\n").encode()
+
+    rounds = [
+        body([chunk({"role": "assistant", "tool_calls": [{"id": "t1", "index": 0,
+              "type": "function", "function": {"name": "calculator",
+                                               "arguments": "{\"expression\": \"2+2\"}"}}]}),
+              chunk({}, "tool_calls")], 3000, 0),
+        body([chunk({"role": "assistant", "content": "It is 4."}), chunk({}, "stop")],
+             3100, 2990),
+    ]
+    sent = []
+
+    def opener(url, payload):
+        sent.append(payload)
+        return Fake(rounds[len(sent) - 1])
+
+    def allow(*_a, **_k):
+        class _Ok:
+            allowed, reason, outcome, tier = True, "approved", "approved", "auto"
+        return _Ok()
+
+    real_rec, real_pub = AG._record_chain, AG._publish_step
+    AG._record_chain = lambda steps: None
+    AG._publish_step = lambda step: None
+    try:
+        meter = S.start("m")
+        turn = AG.run_local_turn(
+            [{"role": "user", "content": "what is 2+2"}], "m",
+            # As jarvis_hud.py wires it: what the app is sent is fed to the meter.
+            ollama_url="http://127.0.0.1:1", stream_out=meter.feed, gate_check=allow,
+            open_stream=opener, context_length=4096, lane_choice=None,
+            model_waking=lambda u, m: False, manner=None)
+        row = meter.finish(log=tmplog(), gpu=lambda n: None, background=False)
+    finally:
+        AG._record_chain, AG._publish_step = real_rec, real_pub
+    check("every streamed round asks Ollama for the usage chunk",
+          len(sent) == 2 and all(p.get("stream_options") == {"include_usage": True}
+                                 for p in sent), [p.get("stream_options") for p in sent])
+    check("the turn returns its prompt and reused tokens, summed over its rounds",
+          turn.get("prompt_tokens") == 6100 and turn.get("cached_tokens") == 2990, turn)
+    check("... and the speed row gets them, with the number of requests",
+          row and row.get("prompt_tokens") == 6100 and row.get("cached_tokens") == 2990
+          and row.get("prompt_rounds") == 2, row)
+    check("the answer itself is unchanged", turn.get("answer") == "It is 4.", turn)
+
+
 def t_the_other_stream_shapes():
     clk = Clock()
     with NoNetwork():
@@ -408,6 +523,7 @@ def t_the_real_file():
 
 if __name__ == "__main__":
     for fn in (t_timing_an_answer, t_no_words_ever_reach_the_file,
+               t_prompt_reuse_is_recorded, t_the_tool_loop_asks_for_and_hands_over_prompt_reuse,
                t_the_other_stream_shapes, t_tools_and_summaries,
                t_the_file_never_breaks_an_answer, t_the_switch_speed_check,
                t_measure_stays_on_this_pc, t_the_patch_context, t_the_real_file):
