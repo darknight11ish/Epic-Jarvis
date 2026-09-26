@@ -1,0 +1,35 @@
+/* The upright (1080x1920) layout, loaded after film.css: only positions and sizes change. */
+body.tall #hero-wrap { left: 40px; top: 360px; }
+body.tall #cap { bottom: 300px; max-width: 960px; font-size: 48px; }
+body.tall #cap b { font-size: 28px; }
+body.tall .tl { font-size: 36px; line-height: 1.45; padding: 0 50px; }
+body.tall .br.bl0, body.tall .br.br0 { bottom: 240px; }
+body.tall #hud-beat, body.tall #hud-tc { bottom: 258px; }
+body.tall #hud-tc { display: none; }
+
+body.tall #s0 .line { bottom: auto; top: 1260px; font-size: 118px; }
+
+body.tall #tl-focus, body.tall #tl-tell, body.tall #tl-stop { top: 200px; }
+body.tall #focus-run, body.tall #focus-drift { left: 70px; top: 360px; width: 940px; }
+body.tall #focus-rep { left: 70px; top: 900px; width: 940px; }
+
+body.tall #tell-card { left: 50px; top: 330px; width: 980px; }
+body.tall #phone-t { left: 347px; top: 900px; zoom: 0.95; }
+
+body.tall .keys { top: 620px; gap: 16px; }
+body.tall .key { min-width: 0; padding: 26px 30px 32px; font-size: 76px; }
+body.tall .plus { font-size: 54px; }
+body.tall #toast { left: 90px; right: auto; bottom: auto; top: 1000px; width: 900px; }
+body.tall #toast .ti { font-size: 30px; }
+body.tall #toast .tx { font-size: 27px; }
+
+body.tall #s5 .line { top: 200px; font-size: 96px; }
+body.tall #ready-mail { left: 50px; right: 50px; top: 322px; font-size: 25px; text-align: center; }
+body.tall #mail-card { left: 50px; top: 400px; width: 980px; height: 340px; object-fit: cover; object-position: top; }
+body.tall #phone-f { left: 347px; top: 800px; zoom: 0.95; }
+body.tall #approved { left: 0; right: 0; margin: 0 auto; width: fit-content; top: 1040px; font-size: 34px; }
+body.tall #tl-asks { display: none; }
+
+body.tall .outro { top: 260px; font-size: 118px; }
+body.tall #wordmark { top: 1480px; }
+body.tall #tell-ok { left: 50px; top: 810px; }

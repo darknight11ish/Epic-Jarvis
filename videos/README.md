@@ -2,6 +2,23 @@
 
 Every version is kept. The newest is at the top. Tap a picture to watch.
 
+## v4 — "Cutting-edge. And it still asks first." (30 s, plus a 15 s upright cut)
+
+[![Jarvis launch video v4](v4/jarvis-launch-v4.jpg)](v4/jarvis-launch-v4.mp4)
+
+v2's fast, punchy style again, now with Jarvis's newest features:
+- focus sessions ("YouTube can wait.");
+- "Tell me when" alerts that ring your phone until you look;
+- Alt+Shift+X to stop everything;
+- a Windows Hello check before sending an email (ready);
+- answers that need no AI model;
+- a memory with "Erase the words".
+
+Every screen is the real desktop app with made-up examples, and
+`v4/brag-plan.md` lists where each claim is in the code.
+
+For a phone held upright: [the 15-second cut](v4/jarvis-launch-v4-vertical.mp4).
+
 ## v3 — "It asks first" (32 s, plus a 15 s upright cut)
 
 [![Jarvis launch video v3](v3/jarvis-launch-v3.jpg)](v3/jarvis-launch-v3.mp4)

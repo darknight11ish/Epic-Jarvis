@@ -6,26 +6,20 @@ Non-commercial, for one owner.
 
 ## Launch video
 
-[![Jarvis launch video v3: it asks first](videos/v3/jarvis-launch-v3.jpg)](videos/v3/jarvis-launch-v3.mp4)
+[![Jarvis launch video v4: cutting-edge, and it still asks first](videos/v4/jarvis-launch-v4.jpg)](videos/v4/jarvis-launch-v4.mp4)
 
-**Tap the picture to watch v3** (32 seconds; it has captions, so sound is
-optional). It opens the video file, and GitHub plays it in the browser. On a
-phone held upright, watch [the 15-second cut](videos/v3/jarvis-launch-v3-vertical.mp4).
+**Tap the picture to watch v4** (30 seconds, sound on; every spoken line is
+captioned). It opens the video file, and GitHub plays it in the browser. On a
+phone held upright, watch [the 15-second cut](videos/v4/jarvis-launch-v4-vertical.mp4).
 
-What it shows:
-- Jarvis asks before it acts, on the desktop and the phone at once, and the
-  phone checks it's you before a risky yes. The example is a visible browser
-  renewing a library book, only on the one site you approved. That part is
-  built and switches on once a second graphics card is in.
-- It asks before it remembers something about you, and keeps a history of
-  what changed.
-- It stops when you say "stop".
-
-Every screen is the real desktop app, with sample data.
+It shows focus sessions, "Tell me when" alerts, the Stop everything key,
+approvals checked by Windows Hello or your fingerprint, answers that need no
+AI model, and a memory you can erase. Every screen is the real desktop app,
+with made-up examples.
 
 Every version is kept in [`videos/`](videos/), with the plan and the project
 needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
-[v2](videos/v2/jarvis-launch-v2.mp4).
+[v2](videos/v2/jarvis-launch-v2.mp4), [v3](videos/v3/jarvis-launch-v3.mp4).
 
 ## How it fits together
 
