@@ -3498,9 +3498,13 @@ If you say no: nothing is set up.
 ```
 
 Its notice (the lock screen's words) comes from `jarvis_gate`'s table like
-every other card: since 2026-09-26 "sets up a morning briefing or a \"tell
-me when\" that repeats on this PC; setting it up sends nothing anywhere, and
-deleting it is immediate" (`asks-first.patch`; before it, `briefing.patch`
+every other card: since 2026-09-26 "sets up a morning briefing, which reads
+your calendar and email if they are set up, or a \"tell me when\", which looks
+at your own mail server or Home Assistant each time; the card says exactly
+what each run reads, what it finds goes only to your own apps, and deleting
+it is immediate" (`asks-first.patch`; it said "setting it up sends nothing
+anywhere" for a few hours on 2026-09-26, which contradicted a "tell me when"
+card's own "How:" line; before it, `briefing.patch`
 said "... - a reminder, an alarm, a morning briefing or a standby schedule
 ...", and `schedule.patch` alone "sets up a reminder, an alarm or a standby
 schedule that repeats, on this PC ..."). A briefing's card replaces the "It runs on this
