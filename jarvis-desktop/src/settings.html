@@ -512,6 +512,23 @@
           <p class="sc-line" id="cv-pending" data-tone="warn" hidden></p>
           <p class="sc-line" id="cv-last" hidden></p>
 
+          <!-- How fast every voice speaks: the PC's `speed` block, choices
+               and words its own (custom-voices.js speedView). No card
+               either way; held on a stale link (voice_training.rs
+               set_voice_speed). The phone's Voices screen has the same. -->
+          <div id="cv-speed" hidden>
+            <h3 class="subhead" id="cv-speed-title">How fast Jarvis speaks</h3>
+            <p class="note" id="cv-speed-detail"></p>
+            <fieldset class="theme-list" id="cv-speed-list">
+              <legend class="label">Speed</legend>
+              <div id="cv-speed-choices"></div>
+            </fieldset>
+            <p class="note" id="cv-speed-note" hidden></p>
+            <div class="row">
+              <span class="status" id="cv-speed-status" role="status"></span>
+            </div>
+          </div>
+
           <h3 class="subhead">Voices</h3>
           <ul class="sc-cards" id="cv-list"></ul>
           <div class="row">

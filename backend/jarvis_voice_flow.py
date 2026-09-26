@@ -325,17 +325,20 @@ def _reference_sources() -> list:
             size = -1
         if size > 0:
             sid = S._cfg("tts_speaker_id", 0) or 0
+            # The owner's speaking speed (one source: jarvis_speech.tts_speed).
+            speed = (S.tts_speed() if hasattr(S, "tts_speed")
+                     else float(S._cfg("tts_speed", 1.0) or 1.0))
 
-            def load_builtin(S=S, sid=sid):
+            def load_builtin(S=S, sid=sid, speed=speed):
                 engine = S._tts_engine()
                 if engine is None:
                     return None
-                audio = engine.generate(REFERENCE_TEXT, sid=int(sid),
-                                        speed=float(S._cfg("tts_speed", 1.0) or 1.0))
+                audio = engine.generate(REFERENCE_TEXT, sid=int(sid), speed=float(speed))
                 if audio is None or len(audio.samples) == 0:
                     return None
                 return np.asarray(audio.samples, dtype=np.float32), int(audio.sample_rate)
-            out.append((("builtin", str(sid), size), "the built-in voice", load_builtin))
+            out.append((("builtin", str(sid), size, str(speed)), "the built-in voice",
+                        load_builtin))
     return out
 
 
@@ -656,7 +659,9 @@ def moment_key() -> tuple:
             parts.append("unreadable")
     S = _speech()
     if S is not None:
-        parts += [str(S._cfg("tts_speaker_id", 0) or 0), str(S._cfg("tts_speed", 1.0) or 1.0)]
+        speed = (S.tts_speed() if hasattr(S, "tts_speed")
+                 else S._cfg("tts_speed", 1.0) or 1.0)
+        parts += [str(S._cfg("tts_speaker_id", 0) or 0), str(speed)]
         try:
             parts.append(__import__("os").path.getsize(S._sherpa_tts_paths()["model"]))
         except Exception:

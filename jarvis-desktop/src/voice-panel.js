@@ -974,6 +974,63 @@ function paintVoices() {
   const timings = CV.timingLines(st);
   $("cv-timings").replaceChildren(...timings.map((t) => node("li", "sc-gpu", t)));
   $("cv-timings-none").hidden = timings.length > 0;
+  paintSpeed();
+}
+
+/** "How fast Jarvis speaks": the PC's three choices, as radios. */
+function paintSpeed() {
+  const sp = CV.speedView(cv.status);
+  $("cv-speed").hidden = !sp.show;
+  if (!sp.show) return;
+  $("cv-speed-title").textContent = sp.title;
+  $("cv-speed-detail").textContent = sp.detail;
+  const note = $("cv-speed-note");
+  note.hidden = !sp.note;
+  note.textContent = sp.note;
+  $("cv-speed-choices").replaceChildren(...sp.choices.map((c) => {
+    const row = node("label", "theme-row");
+    row.dataset.choice = c.id;
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "cv-speed";
+    radio.value = c.id;
+    radio.checked = c.id === sp.choice;
+    // Every change sent to the PC is held on a stale link (rule 4).
+    radio.disabled = cv.busy || linkStale;
+    radio.title = linkStale ? HELD : "";
+    radio.addEventListener("change", () => {
+      if (radio.checked) setSpeed(c.id);
+    });
+    const text = node("span", "theme-text");
+    text.append(node("span", "theme-name", c.label));
+    const tick = node("span", "theme-check", "✓");
+    tick.setAttribute("aria-hidden", "true");
+    row.append(radio, text, tick);
+    return row;
+  }));
+}
+
+async function setSpeed(speed) {
+  const out = $("cv-speed-status");
+  if (linkStale) {
+    say(out, HELD, "bad");
+    paintSpeed();
+    return;
+  }
+  cv.busy = true;
+  paintSpeed();
+  say(out, "Sending…");
+  try {
+    const reply = CV.voiceReply(await invoke("set_voice_speed", { speed }), APPROVE_WHERE);
+    say(out, reply.text, reply.tone);
+    announce(reply.text);
+  } catch (error) {
+    say(out, problemWords(error), "bad");
+    announce(out.textContent, "assertive");
+  } finally {
+    cv.busy = false;
+  }
+  await loadVoices();
 }
 
 function paintAdd() {
@@ -1161,7 +1218,10 @@ export function startVoicePanel(opts = {}) {
     if (was !== linkStale) {
       if (train.reader && train.view === "reading") train.reader.draw();
       if (others.view === "result") paintOthers();
-      if (cv.status) paintAdd();
+      if (cv.status) {
+        paintAdd();
+        paintSpeed();
+      }
     }
   });
   if (!cv.card) return;

@@ -16,6 +16,8 @@
  *   nothing; a file's words are what the owner typed;
  * - "This sounds like you, so Jarvis won't copy it." for the owner's voice;
  * - the better voice only with a capable second card; ON a card, OFF at once;
+ * - how fast Jarvis speaks: the PC's own three choices and words, no card
+ *   either way, held on a stale link like every change;
  * - the last card's outcome and recent timings, in words.
  */
 import assert from "node:assert/strict";
@@ -259,6 +261,50 @@ await check("the better voice: hidden without a capable card; ON is a card, OFF 
   assert.deepEqual(o, [{ enabled: false }], "OFF is never held");
 });
 
+await check("how fast Jarvis speaks: the PC's three choices and words, from every real status", async () => {
+  for (const [name, st] of Object.entries(V)) {
+    const sp = CV.speedView(st);
+    assert.equal(sp.show, true, `${name}: no speed block`);
+    assert.deepEqual(sp.choices.map((c) => c.label), ["Slower", "Normal", "Faster"], name);
+    assert.equal(sp.title, "How fast Jarvis speaks", name);
+    assert.match(sp.detail, /never asks first/, name);
+    noRaw([sp.title, sp.detail, sp.note, ...sp.choices.map((c) => c.label)].join(" "));
+  }
+  assert.equal(CV.speedView(V.builtin_nothing_installed).choice, "normal");
+  assert.equal(CV.speedView(V.speed_chosen).choice, "faster");
+  assert.equal(CV.speedView({ voices: [] }).show, false, "an older PC has no speed block: nothing shown");
+  const reply = CV.voiceReply(P("speed_faster"), WHERE);
+  assert.equal(reply.text, "Jarvis now speaks faster.");
+  assert.equal(reply.waiting, false, "no card");
+  assert.equal(CV.voiceReply(P("speed_bad"), WHERE).text, "The speed must be slower, normal or faster.");
+});
+
+await check("how fast Jarvis speaks: one click, at once; held on a stale link", async () => {
+  const page = await open(V.builtin_nothing_installed);
+  const shown = await page.evaluate(() => ({
+    hidden: document.getElementById("cv-speed").hidden,
+    radios: [...document.querySelectorAll("#cv-speed-choices input")].map((r) => [r.value, r.checked]),
+  }));
+  await page.click('#cv-speed-choices input[value="faster"]');
+  await page.waitForTimeout(200);
+  const sent = await calls(page, "set_voice_speed");
+  const said = await text(page, "cv-speed-status");
+  await page.close();
+  assert.equal(shown.hidden, false);
+  assert.deepEqual(shown.radios, [["slower", false], ["normal", true], ["faster", false]]);
+  assert.deepEqual(sent, [{ speed: "faster" }]);
+  assert.equal(said, "Jarvis now speaks faster.");
+  assert.doesNotMatch(said, /approv/i, "no card for the speed");
+
+  const stale = await open(V.builtin_nothing_installed, {}, { link: { stale: true } });
+  const disabled = await stale.evaluate(() =>
+    [...document.querySelectorAll("#cv-speed-choices input")].every((r) => r.disabled));
+  const none = await calls(stale, "set_voice_speed");
+  await stale.close();
+  assert.equal(disabled, true, "held on a stale link");
+  assert.deepEqual(none, []);
+});
+
 await check("the fallback, a waiting card, the last card and the timings are on the page", async () => {
   const page = await open(V.fallback);
   const all = await text(page, "voices");
@@ -303,9 +349,11 @@ await check("CONTROL (Rust): only what raises a card is held on a stale link", a
   assert.match(fnBody(RUST, "pub async fn create_custom_voice("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
   assert.match(fnBody(RUST, "pub async fn set_active_voice("), /if voice != "builtin" && stale\(&app\)/);
   assert.match(fnBody(RUST, "pub async fn set_better_voice("), /if enabled && stale\(&app\)/);
+  assert.match(fnBody(RUST, "pub async fn set_voice_speed("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
   assert.doesNotMatch(fnBody(RUST, "pub async fn delete_custom_voice("), /stale/);
   for (const [fn, route] of [["create_custom_voice", "/api/voice/voices/create"], ["set_active_voice", "/api/voice/voices/active"],
-    ["delete_custom_voice", "/api/voice/voices/delete"], ["set_better_voice", "/api/voice/voices/better"]]) {
+    ["delete_custom_voice", "/api/voice/voices/delete"], ["set_better_voice", "/api/voice/voices/better"],
+    ["set_voice_speed", "/api/voice/voices/speed"]]) {
     assert.ok(fnBody(RUST, `pub async fn ${fn}(`).includes(`"${route}"`), `${fn} does not post to ${route}`);
   }
   assert.match(fnBody(RUST, "pub async fn get_custom_voices("), /\.headers\(jarvis_headers\(&app\)\?\)/);

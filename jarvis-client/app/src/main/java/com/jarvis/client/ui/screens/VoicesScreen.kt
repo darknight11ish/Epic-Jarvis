@@ -50,6 +50,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * card on the PC and change nothing until it is approved - held on a stale
  * link. Going back to the built-in voice, deleting a voice (after asking
  * here) and turning the better voice OFF happen at once, and always go.
+ * How fast Jarvis speaks is the PC's own three choices: no card either way,
+ * held on a stale link like every change sent to the PC.
  *
  * Adding a voice: either someone reads a sentence this screen SHOWS - and
  * the words sent are that sentence, because this phone never turns speech
@@ -72,6 +74,7 @@ fun VoicesScreen(
     switchTo: suspend (id: String) -> CustomVoices.Answer?,
     delete: suspend (id: String) -> CustomVoices.Answer?,
     setBetter: suspend (on: Boolean) -> CustomVoices.Answer?,
+    setSpeed: suspend (id: String) -> CustomVoices.Answer?,
     onPickFile: () -> Unit,
     onClearPicked: () -> Unit,
     onRefresh: suspend () -> Unit,
@@ -178,6 +181,10 @@ fun VoicesScreen(
                             Gap(6)
                             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                         }
+                    }
+
+                    s.speed?.let { sp ->
+                        SpeedPlate(sp, busy, linkBlocker, onSet = { id -> act { setSpeed(id) } })
                     }
 
                     Plate {
@@ -468,6 +475,47 @@ private fun AddVoicePlate(
         )
         Gap(4)
         Quiet("Cancel", enabled = !busy, onClick = onCancel)
+    }
+}
+
+/**
+ * "How fast Jarvis speaks": the PC's own choices and words. No card either
+ * way; held on a stale link, like every change sent to the PC.
+ */
+@Composable
+private fun SpeedPlate(
+    sp: CustomVoices.Speed,
+    busy: Boolean,
+    linkBlocker: String?,
+    onSet: (String) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Plate {
+        Text(sp.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+        if (sp.detail.isNotBlank()) {
+            Gap(4)
+            Text(sp.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        Gap(8)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (c in sp.choices) {
+                OptionChip(
+                    c.label,
+                    isSelected = c.id == sp.choice,
+                    modifier = Modifier.weight(1f),
+                    enabled = !busy && linkBlocker == null,
+                    onClick = { if (c.id != sp.choice) onSet(c.id) },
+                )
+            }
+        }
+        if (sp.note.isNotBlank()) {
+            Gap(6)
+            Text(sp.note, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        if (linkBlocker != null) {
+            Gap(4)
+            Text(linkBlocker, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+        }
     }
 }
 

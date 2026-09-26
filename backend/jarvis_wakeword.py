@@ -136,6 +136,131 @@ MODEL_FILES = {
 #: `wake_phrase` in [voice] -> the model file for it. Only one exists.
 PHRASE_MODELS = {"hey_jarvis": "hey_jarvis_v0.1.onnx"}
 
+#: Every wake-word file Jarvis ships, with its SHA-256, publisher, version
+#: and licence. The SAME files are in the phone's APK
+#: (jarvis-client/app/src/main/assets/wakeword/) and on the PC (the install
+#: line in backend/README.md checks these hashes on download);
+#: test_voice_upgrades.py fails when the phone's copy, this table and the
+#: install line disagree - one file, one hash, both apps.
+#:
+#: livekit-wakeword (the candidate below) ships byte-identical copies of the
+#: first two - same SHA-256, checked in its repository at commit 95448a7
+#: (src/livekit/wakeword/resources/) - so a detector trained with it runs on
+#: this exact front end, the owner's verifier and the "stop" head included.
+KNOWN_FILES = {
+    "melspectrogram.onnx": {
+        "sha256": "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f",
+        "publisher": "openWakeWord (github.com/dscripka/openWakeWord)", "version": "v0.5.1",
+        "licence": "CC BY-NC-SA 4.0"},
+    "embedding_model.onnx": {
+        "sha256": "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f",
+        "publisher": "openWakeWord (derived from Google's speech_embedding, Apache-2.0)",
+        "version": "v0.5.1", "licence": "CC BY-NC-SA 4.0"},
+    "hey_jarvis_v0.1.onnx": {
+        "sha256": "94a13cfe60075b132f6a472e7e462e8123ee70861bc3fb58434a73712ee0d2cb",
+        "publisher": "openWakeWord (github.com/dscripka/openWakeWord)", "version": "v0.5.1",
+        "licence": "CC BY-NC-SA 4.0"},
+}
+
+# --------------------------------------------------------------------------
+#   The candidate: a newer "hey Jarvis" detector (livekit-wakeword)
+# --------------------------------------------------------------------------
+#
+# livekit-wakeword (github.com/livekit/livekit-wakeword, Apache-2.0, v0.2,
+# pinned to commit LIVEKIT_COMMIT) trains a new LAST model - a
+# "conv-attention" head over the same 16 x 96 numbers - that its makers say
+# gives about 100 times fewer false wake-ups (measured on "hey livekit", not
+# on "hey Jarvis"). There is no ready-made "hey Jarvis" one: the owner trains
+# it once on his PC (tools/train_wakeword.py, in its own Python, never
+# Jarvis's), which writes CANDIDATE_FILE and CANDIDATE_MANIFEST next to the
+# files above.
+#
+# NOT SWITCHED ON. spot() never uses it. Only the bake-off
+# (jarvis_bakeoff.py) loads it, scores it beside today's detector on the
+# same clips, and says "replace" or "keep what we have" by rules fixed
+# beforehand. A "replace" is then a change here (it joins KNOWN_FILES with
+# its hash, and PHRASE_MODELS) and in the phone's assets, both at once -
+# never a switch, and never two detectors on screen.
+#
+# FAIL CLOSED. The manifest carries the SHA-256 the training wrote down; a
+# file that no longer matches it, a manifest from another livekit-wakeword
+# commit, or a model whose input or output is not the (1, 16, 96) -> (1, 1)
+# shape this front end feeds is refused with the reason.
+
+LIVEKIT_COMMIT = "95448a7559c453fcd87645bd67b247ffb45f85b0"
+CANDIDATE_FILE = "hey_jarvis_livekit.onnx"
+CANDIDATE_MANIFEST = "hey_jarvis_livekit.json"
+CANDIDATE_VERSION = 1
+
+
+def sha256_file(path) -> str:
+    """The file's SHA-256 (the wake-word files are a few MB at most)."""
+    import hashlib
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def candidate_status() -> dict:
+    """Is a trained candidate on disk, and may it be measured? File checks
+    and one hash; loads nothing. {"present", "ok", "why", "file", "sha256",
+    "threshold", "trained"}."""
+    d = model_dir()
+    f, m = d / CANDIDATE_FILE, d / CANDIDATE_MANIFEST
+    out = {"present": f.is_file(), "ok": False, "why": "", "file": str(f), "sha256": "",
+           "threshold": 0.5, "trained": ""}
+    if not f.is_file():
+        out["why"] = (f"no trained candidate yet ({CANDIDATE_FILE} is not in {d}); "
+                      f"backend/README.md, \"Voice upgrades: the bake-off\", has the one line "
+                      f"that trains it")
+        return out
+    try:
+        doc = json.loads(m.read_text(encoding="utf-8"))
+        if not isinstance(doc, dict) or doc.get("version") != CANDIDATE_VERSION:
+            raise ValueError
+    except Exception:
+        out["why"] = (f"{CANDIDATE_MANIFEST} is missing or unreadable, so there is nothing to "
+                      f"check {CANDIDATE_FILE} against - train it again")
+        return out
+    if doc.get("livekit_commit") != LIVEKIT_COMMIT:
+        out["why"] = (f"it was trained with a different livekit-wakeword "
+                      f"({str(doc.get('livekit_commit'))[:12] or 'unknown'}, not "
+                      f"{LIVEKIT_COMMIT[:12]}) - train it again with the line in "
+                      f"backend/README.md")
+        return out
+    try:
+        got = sha256_file(f)
+    except OSError as exc:
+        out["why"] = f"{CANDIDATE_FILE} could not be read ({type(exc).__name__})"
+        return out
+    out["sha256"] = got
+    if got != str(doc.get("sha256", "")).lower():
+        out["why"] = (f"{CANDIDATE_FILE} is not the file the training wrote down (its SHA-256 "
+                      f"is different), so it is not used - train it again")
+        return out
+    try:
+        thr = float(doc.get("threshold", 0.5))
+    except (TypeError, ValueError):
+        thr = 0.5
+    out.update(ok=True, threshold=min(0.99, max(0.1, thr)), trained=str(doc.get("created", "")))
+    return out
+
+
+def load_head(path) -> "_Models":
+    """Today's front end with another last model - for the bake-off only.
+    Raises ValueError, in words, for a model of the wrong shape."""
+    if ort is None or np is None:
+        raise ValueError("onnxruntime or numpy is not installed")
+    d = model_dir()
+    m = _Models({"melspectrogram": str(d / MODEL_FILES["melspectrogram"]),
+                 "embedding": str(d / MODEL_FILES["embedding"]), "wake": str(path)})
+    ins, outs = m.wake.get_inputs(), m.wake.get_outputs()
+    shape_in = list(ins[0].shape) if len(ins) == 1 else []
+    shape_out = list(outs[0].shape) if len(outs) >= 1 else []
+    if len(shape_in) != 3 or shape_in[1:] != [EMB_WINDOW, 96] or len(shape_out) != 2 \
+            or shape_out[1] != 1:
+        raise ValueError(f"{Path(path).name} takes {shape_in} and gives {shape_out}; this "
+                         f"front end needs [1, {EMB_WINDOW}, 96] in and [1, 1] out")
+    return m
+
 
 def _cfg(key: str, default=None):
     if fw is None:

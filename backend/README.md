@@ -6642,6 +6642,227 @@ will not start while the big model runs there, but the big model does not
 yet check for the better voice before it starts.
 ---
 
+# Voice upgrades: the bake-off (2026-09-26) — `jarvis_bakeoff.py`, Pocket TTS, a newer "hey Jarvis", and the speaking speed
+
+**What it is, in plain words.** You chose two voice upgrades: a newer
+"hey Jarvis" detector (the part that listens for the wake word) and a fast
+voice-copying voice. Both are **built but switched off**. A new program,
+`jarvis_bakeoff.py`, measures each one against what Jarvis uses today, on
+your PC, and prints **"replace"** or **"keep what we have"**. The rules it
+judges by were written down before anything was measured (below). There is
+no switch for either upgrade in the apps, on purpose: you cannot judge a
+voice engine by its name, only by the numbers and your ear. A "replace"
+means a later change swaps the old part out - one engine, one detector,
+never two side by side.
+
+The one thing you can see today is new: **"How fast Jarvis speaks"** -
+Slower, Normal or Faster - in both apps (desktop: Settings -> Jarvis's
+voice; phone: Checks -> Jarvis's voice). It never asks first, because it
+trusts nothing more; it changes every voice made on your PC.
+
+## The two candidates
+
+| | today | the candidate | where it comes from |
+|---|---|---|---|
+| "hey Jarvis" detector | openWakeWord's `hey_jarvis_v0.1` | a "hey Jarvis" model you train once with **livekit-wakeword** | livekit-wakeword (Apache-2.0), pinned to commit `95448a7559c453fcd87645bd67b247ffb45f85b0`; its two front-end files are byte-for-byte the ones Jarvis already ships (same SHA-256, checked) |
+| voice copying, on the processor | ZipVoice | **Pocket TTS** (Kyutai, about 100 million numbers) | sherpa-onnx's package `sherpa-onnx-pocket-tts-int8-2026-01-26`, SHA-256 `2F3B88823CBBB9BF0B2477EC8AE7B3FEC417B3A87B6BB5F256DBA66F2AD967CB` (measured from the real download); each of its 7 files is pinned in `jarvis_voices.POCKET_FILES` and checked before it is loaded - a changed file is refused, never used "anyway" |
+
+Licences: livekit-wakeword is Apache-2.0; the model you train from it is
+built on openWakeWord's non-commercial numbers, so it is treated as
+non-commercial, like today's. Pocket TTS's weights are CC BY 4.0 and its
+package says "for non-commercial"; Kyutai forbids copying a voice without
+the person's explicit, lawful consent - exactly what the custom-voice card
+already asks, and your own voice is still refused. This build is
+non-commercial (rule 5). All recorded in `THIRD-PARTY-NOTICES.txt`.
+
+**Two things found while building, said plainly:**
+
+- **Pocket TTS ignores the speaking speed.** sherpa-onnx never reads the
+  speed for it (its source, `offline-tts-pocket-impl.h`), and a test here
+  confirmed it: the same sentence with the same random seed came out
+  sample-for-sample identical at Normal and Faster. So if Pocket TTS ever
+  replaces ZipVoice, custom voices on the processor would speak at normal
+  speed whatever you choose, and the apps would say so. The bake-off
+  counts this against it only if you have chosen Slower or Faster.
+- **Pocket TTS makes a sentence's sound whole before any of it plays.**
+  Its "first sound" is the time to make that first phrase - which is why
+  the bake-off measures it on short first phrases, like Jarvis's first
+  comma.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Download Pocket TTS** - 98 MB, into `voice-models\pocket-tts` in
+Jarvis's settings folder (normally
+`C:\Users\pcadmin\.openjarvis\voice-models\pocket-tts`). The download is
+checked against the SHA-256 above; a wrong file is deleted and nothing is
+installed. Nothing is switched on by this:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $m = Join-Path $base 'voice-models'; New-Item -ItemType Directory -Force -Path $m | Out-Null; $f = Join-Path $env:TEMP 'jarvis-pocket-tts.tar.bz2'; Write-Host 'Downloading Pocket TTS (98 MB)...'; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2' -OutFile $f; if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '2F3B88823CBBB9BF0B2477EC8AE7B3FEC417B3A87B6BB5F256DBA66F2AD967CB') { Remove-Item $f; Write-Host 'That is not the expected file, so nothing was installed. Run this line again.' -ForegroundColor Red } else { tar -xjf $f -C $m; Remove-Item $f; $d = Join-Path $m 'pocket-tts'; if (Test-Path $d) { Rename-Item $d ('pocket-tts-old-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }; Rename-Item (Join-Path $m 'sherpa-onnx-pocket-tts-int8-2026-01-26') 'pocket-tts'; Write-Host "OK - Pocket TTS is in $d. Nothing is switched on; the bake-off measures it." -ForegroundColor Green }
+```
+
+**2. Train the new "hey Jarvis" detector** - optional, and big: about
+18 GB of downloads and several hours on the graphics card. **Put Jarvis on
+Standby first** (it frees the graphics card; chat is off while it trains).
+Run it from this repository's folder. It makes a separate Python for the
+training in `C:\Users\pcadmin\.openjarvis\wake-training\venv` (never the
+one Jarvis runs in), installs PyTorch for the graphics card and
+livekit-wakeword at the pinned commit (this needs `git`, which the patch
+script already uses), checks everything before downloading anything big,
+and at the end writes `hey_jarvis_livekit.onnx` and
+`hey_jarvis_livekit.json` into `voice-models\wakeword`. It needs Python
+3.11 or newer and the **espeak-ng** program (the training's pronouncer:
+the `.msi` from https://github.com/espeak-ng/espeak-ng/releases) - the
+line says so if either is missing:
+
+```powershell
+$w = Join-Path $env:USERPROFILE '.openjarvis\wake-training'; py -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"; if ($LASTEXITCODE -ne 0) { Write-Host 'Training needs Python 3.11 or newer, and py -3 is older. Install Python 3.11 or newer from python.org, then run this line again.' -ForegroundColor Red } else { py -3 -m venv "$w\venv"; $py = Join-Path $w 'venv\Scripts\python.exe'; & $py -m pip install --upgrade pip; & $py -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124; & $py -m pip install "livekit-wakeword[train,eval,export] @ git+https://github.com/livekit/livekit-wakeword@95448a7559c453fcd87645bd67b247ffb45f85b0"; & $py tools\train_wakeword.py --work $w; Write-Host "The new detector (if training finished) is in $env:USERPROFILE\.openjarvis\voice-models\wakeword" }
+```
+
+Then take Jarvis off Standby. You can skip this step: the bake-off then
+says "keep what we have" for the detector, because there is nothing to
+compare.
+
+**3. Put the new code on the PC** (copies `jarvis_bakeoff.py` and the new
+`jarvis_voices.py`, `jarvis_wakeword.py`, `jarvis_speech.py` and
+`jarvis_voice_flow.py`; `voices.patch` gains the speed route; sherpa-onnx
+must be 1.12.26 or newer), from this repository's folder, then restart
+Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**4. Run the bake-off.** Have Jarvis running with a chat started (so the
+chat model is on the graphics card - the voice part measures beside it).
+It asks three questions as it goes; Enter alone skips each:
+
+- how many of your own "hey Jarvis" to record now (at least 10 are needed;
+  each is 3.5 seconds). **None is kept**: each recording is read and
+  deleted at once. A saved recording of you saying "hey Jarvis" is exactly
+  what someone would need to wake Jarvis in your voice, and the voice check
+  cannot tell a recording from you - so the bake-off asks you to record
+  again each time it runs;
+- how many minutes to listen to the room (60 is what the rules need; talk
+  and have the television on, but do not say "hey Jarvis"; the room is
+  scored a minute at a time and each minute is deleted at once - none of
+  it is kept);
+- after it has made the listening pairs (the folder opens by itself): for
+  each pair, which sounds better, A or B, or "S" for the same. Which engine
+  is which is only revealed after you answer.
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_bakeoff.py; Write-Host "The results are in $env:USERPROFILE\.openjarvis\voice\bakeoff (the newest folder: results.txt and results.json)"
+```
+
+Everything it prints is also saved as `results.txt`, with every number in
+`results.json`, in a new dated folder under
+`C:\Users\pcadmin\.openjarvis\voice\bakeoff\`. **Please send
+`results.txt` back** - it is how the decision gets made. It changes
+nothing in Jarvis. The listening pairs stay in that folder (copies of the
+custom voice, never your own voice); delete the folder when you have sent
+the results. Recording uses Windows' own sound recorder library (no
+install); if recording fails, you can put WAV files of you saying "hey
+Jarvis" into `C:\Users\pcadmin\.openjarvis\voice\bakeoff\hey-jarvis\`
+instead - and delete them afterwards, for the reason above.
+
+## The rules (fixed before anything was measured)
+
+Every rule must hold for "replace". A rule that could not be measured
+counts as not met. (`jarvis_bakeoff.py`, `WAKE_RULES` and `VOICE_RULES`;
+`test_voice_upgrades.py` checks each one.)
+
+**"Hey Jarvis" - the new detector replaces today's only if:**
+
+1. there are at least **10** of your own recordings and at least **60
+   minutes** of the room;
+2. it hears **at least as many** of your recordings as today's - alone,
+   and with your own "is it you saying hey Jarvis" check, because a new
+   detector changes when that check is asked;
+3. in the room it wakes by mistake **no more often** than today's;
+4. of the 110 built-in-voice sentences (11 Kokoro voices, 4 of each 10
+   starting with "hey Jarvis") it hears **at least as many** "hey Jarvis"
+   ones and wakes on **no more** of the others;
+5. it wins clearly: it misses **fewer** of your recordings, or wakes by
+   mistake **at most half as often** as today's in the room (today's must
+   have woken at least once - otherwise halving proves nothing);
+6. it costs at most **2 ms** of processor time per 80 ms of sound, so the
+   phone keeps up.
+
+**The voice - Pocket TTS replaces ZipVoice only if:**
+
+1. both are installed and every test sentence made sound;
+2. its time to first sound is **at most 80%** of ZipVoice's (the middle
+   value over six first phrases) - it was chosen for being fast, so it must
+   be clearly faster;
+3. it makes each second of speech in **at most one second**, so a long
+   answer never stalls;
+4. the graphics card's memory rises by **at most 100 MB** while it speaks,
+   and the chat model keeps its room on the card (it must stay on the
+   processor; the 8 GB card has about 0.25 GB to spare beside chat);
+5. in the three blind pairs, you pick Pocket TTS or "the same" in **at
+   least 2**;
+6. if you chose Slower or Faster, it follows it (a sentence at least 8%
+   shorter or longer).
+
+## What a "replace" would change (not done now)
+
+- **Pocket TTS:** one line in `jarvis_voices.py` (`PROCESSOR_ENGINE =
+  "pocket"`); its status row then replaces ZipVoice's in both apps (they
+  already have the words for it), and ZipVoice's files can be deleted.
+- **The detector:** the new file's SHA-256 joins
+  `jarvis_wakeword.KNOWN_FILES` and `PHRASE_MODELS`, and the same file goes
+  into the phone's `assets/wakeword/` - `test_voice_upgrades.py` fails if
+  the phone's file and the PC's pin ever differ. The phone's hand check
+  (`WakeListenTest.kt`'s header) is redone, and the "stop" word and your
+  verifier keep working because the front end is unchanged.
+
+## Measured here, and how little it means
+
+Run end to end in the dev container (Linux, 4 processor cores shared with
+other work, load average 6-10, no graphics card, no microphone), with the
+real downloads (every hash matched the pins):
+
+- **The voice** (both copying the built-in voice reading one sentence):
+  ZipVoice's first sound 4.2-4.5 s, 1.7-1.8 s to make each second of
+  speech; Pocket TTS's first sound 1.2 s, 0.76-1.03 s per second of
+  speech. At "Faster", ZipVoice's sentences were 16-18% shorter; Pocket
+  TTS's were exactly the same length (ratio 1.0, same seed). Graphics
+  memory: not measurable here. **Your PC's numbers are the ones that
+  count** (a Ryzen 9 3900X is much faster than this container).
+- **The detector**: no "hey Jarvis" candidate can be trained here (no
+  graphics card; huggingface.co, where the training data lives, is
+  blocked). The plumbing was run with livekit-wakeword's own
+  `hey_livekit.onnx` standing in as the "candidate" - it listens for
+  another phrase, so it should lose, and did: today's detector heard all
+  44 of the Kokoro "hey Jarvis" sentences and woke on 7 of the 66 others;
+  the stand-in heard 0 and woke on 0. Cost per 80 ms step: 0.06 ms today,
+  0.28 ms for livekit's head. That same head scored "hey LiveKit" at
+  0.63-0.98 through Jarvis's own front end - so its models do run on it.
+  (livekit-wakeword trains on sound scaled -1..1 while Jarvis feeds it
+  -32768..32767; the head gave nearly the same scores both ways here. The
+  bake-off scores the candidate exactly as Jarvis would run it, so any
+  difference shows in its numbers.)
+
+**Not checked, said plainly:** nothing ran on Windows or your PC. The
+recording (Windows' winmm) could not be tried here - if it fails, the
+WAV-folder route above works. The training line and `train_wakeword.py`
+were never run anywhere: livekit-wakeword documents training on Linux and
+macOS, not Windows, and needs espeak-ng there; if a step fails, send the
+error back. The phone's battery with a new detector is not measured (the
+cost per step is the stand-in for it).
+
+## Test it
+
+```powershell
+py -3 backend\test_voice_upgrades.py
+```
+
+With `$env:JARVIS_TEST_VOICE_MODELS = "$env:USERPROFILE\.openjarvis\voice-models"`
+set first, it also runs the real Pocket TTS once and checks every pin.
+
+---
+
 # The stricter voice check (2026-09-24) — only your voice, and more sure of it
 
 **What it is, in one paragraph.** Jarvis only takes spoken commands from

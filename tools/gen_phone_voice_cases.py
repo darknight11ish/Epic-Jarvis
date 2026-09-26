@@ -15,7 +15,7 @@ Two halves, both the backend's own code run with the outside world replaced:
            real jarvis_voice.enroll().
   voices   Custom voices (section 15). GET /api/voice/voices is
            backend/jarvis_voices.status(); the POST answers are its create(),
-           switch(), delete() and set_better(). The "sounds like you"
+           switch(), delete(), set_better() and set_speed(). The "sounds like you"
            refusal is the real owner_check() against a print the real
            jarvis_voice.enroll() made from the same voice.
 
@@ -553,7 +553,7 @@ def vpost(fn, body, g=None, spawn=run_now, check=not_owner):
     kw = {"gate": g or gate(), "tier_of": ask, "spawn": spawn}
     if fn in (VS.create, VS.switch):
         kw["check"] = check
-    if fn is VS.delete:
+    if fn in (VS.delete, VS.set_speed):
         return fn(body)
     return fn(body, **kw)
 
@@ -603,6 +603,11 @@ def voices_cases():
             vpost(VS.set_better, {"enabled": False})
             vpost(VS.set_better, {"enabled": True})
             status["better_on"] = scrub(VS.status(), w)
+        # The speaking speed: no card either way.
+        answers["speed_faster"] = scrub(answer(vpost(VS.set_speed, {"speed": "faster"})), w)
+        status["speed_faster"] = scrub(VS.status(), w)
+        answers["speed_bad"] = scrub(answer(vpost(VS.set_speed, {"speed": "warp"})), w)
+        answers["speed_normal"] = scrub(answer(vpost(VS.set_speed, {"speed": "normal"})), w)
 
     with VoicesWorld(zipvoice=False) as w:
         vpost(VS.create, create_body())

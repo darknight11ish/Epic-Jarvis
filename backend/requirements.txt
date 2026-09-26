@@ -15,7 +15,7 @@
 # the bottom.
 
 numpy                                  # voice: reading and checking recorded audio (jarvis_speech.py, rebuilt jarvis_voice.py)
-sherpa-onnx                            # voice: speech-to-text on the PC, and the better "is it your voice" check (jarvis_speech.py, rebuilt jarvis_voice.py)
+sherpa-onnx>=1.12.26                   # voice: speech-to-text on the PC, the better "is it your voice" check, and the custom voices (jarvis_speech.py, rebuilt jarvis_voice.py, jarvis_voices.py). 1.12.26 is the oldest on PyPI with Pocket TTS, the bake-off's candidate voice (checked: its library names OfflineTtsPocketModelConfig and reference_audio); tested with 1.13.8.
 onnxruntime                            # voice: the "hey Jarvis" wake-word spotter (jarvis_wakeword.py) and Smart Turn, "finished or only paused?" (jarvis_turn.py). The voice MODEL files are a separate download: backend\README.md, "Voice that works".
 fastembed                              # memory: finding facts by MEANING, not only by matching words, and the re-ranker that puts the best-matching facts first (rebuilt jarvis_memory.py). Downloads its two models (about 70 MB and 80 MB) the first time they are needed; a fastembed too old to have re-rankers just leaves the re-ranker off.
 sqlite-vec                             # memory: the search index fastembed's numbers are kept in (rebuilt jarvis_memory.py)

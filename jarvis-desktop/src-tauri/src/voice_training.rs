@@ -990,6 +990,32 @@ pub async fn set_better_voice(app: AppHandle, enabled: bool) -> Result<Value, St
     voices_answer(status, &text)
 }
 
+/// The three speaking speeds the PC offers (`GET /api/voice/voices`
+/// `speed.choices`). Anything else is refused here, before it is sent.
+pub(crate) const SPEEDS: [&str; 3] = ["slower", "normal", "faster"];
+
+/// How fast every voice on the PC speaks. No card either way - it trusts
+/// nothing more (like the manner setting) - but, like every change sent to
+/// the PC, held on a stale link (rule 4).
+#[tauri::command]
+pub async fn set_voice_speed(app: AppHandle, speed: String) -> Result<Value, String> {
+    let speed = speed.trim().to_string();
+    if !SPEEDS.contains(&speed.as_str()) {
+        return Err("Choose Slower, Normal or Faster.".to_string());
+    }
+    if stale(&app) {
+        return Err(HELD_STALE.to_string());
+    }
+    let (status, text) = post(
+        &app,
+        "/api/voice/voices/speed",
+        &json!({ "speed": speed }),
+        VOICES_TIMEOUT,
+    )
+    .await?;
+    voices_answer(status, &text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1029,6 +1055,24 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{name}: {e}"));
             assert_eq!(&got, st, "{name}");
         }
+    }
+
+    #[test]
+    fn the_speed_choices_are_the_pcs_own() {
+        let all = cases();
+        let st = &all["voices"]["speed_chosen"]["speed"];
+        let ids: Vec<&str> = st["choices"]
+            .as_array()
+            .expect("choices")
+            .iter()
+            .map(|c| c["id"].as_str().expect("id"))
+            .collect();
+        assert_eq!(ids, SPEEDS, "the PC's choices and the ones sent from here");
+        assert_eq!(st["choice"], "faster");
+        let bad = voices_answer(400, &all["voice_posts"]["speed_bad"]["body"].to_string())
+            .expect("passed on");
+        assert_eq!(bad["http"], 400);
+        assert!(bad["error"].as_str().unwrap_or("").contains("speed"));
     }
 
     #[test]
