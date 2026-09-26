@@ -988,3 +988,34 @@ select:focus-visible {
   z-index: 5;
   background: linear-gradient(var(--warn-faint), var(--warn-faint)), var(--bg);
 }
+
+/* Hang and crash notes (feasibility I99): the newest 10, oldest first so a
+   fresh one lands at the bottom, the same direction the log files grow. */
+.crash-notes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.crash-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--bg-raised, transparent);
+}
+.crash-note-when {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.crash-note-detail {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}

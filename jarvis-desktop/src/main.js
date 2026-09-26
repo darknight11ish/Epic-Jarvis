@@ -167,6 +167,7 @@ import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
 // One card on every screen, and what a spoken question hears about a card
 // (the creativity audit, 2026-09-25) - card-words.js.
 import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
+import { HeavyGate, isHeavy } from "./heavy-approve.js";
 import { buildSayableList } from "./sayable.js";
 // A timer said aloud while hands-free listening is on (2026-09-25).
 import { aloudFor } from "./coming-up.js";
@@ -328,6 +329,16 @@ const dom = {
   previousAnswerSummary: $("previous-answer-summary"),
   previousAnswerBody: $("previous-answer-body"),
 };
+
+/** Feasibility I110: a `notice.weight: "heavy"` card's Approve stays grey
+ * for a moment and until `#approval-preview` has been in view - see
+ * heavy-approve.js's own doc comment. `syncApprovalButtons` is a plain
+ * function declaration, hoisted, so naming it here (before its own textual
+ * definition further down) is safe. */
+const heavyGate = new HeavyGate({
+  scrollEl: dom.approvalPreview,
+  onChange: () => syncApprovalButtons(),
+});
 
 /* ==========================================================================
    State
@@ -1373,6 +1384,16 @@ function refreshApproval(approval) {
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
 
+  // Feasibility I110: a genuinely new heavy card restarts the clock and the
+  // scroll watch; a re-render of the SAME card (a resync, `raised` ticking
+  // up) must not, or a backend that resyncs the queue every few seconds
+  // would hold Approve grey forever. A card that stops being heavy (should
+  // never happen mid-life, but nothing here assumes it cannot) is stopped.
+  if (fresh) {
+    if (isHeavy(approval)) heavyGate.start();
+    else heavyGate.stop();
+  }
+
   // The PC's own words for it (notice.title, card-words.js), never the code
   // name: "Jarvis wants to switch to a different AI model", not `switch_model`.
   dom.approvalAction.textContent = cardTitle(approval);
@@ -1801,6 +1822,9 @@ function syncParkedBar() {
 /** Clears the gate. Called when it leaves the queue, however it left. */
 function closeApproval() {
   state.approval = null;
+  // Feasibility I110: no card left to watch. `openApproval`/`refreshApproval`
+  // restarts it for whichever card (the same or a different one) opens next.
+  heavyGate.stop();
   // `state.decided` is deliberately NOT cleared here. It is the guard that
   // stops an already-answered gate being answered again, and `decide_approval`
   // does not re-read the queue — so between answering and the server's next
@@ -1832,10 +1856,15 @@ function closeApproval() {
 function syncApprovalButtons() {
   const link = currentLink();
   const blocked = link.stale || state.deciding;
+  // Feasibility I110: a heavy card's Approve stays grey until BOTH
+  // heavyGate conditions clear (the delay, and the preview having been in
+  // view). Deny is never touched by this, same as `cutOff` below.
+  const heavyBlocked = isHeavy(state.approval) && !heavyGate.ok;
   // A card whose request was cut off on its way here cannot be approved: what
   // is on screen is not all of what would run. Deny stays - refusing
   // something unread costs a retry, approving it is the thing to prevent.
-  dom.approvalApprove.disabled = blocked || Boolean(state.approval && state.approval.cutOff);
+  dom.approvalApprove.disabled =
+    blocked || Boolean(state.approval && state.approval.cutOff) || heavyBlocked;
   dom.approvalDeny.disabled = blocked;
   paintApprovalClock();
   // Not `= blocked`: the option buttons `renderOptions` builds are already
@@ -1880,6 +1909,16 @@ function paintApprovalClock() {
   const parts = ["Nothing runs until you decide."];
   if (approval && approval.cutOff) {
     parts.push("This request was cut off before it reached this card, so it cannot be approved here - deny it and ask Jarvis for a shorter plan.");
+  } else if (isHeavy(approval) && !heavyGate.ok) {
+    // Feasibility I110. Two conditions, said as one sentence rather than
+    // two, since they clear together and the owner only needs to know
+    // there is something left to do, not the mechanism.
+    const left = heavyGate.secondsLeft();
+    parts.push(
+      heavyGate.scrollOk
+        ? `Approve unlocks in ${left}s.`
+        : `Read the whole card (scroll down) - Approve unlocks once you have, and no sooner than ${left}s.`
+    );
   }
   const clock = approval ? expiryWords(approval.expiresAt) : "";
   if (clock) parts.push(clock);
@@ -3975,7 +4014,19 @@ if (dom.temporary) dom.temporary.addEventListener("click", () => temporaryChat.t
 dom.copy.addEventListener("click", async () => {
   const text = state.buffer.trim();
   if (!text) return;
-  await invoke("write_clipboard", { text });
+  // Feasibility I114, "Private copy": an answer copied from here is kept
+  // out of Windows Clipboard History (Win+V) and Cloud Clipboard sync -
+  // both of them ways an answer that never left this PC over Jarvis's own
+  // network could still leave it through Windows' own clipboard features
+  // (clipboard_privacy.rs has the how and why). If the privacy command is
+  // ever unavailable (an older build), fall back to a plain copy rather
+  // than copying nothing at all - the owner still gets the text, just
+  // without the exclusion.
+  try {
+    await invoke("write_clipboard_private", { text });
+  } catch {
+    await invoke("write_clipboard", { text });
+  }
   const original = dom.copy.textContent;
   dom.copy.textContent = "Copied";
   setTimeout(() => {

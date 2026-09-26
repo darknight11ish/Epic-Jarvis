@@ -201,6 +201,11 @@ permissions = [
   "allow-resize-quickbar",
   "allow-set-quickbar-pinned",
   "allow-write-clipboard",
+  # "Private copy" (feasibility I114): the answer card's Copy button calls
+  # this one - clipboard_privacy.rs. allow-write-clipboard above stays for
+  # completeness (an older build's fallback path), though nothing calls it
+  # for an answer any more.
+  "allow-write-clipboard-private",
   "allow-open-external-url",
   # The right/wrong mark on the answer on screen - one answer, one mark.
   # Changes no memory by itself; see commands.rs mark_answer.

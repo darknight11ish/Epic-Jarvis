@@ -77,6 +77,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- App-icon shortcuts (feasibility I125): Talk, Note, Brief me,
+                 What did I miss - res/xml/shortcuts.xml. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+
             <!-- "Share" from another app - a web page's selected text, a
                  note, an address - lands here as plain text and is folded
                  into the composer draft, never sent on its own. -->

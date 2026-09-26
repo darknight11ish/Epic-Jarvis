@@ -215,7 +215,7 @@ def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
     want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
             "gate", "stop_all", "scheduler", "folders", "instant_email", "events", "voice",
-            "reach", "home", "sleep", "credentials"]
+            "reach", "home", "sleep", "data_health", "credentials"]
     check("every check the owner asked for is registered, in order", keys == want, keys)
     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
     try:
@@ -504,6 +504,37 @@ def t_folders_and_instant_email():
     live, _f, _o = _live(fake)
     _p, f, _w, _s, rows, _t = _run(live, only={"backend", "instant_email"})
     check("connected: PASS", _rows(rows, "instant_email")[0][0] == S.PASS)
+
+
+def t_data_health():
+    """data-health.patch and jarvis_data_health.py (feasibility I97): the
+    check turns the route's own "ok"/"warn" rows into PASS/WARN, never
+    FAIL - and without the route at all (no data-health.patch), it says so
+    with a WARN, not a FAIL, exactly like pf_folders without documents.patch."""
+    fake = FakeJarvis()
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "data_health"})
+    dh = _rows(rows, "data_health")
+    check("no data-health.patch: a WARN saying how, never a FAIL",
+          dh[0][0] == S.WARN and "apply-patches.ps1" in dh[0][2] and f == 0, dh)
+    fake.routes[("GET", "/api/data-health")] = (200, {"available": True, "warn": 1, "checks": [
+        {"status": "ok", "what": "the chat history database opens and checks out", "detail": ""},
+        {"status": "warn", "what": "the memory store database may be damaged",
+         "detail": "DatabaseError: file is not a database"},
+    ]})
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "data_health"})
+    dh = _rows(rows, "data_health")
+    check("an ok row: PASS, never FAIL", dh[0] == (S.PASS,
+          "the chat history database opens and checks out", ""), dh)
+    check("a warn row: WARN, never FAIL", dh[1][0] == S.WARN
+          and "may be damaged" in dh[1][1], dh)
+    check("still no FAIL anywhere in this check (WARN, never fix, never fail)", f == 0, dh)
+    fake.routes[("GET", "/api/data-health")] = (404, {"error": "no such route"})
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "data_health"})
+    check("a 404 (module not installed): WARN, not FAIL", _rows(rows, "data_health")[0][0]
+          == S.WARN and f == 0)
 
 
 def t_chat_waits_for_tools():

@@ -399,6 +399,19 @@ data class PendingItem(
     val swipeable: Boolean get() = risk.swipeOk && raised == null
 
     /**
+     * `notice.weight == "heavy"` - feasibility idea I110, "Slower Approve on
+     * risky cards". `ApprovalCard` reads this to keep Approve disabled for a
+     * couple of seconds and until the card's text has actually been shown in
+     * full (see its own comment on what that means on this screen, where a
+     * long `detail` starts collapsed rather than in a scrolling view).
+     *
+     * Null `notice` (an older desktop) is `false`, the same "stricter only,
+     * never touches an older backend's cards" rule [shouldInterrupt] documents
+     * for the same field.
+     */
+    val isHeavy: Boolean get() = notice?.weight.equals("heavy", ignoreCase = true)
+
+    /**
      * Whether this approval may make a sound and appear over what you are
      * doing, rather than waiting in the drawer to be found.
      *

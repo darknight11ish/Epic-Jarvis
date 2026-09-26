@@ -140,4 +140,34 @@ class NoticeRuleTest {
     fun `weight is matched without case sensitivity`() {
         assertTrue(row("Heavy", reversible = "no", reach = "local", raised = false).shouldInterrupt)
     }
+
+    // ---------------------------------------------- feasibility I110 ----
+    // "Slower Approve on risky cards" - ApprovalCard's own gate reads
+    // isHeavy directly (unlike shouldInterrupt, this one is NOT reduced by
+    // `raised` alone: every heavy card is slowed down, whatever earned it).
+
+    @Test
+    fun `isHeavy is true for weight heavy, whatever raised it`() {
+        assertTrue(row("heavy", reversible = "yes", reach = "local", raised = true).isHeavy)
+        assertTrue(row("heavy", reversible = "no", reach = "outbound", raised = false).isHeavy)
+    }
+
+    @Test
+    fun `isHeavy is false for normal and for an unknown weight`() {
+        assertFalse(row("normal", reversible = "yes", reach = "local", raised = false).isHeavy)
+        assertFalse(row("URGENT!!", reversible = "yes", reach = "local", raised = false).isHeavy)
+    }
+
+    @Test
+    fun `isHeavy matches weight without case sensitivity`() {
+        assertTrue(row("Heavy", reversible = "no", reach = "local", raised = false).isHeavy)
+        assertTrue(row("HEAVY", reversible = "no", reach = "local", raised = false).isHeavy)
+    }
+
+    @Test
+    fun `an older desktop sending no notice at all is never heavy - stricter only`() {
+        val it = item("""{"id":"a","title":"t","summary":"s"}""")
+        assertNull(it.notice)
+        assertFalse("a missing notice must not gate an older backend's cards", it.isHeavy)
+    }
 }

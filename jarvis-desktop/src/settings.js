@@ -134,6 +134,10 @@ const dom = {
   logsStatus: $("logs-status"),
   logsState: $("logs-state"),
 
+  crashNotesList: $("crash-notes-list"),
+  crashNotesState: $("crash-notes-state"),
+  refreshCrashNotes: $("refresh-crash-notes"),
+
   updateAuto: $("update-auto"),
   updateState: $("update-state"),
   updateCheck: $("update-check"),
@@ -801,6 +805,57 @@ async function paintLogs() {
     `${info.dir} · this app ${size(info.app?.bytes)} · backend ${size(info.backend?.bytes)}`;
 }
 
+/** `2026-09-15 14:03` from a Unix-seconds timestamp, in the viewer's own
+ * time zone - the notes are for the owner reading this screen, not a log
+ * file another machine will parse. */
+function crashNoteWhen(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n <= 0) return "unknown time";
+  const d = new Date(n * 1000);
+  if (Number.isNaN(d.getTime())) return "unknown time";
+  return d.toLocaleString();
+}
+
+const CRASH_NOTE_SOURCE_WORDS = { desktop: "This app", backend: "Jarvis (the backend)" };
+const CRASH_NOTE_KIND_WORDS = { panic: "panicked", crash: "crashed", hang: "stopped answering" };
+
+/** Feasibility I99: the newest hang/crash notes, newest last (the same order
+ * `crash_notes()` serves them in, which is oldest-first - see its own doc
+ * comment), so the list reads top-to-bottom as oldest-to-newest and a fresh
+ * one appears at the bottom, the same direction the log files grow in. */
+async function paintCrashNotes() {
+  let notes;
+  try {
+    notes = await invoke("crash_notes");
+  } catch (error) {
+    dom.crashNotesState.textContent = String((error && error.message) || error);
+    dom.crashNotesList.replaceChildren();
+    return;
+  }
+  dom.crashNotesList.replaceChildren();
+  if (!Array.isArray(notes) || notes.length === 0) {
+    dom.crashNotesState.textContent = "None yet.";
+    return;
+  }
+  dom.crashNotesState.textContent = `${notes.length} of the newest ${notes.length === 1 ? "one" : notes.length}.`;
+  for (const note of notes) {
+    const li = document.createElement("li");
+    li.className = "crash-note";
+    const who = CRASH_NOTE_SOURCE_WORDS[note?.source] || String(note?.source || "Something");
+    const what = CRASH_NOTE_KIND_WORDS[note?.kind] || String(note?.kind || "had a problem");
+    const when = document.createElement("span");
+    when.className = "crash-note-when";
+    when.textContent = crashNoteWhen(note?.when);
+    const detail = document.createElement("span");
+    detail.className = "crash-note-detail";
+    detail.textContent = `${who} ${what}: ${String(note?.detail || "").trim() || "(no detail)"}`;
+    li.append(when, detail);
+    dom.crashNotesList.append(li);
+  }
+}
+
+dom.refreshCrashNotes.addEventListener("click", () => paintCrashNotes());
+
 async function paintAutostart() {
   let info;
   try {
@@ -864,6 +919,7 @@ dom.openLogs.addEventListener("click", async () => {
   await paintBackend({ fields: true });
   await paintAutostart();
   await paintLogs();
+  await paintCrashNotes();
   // Cheap, and only while the window is actually on screen — a settings page
   // nobody is looking at has no reason to poll.
   let timer = null;

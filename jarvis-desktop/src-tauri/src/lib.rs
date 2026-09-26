@@ -25,7 +25,9 @@ pub mod attention;
 pub mod autostart;
 pub mod backup;
 pub mod brain;
+pub mod clipboard_privacy;
 pub mod commands;
+pub mod crash_notes;
 pub mod email_sending;
 pub mod folders;
 pub mod hardware;
@@ -636,6 +638,12 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
 /// Builds and runs the Tauri application. Blocks until the process exits.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Feasibility I99: before anything else can panic, so a panic during
+    // setup (single-instance handling, plugin registration, window
+    // creation - all of it, above) leaves a note behind too. Never changes
+    // what a panic does; see crash_notes.rs's own doc comment.
+    crash_notes::install_panic_hook();
+
     let mut builder = tauri::Builder::default();
 
     // Build order step 3. Registered before anything else so a second launch
@@ -694,6 +702,7 @@ pub fn run() {
         .manage(ChatState::default())
         .manage(stream::StreamState::default())
         .manage(sidecar::SupervisorState::default())
+        .manage(sidecar::WatchdogState::default())
         .manage(tray::TrayHandles::default())
         .manage(tray::Painted::default())
         .manage(tray::TrayFlashGovernor::default())
@@ -805,6 +814,7 @@ pub fn run() {
             sidecar::set_supervision,
             sidecar::start_backend,
             sidecar::stop_backend,
+            crash_notes::crash_notes,
             pyfind::find_python,
             commands::get_theme,
             commands::set_theme,
@@ -884,6 +894,7 @@ pub fn run() {
             commands::resize_quickbar,
             commands::set_quickbar_pinned,
             commands::write_clipboard,
+            commands::write_clipboard_private,
             commands::open_external_url,
             commands::get_log_info,
             commands::open_log_folder,
@@ -1113,6 +1124,12 @@ pub fn run() {
                     }
                 });
             }
+            // The restart-with-a-cap watchdog (feasibility I98). Started
+            // once, unconditionally: it watches for `SupervisorState::owns`
+            // on every tick, which the block above (or a later manual
+            // "Start backend") can set at any time, and it does nothing on
+            // every tick until supervision has actually started something.
+            sidecar::spawn_watchdog(handle.clone());
 
             // The one event-stream connection. Everything downstream of it —
             // the tray colour, the approval queue in all three windows, the

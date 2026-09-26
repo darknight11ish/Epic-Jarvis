@@ -1789,6 +1789,38 @@ def pf_sleep(live: Live) -> list:
              "powercfg /change standby-timeout-ac 0")]
 
 
+@preflight_check("data_health", "Is Jarvis's own data healthy?")
+def pf_data_health(live: Live) -> list:
+    """data-health.patch and jarvis_data_health.py (feasibility I97): does
+    the chat history database open, does the memory database open, is
+    there room on the disk Jarvis writes its data to, and do the settings
+    files parse. Read-only, and the guardrail runs twice - this function
+    only ever turns the route's own "ok"/"warn" rows into PASS/WARN, never
+    FAIL, matching jarvis_data_health.py's own "WARN, never fix"."""
+    if not live.up:
+        return _needs_backend(live, "data health")
+    try:
+        code, body, _r, _h = live.get("/api/data-health")
+    except Exception as exc:
+        return [(WARN, "/api/data-health did not answer", type(exc).__name__)]
+    if code == 404:
+        return [(WARN, "the data health check is not on",
+                 "Run apply-patches.ps1 (data-health.patch and "
+                 "jarvis_data_health.py), then restart Jarvis.")]
+    if code != 200 or not isinstance(body, dict):
+        return [(WARN, f"/api/data-health answered {code}", "")]
+    checks = body.get("checks") if isinstance(body.get("checks"), list) else []
+    if not checks:
+        return [(WARN, "/api/data-health answered with nothing to show", "")]
+    rows = []
+    for c in checks:
+        if not isinstance(c, dict):
+            continue
+        status = WARN if c.get("status") == "warn" else PASS
+        rows.append((status, str(c.get("what") or ""), str(c.get("detail") or "")))
+    return rows
+
+
 @preflight_check("credentials", "Is Windows Credential Manager reachable?")
 def pf_credentials(live: Live) -> list:
     try:
