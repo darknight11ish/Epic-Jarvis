@@ -4630,7 +4630,8 @@ calendar (reading); email (reading); email (sending - "not set up" until
 sending is built; adding it is one `KINDS` entry); Home Assistant (reading);
 Home Assistant (changing things); notes (searching); notes (writing); GitHub
 research; phone notifications (ntfy); computer control; browser control;
-phone control; commands on this PC; the second graphics card; the big model.
+phone control; commands on this PC; plug-in programs (MCP, id `plugins`,
+since 2026-09-26 - section 37); the second graphics card; the big model.
 `tools` is the list the chat's tool loop offers the model
 (`jarvis_agent.offered_tools()` of `[tools].enabled`), in plain names.
 
@@ -5597,10 +5598,13 @@ settings file switches it off". An action that only runs on a person's yes
 cannot be changed from an app."; set looser in the file it says "Refused - it
 only runs on your yes, so its line must say "ask"". Anything else not on the
 short list says "Only your settings file (jarvis-framework.toml) changes this
-one." Three rows have no tier (`"fixed": true`): timers and one-off
+one." Five rows have no tier (`"fixed": true`): timers and one-off
 reminders, plain repeats and the standby schedule (both "Does it without
-asking", section 21), and "Switch lights, plugs and fans you name" (section
-33). Every action an approval card can name (`jarvis_card_words.TITLES`) is
+asking", section 21), "Switch lights, plugs and fans you name" (section
+33), and since 2026-09-26 the plug-in programs' two (section 37):
+`fixed:plugin_start` "Start a plug-in program on this PC (MCP)" - "Asks you
+when it is new or has changed" - and `fixed:plugin_use` "Use a tool from a
+plug-in program on this PC (MCP)" - "Asks you first, every time". Every action an approval card can name (`jarvis_card_words.TITLES`) is
 on the page, in ten groups; a line in the owner's file that no group names is
 added under "Other", never hidden.
 
@@ -6100,3 +6104,40 @@ run here; everything around it is tested with a stand-in
 (`backend/test_picture_text.py`). A follow-up question about the same
 picture does not have its words: the apps re-send the conversation's words,
 never the picture.
+
+
+## 37. Plug-in programs (MCP), and the short tool list (added 2026-09-26)
+
+The owner's "Smarter tools" choice (`CLAUDE.md`, 2026-09-26; feasibility
+audit I06 and I07). **No new route.** Everything the apps see arrives
+through what they already read:
+
+- **Cards.** Starting a plug-in program raises a card under the gate action
+  `mcp_start__<program>` ("Jarvis wants to start the plug-in program
+  "<program>"") when the program is new or has changed since the owner last
+  approved it (`jarvis_mcp.CARD_EVERY_START` makes it every start - the
+  owner's open question). Every tool call raises a card under
+  `mcp__<program>__<tool>` ("Jarvis wants to use a tool from the plug-in
+  program "<program>""), whose text shows every argument in full and why it
+  asks. Only a person's Approve runs it (a tier that lets it through with
+  nobody asked is refused). Both are ordinary cards (`notice`, section 3):
+  titles from `jarvis_card_words.title_for`, which puts the owner's program
+  name in the title and never a tool name the program wrote.
+- **What Jarvis can reach** (section 24): a row `plugins`, "Plug-in programs
+  (MCP)" - "not set up" until `[mcp]` lists a program; "off" with the reason
+  when the `[mcp]` lines have a mistake; else "on", where "programs on this
+  PC: <names>", asks "Yes, every time", and which are running now. Names
+  only - never anything a program wrote.
+- **What asks first** (section 32): the two fixed rows above.
+- **The chat.** A plug-in tool's result is outside text like an email's: it
+  marks the conversation (`read_outside`, section 18), so a later note write
+  or web search asks first. `tools_ran` names the tool; the `step` event
+  carries its name like any tool's.
+
+**The short tool list** (`[tools] short_list = true` in
+`jarvis-framework.toml`; OFF as shipped until the tool test on the PC shows
+it costs nothing) changes only which tool descriptions the PC sends its own
+model: 8 core tools and `more_tools`, which opens a named group for the
+rest of that conversation. Nothing an app sends or reads changes; a group
+opened after outside text is named on the next card ("Jarvis asked for more
+tools (...) after reading outside text.").

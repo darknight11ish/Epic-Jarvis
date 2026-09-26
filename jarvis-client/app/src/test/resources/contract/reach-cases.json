@@ -160,6 +160,16 @@
     },
     {
      "asks": "-",
+     "id": "plugins",
+     "line": "Not set up: no plug-in programs are listed under [mcp] in jarvis-framework.toml.",
+     "name": "Plug-in programs (MCP)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "second_card",
      "line": "Off. Switching it on asks you with an approval card.",
      "name": "Second graphics card",
@@ -354,6 +364,16 @@
     },
     {
      "asks": "-",
+     "id": "plugins",
+     "line": "Not set up: no plug-in programs are listed under [mcp] in jarvis-framework.toml.",
+     "name": "Plug-in programs (MCP)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "second_card",
      "line": "Off. Switching it on asks you with an approval card.",
      "name": "Second graphics card",
@@ -544,6 +564,16 @@
     },
     {
      "asks": "-",
+     "id": "plugins",
+     "line": "Not set up: no plug-in programs are listed under [mcp] in jarvis-framework.toml.",
+     "name": "Plug-in programs (MCP)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "second_card",
      "line": "Off. Switching it on asks you with an approval card.",
      "name": "Second graphics card",
@@ -604,7 +634,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 17,
+   "on": 18,
    "rows": [
     {
      "asks": "Yes, every question",
@@ -755,6 +785,16 @@
      "state": "on",
      "state_words": "On",
      "where": "this PC (a command can reach the internet)"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "plugins",
+     "line": "Read-only tools from programs on this PC that you listed. Starting one asks you when it is new or has changed. Every use asks you, every time, and what they send back is treated as outside text. The programs themselves run with your account's permissions. Running now: repo.",
+     "name": "Plug-in programs (MCP)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "programs on this PC: repo"
     },
     {
      "asks": "-",
@@ -1036,6 +1076,16 @@
     },
     {
      "asks": "-",
+     "id": "plugins",
+     "line": "Not set up: no plug-in programs are listed under [mcp] in jarvis-framework.toml.",
+     "name": "Plug-in programs (MCP)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "second_card",
      "line": "Off. Switching it on asks you with an approval card.",
      "name": "Second graphics card",
@@ -1081,6 +1131,7 @@
   "browser",
   "phone_control",
   "shell",
+  "plugins",
   "second_card",
   "big_model"
  ],

@@ -241,6 +241,7 @@ GROUPS = (
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
                       "control_browser", "post_to_external_service", "open_public_tunnel"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
+                                "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
@@ -263,7 +264,29 @@ FIXED = {
                       "Your own words only; the answer says when it next goes off, and "
                       "deleting is immediate. A repeating morning briefing and \"tell me when\" "
                       "still ask (below)."),
+    # The plug-in programs (jarvis_mcp.py): a program someone else wrote,
+    # running as the owner - every use asks, in code, whatever the file says.
+    "fixed:plugin_use": ("Use a tool from a plug-in program on this PC (MCP)",
+                         "Asks you first, every time",
+                         "Always asks, whatever your settings file says: it is someone "
+                         "else's program. Only tools that read are offered for now."),
 }
+
+#: The plug-in start row's words: the owner's open question 9 is answered in
+#: one line of jarvis_mcp.py (CARD_EVERY_START), and this row follows it.
+PLUGIN_START_ROW = "Start a plug-in program on this PC (MCP)"
+PLUGIN_START_SAYS = "Asks you when it is new or has changed"
+PLUGIN_START_NOTE = ("Asks when you add a program under [mcp] in your settings file, and again "
+                     "whenever the program or its version changes.")
+PLUGIN_START_EVERY_NOTE = "Asks every time a plug-in program starts."
+
+
+def _plugin_card_every_start() -> bool:
+    try:
+        import jarvis_mcp
+        return bool(jarvis_mcp.CARD_EVERY_START)
+    except Exception:
+        return True
 
 # ---------------------------------------------------------------------------
 # What is read, replaceable for the tests
@@ -352,6 +375,12 @@ def _row(action: str, *, here: bool) -> dict:
     if action in FIXED:
         title, says, note = FIXED[action]
         return {"id": action, "title": title, "says": says, "note": note, "fixed": True}
+    if action == "fixed:plugin_start":
+        every = _plugin_card_every_start()
+        return {"id": action, "title": PLUGIN_START_ROW,
+                "says": SAYS["ask"] if every else PLUGIN_START_SAYS,
+                "note": PLUGIN_START_EVERY_NOTE if every else PLUGIN_START_NOTE,
+                "fixed": True}
     if action == "fixed:lights":
         on = lights_setting()["on"]
         return {"id": action, "title": LIGHTS_ROW,

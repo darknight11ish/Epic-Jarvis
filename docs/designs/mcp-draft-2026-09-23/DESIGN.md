@@ -1,7 +1,22 @@
 # jarvis_mcp: an MCP bridge for Jarvis
 
-Status: **research output, nothing applied to Epic-Jarvis.** Tested on Linux
-only. Not yet run on Windows.
+> **Moved, 2026-09-26 (feasibility audit I07).** The code now lives in
+> `backend/`: `jarvis_mcp.py`, `fake_mcp_server.py`, `test_mcp.py`, and
+> `test_mcp_wiring.py` (which replaces this folder's `test_agent_wiring.py`
+> and `jarvis-agent-mcp.patch` - that patch no longer applied). CI runs both
+> suites. Version 1 differs from this draft in five ways, all stricter:
+> nothing that downloads code at start (`npx`, `uvx`...) is accepted; only
+> read-only tools are offered; `below_ask_ok` is refused, so every call asks
+> a person; `env:` references are refused and the environment comes from
+> `jarvis_child_env`; and a start asks when a server is added or changes
+> (not every start - `CARD_EVERY_START` is the one-line switch). The model
+> reaches these tools only through `more_tools("plugins")`. See
+> `backend/README.md`, "Smarter tools, part 2". The rest of this document -
+> the protocol, the untrusted-text handling, the Windows process tree - still
+> describes the code; line numbers below are the draft's.
+
+Status (of the draft, 2026-09-23): **research output, nothing applied to
+Epic-Jarvis.** Tested on Linux only. Not yet run on Windows.
 
 ## The short version
 

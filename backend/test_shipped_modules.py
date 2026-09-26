@@ -103,6 +103,7 @@ NOT_SHIPPED = {
     "grade-peers.py": "a research tool, not part of the backend",
     "_ollama_wire.py": "test fixture: Ollama's real /v1 stream format, for the chat tests",
     "_voice_test.py": "test plumbing: a stand-in speaker model for the voice suites",
+    "fake_mcp_server.py": "test fixture: a badly behaved plug-in program, for test_mcp.py",
 }
 
 

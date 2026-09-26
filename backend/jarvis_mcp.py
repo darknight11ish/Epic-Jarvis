@@ -1,90 +1,92 @@
-"""jarvis_mcp.py - lets Jarvis use tools from local MCP servers, one approved call at a time.
+"""jarvis_mcp.py - tools from plug-in programs on this PC (MCP), one approved call at a time.
+
+NEW MODULE, shipped whole (feasibility audit I07, 2026-09-26; the owner chose
+"the MCP bridge (local servers only, read-only first, a card to start each
+server, every call through the gate)"). It began as a design draft
+(docs/designs/mcp-draft-2026-09-23/DESIGN.md, which still explains the
+protocol and the Windows process handling in full) and was moved here so CI
+runs its tests.
 
 WHAT IT IS FOR
-MCP (Model Context Protocol) is a standard way for a separate program - an
-"MCP server" - to offer tools to an assistant. A filesystem server offers
-"read_file", a Git server offers "git_log", and so on. The server runs as a
-child process on this machine and talks over its stdin/stdout, one JSON
-message per line. This module is the client end of that pipe: it starts the
-servers the owner lists, asks them what tools they have, and calls those
-tools - but only through jarvis_gate, and only for the servers and tools the
-owner named by hand.
+MCP (Model Context Protocol) is a standard way for a separate program - a
+"plug-in server" - to offer tools to an assistant: a Git server offers
+"git_log", and so on. The server runs as a child process on this PC and
+talks over its stdin/stdout, one JSON message per line. This module is the
+Jarvis end of that pipe. The model reaches these tools ONLY through
+`more_tools("plugins")` (jarvis_agent.py, the short tool list), never in
+the core list.
 
-No dependencies. subprocess, threading, json and (on Windows) ctypes. It does
-not use the `mcp` Python SDK, which pulls in anyio, pydantic, httpx and
-pywin32. docs/ARCHITECTURE.md's list of rejected projects is mostly
-dependency weight; this one does not add any.
+VERSION 1, ON PURPOSE NARROW
+  * Programs on this PC only, over stdin/stdout ("stdio"). Any other
+    transport is refused: no web addresses, no HTTP servers, no remote
+    servers (the recommended answer to the owner's open question 2 - it is
+    also correct if the owner picks the wider answer later, which would add
+    a transport, not change this one). Never Home Assistant's MCP server:
+    its tools act without a card; jarvis_home.py does that job safely.
+  * Installed once, never fetched at start: a command that downloads code
+    each time it starts (npx, uvx, pipx, `npm exec`...) is refused, and the
+    command must be a full path (no search of PATH).
+  * Read-only first: a tool is offered only when nothing in its NAME says it
+    changes something, the program does not say otherwise, and either the
+    program says it only reads (readOnlyHint) or the owner wrote
+    `read_only = true` for it after checking. `below_ask_ok` (letting a tool
+    go below "ask") is refused in version 1.
+  * Every call goes through the gate as its own action,
+    "mcp__<server>__<tool>" (unknown to the gate, so it asks), and runs only
+    on a PERSON's yes (jarvis_agent: outside_program, like NEEDS_A_PERSON;
+    and Bridge.run checks the verdict again: this action, used once).
+  * What a program sends back is OUTSIDE TEXT: cleaned, capped, labelled
+    untrusted here, then labelled and checked again by jarvis_agent's
+    _TurnWatch.took_in - so it marks the turn and the conversation (the note
+    and web-search cards ask after it), and it is never learned as a fact
+    (learning reads only the owner's own words).
+  * The program's environment is built by jarvis_child_env.inherited(): an
+    allow-list, so it never gets the pairing token (HUD_TOKEN, JARVIS_TOKEN)
+    or any *_KEY / *_TOKEN / *_PASSWORD of Jarvis's. A setting the owner
+    gives one server by name is either a plain value (never for a
+    secret-looking name) or read from Windows Credential Manager
+    ("credman:<entry>") at the moment it starts - rule 3: a key goes only
+    to the one program it is for.
 
-THE PERMISSION MODEL, SAME SHAPE AS EVERYTHING ELSE
-Starting a server runs somebody else's program, so it is a gated action.
-Every tool call is a gated action. Both use the four steps from
-docs/ARCHITECTURE.md section 3:
+STARTING A PROGRAM - WHEN IT ASKS
+A card when a server is ADDED, and again whenever the program or its version
+CHANGES (the recommended answer to the owner's open question 9). What the
+owner approved is remembered as a fingerprint - the command, its arguments,
+folder and setting NAMES, and the bytes of the program file and of every
+argument that is a file - plus the version the server reported. A start
+with the same fingerprint and version needs no card (it is written to the
+audit log); anything different asks again, and the card says what changed.
+The stricter answer, "a card every time it starts", is one line:
+CARD_EVERY_START = True.
 
-    plan_start(cfg)          touches nothing, opens nothing, starts nothing.
-    describe_start(plan)     the full command line, the working folder, the
-                             NAMES of the settings passed in (never values),
-                             whether it downloads code, what refusing costs.
-    <jarvis_gate.check>      action "mcp_start__<server>".
-    Bridge.start()           runs only with a verdict that a human approved.
-
-    Bridge.plan_call()       validates the arguments, snapshots them, works
-                             out the tier FLOOR. Sends nothing.
-    describe_call(plan)      every argument, in full, with invisible
-                             characters shown as \\u escapes so the card
-                             cannot hide anything.
-    <jarvis_gate.check>      action "mcp__<server>__<tool>".
-    Bridge.run(plan, verdict=...)   `verdict` has no default. Sends exactly the
-                             snapshot the card showed, once.
-
-WHO DECIDES THE TIER - NEVER THE MODEL, NEVER THE SERVER
-The tier comes from jarvis_gate, which looks the action name up in
-jarvis-framework.toml; an action nobody listed gets the unknown-action tier,
-which is "ask". On top of that, this module computes a FLOOR in plain code,
-and run() refuses any verdict below it - because docs/ARCHITECTURE.md is
-explicit that `allowed=True` is not "a human decided" (tier auto and notify
-return allowed with nobody asked).
-
-The floor is "ask" for every MCP call unless ALL of these hold:
-  * the owner put the tool in that server's `below_ask_ok` list, and
-  * no word in the tool's name or argument names suggests writing, sending,
-    running, the network, files or credentials (`risky_reasons`), and
-  * the server's own annotations do not claim it is destructive, open-world
-    or not read-only (annotations can only ever RAISE the floor: the MCP spec
-    says clients MUST treat them as untrusted), and
-  * no outside text has tried to rush the reader in the last ten minutes.
-Even then it is only a floor - the gate's own tier still applies on top.
-
-TOOL RESULTS ARE UNTRUSTED
-Whatever a tool returns was written by a program that is not the owner, and
-may be quoting a web page or an email written by anyone. So every result is
-wrapped in an envelope that says so, cleaned of invisible characters (zero-
-width, bidi controls, Unicode "tag" characters used to smuggle hidden
-instructions), capped in size, and scanned with fixed patterns for rushing
-language, "ignore previous instructions", fake chat-template tokens and
-fake tool calls. A hit latches every MCP call to "ask" for ten minutes
-(jarvis-framework.toml [content_risk] rush_latch_minutes = 10). Images,
-audio, blobs and links are dropped, never fetched.
-
-The server's `instructions` text from the handshake is never shown to the
-model. Tool descriptions and input schemas ARE shown to the model (it needs
-them), so they are pinned: the owner approves a SHA-256 of each tool's
-definition, and if the server later changes it, the tool disappears until
-the owner looks again. A description that trips the scanner is never offered.
+A server Jarvis started is stopped after IDLE_STOP_SECONDS unused, and when
+Jarvis exits. A server that dies is never restarted on its own: the next
+`more_tools("plugins")` starts it again, through the same rule.
 
 WHAT THIS MODULE CANNOT DO - SAID PLAINLY
-An MCP server is an ordinary program running as the owner. Once started it
-can read files, open network connections, anything the owner's account can.
-This module controls WHAT JARVIS ASKS IT TO DO and WHAT COMES BACK INTO THE
-CONVERSATION. It does not sandbox the server. That is why starting one is
-tier "ask", and why the start card says so.
+A plug-in server is an ordinary program running as the owner. Once started
+it can read files and use the internet, whatever Jarvis asks of it. This
+module controls WHAT JARVIS ASKS IT TO DO and WHAT COMES BACK INTO THE
+CONVERSATION; it does not sandbox the program. That is why adding one asks,
+and why the card says so.
+
+    python3 test_mcp.py          # the bridge, against a real child process
+    python3 test_mcp_wiring.py   # the bridge inside jarvis_agent's loop
+
+WHO DECIDES THE TIER - NEVER THE MODEL, NEVER THE SERVER
+The gate, from the action name; an action nobody listed gets the unknown-
+action tier, "ask". On top of that this module's FLOOR is always "ask" in
+version 1 and run() refuses any verdict that is not a person's approval.
 
 PROCESSES ARE KILLED AS A TREE
 Windows: every server is created suspended, put in a Job Object with
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, then resumed - so nothing it starts can
 escape the job, and if Jarvis itself dies Windows kills the whole tree.
 POSIX: a new session (process group), then SIGTERM, then SIGKILL, to the
-group. Shutdown always kills the tree, even when the server exits politely
-on its own - a polite exit can leave its children running.
+group. Shutdown always kills the tree, even when the server exits politely.
+
+Standard library only (subprocess, threading, json, and ctypes on Windows).
+It does not use the `mcp` Python SDK.
 """
 
 from __future__ import annotations
@@ -117,6 +119,20 @@ SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 CLIENT_INFO = {"name": "jarvis-mcp-bridge", "version": "0.1.0"}
 
 RUSH_LATCH_SECONDS = 600            # [content_risk] rush_latch_minutes = 10
+#: The owner's open question 9 (docs/FEASIBILITY-AUDIT-2026-09-26.md section
+#: 5). False - the recommended answer, built: a card when a server is added,
+#: and again when the program or its version changes. True - the stricter
+#: answer: a card every time a server starts.
+CARD_EVERY_START = False
+#: A server nobody has used for this long is stopped (started again, by the
+#: same rule, the next time the model asks for plug-in tools).
+IDLE_STOP_SECONDS = 600
+#: Where the approved starts are remembered, in Jarvis's config folder.
+APPROVALS_FILE = "mcp-approved.json"
+#: The most a tool's description and arguments may cost the model, by
+#: jarvis_agent.estimate_tokens's rule (3 characters a token) - the same
+#: limit every built-in tool is held to (test_tool_text.py, PER_TOOL).
+MAX_TOOL_TOKENS = 300
 DEFAULT_CALL_TIMEOUT = 60.0
 DEFAULT_START_TIMEOUT = 30.0
 GRACE_SECONDS = 2.0                 # stdin closed -> wait this long -> kill tree
@@ -159,17 +175,10 @@ _CMD_META = re.compile(r'[&|<>^%"!\r\n]')
 # Launchers that fetch code from the internet when they start.
 _DOWNLOADERS = {"npx", "uvx", "pipx", "bunx", "pnpx", "dlx"}
 
-#: Inherited from Jarvis's own environment. Nothing else is - not HUD_TOKEN,
-#: not JARVIS_GITHUB_TOKEN, not OLLAMA_URL. Same list the MIT-licensed MCP
-#: Python SDK uses (mcp/client/stdio/__init__.py, DEFAULT_INHERITED_ENV_VARS).
-_BASE_ENV_WINDOWS = ("APPDATA", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH",
-                     "PROCESSOR_ARCHITECTURE", "SYSTEMDRIVE", "SYSTEMROOT", "TEMP",
-                     "USERNAME", "USERPROFILE",
-                     # Not in the SDK's list. Added because npm's .cmd shims and
-                     # some Node code look them up; none is a secret. Whether
-                     # any server actually fails without them is NOT verified.
-                     "PATHEXT", "COMSPEC", "WINDIR", "TMP")
-_BASE_ENV_POSIX = ("HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER", "LANG")
+#: The environment a server inherits is jarvis_child_env.inherited()'s
+#: allow-list - what a program needs to start and find its files, never a
+#: name that looks like a secret - so it never gets HUD_TOKEN,
+#: JARVIS_GITHUB_TOKEN or any other key of Jarvis's (bug audit 3, CONN-2).
 
 
 @dataclass(frozen=True)
@@ -177,6 +186,7 @@ class ToolRule:
     pin: str                          # "sha256:<hex>" of the definition the owner approved
     alias: Optional[str] = None       # model-facing name, if the real one will not do
     description: Optional[str] = None  # owner-written text, replaces the server's
+    read_only: bool = False           # the owner checked: this tool only reads
 
 
 @dataclass(frozen=True)
@@ -187,7 +197,7 @@ class ServerConfig:
     cwd: Optional[str]
     env: tuple                        # ((NAME, "env:X" | "credman:Y" | literal), ...)
     tools: dict                       # tool name -> ToolRule
-    below_ask_ok: frozenset
+    below_ask_ok: frozenset           # always empty in version 1 (parse_config)
     call_timeout: float = DEFAULT_CALL_TIMEOUT
     start_timeout: float = DEFAULT_START_TIMEOUT
     memory_limit_mb: int = 0          # Windows job memory cap; 0 = none
@@ -204,6 +214,10 @@ class ServerConfig:
         return (stem in _DOWNLOADERS
                 or (stem in ("npm", "pnpm", "yarn") and first in ("exec", "x", "dlx"))
                 or (stem in ("uv", "pipx") and first in ("tool", "run")))
+
+
+_SERVER_KEYS = frozenset({"command", "args", "cwd", "env", "tools", "below_ask_ok",
+                          "timeout_sec", "start_timeout_sec", "memory_limit_mb", "transport"})
 
 
 def _num(v, name, lo, hi, default):
@@ -239,6 +253,10 @@ def parse_config(section: Optional[dict]) -> dict:
             raise ConfigError(f"{where}: only transport = \"stdio\" is supported. A network "
                               f"transport would mean Jarvis talking to a URL, which this "
                               f"module does not do")
+        extra = sorted(set(raw) - _SERVER_KEYS)
+        if extra:
+            raise ConfigError(f"{where}: unknown setting(s) {extra}; the settings are "
+                              f"{sorted(_SERVER_KEYS)}")
         cmd = raw.get("command")
         if not isinstance(cmd, str) or not os.path.isabs(cmd):
             raise ConfigError(f"{where}: command must be a FULL path to the program, e.g. "
@@ -258,7 +276,12 @@ def parse_config(section: Optional[dict]) -> dict:
         for k, v in env.items():
             if not isinstance(k, str) or not _ENV_NAME.match(k) or not isinstance(v, str):
                 raise ConfigError(f"{where}: env entry {k!r} must be NAME = \"text\"")
-            is_ref = v.startswith("env:") or v.startswith("credman:")
+            if v.startswith("env:"):
+                raise ConfigError(
+                    f"{where}: env {k} copies one of Jarvis's own settings, and a plug-in "
+                    f"program never gets those (one could be the pairing key). Write the "
+                    f"value itself, or for a key use \"credman:<entry name>\"")
+            is_ref = v.startswith("credman:")
             if _SECRETISH.search(k) and not is_ref:
                 raise ConfigError(
                     f"{where}: env {k} looks like a secret, and secrets are never written "
@@ -283,10 +306,15 @@ def parse_config(section: Optional[dict]) -> dict:
             desc = t.get("description")
             if desc is not None and not isinstance(desc, str):
                 raise ConfigError(f"{where}.tools.{tname}: description must be text")
-            tools[tname] = ToolRule(pin=t["pin"], alias=alias, description=desc)
+            ro = t.get("read_only", False)
+            if not isinstance(ro, bool):
+                raise ConfigError(f"{where}.tools.{tname}: read_only must be true or false")
+            tools[tname] = ToolRule(pin=t["pin"], alias=alias, description=desc,
+                                    read_only=ro)
         below = raw.get("below_ask_ok") or []
-        if not isinstance(below, list) or not all(isinstance(b, str) for b in below):
-            raise ConfigError(f"{where}: below_ask_ok must be a list of tool names")
+        if below:
+            raise ConfigError(f"{where}: below_ask_ok is not available yet - every tool from "
+                              f"a plug-in program asks you, every time, in this version")
         cfg = ServerConfig(
             name=name, command=cmd, args=tuple(args), cwd=cwd, env=tuple(env_items),
             tools=tools, below_ask_ok=frozenset(below),
@@ -297,6 +325,11 @@ def parse_config(section: Optional[dict]) -> dict:
                                      DEFAULT_START_TIMEOUT)),
             memory_limit_mb=int(_num(raw.get("memory_limit_mb"), f"{where} memory_limit_mb",
                                      0, 65536, 0)))
+        if cfg.downloads:
+            raise ConfigError(f"{where}: {os.path.basename(cmd)} downloads code from the "
+                              f"internet each time it starts. Install the server once into a "
+                              f"folder, then point command at node.exe or python.exe and args "
+                              f"at the installed files, so what runs is what you approved")
         if cfg.is_batch:
             bad = [a for a in args if _CMD_META.search(a)]
             if bad:
@@ -328,19 +361,12 @@ def load_config(path: str) -> dict:
 # --------------------------------------------------------------------------
 
 def _describe_env_source(v: str) -> str:
-    if v.startswith("env:"):
-        return f"copied from Jarvis's own setting {v[4:]}"
     if v.startswith("credman:"):
         return f"read from Windows Credential Manager entry \"{v[8:]}\""
     return "a fixed value from your config"
 
 
 def _resolve_env_value(v: str) -> str:
-    if v.startswith("env:"):
-        val = os.environ.get(v[4:])
-        if val is None:
-            raise BridgeError(f"the setting {v[4:]} is not set on this machine")
-        return val
     if v.startswith("credman:"):
         return _credman_read(v[8:])
     return v
@@ -391,12 +417,16 @@ def _credman_read(target: str) -> str:
 
 
 def _child_env(cfg: ServerConfig) -> dict:
-    base = _BASE_ENV_WINDOWS if os.name == "nt" else _BASE_ENV_POSIX
-    env = {}
-    for k in base:
-        v = os.environ.get(k)
-        if v is not None and not v.startswith("()"):   # bash exported functions
-            env[k] = v
+    """What the server's process gets: jarvis_child_env's allow-list of this
+    process's environment, then the settings the owner gave THIS server.
+    Fails closed: without jarvis_child_env nothing starts."""
+    try:
+        import jarvis_child_env
+    except Exception as exc:
+        raise BridgeError("jarvis_child_env.py is missing, so a plug-in program cannot be "
+                          "given a safe environment; nothing was started") from exc
+    env = {k: v for k, v in jarvis_child_env.inherited().items()
+           if not str(v).startswith("()")}                # bash exported functions
     for k, ref in cfg.env:
         env[k] = _resolve_env_value(ref)
     return env
@@ -462,17 +492,58 @@ def risky_reasons(tool_def: dict) -> list:
 
 
 def floor_for(cfg: ServerConfig, tool_def: dict, latch_active: bool) -> tuple:
-    """-> ("ask" | "none", [reasons]). "none" means the gate's own tier stands."""
-    name = tool_def.get("name", "")
-    reasons = []
-    if name not in cfg.below_ask_ok:
-        reasons.append("every tool from an outside program asks, unless you list it "
-                       "in below_ask_ok")
+    """-> ("ask", [reasons]). Version 1: every call from a plug-in program
+    asks a person, whatever the tool or the gate's tier (below_ask_ok is
+    refused by parse_config). The reasons are the card's "Why you are
+    asked" lines."""
+    reasons = ["every tool from a plug-in program asks you, every time"]
     reasons += risky_reasons(tool_def)
     if latch_active:
         reasons.append("text from outside tried to rush or instruct Jarvis in the last "
                        "ten minutes")
-    return ("ask" if reasons else "none"), reasons
+    return "ask", reasons
+
+
+#: Words in a tool's NAME that mean it changes something. A tool named with
+#: one is never offered in version 1 ("read-only first"), whatever the
+#: program or the owner says about it.
+_WRITE_WORDS = {
+    "write", "create", "update", "delete", "remove", "rm", "move", "mv", "rename", "copy",
+    "edit", "patch", "put", "post", "set", "save", "insert", "append", "replace", "modify",
+    "upload", "commit", "push", "merge", "install", "uninstall", "kill", "drop", "truncate",
+    "mkdir", "chmod", "chown", "store", "send", "email", "mail", "message", "reply",
+    "publish", "notify", "invite", "share", "comment", "exec", "execute", "run", "shell",
+    "command", "cmd", "eval", "script", "spawn", "launch", "start", "stop", "add", "reset",
+    "checkout", "init", "apply", "stage", "unstage", "tag", "restore", "revert", "rebase",
+    "clone", "pull", "fetch", "download", "cherry", "stash", "new",
+    "open", "close", "lock", "unlock", "enable", "disable", "grant", "revoke", "pay",
+    "buy", "order", "book", "schedule", "cancel", "approve", "sign", "login", "logout",
+}
+
+
+def read_only_problem(tool_def: dict, rule: "ToolRule") -> str:
+    """Why this tool may NOT be offered in version 1 ("read-only first"), or
+    "" when it may. Its NAME must not say it changes something; the program
+    must not say it writes, destroys or reaches outside; and the program
+    must say it only reads (readOnlyHint), or the owner must have written
+    `read_only = true` for it. The program's claims are untrusted, so they
+    only ever take a tool away (MCP spec: clients MUST treat them so)."""
+    hits = sorted(_words(tool_def.get("name", "")) & _WRITE_WORDS)
+    if hits:
+        return (f"its name says it changes something ({', '.join(hits)}); only tools "
+                f"that read are offered for now")
+    ann = tool_def.get("annotations")
+    ann = ann if isinstance(ann, dict) else {}
+    if ann.get("readOnlyHint") is False:
+        return "the program says it is not read-only"
+    if ann.get("destructiveHint") is True:
+        return "the program says it can destroy data"
+    if ann.get("openWorldHint") is True:
+        return "the program says it reaches outside systems"
+    if ann.get("readOnlyHint") is not True and not rule.read_only:
+        return ("neither the program nor your settings say it only reads. Once you have "
+                "checked that it does, add read_only = true under its pin")
+    return ""
 
 
 # --------------------------------------------------------------------------
@@ -1020,6 +1091,8 @@ class StartPlan:
     downloads: bool
     floor: str = "ask"
     used: bool = False
+    fingerprint: str = ""         # what the owner approves (fingerprint_of)
+    changed: str = ""             # why it asks again, when it was approved before
 
 
 @dataclass
@@ -1052,11 +1125,65 @@ def plan_start(cfg: ServerConfig, work_root: Optional[str] = None) -> StartPlan:
     return StartPlan(server=cfg.name, action=f"mcp_start__{cfg.name}",
                      argv=(cfg.command, *cfg.args), cwd=cwd,
                      env_sources=tuple((k, _describe_env_source(v)) for k, v in cfg.env),
-                     runs_through_cmd=cfg.is_batch, downloads=cfg.downloads)
+                     runs_through_cmd=cfg.is_batch, downloads=cfg.downloads,
+                     fingerprint=fingerprint_of(cfg, cwd))
+
+
+_HASH_CACHE: dict = {}
+
+
+def _file_sha(path: str) -> Optional[str]:
+    """SHA-256 of a file's bytes, or None when it is not a file. Cached by
+    size and modification time, so a large program is not re-read on every
+    start."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    if not os.path.isfile(path):
+        return None
+    key = (os.path.abspath(path), st.st_size, st.st_mtime_ns)
+    hit = _HASH_CACHE.get(key)
+    if hit:
+        return hit
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+    except OSError:
+        return None
+    _HASH_CACHE[key] = h.hexdigest()
+    return _HASH_CACHE[key]
+
+
+def fingerprint_of(cfg: ServerConfig, cwd: str) -> str:
+    """What the owner approves when a server is added: the command, its
+    arguments, its folder, the NAMES of its settings and where each comes
+    from (never a value), and the bytes of the program file and of every
+    argument that is a file. Any change - an update of the program, an
+    edited argument - is a new fingerprint, and the next start asks again."""
+    files = {}
+    for a in (cfg.command, *cfg.args):
+        if isinstance(a, str) and os.path.isabs(a):
+            sha = _file_sha(a)
+            if sha:
+                files[a] = sha
+    # A plain setting's value counts (a changed setting changes what the
+    # program does), as a hash; a Credential Manager entry by its name only -
+    # the key itself is never read here.
+    doc = {"command": cfg.command, "args": list(cfg.args), "cwd": cwd,
+           "env": [[k, v if v.startswith("credman:") else
+                    "sha256:" + hashlib.sha256(v.encode("utf-8")).hexdigest()]
+                   for k, v in cfg.env],
+           "files": files}
+    canon = json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(canon.encode("utf-8")).hexdigest()
 
 
 def describe_start(p: StartPlan) -> str:
-    lines = [f"Jarvis wants to start an outside program: the MCP server \"{p.server}\".",
+    lines = [f"Jarvis wants to start a plug-in program on this PC: \"{p.server}\" (an MCP "
+             f"server).",
              "", "It will run exactly this command:"]
     lines += [f"    {json.dumps(a, ensure_ascii=True)}" for a in p.argv]
     lines += ["", f"In this folder: {json.dumps(p.cwd, ensure_ascii=True)}"]
@@ -1070,12 +1197,17 @@ def describe_start(p: StartPlan) -> str:
     if p.downloads:
         lines.append("This command can DOWNLOAD code from the internet each time it "
                      "starts, and run whatever it downloads.")
+    if p.changed:
+        lines += ["", f"You approved this program before, but {p.changed}."]
     lines += ["",
               "What this means: the program runs with your Windows account's permissions "
               "until Jarvis stops. Jarvis cannot see or limit what it does on its own - "
               "it could read your files or use the internet. Jarvis will still ask you "
-              "separately before using any of its tools.",
-              "",
+              "separately before using any of its tools, every time."]
+    if not CARD_EVERY_START:
+        lines += ["", "If you say yes, Jarvis starts it again later without asking - until "
+                      "the program, its settings or its version change."]
+    lines += ["",
               "If you say no: the program does not start, and none of its tools are "
               "available until you are asked again."]
     return "\n".join(lines)
@@ -1083,7 +1215,8 @@ def describe_start(p: StartPlan) -> str:
 
 def describe_call(p: CallPlan, cfg: ServerConfig) -> str:
     pretty = json.dumps(json.loads(p.args_json), indent=2, ensure_ascii=True, sort_keys=True)
-    lines = [f"Jarvis wants to use the tool \"{p.tool}\" from the MCP server \"{p.server}\".",
+    lines = [f"Jarvis wants to use the tool \"{p.tool}\" from the plug-in program "
+             f"\"{p.server}\" (MCP).",
              "", "It will send exactly these arguments, in full:", pretty, "",
              f"(argument fingerprint {p.args_sha[:16]})", "",
              "The program that receives them: "
@@ -1133,9 +1266,16 @@ class Bridge:
     def __init__(self, servers: dict, *, gate_check: Optional[Callable] = None,
                  on_outside_text: Optional[Callable[[str, str], None]] = None,
                  work_root: Optional[str] = None, clock: Callable[[], float] = time.monotonic,
-                 max_line_bytes: int = MAX_LINE_BYTES):
+                 max_line_bytes: int = MAX_LINE_BYTES,
+                 approvals: Optional["ApprovalStore"] = None,
+                 audit: Optional[Callable[[str, dict], None]] = None):
         self.servers = dict(servers)
         self._check = gate_check or _default_gate_check
+        # Approved starts (the card when a server is added or changes). None:
+        # nothing is remembered, so every start asks.
+        self._approvals = approvals
+        self._audit = audit or (lambda event, detail: None)
+        self._last_used = {}          # server -> clock() of its last start or call
         self._on_outside_text = on_outside_text
         self._work_root = work_root
         self._clock = clock
@@ -1146,6 +1286,7 @@ class Bridge:
         self._latch_until = 0.0
         self._used_requests = set()
         self._lock = threading.RLock()
+        self._start_lock = threading.Lock()
         _LIVE.add(self)
 
     # ---- the rush latch ----
@@ -1194,25 +1335,62 @@ class Bridge:
         return True, "ok"
 
     # ---- starting ----
-    def start(self, name: str) -> dict:
-        """plan -> describe -> gate -> spawn -> handshake -> inventory."""
+    def start(self, name: str, *, gate_check: Optional[Callable] = None) -> dict:
+        """plan -> (remembered? no card) or (describe -> gate) -> spawn ->
+        handshake -> version check -> inventory. `gate_check`: this turn's
+        own gate (jarvis_agent counts its cards), else the bridge's.
+
+        One start at a time: two chats asking for plug-in tools together
+        must not start the same program twice (the first copy would be left
+        running with nothing to stop it)."""
+        with self._start_lock:
+            return self._start(name, gate_check)
+
+    def _start(self, name: str, gate_check: Optional[Callable]) -> dict:
+        check = gate_check or self._check
         cfg = self.servers.get(name)
         if cfg is None:
             return {"ok": False, "error": f"{name!r} is not in your [mcp.servers] config; "
                                           f"only servers you list are ever started"}
         with self._lock:
             if name in self._conns and not self._conns[name].dead:
+                self._last_used[name] = self._clock()
                 return {"ok": True, "already_running": True}
         try:
             plan = plan_start(cfg, self._work_root)
         except ConfigError as exc:
             return {"ok": False, "error": str(exc)}
+        known = None
+        if self._approvals is not None and not CARD_EVERY_START:
+            known = self._approvals.get(name)
+        if known and known.get("fingerprint") == plan.fingerprint:
+            res = self._spawn(plan, cfg)
+            if not res.get("ok"):
+                return res
+            now = str((self._conns.get(name).server_info or {}).get("version") or "")
+            then = str(known.get("version") or "")
+            if now == then:
+                self._audit("mcp.start.remembered", {"server": name, "version": now})
+                return dict(res, remembered=True)
+            # Same program file, different version (an update inside a
+            # package the command does not name): stop it and ask.
+            self.stop(name)
+            self._approvals.drop(name)
+            plan = plan_start(cfg, self._work_root)
+            plan.changed = (f"it now says it is version {now or '(none)'}, not "
+                            f"{then or '(none)'} as when you approved it")
+        elif known:
+            plan.changed = "the program or its settings have changed since then"
         card = describe_start(plan)
-        verdict = self._check(plan.action, {"text": card}, f"start mcp server {name}")
+        verdict = check(plan.action, {"text": card}, f"start mcp server {name}")
         good, why = self._verdict_ok(plan.action, plan.floor, verdict)
         if not good:
             return {"ok": False, "error": why}
-        return self._spawn(plan, cfg)
+        res = self._spawn(plan, cfg)
+        if res.get("ok") and self._approvals is not None:
+            version = str((self._conns.get(name).server_info or {}).get("version") or "")
+            self._approvals.put(name, plan.fingerprint, version)
+        return res
 
     def _spawn(self, plan: StartPlan, cfg: ServerConfig) -> dict:
         if plan.used:
@@ -1229,8 +1407,28 @@ class Bridge:
             return {"ok": False, "error": str(exc)}
         with self._lock:
             self._conns[cfg.name] = conn
-        inv = self.inventory(cfg.name)
+            self._last_used[cfg.name] = self._clock()
+        try:
+            inv = self.inventory(cfg.name)
+        except (BridgeError, TimeoutError, RpcError) as exc:
+            self.stop(cfg.name)
+            return {"ok": False, "error": f"{cfg.name} started but would not list its tools "
+                                          f"({exc}); it was stopped"}
         return {"ok": True, "server": cfg.name, "protocol": conn.protocol, **inv}
+
+    def stop_idle(self) -> list:
+        """Stop every server unused for IDLE_STOP_SECONDS. Returns their names."""
+        now = self._clock()
+        with self._lock:
+            idle = [n for n in self._conns
+                    if now - self._last_used.get(n, now) >= IDLE_STOP_SECONDS]
+        for n in idle:
+            self.stop(n)
+        return idle
+
+    def running(self) -> list:
+        with self._lock:
+            return sorted(n for n, c in self._conns.items() if not c.dead)
 
     # ---- discovery ----
     def list_tools_raw(self, name: str) -> list:
@@ -1294,8 +1492,20 @@ class Bridge:
                 if scan(schema_text):
                     hidden[tname] = "its input schema contains instruction-like text"
                     continue
+                ro = read_only_problem(t, rule)
+                if ro:
+                    hidden[tname] = ro
+                    continue
                 desc = rule.description if rule.description is not None else desc_raw
                 desc = clean_text(desc, MAX_DESCRIPTION_CHARS)[0]
+                cost = len(json.dumps({"name": tname, "description": desc,
+                                       "parameters": schema}, ensure_ascii=False)) // 3
+                if cost > MAX_TOOL_TOKENS:
+                    hidden[tname] = (f"its description and arguments are too long for the "
+                                     f"model (about {cost} tokens, the limit is "
+                                     f"{MAX_TOOL_TOKENS}); give it a shorter description "
+                                     f"in your settings")
+                    continue
                 model_name = rule.alias or f"mcp_{name}__{tname}"
                 if not _MODEL_NAME.match(model_name):
                     hidden[tname] = "its name does not fit; give it an alias in config"
@@ -1362,6 +1572,7 @@ class Bridge:
         if not good:
             return {"ok": False, "error": why}
         plan.used = True                       # before sending: an exception cannot re-arm it
+        self._last_used[plan.server] = self._clock()
         conn = self._conns.get(plan.server)
         if conn is None or conn.dead:
             return {"ok": False, "error": f"server {plan.server} is not running. Starting it "
@@ -1466,10 +1677,11 @@ def _check_args(args: dict, schema: dict) -> None:
 # --------------------------------------------------------------------------
 
 def agent_tools(bridge: Bridge, tool_cls) -> dict:
-    """Offered MCP tools as jarvis_agent.Tool objects. Pass jarvis_agent.Tool
-    as `tool_cls`. Needs the two-line jarvis_agent change in
-    jarvis-agent-mcp.patch (gate_direct, needs_verdict); without it every
-    call is refused by run(), which is the safe direction."""
+    """Offered MCP tools as jarvis_agent.Tool objects (pass jarvis_agent.Tool
+    as `tool_cls`). Each carries `outside_program = True`, which jarvis_agent
+    reads: its own gate action (not folded into "unclassified_tool"), a
+    person's yes required whatever the tier, and the gate's verdict handed to
+    execute() - which Bridge.run checks again before sending anything."""
     out = {}
     for spec in bridge.offered():
         name = spec["model_name"]
@@ -1483,10 +1695,198 @@ def agent_tools(bridge: Bridge, tool_cls) -> dict:
 
         t = tool_cls(name, spec["description"], spec["parameters"], prepare, execute,
                      gate_lookup_name=lambda args, _a=spec["action"]: _a)
-        t.gate_direct = True
-        t.needs_verdict = True
+        t.outside_program = True
         out[name] = t
     return out
+
+
+# --------------------------------------------------------------------------
+#   Approved starts, remembered (the card when a server is added or changes)
+# --------------------------------------------------------------------------
+
+class ApprovalStore:
+    """{server: {"fingerprint", "version", "approved_at"}} in one small JSON
+    file in Jarvis's config folder. Only ever written after a person
+    approved a start card. A file that cannot be read is treated as empty -
+    which asks again, the safe direction."""
+
+    def __init__(self, path: str):
+        self.path = path
+        self._lock = threading.Lock()
+
+    def _read(self) -> dict:
+        try:
+            with open(self.path, "r", encoding="utf-8") as f:
+                doc = json.load(f)
+            return doc if isinstance(doc, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _write(self, doc: dict) -> None:
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(doc, f, indent=1, sort_keys=True)
+        os.replace(tmp, self.path)
+
+    def get(self, name: str) -> Optional[dict]:
+        with self._lock:
+            got = self._read().get(name)
+        return got if isinstance(got, dict) else None
+
+    def put(self, name: str, fingerprint: str, version: str) -> None:
+        with self._lock:
+            doc = self._read()
+            doc[name] = {"fingerprint": fingerprint, "version": version,
+                         "approved_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            self._write(doc)
+
+    def drop(self, name: str) -> None:
+        with self._lock:
+            doc = self._read()
+            if doc.pop(name, None) is not None:
+                self._write(doc)
+
+
+# --------------------------------------------------------------------------
+#   The one bridge the backend uses (jarvis_agent's "plugins" group)
+# --------------------------------------------------------------------------
+
+def _fw():
+    try:
+        import jarvis_framework
+        return jarvis_framework
+    except Exception:
+        return None
+
+
+def _load_section() -> dict:
+    """[mcp] from jarvis-framework.toml; {} when it cannot be read."""
+    fw = _fw()
+    try:
+        cfg = fw.load_framework() if fw is not None else {}
+        sec = (cfg or {}).get("mcp")
+        return sec if isinstance(sec, dict) else {}
+    except Exception:
+        return {}
+
+
+def _config_dir() -> str:
+    fw = _fw()
+    try:
+        if fw is not None:
+            return str(fw.CONFIG_DIR)
+    except Exception:
+        pass
+    env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
+    return os.path.expanduser(env) if env else os.path.join(os.path.expanduser("~"),
+                                                              ".openjarvis")
+
+
+def _audit(event: str, detail: dict) -> None:
+    fw = _fw()
+    try:
+        if fw is not None:
+            fw.audit_log(event, detail)
+    except Exception:
+        pass
+
+
+def servers_now() -> tuple:
+    """({name: ServerConfig}, problem): the servers the owner lists, or {}
+    and the plain reason the [mcp] settings could not be used."""
+    try:
+        return parse_config(_load_section()), ""
+    except ConfigError as exc:
+        return {}, str(exc)
+    except Exception as exc:        # noqa: BLE001 - never raises
+        return {}, f"the [mcp] settings could not be read ({type(exc).__name__})"
+
+
+def configured() -> bool:
+    """True when [mcp] is switched on and lists at least one usable server."""
+    servers, _problem = servers_now()
+    return bool(servers)
+
+
+_SHARED: dict = {"bridge": None, "servers": None}
+_SHARED_LOCK = threading.Lock()
+
+
+def shared_bridge() -> Optional[Bridge]:
+    """The backend's one bridge, built from the settings as they are now. A
+    change to the [mcp] settings stops the old bridge's servers and builds a
+    new one."""
+    servers, _problem = servers_now()
+    with _SHARED_LOCK:
+        old = _SHARED["bridge"]
+        if old is not None and _SHARED["servers"] == servers:
+            return old
+        if old is not None:
+            old.shutdown()
+        _SHARED["bridge"] = None
+        _SHARED["servers"] = servers
+        if not servers:
+            return None
+        _SHARED["bridge"] = Bridge(
+            servers, approvals=ApprovalStore(os.path.join(_config_dir(), APPROVALS_FILE)),
+            audit=_audit)
+        return _SHARED["bridge"]
+
+
+def turn_tools(tool_cls, *, start: bool, gate_check: Optional[Callable] = None) -> dict:
+    """The plug-in tools for one chat turn (jarvis_agent._open_plugins).
+
+    `start`: servers not running are started - a card when new or changed
+    (Bridge.start), through `gate_check`, this turn's gate. Without it only
+    running servers count. Servers idle for IDLE_STOP_SECONDS are stopped
+    first. Never raises.
+
+    {"tools": {model name: tool_cls object}, "problems": [plain sentences]}."""
+    b = shared_bridge()
+    if b is None:
+        _servers, problem = servers_now()
+        return {"tools": {}, "problems": [problem or "no plug-in programs are set up "
+                                                     "([mcp] in jarvis-framework.toml)"]}
+    problems = []
+    try:
+        b.stop_idle()
+    except Exception:               # noqa: BLE001
+        pass
+    for name in sorted(b.servers):
+        if name in b.running():
+            continue
+        if not start:
+            continue
+        try:
+            res = b.start(name, gate_check=gate_check)
+        except Exception as exc:    # noqa: BLE001 - one server must not stop the rest
+            res = {"ok": False, "error": f"{type(exc).__name__}"}
+        if not res.get("ok"):
+            problems.append(f"{name} was not started: {res.get('error')}")
+    try:
+        tools = agent_tools(b, tool_cls)
+    except Exception as exc:        # noqa: BLE001
+        return {"tools": {}, "problems": problems + [f"the plug-in tools could not be read "
+                                                     f"({type(exc).__name__})"]}
+    return {"tools": tools, "problems": problems}
+
+
+def reach_status() -> dict:
+    """For "What Jarvis can reach" (jarvis_reach.py): names and counts only,
+    never anything a server wrote. {"servers": [...], "running": [...],
+    "problem": str, "card_every_start": bool}."""
+    servers, problem = servers_now()
+    with _SHARED_LOCK:
+        b = _SHARED["bridge"]
+    running = []
+    if b is not None:
+        try:
+            running = b.running()
+        except Exception:           # noqa: BLE001
+            running = []
+    return {"servers": sorted(servers), "running": running, "problem": problem,
+            "card_every_start": bool(CARD_EVERY_START)}
 
 
 @atexit.register
@@ -1532,15 +1932,24 @@ def _inspect(config_path: str, name: str) -> int:
         for t in tools:
             tname = str(t.get("name"))
             flags = scan(str(t.get("description") or "") + json.dumps(t.get("inputSchema")))
-            floor, reasons = floor_for(cfg, t, False)
-            print(f"- {tname}\n    pin: {pin_of(t)}\n    would ask: {floor == 'ask'}"
+            ro = read_only_problem(t, ToolRule(pin=pin_of(t)))
+            vouch = ro.startswith("neither the program nor your settings")
+            print(f"- {tname}\n    pin: {pin_of(t)}\n    every use asks you: yes"
+                  + (f"\n    offered: no - {ro}" if ro and not vouch else
+                     "\n    offered: only once you add read_only = true" if vouch else
+                     "\n    offered: yes (the program says it only reads)")
                   + (f"\n    WARNING, looks like instructions: {', '.join(flags)}"
                      if flags else ""))
             print("    description: "
                   + json.dumps(str(t.get("description") or ""), ensure_ascii=True)[:600])
+            if ro and not vouch:
+                continue
             paste.append(f"[mcp.servers.{name}.tools.{json.dumps(tname)}]\n"
-                         f"pin = \"{pin_of(t)}\"")
-        print("\nTo allow a tool, copy its two lines into jarvis-framework.toml:\n")
+                         f"pin = \"{pin_of(t)}\""
+                         + ("\n# read_only = true    # only once you have checked it only "
+                            "reads" if vouch else ""))
+        print("\nTo allow a tool, copy its lines into jarvis-framework.toml "
+              "(tools that change things are not offered in this version):\n")
         print("\n\n".join(paste))
         return 0
     finally:

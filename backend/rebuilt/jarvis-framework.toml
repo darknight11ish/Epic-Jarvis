@@ -811,6 +811,24 @@ enabled = true
 # about it leaves the machine. Falls back to a plain PDF text pull if
 # Docling is not installed.
 
+# Plug-in programs (MCP) - jarvis_mcp.py; backend/README.md, "Smarter tools,
+# part 2". Off until you list a program AND set enabled = true. Programs on
+# this PC only (stdio - no web addresses), installed once (never npx/uvx),
+# read-only tools only, and every tool use asks you. Starting a program asks
+# when it is new or has changed. The model reaches these tools only by
+# asking for "plugins" (jarvis_agent's more_tools). To see a program's
+# tools and the pin lines to copy in:
+#   py -3 jarvis_mcp.py inspect jarvis-framework.toml <name>
+# Shape of one entry (full paths; a key only as "credman:<entry name>"):
+#   [mcp.servers.repo]
+#   command = 'C:\Program Files\Python312\python.exe'
+#   args = ['-m', 'mcp_server_git', '--repository', 'C:\Users\you\code\project']
+#   [mcp.servers.repo.tools."git_status"]
+#   pin = "sha256:..."
+#   read_only = true      # only once you have checked it only reads
+[mcp]
+enabled = false
+
 # ------------------------------------------------------------------------
 # 14. VOICE - who may talk to Jarvis, and how it wakes
 # ------------------------------------------------------------------------

@@ -575,6 +575,8 @@ $SHIPPED = @(
     'jarvis_documents.py'        # "Folders Jarvis may look in": the list, the my_files tool (find, search, read PDFs and Word files in parts), the Notion import
     # --- the words in a picture (2026-09-26) ---
     'jarvis_ocr.py'              # reads the words in a picture with Windows' own text recognition, on this PC; jarvis_agent.py marks them as outside text; no patch
+    # --- plug-in programs (MCP), reached only through more_tools("plugins") ---
+    'jarvis_mcp.py'              # read-only tools from programs on this PC you list under [mcp]; stdio only; every call asks
 )
 
 # The settings file. Installed only where none exists; never overwritten.

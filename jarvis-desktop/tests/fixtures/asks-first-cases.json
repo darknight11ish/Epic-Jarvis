@@ -383,6 +383,20 @@
        "title": "Tap and type on your phone"
       },
       {
+       "fixed": true,
+       "id": "fixed:plugin_start",
+       "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
+       "says": "Asks you when it is new or has changed",
+       "title": "Start a plug-in program on this PC (MCP)"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_use",
+       "note": "Always asks, whatever your settings file says: it is someone else's program. Only tools that read are offered for now.",
+       "says": "Asks you first, every time",
+       "title": "Use a tool from a plug-in program on this PC (MCP)"
+      },
+      {
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
@@ -1044,6 +1058,20 @@
        "title": "Tap and type on your phone"
       },
       {
+       "fixed": true,
+       "id": "fixed:plugin_start",
+       "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
+       "says": "Asks you when it is new or has changed",
+       "title": "Start a plug-in program on this PC (MCP)"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_use",
+       "note": "Always asks, whatever your settings file says: it is someone else's program. Only tools that read are offered for now.",
+       "says": "Asks you first, every time",
+       "title": "Use a tool from a plug-in program on this PC (MCP)"
+      },
+      {
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
@@ -1703,6 +1731,20 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_start",
+       "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
+       "says": "Asks you when it is new or has changed",
+       "title": "Start a plug-in program on this PC (MCP)"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_use",
+       "note": "Always asks, whatever your settings file says: it is someone else's program. Only tools that read are offered for now.",
+       "says": "Asks you first, every time",
+       "title": "Use a tool from a plug-in program on this PC (MCP)"
       },
       {
        "action": "delete_file",
@@ -2373,6 +2415,20 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Tap and type on your phone"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_start",
+       "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
+       "says": "Asks you when it is new or has changed",
+       "title": "Start a plug-in program on this PC (MCP)"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_use",
+       "note": "Always asks, whatever your settings file says: it is someone else's program. Only tools that read are offered for now.",
+       "says": "Asks you first, every time",
+       "title": "Use a tool from a plug-in program on this PC (MCP)"
       },
       {
        "action": "delete_file",

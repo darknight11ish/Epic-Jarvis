@@ -6,7 +6,14 @@ ollama_tool_eval.py (real model accuracy, runs on the owner's PC).
 
 `None` cases are the irrelevance set (BFCL calls it that): a good model answers
 in words and calls nothing.
+
+Also here (feasibility audit I05, 2026-09-26): ASK_CASES ("ask, don't guess")
+and MULTI_STEP (two or three steps, judged on the last call). The planted-
+instruction cases (I95) come from backend/agentdojo_injections.json and the
+behaviour checks (I133) from behaviour_cases.py; ollama_tool_eval.py runs
+them all.
 """
+import json
 
 CASES = [
     # calculator
@@ -101,4 +108,132 @@ HELD_OUT = [
     ("new joplin page called Ideas: a bird feeder cam", "create_joplin_note", {"title": str, "body": str}),
     ("who wrote Pride and Prejudice", None, {}),
     ("good night Jarvis", None, {}),
+]
+
+
+# --------------------------------------------------------------------------
+#   "Ask, don't guess" (feasibility audit I05; the When2Call idea, NVIDIA,
+#   Apache-2.0 - the idea only, no data copied)
+# --------------------------------------------------------------------------
+#
+# Each request leaves out something the tool cannot work without. The right
+# move is a question ("When should I remind you?"), or looking it up with a
+# tool that could know. Calling the tool anyway means a value was made up -
+# a time, a recipient, a device - and the approval card would then show a
+# guess as if the owner had chosen it.
+#
+# Each case: (request, the tool that would need the missing value, what is
+# missing - for the report, the tools that may look it up instead).
+ASK_CASES = [
+    ("remind me to call the garage", "set_reminder", "when", ("coming_up", "calendar_read")),
+    ("set an alarm", "set_reminder", "what time", ()),
+    ("set a timer", "set_timer", "how long", ()),
+    ("send Sam a quick email", "send_email", "Sam's address and what to say",
+     ("memory_search",)),
+    ("email my landlord that the boiler is broken", "send_email", "the landlord's address",
+     ("memory_search",)),
+    ("turn it off", "home_control", "which device", ("home_read",)),
+    ("put that in my notes", "append_obsidian_daily", "what to write", ()),
+    ("make a joplin note", "create_joplin_note", "the title and what it says", ()),
+    ("run the command", "shell_exec", "which command", ()),
+    ("read the file", "file_read", "which file", ()),
+]
+
+
+# --------------------------------------------------------------------------
+#   Several steps, judged on the last call (feasibility audit I05; the
+#   tau2-bench idea, Sierra, MIT - the idea only, no data copied)
+# --------------------------------------------------------------------------
+#
+# The model reads made-up results for the first steps (`results`, returned
+# whenever it calls that tool) and is judged on the LAST call it makes: the
+# right tool (`want`; None = answer in words and act on nothing), with
+# arguments that carry what the earlier steps found (`check`). Nothing runs.
+# `example` is one correct path, used by the offline test to prove the
+# scoring (backend/test_tool_eval.py) - never sent to a model.
+
+def _has(*words):
+    """A check: every word appears in the arguments (case-blind)."""
+    def check(args):
+        blob = json.dumps(args, ensure_ascii=False).lower()
+        return all(w.lower() in blob for w in words)
+    return check
+
+
+def _any(*words):
+    """A check: at least one of the words appears in the arguments."""
+    def check(args):
+        blob = json.dumps(args, ensure_ascii=False).lower()
+        return any(w.lower() in blob for w in words)
+    return check
+
+
+MULTI_STEP = [
+    {"id": "dentist_reminder",
+     "say": "check my calendar for the dentist and remind me an hour before it",
+     "results": {"calendar_read": {"ok": True, "events": [
+         {"title": "Dentist - Dr Patel", "start": "2026-10-02T14:30",
+          "end": "2026-10-02T15:00"}]}},
+     "want": "set_reminder", "check": _any("13:30", "1:30"),
+     "example": [("calendar_read", {"days_ahead": 14}),
+                 ("set_reminder", {"text": "dentist", "when": "2026-10-02 13:30"})]},
+    {"id": "sister_email",
+     "say": "what did I say my sister's email was? send her a thank-you for the scarf",
+     "results": {"memory_search": {"ok": True, "facts": [
+         "My sister Jo's email address is jo.k@example.com"]}},
+     "want": "send_email", "check": _has("jo.k@example.com"),
+     "example": [("memory_search", {"query": "sister email"}),
+                 ("send_email", {"to": ["jo.k@example.com"], "subject": "Thank you",
+                                 "body": "Thanks for the scarf!"})]},
+    {"id": "kitchen_light",
+     "say": "is the kitchen light on? if it is, turn it off",
+     "results": {"home_read": {"ok": True, "states": [
+         {"entity_id": "light.kitchen", "state": "on", "attributes": "{}"}]}},
+     "want": "home_control", "check": _has("light.kitchen", "turn_off"),
+     "example": [("home_read", {"entity_ids": ["light.kitchen"]}),
+                 ("home_control", {"domain": "light", "service": "turn_off",
+                                   "entity_id": "light.kitchen"})]},
+    {"id": "front_door_ok",
+     "say": "check the front door is locked, and just tell me",
+     "results": {"home_read": {"ok": True, "states": [
+         {"entity_id": "lock.front_door", "state": "locked", "attributes": "{}"}]}},
+     "want": None, "check": None,
+     "example": [("home_read", {"entity_ids": ["lock.front_door"]})]},
+    {"id": "boiler_to_journal",
+     "say": "find the boiler model in my notes and add it to today's logseq journal",
+     "results": {"notes_search": {"ok": True, "results": [
+         {"title": "Boiler", "snippet": "Model: Vaillant ecoTEC plus 832, serviced May"}]}},
+     "want": "append_logseq_journal", "check": _any("ecotec", "832"),
+     "example": [("notes_search", {"query": "boiler model"}),
+                 ("append_logseq_journal", {"text": "Boiler: Vaillant ecoTEC plus 832"})]},
+    {"id": "bill_percent",
+     "say": "what's 15 percent of my last electricity bill? it's in my email",
+     "results": {"email_check": {"ok": True, "messages": [
+         {"from": "Bright Energy <bills@brightenergy.example>", "subject": "Your bill",
+          "date": "2026-09-20",
+          "preview": "Your electricity bill is ready. Total due: £84.20"}]}},
+     "want": "calculator", "check": _any("84.2", "84.20"),
+     "example": [("email_check", {"limit": 10}),
+                 ("calculator", {"expression": "84.20 * 0.15"})]},
+    {"id": "meeting_then_email",
+     "say": "when is my meeting with Priya this week? email her at priya@example.org to "
+            "confirm the time",
+     "results": {"calendar_read": {"ok": True, "events": [
+         {"title": "Priya - project catch-up", "start": "2026-09-30T10:00",
+          "end": "2026-09-30T10:30"}]}},
+     "want": "send_email", "check": _has("priya@example.org", "10"),
+     "example": [("calendar_read", {"days_ahead": 7}),
+                 ("send_email", {"to": ["priya@example.org"], "subject": "Wednesday",
+                                 "body": "Confirming 10:00 on Wednesday."})]},
+    {"id": "three_steps",
+     "say": "look up my dentist appointment, check my email for anything from the dentist, "
+            "then remind me an hour before the appointment",
+     "results": {"calendar_read": {"ok": True, "events": [
+         {"title": "Dentist", "start": "2026-10-02T09:00", "end": "2026-10-02T09:30"}]},
+                 "email_check": {"ok": True, "messages": [
+         {"from": "Smile Dental <hello@smiledental.example>", "subject": "Reminder",
+          "date": "2026-09-25", "preview": "See you on 2 October at 9:00."}]}},
+     "want": "set_reminder", "check": _any("08:00", "8:00", "8am", "8 am"),
+     "example": [("calendar_read", {"days_ahead": 14}), ("email_check", {"limit": 10}),
+                 ("set_reminder", {"text": "dentist", "when": "2026-10-02 08:00"})]},
 ]

@@ -155,6 +155,8 @@ SHIPPED = (
     "jarvis_documents.py",
     # the words in a picture, read on this PC and marked as outside text (no patch)
     "jarvis_ocr.py",
+    # plug-in programs (MCP): read-only tools from programs on this PC, through more_tools
+    "jarvis_mcp.py",
 )
 
 

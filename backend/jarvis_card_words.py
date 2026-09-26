@@ -134,6 +134,13 @@ NO_ACTION = "Jarvis is asking for your approval"
 #: enable"). `{name}` is the action with its underscores as spaces.
 FALLBACK = 'Jarvis wants your OK for "{name}"'
 
+#: The plug-in programs' actions (jarvis_mcp.py): "mcp_start__<program>" and
+#: "mcp__<program>__<tool>".
+PLUGIN_START_PREFIX = "mcp_start__"
+PLUGIN_USE_PREFIX = "mcp__"
+PLUGIN_START = 'start the plug-in program "{name}"'
+PLUGIN_USE = 'use a tool from the plug-in program "{name}"'
+
 #: The small label above the title, on every screen.
 KICKER = "Needs your OK"
 
@@ -180,6 +187,18 @@ def title_for(action) -> str:
     phrase = TITLES.get(action)
     if phrase:
         return LEAD + phrase
+    # The plug-in programs (jarvis_mcp.py): one action per program and per
+    # tool, so no fixed phrase. The PROGRAM's name is the owner's own (the
+    # [mcp.servers.<name>] line); a tool's name is the program's, so it is
+    # left off the title - the card itself shows it, in full.
+    if action.startswith(PLUGIN_START_PREFIX):
+        name = _name(action[len(PLUGIN_START_PREFIX):])
+        if name:
+            return LEAD + PLUGIN_START.format(name=name)
+    elif action.startswith(PLUGIN_USE_PREFIX):
+        name = _name(action[len(PLUGIN_USE_PREFIX):].split("__", 1)[0])
+        if name:
+            return LEAD + PLUGIN_USE.format(name=name)
     name = _name(action)
     return FALLBACK.format(name=name) if name else NO_ACTION
 

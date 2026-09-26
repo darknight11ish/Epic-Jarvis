@@ -11194,3 +11194,191 @@ python3 backend/eval_memory.py --sizes 0,100,1000 --reranker stand-in
   them; `apply-patches.ps1` on your real files is the final proof.
 - **B17: your own backend start-up is outside this repository.** If it sets
   the models' folder some other way, that is not checked.
+
+# Smarter tools, part 1: one test for tools and behaviour, and a short tool list (2026-09-26)
+
+The feasibility audit's step 2 (`docs/FEASIBILITY-AUDIT-2026-09-26.md`
+section 3): I05, I95 and I133 as ONE test, then I06. The plug-in bridge
+(MCP) is the next section.
+
+## In plain words
+
+- **One test, five parts** (`tools/tool_eval/ollama_tool_eval.py`, which
+  already existed and now does more). Besides "picks the right tool" it
+  checks that Jarvis **asks instead of guessing** a missing time or
+  address, gets **two- and three-step jobs** right (judged on the last
+  step), how many approval cards **planted text in an email** would get
+  (AgentDojo's 46 attack goals), and **14 fixed behaviour checks** (says it
+  is Jarvis, says "I don't know", keeps a right answer when pushed, never
+  pretends to have acted, short spoken answers, points to help in a
+  crisis...). No model marks another model's answers: every check is a
+  plain rule. Nothing is run; every tool result is made up.
+- **A short tool list, more on request.** With it on, each turn shows the
+  model 8 core tools (calculator, memory, calendar, email reading, notes
+  search, web search, home status, reminders) plus one tool, `more_tools`,
+  that adds a named group of the others ("timers", "send_email", "notes",
+  "home_control", "documents", "files", "github", "control", "plugins") for the rest of
+  that chat. **It ships OFF.** It turns on only after the test above, run on
+  your PC, shows it does not make Jarvis worse - the test runs every part
+  with both lists side by side.
+
+## What it saves (Jarvis's own estimate, 3 characters a token)
+
+| | every tool but browser control (22) | all 23 |
+|---|---|---|
+| full list, every round | 3,067 tokens | 3,612 |
+| short list, every round | 1,356 (core 1,100 + `more_tools` 256) | 1,356 |
+| saved | 1,711 (56%) | 2,256 (62%) |
+
+Against the real room of about 8,000 tokens on the 8 GB card, that is about
+a fifth of the model's working memory back. **Not measured here:** Ollama's
+own count (`prompt_tokens`, and how much it reused, `cached_tokens` - I03)
+and whether the model picks as well with the short list. The PC run prints
+both, column by column.
+
+## Owner steps (one line, in PowerShell, in the repository folder, when Jarvis is idle - about 20-40 minutes)
+
+```
+py -3 tools\tool_eval\ollama_tool_eval.py --models jarvis-primary; Write-Host "Results saved in tools\tool_eval\tool_eval_results.json, inside this repository folder"
+```
+
+Send back `tools\tool_eval\tool_eval_results.json`. If the short list's
+column is as good as the full one, it is switched on by adding
+`short_list = true` under `[tools]` in `jarvis-framework.toml` (and later
+made the default).
+
+## What the code does
+
+- `jarvis_agent.py`: `CORE_TOOLS`, `TOOL_GROUPS`, `more_tools`,
+  `tool_offer()`, `short_list_on()`. The core is fixed and in a fixed
+  order, so Ollama can keep reusing the start of the prompt; an opened group
+  stays open for that conversation (one re-read, not one per turn) and goes
+  in a fixed place. `more_tools` never adds a tool that is switched off or
+  not allowed on this turn, is not outside text (it neither marks the chat
+  nor counts as a step), and asks nobody. A tool reached this way is the
+  same tool, through the same gate and cards. A call to an allowed tool
+  that is not shown is still accepted. A group opened after outside text is
+  named on the next card. A model that cannot use tools gets none.
+- `tools/tool_eval/`: `jarvis_tool_cases.py` gains `ASK_CASES` and
+  `MULTI_STEP`; `behaviour_cases.py` is new; `ollama_tool_eval.py` runs all
+  five parts on both lists, uses Jarvis's own rules (`LANE_SYSTEM`) and
+  outside-text labels, and saves a dated results file.
+
+## Test it
+
+```
+python3 backend/test_tool_eval.py        # the scorers, with scripted answers
+python3 backend/test_short_tool_list.py  # the short list in the real loop
+```
+
+## Not checked, said plainly
+
+- **Every model number.** Pass rates, attacker cards and Ollama's prompt
+  counts need the model; only your PC has it.
+- **Whether Ollama reuses the prompt after a group opens.** Expected: one
+  re-read, then reuse. The PC run's `cached_tokens` will say.
+- **The behaviour checks are blunt on purpose.** A fixed rule can fail a
+  good answer worded unusually (and pass a poor one). Each check is proven
+  to tell its own good and bad example apart, no more.
+- **No preflight row for the result's age yet** - the results file is
+  dated; showing its age belongs with the audit's guardrail 10 for every
+  measured result, not one.
+
+---
+
+# Smarter tools, part 2: plug-in programs (MCP): `jarvis_mcp.py` (2026-09-26)
+
+The last piece of the feasibility audit's step 2 (I07). The design draft
+(`docs/designs/mcp-draft-2026-09-23/`) was moved here so CI runs its tests;
+its patch no longer applied and is replaced by a few lines in
+`jarvis_agent.py`. **Nothing is switched on:** `[mcp] enabled = false` is
+shipped, and no program is listed.
+
+## In plain words
+
+A "plug-in program" (an MCP server) is a small program on this PC that
+offers Jarvis extra tools - for example a Git program that can show what
+changed in a code folder. Version 1 is deliberately narrow:
+
+- **Programs on this PC only**, talked to through their input and output -
+  no web addresses at all. Never a program that downloads code each time it
+  starts (`npx`, `uvx`): install it once, and point Jarvis at it.
+- **Read-only tools only.** A tool whose name says it changes something
+  (commit, add, reset, write, send...) is never offered, and a tool is
+  offered only when the program says it only reads, or you wrote
+  `read_only = true` for it after checking.
+- **Every use asks you**, on its own card, with every argument in full -
+  whatever your settings file says. Only your Approve runs it.
+- **Starting a program asks you when it is new, and again whenever the
+  program or its version changes.** (This is the recommended answer to
+  your open question 9; the stricter answer, "a card every time it starts",
+  is one line: `CARD_EVERY_START = True` in `jarvis_mcp.py`.)
+- **What a program sends back is outside text**, like an email: it is
+  labelled, checked for planted instructions, marks the conversation (so a
+  note or a web search asks first afterwards), and is never learned.
+- **It never gets your pairing key or any other key.** Its settings come
+  from the same allow-list the second graphics card's program gets
+  (`jarvis_child_env`); a key you give one program comes from Windows
+  Credential Manager only.
+- The model reaches these tools only by asking for "plugins"
+  (`more_tools`), never on its own.
+
+**Said plainly:** a plug-in program runs with your Windows account's
+permissions. Jarvis controls what it asks the program and what comes back;
+it cannot stop the program itself using the internet or your files. That is
+why adding one asks, and its card says so.
+
+## Owner steps
+
+Nothing to do now. When you want one (the audit suggests the reference Git
+program, read tools only, at or after the version that fixed its 2025-26
+security problems - not checked here), install it once, add its lines under
+`[mcp]` (the shipped `jarvis-framework.toml` shows the shape), and list its
+tools and their pins with (one line, in PowerShell, in the backend folder):
+
+```
+py -3 jarvis_mcp.py inspect jarvis-framework.toml repo
+```
+
+It prints each tool, whether it would be offered, and the lines to copy.
+
+## What the code does
+
+- `jarvis_mcp.py` (new, shipped whole): the bridge - config (`[mcp]`),
+  the process tree (a Windows job object; a process group elsewhere), the
+  handshake, the pinned tool list, the untrusted-result envelope, the
+  approved-start store (`mcp-approved.json` in the config folder), idle
+  stop, and `turn_tools()` / `reach_status()` for the agent and the reach
+  list.
+- `jarvis_agent.py`: the "plugins" group of `more_tools` (`_open_plugins`),
+  and `outside_program` tools in `_one_call` (their own gate action, a
+  person's yes only, the verdict handed to the bridge).
+- `jarvis_reach.py`: a "Plug-in programs (MCP)" row. `jarvis_asks_first.py`:
+  two fixed rows. `jarvis_card_words.py`: card titles for the two new kinds
+  of action.
+
+## Test it
+
+```
+python3 backend/test_mcp.py          # the bridge, against a real child process
+python3 backend/test_mcp_wiring.py   # the bridge inside the chat's tool loop
+```
+
+## Not checked, said plainly
+
+- **Nothing has run on Windows**: the job object, Credential Manager, a
+  `.cmd` program. The Windows code runs here only against a fake
+  `kernel32`.
+- **No real MCP server was tried in this change** (the draft was tried
+  against one server built with the MCP Python SDK 1.13.1). Whether the
+  reference Git server marks its read tools `readOnlyHint` is not checked -
+  if it does not, you add `read_only = true` per tool.
+- **The owner's `jarvis_gate.py` is not in this repository.** The bridge
+  expects its verdict to carry `action`, `outcome` and `request_id`
+  (`gate-outcome.patch`); if it does not, every plug-in call is refused -
+  the safe direction, but it would be obvious.
+- **The newest MCP version (2026-07-28), which dropped the start-up
+  handshake, is not spoken yet**: a program that speaks only that version is
+  refused with a message saying so.
+- **Whether an 8B model uses plug-in tools well** is unmeasured; the tool
+  test (part 1) is the place to measure it once a program is set up.

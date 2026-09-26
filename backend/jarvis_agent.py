@@ -88,6 +88,17 @@ note write (Obsidian, Logseq, Joplin) waits for a person's yes (NOTE_WRITES)
   - A card proposed after outside text says so: which tools were read, and
     which of its values came from that text rather than from the owner
     (_TurnWatch.shaped_by).
+
+A SHORT TOOL LIST, AND PLUG-IN PROGRAMS (2026-09-26, feasibility audit I06
+and I07; the owner's "Smarter tools" choice). With `[tools] short_list =
+true` a turn shows the model CORE_TOOLS plus `more_tools`, which opens a
+named group of the others for the rest of that chat - see the section above
+TOOL_GROUPS. Tools from plug-in programs on this PC (jarvis_mcp.py, the
+"plugins" group) are reached only through `more_tools`, whether or not the
+short list is on; each call is its own gate action, runs only on a person's
+yes, and its result is outside text (`outside_program`, _one_call). The
+"connectors excluded" above still stands for anything that is not one of
+those programs.
 """
 
 from __future__ import annotations
@@ -1285,6 +1296,11 @@ NEEDS_A_PERSON = {
     "send_email": "sends an email in the owner's name, which cannot be taken back",
 }
 
+#: The same rule for every tool from a plug-in program (jarvis_mcp.py): a
+#: program someone else wrote, running as the owner. Such a tool carries
+#: `outside_program = True`; its name is not known until the program says.
+OUTSIDE_PROGRAM_WHY = "is a tool from a plug-in program on this PC"
+
 
 #: LIGHTS_WITHOUT_CARD - the owner's decision of 2026-09-26, after the
 #: approvals audit: "Lights, plugs and fans without a card", a setting that
@@ -2402,11 +2418,13 @@ def _schema_problems(schema: dict, value, where: str, depth: int = 0) -> list:
     return out
 
 
-def check_call(name, raw_args, names) -> tuple:
+def check_call(name, raw_args, names, tools=None) -> tuple:
     """(args, None) when this call may go on to prepare() and the gate;
     (None, problem) when it may not, `problem` one plain sentence for the
-    model. `names` are the tools this turn offers."""
-    if not isinstance(name, str) or name not in names or name not in TOOLS:
+    model. `names` are the tools this turn offers; `tools` the Tool objects
+    by name (TOOLS, plus a turn's plug-in tools)."""
+    tools = TOOLS if tools is None else tools
+    if not isinstance(name, str) or name not in names or name not in tools:
         real = ", ".join(names) if names else "none - no tools are on"
         return None, (f"no such tool: {name!r}. The tools you can use here are: "
                       f"{real}.")
@@ -2426,7 +2444,7 @@ def check_call(name, raw_args, names) -> tuple:
         return None, (f"The arguments for {name} must be one JSON object with named "
                       f"fields, not {_PLAIN_TYPE.get(_json_type(args), 'a bare value')}. "
                       f"Write the call again.")
-    problems = _schema_problems(TOOLS[name].parameters, args, name)
+    problems = _schema_problems(tools[name].parameters, args, name)
     if problems:
         shown = "; ".join(problems[:_MAX_PROBLEMS])
         more = len(problems) - _MAX_PROBLEMS
@@ -2705,6 +2723,9 @@ class _TurnWatch:
         self.cards = 0               # approval cards this turn (CARDS_PER_TURN)
         self.file_parts = 0          # document parts read this turn (FILES_PARTS_PER_TURN)
         self.secrets: list = []      # KINDS of password or key read, never values
+        # Groups `more_tools` opened after this turn read outside text, or in
+        # a tainted conversation (the short tool list): the next card says so.
+        self.opened_after_outside: list = []
         req = request if isinstance(request, dict) else {}
         # The apps' provenance comes off `messages` before this loop gets
         # them (chat-history.patch, _chat_client_fields_off); the request as
@@ -2875,6 +2896,9 @@ class _TurnWatch:
                          + " ".join(self.flags.values()))
         if self.secrets:
             lines.append(SECRET_READ_LINE.format(kinds="; ".join(self.secrets)))
+        if self.opened_after_outside:
+            lines.append(MORE_TOOLS_AFTER_OUTSIDE.format(
+                groups=", ".join(self.opened_after_outside)))
         for v in self._came_from_outside(args):
             shown = v if len(v) <= 120 else v[:117] + "..."
             lines.append(f"“{shown}” came from what Jarvis read, not from you.")
@@ -3034,6 +3058,223 @@ def offered_tools(enabled_tools) -> list:
         # (jarvis_documents.py - the list is empty by default).
         wanted.discard(FILES_TOOL)
     return [n for n in TOOLS if n in wanted]
+
+
+# --------------------------------------------------------------------------
+#   A short tool list, more on request (feasibility audit I06, 2026-09-26)
+# --------------------------------------------------------------------------
+#
+# Every tool's description is sent on every round, and on the 8 GB card the
+# model's real room is about 8,000 tokens (test_tool_text.py). All 23 tools
+# are about 3,600 of them by estimate_tokens - 3,067 without browser_control.
+# With the short list on, a turn offers only CORE_TOOLS (the ones enabled),
+# always the same ones in the same order, plus one tool, `more_tools`, that
+# adds a named group of the others for the rest of that chat.
+#
+# Why fixed and in a fixed order: the tool list sits at the start of the
+# prompt, and Ollama reuses what it has already read only while the prompt
+# starts the same way (PROMPT_USAGE measures it). A list that changed from
+# turn to turn would be re-read every turn - about 3-4 s at 8K on this card.
+# So a group, once opened, stays open for that conversation: one re-read,
+# not one per turn.
+#
+# It changes what the model is SHOWN, never what it may do or what asks:
+#   * `more_tools` only ever adds tools that are already allowed on this
+#     turn - in `[tools].enabled`, allowed on this lane (offered_tools), and
+#     only when the model can use tools at all (_model_can_use_tools);
+#   * a tool reached this way is the same tool, through the same checks,
+#     the same gate and the same cards (_one_call);
+#   * a call to an allowed tool that is not shown is still accepted, as it
+#     always was - hiding a tool must not make the model worse at using it;
+#   * `more_tools`'s own answer is Jarvis's text, not outside text: it does
+#     not mark the turn or the conversation, is not a step in the chain
+#     skill discovery counts, and never raises a card. Asked for after
+#     outside text, the next card says so (_TurnWatch.shaped_by).
+#
+# It ships OFF (SHORT_LIST_DEFAULT) until the tool test on the owner's PC
+# (tools/tool_eval, which scores both lists side by side) shows it does not
+# lower the pass rate - the same "measure before switching on" rule the
+# memory re-ranker should have had. `[tools] short_list = true` in
+# jarvis-framework.toml turns it on; test_short_tool_list.py pins it.
+
+#: The core: offered on every turn (when enabled), in this order.
+CORE_TOOLS = ("calculator", "memory_search", "calendar_read", "email_check",
+              "notes_search", "web_search", "home_read", "set_reminder")
+
+#: The name of the one tool that opens a group.
+MORE_TOOLS = "more_tools"
+
+#: The groups `more_tools` can open, in the fixed order they are shown:
+#: (name, what it is for - a few words the model reads, members).
+#: test_short_tool_list.py fails when a tool in TOOLS is in neither the core
+#: nor exactly one group, so a new tool cannot land nowhere.
+TOOL_GROUPS = (
+    ("timers", "a countdown timer, the to-do list, what is coming up",
+     ("set_timer", "todo_add", "todo_done", "coming_up")),
+    ("send_email", "send an email", ("send_email",)),
+    ("notes", "add to the owner's Logseq, Obsidian or Joplin notes",
+     ("append_logseq_journal", "append_obsidian_daily", "create_joplin_note")),
+    ("home_control", "switch a light or another device", ("home_control",)),
+    # Its own group, not "files": asking about the owner's documents must not
+    # also put the command tool in front of the model. Offered only while a
+    # folder is listed (offered_tools), so the group appears only then too.
+    ("documents", "find and read files in the folders the owner listed", ("my_files",)),
+    ("files", "read a file on this PC, run a command", ("file_read", "shell_exec")),
+    ("github", "check GitHub for an existing library", ("github_search",)),
+    ("control", "click or type in a program, tap on the phone, drive a web page",
+     ("control_computer", "control_phone", "browser_control")),
+    # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
+    # through here - never in the core, whether or not the short list is on.
+    ("plugins", "read-only tools from plug-in programs on this PC", ()),
+)
+PLUGINS = "plugins"
+
+#: The short list is off until the PC's tool test says it costs nothing.
+SHORT_LIST_DEFAULT = False
+
+#: Groups opened per conversation, newest last; at most this many kept.
+_OPENED_MAX = 200
+_OPENED: "dict[str, frozenset]" = {}
+_OPENED_LOCK = threading.Lock()
+_CID_OK = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+
+
+def short_list_on() -> bool:
+    """`[tools] short_list` in jarvis-framework.toml; SHORT_LIST_DEFAULT when
+    it is not set or cannot be read. Only a real `true` turns it on."""
+    try:
+        import jarvis_framework
+        tools = (jarvis_framework.load_framework() or {}).get("tools") or {}
+        if "short_list" in tools:
+            return tools.get("short_list") is True
+    except Exception:
+        pass
+    return SHORT_LIST_DEFAULT
+
+
+def more_tools_groups(allowed, *, short: bool, plugins: bool = False) -> list:
+    """The groups `more_tools` may open on this turn, in TOOL_GROUPS order:
+    each one with at least one ALLOWED tool outside the core (short list
+    only), and "plugins" when plug-in programs are set up. The same answer
+    on every turn of a chat, whatever is already open - so `more_tools`'s
+    own description never changes and never costs a re-read."""
+    aset = set(allowed or ())
+    out = []
+    for group, _what, members in TOOL_GROUPS:
+        if group == PLUGINS:
+            if plugins and aset:
+                out.append(group)
+        elif short and any(n in aset and n not in CORE_TOOLS for n in members):
+            out.append(group)
+    return out
+
+
+def tool_offer(allowed, opened=(), *, short: bool, plugins: bool = False) -> list:
+    """The built-in tool names a round shows the model, in a fixed order,
+    with MORE_TOOLS last when there is anything to open.
+
+    Short list off: every allowed tool, as before. On: the allowed CORE_TOOLS
+    in CORE_TOOLS order, then each OPENED group's allowed tools in
+    TOOL_GROUPS order (never the order they were opened in, so two chats
+    that opened the same groups send the same list)."""
+    allowed = list(allowed or ())
+    aset = set(allowed)
+    if not short:
+        shown = list(allowed)
+    else:
+        shown = [n for n in CORE_TOOLS if n in aset]
+        grouped = set(CORE_TOOLS)
+        for group, _what, members in TOOL_GROUPS:
+            grouped.update(members)
+            if group in opened:
+                shown += [n for n in members if n in aset and n not in shown]
+        # A tool in no group has no way to be asked for: always shown.
+        shown += [n for n in allowed if n not in grouped and n not in shown]
+    if more_tools_groups(allowed, short=short, plugins=plugins):
+        shown.append(MORE_TOOLS)
+    return shown
+
+
+def more_tools_schema(groups) -> dict:
+    """`more_tools`'s schema: the groups it may open, each with its few
+    words. The same text for the same groups, every time."""
+    what = {g: w for g, w, _m in TOOL_GROUPS}
+    listed = "; ".join(f"{g} ({what[g]})" for g in groups)
+    return {"type": "function", "function": {
+        "name": MORE_TOOLS,
+        "description": ("Only the tools needed most are listed. Call this to add a group of "
+                        "other tools for the rest of this chat, then call the one you need: "
+                        + listed + "."),
+        "parameters": {"type": "object", "properties": {
+            "group": {"type": "string", "enum": list(groups)}},
+            "required": ["group"]}}}
+
+
+def opened_groups(conversation_id) -> frozenset:
+    """The groups this conversation has opened (none for a request without
+    a usable conversation id - it then lasts one turn)."""
+    if not isinstance(conversation_id, str) or not _CID_OK.match(conversation_id):
+        return frozenset()
+    with _OPENED_LOCK:
+        return _OPENED.get(conversation_id, frozenset())
+
+
+def _remember_opened(conversation_id, groups) -> None:
+    if not isinstance(conversation_id, str) or not _CID_OK.match(conversation_id):
+        return
+    with _OPENED_LOCK:
+        _OPENED.pop(conversation_id, None)
+        _OPENED[conversation_id] = frozenset(groups)
+        while len(_OPENED) > _OPENED_MAX:
+            _OPENED.pop(next(iter(_OPENED)))
+
+
+def tool_text_tokens(names, *, extra=None) -> int:
+    """What a list of tool names costs the model on every round, by
+    estimate_tokens - the same count budget() takes off the room."""
+    return estimate_tokens(_schemas_for(list(names), [], extra or {}))
+
+
+def _schemas_for(shown: list, groups: list, extra: dict) -> list:
+    out = []
+    for n in shown:
+        if n == MORE_TOOLS:
+            continue
+        tool = TOOLS.get(n) or extra.get(n)
+        if tool is not None:
+            out.append(tool.schema(shown))
+    for n, tool in extra.items():
+        if n not in shown:
+            out.append(tool.schema(shown))
+    if MORE_TOOLS in shown and groups:
+        out.append(more_tools_schema(groups))
+    return out
+
+
+#: The plug-in programs (jarvis_mcp.py) - None when the module is missing.
+def _mcp():
+    try:
+        import jarvis_mcp
+        return jarvis_mcp
+    except Exception:
+        return None
+
+
+def _plugins_configured() -> bool:
+    m = _mcp()
+    try:
+        return bool(m is not None and m.configured())
+    except Exception:
+        return False
+
+
+MORE_TOOLS_ADDED = ("These tools are ready now: {names}. Call the one you need. They stay "
+                    "available for the rest of this chat.")
+MORE_TOOLS_NONE = ("That group has no tools you may use here, so nothing was added. Answer "
+                   "with what you have, or tell the owner it is not switched on.")
+MORE_TOOLS_BAD = "No such group: {got!r}. The groups are: {groups}."
+MORE_TOOLS_AFTER_OUTSIDE = ("Jarvis asked for more tools ({groups}) after reading outside "
+                            "text.")
 
 
 # --------------------------------------------------------------------------
@@ -3810,9 +4051,31 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 announce(NO_TOOLS_NOTE)
             except Exception:
                 pass
-    tool_schemas = [TOOLS[n].schema(names) for n in names]
     sink = on_step if on_step is not None else _publish_step
     req = request or {}
+    # What the model is shown (the short tool list, I06): `names` stays every
+    # tool this turn ALLOWS - what a call is checked against - and `offer`
+    # holds what each round SHOWS. With the short list off and no plug-in
+    # programs, the two are the same list, as before.
+    conv_id = req.get("conversation_id")
+    offer: dict = {"short": bool(names) and short_list_on(),
+                   "plugins": bool(names) and _plugins_configured(),
+                   "opened": set(opened_groups(conv_id)), "extra": {}, "shown": [],
+                   "groups": [], "schemas": []}
+
+    def reoffer() -> None:
+        offer["groups"] = more_tools_groups(names, short=offer["short"],
+                                            plugins=offer["plugins"])
+        offer["shown"] = tool_offer(names, offer["opened"], short=offer["short"],
+                                    plugins=offer["plugins"])
+        offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
+
+    if offer["plugins"] and PLUGINS in offer["opened"]:
+        # Opened earlier in this chat: the plug-in tools of programs still
+        # running come back without a card. One that stopped is asked for
+        # again through more_tools.
+        _open_plugins(offer, gate_check or _gate_check, None, start=False)
+    reoffer()
     opts: dict = {}
     for key in ("temperature", "top_p"):
         if isinstance(req.get(key), (int, float)) and not isinstance(req.get(key), bool):
@@ -3865,7 +4128,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     def budget() -> int:
         n_ctx = cur["ctx"] or _context_length(cur["url"], cur["model"])
         return max(512, n_ctx - opts["max_tokens"] - _TEMPLATE_TOKENS
-                   - estimate_tokens(tool_schemas))
+                   - estimate_tokens(offer["schemas"]))
 
     def one_round(offer_tools: bool) -> _Round:
         global _reasoning_field_refused
@@ -3897,8 +4160,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         body["messages"] = keep_rules_first(body["messages"])
         if not _reasoning_field_refused:
             body.update(REASONING_OFF)
-        if offer_tools and tool_schemas:
-            body["tools"] = tool_schemas
+        if offer_tools and offer["schemas"]:
+            body["tools"] = offer["schemas"]
         stripper = _ThinkStripper()
         first = {"text": True}
 
@@ -4053,7 +4316,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 # tools were offered, and only when nothing of this round
                 # reached the app yet (asking again would repeat it). Failing
                 # again, today's plain error stands.
-                if watch.reasked or final or not tool_schemas or len(answer) != shown:
+                if watch.reasked or final or not offer["schemas"] or len(answer) != shown:
                     raise
                 watch.reasked = True
                 convo.append({"role": "system", "content": REASK_NOTE})
@@ -4073,8 +4336,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             for call in calls:
                 if out.gone:
                     raise ClientGone()
-                _one_call(call, names, convo, steps, checker, announce, out, say_step,
-                          watch=watch, tell_owner=tell_owner)
+                if ((call.get("function") or {}).get("name") == MORE_TOOLS
+                        and MORE_TOOLS in offer["shown"]):
+                    # Opens a group; nothing runs and nobody is asked
+                    # (except to start a plug-in program - see _open_plugins).
+                    _more_tools_call(call, convo, offer, reoffer, conv_id, checker, watch, out)
+                    continue
+                _one_call(call, names + [n for n in offer["extra"] if n not in names],
+                          convo, steps, checker, announce, out, say_step,
+                          watch=watch, tell_owner=tell_owner, tools=offer["extra"])
             if watch.read and not watch.noted:
                 # Once per turn, as soon as outside text is in it - before the
                 # round that first asked for a tool, so every result that
@@ -4155,10 +4425,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,
               announce, out: "_Out", say_step, *, watch: Optional[_TurnWatch] = None,
-              tell_owner: Optional[Callable[[str], None]] = None) -> None:
+              tell_owner: Optional[Callable[[str], None]] = None,
+              tools: Optional[dict] = None) -> None:
     """One tool call the model asked for: check it, gate it, run it if
-    allowed, and put the result in `convo` for the model to read."""
+    allowed, and put the result in `convo` for the model to read. `tools`:
+    this turn's plug-in tools (jarvis_mcp.py), by name, beside TOOLS."""
     watch = watch if watch is not None else _TurnWatch()
+    every = dict(TOOLS, **tools) if tools else TOOLS
     fn = (call.get("function") or {})
     name = fn.get("name", "")
     if watch.stopped():
@@ -4170,10 +4443,10 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     # JSON, not an object, or wrong for the tool's own schema is never
     # prepared and never raises a card (see check_call). It used to become
     # {} and carry on - a shell_exec card with an empty command.
-    args, problem = check_call(name, fn.get("arguments"), names)
+    args, problem = check_call(name, fn.get("arguments"), names, every)
     if problem is not None:
         say_step("tool_refused", name)
-        label = name if isinstance(name, str) and name in TOOLS else "a tool that does not exist"
+        label = name if isinstance(name, str) and name in every else "a tool that does not exist"
         if watch.broken(name) >= 2:
             # One retry per tool per turn, and it has been used.
             problem += (" That was the second try, so this is not being run. Do not "
@@ -4187,7 +4460,10 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                       "content": _tool_content({"ok": False, "error": problem})})
         return
-    tool = TOOLS[name]
+    tool = every[name]
+    # A tool from a plug-in program (jarvis_mcp.py): its own gate action,
+    # and it runs only on a person's yes, whatever the tier says.
+    outside_program = getattr(tool, "outside_program", False) is True
     if name == "web_search":
         # When a search asks depends on this turn, not on a tier - see
         # WEB_SEARCH_* and _web_search_call.
@@ -4222,11 +4498,15 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         watch.file_parts += 1
     lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
     action_name = lookup_name
-    try:
-        import jarvis_gate
-        action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
-    except Exception:
-        pass
+    if not outside_program:
+        # A plug-in tool keeps its own action name ("mcp__<server>__<tool>"):
+        # the gate's table would fold it into "unclassified_tool", and the
+        # card could not say which tool it is. Unknown to the gate, it asks.
+        try:
+            import jarvis_gate
+            action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
+        except Exception:
+            pass
     if name == "send_email":
         action_name = SEND_EMAIL_ACTION
     # A note write after outside text waits for a person (NOTE_WRITES): put
@@ -4344,15 +4624,17 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         say_step("tool_refused", name)
         result = {"ok": False,
                   "error": f"refused: {getattr(verdict, 'reason', 'not approved')}"}
-    elif name in NEEDS_A_PERSON and not lights_ok and not _a_person_said_yes(verdict):
+    elif ((name in NEEDS_A_PERSON or outside_program) and not lights_ok
+          and not _a_person_said_yes(verdict)):
         # Allowed, but nobody was asked. See NEEDS_A_PERSON.
         say_step("tool_refused", name)
         vtier = getattr(verdict, "tier", None) or "unknown"
         # The gate's own name for the action - the key that
         # [autonomy.tiers] uses - rather than the lookup name.
         vaction = getattr(verdict, "action", None) or action_name
+        why = NEEDS_A_PERSON.get(name) or OUTSIDE_PROGRAM_WHY
         result = {"ok": False,
-                  "error": (f"refused: {name} {NEEDS_A_PERSON[name]}, so it "
+                  "error": (f"refused: {name} {why}, so it "
                             f"only runs after the owner approves it on a "
                             f"card - but the approval gate let it through "
                             f"at tier {vtier!r} without asking anyone. "
@@ -4395,6 +4677,11 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         if announce:
             announce(f"Using {name}...")
         kwargs = {"announce": announce} if tool.needs_announce else {}
+        if outside_program:
+            # The plug-in bridge checks the verdict itself before it sends
+            # anything (jarvis_mcp.Bridge.run: a person's yes, for this
+            # action, used once).
+            kwargs["verdict"] = verdict
         # A multi-step plan: register it so Pause/Stop can reach it, and hand
         # run() the checkpoint it reads before every step. The id is the
         # approval card's own when there was one, so "this task" and "that
@@ -4562,3 +4849,112 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
         result = dict(result)
         result["owner_note"] = card_note
     reply(result)
+
+
+def _more_tools_call(call: dict, convo: list, offer: dict, reoffer: Callable[[], None],
+                     cid, checker, watch: "_TurnWatch", out: "_Out") -> None:
+    """One `more_tools` call (the short tool list, I06): open the group it
+    names for the rest of this chat and say which tools are now there. It
+    runs nothing and asks nobody - except that opening "plugins" may start
+    a plug-in program, which has its own card (_open_plugins). Its answer is
+    Jarvis's own words, so it is not marked as outside text and is not a
+    step (see the section above TOOL_GROUPS)."""
+    fn = call.get("function") or {}
+    raw = fn.get("arguments")
+    try:
+        args = raw if isinstance(raw, dict) else json.loads(raw or "{}")
+    except ValueError:
+        args = None
+    group = args.get("group") if isinstance(args, dict) else None
+    groups = offer["groups"]
+
+    def reply(result: dict) -> None:
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": json.dumps(result, ensure_ascii=False)})
+
+    if watch.stopped():
+        return reply({"ok": False, "error": STOPPED_ERROR})
+    if group not in groups:
+        return reply({"ok": False, "error": MORE_TOOLS_BAD.format(
+            got=group, groups=", ".join(groups) or "none")})
+    if (watch.read or watch.tainted) and group not in watch.opened_after_outside:
+        watch.opened_after_outside.append(group)
+    if group == PLUGINS:
+        added = _open_plugins(offer, checker, watch, start=True, out=out)
+        names = added.get("names") or []
+        if added.get("problems") and not names:
+            return reply({"ok": False, "error": " ".join(added["problems"])})
+        offer["opened"].add(PLUGINS)
+        _remember_opened(cid, offer["opened"])
+        reoffer()
+        result = {"ok": bool(names),
+                  "note": MORE_TOOLS_ADDED.format(names=", ".join(names)) if names
+                  else MORE_TOOLS_NONE}
+        if added.get("problems"):
+            result["not_started"] = added["problems"]
+        return reply(result)
+    offer["opened"].add(group)
+    _remember_opened(cid, offer["opened"])
+    reoffer()
+    members = next(m for g, _w, m in TOOL_GROUPS if g == group)
+    names = [n for n in members if n in offer["shown"]]
+    reply({"ok": bool(names),
+           "note": MORE_TOOLS_ADDED.format(names=", ".join(names)) if names
+           else MORE_TOOLS_NONE})
+
+
+def _open_plugins(offer: dict, checker, watch: Optional["_TurnWatch"], *, start: bool,
+                  out: Optional["_Out"] = None) -> dict:
+    """Put the plug-in programs' tools (jarvis_mcp.py) into this turn's
+    offer. `start`: a program not running yet is started - with a card when
+    it is new or has changed (jarvis_mcp decides; the gate asks). Without
+    `start` only programs already running count. Never raises.
+
+    {"names": [tool names added], "problems": [plain sentences]}."""
+    m = _mcp()
+    if m is None:
+        return {"names": [], "problems": ["plug-in programs are not available here"]}
+
+    def gate(action: str, detail: dict, prompt: str):
+        # A start card counts against this answer's cards like any other,
+        # and says what shaped it, like any other.
+        if watch is not None and watch.cards >= CARDS_PER_TURN:
+            class _Limit:
+                allowed = False
+                outcome = "refused"
+                reason = CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN)
+            return _Limit()
+        if watch is not None:
+            shaped = watch.shaped_by({})
+            if shaped:
+                detail = dict(detail, text=f"{detail.get('text', '')}\n\nWhat shaped "
+                                            f"this request:\n{shaped}")
+        if out is not None:
+            out.set_status("approval")
+        verdict = checker(action, detail, prompt)
+        if out is not None:
+            out.card_answered(verdict)
+            out.set_status("thinking")
+        if watch is not None and _a_card_was_shown(verdict):
+            watch.cards += 1
+        if watch is not None and watch.stopped():
+            # Stop everything while the start card waited: the stop wins
+            # over the yes, as it does for a tool's card.
+            class _Stopped:
+                allowed = False
+                outcome = "refused"
+                reason = STOPPED_ERROR
+            return _Stopped()
+        return verdict
+
+    try:
+        got = m.turn_tools(Tool, start=start, gate_check=gate)
+    except Exception as exc:
+        return {"names": [], "problems": [f"the plug-in programs could not be reached "
+                                          f"({type(exc).__name__})"]}
+    tools = got.get("tools") or {}
+    for name, tool in tools.items():
+        if name not in TOOLS and name != MORE_TOOLS:
+            offer["extra"][name] = tool
+    return {"names": sorted(n for n in tools if n in offer["extra"]),
+            "problems": list(got.get("problems") or [])}

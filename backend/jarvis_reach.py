@@ -222,6 +222,9 @@ class Ctx:
     second_card: Optional[dict] = None      # {"master": bool, "features": {id: bool}}
     big_model: Optional[dict] = None        # {"master": bool, ...}
     gate_action: Optional[Callable[[str], Optional[str]]] = None
+    # The plug-in programs (jarvis_mcp.reach_status): {"servers", "running",
+    # "problem", "card_every_start"}; None: read them.
+    plugins: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -689,6 +692,43 @@ def _big_model(ctx: Ctx) -> dict:
                 f"Switched on for: {what}. It runs on this PC: nothing it handles leaves the PC.")
 
 
+def _plugin_status() -> dict:
+    try:
+        import jarvis_mcp
+        return jarvis_mcp.reach_status()
+    except Exception:
+        return {"servers": [], "running": [], "problem": "", "card_every_start": False,
+                "missing": True}
+
+
+def _plugins(ctx: Ctx) -> dict:
+    """Plug-in programs (MCP, jarvis_mcp.py): programs on this PC the owner
+    listed under [mcp]. Names only - never anything a program wrote."""
+    name = "Plug-in programs (MCP)"
+    st = ctx.plugins if ctx.plugins is not None else _plugin_status()
+    servers = [str(n) for n in st.get("servers") or []]
+    if st.get("problem"):
+        return _row("plugins", name, "off", "", ASK_NA,
+                    "Off: the [mcp] part of jarvis-framework.toml has a mistake - "
+                    + str(st["problem"]))
+    if not servers:
+        return _row("plugins", name, "not_set_up", "", ASK_NA,
+                    "Not set up: no plug-in programs are listed under [mcp] in "
+                    "jarvis-framework.toml.")
+    if not ctx.enabled:
+        return _row("plugins", name, "off", "", ASK_NA,
+                    "Off: the AI model is offered no tools, so it cannot ask for these.")
+    running = [n for n in st.get("running") or [] if n in servers]
+    start = ("Starting one asks you every time." if st.get("card_every_start") else
+             "Starting one asks you when it is new or has changed.")
+    return _row("plugins", name, "on", "programs on this PC: " + _join(servers),
+                ASK_EVERY,
+                "Read-only tools from programs on this PC that you listed. " + start
+                + " Every use asks you, every time, and what they send back is treated as "
+                  "outside text. The programs themselves run with your account's "
+                  "permissions." + (f" Running now: {_join(running)}." if running else ""))
+
+
 #: Every way Jarvis can reach something outside itself, in the order both
 #: apps show them. A new way out is ONE entry here.
 KINDS = (
@@ -707,6 +747,7 @@ KINDS = (
     ("browser", _browser),
     ("phone_control", _phone),
     ("shell", _shell),
+    ("plugins", _plugins),
     ("second_card", _second_card),
     ("big_model", _big_model),
 )

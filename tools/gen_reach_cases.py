@@ -87,8 +87,11 @@ SEARXNG = {"provider": "searxng", "searxng_url": "http://127.0.0.1:8888",
 OFF = {"master": False, "features": {}}
 
 
+NO_PLUGINS = {"servers": [], "running": [], "problem": "", "card_every_start": False}
+
+
 def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=None,
-         second=None, big=None) -> R.Ctx:
+         second=None, big=None, plugins=None) -> R.Ctx:
     tiers = dict(TIERS_SHIPPED, **(tiers or {}))
     return R.Ctx(enabled=set(enabled), tier=lambda a: tiers.get(a, "ask"),
                  env=lambda n: str(os.environ.get(n, "") or "").strip(),
@@ -96,7 +99,7 @@ def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=N
                  search=dict(search or SEARXNG),
                  key_saved=lambda p: (keys or {}).get(p, False),
                  second_card=second or OFF, big_model=big or {"master": False},
-                 gate_action=lambda lookup: None)
+                 gate_action=lambda lookup: None, plugins=plugins or NO_PLUGINS)
 
 
 def cases() -> dict:
@@ -115,7 +118,9 @@ def cases() -> dict:
         keys={"tavily": True}, lanes=["jarvis-escalate"], providers=["openrouter"],
         second={"master": True, "features": {"long_context": True, "browser_control": True,
                                              "vision": True}},
-        big={"master": True, "wiki": True, "deep_questions": False}))
+        big={"master": True, "wiki": True, "deep_questions": False},
+        plugins={"servers": ["repo"], "running": ["repo"], "problem": "",
+                 "card_every_start": False}))
     _set_env(EVERYDAY_ENV)
     out["blocked_and_no_key"] = R.view(_ctx(
         {"web_search", "email_check", "browser_control"}, tiers={"email_read": "never"},
