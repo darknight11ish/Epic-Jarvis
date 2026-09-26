@@ -37,6 +37,12 @@ Two ideas, both of which the patches explain in the original's own words:
      move happened or lie about when you were told, and a fact accepted late
      out of the review queue has the same problem.
 
+     Since memory idea 4 (2026-09-26) add() also reads that date from the
+     words themselves: "I moved to Leeds in January", told in March, is
+     true from 1 January (true_from(), fixed rules, never a future date),
+     and a correction that is OLDER news than the fact it names keeps that
+     fact and is stored as history (Graphiti's rule; add()).
+
      A fact is never deleted, so "where do I live" returns the current answer,
      "where did I live last year" works, and "what did you think you knew in
      June" is answerable from the same rows.
@@ -650,6 +656,169 @@ def _rerank(query: str, facts: list) -> Optional[list]:
 
 
 # --------------------------------------------------------------------------
+#   "True from" dates from the owner's words (memory idea 4)
+# --------------------------------------------------------------------------
+#
+# A fact's valid_from - when it became TRUE - used to be the moment it was
+# saved, always. But the owner's words often say when: "I moved to Leeds in
+# January", told in March. true_from() reads that date, with fixed rules and
+# no model, and add() stores it as valid_from. So "where did I live in
+# February?" is answered from when things really changed, not from when
+# Jarvis was told.
+#
+# THE RULES, ALL STRICT ON PURPOSE - a date that is not clearly "when this
+# became true" is left alone, and the fact keeps the day it was saved, as
+# before:
+#   * the words must say something CHANGED or began, in the past: "moved",
+#     "started", "joined", "switched", "got", "bought", "left", "since"...
+#     A fact that only mentions a date ("visited Iceland in 2023",
+#     "passport expires in January 2028") keeps the day it was saved;
+#   * nothing may point at the future: "will", "going to", "next", "plan",
+#     "is moving" ... - "I'm moving to Leeds in March" is a plan, true NOW
+#     as a plan, and a true-from date in March would hide it until March;
+#   * exactly ONE date: two ("married in 2019 and moved in 2021") is
+#     ambiguous, so none;
+#   * the date must already have begun. NEVER a future date: a fact "true
+#     from" a day that has not come yet would be hidden until then;
+#   * the date is the START of what was said: "in January" is 1 January,
+#     "in 2025" is 1 January 2025, "(week of 2026-09-14)" is that Monday. A
+#     month or year with no year is the most recent one that has begun
+#     ("in January", said in March, is this January; "last June", said in
+#     June, is last year's), like jarvis_past.when();
+#   * the dates jarvis_intake adds in brackets ("yesterday (2026-09-25)",
+#     "last month (2026-08)", "(around 2026-06-24)") are read as dates; its
+#     "(as of 2023-05-01)" on an old imported fact is NOT a true-from date -
+#     it is the day the words were said, and a bare month is read from it.
+#   * English only, like the relation words of the entity layer. Anything
+#     it cannot read is the old behaviour, never an error.
+
+_MONTH_NUM = {m: i for i, m in enumerate(
+    ("january february march april may june july august september october november "
+     "december").split(), 1)}
+_MONTH_NUM.update({m[:3]: i for m, i in list(_MONTH_NUM.items())})
+_MONTH_NUM["sept"] = 9
+_MONTH_WORD = r"(?:january|february|march|april|may|june|july|august|september|october" \
+              r"|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)"
+
+#: Words that say something changed or began, in the past.
+_BEGAN = re.compile(
+    r"\b(?:moved|relocated|started|began|begun|joined|switched|changed|became|got|bought"
+    r"|adopted|took\s+up|left|quit|retired|graduated|married|engaged|divorced|sold"
+    r"|finished|hired|promoted|opened|launched|signed|enrolled|arrived|founded|since"
+    r"|has\s+been|have\s+been|has\s+had|have\s+had|has\s+lived|has\s+worked)\b", re.I)
+#: Anything that points at the future, or is only a wish or a maybe.
+_NOT_YET = re.compile(
+    r"\b(?:will|shall|going\s+to|gonna|plans?|planning|planned|next|soon|upcoming"
+    r"|hopes?|hoping|wants?\s+to|wanted\s+to|would|might|could|intends?"
+    r"|is\s+(?:moving|starting|joining|switching|leaving|getting|buying)"
+    r"|are\s+(?:moving|starting|joining|switching|leaving|getting|buying))\b"
+    r"|'ll\b|\btomorrow\b", re.I)
+#: "may" the maybe, in lower case - "May" the month is capitalised.
+_MAYBE = re.compile(r"\bmay\b(?!\s+\d)")
+_AS_OF = re.compile(r"\(as of (\d{4})-(\d{2})-(\d{2})\)")
+
+_DATE_FORMS = [
+    # jarvis_intake's brackets, and plain ISO dates
+    ("day", re.compile(r"\((?:(?:week|weekend) of |around )?(\d{4})-(\d{2})-(\d{2})\)")),
+    ("month", re.compile(r"\((?:around )?(\d{4})-(\d{2})\)")),
+    ("year", re.compile(r"\((\d{4})\)")),
+    ("day", re.compile(r"(?<![\d(-])(\d{4})-(\d{2})-(\d{2})(?![\d-])")),
+    # "14 March 2026", "14th of March 2026", "March 14, 2026"
+    ("dmy", re.compile(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?({_MONTH_WORD})\s+"
+                       r"((?:19|20)\d\d)\b", re.I)),
+    ("mdy", re.compile(rf"\b({_MONTH_WORD})\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+"
+                       r"((?:19|20)\d\d)\b", re.I)),
+    # "March 2026"
+    ("my", re.compile(rf"\b({_MONTH_WORD})\s+((?:19|20)\d\d)\b", re.I)),
+    # "in / since / from / last / back in March" - no year
+    ("m", re.compile(rf"\b(in|since|from|during|last|back\s+in)\s+({_MONTH_WORD})\b(?!\s+\d)",
+                     re.I)),
+    # "in / since 2025"
+    ("y", re.compile(r"\b(?:in|since|from|during)\s+((?:19|20)\d\d)\b(?![-/]\d)", re.I)),
+]
+
+
+def _midnight(y: int, m: int, d: int = 1) -> Optional[float]:
+    try:
+        return time.mktime((y, m, d, 0, 0, 0, 0, 0, -1))
+    except (OverflowError, ValueError):
+        return None
+
+
+#: meta["true_from"] on a fact whose valid_from came from its words.
+TRUE_FROM_SAID = "said"
+
+
+def said_from(meta) -> bool:
+    """Did this fact's valid_from come from its own words (true_from)?
+    `meta` is the row's meta, as stored (JSON text) or a dict."""
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta or "{}")
+        except Exception:
+            return False
+    return isinstance(meta, dict) and meta.get("true_from") == TRUE_FROM_SAID
+
+
+def true_from(text: str, now: Optional[float] = None) -> Optional[float]:
+    """When the fact's own words say it became true, as epoch seconds (the
+    start of that day, month or year, this PC's time zone) - or None: no
+    clear date, a date in the future, or a plan. See the rules above."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    now = time.time() if now is None else float(now)
+    ref = now
+    m = _AS_OF.search(text)
+    if m:
+        ref = _midnight(int(m.group(1)), int(m.group(2)), int(m.group(3))) or now
+        ref = min(ref + 86399, now)
+    body = _AS_OF.sub(" ", text)
+    if not _BEGAN.search(body) or _NOT_YET.search(body) or _MAYBE.search(body):
+        return None
+    found = []
+    taken = []
+    for kind, rx in _DATE_FORMS:
+        for mm in rx.finditer(body):
+            if any(a < mm.end() and mm.start() < b for a, b in taken):
+                continue            # inside a date already read
+            taken.append((mm.start(), mm.end()))
+            g = mm.groups()
+            lt = time.localtime(ref)
+            when = None
+            if kind == "day":
+                when = _midnight(int(g[0]), int(g[1]), int(g[2]))
+            elif kind == "month":
+                when = _midnight(int(g[0]), int(g[1]))
+            elif kind == "year":
+                when = _midnight(int(g[0]), 1)
+            elif kind == "dmy":
+                when = _midnight(int(g[2]), _MONTH_NUM[g[1].lower()], int(g[0]))
+            elif kind == "mdy":
+                when = _midnight(int(g[2]), _MONTH_NUM[g[0].lower()], int(g[1]))
+            elif kind == "my":
+                when = _midnight(int(g[1]), _MONTH_NUM[g[0].lower()])
+            elif kind == "m":
+                n = _MONTH_NUM[g[1].lower()]
+                if g[0].lower() == "last":
+                    y = lt.tm_year if n < lt.tm_mon else lt.tm_year - 1
+                else:
+                    y = lt.tm_year if n <= lt.tm_mon else lt.tm_year - 1
+                when = _midnight(y, n)
+            elif kind == "y":
+                when = _midnight(int(g[0]), 1)
+            if when is None:
+                return None
+            found.append(when)
+    if len(set(found)) != 1:
+        return None
+    when = found[0]
+    # Never a date that has not begun, and never before 1900.
+    if when > now or when < -2208988800:
+        return None
+    return when
+
+
+# --------------------------------------------------------------------------
 #   The store
 # --------------------------------------------------------------------------
 
@@ -660,6 +829,9 @@ class MemoryStore:
     #: attempted - so anything reading it on a fresh store (the memory pane
     #: rendering a correction card) got AttributeError instead of "no".
     last_supersede_failed = False
+    #: Did the last add(supersedes=...) find the correction was OLDER news
+    #: than the fact it named, and so keep that fact (memory idea 4)?
+    last_older_news = False
 
     def __init__(self, path: Optional[Path] = None, embedder=None) -> None:
         self.path = Path(path or DOCS_DB)
@@ -943,25 +1115,91 @@ class MemoryStore:
     def add(self, text: str, source: str = "", meta: Optional[dict] = None,
             valid_from: Optional[float] = None,
             supersedes: Optional[int] = None) -> int:
+        """Store one fact. Returns its id.
+
+        valid_from   when it became TRUE. Left out, it is the date the
+                     fact's own words give (true_from(), memory idea 4:
+                     "moved to Leeds in January" is true from 1 January),
+                     marked meta["true_from"] = "said" - and otherwise now,
+                     as it always was.
+        supersedes   the id of the fact this one corrects. It is retired on
+                     both axes: retired_at now (when Jarvis learned), and
+                     valid_to the new fact's true-from date when the words
+                     give one after the old fact began, else now. UNLESS the
+                     correction is older news (Graphiti's rule): both facts'
+                     dates come from the owner's words and this one's is
+                     EARLIER - then the old fact stays in use, and this one
+                     is kept as history, true until the old one began
+                     (last_older_news says so).
+        """
         text = " ".join(str(text).split())
         if not text:
             raise ValueError("refusing to store an empty fact")
         now = time.time()
+        meta = dict(meta or {})
+        said = None
+        if valid_from is None:
+            try:
+                said = true_from(text, now)
+            except Exception:
+                said = None          # an unreadable date is the old behaviour
+            if said is not None:
+                meta["true_from"] = TRUE_FROM_SAID
         with _LOCK, closing(self._connect()) as c:
-            cur = c.execute(
-                "INSERT INTO facts (text, source, created, valid_from, meta)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (text, source, now, valid_from or now, json.dumps(meta or {})))
-            fid = cur.lastrowid
+            old = None
             if supersedes:
+                old = c.execute("SELECT valid_from, valid_to, meta FROM facts WHERE id=?",
+                                (supersedes,)).fetchone()
+            # Older news never replaces newer news: only when BOTH dates are
+            # the owner's own words. A date that is only when Jarvis was told
+            # says nothing about when the old fact became true.
+            older_than = None
+            if (old is not None and said is not None and said_from(old["meta"])
+                    and (old["valid_to"] is None or old["valid_to"] > now)
+                    and said < float(old["valid_from"])):
+                older_than = float(old["valid_from"])
+            if older_than is None:
+                cur = c.execute(
+                    "INSERT INTO facts (text, source, created, valid_from, meta)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    (text, source, now, valid_from or said or now, json.dumps(meta)))
+            else:
+                # History from the start: true from its own date until the
+                # newer fact began, and never in use - retired_at now, and
+                # retired_by the fact that is newer, so timeline() shows the
+                # two in order and erasing that fact erases this one too
+                # (its earlier wordings, erase()).
+                cur = c.execute(
+                    "INSERT INTO facts (text, source, created, valid_from, valid_to,"
+                    " retired_at, retired_by, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (text, source, now, said, older_than, now, int(supersedes),
+                     json.dumps(meta)))
+            fid = cur.lastrowid
+            self.last_older_news = older_than is not None
+            if older_than is not None:
+                self.last_supersede_failed = False
+                try:
+                    if fw is not None:
+                        fw.audit_log("memory.older_news", {"new": fid, "kept": supersedes})
+                except Exception:
+                    pass
+            elif supersedes:
                 # Both axes. A correction arriving now means we learned now
-                # (retired_at), and - absent anything better - that the old
-                # fact stopped being true now too (valid_to). Callers that
-                # know the real date call retire() with it before adding.
+                # (retired_at). The old fact stopped being true when the new
+                # one's own words say it began - if they say, and it is after
+                # the old one began - and otherwise now. Callers that know
+                # the real date call retire() with it before adding.
+                end = now
+                if old is not None and said is not None and said > float(old["valid_from"]):
+                    end = said
+                # "Still in use" is valid_to NULL OR in the future - the rule
+                # every reader uses. This matched `valid_to IS NULL` only, so
+                # a fact that ends later (a lease to December) could never be
+                # corrected (the bug fixed with memory idea 4, 2026-09-26).
                 done = c.execute(
                     "UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
-                    " WHERE id=? AND valid_to IS NULL",
-                    (now, now, fid, supersedes))
+                    " WHERE id=? AND (valid_to IS NULL OR valid_to > ?)",
+                    (end, now, fid, supersedes, now))
                 if done.rowcount:
                     # The old wording is history now: its names and the
                     # "sister" it taught stop being looked up (the entity
@@ -1001,8 +1239,10 @@ class MemoryStore:
             self._embed_rows(c, [(fid, text)])
             # The entity layer: who and what this SAVED fact names, found
             # without a model, in the same breath as the save. Never raises -
-            # like _embed_rows, the fact is already stored by now.
-            self._link_safely(c, fid, text)
+            # like _embed_rows, the fact is already stored by now. Not for
+            # older news: it is history from the start, like a retired fact.
+            if older_than is None:
+                self._link_safely(c, fid, text)
             c.commit()
             try:
                 waiting = c.execute("SELECT 1 FROM entity_merge_asks"
@@ -1048,9 +1288,14 @@ class MemoryStore:
             # This diverges from bitemporal.patch, which stamps now
             # unconditionally. The patch predates retire() taking a date.
             ra = now if vt <= now else None
+            # "Still in use" is valid_to NULL OR in the future, the rule
+            # every reader uses. `valid_to IS NULL` alone meant a fact that
+            # ends later (a lease to December) could never be forgotten, and
+            # a "stop using this fact?" card on it did nothing (the bug fixed
+            # with memory idea 4, 2026-09-26).
             cur = c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
-                            " WHERE id=? AND valid_to IS NULL",
-                            (vt, ra, replaced_by, fact_id))
+                            " WHERE id=? AND (valid_to IS NULL OR valid_to > ?)",
+                            (vt, ra, replaced_by, fact_id, now))
             if cur.rowcount and ra is not None:
                 # Forget (or a correction) takes the fact's links and the
                 # aliases it taught with it: "sister" stops meaning Priya the
@@ -1078,7 +1323,9 @@ class MemoryStore:
             # superseded version stays readable as it was; rewriting one makes
             # "where did I live last year" answer with today's words.
             row = c.execute("SELECT valid_to FROM facts WHERE id=?", (fact_id,)).fetchone()
-            if row is None or row["valid_to"] is not None:
+            # Still in use = valid_to NULL or in the future (a lease that ends
+            # in December is still current, and can be reworded).
+            if row is None or (row["valid_to"] is not None and row["valid_to"] <= time.time()):
                 return False
             cur = c.execute("UPDATE facts SET text=?, embedded=0 WHERE id=?", (text, fact_id))
             if cur.rowcount:
@@ -1192,8 +1439,8 @@ class MemoryStore:
                 # The same rule every reader uses for "current": valid_to
                 # NULL or still in the future. A lease that ends in December
                 # is current today, and an erased fact must never be recalled
-                # again, so it is retired now too - which retire() alone
-                # would not do (it matches valid_to IS NULL only).
+                # again, so it is retired now too (retire() uses the same rule
+                # since 2026-09-26; it used to match valid_to IS NULL only).
                 if vt is None or float(vt) > now:
                     vt, retired_now = now, True
                 if ra is None and float(vt) <= now:
@@ -2358,7 +2605,7 @@ ERASED_TEXT = "[erased]"
 #: including keys this list has never heard of: an allowlist, because meta
 #: is free-form and a new key holding words must not survive by default.
 ERASE_KEEPS_META = ("auto", "saved_at", "proposal_id", "proposal_source", "provenance",
-                    "device", "tainted", "confidence")
+                    "device", "tainted", "confidence", "true_from")
 
 #: A kept string value must look like a label ("typed", "phone",
 #: "import:claude"), never like a sentence.

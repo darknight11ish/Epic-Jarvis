@@ -291,6 +291,28 @@ def _said_again(w, I, A, case) -> dict:
     return {"ok": got == case["want"], "got": {"recorded": got}}
 
 
+def _true_from(w, case) -> dict:
+    """Memory idea 4: the fact is added through the real MemoryStore.add()
+    on the day it was told; scored on the "true from" date it gets - the
+    date its words give, or none (then it is the day it was told)."""
+    M = w.M
+    if not hasattr(M, "true_from"):
+        return {"ok": False, "got": "this memory has no \"true from\" dates (idea 4 not built)"}
+    told = _day(case["told"])
+    real = M.time
+    M.time = types.SimpleNamespace(**{k: getattr(real, k) for k in dir(real)
+                                      if not k.startswith("_")})
+    M.time.time = lambda: told
+    try:
+        fid = w.store.add(case["text"], source="eval")
+    finally:
+        M.time = real
+    row = w.store.get(fid)
+    said = M.said_from(row.get("meta"))
+    got = time.strftime("%Y-%m-%d", time.localtime(row["valid_from"])) if said else None
+    return {"ok": got == case["want"], "got": {"true_from": got}}
+
+
 # ----------------------------------------------------- the real learner --
 
 def _ollama(url: str, model: str, timeout: float = 120.0):
@@ -410,6 +432,8 @@ def run(M, scratch: Path, *, model: Optional[str] = None, ollama: str = LOCAL) -
                     r = _gate(w, I, A, case)
                 elif kind == "said_again":
                     r = _said_again(w, I, A, case)
+                elif kind == "true_from":
+                    r = _true_from(w, case)
                 else:
                     r = {"ok": False, "got": f"unknown kind {kind!r}"}
             except Exception as exc:

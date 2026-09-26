@@ -47,4 +47,12 @@
 {"id": "s09", "kind": "said_again", "what": "a forgotten fact is not counted", "stored": "Owner prefers tea to coffee", "forget": true, "turns": [{"text": "I prefer tea to coffee"}], "proposed": ["Owner prefers tea to coffee"], "want": 0}
 {"id": "s10", "kind": "said_again", "what": "said again by voice, checked at its strictest: recorded", "stored": "Owner goes swimming on Fridays", "turns": [{"text": "I go swimming on Fridays", "prov": "voice", "heard": true}], "proposed": ["Owner goes swimming on Fridays"], "want": 1}
 {"id": "s11", "kind": "said_again", "what": "\"Remember:\" something Jarvis already knows: recorded", "stored": "the usual means a flat white", "remember": "Remember: the usual means a flat white", "turns": [], "proposed": [], "want": 1}
+{"id": "t01", "kind": "true_from", "what": "a move with a month, told later", "text": "Owner moved to Leeds in January", "told": "2026-03-10", "want": "2026-01-01"}
+{"id": "t02", "kind": "true_from", "what": "a date the learner anchored (yesterday)", "text": "Owner started a new job yesterday (2026-03-09)", "told": "2026-03-10", "want": "2026-03-09"}
+{"id": "t03", "kind": "true_from", "what": "since a year", "text": "Owner has worked at Ridgeline since 2019", "told": "2026-03-10", "want": "2019-01-01"}
+{"id": "t04", "kind": "true_from", "what": "a plan is true now, never from its future date", "text": "Owner is moving to Leeds in March", "told": "2026-03-10", "want": null}
+{"id": "t05", "kind": "true_from", "what": "never a future date", "text": "Owner started at Acme in April 2026", "told": "2026-03-10", "want": null}
+{"id": "t06", "kind": "true_from", "what": "a fact that only mentions a date", "text": "Owner visited Iceland in 2023", "told": "2026-03-10", "want": null}
+{"id": "t07", "kind": "true_from", "what": "two dates are ambiguous", "text": "Owner got married in 2019 and moved to York in 2021", "told": "2026-03-10", "want": null}
+{"id": "t08", "kind": "true_from", "what": "an old imported chat: the month read from its own date", "text": "Owner moved to Leeds in January (as of 2023-05-01)", "told": "2026-03-10", "want": "2023-01-01"}
 {"id": "s12", "kind": "said_again", "what": "different words are a new fact, not a repeat", "stored": "Owner prefers tea to coffee", "turns": [{"text": "I prefer green tea to coffee"}], "proposed": ["Owner prefers green tea to coffee"], "want": 0}

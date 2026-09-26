@@ -498,7 +498,7 @@ def t_the_self_test_runs_on_a_scratch_store_only():
     le = res.get("learner") or {}
     check("the learner test ran, with no model", le.get("available")
           and not le["model_part"]["ran"], le.get("why"))
-    for kind in ("reads", "remember", "dates", "gate"):
+    for kind in ("reads", "remember", "dates", "gate", "said_again", "true_from"):
         k = (le.get("kinds") or {}).get(kind) or {}
         check(f"the learner test: every {kind} case right", k and k["right"] == k["total"],
               [c for c in le.get("cases", []) if c["kind"] == kind and not c["ok"]])

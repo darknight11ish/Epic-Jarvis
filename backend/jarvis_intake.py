@@ -1213,7 +1213,57 @@ def annotate(rows: list) -> list:
         jarvis_auto_learn.annotate(rows)
     except Exception:
         pass
+    # Memory idea 4: a correction that sounds OLDER than the fact it names
+    # says so, in the line both apps already show under a card (its
+    # reason) - keeping it saves it as history and the newer fact stays.
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        try:
+            note = older_news_note(r)
+        except Exception:
+            note = ""
+        if note:
+            r["older_news"] = True
+            why = str(r.get("auto_reason") or "").strip().rstrip(".")
+            r["auto_reason"] = f"{why}. {note}" if why else note
     return rows
+
+
+#: The card's words for older news (memory idea 4, Graphiti's rule).
+OLDER_NEWS = ("It sounds older than what Jarvis knows: your words date it from {new}, "
+              "and the fact it would replace is true from {old}. Keeping it saves it "
+              "as history - the newer fact stays in use")
+
+
+def older_news_note(row: dict, store=None) -> str:
+    """"" - or, for a correction card whose words date it BEFORE the fact it
+    would replace (both dates from the owner's words), the sentence saying
+    so. The same rule add() applies when the card is kept, read the same
+    way: jarvis_memory.true_from and said_from. No model."""
+    rid = row.get("replaces_id") if isinstance(row, dict) else None
+    if not rid or row.get("source") == RETIRE_CARD_SOURCE:
+        return ""
+    Mm = sys.modules.get("jarvis_memory")
+    if Mm is None or not hasattr(Mm, "true_from") or not hasattr(Mm, "said_from"):
+        return ""
+    st = _live_store(store)
+    if st is None:
+        return ""
+    target = st.get(int(rid))
+    if not target or not Mm.said_from(target.get("meta")):
+        return ""
+    now = time.time()
+    if target.get("valid_to") is not None and float(target["valid_to"]) <= now:
+        return ""
+    try:
+        at = float(row.get("created") or now)
+    except (TypeError, ValueError):
+        at = now
+    new = Mm.true_from(str(row.get("text") or ""), min(at, now))
+    if new is None or new >= float(target["valid_from"]):
+        return ""
+    return OLDER_NEWS.format(new=_iso(_day(new)), old=_iso(_day(float(target["valid_from"]))))
 
 
 # --------------------------------------------------------------------------
