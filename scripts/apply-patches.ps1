@@ -481,6 +481,15 @@ $PATCHES = @(
     # jarvis_intake.py (game_or_roleplay()); without that module, or on any
     # error, nothing is detected and chat works exactly as before.
     'games-temporary.patch'
+    # Smartwatch notifications (the owner's decision, 2026-09-25;
+    # reconfirmed 2026-09-27, Q17): GET and POST /api/notifications/watch -
+    # off by default (every notification stays on the phone), ON is one
+    # approval card (watch_notifications_enable), OFF is instant. Wrapped
+    # round the server's handler at start-up like folders. Its context is
+    # documents's banner lines, so it goes after it - last, like every new
+    # patch. Needs jarvis_watch_notify.py copied in; without it the banner
+    # says so and the route is not there.
+    'watch-notifications.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -589,6 +598,8 @@ $SHIPPED = @(
     'jarvis_ocr.py'              # reads the words in a picture with Windows' own text recognition, on this PC; jarvis_agent.py marks them as outside text; no patch
     # --- plug-in programs (MCP), reached only through more_tools("plugins") ---
     'jarvis_mcp.py'              # read-only tools from programs on this PC you list under [mcp]; stdio only; every call asks
+    # --- the smartwatch notifications setting (2026-09-27) ---
+    'jarvis_watch_notify.py'     # off by default; ON is one approval card, watch_notifications_enable; OFF is instant
 )
 
 # The settings file. Installed only where none exists; never overwritten.

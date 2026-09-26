@@ -126,6 +126,7 @@ on a throwaway copy instead.
 | `manner.patch` | `jarvis_hud.py` | **How Jarvis talks: warm and brief, or plain** (the owner's decision, 2026-09-25). Adds `GET` and `POST /api/manner` - one change at a time, **no approval card either way** (it changes only how answers are worded). Its context is `web-search.patch`'s route blocks. Needs `jarvis_manner.py` - see "How Jarvis talks, and errors in plain words", at the very end. |
 | `documents.patch` | `jarvis_hud.py` | **Folders Jarvis may look in** (the owner's decisions of 2026-09-26: asking about PDFs and Word files, and the Notion import). One call at start-up, `jarvis_documents.install(Handler, ...)`, answers `GET /api/folders` and `POST /api/folders/add` (this PC only, one approval card), `/remove` (at once) and `/import` (a Notion export, this PC only). Last in the list; its context is `stop-all.patch`'s banner lines. Needs `jarvis_documents.py` - see "Documents & email", at the very end. |
 | `games-temporary.patch` | `jarvis_hud.py` | **Games and role-play run in a temporary chat automatically** (the owner's decision, 2026-09-27; CLAUDE.md, `docs/OWNER-QUESTIONS-2026-09-27.md` Q19). No new route: `_temporary_chat(body)` now also returns true once the owner's own words, anywhere in the conversation, start a game or role-play (`jarvis_intake.game_or_roleplay`), and the two lines in the chat turn's `finally` block that used to read `body.get("temporary")` directly now go through that same function - so a detected game gets no recall, no "Remember:", no chat history and no learning, exactly like a manually-started temporary chat, with no card and no setting. Last in the list; its context is `temporary-chat.patch`'s `_temporary_chat()` function and the two `finally`-block lines. Needs `jarvis_intake.py` (already shipped for `memory-intake.patch`) - without it, or on any error, nothing is detected and chat works exactly as before this patch. See "Games and role-play", at the very end. |
+| `watch-notifications.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Smartwatch notifications, off by default** (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). Adds `GET`/`POST /api/notifications/watch` - ON is one approval card (`watch_notifications_enable`), OFF is instant - wrapped round the running server's handler at start-up, like `documents.patch`, rather than an inline route; `jarvis_gate.py` gains the action on `_NO_RULE_FROM_DENIAL` and `_RISK` (a denial of this switch's card proposes no standing rule, and the notice says it stays on this PC). Android's own, already-built-in notification bridging does the actual copying to a paired watch; there is no Jarvis watch app. Last in the list; its `jarvis_hud.py` context is `documents.patch`'s banner lines, and its `jarvis_gate.py` context is `asks-first.patch`'s `_NO_RULE_FROM_DENIAL` and `_RISK` additions. Needs `jarvis_watch_notify.py` - without it, or on any error, the banner says so and the route is not there. See "Smartwatch notifications", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -11475,3 +11476,96 @@ check here fails on the code before this change.
   - on purpose (`game_or_roleplay()` reads only `role: "user"` messages), so
   the model cannot turn this on (or, since a game does not "end" mid-chat,
   off) by playing along.
+
+# Smartwatch notifications: `jarvis_watch_notify.py`, `watch-notifications.patch` (2026-09-27)
+
+The owner's decision (CLAUDE.md, 2026-09-25, the competitiveness audit;
+reconfirmed 2026-09-27, `docs/OWNER-QUESTIONS-2026-09-27.md` Q17):
+"Smartwatch: every notification stays on the phone by default, with a
+setting to let them all show on a compatible watch (turning it on raises a
+card, turning it off is instant)." A 2026-09-26 fix already made every
+notification builder `.setLocalOnly(true)` - refusing Android's own,
+already-built-in bridging to a paired companion device. What was missing
+was the setting itself: a way to turn that bridging back on, with the same
+permission model every other risky switch here uses.
+
+## What "showing on a watch" actually means
+
+**There is no Jarvis watch app, and none is built here.** The
+competitiveness audit says plainly that one is "not for Jarvis" - a Wear OS
+app would sync through Google's own servers (rule 1). This setting only
+changes what `.setLocalOnly(...)` argument the phone's notification
+builders pass: `true` (the default) refuses Android's own bridging to a
+paired, compatible watch; turning this on simply stops refusing it, and
+Android does the rest, the same as any other app that has not opted out.
+
+## What it adds
+
+`GET`/`POST /api/notifications/watch` - the shape of `jarvis_learning_switch.py`
+(off by default; ON is one approval card, action `watch_notifications_enable`;
+OFF is instant, and withdraws a waiting ON card). See "Smartwatch
+notifications" in `docs/JARVIS-API.md` (section 38) for the exact bodies and
+status codes.
+
+## Why a wrapped route, not an inline one
+
+`jarvis_hud.py`'s real text is not in this repository, so a new patch can
+only touch lines an earlier patch already quotes as context. Rather than
+guess at an inline `if route == ...:` block's surrounding text, this follows
+`jarvis_documents.install()`'s and `jarvis_stop_all.install()`'s own
+pattern: `jarvis_watch_notify.install(handler_cls, ...)` wraps
+`do_GET`/`do_POST` at start-up, right after `documents.patch`'s own
+`jarvis_documents.install(...)` call - a spot every later patch here already
+proves it can anchor on.
+
+## `jarvis_gate.py`: a denial proposes no standing rule
+
+Like every other settings switch of this shape (`learning_enable`,
+`custom_voice`, `loosen_what_asks_first`...), a "no" on this card must not
+turn into a proposed rule ("I do not want Jarvis to X without asking me
+first") - the card always asks anyway, so the proposal would say nothing.
+`watch_notifications_enable` joins `_NO_RULE_FROM_DENIAL`, and its own
+`_RISK` entry says the card stays on this PC, as its own hunk in
+`watch-notifications.patch`, positioned after `asks-first.patch`'s own
+additions to both tables (the same reason those tables have grown a line at
+a time, patch by patch, rather than every addition editing
+`gate-outcome.patch` itself: this patch's hunks only need to anchor on text
+an EARLIER patch already put there).
+
+## Phone only
+
+A smartwatch pairs with a phone, never a Windows PC - `tools/check_parity.py`
+classifies the route `phone-only`, and `docs/ARCHITECTURE.md` §8 says why.
+The setting still lives on the PC, the same as every other approval-card
+switch: only the phone ever reads or writes it, but a stolen or borrowed
+phone still cannot turn it on without a card and (once the approval gap's
+step 2 lands) Windows Hello or the phone's own fingerprint.
+
+## Test it
+
+```
+python3 backend/test_watch_notify.py
+```
+
+No pytest, no network, no model. Real settings files in a temporary folder;
+the gate, the tier and the clock are stand-ins, the same shape
+`test_learning_switch.py` proves that shape with. Also proves `install()`'s
+route wrapping (the shape of `test_documents.py`'s `t_the_routes`), that
+`watch-notifications.patch` is listed after `documents.patch` and applies to
+what the earlier patches wrote (both target files) and reverses cleanly.
+Every check here fails on the code before this change.
+
+## Not checked, said plainly
+
+- **Nothing has run on the owner's PC**, and no real Android notification
+  was posted anywhere - `NotificationsStayLocalTest.kt` (jarvis-client) is a
+  pure-JVM source read, not a running app, and it is unchanged in what it
+  proves: every notification still reaches a traceable `.setLocalOnly(...)`.
+- **No real smartwatch was involved.** Whether Android's own bridging
+  actually reaches a real paired device once `.setLocalOnly(false)` is in
+  effect is Android's own feature, not code in this repository, and is
+  unverified here.
+- **The approval gap's phone half** (a Keystore key needing a fresh
+  fingerprint per risky approval) is not built yet (`docs/APPROVAL-GAP-DESIGN.md`,
+  "more devices") - this switch's card is exactly as protected, and exactly
+  as exposed, as every other risky card on the phone today.

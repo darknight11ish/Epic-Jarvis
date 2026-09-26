@@ -157,6 +157,8 @@ SHIPPED = (
     "jarvis_ocr.py",
     # plug-in programs (MCP): read-only tools from programs on this PC, through more_tools
     "jarvis_mcp.py",
+    # the smartwatch notifications setting (watch-notifications.patch)
+    "jarvis_watch_notify.py",
 )
 
 

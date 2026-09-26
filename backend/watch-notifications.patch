@@ -1,0 +1,47 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2978,6 +2978,21 @@
+     except Exception as exc:
+         print(f"  folders    NOT ON ({type(exc).__name__}) - Folders Jarvis may look in is off")
+         print("             until jarvis_documents.py is back: run apply-patches.ps1 again")
++    # watch-notifications.patch (the owner's decision, 2026-09-25;
++    # reconfirmed 2026-09-27, Q17): GET and POST /api/notifications/watch -
++    # OFF by default (every notification stays on the phone), ON is one
++    # approval card (watch_notifications_enable), OFF is instant. Android
++    # itself does the bridging to a paired watch; this only decides whether
++    # the phone's own .setLocalOnly(...) refuses it. Wrapped round Handler
++    # here, before anything listens, like folders above; the rules are all
++    # in jarvis_watch_notify.py.
++    try:
++        import jarvis_watch_notify
++        print(jarvis_watch_notify.install(Handler, origin_ok=_origin_ok,
++                                          token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  watch      NOT ON ({type(exc).__name__}) - Smartwatch notifications setting is off")
++        print("             until jarvis_watch_notify.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -152,6 +152,7 @@
+     "power_manage",           # shipped "auto": a card means the owner chose "ask"
+     "append_obsidian_daily",  # shipped "auto": the same
+     "loosen_what_asks_first",  # jarvis_asks_first.py acts only on tier "ask" (asks-first.patch)
++    "watch_notifications_enable",  # jarvis_watch_notify.py acts only on tier "ask" (watch-notifications.patch)
+ })
+
+
+@@ -673,6 +674,12 @@
+     # instant, from either app. jarvis_owner_check.PC_ONLY_ACTIONS makes its
+     # approval need Windows Hello on this PC whatever this line says.
+     "loosen_what_asks_first": ("yes", "local", "lets one action from a short list - reading your own calendar, email, notes or home status, or adding to your notes - go ahead without asking you first, by changing one line of your settings file on this PC; making it ask again is instant"),
++    # watch-notifications.patch (jarvis_watch_notify.py, the owner's decision
++    # of 2026-09-25; reconfirmed 2026-09-27, Q17). Lets the phone's own,
++    # already-built-in notification bridging copy Jarvis's notifications to a
++    # paired smartwatch too - not a Jarvis watch app, and nothing about it
++    # reaches this PC. Turning it off again is instant.
++    "watch_notifications_enable": ("yes", "local", "lets your phone's own notification bridging copy Jarvis's notifications to a paired smartwatch too, instead of keeping them on the phone only; nothing about this reaches this PC, and turning it off again is instant"),
+ }
+
+ _UNKNOWN_RISK = ("no", "outbound",

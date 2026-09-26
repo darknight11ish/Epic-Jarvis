@@ -596,6 +596,15 @@
        "title": "Turn on the better custom voice"
       },
       {
+       "action": "watch_notifications_enable",
+       "fixed": false,
+       "id": "watch_notifications_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let your notifications show on a smartwatch too"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -1271,6 +1280,15 @@
        "title": "Turn on the better custom voice"
       },
       {
+       "action": "watch_notifications_enable",
+       "fixed": false,
+       "id": "watch_notifications_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let your notifications show on a smartwatch too"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -1944,6 +1962,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Turn on the better custom voice"
+      },
+      {
+       "action": "watch_notifications_enable",
+       "fixed": false,
+       "id": "watch_notifications_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let your notifications show on a smartwatch too"
       },
       {
        "action": "modify_own_code",
@@ -2628,6 +2655,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Turn on the better custom voice"
+      },
+      {
+       "action": "watch_notifications_enable",
+       "fixed": false,
+       "id": "watch_notifications_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let your notifications show on a smartwatch too"
       },
       {
        "action": "modify_own_code",

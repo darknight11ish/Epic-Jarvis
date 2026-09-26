@@ -86,6 +86,27 @@ class ClientSettings(context: Context) {
         _heardSound.value = value
     }
 
+    private val _watchNotifications = MutableStateFlow(prefs.getBoolean(KEY_WATCH_NOTIFICATIONS, false))
+
+    /**
+     * A CACHE of the PC's own smartwatch-notifications switch
+     * ([com.jarvis.client.net.WatchNotify]), off by default - the same
+     * direction every notification builder already defaults to
+     * (`.setLocalOnly(true)`). This is not the setting's only copy: the PC
+     * decides it, behind an approval card to turn it on; this is only what
+     * the phone last heard, kept so a notification can be built without a
+     * network round trip. [JarvisRuntime] writes it whenever it reads or
+     * changes the real setting. Unknown or stale reads as OFF, on purpose -
+     * staying on the phone leaks nothing, showing on a watch that never
+     * asked would.
+     */
+    val watchNotifications: StateFlow<Boolean> = _watchNotifications.asStateFlow()
+
+    fun setWatchNotifications(value: Boolean) {
+        prefs.edit { putBoolean(KEY_WATCH_NOTIFICATIONS, value) }
+        _watchNotifications.value = value
+    }
+
     private val _security = MutableStateFlow(SecurityRules.fromStored { prefs.getString(it, null) })
 
     /**
@@ -160,6 +181,7 @@ class ClientSettings(context: Context) {
         const val KEY_BARGE_IN = "barge_in"
         const val KEY_ONE_MOMENT = "one_moment"
         const val KEY_HEARD_SOUND = "heard_sound"
+        const val KEY_WATCH_NOTIFICATIONS = "watch_notifications"
         const val KEY_UPDATE_CHECKS = "update_checks"
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
         const val KEY_UPDATE_NEWER = "update_newer_line"

@@ -2962,6 +2962,59 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * Read by every notification builder ([com.jarvis.client.service]) to
+     * decide `.setLocalOnly(...)` - the cached last-known answer from the
+     * PC ([ClientSettings.watchNotifications]), or false (stay on the phone
+     * - the safe direction) if [settings] has not been set up yet, which a
+     * notification built before [initialize] ever ran should not crash
+     * over.
+     */
+    fun watchNotificationsAllowed(): Boolean =
+        if (::settings.isInitialized) settings.watchNotifications.value else false
+
+    // -------------------------------------------- smartwatch notifications ----
+    // docs/JARVIS-API.md; see [com.jarvis.client.net.WatchNotify] and
+    // ui/screens/WatchNotifyPlate.kt. OFF by default, ON is one approval
+    // card. Every successful read or write updates [ClientSettings]'s cache,
+    // which the notification builders read - the only reason this route is
+    // read at all off the settings screen.
+
+    /**
+     * `GET /api/notifications/watch`. Updates the cache on success; leaves
+     * it alone on failure (a stale cache is never worse than no cache, and
+     * an app briefly offline should not flip every notification local
+     * again).
+     */
+    suspend fun watchNotifySettings(): ApiResult<JsonObject> {
+        val r = api.watchNotifySettings()
+        if (r is ApiResult.Ok) {
+            com.jarvis.client.net.WatchNotify.enabled(r.value)?.let { settings.setWatchNotifications(it) }
+        }
+        return r
+    }
+
+    /**
+     * The switch. ON is held on a stale link (rule 4) and raises an
+     * approval card on the PC; OFF is never held. @return the sentence to
+     * show under the switch.
+     */
+    suspend fun setWatchNotify(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setWatchNotify(on) }) {
+            is ApiResult.Ok -> {
+                // Only a real Done (not Waiting) means the PC actually
+                // changed it - an ON that is still waiting for its card
+                // must not flip the cache early.
+                if (r.value is com.jarvis.client.net.DesktopWrite.Outcome.Done) {
+                    settings.setWatchNotifications(on)
+                }
+                com.jarvis.client.net.WatchNotify.said(on, r.value)
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
     // ----------------------------------------------- automatic learning ----
     // docs/JARVIS-API.md section 19 (2026-09-24) - see
     // [com.jarvis.client.net.AutoLearn] and ui/screens/AutoLearnPlate.kt.

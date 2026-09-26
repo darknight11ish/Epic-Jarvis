@@ -547,6 +547,13 @@ fun BrainScreen(
             item(key = "compute") {
                 Probed("Compute", brain.compute, "GPU and VRAM plan", brain.computeRead, retry)
             }
+            // The smartwatch notification setting (WatchNotifyPlate.kt): off
+            // by default (every notification stays on this phone), on is
+            // one approval card. Android-only, so nothing like it is on the
+            // desktop (docs/ARCHITECTURE.md section 8).
+            item(key = "watch-notify") {
+                WatchNotifySection(canAct = canAct)
+            }
             // How much Jarvis remembers, and whether it is learning - the
             // desktop's Memory pane numbers, read-only (MemoryCountsPlate.kt).
             item(key = "memory-counts") {

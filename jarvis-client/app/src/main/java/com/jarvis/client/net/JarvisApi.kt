@@ -545,6 +545,19 @@ class JarvisApi(
     suspend fun autoFacts(before: Double? = null, limit: Int = AutoLearn.PAGE): ApiResult<JsonObject> =
         probeKeeping503(AutoLearn.listPath(before, limit))
 
+    // ------------------------------------------------- smartwatch notifications ----
+    // docs/JARVIS-API.md; see [WatchNotify] for the shapes and words.
+
+    /** `GET /api/notifications/watch`: `{"enabled", "waiting", "last", "why"}`. */
+    suspend fun watchNotifySettings(): ApiResult<JsonObject> = probe(WatchNotify.PATH)
+
+    /**
+     * The switch. ON answers 202 waiting while its approval card is up; OFF
+     * is immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setWatchNotify(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(WatchNotify.PATH, WatchNotify.enabledBody(on))
+
     /**
      * [probe], except that a 503 keeps its body: `ApiError.Server(503, body)`
      * instead of [ApiError.NotAvailable], so the PC's own `error` ("automatic
