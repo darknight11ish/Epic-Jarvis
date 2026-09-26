@@ -423,6 +423,14 @@
                 everything": delete them one at a time, or choose above how
                 long they are kept.
               </p>
+              <!-- Filters the list already loaded, by title (ease-of-use
+                   audit row 20; the owner's answer of 2026-09-27: "shown on
+                   screen only; nothing saved, nothing handed to the AI").
+                   Asks the PC nothing - the same shape as "What Jarvis knows
+                   about you"'s filter above. -->
+              <input class="field search history-filter" id="history-filter" type="search"
+                     placeholder="Search this list…" spellcheck="false" autocomplete="off"
+                     aria-label="Search your chat history" />
               <div id="history-list"></div>
             </div>
           </div>

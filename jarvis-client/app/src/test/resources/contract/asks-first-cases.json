@@ -621,6 +621,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let one action go ahead without asking you first"
+      },
+      {
+       "action": "enable_reading_tool",
+       "fixed": false,
+       "id": "enable_reading_tool",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer a reading tool to the AI model"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -687,6 +696,41 @@
     "create_joplin_note"
    ],
    "title": "What asks first",
+   "tools": {
+    "can_enable": true,
+    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "items": [
+     {
+      "id": "calendar_read",
+      "last": null,
+      "on": false,
+      "title": "Read your calendar",
+      "waiting": false
+     },
+     {
+      "id": "email_read",
+      "last": null,
+      "on": false,
+      "title": "Read your email",
+      "waiting": false
+     },
+     {
+      "id": "notes_search",
+      "last": null,
+      "on": false,
+      "title": "Search your notes",
+      "waiting": false
+     },
+     {
+      "id": "home_read",
+      "last": null,
+      "on": false,
+      "title": "Check your smart home",
+      "waiting": false
+     }
+    ],
+    "label": "Offer this to the AI model"
+   },
    "waiting": null
   },
   "pc_stricter_lights_on": {
@@ -1305,6 +1349,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let one action go ahead without asking you first"
+      },
+      {
+       "action": "enable_reading_tool",
+       "fixed": false,
+       "id": "enable_reading_tool",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer a reading tool to the AI model"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -1371,6 +1424,41 @@
     "create_joplin_note"
    ],
    "title": "What asks first",
+   "tools": {
+    "can_enable": true,
+    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "items": [
+     {
+      "id": "calendar_read",
+      "last": null,
+      "on": true,
+      "title": "Read your calendar",
+      "waiting": false
+     },
+     {
+      "id": "email_read",
+      "last": null,
+      "on": false,
+      "title": "Read your email",
+      "waiting": false
+     },
+     {
+      "id": "notes_search",
+      "last": null,
+      "on": false,
+      "title": "Search your notes",
+      "waiting": false
+     },
+     {
+      "id": "home_read",
+      "last": null,
+      "on": false,
+      "title": "Check your smart home",
+      "waiting": false
+     }
+    ],
+    "label": "Offer this to the AI model"
+   },
    "waiting": null
   },
   "phone_cards_waiting": {
@@ -1989,6 +2077,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let one action go ahead without asking you first"
+      },
+      {
+       "action": "enable_reading_tool",
+       "fixed": false,
+       "id": "enable_reading_tool",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer a reading tool to the AI model"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -2055,6 +2152,41 @@
     "create_joplin_note"
    ],
    "title": "What asks first",
+   "tools": {
+    "can_enable": false,
+    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "items": [
+     {
+      "id": "calendar_read",
+      "last": null,
+      "on": false,
+      "title": "Read your calendar",
+      "waiting": false
+     },
+     {
+      "id": "email_read",
+      "last": null,
+      "on": false,
+      "title": "Read your email",
+      "waiting": true
+     },
+     {
+      "id": "notes_search",
+      "last": null,
+      "on": false,
+      "title": "Search your notes",
+      "waiting": false
+     },
+     {
+      "id": "home_read",
+      "last": null,
+      "on": false,
+      "title": "Check your smart home",
+      "waiting": false
+     }
+    ],
+    "label": "Offer this to the AI model"
+   },
    "waiting": {
     "action": "calendar_read",
     "said": "Waiting for your yes on the approval card, and Windows Hello, on your PC.",
@@ -2682,6 +2814,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let one action go ahead without asking you first"
+      },
+      {
+       "action": "enable_reading_tool",
+       "fixed": false,
+       "id": "enable_reading_tool",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer a reading tool to the AI model"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -2748,6 +2889,41 @@
     "create_joplin_note"
    ],
    "title": "What asks first",
+   "tools": {
+    "can_enable": false,
+    "detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+    "items": [
+     {
+      "id": "calendar_read",
+      "last": null,
+      "on": false,
+      "title": "Read your calendar",
+      "waiting": false
+     },
+     {
+      "id": "email_read",
+      "last": null,
+      "on": false,
+      "title": "Read your email",
+      "waiting": false
+     },
+     {
+      "id": "notes_search",
+      "last": null,
+      "on": false,
+      "title": "Search your notes",
+      "waiting": false
+     },
+     {
+      "id": "home_read",
+      "last": null,
+      "on": false,
+      "title": "Check your smart home",
+      "waiting": false
+     }
+    ],
+    "label": "Offer this to the AI model"
+   },
    "waiting": null
   }
  },
@@ -2769,6 +2945,12 @@
   "append_logseq_journal",
   "create_joplin_note"
  ],
+ "tools_switchable": [
+  "calendar_read",
+  "email_read",
+  "notes_search",
+  "home_read"
+ ],
  "words": {
   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
   "lights_detail": "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis switches it without an approval card. Locks, doors, alarms, covers and garage doors always ask, each with a card of its own, and so does everything after Jarvis has read outside text in the chat. Turning this on shows you an approval card first; turning it off happens at once.",
@@ -2787,6 +2969,10 @@
   "says_search": "Asks only when something private could slip in",
   "switch_label": "Ask me first",
   "title": "What asks first",
+  "tools_detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
+  "tools_label": "Offer this to the AI model",
+  "tools_not_on_list": "Only reading your calendar, email, notes and home status can be offered to the AI model from an app. Every other tool changes only in your settings file (jarvis-framework.toml, [tools].enabled).",
+  "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes an approval card and Windows Hello.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
  }
 }

@@ -88,6 +88,20 @@ class ChatLogTest {
     }
 
     @Test
+    fun `the search box narrows the loaded list by title, case-insensitively, and asks nothing`() {
+        // Ease-of-use audit row 20; the owner's answer of 2026-09-27: "shown
+        // on screen only; nothing saved, nothing handed to the AI" - pure
+        // client-side filtering, the same shape as the desktop's.
+        val rows = ChatLog.page(obj(listBody)).conversations
+        assertEquals(2, rows.size)
+        assertEquals(listOf("Dentist on Tuesday"), ChatLog.filtered(rows, "dentist").map { it.title })
+        assertEquals(listOf("Dentist on Tuesday"), ChatLog.filtered(rows, "DENTIST").map { it.title })
+        assertEquals(rows, ChatLog.filtered(rows, ""))
+        assertEquals(rows, ChatLog.filtered(rows, "   "))
+        assertTrue(ChatLog.filtered(rows, "zzz-nothing").isEmpty())
+    }
+
+    @Test
     fun `nothing being kept is said plainly, in the PC's words`() {
         val s = ChatLog.status(
             obj("""{"enabled":true,"recording":false,"why_not":"windows credential manager could not be used","waiting":false}"""),

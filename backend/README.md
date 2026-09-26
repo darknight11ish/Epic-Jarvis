@@ -129,6 +129,7 @@ on a throwaway copy instead.
 | `games-temporary.patch` | `jarvis_hud.py` | **Games and role-play run in a temporary chat automatically** (the owner's decision, 2026-09-27; CLAUDE.md, `docs/OWNER-QUESTIONS-2026-09-27.md` Q19). No new route: `_temporary_chat(body)` now also returns true once the owner's own words, anywhere in the conversation, start a game or role-play (`jarvis_intake.game_or_roleplay`), and the two lines in the chat turn's `finally` block that used to read `body.get("temporary")` directly now go through that same function - so a detected game gets no recall, no "Remember:", no chat history and no learning, exactly like a manually-started temporary chat, with no card and no setting. Last in the list; its context is `temporary-chat.patch`'s `_temporary_chat()` function and the two `finally`-block lines. Needs `jarvis_intake.py` (already shipped for `memory-intake.patch`) - without it, or on any error, nothing is detected and chat works exactly as before this patch. See "Games and role-play", at the very end. |
 | `watch-notifications.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Smartwatch notifications, off by default** (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). Adds `GET`/`POST /api/notifications/watch` - ON is one approval card (`watch_notifications_enable`), OFF is instant - wrapped round the running server's handler at start-up, like `documents.patch`, rather than an inline route; `jarvis_gate.py` gains the action on `_NO_RULE_FROM_DENIAL` and `_RISK` (a denial of this switch's card proposes no standing rule, and the notice says it stays on this PC). Android's own, already-built-in notification bridging does the actual copying to a paired watch; there is no Jarvis watch app. Last in the list; its `jarvis_hud.py` context is `documents.patch`'s banner lines, and its `jarvis_gate.py` context is `asks-first.patch`'s `_NO_RULE_FROM_DENIAL` and `_RISK` additions. Needs `jarvis_watch_notify.py` - without it, or on any error, the banner says so and the route is not there. See "Smartwatch notifications", at the very end. |
 | `draft-email.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Email drafts, one approval card per draft** (the owner's decision, 2026-09-27). Adds `GET /api/email/drafting` (whether saving a draft is set up - the same shape as sending's Settings line, never the password), and in the gate the notice's words for `draft_email`, `draft_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Same shape as `email-send.patch`, right beside its own lines. Its context is `email-send.patch`'s three blocks; last in the list. Needs `jarvis_email_draft.py` - see "Email drafts", at the very end. |
+| `tools-enable.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Offering a reading tool to the AI model, from the PC** (the owner's answer, 2026-09-27). Adds `POST /api/asks_first/tools` - a DIFFERENT thing from `asks-first.patch`'s `/api/asks_first/tier`: whether a tool is offered to the model at all (`[tools].enabled`), never whether it asks first. ON is one approval card (`enable_reading_tool`) that needs Windows Hello, the same PC-only shape as `loosen_what_asks_first`; OFF is instant. `jarvis_gate.py` gains the action on `_NO_RULE_FROM_DENIAL` and `_RISK`, right beside `loosen_what_asks_first`'s own lines (a denial of this card proposes no standing rule either). Desktop only. Last in the list; its `jarvis_hud.py` context is `asks-first.patch`'s tier/lights route block, and its `jarvis_gate.py` context is `asks-first.patch`'s two additions. Needs `jarvis_asks_first.py` - already needed by `asks-first.patch`, so nothing new to copy in. See "Offering a reading tool to the AI model", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -10414,6 +10415,11 @@ The owner's four decisions of 2026-09-26, after the approvals audit
 stop asking. `docs/JARVIS-API.md` sections 21, 32 and 33 have the routes,
 the words and the known gaps.
 
+**A related but different setting was added 2026-09-27**: offering a
+reading tool to the AI model at all, rather than whether an offered tool
+asks first. See "Offering a reading tool to the AI model", at the very end
+of this file, and `docs/JARVIS-API.md` section 41.
+
 ## In plain words
 
 1. **Plain repeating reminders, alarms and the standby schedule need no
@@ -11804,3 +11810,125 @@ server on 127.0.0.1, written here with the standard library (LOGIN, LIST
 with and without a server-flagged Drafts mailbox, APPEND, a refused login,
 a dropped connection), proves what is saved and where without ever
 reaching a real account.
+
+# Offering a reading tool to the AI model: `jarvis_asks_first.py`, `tools-enable.patch` (2026-09-27)
+
+The owner's answer (`CLAUDE.md`, 2026-09-27, the answers to
+`docs/OWNER-QUESTIONS-2026-09-27.md`, after the ease-of-use audit, row 14):
+"Reading tools (calendar, email, notes, home status) can be switched on
+from the PC app, each with a card plus Windows Hello; other tools stay in
+the settings file." `docs/JARVIS-API.md` section 41 has the route and the
+words.
+
+## The real gap this closes
+
+`jarvis_agent.offered_tools()` only ever offers the model a tool named in
+`[tools].enabled` (`jarvis-framework.toml`). Before this, `calendar_read`,
+`email_read`, `notes_search` and `home_read` already shipped tier `"auto"`
+in `[autonomy.tiers]` (meaning, once offered, none of them would need a
+card to be USED), but they were never in `[tools].enabled` - so the only
+way to actually turn them on was to hand-edit the settings file. This is a
+DIFFERENT switch from `asks-first.patch`'s "Ask me first" (section above):
+that changes a tool's ask-TIER once it is offered; this changes whether it
+is offered AT ALL.
+
+## In plain words
+
+- **The same PC-only, Windows-Hello shape as loosening**
+  (`loosen_what_asks_first`, above): turning one of the four ON is ONE
+  approval card, action `enable_reading_tool`, approved on the PC only -
+  `jarvis_owner_check.PC_ONLY_ACTIONS` refuses its approval from any other
+  device, exactly like the loosening card. Turning it OFF is instant, from
+  either app: it only narrows what the model may be offered.
+- **Each of the four switches on its own.** The owner may want the
+  calendar offered without also handing over email, so this is four
+  separate switches, not one combined toggle - the same pattern "Ask me
+  first" already uses for its own four reads.
+- **Desktop only.** CLAUDE.md's standing rule against deep config editing
+  on the phone applies: choosing which tools the model may even be offered
+  is settings-file editing, not answering one card about one action. The
+  phone's own "What asks first" page is unaffected - it reads the same
+  `GET /api/asks_first`, and simply does not show the new `"tools"` key
+  that response now carries.
+- **Every other tool stays file-only, said plainly.** `jarvis_reach.py`'s
+  "What Jarvis can reach" already told the owner when a tool was off
+  because it was not in `[tools].enabled`; its wording now also names which
+  four can be switched on from Settings, and says outright, for every
+  other tool, "This one is file-only - it cannot be switched on from
+  either app."
+
+## What changes in your settings file
+
+Only the one `enabled = [...]` line under `[tools]` - one tool name added
+or removed, every other entry and every other byte kept (comments,
+spacing, CRLF, a byte-order mark), the same write discipline `set_tier`
+already uses for `[autonomy.tiers]` (`jarvis_asks_first.rewrite_tools`,
+`set_tools_enabled`). A file whose `[tools]` table is written some other
+way (no header, two headers, the array split across lines) is refused with
+a sentence saying to edit it by hand.
+
+The card that offers one is named `enable_reading_tool`. Your file does
+not need a line for it under `[autonomy.tiers]` (a missing line means
+"ask", which is what it must be); this repository's copy has
+`enable_reading_tool = "ask"`, right beside `loosen_what_asks_first`.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Apply the new patch** (the same line as always, from the folder this
+repository is cloned into - no new module to copy, `jarvis_asks_first.py`
+is already there from `asks-first.patch`):
+
+```
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Restart the backend, then open the desktop's Settings, "What asks
+first".** The four reading tools now show a second switch, "Offer this to
+the AI model", beside "Ask me first".
+
+To see the page's answer on the PC (one line, in the backend folder; 4719
+is the usual port):
+
+```
+$t = (py -3 jarvis_token_store.py show).Trim(); (Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:4719/api/asks_first -Headers @{"X-Jarvis-Token"=$t; "X-Jarvis-Client"="hud"}).Content
+```
+
+## What the code does
+
+- `jarvis_asks_first.py` - `TOOLS_SWITCHABLE`, `ENABLE_TOOL_ACTION`,
+  `tools_enabled_set`, `tool_enable_card`, the one-line array writer
+  (`rewrite_tools`, `set_tools_enabled` - parse, change one entry, parse
+  again and compare, write to a temporary file, move it into place),
+  `request_tool_enable` (PC-only, one card, Windows Hello for ON; instant
+  for OFF) and `tools_status` (the switch's state for the page).
+- `tools-enable.patch` - the one route in `jarvis_hud.py`; in
+  `jarvis_gate.py` the risk words for `enable_reading_tool` and its entry
+  on `_NO_RULE_FROM_DENIAL`, right beside `loosen_what_asks_first`'s own
+  lines.
+- `jarvis_owner_check.py` - `PC_ONLY_ACTIONS` gains `enable_reading_tool`:
+  its card is approved on this PC only, and always with Windows Hello,
+  even though it is not "risky"; approval from the phone or any other
+  device is refused.
+- `jarvis_reach.py` - `_enable_line`/`_off_line` now name the new switch
+  for the four reading tools, and say "file-only" plainly for every other
+  tool (`_tool_switchable`).
+- `jarvis_card_words.py` - a plain title for `enable_reading_tool`.
+
+## Test it
+
+```
+python3 backend/test_asks_first.py
+```
+
+(in the dev container; on the PC, `py -3 backend\test_asks_first.py` from
+the repository folder). Section 9 of that file's own docstring covers this
+feature; `t_the_tools_enable_patch` proves the patch applies to what
+`asks-first.patch` wrote, and reverses cleanly.
+
+## Not checked, said plainly
+
+- **Nothing here has run on Windows.** The card's Windows Hello prompt is
+  the same approval-gap machinery the loosening card already relies on,
+  itself untested on Windows.
+- **The phone code was re-read by hand, not compiled here.** There is no
+  local Android build in this container; CI is the proof.

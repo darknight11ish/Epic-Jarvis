@@ -971,6 +971,23 @@ reads from on its own. Three things about it are invariants:
 - **A temporary chat is never kept** (2026-09-25): nothing of it reaches
   `chat-history.db`, whether history is on or off (§5, "A temporary chat
   uses and makes no memory").
+- **Searching your own old chats is a client-side filter, not a search
+  feature.** 2026-09-26 said plainly that "searching past chat words waits"
+  - that decision was about a NEW capability: a backend index or route over
+    `chat-history.db`'s words, callable from a chat turn or the model, which
+    would be a new way memory-adjacent text reaches the model without the
+    review queue's checks. The owner's answer of 2026-09-27, "A search box
+    in History for the owner's own old chats is allowed now", is a narrower,
+    already-approved carve-out of that rule, not a repeal of it: a plain
+    text box over the History list an app has ALREADY LOADED from
+    `GET /api/history`, filtering it in the app - `ChatLog.filtered()` on
+    the phone, `paintHistoryList`'s `needle` on the desktop - by
+    conversation title only. No new route, no new index, nothing written to
+    disk, and the search words never reach a model or a tool. The waiting
+    rule still stands for anything else: a backend route that searches
+    `chat-history.db`'s words, or a chat turn that can ask Jarvis to search
+    its own past conversations, both still wait on ideas 1-4 and the memory
+    self-test, unbuilt.
 
 ---
 
@@ -1254,6 +1271,7 @@ backend routes, in both directions; the rest are listed here only.
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | The voice upgrades' bake-off (`backend/jarvis_bakeoff.py`, 2026-09-26) | Written with it. It is a program the owner runs on the PC, not an app screen: it measures the PC's own voice engines, the PC's graphics-card memory and the room through the PC's microphone. Its verdict decides a later change that reaches both apps (the phone's wake-word file, the engine name both apps show). |
 | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
+| Offering a reading tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello; other tools stay in the settings file") | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page is unaffected - it reads the same route, but simply does not show the new "tools" key GET /api/asks_first now carries (`jarvis_reach.py`'s "What Jarvis can reach" already told the owner a tool was "off" for this reason; its wording now also says which four can be switched on, and that every other tool is file-only). `deliberate` in `tools/check_parity.py`. |
 | "Show me where" under "Jarvis isn't running on your PC." (ease-of-use audit 2026-09-27, #2) | Written with the change. It opens the desktop's own Settings at "Starting Jarvis for you", with More options open. The phone has no Settings for the PC to open: it shows the same words (the shared plain-errors list), which name that place, and its "Try again". |
 | A filter box on "What Jarvis knows about you" (ease-of-use audit #7) | That list - every fact, forgotten ones too - is on the desktop only (the Forget and Erase rows above), so its filter is too. |
 | "I lost my phone. What do I do?" in the FAQ (ease-of-use audit #8h) | Everything it says is done on the PC and in Tailscale's or NordVPN's own pages, and the phone it is about is the one that is gone. docs/INSTALL.md, "If you lose your phone", has the steps. "How do I update Jarvis?" is in both FAQs. |

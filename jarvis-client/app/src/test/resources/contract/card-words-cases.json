@@ -115,6 +115,10 @@
       "title": "Jarvis wants to read your email"
     },
     {
+      "action": "enable_reading_tool",
+      "title": "Jarvis wants to offer a reading tool to the AI model"
+    },
+    {
       "action": "execute_pending_actions",
       "title": "Jarvis wants to run actions it has lined up"
     },

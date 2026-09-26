@@ -2725,8 +2725,22 @@ function paintHistoryList() {
       : "No conversations kept. Chat history is off."));
     return;
   }
+  // The search box (ease-of-use audit row 20; the owner's answer of
+  // 2026-09-27: "shown on screen only; nothing saved, nothing handed to the
+  // AI"): the list already loaded, by its title only - nothing is asked of
+  // the PC and nothing reaches the model. The same shape as "What Jarvis
+  // knows about you"'s filter (renderFacts).
+  const needle = ($("history-filter")?.value || "").trim().toLowerCase();
+  const shown = needle
+    ? chats.rows.filter((c) => String(c.title || "").toLowerCase().includes(needle))
+    : chats.rows;
+  if (needle && !shown.length) {
+    box.append(el("p", "empty", chats.more
+      ? "No loaded conversations match that search. \"Load older\" may bring in more to search."
+      : "No conversations match that search."));
+  }
   const list = el("div", "rows history-rows");
-  for (const c of chats.rows) {
+  for (const c of shown) {
     const open = chats.openId === c.id;
     const device = deviceTag(c.device);
     const item = row({
@@ -5552,6 +5566,7 @@ dom.graphRefit.addEventListener("click", () => {
 dom.inspectorClose.addEventListener("click", () => select(null));
 
 dom.memoryFactsFilter?.addEventListener("input", () => renderFacts());
+$("history-filter")?.addEventListener("input", () => paintHistoryList());
 
 dom.graphSearch.addEventListener("input", () => {
   const q = dom.graphSearch.value.trim().toLowerCase();

@@ -2877,6 +2877,23 @@ other sections. (The HUD page sends `conversation_id`, `device: "hud"` and
   typed or voice, the provenance is shown quietly ("shared", "pasted",
   "from clipboard").
 - Deleting one, with a confirm step. No delete-all.
+- **A search box over the list, added 2026-09-27** (ease-of-use audit row
+  20; the owner's answer to `docs/OWNER-QUESTIONS-2026-09-27.md`, question
+  4: "A search box in History for the owner's own old chats is allowed now
+  - shown on screen only; nothing saved, nothing handed to the AI"). Pure
+  client-side filtering over the list the app has ALREADY loaded from
+  `GET /api/history` - by conversation title only, case-insensitively. No
+  new route, no new backend capability, nothing written to disk, and the
+  search words never reach a model or a tool: `jarvis-desktop/src/
+  brain.js`'s `paintHistoryList` reads a `#history-filter` box the same way
+  its "What Jarvis knows about you" filter does (ease-of-use audit #7);
+  the phone's `ChatLog.filtered()` does the same over `HistoryScreen.kt`'s
+  search box. "Load older" still pages the full, unfiltered list; the
+  filter narrows only what is drawn from what has already loaded. See
+  `docs/ARCHITECTURE.md` §5, "Searching your own old chats is a
+  client-side filter, not a search feature", for why this is narrower than
+  the 2026-09-26 decision that a search over `chat-history.db`'s words
+  waits.
 - On a stale link (rule 4) both apps hold turning history ON, deleting a
   conversation and changing how long they are kept - each cannot be taken
   back or raises a card, and acts on a list that may be out of date, the
@@ -6490,3 +6507,104 @@ to configure for an account that can already read its mail.
 - A program already on the PC could approve a card with the pairing token,
   without Windows Hello - the known limit in `docs/ARCHITECTURE.md` section
   3, which applies to a draft's card as to every other.
+
+## 41. Offering a reading tool to the AI model, from the PC (added 2026-09-27)
+
+The owner's answer (`CLAUDE.md`, 2026-09-27, the answers to
+`docs/OWNER-QUESTIONS-2026-09-27.md`): "Reading tools (calendar, email,
+notes, home status) can be switched on from the PC app, each with a card
+plus Windows Hello; other tools stay in the settings file." This is a
+DIFFERENT setting from §32's "Ask me first": that changes whether an
+offered tool asks first ([autonomy.tiers]); this changes whether the AI
+model is offered the tool AT ALL (`[tools].enabled` in
+`jarvis-framework.toml` - `jarvis_agent.offered_tools()` only ever offers a
+tool named there). Before this, the only way to add `calendar_read`,
+`email_read`, `notes_search` or `home_read` to `[tools].enabled` was to
+hand-edit the settings file; every other tool still is.
+
+Built into `backend/jarvis_asks_first.py` (shipped whole, no new module),
+the same PC-only, Windows-Hello shape as §32.3's loosening card:
+`jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any
+device but the PC. **Desktop only** (`CLAUDE.md`: no deep config editing on
+the phone) - see `docs/ARCHITECTURE.md` section 8.
+
+### 41.1 Route
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** for a tool off the four; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (41.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app (Rust still refuses it on the phone - no screen calls it there), never held: it only narrows what the model may be offered. |
+
+Its state rides on `GET /api/asks_first` (§32.2), which now also carries:
+
+```
+"tools": {"label": "Offer this to the AI model",
+          "detail": <the sentence above the switches>,
+          "can_enable": bool,        true only for a request from this PC
+          "items": [{"id": "calendar_read", "title": "Read your calendar",
+                     "on": bool, "waiting": bool,
+                     "last": {"outcome", "tool", "message", "why", "at"}|null}, ...]}
+```
+
+`items` always lists exactly the four (`jarvis_asks_first.TOOLS_SWITCHABLE`),
+in that order, whatever `here` is - the desktop greys the switch when
+`can_enable` is false or another one's card is waiting; OFF is never held.
+The phone reads the same `GET /api/asks_first` for §32's page and simply
+does not read this key.
+
+### 41.2 The card
+
+```
+Offer "read your calendar" to the AI model?
+
+From now on the AI model may use this tool when it decides to - it can read
+your calendar. This changes one line of your settings file on this PC
+(jarvis-framework.toml): "calendar_read" is added to [tools].enabled.
+Nothing else in it changes.
+
+This is separate from whether it asks you first: that is set above, in "Ask
+me first", and is unchanged by this card.
+
+Approving it needs Windows Hello on this PC. You can turn it off again at
+any time from either app, and that is instant.
+
+If you did not just do this, say no.
+
+If you say no: nothing changes - the AI model is still not offered this
+tool.
+```
+
+Its title: "Jarvis wants to offer a reading tool to the AI model"
+(`jarvis_card_words.TITLES["enable_reading_tool"]`). Tier `ask` in the
+shipped `jarvis-framework.toml`, in `jarvis_asks_first.HARD_LIMITS` and
+`MUST_ASK` like `loosen_what_asks_first` (§32.3) - it always asks, and it is
+never itself on the switchable list.
+
+### 41.3 Writing `[tools].enabled`
+
+`jarvis_asks_first.rewrite_tools()`/`set_tools_enabled()`: only the single
+`enabled = [...]` line under `[tools]` changes - one tool added or removed
+from the array, every other entry and every other byte of the file kept
+(comments, spacing, CRLF, a byte-order mark). The new text is parsed and
+must match the old settings with only that one entry changed, or nothing is
+written; an unusual file (no `[tools]` header, or two of them, or the array
+split across several lines) is refused with a sentence saying to edit it by
+hand - the same discipline as `set_tier` (§32.4).
+
+### 41.4 What every other tool's row says
+
+`backend/jarvis_reach.py`'s "What Jarvis can reach" (§24) already told the
+owner when a tool was off because it was not in `[tools].enabled`; its
+wording (`_enable_line`, `_off_line`) now also says which tools can be
+switched on from Settings, "What asks first", and says plainly - "This one
+is file-only - it cannot be switched on from either app." - for every tool
+that is not one of the four.
+
+### 41.5 Known gaps, said plainly
+
+- **Not run on Windows.** The Windows Hello prompt for this card is the
+  same approval-gap machinery §32.5 already says is untested on Windows.
+- **A program already on the PC** that holds the token can turn a tool OFF
+  (harmless) and can raise the ON card; approving it still needs Windows
+  Hello at the backend. Step 1's known limits (`docs/ARCHITECTURE.md`
+  section 3) apply.

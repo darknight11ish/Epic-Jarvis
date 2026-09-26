@@ -31,7 +31,7 @@
     {
      "asks": "-",
      "id": "calendar",
-     "line": "Set up on this PC, but the AI model is not offered it: \"calendar_read\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Set up on this PC, but the AI model is not offered it yet: switch it on in Settings, \"What asks first\" (one approval card and Windows Hello), or add \"calendar_read\" to [tools].enabled in jarvis-framework.toml by hand.",
      "name": "Calendar (reading)",
      "on": false,
      "state": "off",
@@ -51,7 +51,7 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Set up on this PC, but the AI model is not offered it: \"send_email\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Set up on this PC, but the AI model is not offered it: \"send_email\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Email (sending)",
      "on": false,
      "state": "off",
@@ -101,7 +101,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -121,7 +121,7 @@
     {
      "asks": "-",
      "id": "computer",
-     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Computer control",
      "on": false,
      "state": "off",
@@ -141,7 +141,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -151,7 +151,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",
@@ -305,7 +305,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -325,7 +325,7 @@
     {
      "asks": "-",
      "id": "computer",
-     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Computer control",
      "on": false,
      "state": "off",
@@ -335,7 +335,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Browser control",
      "on": false,
      "state": "off",
@@ -345,7 +345,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -355,7 +355,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",
@@ -455,7 +455,7 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Set up on this PC, but the AI model is not offered it: \"send_email\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Set up on this PC, but the AI model is not offered it: \"send_email\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Email (sending)",
      "on": false,
      "state": "off",
@@ -505,7 +505,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -535,7 +535,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Browser control",
      "on": false,
      "state": "off",
@@ -545,7 +545,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -555,7 +555,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",
@@ -941,7 +941,7 @@
     {
      "asks": "-",
      "id": "web_search",
-     "line": "Off: \"web_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"web_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Web search",
      "on": false,
      "state": "off",
@@ -1021,7 +1021,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -1041,7 +1041,7 @@
     {
      "asks": "-",
      "id": "computer",
-     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Computer control",
      "on": false,
      "state": "off",
@@ -1051,7 +1051,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Browser control",
      "on": false,
      "state": "off",
@@ -1061,7 +1061,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -1071,7 +1071,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml.",
+     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",

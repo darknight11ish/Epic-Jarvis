@@ -21,6 +21,15 @@
 //!   {"enabled"}`: "Lights, plugs and fans without a card". OFF at once,
 //!   never held; ON raises ONE approval card on the PC, so it is held on a
 //!   stale link - the shape of every setting that trusts more.
+//! * [`set_tool_enabled`] - `POST /api/asks_first/tools {"tool", "enabled"}`
+//!   (the owner's answer of 2026-09-27): whether the AI model is offered
+//!   ONE of the four reading tools ([`TOOLS_SWITCHABLE`]) AT ALL - a
+//!   DIFFERENT thing from [`set_asks_first`], which is whether an offered
+//!   tool asks first. `enabled: true` is the PC only, one approval card
+//!   that needs Windows Hello, so it is held on a stale link; `enabled:
+//!   false` is at once, never held, from either app. A tool off the list is
+//!   refused HERE too, before anything is sent; the PC refuses it as well.
+//!   Desktop only (CLAUDE.md: no deep config editing on the phone).
 
 use std::time::Duration;
 
@@ -33,6 +42,7 @@ use crate::commands::{
 pub(crate) const ASKS_FIRST_PATH: &str = "/api/asks_first";
 const TIER_PATH: &str = "/api/asks_first/tier";
 const LIGHTS_PATH: &str = "/api/asks_first/lights";
+const TOOLS_PATH: &str = "/api/asks_first/tools";
 
 /// The actions the apps may switch - `jarvis_asks_first.SWITCHABLE`, word for
 /// word (tests/fixtures/asks-first-cases.json checks it).
@@ -46,6 +56,12 @@ pub(crate) const SWITCHABLE: [&str; 7] = [
     "create_joplin_note",
 ];
 
+/// The four reading tools that may be OFFERED to the AI model at all from
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. A
+/// DIFFERENT list from [`SWITCHABLE`], and desktop only.
+pub(crate) const TOOLS_SWITCHABLE: [&str; 4] =
+    ["calendar_read", "email_read", "notes_search", "home_read"];
+
 /// What a backend without `jarvis_asks_first.py` is told. The phone says
 /// the same (`AsksFirst.MISSING`), and so does the PC.
 pub(crate) const ASKS_FIRST_MISSING: &str = "Your PC's Jarvis cannot show what asks first yet - \
@@ -55,6 +71,12 @@ pub(crate) const ASKS_FIRST_MISSING: &str = "Your PC's Jarvis cannot show what a
 pub(crate) const NOT_ON_LIST: &str = "Only reading your calendar, email, notes and home \
      status, and adding to your notes, can be changed from an app. Everything else changes \
      only in your settings file (jarvis-framework.toml), and some things always ask.";
+
+/// A tool off [`TOOLS_SWITCHABLE`] - `jarvis_asks_first.TOOLS_NOT_ON_LIST`,
+/// word for word.
+pub(crate) const TOOLS_NOT_ON_LIST: &str = "Only reading your calendar, email, notes and home \
+     status can be offered to the AI model from an app. Every other tool changes only in your \
+     settings file (jarvis-framework.toml, [tools].enabled).";
 
 const STALE: &str =
     "The connection to Jarvis is catching up, so nothing can be sent until it does.";
@@ -95,6 +117,15 @@ pub(crate) fn tier_body(action: &str, ask: bool) -> Result<serde_json::Value, St
         return Err(NOT_ON_LIST.to_string());
     }
     Ok(serde_json::json!({ "action": action, "ask": ask }))
+}
+
+/// The body of one "offer this to the AI model" switch, or why not: only a
+/// tool on [`TOOLS_SWITCHABLE`].
+pub(crate) fn tool_body(tool: &str, enabled: bool) -> Result<serde_json::Value, String> {
+    if !TOOLS_SWITCHABLE.contains(&tool) {
+        return Err(TOOLS_NOT_ON_LIST.to_string());
+    }
+    Ok(serde_json::json!({ "tool": tool, "enabled": enabled }))
 }
 
 /// Whether a change is held while the event stream is stale: loosening
@@ -186,11 +217,29 @@ pub async fn set_lights_without_card(
     post(&app, LIGHTS_PATH, serde_json::json!({ "enabled": enabled })).await
 }
 
+/// Offer ONE reading tool to the AI model at all, or stop offering it - a
+/// DIFFERENT thing from [`set_asks_first`] (whether the AI model is offered
+/// the tool at all, not whether it asks first once offered). `enabled: true`
+/// raises ONE approval card that needs Windows Hello on the PC, so it is
+/// held on a stale link; `enabled: false` is at once, never held.
+#[tauri::command]
+pub async fn set_tool_enabled(
+    app: AppHandle,
+    tool: String,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    let body = tool_body(&tool, enabled)?;
+    if held_on_stale(enabled) && stale(&app) {
+        return Err(STALE.to_string());
+    }
+    post(&app, TOOLS_PATH, body).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        asks_first_answer, change_answer, held_on_stale, tier_body, ASKS_FIRST_MISSING,
-        NOT_ON_LIST, SWITCHABLE,
+        asks_first_answer, change_answer, held_on_stale, tier_body, tool_body, ASKS_FIRST_MISSING,
+        NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST, TOOLS_SWITCHABLE,
     };
 
     /// The real answers, made by `tools/gen_asks_first_cases.py`.
@@ -211,11 +260,35 @@ mod tests {
             .map(|x| x.as_str().unwrap())
             .collect();
         assert_eq!(list, SWITCHABLE.to_vec());
+        let tools_list: Vec<&str> = doc["tools_switchable"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap())
+            .collect();
+        assert_eq!(tools_list, TOOLS_SWITCHABLE.to_vec());
         assert_eq!(
             doc["words"]["missing"].as_str().unwrap(),
             ASKS_FIRST_MISSING
         );
         assert_eq!(doc["words"]["not_on_list"].as_str().unwrap(), NOT_ON_LIST);
+        assert_eq!(
+            doc["words"]["tools_not_on_list"].as_str().unwrap(),
+            TOOLS_NOT_ON_LIST
+        );
+    }
+
+    #[test]
+    fn only_the_four_reading_tools_can_be_offered_and_only_on_is_held() {
+        for t in TOOLS_SWITCHABLE {
+            assert!(tool_body(t, false).is_ok());
+            assert!(tool_body(t, true).is_ok());
+        }
+        for t in ["send_email", "home_control", "browser_control", ""] {
+            assert_eq!(tool_body(t, false).unwrap_err(), TOOLS_NOT_ON_LIST);
+        }
+        assert!(held_on_stale(true));
+        assert!(!held_on_stale(false));
     }
 
     #[test]

@@ -102,6 +102,7 @@ TITLES = {
     # --- its own settings and code
     "change_own_config": "change one of its settings",
     "loosen_what_asks_first": "let one action go ahead without asking you first",
+    "enable_reading_tool": "offer a reading tool to the AI model",
     "modify_own_code": "change its own code",
     "power_manage": "change its power mode (Active, Quiet or Standby)",
     "schedule_repeat": "set up something that repeats",

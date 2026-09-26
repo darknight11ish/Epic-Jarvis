@@ -30,6 +30,9 @@ import {
   STALE,
   SWITCH_LABEL,
   switchView,
+  TOOLS_LABEL,
+  TOOLS_SWITCHABLE,
+  toolSwitchView,
 } from "./asks-first.js";
 
 const TAURI = globalThis.__TAURI__;
@@ -98,6 +101,15 @@ function paintRow(row) {
     li.append(toggle(`af-${row.action}`, SWITCH_LABEL, "", sw.checked, busy || sw.disabled,
       (want, box) => change(row, want, box)));
     for (const line of sw.lines) li.append(node("span", "sc-gpu-role", line));
+  }
+  if (TOOLS_SWITCHABLE.includes(row.action)) {
+    const item = view.tools.items.find((i) => i.id === row.action);
+    const tv = toolSwitchView(item, view.tools, live());
+    if (tv) {
+      li.append(toggle(`af-tool-${row.action}`, TOOLS_LABEL, "", tv.checked, busy || tv.disabled,
+        (want, box) => changeTool(row.action, want, box)));
+      for (const line of tv.lines) li.append(node("span", "sc-gpu-role", line));
+    }
   }
   if (row.lights) {
     const lv = lightsView(view.lights, live());
@@ -181,6 +193,32 @@ async function changeLights(on, box) {
   say(on ? "Asking…" : "Turning it off…");
   try {
     const out = await TAURI.core.invoke("set_lights_without_card", { enabled: on });
+    const words = String((out && (out.message || out.error)) || "Done.");
+    say(words, out && out.ok === false ? "bad" : "ok");
+    announce(words);
+  } catch (error) {
+    say(problemWords(error), "bad");
+  } finally {
+    busy = false;
+  }
+  await load();
+}
+
+/**
+ * "Offer this to the AI model", on the four reading tools only: ON one card
+ * (held on a stale link, Windows Hello on the PC), OFF at once.
+ */
+async function changeTool(tool, enabled, box) {
+  if (busy) return;
+  if (enabled && !live()) {
+    box.checked = false;
+    say(STALE, "bad");
+    return;
+  }
+  busy = true;
+  say(enabled ? "Asking…" : "Turning it off…");
+  try {
+    const out = await TAURI.core.invoke("set_tool_enabled", { tool, enabled });
     const words = String((out && (out.message || out.error)) || "Done.");
     say(words, out && out.ok === false ? "bad" : "ok");
     announce(words);
