@@ -149,27 +149,48 @@ def _read_jsonl(path: Path) -> list:
             if line.strip()]
 
 
-def _put_golden(st, facts: list) -> dict:
-    """Add the made-up person's facts, then give each the dates the file
-    says - when Jarvis was told, and for a replaced fact when it stopped
-    being true and what replaced it. Straight into the scratch store's own
-    table: this is the ONLY way to have facts that were told last year."""
+class _Clock:
+    """The real `time` module, except that time() says `now` when it is set.
+    Put in place of jarvis_memory's `time` while the made-up person's facts
+    are added, so each one is added ON THE DAY it was told - through the
+    real add(), the way a chat turn adds it."""
+
+    def __init__(self, real):
+        self._real = real
+        self.now = None
+
+    def time(self):
+        return self._real.time() if self.now is None else self.now
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+def _put_golden(M, st, facts: list) -> dict:
+    """Add the made-up person's facts, oldest told first, each through the
+    real MemoryStore.add() on the day the file says it was told - and a
+    replacement with supersedes= the fact it replaced, as accepting a
+    correction card does. So what add() does with the words (from memory
+    idea 4 on: a "true from" date the words give, and older news never
+    replacing newer) is what is measured, not a copy of it here.
+
+    Only jarvis_memory's own clock is moved, and only while adding: search
+    and recall below run on the real one. The golden file's "retired" date
+    is the day the replacement was told (test_memory_recall checks that),
+    so a store without idea 4 gets exactly the dates the self-test always
+    gave it."""
     ids = {}
-    for f in facts:
-        ids[f["id"]] = st.add(f["text"], source="eval")
-    c = st._connect()
+    replaced = {f["replaced_by"]: f["id"] for f in facts if f.get("replaced_by")}
+    clock = _Clock(M.time)
+    M.time = clock
     try:
-        for f in facts:
-            told = _day(f["told"])
-            c.execute("UPDATE facts SET created=?, valid_from=? WHERE id=?",
-                      (told, told, ids[f["id"]]))
-        for f in facts:
-            if f.get("retired"):
-                when = _day(f["retired"])
-                c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=? WHERE id=?",
-                          (when, when, ids[f["replaced_by"]], ids[f["id"]]))
+        for f in sorted(facts, key=lambda f: (f["told"], f["id"])):
+            clock.now = _day(f["told"])
+            old = replaced.get(f["id"])
+            ids[f["id"]] = st.add(f["text"], source="eval",
+                                  supersedes=ids.get(old) if old else None)
     finally:
-        c.close()
+        M.time = clock._real
     return ids
 
 
@@ -348,7 +369,7 @@ def _score(M, P, st, qs: list, gid: dict, now: float) -> dict:
     rows = []
     ent = _entity_search(st)
     for q in qs:
-        if q["type"] == "past":
+        if q["type"] in ("past", "time"):
             res = P.recall(st, q["q"], k=K, now=now)
         elif q["type"] == "belief":
             res = st.search(q["q"], k=K, known_at=_day(q["known_at"]))
@@ -367,6 +388,8 @@ def _score(M, P, st, qs: list, gid: dict, now: float) -> dict:
             "rr": 0.0 if first is None else 1.0 / (first + 1),
             "ndcg": ndcg(got, ans, K) if ans else 0.0,
             "stale": any(g in set(q.get("stale", [])) for g in got),
+            # "multi": every fact the answer needs is among the five.
+            "all5": bool(ans) and ans <= set(got),
             "labelled": q["type"] != "past" or any(
                 r.get("past") and "no longer true since" in r.get("text", "") for r in res),
             "chars": sum(len(r.get("text", "")) for r in res),
@@ -381,6 +404,8 @@ def _summary(rows: dict, split: str = None) -> dict:
     past = [r for r in rs if r["type"] == "past"]
     bel = [r for r in rs if r["type"] == "belief" and r["answerable"]]
     bel_none = [r for r in rs if r["type"] == "belief" and not r["answerable"]]
+    multi = [r for r in rs if r["type"] == "multi"]
+    tq = [r for r in rs if r["type"] == "time"]
     n = len(cur) or 1
 
     def pct(x, d):
@@ -409,6 +434,14 @@ def _summary(rows: dict, split: str = None) -> dict:
         "people_found": sum(r["hit5"] for r in cur if r["type"] in ("person", "alias")),
         "alias_questions": len([r for r in cur if r["type"] == "alias"]),
         "alias_found": sum(r["hit5"] for r in cur if r["type"] == "alias"),
+        # The bigger self-test (memory idea 2, 2026-09-26). Counted on their
+        # own lines, so every number above stays comparable with older runs.
+        "multi_questions": len(multi),
+        "multi_all_found": sum(r["all5"] for r in multi),
+        "multi_any_found": sum(r["hit5"] for r in multi),
+        "time_questions": len(tq),
+        "time_found": sum(r["hit5"] for r in tq),
+        "time_wrong_version": sum(r["stale"] for r in tq),
     }
 
 
@@ -460,7 +493,8 @@ def _db_bytes(path: Path) -> int:
 
 # ------------------------------------------------------------ the run --
 
-def run(sizes: list, words_only: bool, scratch: Path) -> dict:
+def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
+        ollama="http://127.0.0.1:11434") -> dict:
     M, P = _load_memory(scratch)
     facts = _read_jsonl(EVAL / "golden_facts.jsonl")
     qs = _read_jsonl(EVAL / "golden_questions.jsonl")
@@ -485,7 +519,7 @@ def run(sizes: list, words_only: bool, scratch: Path) -> dict:
         out["semantic"] = bool(stat["semantic"])
         out["vector_search"] = bool(stat["vector_search"])
         out["memory_module"] = str(Path(M.__file__).resolve())
-        ids = _put_golden(st, facts)
+        ids = _put_golden(M, st, facts)
         gid = {v: k for k, v in ids.items()}
         stream = filler(kind)
         have = 0
@@ -557,6 +591,13 @@ def run(sizes: list, words_only: bool, scratch: Path) -> dict:
     out["word_floor_configured"] = configured_floor
     out["max_distance_configured"] = configured_distance
     out["word_floor_choice"] = choose_floor(out["floor_sweep"])
+    # The learner (memory idea 2): its own scratch store, in the same
+    # temporary folder. eval_learner.py says what it checks.
+    try:
+        import eval_learner
+        out["learner"] = eval_learner.run(M, scratch, model=learner_model, ollama=ollama)
+    except Exception as exc:
+        out["learner"] = {"available": False, "why": f"{type(exc).__name__}: {exc}"}
     return out
 
 
@@ -661,6 +702,33 @@ def markdown(res: dict) -> str:
                               for lv in ent_rows)]
     elif res.get("entities_available") is False:
         lines += ["", "The entity layer: not measured - this jarvis_memory.py does not have it."]
+    big = [lv for lv in res["levels"] if lv["after"].get("multi_questions") is not None]
+    if big:
+        lines += [
+            "",
+            "**The bigger self-test** (memory idea 2), as a chat turn recalls (the word "
+            "floor on, and the entity layer when this memory has it). Two facts = a "
+            "question that needs two or three facts; all of them must be among the five. "
+            "Time = \"what phone did I have in June?\": the fact true THEN is among the "
+            "five, and wrong version = a fact that was NOT true then came back as if it "
+            "were.",
+            "",
+            "| Filler | Facts | Two facts: all found | ... at least one | Time: found "
+            "| Time: wrong version | Don't know: facts per question | Don't know: none "
+            "returned |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for lv in big:
+            a = lv.get("entities") or lv["after"]
+            lines.append(
+                f"| {lv['filler'].replace('_', '-')} | {lv['facts']:,} "
+                f"| {a['multi_all_found']}/{a['multi_questions']} "
+                f"| {a['multi_any_found']}/{a['multi_questions']} "
+                f"| {a['time_found']}/{a['time_questions']} | {a['time_wrong_version']} "
+                f"| {a['dont_know_facts_avg']} | {a['dont_know_none_pct']}% |")
+    if "learner" in res:
+        import eval_learner
+        lines += eval_learner.markdown(res["learner"])
     ch = res["word_floor_choice"]
     lines += [
         "",
@@ -719,6 +787,13 @@ def main(argv=None) -> int:
                     help="folder for the two result files (default: jarvis-memory-eval "
                          "in your home folder)")
     ap.add_argument("--keep", action="store_true", help="keep the scratch store")
+    ap.add_argument("--learner-model", default=None,
+                    help="OPTIONAL: also run the real learner on made-up conversations "
+                         "with this local Ollama model (needs JARVIS_BACKEND pointing at "
+                         "the backend folder, for jarvis_extract.py). Off by default: the "
+                         "default run needs no model")
+    ap.add_argument("--ollama", default="http://127.0.0.1:11434",
+                    help="this PC's Ollama, for --learner-model (loopback only)")
     a = ap.parse_args(argv)
     sizes = sorted({int(x) for x in a.sizes.split(",") if x.strip()})
     scratch = Path(tempfile.mkdtemp(prefix="jarvis-memory-eval-"))
@@ -727,7 +802,8 @@ def main(argv=None) -> int:
     print(f"scratch store: {scratch} (deleted at the end; your memory.db is not opened)")
     t0 = time.time()
     try:
-        res = run(sizes, a.words_only, scratch)
+        res = run(sizes, a.words_only, scratch, learner_model=a.learner_model,
+                  ollama=a.ollama)
     finally:
         if not a.keep:
             shutil.rmtree(scratch, ignore_errors=True)

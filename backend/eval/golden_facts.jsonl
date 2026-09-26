@@ -61,3 +61,11 @@
 {"id": "f61", "text": "Owner used to work in a bookshop", "told": "2025-06-15", "kind": "past"}
 {"id": "f62", "text": "Owner gets paid on the 28th of each month", "told": "2025-06-30", "kind": "date"}
 {"id": "f63", "text": "Owner's dentist appointment moved to 10 October", "told": "2026-09-10", "kind": "update"}
+{"id": "f64", "text": "Owner sings in the Minster Community Choir", "told": "2025-09-10", "kind": "replaced", "retired": "2026-07-02", "replaced_by": "f65"}
+{"id": "f65", "text": "Owner left the Minster Community Choir and joined the Rowntree Singers in May 2026", "told": "2026-07-02", "kind": "update"}
+{"id": "f66", "text": "Owner's phone is an iPhone 12", "told": "2025-08-01", "kind": "replaced", "retired": "2026-07-20", "replaced_by": "f67"}
+{"id": "f67", "text": "Owner switched from the iPhone 12 to a Pixel 8 in June 2026", "told": "2026-07-20", "kind": "update"}
+{"id": "f68", "text": "Owner's team is based at the Holgate depot", "told": "2025-06-18", "kind": "replaced", "retired": "2026-04-02", "replaced_by": "f69"}
+{"id": "f69", "text": "Owner's team moved to the Clifton depot in February 2026", "told": "2026-04-02", "kind": "update"}
+{"id": "f70", "text": "Owner has had allotment plot 14 since March 2026", "told": "2026-04-01", "kind": "replaced", "retired": "2026-08-01", "replaced_by": "f71", "note": "older news: f71 is about an EARLIER time, so from memory idea 4 on it must not retire this"}
+{"id": "f71", "text": "Owner got allotment plot 9 in January 2026", "told": "2026-08-01", "kind": "older"}
