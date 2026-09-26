@@ -337,6 +337,24 @@ Decided 2026-09-26, after the approvals build:
   first. Their health, money, address, contact details, debts and secrets
   stay sensitive everywhere.
 
+Decided 2026-09-26, after the cutting-edge research
+(`docs/CUTTING-EDGE-2026-09-26-*.md`) - build all four groups, after the
+current fix pass, and keep researching:
+- **Quick wins:** briefing weather from the owner's own Home Assistant;
+  "Also on my phone" (hand an alarm or event to the phone's own apps by the
+  owner's tap); reading the text in a screenshot on the PC (marked as
+  outside text).
+- **Smarter tools:** a short tool list with more on request, "ask, don't
+  guess" and multi-step tool tests, then the MCP bridge (local servers only,
+  read-only first, a card to start each server, every call through the
+  gate).
+- **Voice upgrades:** a newer "Hey Jarvis" detector and a fast voice-copying
+  voice, each measured before it replaces anything.
+- **Documents & email:** asking about PDFs and Word files, instant "tell me
+  when" for email, saving drafts to the owner's Drafts folder.
+Also fixed without asking: a model that cannot use tools gets a true error
+message, and `OLLAMA_NO_CLOUD=1` as a second lock behind rule 1.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
