@@ -702,6 +702,13 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             ));
         }
 
+        // A job changed - snoozed, deleted or done on the phone, by voice or
+        // in the Brain: its "went off" toast goes, and a ringing alarm stops
+        // (brain/schedule.rs on_changed). Fanned out below too.
+        "schedule" if event.data["state"].as_str() == Some("changed") => {
+            crate::brain::schedule::on_changed(&event.data);
+        }
+
         // A morning briefing is put together (backend/briefing.patch):
         // `{"id", "kind": "briefing", "state": "ready"}`. The toast says
         // only "Jarvis: your morning briefing is ready." - never a line of

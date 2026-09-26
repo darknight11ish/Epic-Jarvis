@@ -598,6 +598,30 @@ fn show(app: &AppHandle, title: &str, body: &str, ring: bool, snooze: Option<(&s
     commands::notify(app, title, body);
 }
 
+/// The PC says a job changed (`{"id", "kind", "state": "changed"}`):
+/// snoozed, deleted or done on the phone, by voice or in the Brain. Its
+/// "went off" toast - a ringing alarm's included - goes. Never a "tell me
+/// when": its job ends the moment it matched to tell only once.
+pub(crate) fn on_changed(data: &serde_json::Value) {
+    let Some(id) = data.get("id").and_then(|v| v.as_str()) else {
+        return;
+    };
+    let kind = data.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+    if !removes_on_change(id, kind) {
+        return;
+    }
+    #[cfg(windows)]
+    crate::winrt_toast::remove_fired(id);
+    #[cfg(not(windows))]
+    let _ = id;
+}
+
+/// Whether a `changed` job's toast is taken away: one job id, of a kind
+/// that has a "went off" toast with Snooze.
+pub(crate) fn removes_on_change(id: &str, kind: &str) -> bool {
+    valid_id(id) && SNOOZABLE.contains(&kind)
+}
+
 /// A toast without a sound: a job heard about too late to ring.
 fn show_quiet(app: &AppHandle, title: &str, body: &str) {
     #[cfg(windows)]
@@ -743,6 +767,14 @@ async fn post(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_job_changed_elsewhere_takes_its_toast_away_but_never_a_tell_me_when() {
+        assert!(removes_on_change("s0123456789", "alarm"));
+        assert!(removes_on_change("s0123456789", "reminder"));
+        assert!(!removes_on_change("s0123456789", "tellme"));
+        assert!(!removes_on_change("all", "alarm"));
+    }
 
     #[test]
     fn a_job_that_could_not_be_read_is_told_apart_by_its_event() {

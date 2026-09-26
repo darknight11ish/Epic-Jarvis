@@ -275,7 +275,9 @@ pub fn notify_alarm(app: &AppHandle, title: &str, body: &str, snooze: Option<(&s
         crate::commands::notify(app, title, body);
         return;
     }
-    if let Err(e) = try_show(&alarm_xml(title, body, snooze)) {
+    // Tagged with the job id when it has one (an alarm going off), so a
+    // snooze or delete elsewhere stops it (`remove_fired`).
+    if let Err(e) = try_show(&alarm_xml(title, body, snooze), snooze.map(|(id, _)| id)) {
         crate::logfile::log(&format!(
             "[jarvis] ringing toast failed, falling back to a plain one: {e}"
         ));
@@ -309,7 +311,7 @@ pub fn notify_quiet(app: &AppHandle, title: &str, body: &str) {
         crate::commands::notify(app, title, body);
         return;
     }
-    if let Err(e) = try_show(&quiet_xml(title, body)) {
+    if let Err(e) = try_show(&quiet_xml(title, body), None) {
         crate::logfile::log(&format!(
             "[jarvis] quiet toast failed, falling back to a plain one: {e}"
         ));
@@ -317,10 +319,13 @@ pub fn notify_quiet(app: &AppHandle, title: &str, body: &str) {
     }
 }
 
-fn try_show(xml: &str) -> windows::core::Result<()> {
+fn try_show(xml: &str, job: Option<&str>) -> windows::core::Result<()> {
     let doc = XmlDocument::new()?;
     doc.LoadXml(&HSTRING::from(xml))?;
     let toast = ToastNotification::CreateToastNotification(&doc)?;
+    if let Some(id) = job {
+        tag_as_job(&toast, id)?;
+    }
     let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(AUMID))?;
     notifier.Show(&toast)
 }
@@ -499,8 +504,41 @@ fn try_notify_fired(title: &str, body: &str, id: &str, label: &str) -> windows::
     let doc = XmlDocument::new()?;
     doc.LoadXml(&HSTRING::from(xml))?;
     let toast = ToastNotification::CreateToastNotification(&doc)?;
+    tag_as_job(&toast, id)?;
     let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(AUMID))?;
     notifier.Show(&toast)
+}
+
+/// The group every "went off" toast is put in, tagged with its job id, so
+/// [`remove_fired`] can take exactly that one away.
+const SCHEDULE_GROUP: &str = "jarvis-schedule";
+
+fn tag_as_job(toast: &ToastNotification, id: &str) -> windows::core::Result<()> {
+    toast.SetTag(&HSTRING::from(id))?;
+    toast.SetGroup(&HSTRING::from(SCHEDULE_GROUP))
+}
+
+/// Takes a job's "went off" toast away - a ringing alarm stops with it -
+/// when the PC says the job changed: snoozed, deleted or done on the phone,
+/// by voice or in the Brain (the phone does the same with its notification;
+/// bug audit 2026-09-26, phone #1, mirrored here). A plain toast shown by
+/// the plugin has no tag and stays; it does not ring.
+pub fn remove_fired(id: &str) {
+    if is_uninstalled_build() {
+        return;
+    }
+    let removed = ToastNotificationManager::History().and_then(|h| {
+        h.RemoveGroupedTagWithId(
+            &HSTRING::from(id),
+            &HSTRING::from(SCHEDULE_GROUP),
+            &HSTRING::from(AUMID),
+        )
+    });
+    if let Err(e) = removed {
+        crate::logfile::log(&format!(
+            "[jarvis] could not take the toast for {id} away: {e}"
+        ));
+    }
 }
 
 /// A Snooze click's job id out of a launch's argv - `None` for every other
