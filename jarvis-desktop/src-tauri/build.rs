@@ -207,6 +207,19 @@ fn main() {
             "add_folder",
             "remove_folder",
             "import_notion",
+            // Settings' "Backups" (backend/jarvis_backup.py, backup.patch;
+            // the owner's decision of 2026-09-27): one locked backup file
+            // with a recovery code shown once. Setting the folder reuses
+            // the Windows folder picker above (one approval card, held on
+            // a stale link); "Back up now" and listing need no card;
+            // restoring is one card that always needs Windows Hello, held
+            // on a stale link. Settings window only.
+            "get_backup",
+            "list_backups",
+            "set_backup_folder",
+            "backup_now",
+            "preview_restore",
+            "restore_backup",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
             // way (it changes wording only). Settings window only.

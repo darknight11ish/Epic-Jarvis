@@ -7034,3 +7034,112 @@ calendar row instead of the two environment-variable names; and
   as plain environment variables in the owner's own Windows profile, which
   this feature does not touch or clean up - only new reads move to
   Credential Manager first.
+## 45. Backups (added 2026-09-27)
+
+The owner's decision (`CLAUDE.md`, 2026-09-27, the answers to
+`docs/OWNER-QUESTIONS-2026-09-27.md`): "one locked backup file into a
+folder the owner picks, a NordLocker (or other cloud-synced) folder
+included. Locked with a recovery code only the owner has (shown once);
+Jarvis keeps only the last few. This bends rule 1 for that one locked file
+only, and the app must say plainly that a lost code means a useless
+backup and that erased facts stay in older backups until they age out."
+The design is `docs/CUTTING-EDGE-2026-09-26-round2-trust.md`, "2. Encrypted
+backup and plain restore".
+
+Built as a new module, `backend/jarvis_backup.py` (shipped whole,
+`backup.patch`). **Desktop only**, apart from one read-only status line on
+the phone - see `docs/ARCHITECTURE.md` section 8.
+
+### 45.1 What is backed up, and what is not
+
+One `.jbak` file: a zip archive, encrypted, holding -
+
+- The four real SQLite databases this backend has, snapshotted with
+  SQLite's own online backup API (safe while Jarvis keeps them open):
+  `memory.db`, `chat-history.db`, `schedule.db`, `feedback.db`.
+- Every `*.json` file directly in the Jarvis settings folder (never a
+  subfolder), `jarvis-framework.toml`, and the `notes/` and `voice/`
+  folders (the owner's own voice-print - not `voice-models/`, downloaded
+  engine files, or `voices/`, the custom-voice bank).
+- The chat-history encryption key, read from Windows Credential Manager
+  and kept, base64, inside the archive - which is encrypted before it ever
+  touches a disk.
+
+**Never backed up**, on purpose (rule 3): the pairing token and every API
+key (Exa, Tavily, Brave, GitHub, ...) - all of them live in Windows
+Credential Manager under their own target names, never in a settings
+file, and this module reads exactly one Credential Manager entry, the
+chat-history key. Also never: model files (large; Ollama keeps its own
+copy) and logs. Also never: `approvals.db`/`holds.db` (pending-approval
+state, not memory - restoring a stale row would be misleading, not a
+security hole, since the in-memory approval stamp is gone the moment the
+backend restarts).
+
+### 45.2 The lock
+
+AES-256-GCM with a key stretched from a recovery code by Argon2id
+(`cryptography`, already a dependency here for chat history). The
+recovery code is 20 characters from a 32-symbol alphabet with no
+0/O/1/I/L (about 100 bits), shown four groups of five, ONCE - never
+written to a file, a log, or the audit trail. **A lost recovery code
+means a useless backup: there is no way in without it**, said in those
+words wherever the code is shown and on the restore card. Restoring can
+bring back an erased fact's original words if an older backup still has
+them, until that backup ages out of the newest 5 kept - said in those
+words too (`"Erase the words" cannot reach into an older backup ...`).
+
+### 45.3 Routes
+
+| Route | Notes |
+|---|---|
+| `GET /api/backup` | From this PC: the folder, whether a card is waiting, the last backup and the last restore's outcome (a one-time recovery code included exactly once, then gone on the next read). From anywhere else: `{"available", "last_backup_at"}` only - the phone's "Last backup: ...". Never held. |
+| `GET /api/backup/list` | The kept backup files in the folder, newest first. This PC only (**403** otherwise). |
+| `POST /api/backup/folder` `{"path"}` | Sets where backups are written. This PC only. **202** while ONE approval card waits (action `change_own_config`, the same action "Folders Jarvis may look in" uses to add a folder, and refused the same places - `jarvis_documents.check_folder`, imported not copied). |
+| `POST /api/backup/now` `{}` | Makes one backup into the folder already set. This PC only, **no card** - the folder was already approved. **409** with no folder set. 200 `{"ok", "name", "at", "counts", "recovery_code"}` - the code shown once. |
+| `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
+| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. |
+
+`[autonomy.tiers]` carries `restore_backup = "ask"` (must stay `ask`, like
+every other PC-only-with-Windows-Hello action); `jarvis_card_words.TITLES`
+has its plain-words title; "What asks first" (§32) lists it under
+"Jarvis's own settings, memory and voice".
+
+### 45.4 Retention
+
+The newest 5 backup files in the folder are kept; making a new one
+deletes the rest. Chosen, not measured: a card is shown for each restore
+either way, so keeping more costs disk, not safety, and a synced folder
+should not grow without bound. Two backups made in the same second get
+distinct names (`-2`, `-3`, ...) rather than overwrite each other.
+
+### 45.5 Desktop and phone
+
+Desktop: Settings, Backups (`backup.rs`, `backup-settings.js`). Setting the
+folder reuses the exact Windows folder picker "Folders Jarvis may look in"
+uses (`folders::picker`, made `pub(crate)` for this); "Back up now" and
+listing need no card; restoring is held on a stale link, like setting the
+folder.
+
+Phone: read-only (`net/Backup.kt`, `ui/screens/BackupPlate.kt`, in
+Settings): "Last backup: 3 days ago." or "No backup has been made yet." -
+nothing else the PC's answer carries (the folder's path, a waiting card, a
+one-time recovery code) is shown. Choosing a folder, backing up and
+restoring are the PC's alone: the folder picker is Windows', the recovery
+code is typed on the PC, and restoring needs Windows Hello there.
+`tools/check_parity.py`: `/api/backup` is `ported` (both read it, at
+different depths); every other backup route is `deliberate`
+(`docs/ARCHITECTURE.md` section 8).
+
+### 45.6 Known gaps, said plainly
+
+- **Restoring while Jarvis is running can fail** if another part of the
+  backend holds the database file open in a way Windows will not let this
+  request replace; the restore fails cleanly (the safety backup already
+  made is still there) rather than half-apply. On success the answer says
+  to restart Jarvis so every part of it uses the restored data.
+- **Not run on Windows.** The Windows Hello prompt for this card is the
+  same approval-gap machinery §32.5 already says is untested on Windows.
+- **A program already on the PC** that holds the token can raise the
+  restore card; approving it still needs Windows Hello at the backend
+  (`jarvis_owner_check`). Step 1's known limits (`docs/ARCHITECTURE.md`
+  section 3) apply.

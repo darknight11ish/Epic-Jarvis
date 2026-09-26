@@ -291,6 +291,15 @@ better_voice_enable       = "ask"
 # rather than let this line become your yes.
 watch_notifications_enable = "ask"
 
+# --- Backups (jarvis_backup.py, the owner's decision of 2026-09-27) ------
+# Restoring from a locked backup file replaces memory, chat history,
+# settings and notes with what was saved then, so it is ONE card, always
+# with Windows Hello and always from this PC (jarvis_owner_check.
+# PC_ONLY_ACTIONS), whatever this line says. Must stay "ask": anything else
+# and a restore refuses to go ahead. "Back up now" itself asks nothing - the
+# owner already approved the folder it writes into (change_own_config).
+restore_backup            = "ask"
+
 
 # ------------------------------------------------------------------------
 # 3. SELF-MODIFICATION RULES

@@ -1,0 +1,48 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2469,6 +2469,23 @@
+     except Exception as exc:
+         print(f"  watch      NOT ON ({type(exc).__name__}) - Smartwatch notifications setting is off")
+         print("             until jarvis_watch_notify.py is back: run apply-patches.ps1 again")
++    # backup.patch ("Backups", the owner's decision of 2026-09-27: "one
++    # locked backup file into a folder the owner picks ... locked with a
++    # recovery code only the owner has ... Jarvis keeps only the last few"):
++    # GET /api/backup, /api/backup/list, POST /api/backup/folder (this PC
++    # only, ONE approval card), /api/backup/now (this PC only, no card - the
++    # folder was already approved), /api/backup/restore/preview and
++    # /api/backup/restore (this PC only, ONE approval card that always
++    # needs Windows Hello - jarvis_owner_check.PC_ONLY_ACTIONS). Wrapped
++    # round Handler here, before anything listens, like folders above; the
++    # rules are all in jarvis_backup.py.
++    try:
++        import jarvis_backup
++        print(jarvis_backup.install(Handler, origin_ok=_origin_ok,
++                                    token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  backup     NOT ON ({type(exc).__name__}) - Backups are off")
++        print("             until jarvis_backup.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -602,5 +602,6 @@
+     "append_obsidian_daily",  # shipped "auto": the same
+     "loosen_what_asks_first",  # jarvis_asks_first.py acts only on tier "ask" (asks-first.patch)
+     "watch_notifications_enable",  # jarvis_watch_notify.py acts only on tier "ask" (watch-notifications.patch)
+     "enable_reading_tool",  # jarvis_asks_first.py acts only on tier "ask" (tools-enable.patch)
++    "restore_backup",  # jarvis_backup.py acts only on tier "ask" (backup.patch)
+ })
+@@ -707,4 +708,12 @@
+     "enable_reading_tool": ("yes", "local", "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant"),
++    # backup.patch (jarvis_backup.py, the owner's decision of 2026-09-27).
++    # Replaces memory, chat history, settings and notes with an older
++    # backup, and puts the chat-history key back in Windows Credential
++    # Manager. Reversible: Jarvis backs up your CURRENT data first, with a
++    # fresh recovery code shown once, so this restore can itself be undone.
++    # jarvis_owner_check.PC_ONLY_ACTIONS makes its approval need Windows
++    # Hello on this PC whatever this line says.
++    "restore_backup": ("yes", "local", "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone"),
+ }
+
+ _UNKNOWN_RISK = ("no", "outbound",

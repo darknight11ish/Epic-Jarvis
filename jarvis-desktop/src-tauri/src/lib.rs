@@ -23,6 +23,7 @@ pub mod appearance;
 pub mod asks_first;
 pub mod attention;
 pub mod autostart;
+pub mod backup;
 pub mod brain;
 pub mod commands;
 pub mod email_sending;
@@ -842,6 +843,12 @@ pub fn run() {
             folders::add_folder,
             folders::remove_folder,
             folders::import_notion,
+            backup::get_backup,
+            backup::list_backups,
+            backup::set_backup_folder,
+            backup::backup_now,
+            backup::preview_restore,
+            backup::restore_backup,
             plain_errors::get_manner,
             plain_errors::set_manner,
             plain_errors::open_fix_place,

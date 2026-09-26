@@ -921,6 +921,14 @@ class JarvisApi(
     suspend fun reach(): ApiResult<JsonObject> = probe(Reach.PATH)
 
     /**
+     * `GET /api/backup` - "Backups": read-only on the phone
+     * ([Backup.parse]); the full flow (choosing a folder, backing up,
+     * restoring) is the PC's alone. A read. A 404 is an older backend
+     * ([Backup.missing]).
+     */
+    suspend fun backup(): ApiResult<JsonObject> = probe(Backup.PATH)
+
+    /**
      * `GET /api/asks_first` - "What asks first": every action and whether it
      * asks, in the PC's words ([AsksFirst.parse]). A read. A 404 is an older
      * backend ([AsksFirst.missing]).

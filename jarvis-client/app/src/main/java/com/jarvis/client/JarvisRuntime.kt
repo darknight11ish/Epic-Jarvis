@@ -1507,6 +1507,15 @@ object JarvisRuntime {
     /** `GET /api/reach`. A read: never held. */
     suspend fun reach(): ApiResult<JsonObject> = api.reach()
 
+    // ------------------------------------------------------------- backups -----
+    // The owner's decision of 2026-09-27 - see [com.jarvis.client.net.Backup]
+    // and ui/screens/BackupPlate.kt. Read-only here on purpose: choosing a
+    // folder, backing up and restoring all happen on the PC, in Jarvis
+    // Desktop's Settings (docs/ARCHITECTURE.md section 8).
+
+    /** `GET /api/backup`. A read: never held. */
+    suspend fun backup(): ApiResult<JsonObject> = api.backup()
+
     // ------------------------------------------------------ what asks first ----
     // The owner's decisions of 2026-09-26 - see [com.jarvis.client.net.AsksFirst]
     // and ui/screens/AsksFirstPlate.kt. Stricter from the phone; looser on

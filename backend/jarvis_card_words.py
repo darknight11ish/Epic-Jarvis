@@ -118,6 +118,8 @@ TITLES = {
     "better_voice_enable": "turn on the better custom voice",
     # --- notifications
     "watch_notifications_enable": "let your notifications show on a smartwatch too",
+    # --- backups
+    "restore_backup": "restore from a backup, replacing what it knows now",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

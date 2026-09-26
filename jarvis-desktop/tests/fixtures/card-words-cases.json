@@ -199,6 +199,10 @@
       "title": "Jarvis wants to search GitHub signed in as you"
     },
     {
+      "action": "restore_backup",
+      "title": "Jarvis wants to restore from a backup, replacing what it knows now"
+    },
+    {
       "action": "rollback_model",
       "title": "Jarvis wants to go back to the AI model you had before"
     },

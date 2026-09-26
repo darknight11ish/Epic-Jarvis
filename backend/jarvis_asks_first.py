@@ -242,7 +242,7 @@ HARD_LIMITS = frozenset({
     "better_voice_enable", "download_model", "switch_model", "models_create",
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
-    "watch_notifications_enable", ENABLE_TOOL_ACTION,
+    "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -256,6 +256,7 @@ MUST_ASK = frozenset({
     "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
+    "restore_backup",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -285,7 +286,8 @@ GROUPS = (
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
         "memory_manage", "user_profile_manage", "custom_voice", "better_voice_enable",
-        "watch_notifications_enable", "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION]),
+        "watch_notifications_enable", "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION,
+        "restore_backup"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
 )
 

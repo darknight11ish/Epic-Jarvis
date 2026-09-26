@@ -399,6 +399,18 @@ permissions = [
   "allow-add-folder",
   "allow-remove-folder",
   "allow-import-notion",
+  # "Backups" (backend/jarvis_backup.py, backup.patch, the owner's decision
+  # of 2026-09-27): one locked backup file with a recovery code shown once.
+  # Setting the folder reuses the Windows folder picker above and raises
+  # one approval card, held on a stale link; "Back up now" and listing are
+  # reads/no-card actions; restoring is one card that always needs Windows
+  # Hello, held on a stale link.
+  "allow-get-backup",
+  "allow-list-backups",
+  "allow-set-backup-folder",
+  "allow-backup-now",
+  "allow-preview-restore",
+  "allow-restore-backup",
   # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain.
   # Wording only; no card either way; held on a stale link in Rust.
   "allow-get-manner",

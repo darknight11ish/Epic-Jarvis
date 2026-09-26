@@ -165,6 +165,9 @@ SHIPPED = (
     # "Things you can say": the fixed list of real sentences answered without
     # the model (sayable.patch)
     "jarvis_sayable.py",
+    # Backups: one locked backup file, a recovery code shown once, restore
+    # with a card plus Windows Hello (backup.patch)
+    "jarvis_backup.py",
 )
 
 

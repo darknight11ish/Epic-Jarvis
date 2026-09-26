@@ -32,6 +32,21 @@ it works.
 
 1. **Everything private stays on the local model.** Cloud lanes exist; what
    may reach them is bounded and enforced in code, not by convention.
+
+   **One narrow, named exception: the encrypted backup file**
+   (`jarvis_backup.py`, `backup.patch`; the owner's decision of
+   2026-09-27, CLAUDE.md - "This bends rule 1 for that one locked file
+   only"). The owner may point "Back up now" at a folder a cloud-sync
+   program (NordLocker, OneDrive, ...) uploads. Jarvis itself sends
+   nothing anywhere: it only writes ONE file, encrypted before it ever
+   touches a disk (AES-256-GCM, a key stretched by Argon2id from a
+   recovery code only the owner ever holds), into a folder the owner
+   picked - exactly what "Folders Jarvis may look in" already lets the
+   owner do for reading. If that folder happens to be synced, the sync
+   program uploads it, the same as anything else the owner puts there.
+   That is the whole exception: one named file, always locked, never a
+   general loosening of this invariant, and never anything Jarvis decides
+   to send anywhere on its own. `docs/JARVIS-API.md` §45.
 2. **No public tunnel, ever.** Reachability is a private, encrypted
    device-to-device network: Tailscale, or NordVPN Meshnet. Both give each
    device an address in `100.64.0.0/10` that only the owner's own devices
@@ -1288,6 +1303,8 @@ backend routes, in both directions; the rest are listed here only.
 | The 3-screen walkthrough (`onboarding.html`; ease-of-use audit #4, "3 examples on walkthrough screen 2") | The desktop has a first-run tour because it is a window that can sit empty with nothing to do until the tray icon, an approval card and memory are explained. The phone's first screen IS the point of contact - pairing - so there is no equivalent empty moment to fill with a tour; its own "What can I say?" line is in the FAQ (`Sayable.HELP_TITLE`/`HELP_BODY`, `FaqScreen.kt`) instead of a screen 2. `Sayable.WALKTHROUGH_EXAMPLES` still exists on the phone, held to the same contract fixture as the desktop's 3 examples, so a phone screen that wants them later does not have to invent its own three. |
 
 | Adding a folder to "Folders Jarvis may look in" (`POST /api/folders/add`) and bringing in a Notion export (`POST /api/folders/import`) (the owner's decisions of 2026-09-26; the feasibility audit's guardrail 1: "one folder list, PC only, empty by default") | Written with the feature. Both are about files on the PC: the desktop opens the Windows folder picker (or the file picker, for the export's `.zip`) in Rust, and only the path the owner chose is sent; adding then raises ONE approval card (`change_own_config`). A phone has no view of the PC's folders to pick from, and a path typed on the phone would be a guess. The backend refuses both routes from any device but the PC (`jarvis_owner_check.from_this_pc`), not only the apps. Everything else is on both apps: the list in the PC's words and Remove on each folder (at once, never held on a stale link - it only lets Jarvis see less; `/api/folders` and `/api/folders/remove`, `ported` in `tools/check_parity.py`), and asking about the files, which is ordinary chat from either app (the `my_files` tool runs on the PC, with the model on the PC). |
+
+| Backups: choosing the folder, "Back up now", listing, and restoring (`POST /api/backup/folder`, `/api/backup/now`, `GET /api/backup/list`, `POST /api/backup/restore/preview`, `/api/backup/restore`) (the owner's decision of 2026-09-27, CLAUDE.md; `docs/JARVIS-API.md` §45) | Written with the feature. The folder picker is the exact one "Folders Jarvis may look in" uses (Rust's `folders::picker`, reused not copied), so the same reasoning applies: a phone has no view of the PC's folders, and the recovery code that locks and unlocks a backup is typed on the PC, never sent to or from the phone. Restoring replaces memory, chat history, settings and notes, so it is PC-only for the same reason `loosen_what_asks_first` and `enable_reading_tool` are: it always needs Windows Hello, which is the PC's (`jarvis_owner_check.PC_ONLY_ACTIONS`). The backend refuses every one of these five routes from any device but the PC (`jarvis_owner_check.from_this_pc`). `GET /api/backup` itself IS on both apps, at two depths - `ported` in `tools/check_parity.py`: the desktop reads the full view (the folder, waiting cards, counts), and the phone reads the same route but shows only `last_backup_at`, as "Last backup: 3 days ago." (`net/Backup.kt`, `ui/screens/BackupPlate.kt`) - the design's own words for what belongs on a phone. |
 
 | The short tool list (`[tools] short_list`) and the tool and behaviour test (`tools/tool_eval`, 2026-09-26) | Written with the feature. Neither is something an app shows: the short list changes which tool descriptions the PC sends to its own model (both apps' chats get it the same), and the test runs on the PC against the PC's model, with one PowerShell line. Nothing to port. |
 | Setting up a plug-in program (MCP): the `[mcp]` lines and `py -3 jarvis_mcp.py inspect` (2026-09-26) | Written with the feature. A plug-in program is a program ON the PC, listed by full path in the PC's settings file - deep config editing, which stays off the phone (`CLAUDE.md`), and the desktop has no screen for it either. Using one is the same from both apps' chats: its start card and every call's card reach both apps like any other card, and both apps show its row on "What Jarvis can reach" and its two rows on "What asks first". |
