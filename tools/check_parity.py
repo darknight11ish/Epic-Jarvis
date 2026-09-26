@@ -215,6 +215,9 @@ CLASSIFICATION = {
     "/api/voice/voices/active": ("ported", "Speak in a custom voice (one approval card) or back in the built-in one (immediate). Desktop: set_active_voice. Phone: the custom voice is held on a stale link, the built-in one always goes."),
     "/api/voice/voices/delete": ("ported", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use. Desktop: delete_custom_voice, after an are-you-sure. Phone: asks first on the phone, never held."),
     "/api/voice/voices/speed": ("ported", "How fast Jarvis speaks: Slower, Normal or Faster, the PC's own choices and words (GET /api/voice/voices `speed`). No card either way; held on a stale link like every change. Desktop: set_voice_speed (Settings, Jarvis's voice). Phone: the Voices screen's speed chips (JarvisRuntime.setVoiceSpeed)."),
+    # Which of Kokoro's own voices speaks (2026-09-27, ease-of-use audit row
+    # 13): the exact same shape as speed above, right next to it.
+    "/api/voice/voices/speaker": ("ported", "Jarvis's built-in voice: which of Kokoro's own voices, the PC's own choices and words (GET /api/voice/voices `speaker`). No card either way; held on a stale link like every change. Desktop: set_voice_speaker (Settings, Jarvis's voice). Phone: the Voices screen's voice chips (JarvisRuntime.setVoiceSpeaker)."),
     "/api/voice/voices/better": ("ported","The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate. Desktop: set_better_voice, offered only with a capable second card. Phone: offered only when a capable second card is there; ON held on a stale link, OFF always goes."),
     # The voice flow (backend/voice-flow.patch, 2026-09-24): built on the
     # backend first, in both apps since 2026-09-25. Its other parts are on

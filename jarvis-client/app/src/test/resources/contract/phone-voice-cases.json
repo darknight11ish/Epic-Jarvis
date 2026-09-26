@@ -11370,6 +11370,74 @@
         },
         "status": 404
       },
+      "speaker_9": {
+        "body": {
+          "message": "Jarvis's built-in voice is now British (male) - George.",
+          "ok": true,
+          "speaker": {
+            "choice": "9",
+            "choices": [
+              {
+                "id": "0",
+                "label": "American (female)"
+              },
+              {
+                "id": "1",
+                "label": "American (female) - Bella"
+              },
+              {
+                "id": "2",
+                "label": "American (female) - Nicole"
+              },
+              {
+                "id": "3",
+                "label": "American (female) - Sarah"
+              },
+              {
+                "id": "4",
+                "label": "American (female) - Sky"
+              },
+              {
+                "id": "5",
+                "label": "American (male) - Adam"
+              },
+              {
+                "id": "6",
+                "label": "American (male) - Michael"
+              },
+              {
+                "id": "7",
+                "label": "British (female) - Emma"
+              },
+              {
+                "id": "8",
+                "label": "British (female) - Isabella"
+              },
+              {
+                "id": "9",
+                "label": "British (male) - George"
+              },
+              {
+                "id": "10",
+                "label": "British (male) - Lewis"
+              }
+            ],
+            "default": "0",
+            "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+            "note": "",
+            "title": "Jarvis's built-in voice",
+            "value": 9
+          }
+        },
+        "status": 200
+      },
+      "speaker_bad": {
+        "body": {
+          "error": "choose one of the listed voices",
+          "ok": false
+        },
+        "status": 400
+      },
       "speed_bad": {
         "body": {
           "error": "the speed must be slower, normal or faster",
@@ -11497,6 +11565,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "normal",
@@ -11608,6 +11730,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "normal",
@@ -11715,6 +11891,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "normal",
@@ -11822,6 +12052,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "normal",
@@ -11951,6 +12235,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "normal",
@@ -12062,6 +12400,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "normal",
@@ -12156,6 +12548,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "normal",
@@ -12273,6 +12719,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "normal",
@@ -12390,6 +12890,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "normal",
@@ -12430,6 +12984,171 @@
             "ready": true,
             "seconds": 5.3,
             "transcript": "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+            "why": ""
+          }
+        ]
+      },
+      "speaker_9": {
+        "active": "builtin",
+        "active_name": "Built-in voice",
+        "available": true,
+        "better_voice": {
+          "can_turn_on": false,
+          "card": null,
+          "enabled": true,
+          "files": false,
+          "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+          "idle_minutes": 10,
+          "last": {
+            "at": 1790000000.0,
+            "outcome": "enabled",
+            "why": "The better voice was turned on."
+          },
+          "load_seconds": null,
+          "need_mb": 3072,
+          "need_mb_measured": false,
+          "pending": false,
+          "state": "off",
+          "state_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+          "why": "needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+        },
+        "engines": {
+          "f5": {
+            "available": false,
+            "where": "the second graphics card",
+            "why": "the better-voice switch is off"
+          },
+          "kokoro": {
+            "available": true,
+            "why": ""
+          },
+          "zipvoice": {
+            "available": true,
+            "where": "this PC's processor",
+            "why": ""
+          }
+        },
+        "fallback": "",
+        "last": {
+          "at": 1790000000.0,
+          "kind": "create",
+          "outcome": "denied",
+          "voice": "aunt-may",
+          "why": "You said no, so nothing changed (the voice \"Aunt May\" was not added)."
+        },
+        "limits": {
+          "max_clip_bytes": 2900000,
+          "max_name_chars": 40,
+          "max_seconds": 10.0,
+          "max_transcript_chars": 300,
+          "max_voices": 20,
+          "min_seconds": 3.0
+        },
+        "pending": null,
+        "sentences": [
+          "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+          "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+          "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+          "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+          "Would you like me to read that again, a little more slowly this time?"
+        ],
+        "speaker": {
+          "choice": "9",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 9
+        },
+        "speaking_with": "kokoro",
+        "speed": {
+          "choice": "normal",
+          "choices": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "default": "normal",
+          "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+          "note": "",
+          "title": "How fast Jarvis speaks",
+          "value": 1.0
+        },
+        "timings": [
+          {
+            "at": 1790000000.0,
+            "audio_seconds": 3.6,
+            "chars": 54,
+            "engine": "zipvoice",
+            "failed": "",
+            "fallback": "",
+            "note": "",
+            "rtf": 0.139,
+            "seconds": 0.5,
+            "voice": "grandpa"
+          }
+        ],
+        "voices": [
+          {
+            "builtin": true,
+            "id": "builtin",
+            "name": "Built-in voice",
+            "ready": true,
             "why": ""
           }
         ]
@@ -12494,6 +13213,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "zipvoice",
         "speed": {
           "choice": "normal",
@@ -12615,6 +13388,60 @@
           "Your parcel arrived at noon, and I left a reminder to open it this evening.",
           "Would you like me to read that again, a little more slowly this time?"
         ],
+        "speaker": {
+          "choice": "0",
+          "choices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "0",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" above.",
+          "note": "",
+          "title": "Jarvis's built-in voice",
+          "value": 0
+        },
         "speaking_with": "kokoro",
         "speed": {
           "choice": "faster",

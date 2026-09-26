@@ -6683,6 +6683,18 @@ Slower, Normal or Faster - in both apps (desktop: Settings -> Jarvis's
 voice; phone: Checks -> Jarvis's voice). It never asks first, because it
 trusts nothing more; it changes every voice made on your PC.
 
+**Also new (2026-09-27, ease-of-use audit row 13): "Jarvis's built-in
+voice"** - which of Kokoro's own voices, right next to the speed choice in
+both apps, the exact same shape (no card either way, held on a stale link
+like every change sent to the PC). Before now this was file-only: `[voice]
+tts_speaker_id` in `jarvis-framework.toml`, a bare number nobody could see
+named anywhere. Only two of the eleven named choices are confirmed against
+this repository (the toml's own commented-out example, "0 = American
+female; 9 = British male (bm_george)"); the rest is Kokoro's own published
+voice pack for the model this backend ships, kept only because it agrees
+with those two - see `jarvis_voices.KOKORO_VOICES`'s own comment for the
+full reasoning and the caveat.
+
 ## The two candidates
 
 | | today | the candidate | where it comes from |
@@ -6748,9 +6760,9 @@ compare.
 
 **3. Put the new code on the PC** (copies `jarvis_bakeoff.py` and the new
 `jarvis_voices.py`, `jarvis_wakeword.py`, `jarvis_speech.py` and
-`jarvis_voice_flow.py`; `voices.patch` gains the speed route; sherpa-onnx
-must be 1.12.26 or newer), from this repository's folder, then restart
-Jarvis:
+`jarvis_voice_flow.py`; `voices.patch` gains the speed and (2026-09-27) the
+built-in-voice-choice route; sherpa-onnx must be 1.12.26 or newer), from
+this repository's folder, then restart Jarvis:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
@@ -9897,9 +9909,13 @@ only reads or takes back what you just set.
   list after "are you sure?" - only in the apps, and only if the list still
   has the number of items you saw. The to-do list is never cleared at once.
 - **"What did I miss?"** Said, typed, or the button next to "Brief me now":
-  what went off since your last message to Jarvis (from either app), cards
-  waiting, unread email (as the briefing reads it), and what is next. Built
-  without the AI model, kept nowhere.
+  what went off since your last message to Jarvis (from either app), real
+  "tell me when" matches, approval cards that timed out, facts saved
+  automatically, cards waiting, unread email (as the briefing reads it),
+  and what is next - each its own section (2026-09-27, ease-of-use audit
+  row 12; see `jarvis_briefing.build_missed`'s own docstring). Built
+  without the AI model, kept nowhere. An idle "tell me when" check that
+  found nothing is still not "something you missed" - only a real match is.
 
 ## What changed
 
@@ -11994,3 +12010,75 @@ feature; `t_the_tools_enable_patch` proves the patch applies to what
   itself untested on Windows.
 - **The phone code was re-read by hand, not compiled here.** There is no
   local Android build in this container; CI is the proof.
+
+# "What did I miss?" covers more: `jarvis_briefing.py`, `jarvis_tellme.py` (2026-09-27)
+
+The ease-of-use audit's "then" table, row 12
+(`docs/EASE-OF-USE-AUDIT-2026-09-27.md`): "'What did I miss?' covers more:
+cards that timed out, facts saved automatically, 'tell me when' matches
+(today skipped), and finished jobs. No new button, because saying it
+already works." No new route, no new button in either app: the answer
+`jarvis_briefing.build_missed()` already sends grows four more labelled
+sections, and both apps already render whatever `sections` it sends,
+generically, since before this change.
+
+## What each new section is, and what it is not
+
+- **Real "tell me when" matches (`tellme`).** A NEW function,
+  `jarvis_tellme.matched_since()`, not `jarvis_schedule.fired_since()`
+  with its `silent`-kind filter lifted - that would also hand back every
+  idle look this kind's own `tick()` stamps `fired_at` for, which
+  `test_tellme.py`'s `t_looks_are_not_what_i_missed` and
+  `t_past_its_end_it_does_not_look_again` already prove is NOT "something
+  I missed" (a watch that simply ran out with no match is not news
+  either). It reads the `matched_at` column `jarvis_tellme.py`'s own state
+  table stamps only when a look actually told the owner something, and
+  the same `alert_words()` sentence the notification says - "14:05 An
+  email from Alex arrived."
+- **Cards that timed out (`timed_out`).** This corrects a claim
+  `jarvis_briefing.py`'s own docstring made until now - "the gate's
+  record of past cards is in the owner's `jarvis_gate.py`, which this
+  repository does not hold, so nothing here reads it." The Activity
+  feature (2026-09-26, see this file's own section) already found that
+  `jarvis_gate.py` DOES have a `history()` (confirmed by
+  `test_gate_egress.py` reading its source on the real PC); this builder
+  had simply never read it. Read the SAME tolerant way the Activity list
+  already does - `state`/`outcome`, `decided_at`/`created`,
+  `notice.title`/the fallback title (`jarvis_card_words.title_for`) -
+  since the row's exact field names still cannot be confirmed from this
+  repository. Left out of the answer entirely when `jarvis_gate.history()`
+  cannot be read at all, never shown as "failed".
+- **Facts saved automatically (`auto_facts`).** Reads
+  `jarvis_auto_learn.list_auto()` - the SAME list "Saved automatically"
+  already shows - filtered to what was saved since the owner last looked.
+- **Finished jobs.** Not a new section: this is `went_off`, unchanged.
+  The audit's own wording just confirms it belongs in the list too.
+
+## What changed
+
+- `jarvis_tellme.py` - `matched_since(since, now, sched=)`: every watch
+  that told the owner something in a time window, newest first.
+- `jarvis_briefing.py` - `Deps.pending_history` (reads
+  `jarvis_gate.history()` defensively), `_history_outcome`/`_history_when`/
+  `_history_title` (the same tolerant field reading `docs/JARVIS-API.md`
+  §42.1 documents), and three new section builders
+  (`_tellme_matches_section`, `_timed_out_section`, `_auto_facts_section`)
+  wired into `build_missed()`. The module's own docstring is corrected
+  (see above).
+- `docs/JARVIS-API.md` §22.9 - the four new/confirmed sections, and the
+  correction to its own earlier claim.
+
+## Test it
+
+```
+python3 backend/test_tellme.py
+python3 backend/test_quick_wins.py
+```
+
+`test_tellme.py`'s `t_matched_since_real_matches_only` proves an idle look
+and a watch that ran out are both still excluded, and a real match is
+found with the exact sentence its notification uses.
+`test_quick_wins.py`'s `t_what_did_i_miss_covers_timed_out_cards_auto_facts_and_real_matches`
+and `t_an_idle_tell_me_when_check_alone_is_not_something_missed` prove the
+four sections in `build_missed()`'s own answer, and the control case the
+audit itself calls for.

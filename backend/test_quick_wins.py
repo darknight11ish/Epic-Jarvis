@@ -58,7 +58,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import REPO, require_shipped  # noqa: E402
 
-require_shipped("jarvis_schedule.py", "jarvis_quick.py", "jarvis_briefing.py", "jarvis_email.py")
+require_shipped("jarvis_schedule.py", "jarvis_quick.py", "jarvis_briefing.py", "jarvis_email.py",
+                "jarvis_tellme.py", "jarvis_auto_learn.py")
 
 if str(HERE / "rebuilt") not in sys.path:
     sys.path.append(str(HERE / "rebuilt"))
@@ -66,6 +67,8 @@ if str(HERE / "rebuilt") not in sys.path:
 import jarvis_schedule as S  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
 import jarvis_briefing as B  # noqa: E402
+import jarvis_tellme as TM  # noqa: E402
+import jarvis_auto_learn as AL  # noqa: E402
 
 PASSED, FAILED = [], []
 
@@ -507,7 +510,7 @@ def t_an_older_file_gains_the_new_columns():
 # --------------------------------------------------------------------------
 
 
-def _deps(pending=0, created=None, senders=None, tools=(), asked=None):
+def _deps(pending=0, created=None, senders=None, tools=(), asked=None, history=None):
     def gate(action, detail, prompt):
         if asked is not None:
             asked.append((action, detail.get("for")))
@@ -515,6 +518,7 @@ def _deps(pending=0, created=None, senders=None, tools=(), asked=None):
     return B.Deps(tier_of=lambda a: "auto", gate=gate, tools_enabled=lambda: set(tools),
                   pending_count=lambda: pending,
                   pending_created=(lambda: created) if created is not None else (lambda: None),
+                  pending_history=(lambda: history) if history is not None else (lambda: None),
                   email_senders=senders, email_search=lambda *a: (_ for _ in ()).throw(
                       ConnectionRefusedError("no network")),
                   senders_on=lambda: senders is not None, publish=lambda k, d: None, deadline=5.0)
@@ -566,6 +570,82 @@ def t_what_did_i_miss_since_you_last_talked():
     b5 = B.build_missed(sched=w.s, now=w.clock.t, since=local(2026, 9, 25, 14, 0), deps=_deps())
     check("nothing since: said plainly",
           next(s for s in b5["sections"] if s["key"] == "went_off")["summary"] == "Nothing went off.")
+
+
+def t_what_did_i_miss_covers_timed_out_cards_auto_facts_and_real_matches():
+    """Ease-of-use audit row 12: "What did I miss?" also covers cards that
+    timed out, facts saved automatically, and real "tell me when" matches -
+    each its own labelled section, never merged into "went off"."""
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    w = World(now, name="missedmore")
+    # A real "tell me when" match, and one that never matched (an idle
+    # check) - both set up the same way, with the one card.
+    watch = {"source": "email", "sender": "Alex"}
+    matched = w.s.add_repeat(TM.KIND, {"every": "minutes", "watch": watch}, TM.what_words(watch))
+    idle_watch = {"source": "email", "sender": "Nobody"}
+    w.s.add_repeat(TM.KIND, {"every": "minutes", "watch": idle_watch}, TM.what_words(idle_watch))
+    check("both watches set up with the one card, no model", len(w.cards) == 2, w.cards)
+    matched_at = local(2026, 9, 25, 13, 0)
+    TM._save(matched["id"], w.s, matched_at=matched_at, matched_n=1, alert_count=1)
+    # Facts saved automatically: a fake list_auto, so no real memory store
+    # is needed here - the real one has its own tests.
+    real_list_auto = AL.list_auto
+    AL.list_auto = lambda limit=None, now=None: {"facts": [
+        {"id": 1, "text": "The owner's sister likes jazz.",
+         "saved_at": int(local(2026, 9, 25, 13, 30))},
+        {"id": 2, "text": "Too early to count - before 'since'.",
+         "saved_at": int(local(2026, 9, 25, 9, 0))},
+    ]}
+    history = [
+        {"state": "expired", "decided_at": local(2026, 9, 25, 13, 15), "action": "send_email"},
+        {"state": "approved", "decided_at": local(2026, 9, 25, 13, 20), "action": "read_calendar"},
+        {"outcome": "timed_out", "created": local(2026, 9, 25, 8, 0),
+         "action": "send_email"},          # before "since": not counted
+    ]
+    try:
+        w.clock.t = local(2026, 9, 25, 14, 30)
+        b = B.build_missed(sched=w.s, now=w.clock.t, since=local(2026, 9, 25, 9, 30),
+                           deps=_deps(history=history))
+    finally:
+        AL.list_auto = real_list_auto
+    sec = {s["key"]: s for s in b["sections"]}
+    check("real 'tell me when' matches: only the real one, with the notification's own words",
+          sec["tellme"]["state"] == "ok"
+          and sec["tellme"]["items"] == [f"{S.clock(matched_at)} An email from Alex arrived."],
+          sec.get("tellme"))
+    check("... and 'went off' does not also carry it (never double-counted)",
+          sec["went_off"]["state"] == "empty", sec["went_off"])
+    check("cards that timed out: only the one inside the window, plain English, not the "
+          "approved one, not the one before 'since'",
+          sec["timed_out"]["state"] == "ok"
+          and sec["timed_out"]["items"] == [f"{S.clock(local(2026, 9, 25, 13, 15))} "
+                                            "Jarvis wants to send an email"]
+          and sec["timed_out"]["summary"].startswith("1 approval card timed out"),
+          sec.get("timed_out"))
+    check("facts saved automatically: only the one saved after 'since'",
+          sec["auto_facts"]["state"] == "ok"
+          and sec["auto_facts"]["items"] == ["The owner's sister likes jazz."],
+          sec.get("auto_facts"))
+
+
+def t_an_idle_tell_me_when_check_alone_is_not_something_missed():
+    """The control case the audit itself calls out: a "tell me when" that
+    only ever looked, never matched, is not "something I missed" - not
+    under its own section, and not folded into "went off" either."""
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    w = World(now, name="onlyidle")
+    watch = {"source": "email", "sender": "Nobody"}
+    job = w.s.add_repeat(TM.KIND, {"every": "minutes", "watch": watch}, TM.what_words(watch))
+    TM._save(job["id"], w.s, looked_at=local(2026, 9, 25, 12, 5), look_said="")
+    w.clock.t = local(2026, 9, 25, 12, 30)
+    b = B.build_missed(sched=w.s, now=w.clock.t, since=local(2026, 9, 25, 9, 30), deps=_deps())
+    sec = {s["key"]: s for s in b["sections"]}
+    check("a look with nothing matching: the section says so plainly, not 'failed'",
+          sec["tellme"]["state"] == "empty" and sec["tellme"]["items"] == [], sec.get("tellme"))
+    check("... and it is not counted under 'went off' either",
+          sec["went_off"]["state"] == "empty", sec["went_off"])
 
 
 def t_what_did_i_miss_reads_email_like_the_briefing():

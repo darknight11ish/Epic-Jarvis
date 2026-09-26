@@ -242,6 +242,7 @@ fn main() {
             "delete_custom_voice",
             "set_better_voice",
             "set_voice_speed",
+            "set_voice_speaker",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

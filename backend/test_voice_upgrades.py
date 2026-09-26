@@ -85,9 +85,11 @@ _S_CFG = S._cfg
 class FakeKokoro:
     def __init__(self):
         self.speeds = []
+        self.sids = []
 
     def generate(self, text, sid=0, speed=1.0):
         self.speeds.append(speed)
+        self.sids.append(sid)
         return types.SimpleNamespace(samples=(0.05 * np.ones(24000)).astype(np.float32),
                                      sample_rate=24000)
 
@@ -250,6 +252,89 @@ def t_the_one_moment_clip_follows_it():
     V.set_speed({"speed": "faster"})
     k2 = F.moment_key()[0]
     check("a new speed makes a new \"One moment.\" clip (its key changes)", k1 != k2, (k1, k2))
+
+
+# ------------------------------------------------------- which built-in voice --
+# Ease-of-use audit row 13: which of Kokoro's own voices speaks - the same
+# shape as speed above (no card either way, kept in state.json, `[voice]
+# tts_speaker_id` applies until a choice is made).
+
+def t_the_speaker_choices_come_from_the_pc():
+    reset()
+    view = V.speaker_view()
+    check("eleven choices, in order, ids '0'..'10'",
+          [c["id"] for c in view["choices"]] == [str(i) for i in range(11)], view)
+    check("voice 0 by default, and speaker() is 0",
+          view["choice"] == "0" and V.speaker() == 0 and not view["note"], view)
+    check("only the two the repo's own file comment confirms are named the same way",
+          V.SPEAKER_LABEL["0"] == "American (female)"
+          and V.SPEAKER_LABEL["9"] == "British (male) - George")
+    check("the title and the detail say what it is",
+          view["title"] == "Jarvis's built-in voice" and "Kokoro" in view["detail"])
+    check("GET /api/voice/voices carries it", V.status()["speaker"] == V.speaker_view())
+
+
+def t_setting_the_speaker_asks_nothing_and_says_so():
+    reset()
+    code, out = V.handle_post("/api/voice/voices/speaker", {"speaker": "9"})
+    check("POST speaker: 200, at once", code == 200 and out["ok"] is True, (code, out))
+    check("no card was raised", not CARDS)
+    check("it is kept, and speaker() follows it",
+          V._read_state()["speaker"] == "9" and V.speaker() == 9)
+    check("the answer names the voice and carries the new view",
+          out["message"] == "Jarvis's built-in voice is now British (male) - George."
+          and out["speaker"]["choice"] == "9")
+    check("both apps are told to read again (a `voices` event, no words)",
+          EVENTS == [{"what": "speaker", "outcome": "set"}], EVENTS)
+    check("the audit line has the choice only",
+          AUDIT == [("voices.speaker", {"speaker": "9"})], AUDIT)
+
+
+def t_bad_speaker_bodies_are_refused():
+    reset()
+    for bad in ({"speaker": "11"}, {"speaker": 9}, {}, {"speaker": "9", "x": 1}, "9",
+                None, {"speaker": None}, {"speaker": ["9"]}, {"speaker": "-1"}):
+        code, out = V.set_speaker(bad)
+        check(f"refused: {bad!r}", code == 400 and out["ok"] is False, (code, out))
+    check("and nothing was kept", V._read_state()["speaker"] is None and V.speaker() == 0)
+
+
+def t_the_old_speaker_setting_applies_until_a_choice():
+    reset()
+    CFG["tts_speaker_id"] = 9
+    check("[voice] tts_speaker_id is used before any choice", V.speaker() == 9)
+    view = V.speaker_view()
+    check("shown as that named voice, with no choice ticked yet",
+          view["choice"] == "9" and not view["note"], view)
+    CFG["tts_speaker_id"] = 40
+    check("a hand-set value with no name of its own: shown as custom, said plainly",
+          V.speaker_view()["choice"] == "custom" and "40" in V.speaker_view()["note"]
+          and "tts_speaker_id" in V.speaker_view()["note"])
+    CFG["tts_speaker_id"] = -1
+    check("an impossible hand-set value is ignored", V.speaker() == 0)
+    CFG["tts_speaker_id"] = 9
+    V.set_speaker({"speaker": "3"})
+    check("the owner's choice wins over the file", V.speaker() == 3)
+    V._state_path().write_text(json.dumps({"active": "builtin", "speaker": "warp"}))
+    check("a damaged choice in state.json is no choice", V._read_state()["speaker"] is None)
+
+
+def t_the_built_in_voice_uses_the_chosen_speaker():
+    reset()
+    V.set_speaker({"speaker": "6"})
+    S.say("Of course. I have added the dentist to Tuesday at ten.")
+    check("the built-in voice (Kokoro) is given the owner's chosen speaker",
+          S._tts_cache.sids == [6], S._tts_cache.sids)
+    check("jarvis_speech.tts_speaker() is that one source", S.tts_speaker() == 6)
+
+
+def t_the_one_moment_clip_follows_the_speaker_too():
+    reset()
+    k1 = F.moment_key()[0]
+    V.set_speaker({"speaker": "7"})
+    k2 = F.moment_key()[0]
+    check("a new built-in voice makes a new \"One moment.\" clip (its key changes)",
+          k1 != k2, (k1, k2))
 
 
 # ---------------------------------------------------------- Pocket TTS --

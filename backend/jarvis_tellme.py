@@ -1016,6 +1016,54 @@ def fields(job_id: str) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   "What did I miss?" - real matches only, never an idle look
+# --------------------------------------------------------------------------
+
+def matched_since(since: float, now: Optional[float] = None, *, sched=None) -> list:
+    """Watches that told the owner something between `since` and `now`,
+    newest first - `{"id", "matched_at", "alert", "urgent"}`. This is the
+    ease-of-use audit's "'tell me when' matches" for "What did I miss?"
+    (docs/EASE-OF-USE-AUDIT-2026-09-27.md row 12), and deliberately NOT
+    `jarvis_schedule.fired_since()` with its `silent`-kind filter lifted:
+    that would also hand back every idle look this kind's own `on_fire`
+    stamps `fired_at` for (tick()'s comment above `k.silent` says why a
+    look rings no doorbell), which is exactly what
+    test_tellme.py's `t_looks_are_not_what_i_missed` and
+    `t_past_its_end_it_does_not_look_again` prove is NOT "something I
+    missed". A match is different: it is stamped in THIS module's own
+    `matched_at` (never on the `jobs` row), only when a look actually told
+    the owner something, so this reads that column instead. "Tell every
+    time" keeps only its LATEST match, so an earlier one inside the window
+    followed by a later one outside it is not found separately - the same
+    limit `note()`'s "Happened at ..." line already has."""
+    sched = sched or _sched()
+    now = sched.now() if now is None else now
+    with sched._lock, sched._db() as c:
+        job_ids = [r["id"] for r in c.execute(
+            "SELECT id FROM jobs WHERE kind = ?", (KIND,)).fetchall()]
+    out = []
+    for jid in job_ids:
+        st = _state(jid, sched)
+        matched_at = st.get("matched_at")
+        if matched_at is None:
+            continue
+        matched_at = float(matched_at)
+        if not (since <= matched_at <= now):
+            continue
+        row, rule, watch = _watch_of(jid, sched)
+        if row is None:
+            continue
+        try:
+            alert = alert_words(check_watch(watch), int(st.get("alert_count") or 1))
+        except ValueError:
+            continue
+        out.append({"id": jid, "matched_at": matched_at, "alert": alert,
+                    "urgent": bool((watch or {}).get("urgent"))})
+    out.sort(key=lambda d: d["matched_at"], reverse=True)
+    return out
+
+
+# --------------------------------------------------------------------------
 #   Setting one up - from an app (the route) or the fast path
 # --------------------------------------------------------------------------
 

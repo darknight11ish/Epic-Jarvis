@@ -85,10 +85,35 @@ owner's previous message to Jarvis, from either app, or the last time
 kept in this process's memory only; after a restart it is "the last 12
 hours", and said so). Never more than FIRED_KEEP back: the scheduler keeps
 what went off for a day. It is answered without the model, marked private
-like the briefing, and never kept as the latest briefing. Cards that
-EXPIRED while the owner was away are not listed: the gate's record of past
-cards is in the owner's jarvis_gate.py, which this repository does not
-hold, so nothing here reads it.
+like the briefing, and never kept as the latest briefing.
+
+COVERS MORE (ease-of-use audit, `docs/EASE-OF-USE-AUDIT-2026-09-27.md` row
+12): four more, each its own labelled section, never merged into "went
+off" -
+  * Cards that timed out (nobody there to answer): `_timed_out_section`
+    reads jarvis_gate.history() - the SAME array the "Activity" list
+    reads (docs/JARVIS-API.md §42). This corrects what this docstring said
+    until now ("not listed... this repository does not hold it") - the
+    gate DOES have a history() (confirmed by `backend/test_gate_egress.py`
+    reading its source on the real PC), this module just never read it.
+    Its exact field names are still ASSUMED, not confirmed, for the same
+    reason §42.1 gives - read the same tolerant way (state/outcome,
+    decided_at/created, notice.title) so a guess never becomes a claim.
+    When jarvis_gate.history() cannot be read at all, the section is left
+    out, like a source that is not set up.
+  * Facts saved automatically: `_auto_facts_section` reads
+    jarvis_auto_learn.list_auto() - the same "Saved automatically" list.
+  * Real "tell me when" matches, never an idle look: `_tellme_matches_section`
+    reads jarvis_tellme.matched_since(), which is NOT `fired_since()` with
+    its silent-kind filter lifted - a look that found nothing must stay
+    out (test_tellme.py's `t_looks_are_not_what_i_missed` and
+    `t_past_its_end_it_does_not_look_again` say so on purpose: a watch
+    that simply ran out is not news). It reads the same `matched_at` a
+    matched watch already stamps for its own card, and the same
+    `alert_words()` sentence its notification says.
+  * Finished jobs (timers, reminders, alarms, the to-do list, the morning
+    briefing): already the "went off" section, unchanged - it is not a
+    gap, and stays here so this list is complete.
 
 OFFERS
 The briefing makes no offer of its own - it never suggests setting itself
@@ -253,6 +278,61 @@ def _pending_created() -> Optional[list]:
         return None
 
 
+def _pending_history() -> Optional[list]:
+    """The gate's own `history` rows (Approved / Denied / Timed out, and
+    when) - or None when jarvis_gate.py has no history() to read (an older
+    backend) or reading it failed. Used only for "What did I miss?"'s
+    "Cards that timed out"; the exact row shape is read the same tolerant
+    way docs/JARVIS-API.md §42.1 does, never guessed at here."""
+    try:
+        import jarvis_gate
+        fn = getattr(jarvis_gate, "history", None)
+        if fn is None:
+            return None
+        rows = fn()
+        return list(rows) if rows is not None else []
+    except Exception:
+        return None
+
+
+def _history_outcome(row: dict) -> str:
+    """"approved" / "denied" / "timed_out" / "unknown" - `state` (approvals'
+    own column) or `outcome` (Verdict's word for the same event), read the
+    same tolerant way the Activity list does (brain.js's activityOutcome)."""
+    state = str(row.get("state") or row.get("outcome") or "").strip().lower()
+    if state == "approved":
+        return "approved"
+    if state == "denied":
+        return "denied"
+    if state in ("expired", "timed_out"):
+        return "timed_out"
+    return "unknown"
+
+
+def _history_when(row: dict) -> Optional[float]:
+    """The decision time if the row has one, else when it was raised -
+    mirrors brain.js's activityWhen. None when neither is a real number."""
+    for key in ("decided_at", "created"):
+        v = row.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+            return float(v)
+    return None
+
+
+def _history_title(row: dict) -> str:
+    """`notice.title` when the row carries one, else the same fallback
+    title a live card with no notice already uses - never `detail` or
+    `prompt` (a history row never carries either, by construction)."""
+    notice = row.get("notice")
+    if isinstance(notice, dict) and notice.get("title"):
+        return str(notice["title"])
+    try:
+        import jarvis_card_words as CW
+        return CW.title_for(row.get("action") or "")
+    except Exception:
+        return "a card"
+
+
 def _publish(kind: str, data: dict) -> None:
     try:
         import jarvis_events
@@ -268,6 +348,7 @@ class Deps:
     tools_enabled: Callable[[], set] = _tools_enabled
     pending_count: Callable[[], Optional[int]] = _pending_count
     pending_created: Callable[[], Optional[list]] = _pending_created
+    pending_history: Callable[[], Optional[list]] = _pending_history
     calendar_fetch: Optional[Callable] = None     # jarvis_calendar.run's `fetch`
     email_search: Optional[Callable] = None       # jarvis_email.count's `search`
     email_senders: Optional[Callable] = None      # jarvis_email.senders's `fetch`
@@ -950,6 +1031,88 @@ def _went_off_section(sched, since: float, now: float) -> dict:
     return _section("went_off", "Went off", "ok", summary, items)
 
 
+def _tellme_matches_section(sched, since: float, now: float) -> Optional[dict]:
+    """Real "tell me when" matches since `since` - a watch that told the
+    owner something, never a look that only checked (jarvis_tellme.py's
+    own kind is left out of `_went_off_section` on purpose - see
+    test_tellme.py's `t_looks_are_not_what_i_missed`). None when
+    jarvis_tellme.py cannot be read at all (its module missing on an older
+    backend); the section is then left out, like a source not set up."""
+    try:
+        import jarvis_tellme as TM
+        matches = TM.matched_since(since, now, sched=sched)
+    except Exception:
+        return None
+    title = "\"Tell me when\" matches"
+    if not matches:
+        return _section("tellme", title, "empty",
+                         "None of your \"tell me when\" watches matched.")
+    items = [f"{S.clock(m['matched_at'])} {m['alert']}" for m in matches[:MAX_ITEMS]]
+    if len(matches) > MAX_ITEMS:
+        items.append(f"... and {len(matches) - MAX_ITEMS} more")
+    summary = _plural(len(matches), "watch", "watches") + " matched."
+    return _section("tellme", title, "ok", summary, items)
+
+
+def _timed_out_section(deps: Deps, since: float, now: float) -> Optional[dict]:
+    """Approval cards that timed out (nobody there to answer) since
+    `since` - the SAME `history` array jarvis_gate.py keeps for the
+    "Activity" list (docs/JARVIS-API.md §42), read the same tolerant way.
+    None when that history cannot be read at all; the section is then
+    left out, like a source not set up (never shown as "failed" - an
+    older backend simply does not have this yet)."""
+    try:
+        hist = deps.pending_history()
+    except Exception:
+        hist = None
+    if hist is None:
+        return None
+    title = "Cards that timed out"
+    rows = []
+    for row in hist:
+        if not isinstance(row, dict) or _history_outcome(row) != "timed_out":
+            continue
+        when = _history_when(row)
+        if when is None or not (since <= when <= now):
+            continue
+        rows.append((when, _history_title(row)))
+    if not rows:
+        return _section("timed_out", title, "empty", "No approval cards timed out.")
+    rows.sort(key=lambda r: r[0], reverse=True)
+    items = [f"{S.clock(w)} {t}" for w, t in rows[:MAX_ITEMS]]
+    if len(rows) > MAX_ITEMS:
+        items.append(f"... and {len(rows) - MAX_ITEMS} more")
+    summary = (_plural(len(rows), "approval card") + " timed out - nobody was there to answer "
+               + ("it" if len(rows) == 1 else "them") + " in time.")
+    return _section("timed_out", title, "ok", summary, items)
+
+
+def _auto_facts_section(since: float, now: float) -> Optional[dict]:
+    """Facts Jarvis saved by itself (background learning) since `since` -
+    the SAME list "Saved automatically" shows (jarvis_auto_learn.list_auto).
+    None when that module cannot be read at all; the section is then left
+    out, like a source not set up."""
+    try:
+        import jarvis_auto_learn as AL
+        out = AL.list_auto(limit=AL.LIST_MAX, now=now)
+    except Exception:
+        return None
+    title = "Facts saved automatically"
+    facts = []
+    for f in (out.get("facts") or []):
+        t = f.get("saved_at")
+        if isinstance(t, (int, float)) and not isinstance(t, bool) and since <= t <= now:
+            facts.append(f)
+    if not facts:
+        return _section("auto_facts", title, "empty", "No facts were saved automatically.")
+    facts.sort(key=lambda f: f["saved_at"], reverse=True)
+    items = [_clean(f.get("text") or "") for f in facts[:MAX_ITEMS]]
+    if len(facts) > MAX_ITEMS:
+        items.append(f"... and {len(facts) - MAX_ITEMS} more")
+    summary = _plural(len(facts), "fact") + " saved automatically."
+    return _section("auto_facts", title, "ok", summary, items)
+
+
 def _waiting_section(deps: Deps, since: float) -> dict:
     s = _approvals_section(deps)
     if s["state"] != "ok":
@@ -1005,9 +1168,12 @@ def _next_section(sched, now: float) -> dict:
 def build_missed(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = None,
                  since: Optional[float] = None) -> dict:
     """ "What did I miss?": what went off since `since` (the owner's last
-    message - touch()), approval cards waiting, unread email as the briefing
-    reads it, and what is next. Reads only; acts on nothing; the email read
-    goes through the gate exactly as the briefing's does. Never kept."""
+    message - touch()), real "tell me when" matches, approval cards that
+    timed out, facts saved automatically, approval cards waiting, unread
+    email as the briefing reads it, and what is next - each its own
+    labelled section (docs/EASE-OF-USE-AUDIT-2026-09-27.md row 12). Reads
+    only; acts on nothing; the email read goes through the gate exactly as
+    the briefing's does. Never kept."""
     deps = deps or Deps()
     sched = sched or S.get()
     now = time.time() if now is None else now
@@ -1024,7 +1190,13 @@ def build_missed(*, sched=None, now: Optional[float] = None, deps: Optional[Deps
     not_included = []
     if src["email"]["state"] not in ("on", "off"):
         not_included.append(src["email"]["said"])
-    sections = [_went_off_section(sched, start, now), _waiting_section(deps, start)]
+    sections = [_went_off_section(sched, start, now)]
+    for extra in (_tellme_matches_section(sched, start, now),
+                  _timed_out_section(deps, start, now),
+                  _auto_facts_section(start, now)):
+        if extra is not None:
+            sections.append(extra)
+    sections.append(_waiting_section(deps, start))
     if email is not None:
         thread, box = email
         thread.join(max(0.0, deps.deadline - (time.time() - started)))

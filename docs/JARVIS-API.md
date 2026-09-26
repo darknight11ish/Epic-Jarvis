@@ -1806,6 +1806,24 @@ way** - it trusts nothing more (like the manner setting, section 27) - but,
 like every change, held on a stale link. Before the owner first chooses,
 `[voice] tts_speed` in `jarvis-framework.toml` still applies.
 
+**Which of Kokoro's own voices Jarvis's built-in voice uses** (added
+2026-09-27, ease-of-use audit row 13): the exact same shape as speed, right
+next to it in both apps - `status()` carries the choices and every word
+(`speaker`, below); `POST /api/voice/voices/speaker` sets it; no card either
+way; held on a stale link; `[voice] tts_speaker_id` still applies before the
+owner first chooses. This closes the one gap the audit found in speed's own
+shape: speed already had settings UI in both apps, the built-in voice choice
+never had. Only two of the eleven named choices are confirmed against
+this repository (`jarvis_voices.KOKORO_VOICES`'s own comment): index 0 and
+index 9, from `jarvis-framework.toml`'s commented-out example ("0 =
+American female; 9 = British male (bm_george)"). The rest is Kokoro's own
+published American+British voice pack (kokoro-en-v0_19) - kept only for
+being internally consistent with those two confirmed points - since the
+installed sherpa-onnx exposes a voice **count** (`OfflineTts.num_speakers`)
+but no names at all, and `status()` stays cheap on purpose (no model is
+loaded to answer it). Choosing a voice beyond what a PC's real model has is
+no different from setting `tts_speaker_id` too high by hand today.
+
 **Where the audio goes: nowhere.** The recording is held in the PC's memory
 until the card is answered; approved, it is kept in
 `<config dir>/voices/<id>/` (`clip.wav` - mono, 24 kHz, 16-bit -
@@ -1823,7 +1841,8 @@ any voice print changes.
 All routes: token + origin, like every other write. A client sends
 `X-Jarvis-Client: hud` as always. **Hold on a stale link (rule 4) every
 POST that raises a card** - adding a voice, switching to a custom one,
-better voice ON - and the speed (a change, though it raises none). Deleting a voice, going back to the built-in one and
+better voice ON - and the speed and the built-in voice choice (a change,
+though each raises none). Deleting a voice, going back to the built-in one and
 better voice OFF only take something away and always go (both apps). Show every `error` and `why` word for word: they are written for the
 owner.
 
@@ -1834,6 +1853,7 @@ owner.
 | `POST /api/voice/voices/active` | `{"voice": "<id>"}` or `{"voice": "builtin"}` | `builtin`: **200** `{"ok": true, "active": "builtin", "pending": false, "message"}` at once, no card (it also withdraws a waiting switch card and stops the better voice). A custom voice: **202** `{"ok": true, "pending": true, "voice": "<id>", "message"}` - ONE card (`custom_voice`); **200** `{"ok": true, "active": "<id>", "pending": false, "message"}` if already active; **404** unknown id; **409** as for create (`refused: "owner_voice"`, a card waiting, tier not `ask`, or its recording unreadable) | Nothing changes until the card is approved. |
 | `POST /api/voice/voices/delete` | `{"voice": "<id>"}` | **200** `{"ok": true, "deleted": "<id>", "active": "<id>" \| "builtin"}` at once, no card; **400** for `builtin`; **404** unknown id; 500 `{"ok": false, "error"}` if the folder could not be removed | Deletes the folder. If Jarvis was speaking in it, it goes back to the built-in voice (`active` says so). |
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
+| `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
 Errors from the route itself (not the module): **400** `{"error": "the
@@ -1878,6 +1898,11 @@ request.
            "choices": [{"id": "slower", "label": "Slower"},
                        {"id": "normal", "label": "Normal"},
                        {"id": "faster", "label": "Faster"}]},        absent on an older PC: show nothing
+ "speaker": {"choice": "0".."10" | "custom",   "custom": set by hand in the toml, not a named voice
+             "value": 0,                  Kokoro's own `sid`
+             "default": "0",
+             "title": "Jarvis's built-in voice", "detail": str, "note": str,
+             "choices": [{"id": "0", "label": "American (female)"}, ... 11 in all]},   absent on an older PC: show nothing
  "pending": {"kind": "create" | "switch", "voice": "<id>", "name": str, "expires_in": <seconds>} | null,
  "last": {"kind": "create" | "switch", "voice": "<id>",
           "outcome": "created"|"switched"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",
@@ -4372,9 +4397,20 @@ What it lists, in this order, each a section in the briefing's own shape:
 | Section (`key`) | What |
 |---|---|
 | Went off (`went_off`) | Every timer, alarm, reminder, briefing and to-do due that went off since then (a repeating one: its latest time), "10:00 call the bank", "(late - the PC was off or asleep)". Not a "tell me when" look (a `silent` kind: looking at the inbox is not news - fixed 2026-09-26), and not the standby schedule. |
-| Approvals (`approvals`) | How many cards wait, and how many of them came up since then - "Open Jarvis to answer." Never an Approve. **Cards that expired while you were away are not listed**: the gate's record of past cards is in the owner's `jarvis_gate.py`, which this repository does not hold, so nothing reads it. |
+| "Tell me when" matches (`tellme`, added 2026-09-27) | A real match only - never an idle look, and never a watch that simply ran out with no match (both stay "not something I missed", by the same reasoning `went_off` already excludes them). The same sentence its notification says, "14:05 An email from Alex arrived.". `jarvis_tellme.matched_since()`, not `fired_since()` with the silent-kind filter lifted. |
+| Cards that timed out (`timed_out`, added 2026-09-27) | Approval cards nobody was there to answer, since then. Reads `jarvis_gate.history()` - the SAME array the "Activity" list reads (§42) - the same tolerant way: `state`/`outcome` `expired`/`timed_out`, `decided_at`/`created`, `notice.title`/the fallback title. **Corrects §22.9's earlier claim** that expired cards "are not listed" - the gate does have a `history()` (§42.1), this builder just never read it before. Left out of the answer entirely (not shown as "failed") when `jarvis_gate.history()` cannot be read at all - an older backend, or one this repository's evidence still cannot fully confirm the row shape of. |
+| Facts saved automatically (`auto_facts`, added 2026-09-27) | Facts background learning saved by itself since then, full text - the SAME list "Saved automatically" shows (`jarvis_auto_learn.list_auto`). Hidden with the rest under "Hide memory lists and chat history", like every other section's `items`. |
+| Approvals (`approvals`) | How many cards wait, and how many of them came up since then - "Open Jarvis to answer." Never an Approve. |
 | Email (`email`) | Exactly as the briefing (22.1): unread count and the newest five senders, only when email is set up, through the same gate action and the same "Show who new emails are from" setting; `read` says email was read when senders are shown. |
 | Coming up (`next`) | The next three things on the list, "18:00 today: water the plants". |
+
+The three added 2026-09-27 (ease-of-use audit row 12, `docs/EASE-OF-USE-AUDIT-2026-09-27.md`)
+are each their own section, never folded into `went_off` - **"finished
+jobs" is `went_off` itself**, unchanged; the audit's own wording just
+confirms it belongs in this list too. Any of the three is left out of
+`sections` entirely when its source cannot be read (an older backend
+module, or one missing outright) - the same way `email` is left out when
+it is not set up, rather than shown as broken.
 
 No calendar, and no weather line. `source` is `"missed"`, and `since` /
 `since_known` say what "since" was. It is **not kept** as the latest
