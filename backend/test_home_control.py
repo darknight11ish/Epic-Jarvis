@@ -443,6 +443,12 @@ with with_env(url="http://192.168.1.20:8123", token="tok"):
           .endswith("/api/states/weather.back_garden"))
     os.environ.pop(H.WEATHER_ENV, None)
 
+    odd = H.run(wp, fetch=lambda q: ["not", "a", "state"] if q.method == "GET" else {
+        "service_response": {"weather.forecast_home": {"forecast": {"a": 1}}}}, approved=True)
+    check("weather: answers of the wrong shape are read as nothing, never raised",
+          odd.get("ok") is True and odd["days"] == [] and odd["now"] == {"condition": "",
+                                                                          "temp": None}, repr(odd))
+
     import urllib.error as _ue  # noqa: E402
 
     def missing(q):

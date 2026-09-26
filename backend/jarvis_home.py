@@ -621,8 +621,9 @@ def _forecast_rows(raw, entity_id: str) -> list:
     if not isinstance(resp, dict):
         resp = raw if isinstance(raw, dict) else {}
     one = resp.get(entity_id) if isinstance(resp.get(entity_id), dict) else {}
+    forecast = one.get("forecast")
     out = []
-    for e in (one.get("forecast") or [])[:_MAX_DAYS * 2]:
+    for e in (forecast if isinstance(forecast, list) else [])[:_MAX_DAYS * 2]:
         if not isinstance(e, dict):
             continue
         day = str(e.get("datetime") or "")[:10]
@@ -661,11 +662,12 @@ def _run_forecast(p: Plan, getter) -> dict:
                                         "forecasts this way")}
     except Exception as exc:
         return {"ok": False, "reason": f"the forecast read failed: {type(exc).__name__}"}
-    attrs = state.get("attributes") if isinstance(state, dict) else None
+    state = state if isinstance(state, dict) else {}
+    attrs = state.get("attributes")
     attrs = attrs if isinstance(attrs, dict) else {}
     unit = attrs.get("temperature_unit")
     unit = unit if unit in ("°C", "°F") else "°"
-    now = {"condition": CONDITIONS.get(str((state or {}).get("state") or ""), ""),
+    now = {"condition": CONDITIONS.get(str(state.get("state") or ""), ""),
            "temp": _number(attrs.get("temperature"))}
     return {"ok": True, "entity_id": get.entity_id, "unit": unit, "now": now,
             "days": _forecast_rows(raw, get.entity_id)}

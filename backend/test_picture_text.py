@@ -265,6 +265,10 @@ def t_the_engine_wrapper():
           and OCR.read_text(PNG, runner=lambda b: (1, b"nonsense"))["why"] == OCR.FAILED
           and OCR.read_text(PNG, runner=lambda b: 1 / 0)["why"] == OCR.FAILED)
 
+    got = OCR.read_text(PNG, runner=lambda b: (0, b'WARNING: something\r\n{"ok":true,"lines":["x"]}\r\n'))
+    check("the one JSON line is found even with other output around it",
+          got["ok"] is True and got["text"] == "x", repr(got))
+
     def slow(b):
         raise subprocess.TimeoutExpired("powershell.exe", OCR.TIMEOUT_S)
     check("too slow: said", OCR.read_text(PNG, runner=slow)["why"] == OCR.TOO_SLOW)

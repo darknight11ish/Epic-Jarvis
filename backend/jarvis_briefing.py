@@ -469,8 +469,17 @@ def weather_now(*, now: Optional[float] = None, deps: Optional[Deps] = None) -> 
     now = time.time() if now is None else float(now)
     src = _weather_source(deps, deps.tools_enabled())
     if src["state"] != "on":
-        return {"text": WEATHER_NOT_HERE if src["state"] == "off" else src["said"], "read": []}
-    s = _read_weather(now, deps, purpose="\"what's the weather?\"")
+        return {"text": WEATHER_NOT_HERE if src["state"] == "off" else WEATHER_ASKS_NOW,
+                "read": []}
+    # The briefing's own deadline: a Home Assistant that does not answer
+    # must not hold the chat answer for its full timeouts.
+    thread, box = _in_thread(_read_weather, now, deps, "\"what's the weather?\"")
+    thread.join(deps.deadline)
+    if thread.is_alive():
+        return {"text": "Jarvis could not read the weather: your Home Assistant did not answer "
+                        "in time.", "read": []}
+    s = box.get("out") or _section("weather", WEATHER_TITLE, "failed",
+                                   f"Not read: something went wrong ({box.get('error', 'unknown')}).")
     if s["state"] != "ok":
         return {"text": f"Jarvis could not read the weather. {s['summary']}", "read": []}
     lines = [s["summary"]] + [i + "." for i in s["items"]]
@@ -481,6 +490,9 @@ def weather_now(*, now: Optional[float] = None, deps: Optional[Deps] = None) -> 
 WEATHER_NOT_HERE = ("Jarvis has no weather to tell you: it comes only from your own Home "
                     "Assistant, which is not set up for Jarvis on this PC, and Jarvis looks "
                     "nothing up on the internet for it.")
+WEATHER_ASKS_NOW = ("The weather was not read: your settings ask for a yes each time Jarvis "
+                    "reads Home Assistant (\"What asks first\"), and a quick answer does not "
+                    "raise a card for that.")
 
 
 def _email_source(src: dict, deps: Deps) -> dict:

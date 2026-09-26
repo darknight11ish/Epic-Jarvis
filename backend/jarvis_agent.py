@@ -3621,24 +3621,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # The model writing this turn, for a tool that must know (send_email:
     # rule 1). The same dict object - `cur.update` below keeps it current.
     watch.lane = cur
-    # A picture the model answering cannot see: the backend reads its words
-    # itself and adds them as OUTSIDE TEXT (with_picture_text, the owner's
-    # decision of 2026-09-26). Not on the second card's picture lane, whose
-    # model sees the picture; not when Ollama says this model can.
+    # Set below, once the keepalives are running (with_picture_text).
     picture_text = None
-    if cur["feature"] != "vision" and newest_turn_has_image(convo):
-        sees = _model_can_see_pictures(cur["url"], cur["model"])
-        if sees is not True:
-            if announce is not None:
-                try:
-                    announce(PICTURE_TEXT_NOTE)
-                except Exception:
-                    pass
-            convo, picture_text = with_picture_text(convo, keep_picture=sees is None)
-            if picture_text["read"]:
-                # Exactly as a reading tool's result: counted, flagged, and
-                # what a card's arguments are checked against.
-                watch.took_in(PICTURE_TEXT_TOOL, {"text": picture_text["text"]})
     names = [] if cur["feature"] == "vision" else offered_tools(enabled_tools)
     if names and _model_can_use_tools(cur["url"], cur["model"]) is False:
         names = []
@@ -3838,6 +3822,24 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                    or local_model_refusal(cur["url"], cur["model"]))
         if refused:
             raise UpstreamError(refused)
+        # A picture the model answering cannot see: the backend reads its
+        # words itself and adds them as OUTSIDE TEXT (with_picture_text, the
+        # owner's decision of 2026-09-26). Not on the second card's picture
+        # lane, whose model sees the picture; not when Ollama says this model
+        # can. Here, after the keepalives started: reading can take seconds.
+        if cur["feature"] != "vision" and newest_turn_has_image(convo):
+            sees = _model_can_see_pictures(cur["url"], cur["model"])
+            if sees is not True:
+                if announce is not None:
+                    try:
+                        announce(PICTURE_TEXT_NOTE)
+                    except Exception:
+                        pass
+                convo, picture_text = with_picture_text(convo, keep_picture=sees is None)
+                if picture_text["read"]:
+                    # Exactly as a reading tool's result: counted, flagged,
+                    # and what a card's arguments are checked against.
+                    watch.took_in(PICTURE_TEXT_TOOL, {"text": picture_text["text"]})
         # Is the model still to be loaded (after standby, or the first
         # question of the day)? Asked once, after the refusal check, so
         # nothing is asked of a machine that is not this PC.

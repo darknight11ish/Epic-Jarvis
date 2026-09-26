@@ -180,8 +180,11 @@ def read_text(image: bytes, *, runner: Optional[Callable[[bytes], tuple]] = None
         return {"ok": False, "text": "", "left_out": 0, "why": TOO_SLOW}
     except Exception:
         return {"ok": False, "text": "", "left_out": 0, "why": FAILED}
+    out = bytes(raw or b"").decode("utf-8-sig", "replace")
+    # The one JSON line, even if Windows printed something around it.
+    start, end = out.find("{"), out.rfind("}")
     try:
-        got = json.loads(bytes(raw or b"").decode("utf-8-sig", "replace").strip() or "{}")
+        got = json.loads(out[start:end + 1]) if 0 <= start < end else {}
     except ValueError:
         got = {}
     if not isinstance(got, dict) or got.get("ok") is not True:

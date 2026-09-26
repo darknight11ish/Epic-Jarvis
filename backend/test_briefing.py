@@ -1063,6 +1063,31 @@ def t_the_weather_from_home_assistant():
         got = B.weather_now(now=local(2026, 9, 26, 9, 0), deps=d3)
         check("\"what's the weather?\" with no Home Assistant: says so, fetches nothing",
               got == {"text": B.WEATHER_NOT_HERE, "read": []})
+        got = B.weather_now(now=local(2026, 9, 26, 9, 0), deps=d2)
+        check("\"what's the weather?\" when reading Home Assistant asks first: says so, no card",
+              got == {"text": B.WEATHER_ASKS_NOW, "read": []} and not seen2)
+        gone = threading.Event()
+
+        def hangs(q):
+            gone.wait(5)
+            return {}
+        d5, _ = _weather_deps(fetch=hangs)
+        d5.deadline = 0.3
+        t0 = time.time()
+        got = B.weather_now(now=local(2026, 9, 26, 9, 0), deps=d5)
+        gone.set()
+        check("\"what's the weather?\": a Home Assistant that does not answer never holds the "
+              "answer past the deadline", time.time() - t0 < 2 and "did not answer in time"
+              in got["text"] and got["read"] == [], repr(got))
+
+        def odd(q):
+            return ["not", "a", "state"] if q.method == "GET" else {
+                "service_response": {"weather.forecast_home": {"forecast": {"a": 1}}}}
+        d6, _ = _weather_deps(fetch=odd)
+        b6 = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d6)
+        check("an answer of the wrong shape from Home Assistant is survived, and said",
+              b6["sections"][0]["key"] == "weather"
+              and b6["sections"][0]["state"] in ("empty", "failed"), repr(b6["sections"][0]))
         check("the grammar: the plain question, today or tomorrow, is answered without the model",
               all(Q.match(t) is not None and Q.match(t).name == "weather_now" for t in (
                   "what's the weather", "What is the weather like today?", "weather",
