@@ -2,6 +2,27 @@
 
 Every version is kept. The newest is at the top. Tap a picture to watch.
 
+## v5 — "A day with Jarvis" (30 s, plus a 15 s upright cut)
+
+[![Jarvis launch video v5](v5/jarvis-launch-v5.jpg)](v5/jarvis-launch-v5.mp4)
+
+A completely new style: one ordinary day, from 7:30 in the morning to 23:00
+at night, in one continuous shot with no cuts. The sky changes with the hour,
+and the app's screens go from its light theme by day to its dark theme at
+night. Along the way:
+- "Brief me now." (a morning briefing made without the AI model);
+- a focus session ("YouTube can wait.");
+- "Tell me when" an email arrives, and the phone rings until you look;
+- a fact learned from your own words, with Forget and "Erase the words";
+- one tap on the phone to put Jarvis on Standby, which frees the graphics card.
+
+Every screen is the real desktop app with made-up examples, the phones are
+drawn with the app's own words, and `v5/brag-plan.md` lists where each claim
+is in the code. The music is new too: a relaxed, warm groove that follows the
+day.
+
+For a phone held upright: [the 15-second cut](v5/jarvis-launch-v5-vertical.mp4).
+
 ## v4 — "Cutting-edge. And it still asks first." (30 s, plus a 15 s upright cut)
 
 [![Jarvis launch video v4](v4/jarvis-launch-v4.jpg)](v4/jarvis-launch-v4.mp4)

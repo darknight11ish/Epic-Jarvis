@@ -220,8 +220,8 @@ the next version, and every version goes on GitHub.
 
 - Finished videos live in `videos/vN/` as `jarvis-launch-vN.mp4` with its
   poster `jarvis-launch-vN.jpg`, the plan, the brief, the share copy and the
-  Hyperframes project. v1 to v4 are there (v3 and v4 also have a 15 s upright
-  cut, `jarvis-launch-vN-vertical.mp4`); the next one is v5.
+  Hyperframes project. v1 to v5 are there (v3, v4 and v5 also have a 15 s
+  upright cut, `jarvis-launch-vN-vertical.mp4`); the next one is v6.
 - The `/brag` skill renders into `brag-output/`, which is gitignored scratch.
   Copy the finished video into `videos/vN/`, add it to the top of
   `videos/README.md`, point the README's "Launch video" section at it, and
