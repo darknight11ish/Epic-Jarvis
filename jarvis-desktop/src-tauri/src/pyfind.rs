@@ -168,7 +168,7 @@ fn python_subfolders(base: &Path, entries: &[String]) -> Vec<PathBuf> {
             digits.parse::<u32>().ok().map(|n| (n, name))
         })
         .collect();
-    named.sort_by(|a, b| b.0.cmp(&a.0));
+    named.sort_by_key(|a| std::cmp::Reverse(a.0));
     named
         .into_iter()
         .map(|(_, name)| base.join(name).join("python.exe"))
