@@ -64,6 +64,21 @@ The `schedule` event for a briefing: "fired" when its time comes (the
 scheduler's own), then "ready" once it is put together - the apps notify on
 "ready", so the notification is never ahead of the briefing.
 
+"WHAT DID I MISS?" (2026-09-25, the creativity audit's item 7)
+The same builder, run for "since you last looked" instead of for the day:
+what went off, approval cards waiting, unread email (count and senders,
+under the same settings and the same gate), and what is next. "Since you
+last looked" is defined simply, and said in the answer: the time of the
+owner's previous message to Jarvis, from either app, or the last time
+"What did I miss?" was asked (touch() below - one time for the whole PC,
+kept in this process's memory only; after a restart it is "the last 12
+hours", and said so). Never more than FIRED_KEEP back: the scheduler keeps
+what went off for a day. It is answered without the model, marked private
+like the briefing, and never kept as the latest briefing. Cards that
+EXPIRED while the owner was away are not listed: the gate's record of past
+cards is in the owner's jarvis_gate.py, which this repository does not
+hold, so nothing here reads it.
+
 OFFERS
 The briefing makes no offer of its own - it never suggests setting itself
 up, or anything else. If one is ever added, it goes through
@@ -131,6 +146,19 @@ SOURCE_SENDERS = ("Included: how many unread emails you have, and who the newest
                   f"{SENDERS_MAX} are from.")
 SOURCE_COUNT_ONLY = "Included: how many unread emails you have (the number only)."
 
+#: "What did I miss?" - both apps' words (briefing.js, net/Briefing.kt).
+MISSED_LABEL = "What did I miss?"
+MISSED_DETAIL = ("Since you last talked to Jarvis, on either app: what went off, approval "
+                 "cards waiting, unread email and what is next. Put together on your PC "
+                 "without the AI model.")
+MISSED_MISSING = ("Your PC's Jarvis does not have \"What did I miss?\" yet - run "
+                  "apply-patches.ps1 on the PC.")
+#: With no earlier message known (Jarvis restarted), this far back.
+MISSED_FALLBACK = 12 * 3600.0
+#: Never further back than the scheduler keeps what went off.
+MISSED_LONGEST = S.FIRED_KEEP
+MISSED_NEXT = 3
+
 #: How long the calendar and email reads may take together, in seconds.
 READ_DEADLINE = 25.0
 
@@ -181,6 +209,22 @@ def _pending_count() -> Optional[int]:
         return None
 
 
+def _pending_created() -> Optional[list]:
+    """When each waiting card came up (its `created`), or None when that
+    cannot be read. For "What did I miss?": how many came up since."""
+    try:
+        import jarvis_gate
+        out = []
+        for row in jarvis_gate.pending() or []:
+            t = row.get("created") if isinstance(row, dict) else None
+            if isinstance(t, bool) or not isinstance(t, (int, float, str)):
+                return None
+            out.append(float(t))
+        return out
+    except Exception:
+        return None
+
+
 def _publish(kind: str, data: dict) -> None:
     try:
         import jarvis_events
@@ -195,6 +239,7 @@ class Deps:
     gate: Callable = _gate
     tools_enabled: Callable[[], set] = _tools_enabled
     pending_count: Callable[[], Optional[int]] = _pending_count
+    pending_created: Callable[[], Optional[list]] = _pending_created
     calendar_fetch: Optional[Callable] = None     # jarvis_calendar.run's `fetch`
     email_search: Optional[Callable] = None       # jarvis_email.count's `search`
     email_senders: Optional[Callable] = None      # jarvis_email.senders's `fetch`
@@ -420,7 +465,9 @@ def sender_line(names: list, count: int, looked_at: int) -> str:
     return f"From {_join(names)}"
 
 
-def _read_email(deps: Deps) -> dict:
+def _read_email(deps: Deps, purpose: str = "the morning briefing") -> dict:
+    """`purpose` names what asked, in the gate's words ("What did I miss?"
+    passes its own), so a notify-tier notice says the right thing."""
     title = "Email"
     import jarvis_email as MAIL
     p = MAIL.plan(1, unread_only=True)
@@ -432,7 +479,7 @@ def _read_email(deps: Deps) -> dict:
     except Exception:
         with_senders = False
     where = ("the \"" + p.mailbox + "\" mailbox on " + p.host + ":" + str(p.port)
-             + " for the morning briefing: one connection, search UNSEEN")
+             + " for " + purpose + ": one connection, search UNSEEN")
     if with_senders:
         text = ("Jarvis would like to count the unread messages in " + where
                 + ", then read the From line only of the newest " + str(SENDERS_MAX)
@@ -441,7 +488,7 @@ def _read_email(deps: Deps) -> dict:
         text = ("Jarvis would like to count the unread messages in " + where
                 + ", the number only - no sender, subject or text is read.")
     try:
-        v = deps.gate(EMAIL_ACTION, {"text": text, "for": "the morning briefing"}, text)
+        v = deps.gate(EMAIL_ACTION, {"text": text, "for": purpose}, text)
     except Exception:
         v = None
     if getattr(v, "allowed", False) is not True:
@@ -517,9 +564,13 @@ def _today_section(sched, now: float) -> dict:
 
 
 def _todo_section(sched, now: float) -> dict:
-    todos = sched.todos()
-    if not todos:
-        return _section("todo", "To-do list", "empty", "Nothing on your to-do list.")
+    # The to-do list itself; a named list ("shopping") is one line with its
+    # count (2026-09-25).
+    todos = [t for t in sched.todos() if not t.get("list")]
+    try:
+        named = list(sched.lists()) if hasattr(sched, "lists") else []
+    except Exception:
+        named = []
     items = []
     for t in todos[:MAX_TODO_ITEMS]:
         line = _clean(t.get("text") or "")
@@ -529,7 +580,15 @@ def _todo_section(sched, now: float) -> dict:
         items.append(line)
     if len(todos) > MAX_TODO_ITEMS:
         items.append(f"... and {len(todos) - MAX_TODO_ITEMS} more")
-    return _section("todo", "To-do list", "ok", _plural(len(todos), "open item") + ".", items)
+    for lst in named:
+        items.append(f"{_clean(lst.get('title') or '')}: {_plural(int(lst.get('open') or 0), 'item')}")
+    summary = (_plural(len(todos), "open item") + ".") if todos else "Nothing on your to-do list."
+    if named:
+        summary += (" 1 other list has items." if len(named) == 1
+                    else f" {len(named)} other lists have items.")
+    if not todos and not named:
+        return _section("todo", "To-do list", "empty", summary)
+    return _section("todo", "To-do list", "ok", summary, items)
 
 
 def _approvals_section(deps: Deps) -> dict:
@@ -557,7 +616,8 @@ def render(b: dict) -> str:
     for s in b["sections"]:
         lines.append(f"{s['title']}: {s['summary']}")
         lines.extend(f"- {i}" for i in s["items"])
-    lines.append(OUTSIDE_LINE)
+    if b.get("source") != "missed":
+        lines.append(OUTSIDE_LINE)
     for n in b.get("not_included") or []:
         lines.append(n)
     return "\n".join(lines)
@@ -633,6 +693,200 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
 
 
 # --------------------------------------------------------------------------
+#   "What did I miss?" - the same builder, since the owner last looked
+# --------------------------------------------------------------------------
+
+_SEEN: dict = {"at": None}
+_SEEN_LOCK = threading.Lock()
+
+
+def touch(now: Optional[float] = None) -> Optional[float]:
+    """The owner is here: a chat message from either app (jarvis_quick's
+    answer_turn calls this for every one), or "What did I miss?" asked in
+    an app. Returns the time before this one - "when you last looked" - or
+    None when this process has seen none (Jarvis restarted since). In
+    memory only; the time, never the words."""
+    now = time.time() if now is None else float(now)
+    with _SEEN_LOCK:
+        before = _SEEN["at"]
+        _SEEN["at"] = now
+    return before
+
+
+def _forget_seen() -> None:
+    """For the tests."""
+    with _SEEN_LOCK:
+        _SEEN["at"] = None
+
+
+def _since_words(t: float, now: float) -> str:
+    """'14:05 today', '22:10 yesterday', '09:00 on Wednesday 23 September'."""
+    a, b = time.localtime(now), time.localtime(t)
+    if (a.tm_year, a.tm_mon, a.tm_mday) == (b.tm_year, b.tm_mon, b.tm_mday):
+        return f"{S.clock(t)} today"
+    if S._add_days(b.tm_year, b.tm_mon, b.tm_mday, 1) == (a.tm_year, a.tm_mon, a.tm_mday):
+        return f"{S.clock(t)} yesterday"
+    return f"{S.clock(t)} on {_date_words(t)}"
+
+
+def _went_off_line(j: dict) -> str:
+    at = j.get("went_off_at") or ""
+    kind = j.get("kind")
+    words = _clean(j.get("text") or "")
+    if kind == "timer":
+        line = f"{at} " + (f"{words} timer" if words else "Timer") + " done"
+    elif kind == "alarm":
+        line = f"{at} alarm" + (f": {words}" if words else "")
+    elif kind == "reminder":
+        line = f"{at} {words or 'reminder'}"
+    elif kind == "todo":
+        line = f"{at} to-do due: {words}"
+    else:
+        k = S.KINDS.get(kind)
+        line = f"{at} {k.noun if k is not None else kind}"
+    if j.get("late"):
+        line += " (late - the PC was off or asleep)"
+    return line
+
+
+def _went_off_section(sched, since: float, now: float) -> dict:
+    try:
+        went = sched.fired_since(since, now)
+    except Exception:
+        return _section("went_off", "Went off", "failed", "Could not read what went off.")
+    if not went:
+        return _section("went_off", "Went off", "empty", "Nothing went off.")
+    counts: dict = {}
+    for j in went:
+        k = S.KINDS.get(j.get("kind"))
+        noun = k.noun if k is not None else str(j.get("kind"))
+        counts[noun] = counts.get(noun, 0) + 1
+    parts = [_plural(n, noun) for noun, n in counts.items()]
+    if len(went) == 1:
+        summary = f"{parts[0]} went off."
+    else:
+        summary = f"{len(went)} things went off: {_join(parts)}."
+    items = [_went_off_line(j) for j in went[:MAX_ITEMS]]
+    if len(went) > MAX_ITEMS:
+        items.append(f"... and {len(went) - MAX_ITEMS} more")
+    return _section("went_off", "Went off", "ok", summary, items)
+
+
+def _waiting_section(deps: Deps, since: float) -> dict:
+    s = _approvals_section(deps)
+    if s["state"] != "ok":
+        return s
+    try:
+        created = deps.pending_created()
+    except Exception:
+        created = None
+    if created is not None:
+        new = sum(1 for t in created if t >= since)
+        if new:
+            s["summary"] = s["summary"].replace(
+                " Open Jarvis to answer.",
+                (" 1 of them came up" if new == 1 else f" {new} of them came up")
+                + " since then. Open Jarvis to answer.")
+    return s
+
+
+def _next_line(j: dict, now: float) -> str:
+    due = j.get("due")
+    when = S.when_words(due, now) if isinstance(due, (int, float)) else ""
+    kind = j.get("kind")
+    words = _clean(j.get("text") or "")
+    if kind == "timer":
+        what = (f"{words} timer" if words else "Timer")
+        return f"{what}: {S.length_words(max(0.0, (due or now) - now))} left"
+    if kind == "alarm":
+        what = "alarm" + (f": {words}" if words else "")
+    elif kind == "reminder":
+        what = words or "reminder"
+    elif kind == KIND:
+        what = NOUN
+    else:
+        k = S.KINDS.get(kind)
+        what = k.noun if k is not None else str(kind)
+        if j.get("when"):
+            return f"{what}: {j['when']}"
+    again = " (repeats)" if j.get("repeats") else ""
+    return f"{when}: {what}{again}"
+
+
+def _next_section(sched, now: float) -> dict:
+    jobs = [j for j in sched.listed() if j.get("state") == "active"
+            and isinstance(j.get("due"), (int, float))]
+    if not jobs:
+        return _section("next", "Coming up", "empty", "Nothing coming up.")
+    first = jobs[0]
+    summary = f"The next is at {S.when_words(first['due'], now)}."
+    return _section("next", "Coming up", "ok", summary,
+                    [_next_line(j, now) for j in jobs[:MISSED_NEXT]])
+
+
+def build_missed(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = None,
+                 since: Optional[float] = None) -> dict:
+    """ "What did I miss?": what went off since `since` (the owner's last
+    message - touch()), approval cards waiting, unread email as the briefing
+    reads it, and what is next. Reads only; acts on nothing; the email read
+    goes through the gate exactly as the briefing's does. Never kept."""
+    deps = deps or Deps()
+    sched = sched or S.get()
+    now = time.time() if now is None else now
+    known = since is not None and since <= now
+    start = float(since) if known else now - MISSED_FALLBACK
+    cut = now - start > MISSED_LONGEST
+    if cut:
+        start = now - MISSED_LONGEST
+    src = sources(deps)
+    started = time.time()
+    email = None
+    if src["email"]["state"] == "on":
+        email = _in_thread(_read_email, deps, "\"What did I miss?\"")
+    not_included = []
+    if src["email"]["state"] not in ("on", "off"):
+        not_included.append(src["email"]["said"])
+    sections = [_went_off_section(sched, start, now), _waiting_section(deps, start)]
+    if email is not None:
+        thread, box = email
+        thread.join(max(0.0, deps.deadline - (time.time() - started)))
+        if thread.is_alive():
+            sections.append(_section("email", "Email", "slow", "Not read: it did not answer in time."))
+        elif "out" in box:
+            sections.append(box["out"])
+        else:
+            sections.append(_section("email", "Email", "failed", "Not read: something went wrong "
+                                                                  f"({box.get('error', 'unknown')})."))
+    sections.append(_next_section(sched, now))
+    if cut:
+        heading = ("What you missed in the last 24 hours. You last talked to Jarvis before "
+                   "that, and what went off earlier is not kept.")
+    elif known:
+        heading = f"What you missed since {_since_words(start, now)}, when you last talked to Jarvis."
+    else:
+        heading = ("What you missed in the last 12 hours. Jarvis restarted since you last "
+                   "talked to it, so it does not know when that was.")
+    b = {
+        "id": "b" + uuid.uuid4().hex[:10],
+        "made": now,
+        "date": _date_words(now),
+        "heading": heading,
+        "source": "missed",
+        "job": None,
+        "missed": "",
+        "late": False,
+        "private": True,
+        "since": start,
+        "since_known": bool(known and not cut),
+        "sections": sections,
+        "not_included": not_included,
+        "read": [EMAIL_TOOL] if any(s["key"] == "email" and s["items"] for s in sections) else [],
+    }
+    b["text"] = render(b)
+    return b
+
+
+# --------------------------------------------------------------------------
 #   The latest one - in memory only
 # --------------------------------------------------------------------------
 
@@ -682,17 +936,12 @@ def _on_fire(job_id: str, *, sched=None, deps: Optional[Deps] = None) -> None:
     try:
         sched = sched or S.get()
         view = sched.job(job_id) or {}
-        # Built for the scheduler's own time (the same clock that decided it
-        # was due), not a second read of the wall clock. On the PC they are
-        # the same; in the tests the scheduler's clock is moved by hand, and
-        # the wall clock used here made "today" the real day - a test that
-        # failed once the real date passed 2026-09-25.
-        clock = getattr(sched, "now", None)
-        try:
-            now = float(clock()) if callable(clock) else None
-        except Exception:
-            now = None
-        make(sched=sched, now=now, deps=deps, source="schedule", job=job_id,
+        # The scheduler's own clock (time.time on the PC): the briefing is
+        # "today" as the scheduler sees it. It read the wall clock before
+        # 2026-09-25, so a test with a hand-moved clock failed once the real
+        # day was past the test's.
+        now = sched.now() if callable(getattr(sched, "now", None)) else None
+        make(sched=sched, deps=deps, now=now, source="schedule", job=job_id,
              missed=str(view.get("missed") or ""))
     finally:
         deps.publish("schedule", {"id": job_id, "kind": KIND, "state": "ready"})
@@ -1006,9 +1255,20 @@ def handle_now(body=None, sched=None, deps: Optional[Deps] = None) -> tuple:
     """POST /api/briefing/now {} - put one together now and answer with it.
     Reads only (it is not held on a stale link in either app, like every
     read). Up to READ_DEADLINE seconds when the calendar or mail server is
-    slow."""
+    slow.
+
+    {"missed": true} - "What did I miss?" instead (build_missed): since the
+    owner last looked, which this counts as looking. Not kept as the latest
+    briefing. A PC from before it ignores the field and answers a briefing
+    (source "now"), and both apps then say it has no "What did I miss?"."""
     if body is not None and not isinstance(body, dict):
         return 400, {"ok": False, "error": "need a JSON object"}
+    if isinstance(body, dict) and body.get("missed") is True:
+        try:
+            m = build_missed(sched=sched, deps=deps, since=touch())
+        except Exception as exc:
+            return 500, {"ok": False, "error": type(exc).__name__}
+        return 200, {"ok": True, "briefing": m}
     try:
         b = make(sched=sched, deps=deps, source="now")
     except Exception as exc:

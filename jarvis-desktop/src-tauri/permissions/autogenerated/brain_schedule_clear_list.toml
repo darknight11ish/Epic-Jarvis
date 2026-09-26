@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-schedule-clear-list"
+description = "Enables the brain_schedule_clear_list command without any pre-configured scope."
+commands.allow = ["brain_schedule_clear_list"]
+
+[[permission]]
+identifier = "deny-brain-schedule-clear-list"
+description = "Denies the brain_schedule_clear_list command without any pre-configured scope."
+commands.deny = ["brain_schedule_clear_list"]

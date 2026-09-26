@@ -36,6 +36,30 @@ apps show under "What Jarvis can reach", built from the PC's settings - so
 the model never describes its own access. Reads only; host names, never an
 account name, a key or a link.
 
+SNOOZE, "CANCEL THAT", NAMED LISTS AND "WHAT DID I MISS?" (2026-09-25, the
+creativity audit's everyday quick wins - docs/CREATIVITY-AUDIT-2026-09-25.md
+items 6 and 7):
+  * "snooze", "snooze 10 minutes", "remind me again in 5 minutes": the
+    timer, alarm or reminder that went off most recently (in the last hour)
+    goes off again after that long (10 minutes when not said). A one-off
+    copy (jarvis_schedule.Scheduler.snooze): a repeating one keeps its
+    usual times. No card.
+  * "cancel that", "never mind", "delete that reminder", "undo": takes back
+    the LAST thing this fast path set IN THIS CONVERSATION (the request's
+    conversation_id), within two minutes, once - and says what it was. It
+    never cancels anything else: nothing the model's tools set, nothing
+    from another conversation, nothing older. With nothing to take back,
+    "never mind" goes to the model as before.
+  * Named lists: "add milk to the shopping list" (with commas, several
+    items: "add milk, eggs and bread to the shopping list"), "what's on my
+    shopping list", "remove milk from the shopping list", "cross milk off
+    the shopping list", "what lists do I have". "Clear the shopping list"
+    changes nothing and points to the app, where clearing a whole list asks
+    "are you sure?" first.
+  * "What did I miss?": jarvis_briefing.build_missed - since the owner's
+    previous message to Jarvis from either app (answer_turn notes the time
+    of every one, jarvis_briefing.touch).
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
@@ -557,6 +581,8 @@ def match(text, now: Optional[float] = None) -> Optional[Intent]:
     got = _match(text, now)
     if got is not None and got.f.get("text"):
         got.f["text"] = _restore(text, got.f["text"])
+    if got is not None and got.f.get("items"):
+        got.f["items"] = [_restore(text, i) for i in got.f["items"]]
     return got
 
 
@@ -570,6 +596,16 @@ def _match(text, now: float) -> Optional[Intent]:
                     r"(?:my|the)\s+)?(timers|alarms|reminders|todos?|todo\s+list|todo\s+items)"
                     r"|(?:clear|empty|delete)\s+(?:my|the)\s+todo\s+list", s):
         return Intent("bulk")
+
+    # --- "what did I miss?", snooze and "cancel that" (2026-09-25) -------------
+    got = _missed(s) or _snooze(s) or _undo(s)
+    if got is not None:
+        return got
+
+    # --- named lists: clearing one, and which lists there are -------------------
+    got = _list_whole(s)
+    if got is not None:
+        return got
 
     # --- timers ----------------------------------------------------------------
     m = re.fullmatch(_SET + _ART + r"(.+?)\s+(?:long\s+)?timer(?:\s+(?:for|called|named)\s+"
@@ -692,8 +728,12 @@ def _match(text, now: float) -> Optional[Intent]:
                      r"(?:\s+list)?", s)
     if m:
         text = m.group(1).strip()
-        if text and not re.fullmatch(r"(?:it|this|that|them|these|those|something)", text):
+        if text and not re.fullmatch(_VAGUE, text):
             return Intent("todo_add", {"text": text})
+    # A named list (2026-09-25): "add milk to the shopping list".
+    got = _named_list(s)
+    if got is not None:
+        return got
     m = re.fullmatch(r"(?:add|put)\s+(?:to|on)\s+(?:my|the)\s+todo(?:\s+list)?\s*[:,-]?\s*(.+)", s)
     if m:
         return Intent("todo_add", {"text": m.group(1).strip()})
@@ -714,6 +754,148 @@ def _match(text, now: float) -> Optional[Intent]:
                      r"(?:\s+list)?", s)
     if m:
         return Intent("todo_remove", {"text": m.group(1).strip()})
+    return None
+
+
+_VAGUE = r"(?:it|this|that|them|these|those|something|stuff|things)"
+
+#: A named list's name as said: one to three words before "list".
+_NAME = r"([a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,2})"
+_OWN = r"(?:my|the|our)"
+
+
+def _key(name: str):
+    """(True, key) for a list's name (key None: the to-do list), or (False,
+    None) when the words cannot be a list's name."""
+    import jarvis_schedule as S
+    try:
+        return True, S.list_key(name)
+    except ValueError:
+        return False, None
+
+
+def _items(text: str) -> list:
+    """"milk, eggs and bread" -> three items; without a comma it is ONE item
+    ("mac and cheese"). At most ten."""
+    if "," not in text:
+        return [text.strip()]
+    parts = [p.strip() for p in text.split(",")]
+    last = parts[-1]
+    if last.startswith("and "):
+        parts[-1] = last[4:].strip()
+    elif " and " in last:
+        head, _, tail = last.rpartition(" and ")
+        parts[-1:] = [head.strip(), tail.strip()]
+    out = [p for p in parts if p]
+    return out if 0 < len(out) <= 10 else []
+
+
+def _named_list(s: str) -> Optional[Intent]:
+    """Add to, read, tick off or remove from a NAMED list ("shopping"). The
+    to-do list's own sentences are matched above; a name that is the to-do
+    list ("todo") lands here only in forms those do not cover."""
+    m = re.fullmatch(r"(?:add|put|write|stick|pop)\s+(.+?)\s+(?:to|on|onto|in)\s+" + _OWN
+                     + r"\s+" + _NAME + r"\s+list", s)
+    if m:
+        ok, key = _key(m.group(2))
+        text = m.group(1).strip()
+        if ok and text and not re.fullmatch(_VAGUE, text):
+            items = _items(text) if key else [text]
+            if items and not any(re.fullmatch(_VAGUE, i) for i in items):
+                return Intent("todo_add", {"text": text, "items": items, "list": key})
+    m = re.fullmatch(r"(?:(?:what's|what\s+is|whats|what\s+are|what's\s+left|what\s+is\s+left)"
+                     r"\s+on|(?:read|show|list|tell|give)\s+(?:me\s+)?|what\s+do\s+i\s+(?:have|need)"
+                     r"\s+on)?\s*" + _OWN + r"\s+" + _NAME + r"\s+list", s)
+    if m:
+        ok, key = _key(m.group(1))
+        if ok:
+            return Intent("todo_list", {"list": key, "named": True})
+    m = re.fullmatch(r"(?:mark|tick|check|cross)\s+(?:off\s+)?(.+?)(?:\s+(?:as\s+)?(?:done|complete"
+                     r"|completed|finished|bought|got))?\s+(?:on|from|off)\s+" + _OWN + r"\s+" + _NAME
+                     + r"\s+list", s)
+    if m:
+        ok, key = _key(m.group(2))
+        text = m.group(1).strip()
+        if ok and text and not re.fullmatch(_VAGUE + r"|everything|all", text):
+            return Intent("todo_done", {"text": text, "list": key, "named": True})
+    m = re.fullmatch(r"(?:remove|delete|take|scratch)\s+(.+?)\s+(?:from|off)\s+" + _OWN + r"\s+"
+                     + _NAME + r"\s+list", s)
+    if m:
+        ok, key = _key(m.group(2))
+        text = m.group(1).strip()
+        if ok and text and not re.fullmatch(_VAGUE + r"|everything|all", text):
+            return Intent("todo_remove", {"text": text, "list": key, "named": True})
+    return None
+
+
+def _list_whole(s: str) -> Optional[Intent]:
+    """"Clear the shopping list" (changes nothing: the app asks "are you
+    sure?" first) and "what lists do I have"."""
+    m = re.fullmatch(r"(?:clear|empty|wipe|reset|delete)\s+(?:out\s+)?" + _OWN + r"\s+" + _NAME
+                     + r"\s+list|(?:clear|remove|delete)\s+(?:everything|all(?:\s+the)?\s+items|"
+                     r"every\s+item|all)\s+(?:from|off|on)\s+" + _OWN + r"\s+" + _NAME + r"\s+list",
+                     s)
+    if m:
+        ok, key = _key(m.group(1) or m.group(2))
+        if ok:
+            return Intent("bulk") if key is None else Intent("list_clear", {"list": key})
+    if re.fullmatch(r"(?:what|which)\s+lists\s+(?:do\s+i\s+have|have\s+i\s+got|are\s+there)"
+                    r"|(?:show|list|read)\s+(?:me\s+)?(?:all\s+)?(?:my|the)\s+lists"
+                    r"|what\s+are\s+my\s+lists|my\s+lists", s):
+        return Intent("lists_which")
+    return None
+
+
+def _missed(s: str) -> Optional[Intent]:
+    """"What did I miss?" (jarvis_briefing.build_missed)."""
+    if re.fullmatch(r"what\s+(?:did|have)\s+i\s+miss(?:ed)?(?:\s+while\s+i\s+was\s+(?:away|out|gone))?"
+                    r"|what'?d\s+i\s+miss|(?:did|have)\s+i\s+miss(?:ed)?\s+anything"
+                    r"|anything\s+(?:i\s+missed|new)|catch\s+me\s+up|fill\s+me\s+in"
+                    r"|what's\s+new|whats\s+new|what\s+is\s+new"
+                    r"|what\s+happened\s+while\s+i\s+was\s+(?:away|out|gone)", s):
+        return Intent("missed")
+    return None
+
+
+def _snooze(s: str) -> Optional[Intent]:
+    """"snooze", "snooze 10 minutes", "snooze the alarm for 5 minutes",
+    "remind me again in 5 minutes"."""
+    m = re.fullmatch(r"snooze(?:\s+(?:it|that|this|(?:the|my|that)\s+(alarm|reminder|timer)))?"
+                     r"(?:\s+(?:for\s+)?(?:another\s+)?(.+))?"
+                     r"|remind\s+me\s+again(?:\s+in\s+(.+))?", s)
+    if not m:
+        return None
+    length = m.group(2) or m.group(3)
+    seconds = None
+    if length:
+        seconds = parse_duration(length)
+        if seconds is None:
+            return None
+    return Intent("snooze", {"seconds": seconds, "kind": m.group(1)})
+
+
+#: What "cancel that <noun>" may name, and the nouns each kind answers to.
+_UNDO_NOUNS = {"timer": "timer", "alarm": "alarm", "reminder": "reminder",
+               "briefing": "briefing", "snooze": "snooze", "item": "item", "todo": "item",
+               "todo item": "item", "one": None, "": None}
+
+
+def _undo(s: str) -> Optional[Intent]:
+    """"cancel that", "never mind", "undo", "delete that reminder" - the
+    last thing this fast path set in this conversation. Never "forget
+    that": that is memory's word."""
+    t = re.sub(r"^(?:(?:no|oh|actually|sorry|wait|oops|hmm|ah)\b[\s,]*)+", "", s).strip()
+    if re.fullmatch(r"never\s*mind(?:\s+that)?", t):
+        # Soft: with nothing just set here, or set too long ago, it is not
+        # about a reminder at all - the model answers, as before.
+        return Intent("undo", {"noun": None, "soft": True})
+    if re.fullmatch(r"undo(?:\s+that)?", t):
+        return Intent("undo", {"noun": None, "soft": False})
+    m = re.fullmatch(r"(?:cancel|undo|scratch|delete|remove|take\s+back)\s+(?:that|it|the\s+last\s+one|"
+                     r"what\s+you\s+just\s+(?:set|added|did))(?:\s+(timer|alarm|reminder|briefing|"
+                     r"snooze|item|one|todo(?:\s+item)?))?", t)
+    if m:
+        return Intent("undo", {"noun": _UNDO_NOUNS.get(m.group(1) or ""), "soft": False})
     return None
 
 
@@ -913,6 +1095,12 @@ class Result:
     # of the turn as `tools_ran`, so the conversation counts as having read
     # outside text - exactly as when the calendar tool runs.
     read: list = field(default_factory=list)
+    # What "cancel that" may take back (2026-09-25): the jobs this answer
+    # MADE (never one that was already there), in words, and the nouns
+    # "cancel that <noun>" may use for it.
+    made: list = field(default_factory=list)
+    what: str = ""
+    nouns: tuple = ()
 
 
 def _join(items: list) -> str:
@@ -950,13 +1138,25 @@ def _pick_timer(timers: list, f: dict):
     return pool[0], None
 
 
-def run(intent: Intent, sched, now: float) -> Optional[Result]:
-    """Do it. None hands the sentence to the model after all."""
+def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
+        seen: Optional[float] = None) -> Optional[Result]:
+    """Do it. None hands the sentence to the model after all.
+    `conversation`: the request's conversation_id ("cancel that" works only
+    within one). `seen`: when the owner last talked to Jarvis before this
+    turn ("what did I miss?")."""
     import jarvis_schedule as S
     n, f = intent.name, intent.f
     if n == "bulk":
         return Result("Jarvis does not clear everything at once. Delete them one at a time, "
                       "here or under Coming up.", n)
+    if n == "missed":
+        return _run_missed(sched, now, seen)
+    if n == "snooze":
+        return _run_snooze(f, sched, now)
+    if n == "undo":
+        return _run_undo(f, sched, now, conversation)
+    if n in ("list_clear", "lists_which"):
+        return _run_lists(intent, sched)
     if n.startswith("briefing_"):
         return _run_briefing(intent, sched, now)
     if n.startswith("search_"):
@@ -969,7 +1169,10 @@ def run(intent: Intent, sched, now: float) -> Optional[Result]:
         except (ValueError, OverflowError) as exc:
             return Result(S._sentence(exc), n)
         what = f"{j['text'].capitalize()} timer" if j.get("text") else "Timer"
-        return Result(f"{what} set for {S.length_words(f['seconds'])}.", n, [j["id"]])
+        name = f"the {j['text']} timer" if j.get("text") else \
+            f"the {_as_adjective(S.length_words(f['seconds']))} timer"
+        return Result(f"{what} set for {S.length_words(f['seconds'])}.", n, [j["id"]],
+                      made=[j["id"]], what=name, nouns=("timer",))
     if n in ("timer_cancel", "timer_pause", "timer_resume", "timer_add", "timer_status"):
         timers = sched.timers()
         if n == "timer_status":
@@ -1043,25 +1246,44 @@ def run(intent: Intent, sched, now: float) -> Optional[Result]:
     if n == "reminder_set":
         return _set_at("reminder", f["when"], f["text"], sched, now, n)
     if n == "todo_add":
+        key = f.get("list")
+        if key:
+            return _add_to_list(f, key, sched)
         try:
             j = sched.add_todo(f["text"], source="quick")
         except (ValueError, OverflowError) as exc:
             return Result(S._sentence(exc), n)
         if j.get("already"):
             return Result("That is already on your to-do list.", n, [j["id"]])
-        return Result("Added to your to-do list.", n, [j["id"]])
+        return Result("Added to your to-do list.", n, [j["id"]], made=[j["id"]],
+                      what="the item just added to your to-do list", nouns=("item",))
     if n == "todo_list":
-        items = sched.todos()
+        key = f.get("list")
+        title = _list_words(key)
+        items = [i for i in sched.todos() if (i.get("list") or None) == key]
+        others = ""
+        if not key:
+            try:
+                names = [lst["title"] for lst in sched.lists()]
+            except Exception:
+                names = []
+            if names:
+                others = " Other lists: " + _join(_lower(t) for t in names) + "."
         if not items:
-            return Result("Your to-do list is empty.", n)
+            return Result(f"Your {title} is empty." + others, n, private=bool(others))
         texts = [i["text"] for i in items]
         if len(texts) > 8:
-            return Result(f"{len(texts)} things on your to-do list. The first 8: "
-                          f"{_join(texts[:8])}.", n, [i["id"] for i in items[:8]], private=True)
-        head = "One thing on your to-do list: " if len(texts) == 1 else "Your to-do list: "
-        return Result(head + _join(texts) + ".", n, [i["id"] for i in items], private=True)
+            return Result(f"{len(texts)} things on your {title}. The first 8: "
+                          f"{_join(texts[:8])}." + others, n, [i["id"] for i in items[:8]],
+                          private=True)
+        head = f"One thing on your {title}: " if len(texts) == 1 else f"Your {title}: "
+        return Result(head + _join(texts) + "." + others, n, [i["id"] for i in items],
+                      private=True)
     if n in ("todo_done", "todo_remove"):
         items = sched.todos()
+        if f.get("named"):
+            # A list was named ("... from the shopping list"): only that one.
+            items = [i for i in items if (i.get("list") or None) == f.get("list")]
         want = f["text"].lower().strip()
         want = re.sub(r"^(?:the|my)\s+", "", want)
         exact = [i for i in items if i["text"].lower() == want
@@ -1075,9 +1297,202 @@ def run(intent: Intent, sched, now: float) -> Optional[Result]:
         code, out = sched.act(pool[0]["id"], "done" if n == "todo_done" else "delete")
         if code != 200:
             return Result(out.get("error") or "That did not work.", n)
-        return Result("Marked done." if n == "todo_done" else "Removed from your to-do list.",
+        return Result("Marked done." if n == "todo_done"
+                      else f"Removed from your {_list_words(pool[0].get('list') or None)}.",
                       n, [pool[0]["id"]])
     return None
+
+
+def _lower(s: str) -> str:
+    return s[:1].lower() + s[1:]
+
+
+def _as_adjective(length: str) -> str:
+    """"10 minutes" -> "10 minute" (the 10 minute timer)."""
+    return re.sub(r"\b(hour|minute|second)s\b", r"\1", length)
+
+
+def _list_words(key) -> str:
+    """"to-do list", "shopping list" - as said in a sentence."""
+    import jarvis_schedule as S
+    return _lower(S.list_title(key))
+
+
+def _add_to_list(f: dict, key: str, sched) -> Result:
+    """One or more items on a named list. Items already there are not added
+    twice, and "cancel that" takes back only the ones added now."""
+    import jarvis_schedule as S
+    n = "todo_add"
+    title = _list_words(key)
+    items = f.get("items") or [f["text"]]
+    made, already = [], 0
+    for text in items:
+        try:
+            j = sched.add_todo(text, source="quick", list_name=key)
+        except (ValueError, OverflowError) as exc:
+            if made:
+                break
+            return Result(S._sentence(exc), n)
+        if j.get("already"):
+            already += 1
+        else:
+            made.append(j["id"])
+    if not made:
+        return Result(f"That is already on your {title}." if already == 1
+                      else f"Those are already on your {title}.", n)
+    if len(made) == 1 and not already:
+        said, what = f"Added to your {title}.", f"the item just added to your {title}"
+    else:
+        said = f"Added {len(made)} item{'s' if len(made) != 1 else ''} to your {title}."
+        if already:
+            said += (" 1 was already on it." if already == 1 else f" {already} were already on it.")
+        what = (f"the {len(made)} items just added to your {title}" if len(made) > 1
+                else f"the item just added to your {title}")
+    return Result(said, n, list(made), made=list(made), what=what, nouns=("item",))
+
+
+#: Both apps' words for where a whole list is cleared (coming-up.js,
+#: net/Schedule.kt): "Clear list" under the list, which asks first.
+LIST_CLEAR_IN_APP = ("Clearing a whole list is done in the app, where it asks \"are you sure?\" "
+                     "first: Coming up, under the {title}, Clear list. Nothing was changed.")
+
+
+def _run_lists(intent: Intent, sched) -> Result:
+    n = intent.name
+    try:
+        lists = list(sched.lists())
+    except Exception:
+        lists = []
+    if n == "list_clear":
+        key = intent.f.get("list")
+        found = [lst for lst in lists if lst.get("name") == key]
+        title = _list_words(key)
+        if not found:
+            return Result(f"There is nothing on your {title}.", n)
+        return Result(LIST_CLEAR_IN_APP.replace("{title}", title), n)
+    if not lists:
+        return Result("You have no other lists - only your to-do list. Say \"add milk to the "
+                      "shopping list\" to start one.", n)
+    words = _join(f"{_lower(lst['title'])} ({lst['open']} item{'s' if lst['open'] != 1 else ''})"
+                  for lst in lists)
+    return Result(f"Your lists, besides the to-do list: {words}.", n, private=True)
+
+
+def _snooze_name(j: dict) -> str:
+    import jarvis_schedule as S
+    kind = j.get("kind")
+    if kind == "timer":
+        if j.get("text"):
+            return f"{j['text']} timer"
+        return f"{_as_adjective(S.length_words(j.get('duration') or 0))} timer"
+    return kind or "reminder"
+
+
+def _run_snooze(f: dict, sched, now: float) -> Result:
+    """The timer, alarm or reminder that went off most recently (the last
+    hour), again after the snooze - a one-off copy, no card."""
+    import jarvis_schedule as S
+    n = "snooze"
+    try:
+        went = list(sched.went_off(now))
+    except Exception:
+        went = []
+    if f.get("kind"):
+        went = [j for j in went if j.get("kind") == f["kind"]]
+    if not went:
+        # Already snoozed in the last hour: say until when, change nothing.
+        try:
+            copies = [j for j in sched.listed() if j.get("snoozed") and j.get("state") == "active"
+                      and j.get("due") is not None and now - float(j.get("created") or 0)
+                      <= S.WENT_OFF_SHOWN and (not f.get("kind") or j.get("kind") == f["kind"])]
+        except Exception:
+            copies = []
+        if copies:
+            j = max(copies, key=lambda x: x.get("created") or 0)
+            return Result(f"The {_snooze_name(j)} is already snoozed until {S.clock(j['due'])}. "
+                          f"Delete or pause it under Coming up to change that.", n, [j["id"]])
+        what = f"{f['kind']} " if f.get("kind") else ""
+        return Result(f"No {what}went off in the last hour, so there is nothing to snooze."
+                      if what else "Nothing went off in the last hour, so there is nothing "
+                                   "to snooze.", n)
+    j = went[0]
+    code, out = sched.snooze(j["id"], f.get("seconds"))
+    if code != 200:
+        return Result(out.get("error") or "That did not work.", n)
+    name = _snooze_name(j)
+    copy = out.get("job") or {}
+    if out.get("already"):
+        return Result(f"The {name} is already snoozed - {_lower(out['said'])}", n, [j["id"]])
+    seconds = f.get("seconds") or S.SNOOZE_DEFAULT
+    until = S.clock(copy["due"]) if copy.get("due") else ""
+    return Result(f"Snoozed the {name} for {S.length_words(seconds)}"
+                  + (f" - until {until}." if until else "."), n, [copy.get("id") or j["id"]],
+                  made=[copy["id"]] if copy.get("id") else [], what="the snooze",
+                  nouns=("snooze", j.get("kind") or ""))
+
+
+UNDO_NOTHING_LEFT = "It is not on the list any more, so there was nothing to cancel."
+
+
+def _run_undo(f: dict, sched, now: float, conversation) -> Optional[Result]:
+    """"Cancel that": the last thing the fast path set in THIS conversation,
+    within UNDO_WINDOW, once. Nothing else, ever."""
+    import jarvis_schedule as S
+    n = "undo"
+    noun = f.get("noun")
+    rec = None
+    try:
+        rec = sched.last_set(conversation, now) if conversation else None
+    except Exception:
+        rec = None
+    fits = rec is not None and (noun is None or noun in (rec.get("nouns") or ()))
+    if rec is None or not fits:
+        # Nothing of ours to take back. "cancel that timer" / "... alarm"
+        # still mean what they meant before this existed.
+        if noun == "timer":
+            return run(Intent("timer_cancel", {}), sched, now)
+        if noun == "alarm":
+            return run(Intent("alarm_cancel", {}), sched, now)
+        if rec is not None and noun is not None:
+            kind = next(iter(rec.get("nouns") or ("thing",)))
+            return Result(f"The last thing set here was {_a(kind)}, not {_a(noun)}, so nothing "
+                          f"was cancelled.", n)
+        return None
+    minutes = int(S.UNDO_WINDOW // 60)
+    if rec["age"] > S.UNDO_WINDOW:
+        if f.get("soft"):
+            return None
+        sched.forget_set(conversation)
+        return Result(f"That was more than {minutes} minutes ago, so nothing was cancelled - "
+                      f"delete it under Coming up.", n)
+    sched.forget_set(conversation)
+    views = [sched.job(i) for i in rec["ids"]]
+    waiting = any(v and v.get("state") == "waiting" for v in views)
+    if not sched.take_back(rec["ids"]):
+        return Result(UNDO_NOTHING_LEFT, n)
+    what = rec.get("what") or "it"
+    if rec.get("intent") == "todo_add":
+        return Result(f"Removed {what}.", n, list(rec["ids"]))
+    said = f"Cancelled: {what}."
+    if waiting:
+        said += " Its approval card will set nothing up."
+    return Result(said, n, list(rec["ids"]))
+
+
+def _a(noun: str) -> str:
+    return ("an " if noun[:1] in "aeiou" else "a ") + noun
+
+
+def _run_missed(sched, now: float, seen: Optional[float]) -> Result:
+    """"What did I miss?" - the briefing's builder, since the owner last
+    talked to Jarvis. Reads only; private, like the briefing."""
+    n = "missed"
+    try:
+        import jarvis_briefing as B
+    except Exception:
+        return Result(BRIEFING_MISSING, n)
+    b = B.build_missed(sched=sched, now=now, since=seen)
+    return Result(b["text"], n, private=True, read=list(b.get("read") or []))
 
 
 def repr_q(text: str) -> str:
@@ -1101,18 +1516,22 @@ def _set_at(kind: str, w: When, text: str, sched, now: float, n: str) -> Result:
             j = sched.add_repeat(kind, w.rule, text, source="quick")
         except (ValueError, OverflowError) as exc:
             return Result(S._sentence(exc), n)
-        return Result(f"That repeats ({S.rule_words(j.get('rule') or w.rule)}), so there is an "
-                      f"approval card for it. Nothing is set up until you say yes.", n, [j["id"]])
+        words = S.rule_words(j.get("rule") or w.rule)
+        return Result(f"That repeats ({words}), so there is an "
+                      f"approval card for it. Nothing is set up until you say yes.", n, [j["id"]],
+                      made=[j["id"]], what=f"the repeating {kind} ({words})", nouns=(kind,))
     if w.passed:
         return Result(f"{S.when_words(w.at, now)} has already passed. Say another time.", n)
     try:
         j = sched.add_at(kind, w.at, text, source="quick")
     except (ValueError, OverflowError) as exc:
         return Result(S._sentence(exc), n)
+    what = f"the {kind} for {S.when_words(w.at, now)}"
     if w.at - now < 3600 and kind == "reminder" and not w.default_time:
         return Result(f"{noun} set for {S.clock(w.at)}, in {S.length_words(w.at - now)}.",
-                      n, [j["id"]])
-    return Result(f"{noun} set for {S.when_words(w.at, now)}.", n, [j["id"]])
+                      n, [j["id"]], made=[j["id"]], what=what, nouns=(kind,))
+    return Result(f"{noun} set for {S.when_words(w.at, now)}.", n, [j["id"]],
+                  made=[j["id"]], what=what, nouns=(kind,))
 
 
 BRIEFING_MISSING = ("Your PC's Jarvis does not have the morning briefing yet - run "
@@ -1176,19 +1595,27 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
             j = sched.add_repeat(B.KIND, w.rule, "", source="quick")
         except (ValueError, OverflowError) as exc:
             return Result(S._sentence(exc), n)
-        return Result(f"That repeats ({S.rule_words(j.get('rule') or w.rule)}), so there is an "
-                      f"approval card for it. Nothing is set up until you say yes.", n, [j["id"]])
+        words = S.rule_words(j.get("rule") or w.rule)
+        return Result(f"That repeats ({words}), so there is an "
+                      f"approval card for it. Nothing is set up until you say yes.", n, [j["id"]],
+                      made=[j["id"]], what=f"the repeating briefing ({words})",
+                      nouns=("briefing",))
     if w.passed:
         return Result(f"{S.when_words(w.at, now)} has already passed. Say another time.", n)
     try:
         j = sched.add_at(B.KIND, w.at, "", source="quick")
     except (ValueError, OverflowError) as exc:
         return Result(S._sentence(exc), n)
-    return Result(f"Briefing set for {S.when_words(w.at, now)}.", n, [j["id"]])
+    return Result(f"Briefing set for {S.when_words(w.at, now)}.", n, [j["id"]],
+                  made=[j["id"]], what=f"the briefing for {S.when_words(w.at, now)}",
+                  nouns=("briefing",))
 
 
-def answer(text, *, sched=None, now: Optional[float] = None) -> Optional[Result]:
-    """Match and act. None: not ours - ask the model."""
+def answer(text, *, sched=None, now: Optional[float] = None,
+           conversation: Optional[str] = None, seen: Optional[float] = None) -> Optional[Result]:
+    """Match and act. None: not ours - ask the model. `conversation`: the
+    request's conversation_id, so "cancel that" takes back only what was set
+    in it; `seen`: when the owner last talked to Jarvis before this turn."""
     now = time.time() if now is None else now
     intent = match(text, now)
     if intent is None:
@@ -1196,10 +1623,19 @@ def answer(text, *, sched=None, now: Optional[float] = None) -> Optional[Result]
     if sched is None:
         import jarvis_schedule
         sched = jarvis_schedule.get()
-    res = run(intent, sched, now)
+    res = run(intent, sched, now, conversation=conversation, seen=seen)
     if res is not None:
         try:
             sched.mark_command(text)
+        except Exception:
+            pass
+        try:
+            if res.made and conversation:
+                sched.note_set(conversation, res.made, res.what, res.intent, nouns=res.nouns)
+            elif res.intent != "undo" and conversation:
+                # Something else happened since: "cancel that" would now
+                # mean THAT, which cannot be taken back - so nothing can.
+                sched.forget_set(conversation)
         except Exception:
             pass
     return res
@@ -1243,12 +1679,51 @@ def newest_own_words(body) -> Optional[str]:
     return content
 
 
-def answer_turn(body, *, sched=None, now: Optional[float] = None) -> Optional[Result]:
-    """For /api/chat: the fast path's answer to this turn, or None."""
-    text = newest_own_words(body)
-    if text is None:
+_CONVERSATION = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
+
+def conversation_of(body) -> Optional[str]:
+    """The request's conversation_id (JARVIS-API 18.1), or None when there
+    is none or it is not one - then "cancel that" has nothing to take back."""
+    cid = body.get("conversation_id") if isinstance(body, dict) else None
+    return cid if isinstance(cid, str) and _CONVERSATION.fullmatch(cid) else None
+
+
+def _touch(now: Optional[float]) -> Optional[float]:
+    """Note that the owner talked to Jarvis now (for "what did I miss?");
+    the time before this one, or None. Never raises."""
+    try:
+        import jarvis_briefing as B
+        return B.touch(now)
+    except Exception:
         return None
-    return answer(text, sched=sched, now=now)
+
+
+def answer_turn(body, *, sched=None, now: Optional[float] = None) -> Optional[Result]:
+    """For /api/chat: the fast path's answer to this turn, or None. Every
+    chat request counts as the owner being here ("what did I miss?" asks
+    since the one before), whoever's words it carries."""
+    seen = _touch(now) if isinstance(body, dict) and body.get("messages") else None
+    conversation = conversation_of(body)
+    text = newest_own_words(body)
+    res = None if text is None else answer(text, sched=sched, now=now,
+                                           conversation=conversation, seen=seen)
+    if res is None and conversation:
+        # The model answers this turn: "cancel that" after it is about the
+        # model's answer, never about a reminder set before it.
+        _forget_set(sched, conversation)
+    return res
+
+
+def _forget_set(sched, conversation) -> None:
+    try:
+        if sched is None:
+            import jarvis_schedule
+            sched = jarvis_schedule._SCHED
+        if sched is not None:
+            sched.forget_set(conversation)
+    except Exception:
+        pass
 
 
 def route_fields(res: Result) -> dict:

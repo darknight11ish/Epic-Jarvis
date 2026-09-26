@@ -45,6 +45,16 @@ import kotlinx.serialization.json.doubleOrNull
  * skips it and Delete turns it off. Its going off tells nobody: the event
  * says `"notify": false`, and [firedFrom] then shows no notification.
  *
+ * SINCE 2026-09-25 (the creativity audit's everyday quick wins), in the
+ * desktop's words: "Just went off" - a timer, alarm or reminder that went off
+ * in the last hour, with Snooze ([SNOOZE]: a one-off copy ten minutes later
+ * on the PC; a repeating one keeps its usual times; no card) - also on the
+ * notification ([com.jarvis.client.service.ScheduleNotifier]); and NAMED
+ * lists ("shopping"), each with its items, an Add box and "Clear list",
+ * which asks "are you sure?" first ([clearListQuestion]) and sends how many
+ * items it showed ([clearListBody]), so nothing added since is lost. The
+ * to-do list itself has no Clear.
+ *
  * Pure Kotlin, no Android types, so `ScheduleTest` runs it on a plain JVM.
  */
 object Schedule {
@@ -82,6 +92,36 @@ object Schedule {
     /** A repeating job whose card has not been answered. */
     const val WAITING = "Waiting for your yes on the approval card."
 
+    /** "Just went off" and Snooze - the desktop's coming-up.js, word for word. */
+    const val WENT_OFF_TITLE = "Just went off"
+    const val WENT_OFF_DETAIL =
+        "In the last hour. Snooze sets it to go off again in 10 minutes - a repeating one keeps its " +
+            "usual times."
+    const val SNOOZE = "Snooze 10 minutes"
+
+    /** How long Snooze sets (jarvis_schedule.SNOOZE_DEFAULT). */
+    const val SNOOZE_SECONDS = 600
+
+    /** Under "Just went off", one button: Snooze - ONE job per tap. */
+    val WENT_OFF_ACTIONS = listOf("snooze")
+
+    /** A snoozed copy's tag ends with this ("alarm, snoozed"). */
+    const val SNOOZED_TAG = "snoozed"
+
+    /** Named lists ("add milk to the shopping list"). */
+    const val LISTS_NOTE = "To start another list, say or type \"add milk to the shopping list\"."
+    const val CLEAR_LIST = "Clear list"
+
+    /** The phone's own two buttons under the "are you sure?" (the desktop uses its OK / Cancel). */
+    const val CLEAR_YES = "Yes, clear it"
+    const val CLEAR_NO = "Keep it"
+
+    /** A named list's title while "Hide memory lists and chat history" is on. */
+    const val HIDDEN_LIST_TITLE = "(hidden) list"
+
+    /** The longest named list's name the PC keeps (jarvis_schedule.MAX_LIST_NAME). */
+    const val MAX_LIST_NAME = 30
+
     /** Stands in for words the private lists hide. */
     const val HIDDEN_TEXT = "(hidden)"
 
@@ -99,7 +139,7 @@ object Schedule {
     const val ALREADY_GONE = "That is not on the list any more."
 
     /** The only things one job can be asked to do. Never "all", never a list. */
-    val ACTIONS = listOf("pause", "resume", "delete", "done")
+    val ACTIONS = listOf("pause", "resume", "delete", "done", "snooze")
 
     /** The longest to-do item the PC keeps (jarvis_schedule.MAX_TEXT). */
     const val MAX_TEXT = 300
@@ -170,9 +210,25 @@ object Schedule {
         val firedAt: Double?,
         /** How a kind's last run went, in the PC's words (the standby schedule's). */
         val note: String = "",
+        /** A to-do item's named list ("shopping"); "" is the to-do list itself. */
+        val list: String = "",
+        /** A snoozed copy of something that went off. */
+        val snoozed: Boolean = false,
+        /** When it went off, by the PC's clock ("07:00"); "" if it has not. */
+        val wentOffAt: String = "",
     )
 
-    data class View(val jobs: List<Job>, val todo: List<Job>, val hidden: Boolean)
+    /** A named list: its name as the PC keeps it, its title, how many open items. */
+    data class NamedList(val name: String, val title: String, val open: Int)
+
+    data class View(
+        val jobs: List<Job>,
+        val todo: List<Job>,
+        val hidden: Boolean,
+        /** What went off in the last hour (an older PC sends none). */
+        val wentOff: List<Job> = emptyList(),
+        val lists: List<NamedList> = emptyList(),
+    )
 
     /** One job, read - or null when it has no id the PC makes. */
     fun job(o: JsonObject): Job? {
@@ -194,6 +250,9 @@ object Schedule {
             lockScreen = o.text("lock_screen") ?: "",
             firedAt = o.num("fired_at"),
             note = o.text("note") ?: "",
+            list = o.text("list") ?: "",
+            snoozed = o.flag("snoozed") == true,
+            wentOffAt = o.text("went_off_at") ?: "",
         )
     }
 
@@ -205,6 +264,14 @@ object Schedule {
             jobs = jobs.mapNotNull { (it as? JsonObject)?.let(::job) },
             todo = todo.mapNotNull { (it as? JsonObject)?.let(::job) },
             hidden = body.flag("hidden") == true,
+            wentOff = (body["went_off"] as? JsonArray)?.mapNotNull { (it as? JsonObject)?.let(::job) }
+                ?: emptyList(),
+            lists = (body["lists"] as? JsonArray)?.mapNotNull { el ->
+                val o = el as? JsonObject ?: return@mapNotNull null
+                val name = o.text("name") ?: return@mapNotNull null
+                val open = o.num("open")?.toInt() ?: return@mapNotNull null
+                if (open <= 0) null else NamedList(name, o.text("title") ?: name, open)
+            } ?: emptyList(),
         )
     }
 
@@ -215,12 +282,73 @@ object Schedule {
     fun missing(error: ApiError): Boolean =
         error == ApiError.NotFound || (error is ApiError.Server && error.code == 501)
 
-    /** The list with every job's words replaced, for while the lists are hidden. */
-    fun hide(v: View): View = View(
-        jobs = v.jobs.map { it.copy(text = "", hidden = true) },
-        todo = v.todo.map { it.copy(text = "", hidden = true) },
-        hidden = true,
-    )
+    /**
+     * The list with every job's words replaced, for while the lists are
+     * hidden. A named list's name is the owner's words too: each becomes
+     * "hidden-1", "hidden-2"..., the same on its items, so they still group -
+     * the desktop's Rust does the same (brain/schedule.rs redact_list).
+     */
+    fun hide(v: View): View {
+        val names = mutableListOf<String>()
+        fun standIn(name: String): String {
+            if (name.isEmpty()) return ""
+            var i = names.indexOf(name)
+            if (i < 0) {
+                names += name
+                i = names.size - 1
+            }
+            return "hidden-${i + 1}"
+        }
+        return View(
+            jobs = v.jobs.map { it.copy(text = "", hidden = true) },
+            todo = v.todo.map { it.copy(text = "", hidden = true, list = standIn(it.list)) },
+            hidden = true,
+            wentOff = v.wentOff.map { it.copy(text = "", hidden = true) },
+            lists = v.lists.map { it.copy(name = standIn(it.name), title = "") },
+        )
+    }
+
+    /** The to-do list's own items: those on no named list. */
+    fun todoItems(v: View?): List<Job> = v?.todo?.filter { it.list.isEmpty() } ?: emptyList()
+
+    /** A named list with its items, as shown. */
+    data class ListPart(val name: String, val title: String, val items: List<Job>)
+
+    /** The named lists with their items, in the PC's order; an empty one is not shown. */
+    fun namedLists(v: View?): List<ListPart> {
+        if (v == null) return emptyList()
+        return v.lists.map { l ->
+            ListPart(l.name, if (v.hidden) HIDDEN_LIST_TITLE else l.title, v.todo.filter { it.list == l.name })
+        }.filter { it.items.isNotEmpty() }
+    }
+
+    private fun lowerFirst(s: String) = s.replaceFirstChar { it.lowercaseChar() }
+
+    /** "Add to the shopping list" - the Add box's words under each list. */
+    fun addPlaceholder(title: String): String = "Add to the " + lowerFirst(title.ifEmpty { TODO_TITLE })
+
+    /** The "are you sure?" before Clear list - the desktop's words. */
+    fun clearListQuestion(title: String, count: Int): String =
+        "Clear the ${lowerFirst(title)}? This deletes all $count item" +
+            (if (count == 1) "" else "s") + " on it, and cannot be undone."
+
+    /** The line under something that went off: "Went off at 07:00". */
+    fun wentOffMeta(job: Job): List<String> {
+        val out = mutableListOf<String>()
+        if (job.wentOffAt.isNotEmpty()) {
+            out += "Went off at ${job.wentOffAt}" +
+                if (job.missed.isNotEmpty()) " (late - the PC was off or asleep)" else ""
+        }
+        if (job.repeats && job.repeat.isNotEmpty()) out += job.repeat
+        return out
+    }
+
+    /** A row's tag: "alarm", "reminder, repeats", "alarm, snoozed". */
+    fun tagOf(job: Job): String = when {
+        job.snoozed -> tag(job.kind) + ", " + SNOOZED_TAG
+        job.repeats -> tag(job.kind) + ", repeats"
+        else -> tag(job.kind)
+    }
 
     /** 600 -> "10 minutes" (jarvis_schedule.length_words). */
     fun lengthWords(seconds: Double): String {
@@ -332,24 +460,58 @@ object Schedule {
         "resume" -> RESUME
         "delete" -> DELETE
         "done" -> DONE
+        "snooze" -> SNOOZE
         else -> action
     }
 
     /** Is anything counting down (worth a once-a-second redraw)? */
     fun anyTicking(v: View?): Boolean = v?.jobs?.any { it.kind == "timer" && it.state == "active" } == true
 
-    /** The body of one change: one id, one action - or null when it is not one. */
+    /**
+     * The body of one change: one id, one action - or null when it is not
+     * one. Snooze says how long: ten minutes, as the button says.
+     */
     fun actBody(id: String, action: String): String? {
         if (!validId(id) || action !in ACTIONS) return null
+        if (action == "snooze") return "{\"id\":\"$id\",\"do\":\"snooze\",\"seconds\":$SNOOZE_SECONDS}"
         return "{\"id\":\"$id\",\"do\":\"$action\"}"
     }
 
-    /** The body of one new to-do item, tidied - or null when it cannot be one. */
-    fun todoBody(text: String): String? {
+    private val LIST_WORD = Regex("[a-z][a-z'-]*")
+
+    /**
+     * A named list's name as the PC keeps it ("shopping"): lower case, one to
+     * three plain words - or null. The PC checks the same, and says why.
+     */
+    fun listName(v: String): String? {
+        val t = v.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+        val words = t.split(" ")
+        if (t.isEmpty() || t.length > MAX_LIST_NAME || words.size > 3) return null
+        return if (words.all { LIST_WORD.matches(it) }) t else null
+    }
+
+    /**
+     * The body of one new to-do item, tidied - on a named list when [list]
+     * says one - or null when it cannot be one.
+     */
+    fun todoBody(text: String, list: String? = null): String? {
         val t = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
         if (t.isEmpty() || t.length > MAX_TEXT) return null
-        return "{\"kind\":\"todo\",\"text\":" + JarvisJson.encodeToString(
-            kotlinx.serialization.serializer<String>(), t) + "}"
+        val words = JarvisJson.encodeToString(kotlinx.serialization.serializer<String>(), t)
+        if (list == null) return "{\"kind\":\"todo\",\"text\":$words}"
+        val name = listName(list) ?: return null
+        return "{\"kind\":\"todo\",\"text\":$words,\"list\":\"$name\"}"
+    }
+
+    /**
+     * The body that clears ONE named list: its name and how many items this
+     * phone showed (the PC clears nothing if that is no longer right). Never
+     * the to-do list, never "all" - or null.
+     */
+    fun clearListBody(list: String, count: Int): String? {
+        val name = listName(list) ?: return null
+        if (count <= 0) return null
+        return "{\"do\":\"clear_list\",\"list\":\"$name\",\"count\":$count}"
     }
 
     /** What the PC answered a change, kept whole. */

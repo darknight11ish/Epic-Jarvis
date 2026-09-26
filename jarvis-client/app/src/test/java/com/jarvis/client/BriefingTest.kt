@@ -182,4 +182,25 @@ class BriefingTest {
         assertEquals("Jarvis: your morning briefing is ready.", Schedule.lockScreen("briefing"))
         assertEquals("briefing", Schedule.tag("briefing"))
     }
+
+    // "What did I miss?" (2026-09-25): the desktop's briefing.js says the
+    // same; its tests/briefing.mjs checks these words are in Briefing.kt.
+    @Test
+    fun whatDidIMissIsReadOnlyFromAPcThatKnowsIt() {
+        val missed = JarvisJson.parseToJsonElement(
+            """{"ok":true,"briefing":{"id":"b00000000m1","source":"missed",
+               "heading":"What you missed since 14:05 today, when you last talked to Jarvis.",
+               "sections":[{"key":"went_off","title":"Went off","state":"ok","summary":"1 reminder went off.",
+                            "items":["15:00 call the bank"]}],"not_included":[]}}""",
+        ) as kotlinx.serialization.json.JsonObject
+        val v = Briefing.readMissed(missed)!!
+        org.junit.Assert.assertEquals("missed", v.briefing!!.source)
+        org.junit.Assert.assertEquals(emptyList<String>(), Briefing.hide(v).briefing!!.sections.single().items)
+        val older = JarvisJson.parseToJsonElement(
+            """{"ok":true,"briefing":{"id":"b00000000b1","source":"now","heading":"Your briefing","sections":[]}}""",
+        ) as kotlinx.serialization.json.JsonObject
+        org.junit.Assert.assertNull(Briefing.readMissed(older))
+        org.junit.Assert.assertEquals("{\"missed\":true}", Briefing.MISSED_BODY)
+        org.junit.Assert.assertEquals("What did I miss?", Briefing.MISSED_LABEL)
+    }
 }

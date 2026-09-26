@@ -3006,16 +3006,37 @@ object JarvisRuntime {
         }
     }
 
-    /** One new to-do item, in the owner's words. Held on a stale link. */
-    suspend fun addTodo(text: String): Pair<Boolean, String> {
+    /**
+     * One new to-do item, in the owner's words - on a named list when [list]
+     * says one ("shopping"). Held on a stale link.
+     */
+    suspend fun addTodo(text: String, list: String? = null): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
-        val body = com.jarvis.client.net.Schedule.todoBody(text)
+        val body = com.jarvis.client.net.Schedule.todoBody(text, list)
             ?: return false to "Type what to add first (up to ${com.jarvis.client.net.Schedule.MAX_TEXT} characters)."
         return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
             is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
                 _scheduleTick.update { n -> n + 1 }
             }
             is ApiResult.Failed -> false to ("Not added. " + describe(r.error))
+        }
+    }
+
+    /**
+     * Every item on ONE named list, after Coming up's "are you sure?" - the
+     * desktop's `brain_schedule_clear_list`. [count] is how many items this
+     * phone showed: the PC clears nothing when the list changed since. Never
+     * the to-do list. Held on a stale link, like every change.
+     */
+    suspend fun clearList(name: String, count: Int): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Schedule.clearListBody(name, count)
+            ?: return false to "That is not one of your lists."
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ACT_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not cleared. " + describe(r.error))
         }
     }
 
@@ -3100,6 +3121,14 @@ object JarvisRuntime {
      * link (the desktop's `brain_briefing_now` is not either).
      */
     suspend fun briefingNow(): ApiResult<JsonObject> = api.briefingNow()
+
+    /**
+     * "What did I miss?" - the briefing's builder on the PC, since the owner
+     * last talked to Jarvis on either app. A read, like "Brief me now", so
+     * not held on a stale link (the desktop's `brain_briefing_now` with
+     * `missed`).
+     */
+    suspend fun briefingMissed(): ApiResult<JsonObject> = api.briefingNow(missed = true)
 
     /**
      * Set up ONE briefing that repeats. It approves nothing: the PC raises

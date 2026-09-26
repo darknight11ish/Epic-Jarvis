@@ -1198,10 +1198,23 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             sc.reads += 1;
             if (sc.fails) throw new Error(sc.fails);
-            const out = JSON.parse(JSON.stringify({ available: true, jobs: sc.jobs, todo: sc.todo }));
+            const out = JSON.parse(JSON.stringify({ available: true, jobs: sc.jobs, todo: sc.todo,
+              ...(sc.went_off ? { went_off: sc.went_off } : {}),
+              ...(sc.lists ? { lists: sc.lists } : {}) }));
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
-              for (const j of [...out.jobs, ...out.todo]) { j.text = ""; j.hidden = true; }
+              // As Rust's redact_list: words out, list names replaced.
+              const names = [];
+              const standIn = (n) => {
+                if (!n) return n;
+                if (!names.includes(n)) names.push(n);
+                return `hidden-${names.indexOf(n) + 1}`;
+              };
+              for (const l of out.lists || []) { l.name = standIn(l.name); l.title = ""; }
+              for (const j of [...out.jobs, ...out.todo, ...(out.went_off || [])]) {
+                j.text = ""; j.hidden = true;
+                if (j.list) j.list = standIn(j.list);
+              }
               out.hidden = true;
             }
             return out;
@@ -1210,6 +1223,18 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__scheduleCalls.push({ cmd, ...args });
             if (state.stale) throw new Error("the event stream is stale");
             const sc = window.__schedule;
+            if (args.action === "snooze") {
+              // jarvis_schedule.Scheduler.snooze: a one-off copy, the
+              // original leaves "Just went off".
+              const w = (sc.went_off || []).find((x) => x.id === args.id);
+              if (!w) throw new Error("That is not on the list any more.");
+              sc.went_off = sc.went_off.filter((x) => x.id !== args.id);
+              const copy = { id: "s" + (0xc000000000 + sc.jobs.length).toString(16), kind: w.kind,
+                text: w.text, state: "active", repeats: false, snoozed: true, when: "12:10 today",
+                due: Math.floor(Date.now() / 1000) + args.seconds };
+              sc.jobs.push(copy);
+              return { ok: true, id: args.id, job: copy, said: "Snoozed for 10 minutes - until 12:10." };
+            }
             const all = [...sc.jobs, ...sc.todo];
             const j = all.find((x) => x.id === args.id);
             if (!j) throw new Error("That is not on the list any more.");
@@ -1249,6 +1274,20 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             br.reads += 1;
             if (br.fails) throw new Error(br.fails);
+            // "What did I miss?": the scenario's `missed` answer, or - a PC
+            // from before it - an ordinary briefing, as that PC would send.
+            if (cmd === "brain_briefing_now" && args.missed) {
+              const m = JSON.parse(JSON.stringify(br.missed || br.now || br.briefing));
+              const out = JSON.parse(JSON.stringify({ available: true, building: false, briefing: m,
+                setups: br.setups, sources: br.sources, senders: br.senders }));
+              const sec = window.__security;
+              if (out.briefing && sec.hidden && !sec.revealed) {
+                for (const s of out.briefing.sections || []) s.items = [];
+                out.briefing.hidden = true;
+                out.hidden = true;
+              }
+              return out;
+            }
             if (cmd === "brain_briefing_now") br.briefing = JSON.parse(JSON.stringify(br.now || br.briefing));
             const out = JSON.parse(JSON.stringify({ available: true, building: false,
               briefing: br.briefing, setups: br.setups, sources: br.sources,
@@ -1299,10 +1338,30 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__scheduleCalls.push({ cmd, ...args });
             const sc = window.__schedule;
             const job = { id: "s" + (0xa000000000 + sc.todo.length).toString(16), kind: "todo",
-                          text: args.text,
+                          text: args.text, list: args.list || "",
                           state: "active", repeats: false };
             sc.todo.push(job);
+            if (args.list) {
+              sc.lists = sc.lists || [];
+              const l = sc.lists.find((x) => x.name === args.list);
+              if (l) l.open += 1;
+              else sc.lists.push({ name: args.list, title: args.list[0].toUpperCase() + args.list.slice(1) + " list", open: 1 });
+            }
             return { ok: true, job };
+          }
+          // One NAMED list cleared - only when the count the page showed
+          // is still right (jarvis_schedule.Scheduler.clear_list).
+          case "brain_schedule_clear_list": {
+            window.__scheduleCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const sc = window.__schedule;
+            const items = sc.todo.filter((x) => x.list === args.list);
+            if (items.length !== args.count) {
+              return { ok: false, error: "The list changed since you looked. Look again before clearing it." };
+            }
+            sc.todo = sc.todo.filter((x) => x.list !== args.list);
+            sc.lists = (sc.lists || []).filter((x) => x.name !== args.list);
+            return { ok: true, cleared: items.length, said: `Cleared your ${args.list} list (${items.length} items).` };
           }
           case "brain_memory_pin": {
             window.__memoryWrites.push({ cmd, ...args });

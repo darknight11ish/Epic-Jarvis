@@ -9551,3 +9551,90 @@ without it they say "SKIP".
 - The "what can Jarvis reach" list (built separately, the same day) must say
   that Jarvis can send email when `send_email` is on - check it after both
   are merged.
+
+---
+
+# Snooze, "cancel that", named lists and "What did I miss?": `jarvis_schedule.py`, `jarvis_quick.py`, `jarvis_briefing.py`
+
+The creativity audit's everyday quick wins (2026-09-25,
+`docs/CREATIVITY-AUDIT-2026-09-25.md` items 6 and 7). **No new patch and no
+new route**: three modules that are already shipped change, and both apps.
+Nothing here asks for an approval card - a snooze is a one-off, and the rest
+only reads or takes back what you just set.
+
+- **Snooze.** When a timer, alarm or reminder goes off, press "Snooze 10
+  minutes" - under "Just went off" at the top of Coming up (both apps), on
+  the phone's notification, or on the Windows toast - or say "snooze" /
+  "snooze 5 minutes". Jarvis sets a one-off copy for later. A repeating
+  reminder keeps its usual times; only that one time moves.
+- **"Cancel that".** Right after Jarvis set something from your sentence,
+  "cancel that" (or "never mind", "undo", "delete that reminder") takes it
+  back and says what it was. Only the last thing, only in the same
+  conversation, only within two minutes - never anything else.
+- **Named lists.** "Add milk, eggs and bread to the shopping list", "what's
+  on my shopping list", "cross milk off the shopping list". Each list shows
+  under Coming up with its own Add box. **Clear list** deletes a whole named
+  list after "are you sure?" - only in the apps, and only if the list still
+  has the number of items you saw. The to-do list is never cleared at once.
+- **"What did I miss?"** Said, typed, or the button next to "Brief me now":
+  what went off since your last message to Jarvis (from either app), cards
+  waiting, unread email (as the briefing reads it), and what is next. Built
+  without the AI model, kept nowhere.
+
+## What changed
+
+- `jarvis_schedule.py` - `snooze`, `went_off`, `fired_since`, named lists
+  (`list_key`, `lists`, `clear_list`), and the "cancel that" note
+  (`note_set`, `last_set`, `take_back`, in memory). `schedule.db` gains three
+  columns the first time it opens (`list_name`, `snooze_of`, `snoozed_to`);
+  your existing timers and to-do items stay as they are.
+- `jarvis_quick.py` - the new sentences, and the conversation id read from
+  the chat request so "cancel that" stays in one conversation.
+- `jarvis_briefing.py` - `build_missed` ("What did I miss?"), `touch` (when
+  you last talked to Jarvis), `POST /api/briefing/now {"missed": true}`, and
+  the briefing's to-do part counts each named list as one line. Also a fix:
+  a briefing that goes off on its own now uses the scheduler's clock (it read
+  the wall clock, which made `test_briefing.py` fail after the day it was
+  written).
+
+## Owner steps (one line each, in PowerShell)
+
+Copy the three updated files in (apply-patches.ps1 does it), from this
+repository's folder, then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+Then type "set a timer for 1 minute", wait for it to go off, and type
+"snooze". The answer should be "Snoozed the 1 minute timer for 10 minutes -
+until ..." with "Done - answered on this PC without the AI model." under it.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_quick_wins.py; py -3 backend\test_schedule.py; py -3 backend\test_briefing.py
+```
+
+No model, no network. About 140 checks in `test_quick_wins.py`: snooze makes
+a copy and never moves a repeat's own time, "cancel that" only takes back the
+last thing set in the same conversation within two minutes, lists keep their
+items apart and clear only with the count the app saw, and "What did I miss?"
+covers the right time and reads email exactly as the briefing does.
+
+## Not checked, said plainly
+
+- Nothing has run on your PC. The Snooze button on the Windows toast uses the
+  same "relaunch Jarvis with a code" trick as the approval toast's Deny
+  button, and neither has been pressed on a real Windows PC. If it fails,
+  you get the plain toast and Snooze is still in the Brain's Coming up.
+- The phone's Snooze action and the phone's screens are compiled by GitHub
+  Actions only (there is no Android build here); the phone's plain-Kotlin
+  parts were compiled and tested here.
+- "What did I miss?" does not list approval cards that EXPIRED while you
+  were away - that record is in your `jarvis_gate.py`, which this repository
+  does not have. It lists the cards still waiting.
+- "Since you last talked to Jarvis" is kept in memory: after a restart the
+  answer covers the last 12 hours, and says so. Opening an app without
+  saying anything does not count as looking.
+- English only, like the rest of the fast path.

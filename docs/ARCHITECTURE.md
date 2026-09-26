@@ -1077,7 +1077,7 @@ they landed):
   once, late. A one-off needs no card; anything that repeats is ONE card
   (`schedule_repeat`, the same four steps as section 3, listing the next
   three times). Stopping or deleting is immediate, one job at a time; there
-  is no delete-all. `jarvis_quick.py` answers the plain sentences ("set a
+  is no delete-all (the one bulk change is clearing a NAMED list, below). `jarvis_quick.py` answers the plain sentences ("set a
   timer for 10 minutes", "remind me at 6 to call Mum") WITHOUT the model, so
   they work when it is slow, unloaded or asleep - English only; anything
   else goes to the model as before. A reminder's words stay on the PC and
@@ -1134,6 +1134,22 @@ they landed):
   is ready." `GET /api/briefing`, `POST /api/briefing/now`,
   `POST /api/briefing/senders` (`briefing.patch`). Not run on the owner's
   PC. JARVIS-API §22.
+- **Snooze, "cancel that", named lists and "What did I miss?"** (added
+  2026-09-25, the creativity audit's everyday quick wins). All on the one
+  scheduler and the fast path, no new route or patch, no card. Snooze makes
+  a one-off copy of a timer, alarm or reminder that went off (a repeat keeps
+  its times) - from "Just went off" in both apps' Coming up, the phone's
+  notification, the Windows toast (the same foreground activation as the
+  approval toast's Deny, not watched on a real PC), or by saying "snooze".
+  "Cancel that" takes back only the last thing the fast path set in the same
+  conversation, within two minutes, once. Named lists ("add milk to the
+  shopping list") are to-do items with a list name; a whole named list is
+  cleared only in the apps, after "are you sure?", with the count the app
+  showed - never the to-do list, never by voice. "What did I miss?" is the
+  briefing's builder since the owner's previous message (one time for the
+  PC, in memory): what went off, cards waiting, unread email as the
+  briefing reads it, and what is next - private, not kept. JARVIS-API
+  §21.9 and §22.9.
 - **The back-off for offers** (added 2026-09-25, `jarvis_backoff.py`): at
   most three offers waiting, none within two minutes of a chat message, and
   each "no" quiet for 1, then 7, then 30 days by a fingerprint of what is

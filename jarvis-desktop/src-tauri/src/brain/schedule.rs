@@ -25,6 +25,17 @@
 //!   it is approved. Held on a stale link. Turning it off is Delete on its
 //!   row, like any job.
 //!
+//! * [`brain_schedule_clear_list`] - `POST /api/schedule/act {"do":
+//!   "clear_list", "list", "count"}` (2026-09-25): every item on ONE named
+//!   list ("shopping"), after the page's "are you sure?". `count` is how many
+//!   items the page showed; the PC clears nothing if that is no longer right.
+//!   Never the to-do list itself. Held on a stale link.
+//!
+//! Snooze (2026-09-25) is one more action of [`brain_schedule_act`]: a timer,
+//! alarm or reminder that went off, again in ten minutes - a one-off copy on
+//! the PC, no card. [`toast_fired`] puts a Snooze button on its toast
+//! (winrt_toast.rs `notify_fired`), which lands in [`snooze_from_toast`].
+//!
 //! And one thing that is not a command: [`toast_fired`], which stream.rs
 //! calls when a `schedule` event says a job went off. The event carries the
 //! id and the kind only, never the words; this reads the words by id and
@@ -59,7 +70,24 @@ const UNREADABLE: &str = "Jarvis answered, but not in a way this app can read. \
      Update the backend by running apply-patches.ps1.";
 
 /// The only things one job can be asked to do. Never "all", never a list.
-pub(crate) const ACTIONS: &[&str] = &["pause", "resume", "delete", "done", "add_time"];
+pub(crate) const ACTIONS: &[&str] = &["pause", "resume", "delete", "done", "add_time", "snooze"];
+
+/// Snooze: how long the buttons set (jarvis_schedule.SNOOZE_DEFAULT), and
+/// the shortest and longest the PC takes.
+pub(crate) const SNOOZE_SECONDS: f64 = 600.0;
+const SNOOZE_MIN: f64 = 60.0;
+const SNOOZE_MAX: f64 = 24.0 * 3600.0;
+
+/// The kinds a toast offers Snooze on (jarvis_schedule.SNOOZABLE).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const SNOOZABLE: &[&str] = &["timer", "alarm", "reminder"];
+
+/// The button's words - both apps' (coming-up.js SNOOZE_LABEL).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const SNOOZE_LABEL: &str = "Snooze 10 minutes";
+
+/// The longest named list's name the PC keeps (jarvis_schedule.MAX_LIST_NAME).
+const MAX_LIST_NAME: usize = 30;
 
 /// The longest to-do item the PC keeps (jarvis_schedule.MAX_TEXT).
 pub(crate) const MAX_TEXT: usize = 300;
@@ -118,11 +146,37 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
 /// The list with every reminder's and to-do item's words taken out, for
 /// while the private lists are hidden (lock.rs). Kinds, times and counts
 /// stay: they say nothing about the owner, and a timer should still count
-/// down.
+/// down. A named list's name is the owner's words too ("presents for Sam"):
+/// each becomes "hidden-1", "hidden-2"... here, the same on its items and in
+/// `lists`, so the page can still group them and cannot read the names.
 pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
     let mut count = 0usize;
+    let mut names: Vec<String> = Vec::new();
+    let mut stand_in = |name: &str| -> String {
+        let i = match names.iter().position(|n| n == name) {
+            Some(i) => i,
+            None => {
+                names.push(name.to_string());
+                names.len() - 1
+            }
+        };
+        format!("hidden-{}", i + 1)
+    };
     if let Some(obj) = list.as_object_mut() {
-        for key in ["jobs", "todo"] {
+        if let Some(serde_json::Value::Array(lists)) = obj.get_mut("lists") {
+            for l in lists.iter_mut() {
+                if let Some(o) = l.as_object_mut() {
+                    let name = o
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    o.insert("name".into(), serde_json::json!(stand_in(&name)));
+                    o.insert("title".into(), serde_json::json!(""));
+                }
+            }
+        }
+        for key in ["jobs", "todo", "went_off"] {
             if let Some(serde_json::Value::Array(items)) = obj.get_mut(key) {
                 for item in items.iter_mut() {
                     if let Some(o) = item.as_object_mut() {
@@ -134,6 +188,14 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
                         }
                         o.insert("text".into(), serde_json::json!(""));
                         o.insert("hidden".into(), serde_json::json!(true));
+                        let named = o
+                            .get("list")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_string);
+                        if let Some(name) = named {
+                            o.insert("list".into(), serde_json::json!(stand_in(&name)));
+                        }
                     }
                 }
             }
@@ -163,11 +225,33 @@ pub(crate) fn act_body(
             None => Err("How much time?".to_string()),
         };
     }
+    if action == "snooze" {
+        let s = seconds.unwrap_or(SNOOZE_SECONDS);
+        if !s.is_finite() || !(SNOOZE_MIN..=SNOOZE_MAX).contains(&s) {
+            return Err("A snooze is from 1 minute to 24 hours.".to_string());
+        }
+        return Ok(serde_json::json!({ "id": id, "do": action, "seconds": s }));
+    }
     Ok(serde_json::json!({ "id": id, "do": action }))
 }
 
-/// The body of one new to-do item.
-pub(crate) fn todo_body(text: &str) -> Result<serde_json::Value, String> {
+/// A named list's name as the PC keeps it ("shopping"): lower case, one to
+/// three plain words. None for anything else - the PC checks the same, and
+/// says why in its own words.
+pub(crate) fn list_name(v: &str) -> Option<String> {
+    let t = v.split_whitespace().collect::<Vec<_>>().join(" ");
+    let words: Vec<&str> = t.split(' ').collect();
+    let plain = |w: &&str| {
+        w.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+            && w.chars()
+                .all(|c| c.is_ascii_lowercase() || c == '\'' || c == '-')
+    };
+    (!t.is_empty() && t.len() <= MAX_LIST_NAME && words.len() <= 3 && words.iter().all(plain))
+        .then_some(t)
+}
+
+/// The body of one new to-do item - on a named list when `list` says one.
+pub(crate) fn todo_body(text: &str, list: Option<&str>) -> Result<serde_json::Value, String> {
     let t = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if t.is_empty() {
         return Err("Type what to add first.".to_string());
@@ -177,7 +261,23 @@ pub(crate) fn todo_body(text: &str) -> Result<serde_json::Value, String> {
             "That is longer than {MAX_TEXT} characters - say it more briefly."
         ));
     }
-    Ok(serde_json::json!({ "kind": "todo", "text": t }))
+    match list {
+        None => Ok(serde_json::json!({ "kind": "todo", "text": t })),
+        Some(l) => {
+            let name = list_name(l).ok_or_else(|| "That is not one of your lists.".to_string())?;
+            Ok(serde_json::json!({ "kind": "todo", "text": t, "list": name }))
+        }
+    }
+}
+
+/// The body that clears ONE named list: its name and how many items the
+/// page showed. Never the to-do list (it has no name), never "all".
+pub(crate) fn clear_list_body(list: &str, count: u32) -> Result<serde_json::Value, String> {
+    let name = list_name(list).ok_or_else(|| "That is not one of your lists.".to_string())?;
+    if count == 0 {
+        return Err("There is nothing on that list.".to_string());
+    }
+    Ok(serde_json::json!({ "do": "clear_list", "list": name, "count": count }))
 }
 
 /// A time of day as the PC wants it: "HH:MM", 24-hour, tidied ("1:00" ->
@@ -335,7 +435,37 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
     let (title, body) = toast_words(&kind, job.as_ref(), private);
+    // A timer, alarm or reminder gets a Snooze button (2026-09-25) - on
+    // Windows, through winrt_toast.rs; anything else, or anywhere else, the
+    // plain toast. The button carries the id only.
+    #[cfg(windows)]
+    if SNOOZABLE.contains(&kind.as_str()) {
+        crate::winrt_toast::notify_fired(&app, &title, &body, &id, SNOOZE_LABEL);
+        return;
+    }
     commands::notify(&app, &title, &body);
+}
+
+/// A Snooze pressed on a toast (winrt_toast.rs): the same change as the
+/// button in Coming up - ten minutes, one job, held on a stale link - and a
+/// toast saying how it went, since the window is very likely not open.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) async fn snooze_from_toast(app: AppHandle, id: String) {
+    let said = match require_link_live(&app) {
+        Err(e) => format!("Not snoozed: {e}."),
+        Ok(()) => match act_body(&id, "snooze", Some(SNOOZE_SECONDS)) {
+            Err(e) => format!("Not snoozed: {e}"),
+            Ok(body) => match post(&app, "/api/schedule/act", body).await {
+                Ok(v) => v
+                    .get("said")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("Snoozed.")
+                    .to_string(),
+                Err(e) => format!("Not snoozed: {e}"),
+            },
+        },
+    };
+    commands::notify(&app, "Jarvis", &said);
 }
 
 pub(crate) async fn read_job(app: &AppHandle, base: &str, id: &str) -> Option<serde_json::Value> {
@@ -390,15 +520,31 @@ pub async fn brain_schedule_act(
     post(&app, "/api/schedule/act", body).await
 }
 
-/// One new to-do item. Held on a stale link.
+/// One new to-do item - on a named list when `list` says one. Held on a
+/// stale link.
 #[tauri::command]
 pub async fn brain_schedule_add_todo(
     app: AppHandle,
     text: String,
+    list: Option<String>,
 ) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
-    let body = todo_body(&text)?;
+    let body = todo_body(&text, list.as_deref())?;
     post(&app, "/api/schedule/add", body).await
+}
+
+/// Every item on ONE named list, after the page's "are you sure?". `count`
+/// is how many items the page showed: the PC clears nothing when the list
+/// has changed since. Never the to-do list. Held on a stale link.
+#[tauri::command]
+pub async fn brain_schedule_clear_list(
+    app: AppHandle,
+    list: String,
+    count: u32,
+) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    let body = clear_list_body(&list, count)?;
+    post(&app, "/api/schedule/act", body).await
 }
 
 /// The standby schedule: every day from `start` to `end` ("HH:MM"). The PC
@@ -499,12 +645,75 @@ mod tests {
     #[test]
     fn a_todo_is_the_owners_words_tidied_and_capped() {
         assert_eq!(
-            todo_body("  buy   milk ").unwrap(),
+            todo_body("  buy   milk ", None).unwrap(),
             serde_json::json!({ "kind": "todo", "text": "buy milk" })
         );
-        assert!(todo_body("   ").is_err());
-        assert!(todo_body(&"x".repeat(MAX_TEXT + 1)).is_err());
-        assert!(todo_body(&"x".repeat(MAX_TEXT)).is_ok());
+        assert!(todo_body("   ", None).is_err());
+        assert!(todo_body(&"x".repeat(MAX_TEXT + 1), None).is_err());
+        assert!(todo_body(&"x".repeat(MAX_TEXT), None).is_ok());
+        assert_eq!(
+            todo_body("milk", Some("shopping")).unwrap(),
+            serde_json::json!({ "kind": "todo", "text": "milk", "list": "shopping" })
+        );
+        for bad in ["", "Shopping", "a b c d", "shop;ping", "hidden 1"] {
+            assert!(todo_body("milk", Some(bad)).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn snooze_is_one_job_ten_minutes_by_default_and_within_limits() {
+        assert_eq!(
+            act_body("s0123456789", "snooze", None).unwrap(),
+            serde_json::json!({ "id": "s0123456789", "do": "snooze", "seconds": 600.0 })
+        );
+        assert_eq!(
+            act_body("s0123456789", "snooze", Some(300.0)).unwrap()["seconds"],
+            300.0
+        );
+        for bad in [0.0, 59.0, 86401.0, f64::NAN] {
+            assert!(
+                act_body("s0123456789", "snooze", Some(bad)).is_err(),
+                "{bad}"
+            );
+        }
+        assert!(act_body("all", "snooze", None).is_err());
+    }
+
+    #[test]
+    fn clearing_names_one_named_list_and_the_count_the_page_showed() {
+        assert_eq!(
+            clear_list_body("shopping", 3).unwrap(),
+            serde_json::json!({ "do": "clear_list", "list": "shopping", "count": 3 })
+        );
+        assert!(clear_list_body("shopping", 0).is_err());
+        for bad in ["", "*", "To-do", "a b c d", "shop,ping"] {
+            assert!(clear_list_body(bad, 1).is_err(), "{bad}");
+        }
+        // "all" is a plain word, so it reaches the PC - which refuses it as
+        // a list's name (jarvis_schedule.list_key): there is no clear-all.
+        assert_eq!(clear_list_body("all", 1).unwrap()["list"], "all");
+    }
+
+    #[test]
+    fn hidden_lists_hide_the_list_names_too_but_keep_the_grouping() {
+        let list = serde_json::json!({
+            "jobs": [],
+            "todo": [{"id": "s0123456781", "kind": "todo", "text": "ring", "list": "presents for sam"},
+                     {"id": "s0123456782", "kind": "todo", "text": "card", "list": "presents for sam"},
+                     {"id": "s0123456783", "kind": "todo", "text": "milk", "list": ""}],
+            "lists": [{"name": "presents for sam", "title": "Presents for sam list", "open": 2}],
+            "went_off": [{"id": "s0123456784", "kind": "reminder", "text": "call Dr Patel"}]
+        });
+        let hidden = redact_list(list);
+        let s = hidden.to_string();
+        assert!(
+            !s.contains("sam") && !s.contains("ring") && !s.contains("Patel"),
+            "{s}"
+        );
+        assert_eq!(hidden["lists"][0]["name"], "hidden-1");
+        assert_eq!(hidden["todo"][0]["list"], "hidden-1");
+        assert_eq!(hidden["todo"][1]["list"], "hidden-1");
+        assert_eq!(hidden["todo"][2]["list"], "");
     }
 
     #[test]

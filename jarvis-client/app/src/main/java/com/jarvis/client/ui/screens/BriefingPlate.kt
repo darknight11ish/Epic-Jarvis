@@ -48,6 +48,11 @@ import kotlinx.coroutines.launch
  * on by default): OFF at once, ON through ONE approval card on the PC, held
  * on a stale link ([JarvisRuntime.setBriefingSenders]).
  *
+ * "What did I miss?" (2026-09-25, [Briefing.MISSED_LABEL]): the same builder
+ * on the PC, since the owner last talked to Jarvis on either app - a read,
+ * like "Brief me now", so not held on a stale link. Shown in place of the
+ * briefing until the next read; the PC keeps nothing of it.
+ *
  * Read when Mind shows it, on Refresh, after every change, and on every
  * `schedule` event about a briefing ([JarvisRuntime.briefingTick]). Nothing
  * of it is kept on the phone. "Hide memory lists and chat history" hides its
@@ -68,6 +73,7 @@ internal fun BriefingSection(
     var missing by remember { mutableStateOf(false) }
     var readError by remember { mutableStateOf<String?>(null) }
     var asking by remember { mutableStateOf(false) }
+    var missedAsking by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     var sendersBusy by remember { mutableStateOf(false) }
@@ -117,6 +123,33 @@ internal fun BriefingSection(
         }
     }
 
+    fun whatDidIMiss() {
+        if (asking) return
+        asking = true
+        missedAsking = true
+        said = null
+        scope.launch {
+            try {
+                when (val r = JarvisRuntime.briefingMissed()) {
+                    is ApiResult.Ok -> {
+                        val v = Briefing.readMissed(r.value)
+                        if (v == null) {
+                            said = Briefing.MISSED_MISSING
+                        } else {
+                            // Keep the setups this plate already read.
+                            view = v.copy(setups = view?.setups ?: v.setups, sources = view?.sources ?: v.sources,
+                                senders = view?.senders ?: v.senders)
+                        }
+                    }
+                    is ApiResult.Failed -> said = "Couldn't look: " + JarvisRuntime.noticeFor(r.error)
+                }
+            } finally {
+                asking = false
+                missedAsking = false
+            }
+        }
+    }
+
     Section(Briefing.TITLE, trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
         Plate {
             Text(Briefing.DETAIL, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
@@ -132,7 +165,7 @@ internal fun BriefingSection(
                     color = if (err != null) chrome.warnInk else chrome.textLo,
                 )
                 else -> {
-                    if (shown.building || asking) {
+                    if (shown.building || (asking && !missedAsking)) {
                         Text(Briefing.BUILDING, style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid, modifier = Modifier.liveStatus())
                     }
@@ -156,8 +189,12 @@ internal fun BriefingSection(
                             }
                         }
                         Gap(8)
-                        Text(Briefing.OUTSIDE_LINE, style = MaterialTheme.typography.labelSmall,
-                            color = chrome.textLo)
+                        val isMissed = b.source == "missed"
+                        // "What did I miss?" fetches nothing from the internet.
+                        if (!isMissed) {
+                            Text(Briefing.OUTSIDE_LINE, style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textLo)
+                        }
                         b.notIncluded.forEach {
                             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                         }
@@ -170,11 +207,16 @@ internal fun BriefingSection(
                                     enabled = !showPrivateBusy, onClick = onShowPrivate)
                             }
                         }
-                        Text(Briefing.KEPT, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                        Text(if (isMissed) Briefing.MISSED_DETAIL else Briefing.KEPT,
+                            style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                     }
-                    // A read: offered on a stale link too, like every read.
-                    Quiet(if (asking) Briefing.NOW_BUSY else Briefing.NOW_LABEL, enabled = !asking,
-                        onClick = { briefNow() })
+                    // Reads: offered on a stale link too, like every read.
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Quiet(if (asking && !missedAsking) Briefing.NOW_BUSY else Briefing.NOW_LABEL,
+                            enabled = !asking, onClick = { briefNow() })
+                        Quiet(if (missedAsking) Briefing.MISSED_BUSY else Briefing.MISSED_LABEL,
+                            enabled = !asking, onClick = { whatDidIMiss() })
+                    }
 
                     // ---- When it arrives (the desktop's Settings) ----
                     Gap(14)

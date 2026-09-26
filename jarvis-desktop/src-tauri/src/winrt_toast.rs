@@ -70,6 +70,11 @@ use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
 /// claims for itself is the one the shortcut already carries.
 const AUMID: &str = "com.jarvis.desktop";
 
+/// The argv marker a Snooze action's `arguments` carries (2026-09-25): a
+/// timer, alarm or reminder that went off, snoozed from its own toast. The
+/// same foreground-activation path as Deny - see [`notify_fired`].
+const SNOOZE_PREFIX: &str = "jarvis-snooze:";
+
 /// The argv marker a Deny action's `arguments` carries. Chosen to look
 /// nothing like a normal flag (`--deny=…`) or a file path, since this token
 /// arrives as a bare, unparsed command-line argument on relaunch and must
@@ -295,9 +300,127 @@ pub fn decide_denied_at_startup(app: &AppHandle) {
     });
 }
 
+/// A timer, alarm or reminder that went off, with a "Snooze 10 minutes"
+/// button (2026-09-25; `brain/schedule.rs` `toast_fired`). The same
+/// foreground activation as Deny, so the same caveat: the button's relaunch
+/// has not been watched on a real Windows PC. Anything failing here - or an
+/// uninstalled build, which has no shortcut for the AUMID - falls back to
+/// the plain toast without a button, the one shown before this existed;
+/// Snooze is then in the Brain's Coming up, under "Just went off".
+///
+/// A snooze is not an approval: it only sets the same thing to go off once
+/// more, later, and needs no card (the owner's rule for a one-off). The
+/// button carries the job id only, never the words.
+pub fn notify_fired(app: &AppHandle, title: &str, body: &str, id: &str, label: &str) {
+    if is_uninstalled_build() {
+        crate::commands::notify(app, title, body);
+        return;
+    }
+    if let Err(e) = try_notify_fired(title, body, id, label) {
+        crate::logfile::log(&format!(
+            "[jarvis] snooze toast failed, falling back to a plain one: {e}"
+        ));
+        crate::commands::notify(app, title, body);
+    }
+}
+
+fn try_notify_fired(title: &str, body: &str, id: &str, label: &str) -> windows::core::Result<()> {
+    let xml = format!(
+        r#"<toast activationType="foreground" launch="jarvis-open">
+  <visual>
+    <binding template="ToastGeneric">
+      <text>{title}</text>
+      <text>{body}</text>
+    </binding>
+  </visual>
+  <actions>
+    <action content="{label}" arguments="{prefix}{id}" activationType="foreground"/>
+  </actions>
+</toast>"#,
+        title = escape_xml(title),
+        body = escape_xml(body),
+        label = escape_xml(label),
+        prefix = SNOOZE_PREFIX,
+        id = escape_xml(id),
+    );
+    let doc = XmlDocument::new()?;
+    doc.LoadXml(&HSTRING::from(xml))?;
+    let toast = ToastNotification::CreateToastNotification(&doc)?;
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(AUMID))?;
+    notifier.Show(&toast)
+}
+
+/// A Snooze click's job id out of a launch's argv - `None` for every other
+/// launch. Only a job id the PC makes ("s" and ten hex digits) counts.
+pub fn snooze_id_from_argv(argv: &[String]) -> Option<&str> {
+    argv.iter()
+        .find_map(|a| a.strip_prefix(SNOOZE_PREFIX))
+        .filter(|id| crate::brain::schedule::valid_id(id))
+}
+
+/// Sends the snooze on its own task, and says how it went in a toast - the
+/// window is very likely not open when a toast button is pressed. Held on a
+/// stale link like every change (`brain/schedule.rs` `snooze_from_toast`).
+pub fn snooze_detached(app: &AppHandle, id: &str) {
+    let app = app.clone();
+    let id = id.to_string();
+    tauri::async_runtime::spawn(async move {
+        crate::brain::schedule::snooze_from_toast(app, id).await;
+    });
+}
+
+/// A Snooze clicked on a toast while Jarvis was CLOSED: the same wait for
+/// the event stream as a cold-start Deny ([`decide_denied_at_startup`]),
+/// because a change is refused while the link is stale.
+pub fn snooze_at_startup(app: &AppHandle) {
+    let argv: Vec<String> = std::env::args().collect();
+    let Some(id) = snooze_id_from_argv(&argv) else {
+        return;
+    };
+    let id = id.to_string();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let deadline = std::time::Instant::now() + STARTUP_DENY_WAIT;
+        loop {
+            if !app.state::<crate::stream::StreamState>().link().stale {
+                crate::logfile::log(&format!("[jarvis] Snooze reached from a cold start: {id}"));
+                snooze_detached(&app, &id);
+                return;
+            }
+            if std::time::Instant::now() >= deadline {
+                crate::logfile::log(&format!(
+                    "[jarvis] Snooze for {id} arrived on a cold start, but the event stream \
+                     never came up - nothing was snoozed"
+                ));
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_snooze_click_yields_one_job_id_and_nothing_else_does() {
+        let argv = vec![
+            "jarvis-desktop.exe".to_string(),
+            "jarvis-snooze:s0123456789".to_string(),
+        ];
+        assert_eq!(snooze_id_from_argv(&argv), Some("s0123456789"));
+        for bad in [
+            "jarvis-snooze:",
+            "jarvis-snooze:all",
+            "jarvis-snooze:s0123",
+            "jarvis-deny:s0123456789",
+            "x-jarvis-snooze:s0123456789",
+        ] {
+            assert_eq!(snooze_id_from_argv(&[bad.to_string()]), None, "{bad}");
+        }
+        assert_eq!(deny_id_from_argv(&argv), None);
+    }
 
     #[test]
     fn xml_special_characters_are_escaped() {

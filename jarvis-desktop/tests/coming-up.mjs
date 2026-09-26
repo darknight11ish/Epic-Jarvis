@@ -24,6 +24,13 @@
  *   list and a pointer instead of the form; held on a stale link; its line
  *   says how the last end went; no toast for a kind the PC says notifies
  *   nobody; the phone says the same words.
+ * - the everyday quick wins (2026-09-25): "Just went off" with Snooze - ONE
+ *   brain_schedule_act "snooze" for that id, ten minutes, asking nothing;
+ *   named lists under their own headings with their own Add box; "Clear
+ *   list" asks "are you sure?" first and sends the list and the count it
+ *   showed - nothing on a "no"; all of it greyed on a stale link; list names
+ *   hidden with the private lists; the to-do list itself has no Clear; the
+ *   phone and the PC say the same words.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -31,10 +38,23 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   actionsOf,
+  addPlaceholder,
+  CLEAR_LIST_LABEL,
+  clearListQuestion,
   COMING_UP_DETAIL,
   COMING_UP_TITLE,
   countdown,
   DONE_LINE,
+  HIDDEN_LIST_TITLE,
+  LISTS_NOTE,
+  namedLists,
+  SNOOZE_LABEL,
+  SNOOZE_SECONDS,
+  tagOf,
+  todoItems,
+  WENT_OFF_DETAIL,
+  WENT_OFF_TITLE,
+  wentOffMeta,
   EMPTY_JOBS,
   EMPTY_TODO,
   LOCK_SCREEN,
@@ -170,6 +190,64 @@ await check("the standby schedule's words, title, lines and times", async () => 
   const py = readRepo("backend/jarvis_standby_schedule.py");
   assert.ok(py.includes('"standby schedule"')
     && py.includes('edges=("on standby", "awake", ", if the schedule put it on standby")'));
+});
+
+/* ── Snooze and named lists: the words and the reading ────────────────── */
+
+const WENT = [{ id: "s00000000c1", kind: "alarm", text: "", state: "fired", repeats: false,
+  went_off_at: "07:00", fired_at: NOW - 60 }];
+const LISTED = [
+  { id: "s00000000d1", kind: "todo", text: "milk", state: "active", list: "shopping" },
+  { id: "s00000000d2", kind: "todo", text: "eggs", state: "active", list: "shopping" },
+  { id: "s00000000d3", kind: "todo", text: "post the letter", state: "active", list: "" },
+];
+const LISTS = [{ name: "shopping", title: "Shopping list", open: 2 }];
+
+await check("snooze and named lists: both apps' words, and the PC's", async () => {
+  const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt")
+    .replace(/"\s*\+\s*\n?\s*"/g, "");
+  for (const words of [WENT_OFF_TITLE, WENT_OFF_DETAIL, SNOOZE_LABEL, LISTS_NOTE, CLEAR_LIST_LABEL,
+    HIDDEN_LIST_TITLE]) {
+    assert.ok(kt.includes(`"${words.replace(/"/g, '\\"')}"`), `the phone does not say: ${words}`);
+  }
+  assert.ok(kt.includes(`const val SNOOZE_SECONDS = ${SNOOZE_SECONDS}`));
+  const html = read("src/brain.html");
+  assert.ok(html.includes(`>${WENT_OFF_TITLE}</h3>`) && html.includes(`>${WENT_OFF_DETAIL}</p>`));
+  assert.ok(html.includes(`>${LISTS_NOTE}</p>`));
+  const rs = read("src-tauri/src/brain/schedule.rs");
+  assert.ok(rs.includes(`SNOOZE_LABEL: &str = "${SNOOZE_LABEL}"`));
+  assert.ok(rs.includes(`SNOOZE_SECONDS: f64 = ${SNOOZE_SECONDS}.0`));
+  const py = readRepo("backend/jarvis_schedule.py");
+  assert.ok(py.includes(`SNOOZE_DEFAULT = ${SNOOZE_SECONDS}.0`));
+  assert.ok(py.includes('DEFAULT_LIST_TITLE = "To-do list"'));
+  // "Clear the shopping list" said to Jarvis points here, by this button's name.
+  assert.ok(readRepo("backend/jarvis_quick.py").includes(CLEAR_LIST_LABEL));
+  assert.equal(clearListQuestion("Shopping list", 3),
+    "Clear the shopping list? This deletes all 3 items on it, and cannot be undone.");
+  assert.equal(clearListQuestion("Packing list", 1),
+    "Clear the packing list? This deletes all 1 item on it, and cannot be undone.");
+  assert.equal(addPlaceholder("Shopping list"), "Add to the shopping list");
+  assert.equal(addPlaceholder("To-do list"), "Add to the to-do list");
+});
+
+await check("reading: what went off, the lists, and which items are on which", async () => {
+  const v = readSchedule({ jobs: [], todo: LISTED, went_off: WENT, lists: LISTS });
+  assert.equal(v.wentOff.length, 1);
+  assert.deepEqual(wentOffMeta(v.wentOff[0]), ["Went off at 07:00"]);
+  assert.deepEqual(wentOffMeta({ ...v.wentOff[0], missed: "missed at 07:00" }),
+    ["Went off at 07:00 (late - the PC was off or asleep)"]);
+  assert.deepEqual(todoItems(v).map((j) => j.text), ["post the letter"]);
+  const lists = namedLists(v);
+  assert.equal(lists.length, 1);
+  assert.equal(lists[0].title, "Shopping list");
+  assert.deepEqual(lists[0].items.map((j) => j.text), ["milk", "eggs"]);
+  assert.equal(tagOf({ kind: "alarm", snoozed: true }), "alarm, snoozed");
+  assert.equal(tagOf({ kind: "reminder", repeats: true }), "reminder, repeats");
+  const old = readSchedule({ jobs: [], todo: [] });
+  assert.deepEqual([old.wentOff, old.lists], [[], []], "an older PC is read as nothing new");
+  const hid = namedLists(readSchedule({ jobs: [], todo: LISTED.map((j) => ({ ...j, list: j.list ? "hidden-1" : "" })),
+    lists: [{ name: "hidden-1", title: "", open: 2 }], hidden: true }));
+  assert.equal(hid[0].title, HIDDEN_LIST_TITLE);
 });
 
 /* ── The Brain window ─────────────────────────────────────────────────── */
@@ -352,6 +430,96 @@ await check("the standby schedule is held on a stale link, and says how it last 
   assert.deepEqual(buttons, ["Pause", "Delete"]);
 });
 
+await check("Just went off: Snooze is ONE change for that id, ten minutes, asking nothing", async () => {
+  const page = await workTab({ schedule: { jobs: [], todo: [], went_off: WENT } });
+  const shown = await page.locator("#went-off-part").isVisible();
+  const title = await page.locator("#went-off-part h3").innerText();
+  const text = await page.locator("#went-off").innerText();
+  let asked = false;
+  page.on("dialog", (d) => { asked = true; d.dismiss(); });
+  await page.locator("#went-off .row-item").first().getByRole("button", { name: SNOOZE_LABEL }).click();
+  await page.waitForTimeout(500);
+  const sent = await page.evaluate(() => window.__scheduleCalls);
+  const after = await page.locator("#went-off-part").isHidden();
+  const rows = await page.locator("#coming-up .row-item").allInnerTexts();
+  await page.close();
+  assert.equal(shown, true, "Just went off was not shown");
+  assert.equal(title.trim().toLowerCase(), WENT_OFF_TITLE.toLowerCase());
+  assert.match(text, /Went off at 07:00/);
+  assert.equal(asked, false, "Snooze asked a question");
+  assert.deepEqual(sent, [{ cmd: "brain_schedule_act", id: "s00000000c1", action: "snooze",
+    seconds: SNOOZE_SECONDS }]);
+  assert.equal(after, true, "it stayed under Just went off");
+  assert.equal(rows.length, 1);
+  assert.match(rows[0], /snoozed/i);
+});
+
+await check("nothing went off: the part is not shown", async () => {
+  const page = await workTab({ schedule: { jobs: JOBS, todo: TODO } });
+  const hidden = await page.locator("#went-off-part").isHidden();
+  await page.close();
+  assert.equal(hidden, true);
+});
+
+await check("a named list: its heading, its items, its own Add, and Clear list asks first", async () => {
+  const page = await workTab({ schedule: { jobs: [], todo: LISTED, lists: LISTS } });
+  const heading = await page.locator("#named-lists h3").allInnerTexts();
+  const items = await page.locator("#named-lists .row-item").allInnerTexts();
+  const todo = await page.locator("#todo-list .row-item").allInnerTexts();
+  const placeholder = await page.locator("#named-lists input").getAttribute("placeholder");
+  const todoButtons = await page.locator("#todo-list, #todo-form").locator("button").allInnerTexts();
+  await page.locator("#named-lists input").fill("bread");
+  await page.locator("#named-lists").getByRole("button", { name: "Add" }).click();
+  await page.waitForTimeout(500);
+  // No: nothing is sent.
+  const questions = [];
+  page.once("dialog", (d) => { questions.push(d.message()); d.dismiss(); });
+  await page.locator("#named-lists").getByRole("button", { name: CLEAR_LIST_LABEL }).click();
+  await page.waitForTimeout(400);
+  const afterNo = await page.evaluate(() => window.__scheduleCalls.length);
+  // Yes: ONE request with the list and the count shown.
+  page.once("dialog", (d) => { questions.push(d.message()); d.accept(); });
+  await page.locator("#named-lists").getByRole("button", { name: CLEAR_LIST_LABEL }).click();
+  await page.waitForTimeout(600);
+  const sent = await page.evaluate(() => window.__scheduleCalls);
+  const left = await page.locator("#named-lists .row-item").count();
+  await page.close();
+  assert.deepEqual(heading.map((h) => h.trim().toLowerCase()), ["shopping list"]);
+  assert.equal(items.length, 2);
+  assert.match(items[0], /milk/);
+  assert.deepEqual(todo.length, 1, "a shopping item showed on the to-do list");
+  assert.equal(placeholder, "Add to the shopping list");
+  assert.ok(!todoButtons.some((b) => /clear/i.test(b)), "the to-do list has a Clear");
+  assert.deepEqual(questions, [clearListQuestion("Shopping list", 3), clearListQuestion("Shopping list", 3)]);
+  assert.equal(afterNo, 1, "a no still cleared");
+  assert.deepEqual(sent, [
+    { cmd: "brain_schedule_add_todo", text: "bread", list: "shopping" },
+    { cmd: "brain_schedule_clear_list", list: "shopping", count: 3 },
+  ]);
+  assert.equal(left, 0);
+});
+
+await check("on a stale link Snooze, a list's Add and Clear list are greyed", async () => {
+  const page = await workTab({ schedule: { jobs: [], todo: LISTED, lists: LISTS, went_off: WENT },
+    link: { stale: true } });
+  const snooze = await page.locator("#went-off button").evaluateAll((bs) => bs.map((b) => b.disabled));
+  const lists = await page.locator("#named-lists button").evaluateAll((bs) => bs.map((b) => b.disabled));
+  await page.close();
+  assert.ok(snooze.length === 1 && snooze.every(Boolean), `${snooze}`);
+  assert.ok(lists.length >= 2 && lists.every(Boolean), `${lists}`);
+});
+
+await check("hidden: no list names, no words, no Add and no Clear list", async () => {
+  const page = await workTab({ schedule: { jobs: [], todo: LISTED, lists: LISTS, went_off:
+    [{ ...WENT[0], kind: "reminder", text: "see Dr Patel" }] }, security: { hidden: true } });
+  const text = await page.locator("#coming-up-card").innerText();
+  const buttons = await page.locator("#named-lists button").allInnerTexts();
+  await page.close();
+  assert.doesNotMatch(text, /shopping|milk|eggs|letter|Patel/i);
+  assert.match(text, /\(hidden\) list/i);
+  assert.deepEqual(buttons.filter((b) => /clear|add/i.test(b)), []);
+});
+
 await check("an answer made without the model shows the Done line", async () => {
   const route = (r) => "\u001fjarvis-route:" + JSON.stringify(r);
   const page = await K.open(browser, base, "index.html", {
@@ -386,7 +554,8 @@ await check("CONTROL: toasts on fired only, words by id, lock-screen words while
     "a kind that notifies nobody (the standby schedule at 01:00) would still be toasted");
   assert.match(body, /security\.app_lock \|\| crate::lock::private_hidden/);
   assert.match(body, /first_time\(/, "a replayed event could toast twice");
-  for (const cmd of ["brain_schedule_act", "brain_schedule_add_todo", "brain_schedule_add_standby"]) {
+  for (const cmd of ["brain_schedule_act", "brain_schedule_add_todo", "brain_schedule_add_standby",
+    "brain_schedule_clear_list"]) {
     const f = rs.slice(rs.indexOf(`pub async fn ${cmd}(`));
     const b = f.slice(0, f.indexOf("\n}\n"));
     assert.ok(b.indexOf("require_link_live") >= 0 && b.indexOf("require_link_live") < b.indexOf("post("),
@@ -395,7 +564,7 @@ await check("CONTROL: toasts on fired only, words by id, lock-screen words while
   const list = rs.slice(rs.indexOf("pub async fn brain_schedule("));
   assert.match(list.slice(0, list.indexOf("\n}\n")), /private_hidden/);
   for (const cmd of ["brain_schedule", "brain_schedule_act", "brain_schedule_add_todo",
-    "brain_schedule_add_standby"]) {
+    "brain_schedule_add_standby", "brain_schedule_clear_list"]) {
     assert.match(read("src-tauri/build.rs"), new RegExp(`"${cmd}"`));
     assert.match(read("src-tauri/src/lib.rs"), new RegExp(`brain::schedule::${cmd},`));
     const sets = read("src-tauri/permissions/surfaces.toml").split("[[set]]").slice(1);
@@ -409,7 +578,18 @@ await check("CONTROL: toasts on fired only, words by id, lock-screen words while
     const c = read(`src-tauri/capabilities/${other}.json`);
     assert.ok(!c.includes("brain-schedule"), `${other} holds brain-schedule`);
   }
-  assert.match(rs, /pub\(crate\) const ACTIONS: &\[&str\] = &\["pause", "resume", "delete", "done", "add_time"\];/);
+  assert.match(rs, /pub\(crate\) const ACTIONS: &\[&str\] = &\[\s*"pause",\s*"resume",\s*"delete",\s*"done",\s*"add_time",\s*"snooze",?\s*\];/);
+  // The toast's Snooze: only for the kinds that can be snoozed, and the
+  // relaunch lands in one snooze held on a stale link.
+  const toastBody = rs.slice(rs.indexOf("pub async fn toast_fired("));
+  assert.match(toastBody.slice(0, toastBody.indexOf("\n}\n")), /SNOOZABLE\.contains/);
+  const fromToast = rs.slice(rs.indexOf("pub(crate) async fn snooze_from_toast("));
+  const ft = fromToast.slice(0, fromToast.indexOf("\n}\n"));
+  assert.ok(ft.indexOf("require_link_live") >= 0 && ft.indexOf("require_link_live") < ft.indexOf("post("),
+    "a toast's Snooze is not held on a stale link");
+  const lib = read("src-tauri/src/lib.rs");
+  assert.match(lib, /winrt_toast::snooze_id_from_argv\(&_argv\)/);
+  assert.match(lib, /winrt_toast::snooze_at_startup\(&handle\)/);
 });
 
 await browser.close();
