@@ -20,6 +20,15 @@ const PAGES = [
   ["widget.html", "#widget-shell", 340, 320],
   ["settings.html", "body", 680, 700],
   ["brain.html", "body", 1000, 600],
+  // 2026-09-27 (UI audit item 11, Q6): the HUD used to commit to its own
+  // dark palette on purpose and was left out of this list for exactly that
+  // reason. It is on `theme.css` now, so it belongs here like the rest.
+  // `body`, not `#shell`: `#shell`'s own background is a decorative
+  // radial-gradient with no solid stop at the end, so its `backgroundColor`
+  // reads as transparent in every theme and this test would always fail
+  // whether or not the theme actually reached the window. `body` carries
+  // the real, solid `var(--void)` underneath it.
+  ["jarvis_hud.html", "body", 1100, 700],
   // `faces.html` is deliberately absent. It keeps the reactor kit's own
   // palette, because every colour on that window is a sample of the thing
   // being edited and a second palette around the swatches would make the
