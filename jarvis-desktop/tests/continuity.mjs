@@ -145,7 +145,9 @@ const browser = await K.launch();
 
 await check("Settings: three named theme rows, and Daylight leaves the list while following Windows", async () => {
   const page = await K.open(browser, base, "settings.html", {}, { width: 760, height: 1400 });
-  const rows = await page.locator(".theme-row .theme-name").allTextContents();
+  // The theme list only: the manner, web search and speaking-speed choices
+  // reuse the same row style further down the page.
+  const rows = await page.locator("#theme-list .theme-row .theme-name").allTextContents();
   assert.deepEqual(rows, ["Reactor", "Daylight", "High Contrast"]);
   // A row must not carry `data-theme`, or theme.css repaints it.
   assert.equal(await page.locator(".theme-row[data-theme]").count(), 0);
