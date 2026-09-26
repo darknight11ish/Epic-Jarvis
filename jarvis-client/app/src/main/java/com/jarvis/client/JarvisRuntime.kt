@@ -15,6 +15,7 @@ import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
+import com.jarvis.client.net.GateHistoryItem
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.SseEvent
@@ -163,6 +164,8 @@ data class InboxRead(
     val digest: SectionRead = SectionRead.Reading,
     val undo: SectionRead = SectionRead.Reading,
     val jobs: SectionRead = SectionRead.Reading,
+    /** "Activity" - past approvals. Its own key: see [pastApprovals]. */
+    val activity: SectionRead = SectionRead.Reading,
     /** When the last read finished. 0 means never, on this run of the app. */
     val fetchedAtMs: Long = 0L,
     val refreshing: Boolean = false,
@@ -430,6 +433,16 @@ object JarvisRuntime {
 
     private val _jobs = MutableStateFlow<List<JobRecord>>(emptyList())
     val jobs: StateFlow<List<JobRecord>> = _jobs.asStateFlow()
+
+    /**
+     * "Activity" - past approvals, read-only (ease-of-use audit, 2026-09-27,
+     * row 11). Never the same list as [pending]: this is `/api/pending`'s
+     * `history` array, fetched by name ([JarvisApi.gateHistoryRead]), which
+     * is a different call to a different key than the one [refreshPending]
+     * makes - see that function's own comment on why the two must not mix.
+     */
+    private val _pastApprovals = MutableStateFlow<List<GateHistoryItem>>(emptyList())
+    val pastApprovals: StateFlow<List<GateHistoryItem>> = _pastApprovals.asStateFlow()
 
     private val _brain = MutableStateFlow(BrainSnapshot())
 
@@ -2134,7 +2147,11 @@ object JarvisRuntime {
             val digest = note("digest", api.digest()) { _digest.value = it }
             val undo = note("undo", api.undo()) { _undo.value = it }
             val jobs = note("jobs", api.jobs()) { _jobs.value = it }
-            // Only this function's own three keys. It used to assign the whole set,
+            // "Activity" (past approvals): read alongside the other three,
+            // never merged with them and never with `pending` - it has its
+            // own key on every side of this call.
+            val activity = note("activity", api.gateHistoryRead()) { _pastApprovals.value = it.items }
+            // Only this function's own keys. It used to assign the whole set,
             // so opening the inbox erased the "approvals" flag that refreshPending
             // had set — and the approvals screen went from "there is no approval
             // queue here" to an empty list with no explanation, which the comment
@@ -2145,6 +2162,7 @@ object JarvisRuntime {
                     digest = digest,
                     undo = undo,
                     jobs = jobs,
+                    activity = activity,
                     fetchedAtMs = System.currentTimeMillis(),
                 )
             }
@@ -3962,8 +3980,8 @@ object JarvisRuntime {
      * connection the socket has not noticed; below that a single late frame on
      * a dozing radio would flap the indicator for no reason.
      */
-    /** The three keys refreshInbox owns; it must not touch the rest of the set. */
-    private val INBOX_KEYS = setOf("digest", "undo", "jobs")
+    /** The keys refreshInbox owns; it must not touch the rest of the set. */
+    private val INBOX_KEYS = setOf("digest", "undo", "jobs", "activity")
 
     /** How often the coalesced resume point may reach SharedPreferences. */
     private const val RESUME_WRITE_GAP_MS = 2_000L

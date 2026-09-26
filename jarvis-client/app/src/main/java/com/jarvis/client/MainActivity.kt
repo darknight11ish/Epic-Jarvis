@@ -679,6 +679,7 @@ class MainActivity : FragmentActivity() {
         val digest by JarvisRuntime.digest.collectAsState()
         val undo by JarvisRuntime.undo.collectAsState()
         val jobs by JarvisRuntime.jobs.collectAsState()
+        val pastApprovals by JarvisRuntime.pastApprovals.collectAsState()
         // How each Inbox list's last read came back, so the screen can tell
         // "nothing waiting" apart from "could not read" (screens-3).
         val inboxRead by JarvisRuntime.inboxRead.collectAsState()
@@ -1470,6 +1471,7 @@ class MainActivity : FragmentActivity() {
                             digest = digest,
                             undo = undo,
                             jobs = jobs,
+                            pastApprovals = pastApprovals,
                             onOpenApproval = { id ->
                                 // Carries the id now. It used to be dropped, so a
                                 // digest row with three approvals waiting took you

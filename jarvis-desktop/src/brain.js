@@ -40,6 +40,7 @@ import {
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
+import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
 import {
   actionsOf as focusActionsOf,
@@ -244,7 +245,11 @@ const VIEW_SECTIONS = {
   memory: ["memory_facts", "memory_pending", "memory_entities"],
   // Read through its own commands (brain/history.rs), not brain_read.
   history: [],
-  work: ["jobs", "undo"],
+  // "Activity" (past approvals, read-only): the same `/api/pending` the
+  // stream already polls for the live queue, read again here for its
+  // `history` half - see brain/routes.rs's own comment on why one more GET
+  // to that route is the right way to reach it.
+  work: ["jobs", "undo", "gate_history"],
   trust: ["content_risk", "ledger"],
   watch: ["watch", "watch_report"],
 };
@@ -310,6 +315,7 @@ const dom = {
   memoryAbout: $("memory-about"),
   jobs: $("jobs"),
   undo: $("undo"),
+  activity: $("activity"),
   focus: $("focus"),
   focusForm: $("focus-form"),
   focusMinutes: $("focus-minutes"),
@@ -697,6 +703,7 @@ function render(name) {
       renderBriefing();
       renderJobs();
       renderUndo();
+      renderActivity();
       break;
     case "trust":
       renderContentRisk();
@@ -4307,6 +4314,80 @@ function renderUndo() {
     },
     "Nothing on the shelf."
   );
+}
+
+/**
+ * "Activity" - past approvals, read-only (ease-of-use audit, 2026-09-27,
+ * row 11): title, Approved/Denied/Timed out, when, and which device. Next
+ * to the Undo shelf, on purpose, and never sharing a list with a WAITING
+ * card - this reads `gate_history`, its own section (brain/routes.rs), which
+ * is the SAME `/api/pending` the stream already polls for the live queue,
+ * asked for again so this pane can show the `history` half of that answer -
+ * the half the stream's own polling loop reads and discards, because an
+ * already-decided row must never be mistaken for one still waiting.
+ *
+ * What each row shows, and what could and could not be confirmed against
+ * this repository (`jarvis_gate.py` itself is not in it - see the module
+ * note on this file's `history` handling, and JARVIS-API.md section 3):
+ *
+ * - title: `notice.title`, else the same action-name fallback a live card
+ *   with no notice uses ([fallbackTitle], card-words.js) - confirmed safe
+ *   for a lock screen either way, since neither reads `detail` or `prompt`.
+ * - outcome: the row's `state` (confirmed values: `approved`, `denied`,
+ *   `expired` - backend/test_gate_outcome.py's docstring) or `outcome`
+ *   (`timed_out`, the Verdict-level name for the same event); anything else
+ *   reads as "Not reported" rather than a guess.
+ * - device: `decided_by` (a real column - backend/gate-outcome.patch reads
+ *   `row["decided_by"]`), else `device`, else `by`; ASSUMED to be "this PC"
+ *   or "another device", the two words every other approval-adjacent route
+ *   in this codebase already sends (focus.patch, power-mode.patch,
+ *   task-control.patch, note-capture.patch) - not confirmed for the gate's
+ *   own history rows. A row with none of the three says nothing about a
+ *   device rather than inventing one.
+ */
+function renderActivity() {
+  const body = state.data.gate_history || {};
+  const why = unavailable("gate_history");
+  if (why) return rows(dom.activity, [], null, whyNode("gate_history"));
+  const history = Array.isArray(body.history) ? body.history : [];
+  const sorted = [...history].sort((a, b) => activityWhen(b) - activityWhen(a));
+
+  rows(
+    dom.activity,
+    sorted,
+    (h) => {
+      const outcome = activityOutcome(h);
+      const device = String(h.decided_by || h.device || h.by || "");
+      const when = activityWhen(h);
+      return row({
+        tag: outcome.toLowerCase(),
+        state: outcome === "Approved" ? "ok" : outcome === "Denied" ? "bad" : "warn",
+        title: (h.notice && h.notice.title) || fallbackTitle(h.action),
+        meta: [outcome, [device, when ? ago(when) : ""].filter(Boolean).join(" · ")],
+      });
+    },
+    "Nothing decided yet."
+  );
+}
+
+/** `approved` / `denied` / `expired` (approvals.state) or `timed_out`
+ * (Verdict.outcome) - both accepted, since which one `history()` rows
+ * actually carry could not be confirmed. Anything else: "Not reported",
+ * never a guess. */
+function activityOutcome(h) {
+  const state = String(h.state || h.outcome || "").toLowerCase();
+  if (state === "approved") return "Approved";
+  if (state === "denied") return "Denied";
+  if (state === "expired" || state === "timed_out") return "Timed out";
+  return "Not reported";
+}
+
+/** When to show: the decision time if the row has one, else when it was raised. */
+function activityWhen(h) {
+  const decided = Number(h.decided_at);
+  if (Number.isFinite(decided) && decided > 0) return decided;
+  const created = Number(h.created);
+  return Number.isFinite(created) && created > 0 ? created : 0;
 }
 
 /* ==========================================================================
