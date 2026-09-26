@@ -37,6 +37,10 @@ CASES = [
     # notes_search
     ("search my notes for the wifi password of the cabin", "notes_search", {"query": str}),
     ("what did I write in Obsidian about the garden plan", "notes_search", {"query": str}),
+    # my_files (2026-09-26): only in the folders the owner listed on the PC
+    ("where's my tenancy agreement PDF?", "my_files", {"action": str}),
+    ("what does the lease say about pets", "my_files", {"action": str}),
+    ("find the invoice from the plumber in my documents", "my_files", {"action": str}),
     # home_read
     ("is the front door locked", "home_read", {"entity_ids": list}),
     ("are the kitchen lights on", "home_read", {"entity_ids": list}),

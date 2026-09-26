@@ -5653,7 +5653,9 @@ full; only a person's "approved" adds it.
 
 Offered only while the list has a folder in it and `my_files` is in
 `[tools].enabled`; decided under `file_read`'s action (`read_files_readonly`)
-- one line on "What asks first" for reading files.
+- one line on "What asks first" for reading files. Its description costs
+about 240 tokens a turn by `jarvis_agent.estimate_tokens` (about 3% of the
+8 GB card's ~8,000), and nothing while no folder is listed.
 
 | action | does | limits |
 |---|---|---|
