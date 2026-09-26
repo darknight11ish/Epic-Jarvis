@@ -33,6 +33,7 @@ pub mod lock;
 pub mod logfile;
 pub mod plain_errors;
 pub mod proctree;
+pub mod pyfind;
 pub mod reach;
 pub mod sidecar;
 pub mod spec;
@@ -802,6 +803,7 @@ pub fn run() {
             sidecar::set_supervision,
             sidecar::start_backend,
             sidecar::stop_backend,
+            pyfind::find_python,
             commands::get_theme,
             commands::set_theme,
             commands::get_theme_prefs,
