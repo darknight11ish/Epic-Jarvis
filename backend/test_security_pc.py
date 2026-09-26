@@ -571,11 +571,61 @@ def t_file_read_never_opens_keys_passwords_or_jarvis_data():
             "a private key file, any case": put("Documents/server.KEY"),
             "the updater signing key": put(".tauri/jarvis-desktop.key"),
             "saved git passwords": put(".git-credentials"),
+            # Security review G2 (2026-09-26): holes in the list.
+            "adb's private key, which drives the phone": put(".android/adbkey"),
+            "the Android debug key store": put(".android/debug.keystore"),
+            "a Java key store anywhere": put("Documents/app/release.JKS"),
+            "an app signing key store": put("Documents/app/upload.keystore"),
+            "Thunderbird's saved passwords": put(
+                "AppData/Roaming/Thunderbird/Profiles/abc.default/logins.json"),
+            "Thunderbird's mail": put(
+                "AppData/Roaming/Thunderbird/Profiles/abc.default/Mail/Inbox"),
+            "Chrome Beta's saved logins": put(
+                "AppData/Local/Google/Chrome Beta/User Data/Default/Login Data"),
+            "Chrome Canary's cookies": put(
+                "AppData/Local/Google/Chrome SxS/User Data/Default/Network/Cookies"),
+            "Chromium's saved logins": put(
+                "AppData/Local/Chromium/User Data/Default/Login Data"),
+            "Edge Beta's saved logins": put(
+                "AppData/Local/Microsoft/Edge Beta/User Data/Default/Login Data"),
+            "Edge Dev's cookies": put(
+                "AppData/Local/Microsoft/Edge Dev/User Data/Default/Network/Cookies"),
+            "Discord's sign-in token": put(
+                "AppData/Roaming/discord/Local Storage/leveldb/000005.ldb"),
+            "Signal's database key": put("AppData/Roaming/Signal/config.json"),
+            "Telegram Desktop's session": put("AppData/Roaming/Telegram Desktop/tdata/key_datas"),
+            "Cargo's publishing token": put(".cargo/credentials.toml"),
+            "Cargo's older token file": put(".cargo/credentials"),
+            "a repository's settings, whose address can hold a token": put(
+                "Documents/project/.git/config",
+                "[remote \"origin\"]\n\turl = https://" + "ghp_" + "X" * 36
+                + "@github.com/o/r.git\n# secret"),
+            "a repository's settings, any case": put("Documents/other/.GIT/CONFIG"),
+            "rclone's cloud sign-ins": put(".config/rclone/rclone.conf"),
+            "rclone's cloud sign-ins on Windows": put("AppData/Roaming/rclone/rclone.conf"),
+            "gcloud's sign-in": put(".config/gcloud/credentials.db"),
+            "gcloud's sign-in on Windows": put("AppData/Roaming/gcloud/access_tokens.db"),
+            "Azure's sign-in": put(".azure/msal_token_cache.json"),
+            "Docker's registry passwords": put(".docker/config.json"),
         }
         for what, path in refused.items():
             r = AG._run_file_read({"path": path})
             check(f"file_read refuses {what}",
                   r.get("ok") is False and "secret" not in json.dumps(r), r)
+        # CONTROLS: near misses that are ordinary files, and must still open.
+        allowed = {
+            "adb's PUBLIC key": put(".android/adbkey.pub", "public half"),
+            "a repository's HEAD": put("Documents/project/.git/HEAD", "public half"),
+            "a file just called config": put("Documents/config", "public half"),
+            "notes about key stores": put("Documents/keystore-notes.txt", "public half"),
+            "a folder that only mentions Discord": put(
+                "Documents/Discord screenshots/list.txt", "public half"),
+            "a Cargo.toml": put("Documents/crate/Cargo.toml", "public half"),
+        }
+        for what, path in allowed.items():
+            r = AG._run_file_read({"path": path})
+            check(f"CONTROL: file_read still opens {what}",
+                  r.get("ok") is not False and "public half" in json.dumps(r), r)
         cfg = Path(tempfile.mkdtemp())
         (cfg / "settings.json").write_text("secret", encoding="utf-8")
         old = os.environ.get("OPENJARVIS_CONFIG_DIR")

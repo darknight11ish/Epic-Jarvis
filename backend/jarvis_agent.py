@@ -214,10 +214,37 @@ _PROTECTED_DIRS = (
     "/appdata/roaming/opera software/", "/appdata/roaming/mozilla/firefox/profiles/",
     "/appdata/local/tailscale/", "/programdata/tailscale/",
     "/windows/system32/config/",
+    # Added 2026-09-26 (security review G2: the list had holes).
+    # Every Chrome channel and Google's other apps (Drive keeps its sign-in
+    # here), Chromium, the other Edge channels; Linux homes as well.
+    "/appdata/local/google/", "/appdata/local/chromium/",
+    "/appdata/local/microsoft/edge beta/", "/appdata/local/microsoft/edge dev/",
+    "/appdata/local/microsoft/edge sxs/",
+    "/.config/google-chrome", "/.config/chromium/", "/.mozilla/",
+    # Thunderbird: the mail itself and its saved passwords.
+    "/appdata/roaming/thunderbird/", "/appdata/local/thunderbird/", "/.thunderbird/",
+    # Chat apps' desktop data: sign-in tokens, and Signal's database key.
+    "/appdata/roaming/discord/", "/appdata/roaming/discordcanary/",
+    "/appdata/roaming/discordptb/", "/appdata/roaming/signal/",
+    "/appdata/roaming/telegram desktop/", "/appdata/roaming/slack/",
+    "/.config/discord/", "/.config/signal/",
+    # Cloud tools' sign-ins.
+    "/.config/gcloud/", "/appdata/roaming/gcloud/",
+    "/.config/rclone/", "/appdata/roaming/rclone/",
 )
 _PROTECTED_NAMES = (".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc",
-                    "hiberfil.sys", "pagefile.sys", "swapfile.sys")
-_PROTECTED_SUFFIXES = (".pem", ".key", ".pfx", ".p12", ".kdbx", ".ppk")
+                    "hiberfil.sys", "pagefile.sys", "swapfile.sys",
+                    # adb's private key: it lets a computer drive the owner's
+                    # phone (jarvis_android_control.py uses it). adbkey.pub
+                    # is the public half and may be read.
+                    "adbkey", ".pgpass")
+_PROTECTED_SUFFIXES = (".pem", ".key", ".pfx", ".p12", ".kdbx", ".ppk",
+                       # Android and Java key stores (app signing keys).
+                       ".jks", ".keystore", ".bks")
+#: Whole paths that end this way, wherever they are: Cargo's publishing
+#: token, and a repository's own settings file, whose remote address can
+#: carry a token ("https://<token>@github.com/...").
+_PROTECTED_ENDINGS = ("/.cargo/credentials", "/.cargo/credentials.toml", "/.git/config")
 
 
 def _protected_path(path: str) -> bool:
@@ -234,6 +261,8 @@ def _protected_path(path: str) -> bool:
             if (low + "/").startswith(dd):
                 return True
     if any(part in low + "/" for part in _PROTECTED_DIRS):
+        return True
+    if low.endswith(_PROTECTED_ENDINGS):
         return True
     name = low.rsplit("/", 1)[-1]
     if name in _PROTECTED_NAMES or name.endswith(_PROTECTED_SUFFIXES):

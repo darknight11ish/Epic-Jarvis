@@ -2366,7 +2366,15 @@ dependency, or need a setup decision only the owner can make:
 What's actually in `jarvis_agent.py` now, because each one reuses
 `jarvis_gate.py`'s existing, already-tiered action names with nothing new to
 configure: `calculator` (auto), `memory_search` (auto, read-only, over the
-real `jarvis_memory.py`), `file_read` (`read_files_readonly`), `shell_exec`
+real `jarvis_memory.py`), `file_read` (`read_files_readonly`; it refuses
+places that hold keys, saved passwords, browser and chat-app data, and
+Jarvis's own data - `_protected_path`, a refusal list widened on 2026-09-26
+after the security review found holes: adb's phone key, Android and Java
+key stores, Thunderbird, the other Chrome and Edge channels, Chromium,
+Discord, Signal, Telegram, Cargo's token, a repository's `.git/config`,
+rclone and gcloud. A refusal list is never complete; the plan is one shared
+list for the backend and the desktop, then the owner's own folder list
+first), `shell_exec`
 (`run_shell_on_host`, tier `ask`), and one tool each for the three modules
 built earlier this session - `control_computer` (native UI control, resolves
 to the `jarvis_ui_control_run` action added by `ui-control-wiring.patch`),
