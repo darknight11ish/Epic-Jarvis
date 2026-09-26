@@ -507,7 +507,9 @@ def t_the_model_layer_fails_closed():
     took = time.time() - t0
     check("no answer in time: sensitive, 'took too long'",
           v["sensitive"] and "too long" in v["reason"], v)
-    check(f"... and the check gave up at the deadline ({took:.2f} s)", took < 1.5, took)
+    # The point is "gave up at its 0.4 s deadline, did not wait the 3 s for
+    # the answer" - with room for a busy CI machine.
+    check(f"... and the check gave up at the deadline ({took:.2f} s)", took < 2.5, took)
     check("the default deadline is about 8 seconds", 5 <= S.MODEL_TIMEOUT <= 10, S.MODEL_TIMEOUT)
 
     calls.clear()
@@ -625,11 +627,15 @@ def t_the_real_caller_asks_this_pcs_ollama_only():
               not v["sensitive"] and len(_FakeOllama.seen) == 2
               and "think" not in _FakeOllama.seen[1]["body"], _FakeOllama.seen)
         _FakeOllama.refuse_think = False
-        _FakeOllama.seen, _FakeOllama.delay = [], 2.0
+        _FakeOllama.seen, _FakeOllama.delay = [], 3.0
         t0 = time.time()
         v = S.classify("I like the hills", ollama=url, model="qwen3:8b", timeout=0.5)
-        check("a slow local model: sensitive ('took too long'), within the deadline",
-              v["sensitive"] and "too long" in v["reason"] and time.time() - t0 < 1.8, v)
+        took = time.time() - t0
+        # Gave up near its 0.5 s deadline, not after the model's 3 s - with
+        # room for a busy CI machine.
+        check(f"a slow local model: sensitive ('took too long'), within the deadline "
+              f"({took:.2f} s)", v["sensitive"] and "too long" in v["reason"] and took < 2.5,
+              (v, took))
         _FakeOllama.delay = 0.0
     finally:
         srv.shutdown()

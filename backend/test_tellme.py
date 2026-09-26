@@ -436,6 +436,62 @@ def t_every_time_and_the_end_date():
     check("... and never looks again", w.s.tick() == [])
 
 
+def t_looks_are_not_what_i_missed():
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    w = World(now, name="missed")
+    TM.add(dict(EMAIL))
+    w.s.tick()
+    for i in range(1, 13):
+        w.clock.t = now + 300 * i
+        w.s.tick()
+    check("an hour of looks with nothing matching: 'What did I miss?' lists none of them",
+          w.s.fired_since(now - 60) == [], w.s.fired_since(now - 60))
+
+
+def t_past_its_end_it_does_not_look_again():
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    w = World(now, name="slept")
+    j = TM.add(dict(EMAIL), ends=now + 3600)
+    w.s.tick()
+    looks = len(w.mail.calls)
+    # The PC sleeps through the end date; an email from Alex comes after it.
+    w.mail.add(40, "Alex <alex@example.test>")
+    w.events.clear()
+    w.clock.t = now + 3 * 86400
+    w.s.tick()
+    v = w.s.job(j["id"])
+    check("woken 3 days after its end: no look, no match - it is simply over",
+          len(w.mail.calls) == looks and w.matched() == [] and v["state"] == "fired",
+          (w.mail.calls, w.matched(), v))
+    check("... and the list is told it changed",
+          any(d.get("state") == "changed" for _, d in w.events), w.events)
+    check("... and it is not 'something I missed'", w.s.fired_since(now - 60) == [])
+    # Paused, the end date passes, then resumed: over, not one more look.
+    w.clock.t = now + 4 * 86400
+    j2 = TM.add(dict(EMAIL, sender="Sam"), ends=w.clock.t + 3600)
+    w.s.tick()
+    looks = len(w.mail.calls)
+    code, out = w.s.act(j2["id"], "pause")
+    w.clock.t += 2 * 3600
+    code, out = w.s.act(j2["id"], "resume")
+    w.mail.add(41, "Sam <sam@example.test>")
+    w.clock.t += 600
+    w.s.tick()
+    v2 = w.s.job(j2["id"])
+    check("paused past its end, then resumed: it ends instead of looking once more",
+          code == 200 and v2["state"] == "fired" and len(w.mail.calls) == looks
+          and w.matched() == [] and "ended" in out.get("said", ""), (code, out, v2))
+    # A look the scheduler hands over after the end is refused by look() too.
+    w.clock.t += 86400
+    j3 = TM.add(dict(EMAIL, sender="Kim"), ends=w.clock.t + 3600)
+    w.clock.t += 2 * 86400
+    r = TM.look(j3["id"])
+    check("look() itself will not look past the end date, and ends the watch",
+          r == {"ok": False, "why": "ended"} and w.s.job(j3["id"])["state"] == "fired", r)
+
+
 def t_sender_matching():
     m = TM.sender_matches
     check("a name matches a display name, whole words", m("Alex", b"From: Alex Smith <a@x.test>"))

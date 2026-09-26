@@ -140,7 +140,7 @@ RULE = {"every": "day", "at": "01:00", "until": "07:00"}
 # --------------------------------------------------------------------------
 
 def t_the_rule():
-    use_tz("Europe/London")
+    in_london = use_tz("Europe/London")
     r = S.check_rule({"every": "day", "at": "1:00", "until": "07:00"}, window=True)
     check("a window is every day from one time to another, tidied",
           r == {"every": "day", "at": "01:00", "until": "07:00"}, r)
@@ -179,6 +179,12 @@ def t_the_rule():
     check("a rule that is not a window is never 'inside'",
           not S.in_window({"every": "day", "at": "07:00"}, fri))
     check("in words", S.rule_words(RULE) == "every day from 01:00 to 07:00")
+    if not in_london:
+        # Windows has no time.tzset: the clock-change days below are London's,
+        # and this PC's own zone may change its clocks on other dates (or not
+        # at all). test_schedule.py skips the same way.
+        return check("SKIP clock-change nights - no time.tzset here (Windows); "
+                     "the rules are the same", True)
     # The clocks go back in the UK at 02:00 on Sunday 25 October 2026 (01:00
     # happens twice) and forward at 01:00 on Sunday 28 March 2027 (01:00
     # to 02:00 never happens).
@@ -304,6 +310,9 @@ def _settled():
         if not PS._PENDING:
             return
         time.sleep(0.02)
+    # Said plainly, rather than a confusing failure a few checks later.
+    check("the background power switch finished within 6 seconds", False,
+          "timed out waiting for it - a very slow machine, or a switch that never returned")
 
 
 def t_the_two_ends():

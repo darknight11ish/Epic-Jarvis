@@ -399,6 +399,10 @@ def calendar_items(events: list, now: float) -> list:
             rows.append(((2, "99:99"), f"{summary} (time not readable)"))
             continue
         day, hhmm = when
+        if day > today:
+            # Starts after today (a calendar server that sends a little
+            # more than was asked for): tomorrow's, not today's.
+            continue
         tail = ""
         if day != today:
             # The calendar says it is on today: a repeating event whose rule
@@ -417,8 +421,11 @@ def calendar_items(events: list, now: float) -> list:
 def _read_calendar(now: float, deps: Deps) -> dict:
     title = "Calendar"
     import jarvis_calendar as CAL
-    start, _ = _today(now)
-    p = CAL.plan(1, now=datetime.fromtimestamp(start, tz=timezone.utc))
+    # Today by this PC's clock, midnight to midnight: 23 or 25 hours on the
+    # two days a year the clocks change, not a fixed 24.
+    start, end = _today(now)
+    p = CAL.plan(1, now=datetime.fromtimestamp(start, tz=timezone.utc),
+                 end=datetime.fromtimestamp(end, tz=timezone.utc))
     if p.query is None:
         return _section("calendar", title, "failed",
                         "Not read: the calendar's settings on this PC need a look "

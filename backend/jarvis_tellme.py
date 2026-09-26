@@ -740,6 +740,14 @@ def look(job_id: str, *, deps: Optional[Deps] = None, sched=None) -> dict:
         return {"ok": False, "why": "not on the list"}
     st = _state(job_id, sched)
     now = sched.now()
+    ends = (rule or {}).get("ends")
+    if ends is not None and now > float(ends) + S.LATE_AFTER:
+        # Past the date the card promised (the PC slept through it): the
+        # watch is over, and this look does not happen - it could tell the
+        # owner about an email that came after the end.
+        if row["state"] == "active":
+            sched.end(job_id)
+        return {"ok": False, "why": "ended"}
     _tidy(sched)
     try:
         watch = check_watch(watch)
