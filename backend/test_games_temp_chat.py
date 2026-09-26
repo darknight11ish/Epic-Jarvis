@@ -174,7 +174,6 @@ def t_combines_with_the_other_exclusions():
     got = [m["content"] for m in I.owner_turns(convo, "owner")]
     check("without a game: schedule and Remember are still skipped",
           got == ["my sister lives in Porto"], got)
-    convo2 = convo + ["let's roleplay, you're a knight"]
     convo2 = convo[:1] + [{"role": "user", "content": "let's roleplay, you're a knight"}] + convo[1:]
     check("with a game anywhere in it: nothing at all, not even the ordinary line",
           I.owner_turns(convo2, "owner") == [])
