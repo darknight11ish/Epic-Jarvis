@@ -80,7 +80,7 @@ class EventService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            linkWanted = false
+            stoppedByOwner = true
             JarvisRuntime.stopStream()
             stopSelf()
             return START_NOT_STICKY
@@ -88,18 +88,20 @@ class EventService : Service() {
         if (intent?.action == ACTION_STOP_RINGING) {
             // Stop on a ringing alarm or urgent "tell me when": silence and
             // remove that one notification. Nothing is sent, nothing decided -
-            // and the link is NOT started: Stop does not need it, and the
-            // owner may have switched it off (bug audit 2026-09-26, #4). A
-            // service woken only for this goes away again.
+            // and a link the owner switched off stays off (bug audit
+            // 2026-09-26, #4): the service woken only for this goes away
+            // again. Otherwise the link is (re)started as before - after the
+            // process was reclaimed, that is what keeps approvals arriving.
             ScheduleNotifier.stopRinging(this, intent.getStringExtra(ScheduleNotifier.EXTRA_TAG))
-            if (!linkWanted) {
+            if (stoppedByOwner) {
                 stopSelf()
                 return START_NOT_STICKY
             }
+            JarvisRuntime.startStream()
             return START_STICKY
         }
         // Every other start runs the link.
-        linkWanted = true
+        stoppedByOwner = false
         if (intent?.action == ACTION_DENY) {
             // The stream first, same as every other start. This branch used to
             // skip it, so a Deny tapped while the service was cold - after a
@@ -445,12 +447,14 @@ class EventService : Service() {
         var lastStartFailure: String? = null
 
         /**
-         * Whether the link should be running in this process: set by every
-         * start but a ringing alarm's Stop, cleared when the owner switches
-         * the link off. A Stop tapped after that must not switch it back on.
+         * The owner switched the link off ([stop], ACTION_STOP) and nothing has
+         * started it since, in this process. A ringing alarm's Stop tapped
+         * then must not switch it back on. (Nothing in the app calls [stop]
+         * today - checked 2026-09-26 - so this guards the route, not a
+         * button.)
          */
         @Volatile
-        private var linkWanted = false
+        private var stoppedByOwner = false
 
         fun start(context: Context) {
             runCatching {
