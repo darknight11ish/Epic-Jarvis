@@ -28,6 +28,7 @@ pub mod hotkeys;
 pub mod hud_proxy;
 pub mod lock;
 pub mod logfile;
+pub mod plain_errors;
 pub mod proctree;
 pub mod reach;
 pub mod sidecar;
@@ -796,6 +797,9 @@ pub fn run() {
             web_search::forget_search_key,
             reach::get_reach,
             email_sending::get_email_sending,
+            plain_errors::get_manner,
+            plain_errors::set_manner,
+            plain_errors::open_fix_place,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,

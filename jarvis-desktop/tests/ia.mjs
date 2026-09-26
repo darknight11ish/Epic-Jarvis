@@ -142,12 +142,15 @@ await check("no hard-coded model name survives in the source", async () => {
 await check("the card says Thinking until a token actually arrives", async () => {
   const main = read("src/main.js");
   // Both transports used to label the card "Streaming" before any token — one
-  // of them before the request had even left.
-  const premature = main.match(/textContent = "Streaming"/g) || [];
+  // of them before the request had even left. Since 2026-09-25 the word is
+  // the plain "Answering…" (plain-errors.js STATUSES), never "Streaming".
+  assert.ok(!/"Streaming"/.test(main), "the developer word Streaming is back");
+  const premature = main.match(/textContent = STATUSES\.answering/g) || [];
   assert.equal(premature.length, 1,
-    `"Streaming" is set in ${premature.length} places; it belongs in exactly one`);
-  assert.match(main, /if \(!state\.chunks\) dom\.cardStatusText\.textContent = "Streaming";/,
+    `"Answering…" is set in ${premature.length} places; it belongs in exactly one`);
+  assert.match(main, /if \(!state\.chunks\) dom\.cardStatusText\.textContent = STATUSES\.answering;/,
     "the label no longer waits for the first chunk");
+  assert.ok(!/chunks · /.test(main), "the card counts chunks again");
 });
 
 /* ── The widget does not claim to have filed anything ────────────────────── */

@@ -103,6 +103,7 @@ import {
   onLink,
   onQueue,
   pauseTask,
+  reconnect as reconnectLink,
   resumeTask,
   linkWords,
   riskLine,
@@ -142,6 +143,7 @@ import {
 // The renderer the answer card and the approval preview use - see markdown.js.
 import { escapeHtml, renderMarkdown } from "./markdown.js";
 import { approvalPlainText, isEmailCard } from "./email-sending.js";
+import { fromChatFailure, fromStreamError, shown, STATUSES } from "./plain-errors.js";
 import {
   boxTagAfter,
   commitExchange,
@@ -291,6 +293,11 @@ const dom = {
   card: $("card"),
   cardStatusText: $("card-status-text"),
   cardStat: $("card-stat"),
+  // A failed answer's fix button and "Details" (plain-errors.js).
+  problem: $("answer-problem"),
+  problemAction: $("problem-action"),
+  problemDetails: $("problem-details"),
+  problemDetailsText: $("problem-details-text"),
   cardBody: $("card-body"),
   answer: $("answer"),
   cursor: $("cursor"),
@@ -457,6 +464,7 @@ const state = {
   /** The prompt behind the answer currently in `state.buffer`, kept after the
    *  turn finishes so a later turn can label it in the scrollback strip. */
   lastPrompt: "",
+  lastAsked: "typed",
   /** The previous turn's `{ prompt, buffer }`, once a new one starts — one
    *  level of scrollback, shown folded in the card until dismissed. */
   previousAnswer: null,
@@ -703,6 +711,7 @@ function closeCard() {
   dom.card.hidden = true;
   dom.answer.innerHTML = "";
   dom.cardStat.textContent = "";
+  paintProblem(null, "");
   dom.cursor.hidden = true;
   state.buffer = "";
   state.lastPrompt = "";
@@ -752,11 +761,59 @@ function truncateForSummary(text, max = 80) {
 
 /** Renders a failure inside the card instead of silently doing nothing. */
 function showError(message) {
+  showProblem(shown("pc_said", message), "", "Error");
+}
+
+/**
+ * A failure in plain words (plain-errors.js): what happened, what to do,
+ * ONE button for it, and the technical detail - scrubbed - behind
+ * "Details" for a bug report. The same words as the phone's.
+ */
+function showProblem(problem, details = problem.details || "", status = "Not answered") {
   setPhase("error");
-  openCard("Error");
+  openCard(status);
   dom.cursor.hidden = true;
-  state.buffer = `**Jarvis could not answer.**\n\n${message}`;
+  state.buffer = problem.kind === "pc_said"
+    ? `**Jarvis could not answer.**\n\n${problem.says}`
+    : `**${problem.says}**\n\n${problem.fix}`;
+  paintProblem(problem, details);
   paint({ immediate: true });
+}
+
+/** The fix button and "Details" under a failed answer; hidden otherwise. */
+function paintProblem(problem, details) {
+  if (!dom.problem) return;
+  const action = problem && problem.button ? problem.action : "none";
+  dom.problem.hidden = !problem || (action === "none" && !details);
+  if (dom.problemAction) {
+    dom.problemAction.hidden = action === "none";
+    dom.problemAction.textContent = problem ? problem.button : "";
+    dom.problemAction.dataset.action = action;
+  }
+  if (dom.problemDetails) {
+    dom.problemDetails.hidden = !details;
+    dom.problemDetails.open = false;
+  }
+  if (dom.problemDetailsText) dom.problemDetailsText.textContent = details || "";
+}
+
+/** What an error's fix button does (the contract file's actions). */
+function runProblemAction(action) {
+  if (action === "retry") {
+    const again = state.lastPrompt;
+    if (again) send(again, state.lastAsked || "typed");
+  } else if (action === "reconnect") {
+    reconnectLink();
+  } else if (action === "connection") {
+    invoke("open_fix_place", { place: "settings" });
+  } else if (action === "models") {
+    invoke("open_fix_place", { place: "brain" });
+  }
+}
+
+if (dom.problemAction) {
+  dom.problemAction.addEventListener("click", () =>
+    runProblemAction(dom.problemAction.dataset.action || "none"));
 }
 
 /* ==========================================================================
@@ -2091,7 +2148,9 @@ function consumeLine(rawLine) {
   }
 
   if (chunk.error) {
-    showError(String((chunk.error && chunk.error.message) || chunk.error));
+    // The PC's own failure (jarvis_agent's plain sentence, with a `code`):
+    // the shared plain words and a fix button, the sentence behind Details.
+    showProblem(fromStreamError(chunk.error));
     return true;
   }
 
@@ -2112,11 +2171,14 @@ function consumeLine(rawLine) {
   return ended;
 }
 
-/** What `: jarvis-status <word>` means, for the card's status line. */
+/** What `: jarvis-status <word>` means, for the card's status line - the
+ *  shared words (plain-errors.js). "loading" is the PC saying the model is
+ *  not in memory yet (after standby): the first words take longer. */
 const WAIT_STATUS = {
-  approval: "Waiting for your approval…",
-  working: "Working…",
-  thinking: "Thinking…",
+  approval: STATUSES.approval,
+  working: STATUSES.working,
+  thinking: STATUSES.thinking,
+  loading: STATUSES.loading,
 };
 
 function showWaitStatus(word) {
@@ -2134,6 +2196,7 @@ function showWaitStatus(word) {
   if (dom.cardStatusText.textContent === text) return;
   dom.cardStatusText.textContent = text;
   if (word === "approval") announce("Waiting for your approval.");
+  if (word === "loading") announce(STATUSES.loading);
 }
 
 /** Appends text to the buffer and schedules a repaint. */
@@ -2145,7 +2208,7 @@ function appendDelta(text) {
   // on screen for a handful of milliseconds and the card claimed to be
   // streaming through the whole cold start of a local model, which is the one
   // stretch a person actually wants explained.
-  if (!state.chunks) dom.cardStatusText.textContent = "Streaming";
+  if (!state.chunks) dom.cardStatusText.textContent = STATUSES.answering;
   state.buffer += text;
   state.chunks += 1;
   updateStat();
@@ -2153,9 +2216,11 @@ function appendDelta(text) {
   checkForSpeakableSentence();
 }
 
+/** The card's corner used to count the pieces received and the seconds -
+ *  developer information. It says nothing now; the status line says what
+ *  is going on. */
 function updateStat() {
-  const seconds = (performance.now() - state.startedAt) / 1000;
-  dom.cardStat.textContent = `${state.chunks} chunks · ${seconds.toFixed(1)}s`;
+  dom.cardStat.textContent = "";
 }
 
 /** Cancels the stream in flight, if there is one. */
@@ -2228,7 +2293,8 @@ async function streamViaBackend(payload) {
   } catch (error) {
     if (settled) return;
     settled = true;
-    showError(String((error && error.message) || error));
+    // stream_chat's tagged facts (plain_errors.rs) -> the plain words.
+    showProblem(fromChatFailure(error));
     finishStream("error");
     refreshHealth();
   }
@@ -2320,11 +2386,11 @@ async function streamViaFetch(payload) {
       finishStream("done", "Stopped");
       return;
     }
-    const hint =
+    showProblem(
       error instanceof TypeError
-        ? `Could not reach the Jarvis server at ${JARVIS_SERVER}. Is it running?`
-        : String((error && error.message) || error);
-    showError(hint);
+        ? { ...shown("jarvis_not_running"), details: `fetch ${JARVIS_SERVER}: ${error.message}` }
+        : fromChatFailure(error)
+    );
     finishStream("error");
     refreshHealth();
   }
@@ -2442,9 +2508,14 @@ async function send(promptText, provenance = "typed") {
       : null;
   renderPreviousAnswer();
   state.lastPrompt = message;
+  // How it was asked, as given - so "Try again" under a failed answer sends
+  // the same words with the same tag (a pasted question stays pasted).
+  state.lastAsked = provenance;
 
   state.buffer = "";
   state.chunks = 0;
+  // A new question: the last failure's fix button and Details go with it.
+  paintProblem(null, "");
   // A new answer, so no id and no mark until the server gives it one.
   state.turnId = null;
   state.turnMark = "none";

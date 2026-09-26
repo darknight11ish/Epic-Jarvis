@@ -215,7 +215,8 @@ pub async fn save_search_key(provider: String, key: String) -> Result<serde_json
     if let Some(why) = token_store::search_key_problem(&key) {
         return Err(why.to_string());
     }
-    token_store::write_search_key(&provider, &key).map_err(|e| format!("Not saved: {e}."))?;
+    token_store::write_search_key(&provider, &key)
+        .map_err(|e| crate::plain_errors::key_store_words(&e.to_string()))?;
     Ok(serde_json::json!({
         "ok": true,
         "said": format!(

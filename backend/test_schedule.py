@@ -697,12 +697,14 @@ def t_no_model_on_a_match():
               rh.get("quick") == "timer_set" and rh.get("where") == "local"
               and rh.get("lane") == Q.LANE and rh.get("injected_facts") == 0
               and rh.get("injected_ids") == [] and rh.get("inject_memory") is False, rh)
+        # In the owner's manner - warm by default (jarvis_manner.py): the
+        # same facts as the plain "Timer set for 10 minutes." (test_manner.py).
         check("the answer is Ollama's SSE shape, then [DONE]",
               h.headers.get("Content-Type") == "text/event-stream"
-              and b'"content":"Timer set for 10 minutes."' in h.out
+              and b'"content":"Got it - timer set for 10 minutes."' in h.out
               and h.out.endswith(b"data: [DONE]\n\n"), h.out[:300])
         check("this PC's record of the turn gets the answer (for chat history)",
-              hist["turn"]["answer"] == "Timer set for 10 minutes."
+              hist["turn"]["answer"] == "Got it - timer set for 10 minutes."
               and hist["turn"]["tools_ran"] == [])
         check("the timer is really running", len(w.s.timers()) == 1)
         h2 = _Handler()
@@ -713,7 +715,7 @@ def t_no_model_on_a_match():
         rh2 = json.loads(h2.headers.get("X-Jarvis-Route", "{}"))
         check("a temporary chat: the reminder is still set, and the header says temporary",
               rh2.get("temporary") is True and h2.headers["Content-Type"] == "application/json"
-              and json.loads(h2.out)["choices"][0]["message"]["content"].startswith("Reminder set"))
+              and json.loads(h2.out)["choices"][0]["message"]["content"].startswith("Got it - reminder set"))
         h3 = _Handler()
         got = ns["f"](h3, {"messages": [{"role": "user", "content": "how long does it take to "
                                          "boil an egg", "provenance": "typed"}]},

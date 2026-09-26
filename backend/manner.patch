@@ -1,0 +1,52 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1548,6 +1548,22 @@
+                 # The exception's NAME only: its message could quote a setting.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
++        if path == "/api/manner":
++            # manner.patch - how Jarvis words things (jarvis_manner.py, the
++            # owner's decision of 2026-09-25): "warm" (the default) or
++            # "plain", with the words both apps show. Behind the token like
++            # every other setting.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_manner
++                code, out = jarvis_manner.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+         if path == "/api/schedule":
+             # schedule.patch - "Coming up": the timers, alarms, reminders and
+             # repeating jobs, and the to-do list (jarvis_schedule.py).
+@@ -2120,6 +2136,26 @@
+                 code, out = jarvis_search.handle_test(body)
+             return self._send(code, out)
+ 
++        if route == "/api/manner":
++            # manner.patch - {"manner": "warm"} or {"manner": "plain"}, at
++            # once, with NO approval card either way: it changes only how
++            # answers are worded - never what Jarvis does, asks, remembers
++            # or sends (jarvis_manner.py). Both apps change it.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_manner
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++            code, out = jarvis_manner.handle_set(body)
++            return self._send(code, out)
++
+         if route in ("/api/schedule/add", "/api/schedule/act"):
+             # schedule.patch - one job at a time (jarvis_schedule.py).
+             #   add {"kind": "todo"|"timer"|"alarm"|"reminder", ...}: a

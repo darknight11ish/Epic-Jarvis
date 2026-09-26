@@ -66,6 +66,19 @@ class ChatSession(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _problem = MutableStateFlow<PlainErrors.Shown?>(null)
+
+    /**
+     * The failure on [error], in the plain words both apps use
+     * ([PlainErrors]): what happened, what to do, ONE button, and the
+     * technical detail - scrubbed - for "Details". [error] is its
+     * [PlainErrors.Shown.text]. Null with no failure.
+     */
+    val problem: StateFlow<PlainErrors.Shown?> = _problem.asStateFlow()
+
+    /** The last question as it was asked, for "Try again" ([retryLast]). Memory only. */
+    @Volatile private var lastAsked: Triple<String, String, String?>? = null
+
     private val _question = MutableStateFlow<String?>(null)
 
     /**
@@ -232,6 +245,11 @@ class ChatSession(
         cancel()
         _reply.value = ""
         _error.value = null
+        _problem.value = null
+        // Kept for "Try again" under a failure: the same words, with the same
+        // tag (a pasted question stays pasted) and the same shared text. A
+        // picture is not kept - it is sent once.
+        lastAsked = Triple(message, provenance, shared)
         // Set as the old reply is cleared, before anything can fail below:
         // a question that got no answer is still what the owner asked, and
         // the screen should not go on showing the one before it. Shared text
@@ -247,6 +265,7 @@ class ChatSession(
         // asked again now, since the PC may have changed since it was turned on.
         val asTemporary = _temporary.value
         if (asTemporary && !canTemporary()) {
+            _problem.value = PlainErrors.shown("pc_said", TemporaryChat.UNAVAILABLE).copy(chat = true)
             _error.value = TemporaryChat.UNAVAILABLE
             return null
         }
@@ -265,7 +284,9 @@ class ChatSession(
             interrupted = interrupted, temporary = asTemporary,
         )
         if (c == null) {
-            _error.value = "No desktop address set"
+            val p = PlainErrors.forInput(PlainErrors.Input(notPaired = true)).copy(chat = true)
+            _problem.value = p
+            _error.value = p.text
             return null
         }
         call = c
@@ -320,8 +341,11 @@ class ChatSession(
             // last half-line of text over the empty reply - so the new question
             // appeared on screen already carrying the old one's error, or the
             // old one's tail.
-            fun failWith(message: String) {
-                if (call === c) _error.value = message
+            fun failWith(p: PlainErrors.Shown) {
+                if (call === c) {
+                    _problem.value = p.copy(chat = true)
+                    _error.value = p.text
+                }
             }
             try {
                 c.execute().use { resp ->
@@ -336,29 +360,19 @@ class ChatSession(
                         // leaving the owner to go and read a log to learn
                         // something the reply already contained.
                         val detail = serverDetail(resp)
-                        // A 404 WITH a sentence is the desktop passing on
-                        // what the model server said - a model that is not
-                        // installed, say - not a missing route. It used to
-                        // read "This server has no chat endpoint." either way.
-                        val generic = when (resp.code) {
-                            401, 403 -> "The desktop refused that token."
-                            404 -> if (detail == null) "This server has no chat endpoint." else ""
-                            else -> if (detail == null) "The desktop answered ${resp.code}." else ""
-                        }
-                        // The token is in the REQUEST, never in the response, so
-                        // there is nothing of the token to leak here. 401/403
-                        // still lead with our own sentence: a server saying
-                        // "invalid bearer" adds nothing to "refused that token"
-                        // and reads worse.
+                        // The plain words both apps use (PlainErrors): a 401
+                        // or 403 is the pairing key, a 404 or 501 with no
+                        // sentence a PC too old for this, and a sentence of
+                        // the desktop's own - a model that is not installed,
+                        // say - is shown as it is: it says what is wrong and
+                        // what to do. A status number is never shown, only
+                        // kept behind Details. The token is in the REQUEST,
+                        // never in the response, so nothing of it is here.
                         failWith(
-                            when {
-                                detail == null -> generic
-                                resp.code == 401 || resp.code == 403 -> "$generic ($detail)"
-                                // The desktop's own sentence says what is wrong
-                                // and what to do; a status number in front of it
-                                // adds nothing the owner can act on.
-                                else -> detail
-                            },
+                            PlainErrors.forInput(
+                                PlainErrors.Input(http = resp.code, said = detail),
+                                detail.orEmpty(),
+                            ),
                         )
                         return@use
                     }
@@ -481,7 +495,15 @@ class ChatSession(
                                 false
                             }
                             is ChatChunkParser.Result.Failed -> {
-                                failWith(result.message)
+                                // The PC's own failure, named by its `code`:
+                                // the shared plain words and a fix button,
+                                // the PC's sentence kept behind Details.
+                                failWith(
+                                    PlainErrors.forInput(
+                                        PlainErrors.Input(code = result.code, said = result.message),
+                                        result.message,
+                                    ),
+                                )
                                 failed = true
                                 true
                             }
@@ -562,7 +584,12 @@ class ChatSession(
                     Log.d(TAG, "chat interrupted by the user")
                 } else {
                     Log.w(TAG, "chat failed", t)
-                    failWith(t.message ?: "The reply stopped unexpectedly.")
+                    failWith(
+                        PlainErrors.forInput(
+                            PlainErrors.Input(network = PlainErrors.networkKind(t)),
+                            "${t::class.java.simpleName}: ${t.message.orEmpty()}",
+                        ),
+                    )
                 }
             } finally {
                 // Nothing left to cancel on; the read is over either way.
@@ -622,9 +649,22 @@ class ChatSession(
         _question.value = null
         _turnId.value = null
         _error.value = null
+        _problem.value = null
+        lastAsked = null
         _waiting.value = null
         _answerNote.value = null
         _usedIds.value = emptyList()
+    }
+
+    /**
+     * "Try again" under a failed question: the same words, with the same tag
+     * and shared text, as a new [send]. False when there is nothing to ask
+     * again (a new conversation was started since).
+     */
+    suspend fun retryLast(): Boolean {
+        val (message, provenance, shared) = lastAsked ?: return false
+        send(message, provenance = provenance, shared = shared)
+        return true
     }
 
     private companion object {
@@ -632,8 +672,11 @@ class ChatSession(
 
         /** What each `: jarvis-status` word means on screen. */
         val WAITING = mapOf(
-            "approval" to "Waiting for your approval…",
-            "working" to "Working…",
+            "approval" to PlainErrors.STATUSES.getValue("approval"),
+            "working" to PlainErrors.STATUSES.getValue("working"),
+            // The PC says the model is not in memory yet (after standby):
+            // the first words take longer, and the owner is told why.
+            "loading" to PlainErrors.STATUSES.getValue("loading"),
         )
 
         /**

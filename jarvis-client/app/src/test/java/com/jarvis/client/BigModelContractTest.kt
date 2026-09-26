@@ -3,6 +3,7 @@ package com.jarvis.client
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.BigModel
+import com.jarvis.client.net.PlainErrors
 import com.jarvis.client.net.JarvisJson
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -290,8 +291,9 @@ class BigModelContractTest {
         val missing = BigModel.readOf(ApiResult.Failed(ApiError.NotAvailable))
         assertEquals(BigModel.Read.NotInstalled, missing)
         assertTrue(BigModel.readLine(missing)!!.contains("jarvis_big_model.py"))
-        val net = BigModel.deepReadOf(ApiResult.Failed(ApiError.Unreachable("timeout")))
-        assertTrue(BigModel.readLine(net)!!.startsWith("Could not reach your PC: timeout."))
+        val net = BigModel.deepReadOf(ApiResult.Failed(ApiError.Unreachable("timeout", "read_timeout")))
+        // The plain words both apps use (PlainErrors), never the raw "timeout".
+        assertEquals(PlainErrors.shown("timeout").text, BigModel.readLine(net))
         // A 200 that is not the shape is a failed read, never "nothing found".
         val odd = JarvisJson.parseToJsonElement("{\"ok\":true}") as JsonObject
         assertTrue(BigModel.readOf(ApiResult.Ok(odd)) is BigModel.Read.Failed)
@@ -345,7 +347,8 @@ class BigModelContractTest {
         assertTrue(BigModel.replyLine(missing)!!.contains("jarvis_big_model.py"))
         assertEquals(ApiResult.Failed(ApiError.BadToken), BigModel.classifyPost(401, null))
         val down = BigModel.replyLine(ApiResult.Failed(ApiError.Unreachable("no route")))!!
-        assertTrue(down, down.startsWith("Nothing changed. Could not reach your PC"))
+        assertTrue(down, down.startsWith("Nothing changed. "))
+        assertTrue(down, !down.contains("no route"))
     }
 
     // ----------------------------------------------------- deep questions --
@@ -458,7 +461,8 @@ class BigModelContractTest {
     fun `a failed ask says nothing was asked`() {
         val down = BigModel.askReply(ApiResult.Failed(ApiError.Unreachable("no route")))
         assertFalse(down.queued)
-        assertTrue(down.text, down.text.startsWith("Not asked. Could not reach your PC"))
+        assertTrue(down.text, down.text.startsWith("Not asked. "))
+        assertTrue(down.text, !down.text.contains("no route"))
         assertTrue(BigModel.askReply(ApiResult.Failed(ApiError.NotFound)).text.contains("apply-patches.ps1"))
     }
 }

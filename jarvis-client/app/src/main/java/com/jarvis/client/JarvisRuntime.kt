@@ -455,6 +455,17 @@ object JarvisRuntime {
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
 
+    private val _problem = MutableStateFlow<com.jarvis.client.net.PlainErrors.Shown?>(null)
+
+    /**
+     * The last failure put into plain words ([com.jarvis.client.net.PlainErrors]):
+     * its fix button and its scrubbed Details. It belongs to the notice on
+     * screen only while [notice] is its [com.jarvis.client.net.PlainErrors.Shown.text]
+     * - Home checks that, so a later, different notice never shows an old
+     * failure's button or Details.
+     */
+    val problem: StateFlow<com.jarvis.client.net.PlainErrors.Shown?> = _problem.asStateFlow()
+
     private val _face = MutableStateFlow(FaceState.IDLE)
 
     /**
@@ -653,27 +664,42 @@ object JarvisRuntime {
                 // ask it about the appearance route afresh.
                 appearanceRoute = null
             }
-            is ApiResult.Failed -> _notice.value = describe(result.error)
+            is ApiResult.Failed -> _notice.value = describe(result.error, handshake = true)
         }
         return result
     }
 
-    private fun describe(e: ApiError): String = when (e) {
-        ApiError.BadToken ->
-            "The desktop refused that token. On the PC, open Jarvis Desktop's Settings, " +
-                "press \"Show the token for my phone\" and type it in again."
-        ApiError.NotFound ->
-            "Reached something at that address, but it is not a Jarvis server."
-        ApiError.AlreadyHandled -> "Already handled elsewhere."
-        ApiError.NotAvailable ->
-            "That part of Jarvis is not running on the desktop right now."
-        is ApiError.Unreachable ->
-            "Cannot reach the desktop: ${e.detail}. Check your private network (Tailscale or NordVPN Meshnet) is up on both ends."
-        is ApiError.Server -> "The desktop answered ${e.code}."
-        is ApiError.Malformed -> "The desktop sent something this app could not read."
+    /**
+     * A failure in the plain words both apps use (PlainErrors, from
+     * tools/gen_plain_error_cases.py): what happened, then what to do - never
+     * a raw error, an exception's text or a status number. The fix button and
+     * the scrubbed technical detail are kept in [problem] for Home's notice.
+     * [handshake]: `GET /api/version`, where a 404 means "not Jarvis at all".
+     */
+    private fun describe(e: ApiError, handshake: Boolean = false): String {
+        if (e == ApiError.AlreadyHandled) return "Already handled elsewhere."
+        val shown = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
+        _problem.value = shown
+        return shown.text
     }
 
-    fun noticeFor(e: ApiError): String = describe(e)
+    /**
+     * The same plain words as [describe], for a screen that shows them itself.
+     * It does NOT touch [problem]: a screen reading a failure of its own must
+     * not take the button and Details away from the notice on Home.
+     */
+    fun noticeFor(e: ApiError): String =
+        if (e == ApiError.AlreadyHandled) "Already handled elsewhere."
+        else com.jarvis.client.net.PlainErrors.forApiError(e).text
+
+    /**
+     * A failure already put into plain words (a failed question, from
+     * ChatSession): the notice says it, and Home shows its button and Details.
+     */
+    fun setProblem(shown: com.jarvis.client.net.PlainErrors.Shown) {
+        _problem.value = shown
+        _notice.value = shown.text
+    }
 
     /**
      * Whether the backend reports a capability.
@@ -1491,6 +1517,26 @@ object JarvisRuntime {
         return com.jarvis.client.net.WebSearch.testLine(
             api.webSearchPost(com.jarvis.client.net.WebSearch.TEST_PATH, "{}"),
         )
+    }
+
+    // ----------------------------------------------------------- manner ----
+    // "How Jarvis talks" (the owner's decision of 2026-09-25) - see
+    // [com.jarvis.client.net.Manner] and ui/screens/MannerPlate.kt. Warm and
+    // brief, or plain: wording only, so no card either way.
+
+    /** `GET /api/manner`. A read: never held. */
+    suspend fun manner(): ApiResult<JsonObject> = api.manner()
+
+    /**
+     * ONE change: "warm" or "plain". No approval card either way (it changes
+     * only how answers are worded), but held on a stale link like every
+     * change sent to the PC ([actionBlocker], rule 4).
+     */
+    suspend fun setManner(manner: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.Manner.body(manner)
+            ?: return "That is not one of the two choices."
+        return com.jarvis.client.net.Manner.replyLine(api.mannerPost(body), manner)
     }
 
     /** Re-reads `/api/deep`. Starts nothing on the PC. */
@@ -2357,7 +2403,9 @@ object JarvisRuntime {
      */
     fun actionBlocker(): String? =
         if (_stale.value || _link.value != LinkState.CONNECTED) {
-            "Not connected to the desktop, so this cannot be delivered."
+            // The plain words both apps use for a link that is catching up
+            // (PlainErrors "link_stale"): what is happening, then what to do.
+            com.jarvis.client.net.PlainErrors.shown("link_stale").text
         } else {
             null
         }

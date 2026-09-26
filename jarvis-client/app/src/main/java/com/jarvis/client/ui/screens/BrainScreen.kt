@@ -428,6 +428,11 @@ fun BrainScreen(
             // Settings -> Sending email. Each email is its own approval card.
             item(key = "email-sending") {
                 EmailSendingSection()
+            // "How Jarvis talks" (the owner's decision of 2026-09-25): warm
+            // and brief, or plain, with the PC's words (MannerPlate.kt) - the
+            // desktop's Settings -> How Jarvis talks. No card either way.
+            item(key = "manner") {
+                MannerSection(canAct = canAct)
             }
 
             if (models != null) {

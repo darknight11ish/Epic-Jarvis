@@ -134,6 +134,7 @@ SHIPPED = (
     "jarvis_backoff.py", "jarvis_briefing.py",
     "jarvis_reach.py",
     "jarvis_owner_check.py",
+    "jarvis_manner.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",

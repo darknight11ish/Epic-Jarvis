@@ -735,6 +735,13 @@ are architectural rather than configuration:
   suppresses the Modelfile's `SYSTEM` block — which is where the persona
   invariants live. Both from one line. If delimiters are ever added around
   recalled facts, they go on that message, not around the list.
+- **The rules block always goes first; everything added to a turn goes after
+  it.** The spoken-style note, the "you were interrupted" note and the owner's
+  manner line (warm or plain, `jarvis_manner.py`, 2026-09-25) are system lines
+  placed just before the newest question, and `keep_rules_first` puts the
+  rules in front whenever anything else would be first. Manner is wording
+  only: its line says every rule still applies, it changes no tier, card,
+  memory or egress, and it is never sent to a cloud lane.
 
 ---
 

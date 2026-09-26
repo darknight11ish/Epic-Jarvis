@@ -714,14 +714,18 @@ fun Notice(
     text: String,
     onDismiss: () -> Unit,
     /**
-     * A button beside Dismiss for a notice whose fix is one tap away - "Open
-     * screen-lock settings" after a risky approval was refused for want of a
-     * screen lock. Null: Dismiss only.
+     * A failure's technical detail for a bug report, already scrubbed of
+     * tokens, keys, passwords, email addresses and user names
+     * ([com.jarvis.client.net.PlainErrors.scrubDetails]). Behind "Details",
+     * closed until tapped. Null or blank: no toggle.
      */
-    action: String? = null,
-    onAction: () -> Unit = {},
+    details: String? = null,
+    /** The failure's ONE fix button ("Try again", "Check the connection settings"...). */
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
+    var open by remember(text) { mutableStateOf(false) }
     Plate(tone = chrome.warnInk.copy(alpha = 0.10f), outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -735,10 +739,24 @@ fun Notice(
             Spacer(Modifier.width(8.dp))
             Quiet("Dismiss", onClick = onDismiss)
         }
-        // Under the text rather than beside it: a second button in the row
-        // would squeeze the sentence into a narrow column.
-        if (action != null) {
-            Quiet(action, onClick = onAction)
+        val hasDetails = !details.isNullOrBlank()
+        if ((onAction != null && !actionLabel.isNullOrBlank()) || hasDetails) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onAction != null && !actionLabel.isNullOrBlank()) {
+                    Quiet(actionLabel, onClick = onAction)
+                    Spacer(Modifier.width(8.dp))
+                }
+                if (hasDetails) {
+                    Quiet(if (open) "Hide details" else "Details", onClick = { open = !open })
+                }
+            }
+        }
+        if (hasDetails && open) {
+            Text(
+                details.orEmpty(),
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
         }
     }
 }

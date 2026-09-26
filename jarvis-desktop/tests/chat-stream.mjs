@@ -21,6 +21,7 @@ import * as K from "./uikit.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = JSON.parse(readFileSync(join(HERE, "fixtures", "chat-stream-cases.json"), "utf8"));
+const PLAIN = JSON.parse(readFileSync(join(HERE, "fixtures", "plain-error-cases.json"), "utf8"));
 
 const { base, close } = await K.serve();
 const browser = await K.launch();
@@ -61,6 +62,10 @@ async function ask(lines) {
   await page.waitForTimeout(400);
   const got = await page.evaluate(() => ({
     answer: document.getElementById("answer").textContent.trim(),
+    details: document.getElementById("problem-details-text").textContent,
+    detailsShown: !document.getElementById("problem-details").hidden,
+    button: document.getElementById("problem-action").hidden
+      ? "" : document.getElementById("problem-action").textContent,
     status: document.getElementById("card-status-text").textContent,
     statuses: window.__statuses,
     tier: document.getElementById("route-tier").textContent,
@@ -74,6 +79,19 @@ for (const c of FIXTURE.cases) {
   await check(`quickbar reads the real reply: ${c.name}`, async () => {
     const got = await ask([routeLine(localRoute.header), ...pumpLines(c.body)]);
     if (c.expect.error) {
+      const code = (c.body.match(/"code":"([a-z_]+)"/) || [])[1];
+      if (code) {
+        // The PC named the failure (jarvis_agent.ERROR_CODES): the card says
+        // the shared plain words and offers their one fix; the PC's own
+        // sentence is kept behind Details (plain-error-cases.json).
+        const k = PLAIN.kinds[PLAIN.codes[code]];
+        assert.ok(got.answer.includes(k.says) && got.answer.includes(k.fix),
+          `the plain words are not shown: ${got.answer}`);
+        assert.equal(got.button, k.button);
+        assert.ok(got.detailsShown && got.details.includes(c.expect.error),
+          `the PC's sentence is not behind Details: ${got.details}`);
+        return;
+      }
       assert.match(got.answer, /Jarvis could not answer\./);
       // The card renders Markdown, so `ollama serve` shows as code, without
       // its backticks.

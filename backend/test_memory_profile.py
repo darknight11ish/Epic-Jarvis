@@ -432,7 +432,7 @@ def t_a_first_question_keeps_the_rules_first():
                           stream_out=lambda b: None, open_stream=opener, enabled_tools=None,
                           context_length=16384, on_step=lambda s: None,
                           record_chain=lambda s: None, keepalive_seconds=60, status_delay=60,
-                          lane_choice=None)
+                          lane_choice=None, manner=None)
     finally:
         AG._record_chain, AG._publish_step = real
     got = sent[0]["messages"] if sent else []

@@ -402,12 +402,10 @@ object Hardware {
     }
 
     private fun failureLine(e: ApiError): String = when (e) {
-        is ApiError.Unreachable ->
-            "Could not reach your PC: ${e.detail}. Check your private network (Tailscale or " +
-                "NordVPN Meshnet) is up on both ends, then tap Refresh."
-        ApiError.BadToken -> "Your PC refused this phone's token. Pair the phone again."
-        is ApiError.Server -> "Your PC answered ${e.code}, which this screen cannot read."
-        is ApiError.Malformed -> "Your PC answered, but not in a shape this screen can read."
+        // The plain words both apps use (PlainErrors): what happened, then
+        // what to do - never the raw error or a status number.
+        is ApiError.Unreachable, ApiError.BadToken, is ApiError.Server, is ApiError.Malformed ->
+            PlainErrors.forApiError(e).text
         ApiError.NotFound, ApiError.NotAvailable -> UPDATE
         ApiError.AlreadyHandled -> "Already handled elsewhere."
     }

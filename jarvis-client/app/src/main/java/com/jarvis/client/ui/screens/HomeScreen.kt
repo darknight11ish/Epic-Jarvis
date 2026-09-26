@@ -394,20 +394,38 @@ data class HomeState(
     val memoryHidden: Boolean = false,
     /** The Show under a hidden list is asking the phone's lock now. */
     val showPrivateBusy: Boolean = false,
+    /**
+     * The failure [notice] says, in plain words: its ONE fix button and its
+     * scrubbed Details ([com.jarvis.client.net.PlainErrors]). Null when the
+     * notice is anything else.
+     */
+    val noticeProblem: com.jarvis.client.net.PlainErrors.Shown? = null,
 )
 
 /**
- * Home's notice: [Notice], plus "Open screen-lock settings" when the notice
- * is a risky approval refused for want of a screen lock.
+ * Home's notice: [Notice], with a failure's one fix button and its "Details"
+ * (PlainErrors), or "Open screen-lock settings" when the notice is a risky
+ * approval refused for want of a screen lock.
  */
 @Composable
-private fun HomeNotice(text: String, actions: HomeActions) {
-    val offer = SecurityRules.offersLockSettings(text)
+private fun HomeNotice(state: HomeState, actions: HomeActions) {
+    val text = state.notice ?: return
+    val problem = state.noticeProblem
+    if (problem == null && SecurityRules.offersLockSettings(text)) {
+        Notice(
+            text,
+            actions.onDismissNotice,
+            actionLabel = SecurityRules.OPEN_LOCK_SETTINGS,
+            onAction = actions.onOpenLockSettings,
+        )
+        return
+    }
     Notice(
         text,
         actions.onDismissNotice,
-        action = if (offer) SecurityRules.OPEN_LOCK_SETTINGS else null,
-        onAction = actions.onOpenLockSettings,
+        details = problem?.details,
+        actionLabel = problem?.button,
+        onAction = noticeAction(problem, actions),
     )
 }
 
@@ -503,7 +521,30 @@ data class HomeActions(
     val onForgetUsed: suspend (Long) -> Pair<Boolean, String> = { false to "" },
     /** Show a hidden memory list, after the phone's lock says it is the owner. */
     val onShowPrivate: () -> Unit = {},
+    /** "Try again" under a failed question: ask the same question again. */
+    val onRetryQuestion: () -> Unit = {},
 )
+
+/**
+ * What a failure notice's ONE fix button does, by the contract file's action
+ * ([com.jarvis.client.net.PlainErrors]): ask a failed question again or
+ * reconnect, open Checks (the connection settings) or Mind (the model).
+ * Null for no button.
+ */
+internal fun noticeAction(
+    problem: com.jarvis.client.net.PlainErrors.Shown?,
+    actions: HomeActions,
+): (() -> Unit)? {
+    val p = problem ?: return null
+    if (p.button.isEmpty()) return null
+    return when (p.action) {
+        com.jarvis.client.net.PlainErrors.RETRY -> if (p.chat) actions.onRetryQuestion else actions.onReconnect
+        com.jarvis.client.net.PlainErrors.RECONNECT -> actions.onReconnect
+        com.jarvis.client.net.PlainErrors.CONNECTION -> actions.onOpenChecks
+        com.jarvis.client.net.PlainErrors.MODELS -> actions.onOpenBrain
+        else -> null
+    }
+}
 
 @Composable
 fun HomeScreen(
@@ -910,7 +951,7 @@ private fun ConversationList(
         item(key = "quick-note") { QuickNotePlate(open = state.quickNoteOpen, actions = actions) }
 
         if (state.notice != null) {
-            item(key = "notice") { HomeNotice(state.notice, actions) }
+            item(key = "notice") { HomeNotice(state, actions) }
         }
 
         if (state.approvalsOff) {
@@ -2251,7 +2292,10 @@ private fun VoiceStrips(state: HomeState, actions: HomeActions) {
             // BEFORE transcribing, so that a voice that is not his is never
             // turned into words at all.
             VoiceStrip("Checking it's you…")
-        VoiceSession.Phase.THINKING -> VoiceStrip("Thinking…")
+        // "Waking up the model…" (or "Waiting for your approval…") when the PC
+        // says so in the answer's stream - the chat's own wait words - rather
+        // than a bare "Thinking…" through a 10-20 second model load.
+        VoiceSession.Phase.THINKING -> VoiceStrip(state.chatWaiting ?: "Thinking…")
         VoiceSession.Phase.SPEAKING -> VoiceStrip("Speaking")
         VoiceSession.Phase.OFF -> Unit
     }
@@ -2286,7 +2330,7 @@ private fun VoiceBar(
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         if (state.notice != null) {
-            HomeNotice(state.notice, actions)
+            HomeNotice(state, actions)
             Gap(8)
         }
         if (state.approvalsOff) {

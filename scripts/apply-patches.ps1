@@ -427,6 +427,13 @@ $PATCHES = @(
     # like every new patch. Needs jarvis_email_send.py copied in; without it
     # the route answers 503 and the send_email tool says it is unavailable.
     'email-send.patch'
+    # How Jarvis words things - warm and brief (the default) or plain (the
+    # owner's decision of 2026-09-25): GET and POST /api/manner, no card
+    # either way. Its context is web-search's GET and POST route blocks, so
+    # it goes after web-search - last, like every new patch. Needs
+    # jarvis_manner.py copied in; without it the routes answer 503 and
+    # answers are worded as before.
+    'manner.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -502,6 +509,7 @@ $SHIPPED = @(
     'jarvis_briefing.py'         # briefing.patch: the morning briefing, a kind of job on the one scheduler
     'jarvis_reach.py'            # reach.patch: "What Jarvis can reach", written from the settings, never by the model
     'jarvis_owner_check.py'      # owner-check.patch: Windows Hello for risky approvals from this PC, and the approval stamp
+    'jarvis_manner.py'           # manner.patch: warm and brief, or plain - the wording of answers only
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

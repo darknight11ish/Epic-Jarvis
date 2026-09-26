@@ -1465,6 +1465,26 @@ def _get_json(url: str, payload: Optional[dict] = None, timeout: float = 4.0) ->
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
+def _model_waking(ollama_url: str, model: str) -> Optional[bool]:
+    """True when Ollama on this PC answers /api/ps and `model` is not in it -
+    the first words will wait for it to load. None when it cannot tell (no
+    answer within a second, or an address that is not this PC). /api/ps
+    loads nothing."""
+    try:
+        if not _is_this_machine(ollama_url):
+            return None
+        ps = _get_json(f"{ollama_url.rstrip('/')}/api/ps", timeout=1.0)
+    except Exception:
+        return None
+    names = set()
+    for m in (ps or {}).get("models") or []:
+        if isinstance(m, dict):
+            names.update(str(m.get(k) or "") for k in ("name", "model"))
+    want = str(model or "")
+    return not ({want, f"{want}:latest"} & names
+                or (want.endswith(":latest") and want[:-7] in names))
+
+
 # --------------------------------------------------------------------------
 #   What goes down the wire to the app
 # --------------------------------------------------------------------------
@@ -1510,7 +1530,12 @@ def _get_json(url: str, payload: Optional[dict] = None, timeout: float = 4.0) ->
 KEEPALIVE_SECONDS = 10.0
 STATUS_DELAY_SECONDS = 1.5
 STATUS_PREFIX = ": jarvis-status "
-STATUS_WORDS = ("thinking", "approval", "working")
+STATUS_WORDS = ("thinking", "approval", "working", "loading")
+# "loading" (2026-09-25): the model is not in memory yet (Ollama's /api/ps did
+# not list it when the turn began - after standby, or the first question of
+# the day), so the first words take longer. Said instead of "thinking" for
+# the first request only, after the same STATUS_DELAY_SECONDS. An app that
+# does not know the word ignores it and keeps its own "Thinking…".
 
 #: When the app does not say how long an answer may be. The same number as
 #: `num_predict` in jarvis-primary.Modelfile, so every window gets the same
@@ -1896,6 +1921,30 @@ def plain_error(exc: BaseException, model: str, said: Optional[str] = None) -> s
                 "stuck: restart Ollama, then try again.")
     return ("The local model is not running. Open Ollama on this PC (or run "
             "`ollama serve`), then try again.")
+
+
+#: Which of this file's own failure sentences an error is, as a short code
+#: the apps turn into their shared plain words and a fix button
+#: (tools/gen_plain_error_cases.py; docs/JARVIS-API.md section 4). Read
+#: from the start of OUR sentences only - plain_error's, and the mid-answer
+#: one in run_local_turn - never from anything Ollama wrote. An app that
+#: does not know the code shows the sentence, as before.
+ERROR_CODES = (
+    ("The model “", "model_missing"),
+    ("The local model is not running", "model_not_running"),
+    ("The local model stopped answering", "model_stuck"),
+    ("The local model stopped in the middle", "model_stopped"),
+    ("The local model answered with an error", "model_error"),
+)
+
+
+def error_code(message: str) -> Optional[str]:
+    """The code for one of this file's failure sentences, or None."""
+    text = str(message or "")
+    for start, code in ERROR_CODES:
+        if text.startswith(start):
+            return code
+    return None
 
 
 _MAX_TOOL_CONTENT_CHARS = 8000
@@ -2962,6 +3011,60 @@ def with_spoken_note(msgs: list) -> list:
 
 
 # --------------------------------------------------------------------------
+#   Manner: warm and brief, or plain (2026-09-25)
+# --------------------------------------------------------------------------
+#
+# The owner's decision: "warm and brief by default, with a 'Plain' option.
+# Manner never changes what Jarvis does, asks or remembers - only how it
+# phrases things." The line is jarvis_manner.NOTE, chosen in both apps'
+# settings (GET/POST /api/manner, manner.patch).
+#
+# Placed exactly like SPOKEN_NOTE, and before it: just before the newest user
+# message, never first - so the rules block stays first (keep_rules_first
+# runs after it), and the spoken-style note, when there is one, is nearer
+# the question and wins on length. The words themselves say "wording only"
+# and that every rule still applies (test_manner.py). Added only to the
+# request for THIS PC's model, never to the caller's `messages`, so the
+# relay - the one path to a cloud model - never sees it.
+
+
+def _manner_now() -> Optional[str]:
+    """The owner's manner setting, or None on a backend without
+    jarvis_manner.py (then nothing is added, as before)."""
+    try:
+        import jarvis_manner
+        return jarvis_manner.current()
+    except Exception:
+        return None
+
+
+def manner_message(manner: Optional[str]) -> Optional[dict]:
+    """The system message for `manner` ("warm" / "plain"), or None."""
+    if manner is None:
+        return None
+    try:
+        import jarvis_manner
+        return {"role": "system", "content": jarvis_manner.note(manner)}
+    except Exception:
+        return None
+
+
+def with_manner_note(msgs: list, manner: Optional[str]) -> list:
+    """A new list: `msgs` with the manner line just before the newest user
+    message - never first (see with_spoken_note, whose placing this is).
+    `msgs` itself is not changed; no manner, or no user message, returns a
+    plain copy."""
+    note = manner_message(manner)
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if note is None or not users:
+        return list(msgs)
+    at = users[-1]
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, note] + list(msgs)
+    return list(msgs[:at]) + [note] + list(msgs[at:])
+
+
+# --------------------------------------------------------------------------
 #   The owner cut the last spoken answer off
 # --------------------------------------------------------------------------
 #
@@ -3060,7 +3163,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                    context_length: Optional[int] = None,
                    keepalive_seconds: float = KEEPALIVE_SECONDS,
                    status_delay: float = STATUS_DELAY_SECONDS,
-                   lane_choice="auto") -> dict:
+                   lane_choice="auto",
+                   manner="auto",
+                   model_waking: Optional[Callable[[str, str], Optional[bool]]] = None) -> dict:
     """One local chat turn, start to finish: asks the model, runs any tool it
     asks for through the gate, and writes the answer to `stream_out` as it is
     written - in Ollama's own format (see "What goes down the wire" above).
@@ -3110,6 +3215,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     `on_step(step)` is told each step as it happens - see _step_event.
     Omitted, it is `_publish_step`: the event bus, for Brain -> Live.
 
+    `manner` - "warm", "plain", None (no manner line) or "auto" (the
+    owner's setting, jarvis_manner.current()). Wording only: see
+    with_manner_note.
+
+    `model_waking(url, model)` - True when the model is not in memory yet,
+    so the first request's wait is said as "loading" ("Waking up the
+    model...") rather than "thinking". Omitted, it asks Ollama's /api/ps on
+    this PC (_model_waking); None means "cannot tell" and changes nothing.
+
     `lane_choice` - the second graphics card (jarvis_second_card.py). The
     default "auto" asks choose_lane(); None keeps the turn on the main card;
     a LaneChoice (what jarvis_hud.py passes since second-card.patch, so the
@@ -3122,6 +3236,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     recorder = record_chain if record_chain is not None else _record_chain
     steps: list = []
     watch = _TurnWatch(messages, request)
+    # The owner's manner (jarvis_manner.py): "auto" reads the setting; None
+    # adds no line (a backend without the module, or a caller that says so).
+    if manner == "auto":
+        manner = _manner_now()
     checker = gate_check or _gate_check
     streamer = open_stream or (lambda url, payload: _open_stream(url, payload))
     closer = abort or (lambda up: getattr(up, "close", lambda: None)())
@@ -3208,11 +3326,18 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             # A second-card lane: its model has no Jarvis SYSTEM block.
             msgs = [{"role": "system", "content": LANE_SYSTEM}] + list(convo)
         room = budget() - (estimate_tokens(_SPOKEN_MSG) if watch.spoken else 0)
+        manner_msg = manner_message(manner)
+        if manner_msg is not None:
+            room -= estimate_tokens(manner_msg)
         if watch.cut_off:
             room -= estimate_tokens({"role": "system", "content": CUT_OFF_NOTE.format(
                 said=watch.cut_off)})
         body = {"model": cur["model"], "messages": fit_messages(msgs, room),
                 "stream": True, **opts}
+        if manner_msg is not None:
+            # The owner's manner (warm or plain): wording only, never first,
+            # and before the spoken note so that one is nearer the question.
+            body["messages"] = with_manner_note(body["messages"], manner)
         if watch.spoken:
             # After trimming, so trimming can never leave the note first.
             body["messages"] = with_spoken_note(body["messages"])
@@ -3299,7 +3424,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
     def fail(message: str) -> None:
         if out.sse:
-            out.send(_sse({"error": {"message": message, "type": "jarvis"}}))
+            err = {"message": message, "type": "jarvis"}
+            code = error_code(message)
+            if code:
+                err["code"] = code
+            out.send(_sse({"error": err}))
         else:
             out.send(json.dumps({"error": message}, ensure_ascii=False,
                                 separators=(",", ":")).encode("utf-8") + b"\n")
@@ -3317,6 +3446,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                    or local_model_refusal(cur["url"], cur["model"]))
         if refused:
             raise UpstreamError(refused)
+        # Is the model still to be loaded (after standby, or the first
+        # question of the day)? Asked once, after the refusal check, so
+        # nothing is asked of a machine that is not this PC.
+        waking = False
+        try:
+            waking = bool((model_waking or _model_waking)(cur["url"], cur["model"]))
+        except Exception:
+            waking = False
         last: Optional[_Round] = None
         for _round in range(max_rounds + 1):
             final = _round == max_rounds
@@ -3326,7 +3463,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                                          "what you have rather than trying again."})
             rounds += 1
             say_step("model", round_no=_round + 1)
-            out.set_status("thinking")
+            out.set_status("loading" if waking and _round == 0 else "thinking")
             shown = len(answer)
             try:
                 last = one_round(offer_tools=not final)

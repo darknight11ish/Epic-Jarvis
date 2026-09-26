@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-manner"
+description = "Enables the set_manner command without any pre-configured scope."
+commands.allow = ["set_manner"]
+
+[[permission]]
+identifier = "deny-set-manner"
+description = "Denies the set_manner command without any pre-configured scope."
+commands.deny = ["set_manner"]

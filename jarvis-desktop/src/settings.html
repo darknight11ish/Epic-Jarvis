@@ -571,6 +571,29 @@
            until the owner picks one; picking one lists its steps, and each
            step is ONE button that raises that step's own approval card.
            docs/HARDWARE-PROFILES.md is the design. -->
+      <!-- ── How Jarvis talks ─────────────────────────────────────────────
+           Warm and brief (the default), or plain (manner-settings.js;
+           src-tauri/src/plain_errors.rs get_manner, set_manner; backend
+           jarvis_manner.py). Wording only - never what Jarvis does, asks or
+           remembers - so neither choice raises an approval card. Held on a
+           stale link like every change sent to the PC. The phone's Mind has
+           the same, in the same words. -->
+      <section class="card" id="manner">
+        <h2>How Jarvis talks</h2>
+        <p class="note" id="mn-detail">Changes only how Jarvis words its answers. It never changes what Jarvis does, what it asks you, or what it remembers.</p>
+        <p class="state" id="mn-state" role="status">Asking Jarvis…</p>
+        <div id="mn-body" hidden>
+          <fieldset class="theme-list" id="mn-list">
+            <legend class="label">Answers</legend>
+            <div id="mn-choices"></div>
+          </fieldset>
+          <p class="note" id="mn-spoken"></p>
+          <div class="row">
+            <span class="status" id="mn-status" role="status"></span>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Morning briefing ─────────────────────────────────────────────
            When the briefing arrives, and what it includes (briefing-settings.js;
            brain/briefing.rs get_briefing_setup, set_briefing, stop_briefing).
@@ -1286,5 +1309,6 @@
     <script type="module" src="web-search-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
+    <script type="module" src="manner-settings.js"></script>
   </body>
 </html>
