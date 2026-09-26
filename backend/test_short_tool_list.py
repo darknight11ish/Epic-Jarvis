@@ -31,7 +31,7 @@ sys.path.append(str(HERE / "rebuilt"))
 import jarvis_agent as AG  # noqa: E402
 from test_agent import NoRealIO, scripted_stream, RECORDED  # noqa: E402
 
-AG._manner_now = lambda: None
+AG._manner_now = lambda *a, **k: None
 FAILED, PASSED = [], []
 REAL_SHORT = AG.short_list_on
 

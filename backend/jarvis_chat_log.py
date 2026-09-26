@@ -1011,6 +1011,16 @@ def conversation_tainted(conversation_id, messages=None) -> bool:
     return _log().conversation_tainted(conversation_id, messages)
 
 
+def delete(conversation_id) -> bool:
+    """One conversation, gone for good. True if there was one to delete.
+
+    The same call `/api/history/delete` makes (`handle_post`, above) and
+    what "Erase the words" + "Also delete the chat it came from" makes
+    (`jarvis_memory.py` `erase()`, the owner's decision, 2026-09-27) - one
+    module function, so both callers delete a conversation the same way."""
+    return _log().delete(conversation_id)
+
+
 def status() -> dict:
     return _log().status()
 

@@ -15,7 +15,7 @@
  */
 
 import { announce, currentLink, linkWords, onLink } from "./jarvis-link.js";
-import { readManner, SAID } from "./manner.js";
+import { HUMOR_SAID, readManner, SAID } from "./manner.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -34,6 +34,9 @@ const mn = {
   choices: $("mn-choices"),
   spoken: $("mn-spoken"),
   status: $("mn-status"),
+  humorTitle: $("mn-humor-title"),
+  humor: $("mn-humor"),
+  humorDetail: $("mn-humor-detail"),
 };
 
 const STALE = "Waiting for the link to catch up. Nothing can be sent until it does.";
@@ -104,6 +107,9 @@ function paint() {
     mn.choices.append(row);
   }
   say(mn.spoken, view.spoken);
+  if (mn.humorTitle) mn.humorTitle.textContent = view.humorTitle;
+  if (mn.humor) mn.humor.checked = view.humor;
+  say(mn.humorDetail, view.humorDetail);
   syncButtons();
 }
 
@@ -135,6 +141,32 @@ async function change(manner) {
     busy = false;
   }
   await load();
+}
+
+/** Humour (the owner's decision, 2026-09-27): on or off, no card either
+ * way - the same shape as `change()` above, its own Tauri command. */
+async function changeHumor(on) {
+  if (busy) return;
+  busy = true;
+  syncButtons();
+  say(mn.status, "Sending…");
+  try {
+    const out = await invoke("set_humor", { on });
+    const said = String((out && (out.said || out.error)) || HUMOR_SAID[on] || "Done.");
+    say(mn.status, said, out && out.ok === false ? "bad" : "ok");
+    announce(said);
+  } catch (error) {
+    say(mn.status, problemWords(error), "bad");
+    announce(mn.status.textContent, "assertive");
+    if (mn.humor && view) mn.humor.checked = view.humor; // revert an optimistic flip
+  } finally {
+    busy = false;
+  }
+  await load();
+}
+
+if (mn.humor) {
+  mn.humor.addEventListener("change", () => changeHumor(mn.humor.checked));
 }
 
 onLink(() => syncButtons());

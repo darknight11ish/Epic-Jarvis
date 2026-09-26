@@ -35,9 +35,22 @@ export const SAID = Object.freeze({
 export const MISSING =
   "Your PC's Jarvis does not have this setting yet - run apply-patches.ps1 on the PC.";
 
+// Humour (the owner's decision, 2026-09-27): "a switch in 'How Jarvis talks',
+// off to start; never on cards, errors or serious topics." A second,
+// independent switch beside manner, on the same GET/POST /api/manner route
+// (set_humor.rs), so it never resets the manner choice, and vice versa.
+export const HUMOR_TITLE = "Humour";
+export const HUMOR_DETAIL =
+  "Off by default. Never as part of an approval, an error message, or a serious or sensitive topic.";
+export const HUMOR_SAID = Object.freeze({
+  true: "Jarvis may now use a little humour, when it fits.",
+  false: "Jarvis will not use humour.",
+});
+
 /**
  * GET /api/manner (through get_manner), read: `{available, manner, title,
- * detail, spoken, choices: [{id, label, why}]}`, or `{available: false, why}`.
+ * detail, spoken, choices: [{id, label, why}], humor, humor_title,
+ * humor_detail}`, or `{available: false, why}`.
  */
 export function readManner(raw) {
   const v = raw && typeof raw === "object" ? raw : {};
@@ -61,5 +74,9 @@ export function readManner(raw) {
     detail: typeof v.detail === "string" && v.detail ? v.detail : DETAIL,
     spoken: typeof v.spoken === "string" && v.spoken ? v.spoken : SPOKEN,
     choices,
+    humor: v.humor === true,
+    humorTitle: typeof v.humor_title === "string" && v.humor_title ? v.humor_title : HUMOR_TITLE,
+    humorDetail:
+      typeof v.humor_detail === "string" && v.humor_detail ? v.humor_detail : HUMOR_DETAIL,
   };
 }

@@ -250,7 +250,7 @@ await check("CONTROL: brain_memory_pin is held on a stale link, sends one id and
   }
   assert.match(read("src-tauri/src/brain/routes.rs"), /"\/api\/memory\/profile",/,
     "the write-route list the read allowlist is checked against lacks the profile route");
-  assert.match(read("src-tauri/src/hud_bootstrap.js"), /sleep_time\|profile\)/,
+  assert.match(read("src-tauri/src/hud_bootstrap.js"), /sleep_time\|profile\|shared\)/,
     "the HUD page could pin a fact");
 });
 

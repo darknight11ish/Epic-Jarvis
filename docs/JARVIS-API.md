@@ -1093,6 +1093,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/memory/learning` | GET | `brain_memory_learning_status` (`brain/auto_learn.rs`) | `JarvisApi.autoLearnSettings` | `auto-learn.patch`, `jarvis_auto_learn.py`, 2026-09-24 - **§19**. Token + origin. The learning switches in one read: `{"enabled", "auto", "auto_sensitive", "auto_waiting", "sensitive_waiting", "auto_last", "sensitive_last", ...}` (`enabled` is background learning's own switch). Before this, only the POST existed. `503 {"available": false, "error", "reason"}` if `jarvis_auto_learn.py` is missing. |
 | `/api/memory/auto?limit=&before=` | GET | `brain_memory_auto_list` (hidden with the other memory lists under Windows Hello) | `JarvisApi.autoFacts` (hidden under "Hide memory lists and chat history") | `auto-learn.patch` - **§19**. "Saved automatically": `{"facts": [{id, text, saved_at, provenance, device}], "auto", "auto_sensitive"}`, current facts only, newest first; `limit` 1-100 (default 30); `before=<saved_at>` pages to older ones (floored to whole seconds; a page never splits a second). |
 | `/api/memory/profile` | GET | `brain_memory_profile` (`brain/profile.rs`; hidden with the other memory lists under Windows Hello) | `JarvisApi.memoryProfile` / `JarvisRuntime.memoryProfile` (hidden under "Hide memory lists and chat history") | **"Always keep in mind"** (the owner's decision, 2026-09-24; `memory-profile.patch`, `rebuilt/jarvis_memory.py`). Token + origin. The facts the owner pinned, which every local chat question reads word for word (§4): `{"facts": [{"id", "text", "added"}], "chars", "limit"}`, oldest pin first. `chars` is how many characters the listed facts' words use; `limit` is 1,200 (`PROFILE_LIMIT`). Only facts still current are listed: a pinned fact that is forgotten, corrected, runs out or is erased leaves the list by itself. Both apps show "N of 1,200 characters used". `501` from a PC whose `jarvis_memory.py` is older (both apps then say the list is not there yet), `503` memory not running. |
+| `/api/memory/shared` | GET | `brain_memory_shared` (Brain, "Between us"; hidden with the other memory lists under Windows Hello) | `JarvisApi.memoryShared` / `JarvisRuntime.memoryShared` (Brain, "Between us"; hidden under "Hide memory lists and chat history") | **"Between us"** (§44; the owner's decision, 2026-09-27; `memory-shared.patch`, `rebuilt/jarvis_memory.py`). Token + origin. The facts the owner tagged as a shared joke or nickname: `{"facts": [<full fact rows>]}`, newest first, current only - the same drop-off rule as "Always keep in mind" (forgotten, corrected or erased leaves the list). `501` from an older `jarvis_memory.py`, `503` memory not running. |
 | `/api/memory/used?ids=` | GET | `memory_used` (`brain/used.rs`; the quickbar's "Used 2 memories", the Brain's "Jarvis remembered N things" and, since memory wave 3, its "About <name>"; facts taken out in Rust while Windows Hello hides the memory lists) | `JarvisApi.memoryUsed` / `JarvisRuntime.memoryUsed` (Home's "Used 2 memories", the Brain's "Jarvis remembered N things"; hidden under "Hide memory lists and chat history") | **"Used in this answer"** (the owner's decision, 2026-09-25; `temporary-chat.patch`, `rebuilt/jarvis_memory.py` `used_view()`). Token + origin, like every memory read. `ids` is 1 to 100 comma-separated whole numbers above 0 (`"mem:12"` is read as 12); anything else - `fact:3`, a name, a fraction - is a `400` in words. `200 {"facts": [{"id", "text", "current", "pinned", "created", "valid_to", "erased_at"}], "missing": [id, ...]}`, in the order asked. `current` is the usual rule (`valid_to` empty or ahead) and false for an erased fact; a fact that is no longer current still has its words (an answer about the past may have used it); an **erased** fact never has words - `text` is `""`, never the `[erased]` marker. An id with no fact at all is in `missing`. `501` from an older `jarvis_memory.py` (both apps then say they cannot show which facts these were yet), `503` memory not running. A read: nothing here acts on memory. |
 | `/api/memory/entities` | GET | `routes.rs` (`memory_entities`; hidden with the other memory lists under Windows Hello, `lock/rules.rs` PRIVATE_LISTS) | **no - by rule** (the memory graph stays off the phone; ARCHITECTURE.md section 8) | **"Who is my sister?"** (memory wave 3, 2026-09-25; `memory-entities.patch`, `rebuilt/jarvis_memory.py` `entities_view()`). Token + origin. The people, pets, places and things saved facts are linked to: `{"entities": [{"id", "name", "kind", "also": [other names joined to it], "aliases": ["sister"], "fact_ids": [newest first], "facts": n}], "count", "limit"}` - one entry per group (a merge is followed), only entries with at least one current, unerased fact, most facts first, at most 500. Names and aliases exactly as the facts wrote them (aliases lower-cased); no fact's words and no summary. `kind` is `person`, `pet`, `place`, `organisation`, `project`, `thing` or null. An app reads the facts' words by id with `/api/memory/used`. The desktop draws the names under each fact in "Saved automatically" and "What Jarvis knows about you", each opening "About <name>" - that entry's facts, word for word (`brain.js` `paintAbout`, `memory-entities.js`). `501` on a PC whose `jarvis_memory.py` predates it. |
 | `/api/history/conversation?id=` | GET | `brain_history_open` | `JarvisApi.historyConversation` | `chat-history.patch` - **§18**. One kept conversation, read-only: `{id, title, tainted, turns: [{role, text, at, provenance, read_outside, answer_kept} or {role: "assistant", text, at}]}`. `404` if there is no such conversation, `400` for a malformed id, `503` if it cannot be opened (the reason in words). |
@@ -1249,8 +1250,9 @@ neither app says it would.
 | `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | `brain.rs` `brain_memory_keep_both` | `JarvisApi.kt:439` (`keepBothMemory`) | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
 | `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | `commands.rs` `mark_answer` (quickbar, and the HUD page through `hud_bootstrap.js`, which holds no token) | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | `JarvisApi.forgetFact`, from the "Saved automatically" list (§19) and, since 2026-09-25, from "Used in this answer" and "Jarvis remembered N things" (§4, §19.5), after a confirm, held on a stale link | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. Since the owner's decision of 2026-09-24 (automatic learning, §19) the phone calls it too, for automatically saved facts - one fact per request, held on a stale link, like the desktop. Rewording (`/api/memory/edit`) stays desktop-only. |
-| `/api/memory/erase` | POST | `{"id": <int>}` and nothing else | `brain.rs` `brain_memory_erase` (Saved automatically, and every fact in What Jarvis knows about you - forgotten ones too; since 2026-09-25 also beside Forget under the quickbar's "Used in this answer" and the Brain's "Jarvis remembered N things"), after a confirm, held on a stale link | `JarvisApi.eraseFact` / `JarvisRuntime.eraseAutoFact` (Brain, Saved automatically), after a confirm, held on a stale link | **"Erase the words"** (the owner's decision, 2026-09-24; `memory-erase.patch`, `rebuilt/jarvis_memory.py` `erase()`). Wipes ONE fact's words for good and keeps its row and dates: `text` becomes `[erased]`, `erased_at` is set, the word-search row and meaning vector are deleted, meta keeps only dates, ids and where it came from (no message hash, no conversation id), a current fact is retired as Forget retires it, and copies of the words in the review queue go too (a card still waiting with exactly those words, or a "retire this?" card about the fact, is turned down). Then the file is cleaned: the word index compacted, freed space zeroed, `memory.db-wal` emptied. Works on an already-forgotten fact. Same token and origin checks as forget and, like forget, **no approval card** - both apps ask first ("Erase the words of this fact from your PC for good? Jarvis keeps only the date it was saved, so its history shows something was erased here. This cannot be undone.") and say "Erased.". **The earlier wordings go too** (security audit L3, 2026-09-25): every fact this one replaced - an edit (`/api/memory/edit`) or a correction - and every fact THOSE replaced is erased the same way; never a later one. `200 {"ok": true, "id", "erased_at", "already_erased", "retired_now", "file_clean", "copies", "earlier", "note"}` (`earlier`: the ids of the earlier wordings erased with it, newest first) - **never the words** (forget's reply has a `was`; this has not). `file_clean: false`: something was reading the file, so an old copy may stay in `memory.db-wal` until the next erase. `400` for anything but one integer `id` (a list, a string, `true`, an extra key); `404 {"ok": false, "reason": "no_such_fact"}` - an app tells this apart from a PC without the route (a plain 404, or `501` from an older `jarvis_memory.py`), where nothing was erased; `503` memory not running. **No event** - forget sends none either, so the other app's list shows the change on its next read. |
+| `/api/memory/erase` | POST | `{"id": <int>, "also_delete_conversation": <bool, optional>}` and nothing else | `brain.rs` `brain_memory_erase` (Saved automatically, and every fact in What Jarvis knows about you - forgotten ones too; since 2026-09-25 also beside Forget under the quickbar's "Used in this answer" and the Brain's "Jarvis remembered N things"), after a confirm, held on a stale link | `JarvisApi.eraseFact` / `JarvisRuntime.eraseAutoFact` (Brain, Saved automatically), after a confirm, held on a stale link | **"Erase the words"** (the owner's decision, 2026-09-24; `memory-erase.patch`, `rebuilt/jarvis_memory.py` `erase()`). Wipes ONE fact's words for good and keeps its row and dates: `text` becomes `[erased]`, `erased_at` is set, the word-search row and meaning vector are deleted, meta keeps only dates, ids and where it came from (no message hash, no conversation id), a current fact is retired as Forget retires it, and copies of the words in the review queue go too (a card still waiting with exactly those words, or a "retire this?" card about the fact, is turned down). Then the file is cleaned: the word index compacted, freed space zeroed, `memory.db-wal` emptied. Works on an already-forgotten fact. Same token and origin checks as forget and, like forget, **no approval card** - both apps ask first ("Erase the words of this fact from your PC for good? Jarvis keeps only the date it was saved, so its history shows something was erased here. This cannot be undone.") and say "Erased.". **The earlier wordings go too** (security audit L3, 2026-09-25): every fact this one replaced - an edit (`/api/memory/edit`) or a correction - and every fact THOSE replaced is erased the same way; never a later one. **"Also delete the chat it came from"** (the owner's decision, 2026-09-27): `also_delete_conversation`, off by default. This fact's own `conversation_id` (§18.1) is read from its meta the instant before erasing strips it out, and, if the flag is set and one is on record, that whole conversation is deleted from chat history the same way `/api/history/delete` is (`jarvis_chat_log.delete()`) - only for the fact named in this call, never for the earlier wordings erased alongside it, which may have been said in a different chat. Both apps ask a second time, right after the first "are you sure?" - a real checkbox on the phone (a Compose dialog can have one), a second `window.confirm` on the desktop (which cannot) - "Also delete the chat this fact came from? That whole conversation will be deleted from History too, on this PC. This cannot be undone either." `200 {"ok": true, "id", "erased_at", "already_erased", "retired_now", "file_clean", "copies", "earlier", "chat_deleted", "note"}` (`earlier`: the ids of the earlier wordings erased with it, newest first; `chat_deleted`: whether this fact's own conversation was found and deleted - false when `also_delete_conversation` was not set, or the fact never had a conversation_id on record, or already had it stripped by an earlier erase) - **never the words** (forget's reply has a `was`; this has not). `file_clean: false`: something was reading the file, so an old copy may stay in `memory.db-wal` until the next erase. `400` for anything but one integer `id` and an optional boolean `also_delete_conversation` (a list, a string, `true`, an extra key, a non-boolean flag); `404 {"ok": false, "reason": "no_such_fact"}` - an app tells this apart from a PC without the route (a plain 404, or `501` from an older `jarvis_memory.py`), where nothing was erased; `503` memory not running. **No event** - forget sends none either, so the other app's list shows the change on its next read. |
 | `/api/memory/profile` | POST | `{"id": <int>, "pinned": true \| false}` and nothing else | `brain/profile.rs` `brain_memory_pin` (Pin / Unpin on every current fact in Saved automatically and What Jarvis knows about you, and Unpin in Always keep in mind), held on a stale link | `JarvisApi.pinFact` / `JarvisRuntime.pinFact` (Pin / Unpin in Brain, Saved automatically; Unpin in Always keep in mind), held on a stale link | **"Always keep in mind"** - pin or unpin ONE fact (the owner's decision, 2026-09-24). Only the id is stored (a `profile(fact_id, added, how)` table in memory.db); the words stay the fact's own, never summarised or rewritten. **No approval card and no confirm**: it is the owner's own tap on a fact they can see, like Forget, and Unpin takes it back. Pinning a sensitive fact is allowed - only the owner's tap can put one there. Same token and origin checks as forget. `200 {"ok": true, "id", "pinned", "changed", "chars", "limit", "note"}` (pinning a pinned fact, or unpinning one that is not, is `changed: false`); **`409`** `{"ok": false, "reason", "error", "chars", "limit"}` with `reason` `"too_long"` ("That would make the list too long - unpin something first"), `"fact_too_long"` (one fact over 1,200 characters on its own) or `"not_current"` (forgotten or erased) - both apps show `error` word for word; `404 {"ok": false, "reason": "no_such_fact"}` (told apart from a PC without the route, as for erase); `400` for anything but one integer `id` and one boolean `pinned`; `501` older `jarvis_memory.py`; `503` memory not running. The reply never has the words. Audit log: `memory.pinned` / `memory.unpinned` with the id only. **No event** - forget and erase send none either; each app reads the list again after its own memory writes and when Memory / Brain is shown. |
+| `/api/memory/shared` | POST | `{"id": <int>, "shared": true \| false}` and nothing else | `brain_memory_shared` (Between-us toggle on every current fact in Saved automatically and What Jarvis knows about you, and Forget in Between us itself), held on a stale link | `JarvisApi.setShared` / `JarvisRuntime.setShared` (same toggle, same places) | **"Between us"** (§44) - tag or untag ONE fact as a shared joke or nickname (the owner's decision, 2026-09-27). Only `meta.kind` changes (`"shared"` or removed); the words stay the fact's own. **No approval card and no confirm** - the owner's own tap, like Pin. Same token and origin checks as forget. `200 {"ok": true, "id", "shared", "changed"}` (tagging a tagged fact, or untagging one that is not, is `changed: false`); `409 {"ok": false, "reason": "not_current", "error"}` (forgotten or erased); `404 {"ok": false, "reason": "no_such_fact"}`; `400` for anything but one integer `id` and one boolean `shared`; `501` older `jarvis_memory.py`; `503` memory not running. The reply never has the words. Audit log: `memory.shared` / `memory.unshared` with the id only. **No event**, like pin. |
 | `/api/memory/edit` | POST | object | `brain.rs` `brain_memory_edit` | **no** | Refused while the stream is stale. Rewording supersedes (a new fact, the old one retired), so a pinned fact that is reworded leaves "Always keep in mind" - pin the new wording. |
 | `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | `JarvisApi.setLearning` (Brain, "What Jarvis remembers") | **ON asks first** (`learning-asks.patch`, `jarvis_learning_switch.py`, 2026-09-24): **202** `{"ok": true, "waiting": true, "enabled": false, "message"}` while one approval card under the action `learning_enable` waits; it turns on (and starts the learner) only when that card is approved. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, and it withdraws a waiting ON. Both apps hold ON (not OFF) while the stream is stale, and say "waiting" until the card leaves the queue. A "Remember:" message makes a card even while learning is off. |
 | `/api/memory/learning/auto` | POST | `{"enabled": bool}` | `brain_memory_learning_auto` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Learn automatically" (on by default). The shape of `/api/memory/learning`: **OFF** 200 at once, never a card, withdraws a waiting ON; **ON** 202 `{"waiting": true, ...}` and ONE approval card, action `learning_auto_enable`; on only when it is approved. Already on: 200, no card. A second ON while one waits: 202, no second card. Tier other than `ask`: **503**. Bad body: `400`. Every reply carries the `GET /api/memory/learning` fields (not `enabled`). |
@@ -4998,8 +5000,8 @@ asks or remembers - only how it phrases things." `backend/jarvis_manner.py`,
 
 | Route | What |
 |---|---|
-| `GET /api/manner` | `{"available": true, "manner": "warm"\|"plain", "default": "warm", "title", "detail", "spoken", "choices": [{"id", "label", "why"}]}` - the words both apps show. |
-| `POST /api/manner` | `{"manner": "warm"}` or `{"manner": "plain"}` - at once, 200 `{"ok": true, "said", ...view}`. **No approval card either way**: it does not trust, show or send anything more. Anything else is 400. Both apps hold it on a stale link like every change. |
+| `GET /api/manner` | `{"available": true, "manner": "warm"\|"plain", "default": "warm", "title", "detail", "spoken", "choices": [{"id", "label", "why"}], "humor": bool, "humor_default": false, "humor_title", "humor_detail"}` - the words both apps show. `humor` is §27.5's own switch, added 2026-09-27. |
+| `POST /api/manner` | `{"manner": "warm"\|"plain"}` and/or `{"humor": true\|false}` - either key alone, or both together, in one request; at once, 200 `{"ok": true, "said", ...view}` (`said` names whichever changed, both if both did). **No approval card either way**: it does not trust, show or send anything more. An empty body, an unknown key, or a bad value for a key that IS present is 400. Sending only `"manner"` never resets `"humor"`, and only `"humor"` never resets `"manner"` - the route reads the file, changes just the key(s) sent, and writes it back. Both apps hold it on a stale link like every change. |
 
 Without `jarvis_manner.py` the routes answer 503 `{"available": false}` and
 answers are worded as before.
@@ -5028,16 +5030,90 @@ answers are worded as before.
 ### 27.3 In the apps
 
 Desktop: Settings, "How Jarvis talks" (two choices with the PC's words).
-Phone: Brain, "How Jarvis talks". The same words in both, checked against
-`plain-error-cases.json` (`manner`).
+Phone: Settings, "How Jarvis talks" (`SettingsScreen.kt`'s `MannerSection`,
+moved there with the phone's own Settings screen, 2026-09-27 - **this
+section used to say "Brain", which is now wrong and is corrected here**).
+The same words in both, checked against `plain-error-cases.json` (`manner`).
 
-### 27.4 Known gaps, said plainly
+### 27.4 "From now on ..." (added 2026-09-27)
+
+The owner's decision (`CLAUDE.md`): "'From now on, ...' style requests apply
+at once, with Undo, no card." `jarvis_quick.py` (the fast path, §21) detects
+the phrase in the owner's OWN typed or said words - never from an email, a
+web page, a note or a game (`newest_own_words`, above, already refuses
+those) - and maps it onto the one real dial this backend has: this section's
+manner (warm/plain). "From now on, be more plain", "... talk more
+formally", "... be warmer", "... be friendlier" and close phrasings change
+`manner.json` at once, the same as a tap in Settings, and say "Done: plainer
+answers from now on. You can undo this in Settings." (or the warm wording).
+Asking for what it already is changes nothing and says so ("Jarvis already
+answers plainly."). A tail that does not map to warm/plain - "from now on,
+keep answers short" - is still recognised as the phrase, but is not acted
+on: Jarvis says plainly that it can only switch between warm-and-brief and
+plain today, rather than pretending a dial exists that does not.
+
+**Undo** is the manner setting itself: saying the other one, or the existing
+Settings switch, both change the SAME setting back - there is no separate
+undo history to build or lose. **No card either way**, because §27.1's
+`POST /api/manner` already raises none.
+
+**A temporary chat's change stays in that chat only** (ARCHITECTURE §5, "a
+temporary chat makes no memory"): held in memory only
+(`jarvis_manner.set_temporary`, keyed by `conversation_id`, bounded like
+every other per-conversation map in this project), never written to
+`manner.json`. `jarvis_manner.current(conversation_id)` checks that
+conversation's own override first; `jarvis_agent._manner_now` and
+`jarvis_quick.answer_turn` both read it that way, so the temporary chat's
+own quick answers AND its model turns get the overridden manner, and no
+other conversation - and no file - is touched. Gone when the process
+restarts. `POST /api/chat` needs no new field for this: `temporary: true`
+on the request (`temporary-chat.patch`, §4) is all it reads.
+
+Never on a client: this is chat-message text, read by the existing fast
+path, so both apps get it for free through their existing chat UI - neither
+needed a code change. `backend/test_manner.py`'s "from now on ..." section.
+
+### 27.5 Humour (added 2026-09-27)
+
+The owner's decision (`CLAUDE.md`): "Humour: a switch in 'How Jarvis talks',
+off to start; never on cards, errors or serious topics." A second,
+independent switch beside manner - it can be on with either warm or plain -
+kept in the same file (`manner.json`, key `"humor"`) and behind the same
+`GET`/`POST /api/manner` routes (§27.1) as the same settings screen, so a
+change to one setting never resets the other (`jarvis_manner.handle_set`
+reads the file, changes only the key(s) sent, and writes it back).
+
+- **Off by default** (`HUMOR_DEFAULT = False`), and off for a missing or
+  damaged file or a non-boolean saved value, the same as manner's own
+  `DEFAULT` fallback.
+- **Wording only, appended to the manner note.** `jarvis_manner.note(manner,
+  humor)` appends `HUMOR_NOTE` to the manner line only when humour is on:
+  "You may add a little light, gentle humour when it naturally fits - never
+  about a serious or sensitive topic (health, money, safety, grief, crisis,
+  or anything that sounds upsetting), never inside an approval card or an
+  error message, and never forced." `run_local_turn` passes the setting's own
+  `humor_enabled()` the same way it already reads `manner`, so no caller
+  needed a second parameter wired through by hand.
+- **Never on a card, an error, or a serious topic** - said in the clause
+  itself, not enforced by a separate filter: like every manner line, this is
+  a wording instruction to the local model, not a code path that rewrites an
+  approval card or an error message (neither is built from the model's own
+  words at all).
+- **In the apps**: a second toggle on the same "How Jarvis talks" screen -
+  desktop `manner-settings.js` (`set_humor` in `plain_errors.rs`, the same
+  route `set_manner` uses, with `{"humor": bool}`); phone `MannerPlate.kt`'s
+  `Switch` (`JarvisRuntime.setHumor`, `Manner.humorBody`). Held on a stale
+  link like `setManner`/`set_manner` (rule 4), though changing it raises no
+  card either way.
+
+### 27.6 Known gaps, said plainly
 
 - An 8B model follows a tone line loosely; nothing measures how warm or plain
-  its answers really are.
+  its answers really are, or how often the model actually adds humour when
+  the switch is on.
 - A turn with tools switched off in `jarvis-framework.toml` is relayed to
-  Ollama without `run_local_turn`, so it gets no manner line - the same gap the
-  spoken-style note has.
+  Ollama without `run_local_turn`, so it gets no manner line, and no humour
+  clause either - the same gap the spoken-style note has.
 - The big model's deep questions and the wiki builder do not use it.
 
 ## 28. Stop everything (added 2026-09-25)
@@ -7374,3 +7450,91 @@ not enabled, for the same reason: nothing in the Rust side needs it, and
 this is not a `docs/ARCHITECTURE.md` §8 "one-sided" decision at all - both
 apps reach the feature identically, through words, with no Rust or Kotlin
 code calling a route directly.
+
+## 48. "Between us": shared jokes and nicknames (added 2026-09-27)
+
+The owner's decision (`CLAUDE.md`, 2026-09-27): "Inside jokes: yes, a
+'between us' list in Brain with Forget, from the owner's own words only."
+Full design: `docs/CUTTING-EDGE-2026-09-26-round4-growth.md` section 7.
+
+**What it is not**: a new way to save a fact. "Remember: we call the
+printer 'the beast'" is saved exactly as any other "Remember: ..." is
+(§19, `jarvis_auto_learn.after_remember`) - this feature never touches
+saving. **What it is**: a LABEL - `meta.kind = "shared"` - the owner's own
+tap adds to or takes off a fact that already exists, the same shape as
+Pin/Unpin for "Always keep in mind" (§6), except the label lives IN the
+fact's own meta rather than a separate table, so it is a fact property, not
+a second list to keep in sync.
+
+### 48.1 Routes
+
+See §6's table: `GET`/`POST /api/memory/shared`. No approval card and no
+confirm for tagging or untagging - the owner's own tap on a fact they can
+already see, exactly like Pin. Held on a stale link, like every memory
+write.
+
+### 48.2 Only ever the owner's own tap
+
+Never set automatically by auto-learning, however the fact itself was
+saved, and never by the model - `MemoryStore.shared()` is called from
+nowhere but the route above. The usual sensitive-topic checks are
+untouched: a shared fact can also be about health, money or another
+sensitive topic, and `shared()` never reads or writes `meta.sensitive`.
+Never pinned automatically either: `shared()` never touches the `profile`
+table, and pinning a shared fact (or not) is a fully separate, independent
+choice.
+
+### 48.3 "Erase the words" keeps the tag, never the words
+
+`kind` joined `ERASE_KEEPS_META` (§6, `/api/memory/erase`): an erased
+shared fact still shows `meta.kind == "shared"` afterwards - never words,
+a label - so the owner's history still shows that a shared joke sat there,
+exactly the way `erased_at` shows something was erased at all.
+
+### 48.4 "May use it in an answer when relevant, in Warm only"
+
+A shared fact is an ordinary fact for recall: it can turn up in search the
+same as any other. What is manner-gated is Plain:
+
+- `jarvis_manner.NOTE["plain"]` (§27) now also tells the local model "do not
+  bring up shared jokes or nicknames unless the owner raises them first" -
+  wording only, like the rest of the manner line.
+- `jarvis_memory.without_shared_in_plain(hits, manner)` takes a shared fact
+  OUT of a Plain-manner turn's recall before the model ever sees it - a
+  fact never offered cannot be misused even if the wording line were
+  ignored. `jarvis_agent._run_memory_search` (the `memory_search` tool the
+  model can call mid-turn) already calls it with the owner's manner.
+  `with_profile()` (§6) takes an optional `manner` for the same filtering,
+  for whichever caller passes one - a PINNED shared fact is never filtered
+  by manner, because pinning is its own separate, explicit choice, the same
+  as it always has been.
+- **Known gap, said plainly**: the primary FACTS block a `/api/chat` turn
+  is built from is assembled by `memory-profile.patch`'s own call to
+  `with_profile()`, and that call site does not yet pass `manner=
+  jarvis_manner.current(conversation_id)` - so today the front-loaded facts
+  a turn opens with are NOT filtered by manner; only a live `memory_search`
+  tool call is. `with_profile()`'s `manner` parameter is built and tested
+  and ready for that one-line change; it was left for a follow-up patch
+  edit rather than made here, to keep this feature's diff to files this
+  work owns rather than editing `memory-profile.patch`, a foundational,
+  widely-touched patch several other features also depend on.
+
+### 48.5 In the apps
+
+Both apps: "Between us" in Brain - the list, each with Forget (the same
+confirm and route Forget already uses, §6 `/api/memory/forget` - retiring,
+never erasing, so the words stay as history unless the owner separately
+uses "Erase the words") - and a "Between us" toggle beside Pin/Forget on
+every current fact in Saved automatically and What Jarvis knows about you,
+so the owner can tag or untag a fact from wherever they already see it.
+Hidden with the other memory lists under Windows Hello / "Hide memory
+lists and chat history", the same as "Always keep in mind".
+
+### 48.6 Not built, said plainly
+
+- No "Also delete the chat it came from"-style option here - Forget on a
+  shared fact is the same Forget every other fact has.
+- No automatic detection of what "counts" as a shared joke from a
+  "Remember: ..." sentence's own words - that would be a model or a
+  fixed-phrase guess about meaning, which this project avoids making
+  without the owner's own explicit action (the tap).

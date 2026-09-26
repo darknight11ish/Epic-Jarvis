@@ -56,7 +56,7 @@ import jarvis_ocr as OCR  # noqa: E402
 import jarvis_intake as IN  # noqa: E402
 import _ollama_wire as W  # noqa: E402
 
-AG._manner_now = lambda: None
+AG._manner_now = lambda *a, **k: None
 
 FAILED, PASSED = [], []
 

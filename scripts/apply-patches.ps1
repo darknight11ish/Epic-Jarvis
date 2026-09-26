@@ -565,6 +565,17 @@ $PATCHES = @(
     # Needs jarvis_news.py copied in; without it, or on any error, the
     # banner says so and the routes answer 503.
     'news.patch'
+    # "Between us" (the owner's decision, 2026-09-27): GET and POST
+    # /api/memory/shared - tag or untag ONE fact as a shared joke or
+    # nickname (meta.kind = "shared"), the owner's own tap only, no approval
+    # card, the same shape as memory-profile.patch. Its jarvis_hud.py
+    # context is news.patch's own install block, so it goes after it - last,
+    # like every new patch (it does not touch the same lines any later patch
+    # here does). The work is in the shipped
+    # rebuilt\jarvis_memory.py (shared(), is_shared(), shared_facts(),
+    # without_shared_in_plain(), with_profile()'s new `manner` argument);
+    # with an older copy the routes answer 501 and nothing is filtered.
+    'memory-shared.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

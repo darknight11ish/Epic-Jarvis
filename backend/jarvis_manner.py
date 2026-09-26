@@ -32,11 +32,22 @@ card (the rule for cards is about loosening; this loosens nothing).
 
 WHERE IT IS KEPT: `manner.json` in the backend's config folder, beside
 web-search.json. A missing or damaged file is the default, warm.
+
+"FROM NOW ON ..." (the owner's decision, 2026-09-27). jarvis_quick.py
+detects the phrase in the owner's own live words and calls set_temporary()
+or handle_set() here - this module only holds the ONE extra idea that
+needed: a manner that applies for ONE conversation only, in memory, never
+written to `manner.json`, because a temporary chat makes no memory
+(ARCHITECTURE section 5). `current()` takes an optional `conversation_id`
+and checks that map first. Gone when the process restarts; bounded the same
+way every other per-conversation map in this project is
+(jarvis_agent.py's `_OPENED`).
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import threading
 from pathlib import Path
@@ -67,6 +78,30 @@ SAID = {
     PLAIN: "Jarvis will now answer plainly.",
 }
 
+# Humour (the owner's decision, 2026-09-27: "a switch in 'How Jarvis
+# talks', off to start; never on cards, errors or serious topics"). A
+# second, independent switch beside manner - it can be on with either
+# manner. Kept in the SAME file as manner (below), because it is the same
+# settings screen; handle_set (below) reads-merges-writes so a POST for
+# one setting never resets the other.
+HUMOR_DEFAULT = False
+HUMOR_TITLE = "Humour"
+HUMOR_DETAIL = ("Occasional light humour in answers, when it fits. Off by default. Never as "
+                "part of an approval, an error message, or a serious or sensitive topic.")
+HUMOR_SAID = {
+    True: "Jarvis may now use a little humour, when it fits.",
+    False: "Jarvis will not use humour.",
+}
+
+#: Appended to the manner NOTE (below) only when the humour switch is on.
+#: Wording only, like the rest of the note - and it says the same limits
+#: the switch's own detail line does, so the model is told the same rule
+#: the owner was.
+HUMOR_NOTE = (
+    " You may add a little light, gentle humour when it naturally fits - never about a "
+    "serious or sensitive topic (health, money, safety, grief, crisis, or anything that "
+    "sounds upsetting), never inside an approval card or an error message, and never forced.")
+
 # The line the local model gets. Wording only; each ends by saying every
 # rule still applies (test_manner.py holds both to that).
 NOTE = {
@@ -76,9 +111,10 @@ NOTE = {
            "rules still apply in full: still say what is a guess, and never claim an "
            "action was taken when it was not."),
     PLAIN: ("Manner, for wording only: be neutral and businesslike. Answer directly, "
-            "with no small talk, praise or emoji. All of Jarvis's rules still apply in "
-            "full: still say what is a guess, and never claim an action was taken when "
-            "it was not."),
+            "with no small talk, praise or emoji, and do not bring up shared jokes or "
+            "nicknames unless the owner raises them first. All of Jarvis's rules still "
+            "apply in full: still say what is a guess, and never claim an action was "
+            "taken when it was not."),
 }
 
 _LOCK = threading.Lock()
@@ -108,24 +144,81 @@ def settings_path() -> Path:
     return _config_dir() / "manner.json"
 
 
-def current() -> str:
-    """"warm" or "plain". The default for a missing or damaged file. Never raises."""
+#: A conversation_id, the same shape every other per-conversation map in
+#: this project checks (jarvis_agent._CID_OK, jarvis_quick._CONVERSATION).
+_CID_OK = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
+#: "from now on ..." in a TEMPORARY chat (2026-09-27): conversation_id ->
+#: manner, in memory only - never written to manner.json. Bounded like
+#: jarvis_agent.py's `_OPENED`, so an owner who starts many temporary
+#: chats cannot grow this without limit.
+_TEMP_LOCK = threading.Lock()
+_TEMPORARY: dict[str, str] = {}
+_TEMPORARY_MAX = 200
+
+
+def set_temporary(conversation_id: str, manner: str) -> bool:
+    """"From now on, be more plain" (etc.), said in a TEMPORARY chat: the
+    manner for THIS conversation only, for the rest of it - never persisted,
+    because a temporary chat makes no memory (ARCHITECTURE section 5; the
+    owner's decision, 2026-09-27). False (and nothing changed) for a bad
+    conversation_id or a manner this module does not know."""
+    if not (isinstance(conversation_id, str) and _CID_OK.fullmatch(conversation_id)):
+        return False
+    if manner not in MANNERS:
+        return False
+    with _TEMP_LOCK:
+        _TEMPORARY.pop(conversation_id, None)
+        _TEMPORARY[conversation_id] = manner
+        while len(_TEMPORARY) > _TEMPORARY_MAX:
+            _TEMPORARY.pop(next(iter(_TEMPORARY)))
+    return True
+
+
+def _read_settings() -> dict:
+    """`manner.json`, as a plain dict - `{}` for a missing or damaged file.
+    Never raises. The one place both `current()` and `humor_enabled()` read
+    the file, and what `handle_set()` merges its one changed key into."""
     try:
         doc = json.loads(settings_path().read_text(encoding="utf-8"))
-        m = doc.get("manner") if isinstance(doc, dict) else None
-        return m if m in MANNERS else DEFAULT
+        return doc if isinstance(doc, dict) else {}
     except Exception:
-        return DEFAULT
+        return {}
 
 
-def note(manner: str | None = None) -> str:
-    """The line for the local model's request, for `manner` (or the setting)."""
+def current(conversation_id: str | None = None) -> str:
+    """"warm" or "plain". `conversation_id`, when it has a temporary-chat
+    override of its own (set_temporary), wins; otherwise the PC's saved
+    setting - the default for a missing or damaged file. Never raises."""
+    if isinstance(conversation_id, str) and conversation_id:
+        with _TEMP_LOCK:
+            m = _TEMPORARY.get(conversation_id)
+        if m in MANNERS:
+            return m
+    m = _read_settings().get("manner")
+    return m if m in MANNERS else DEFAULT
+
+
+def humor_enabled() -> bool:
+    """Whether the humour switch (the owner's decision, 2026-09-27) is on -
+    off by default, and off for a missing or damaged file. Independent of
+    manner: it can be on with either warm or plain. Never raises."""
+    h = _read_settings().get("humor")
+    return h if isinstance(h, bool) else HUMOR_DEFAULT
+
+
+def note(manner: str | None = None, humor: bool | None = None) -> str:
+    """The line for the local model's request, for `manner` (or the
+    setting) - with the humour clause appended when `humor` (or the
+    setting) is on."""
     m = manner if manner in MANNERS else current()
-    return NOTE[m]
+    h = humor if isinstance(humor, bool) else humor_enabled()
+    return NOTE[m] + (HUMOR_NOTE if h else "")
 
 
 def view() -> dict:
     m = current()
+    h = humor_enabled()
     return {
         "available": True,
         "manner": m,
@@ -134,6 +227,12 @@ def view() -> dict:
         "detail": DETAIL,
         "spoken": SPOKEN,
         "choices": [{"id": k, "label": LABEL[k], "why": WHY[k]} for k in MANNERS],
+        # Humour (the owner's decision, 2026-09-27): a second, independent
+        # switch on the same "How Jarvis talks" screen - off to start.
+        "humor": h,
+        "humor_default": HUMOR_DEFAULT,
+        "humor_title": HUMOR_TITLE,
+        "humor_detail": HUMOR_DETAIL,
     }
 
 
@@ -143,21 +242,38 @@ def handle_get() -> tuple:
 
 
 def handle_set(body) -> tuple:
-    """POST /api/manner {"manner": "warm" | "plain"} - at once, no card
-    either way (see the module docstring)."""
-    if not isinstance(body, dict) or set(body) != {"manner"}:
-        return 400, {"ok": False, "error": 'send exactly {"manner": "warm"} or {"manner": "plain"}'}
-    m = body["manner"]
-    if m not in MANNERS:
+    """POST /api/manner {"manner": "warm" | "plain"} and/or {"humor": true |
+    false} - at once, no card either way (see the module docstring). Either
+    key alone, or both together, in one request; a POST that changes only
+    one setting never resets the other, because this reads the file,
+    changes just the key(s) sent, and writes it back."""
+    if (not isinstance(body, dict) or not body
+            or (set(body) - {"manner", "humor"})):
+        return 400, {"ok": False, "error": 'send {"manner": "warm"|"plain"} and/or '
+                                           '{"humor": true|false}, and nothing else'}
+    changed_manner = "manner" in body
+    changed_humor = "humor" in body
+    m = body.get("manner")
+    if changed_manner and m not in MANNERS:
         return 400, {"ok": False, "error": 'manner must be "warm" or "plain"'}
+    h = body.get("humor")
+    if changed_humor and not isinstance(h, bool):
+        return 400, {"ok": False, "error": "humor must be true or false"}
     p = settings_path()
     try:
         with _LOCK:
+            doc = _read_settings()
+            if changed_manner:
+                doc["manner"] = m
+            if changed_humor:
+                doc["humor"] = h
             p.parent.mkdir(parents=True, exist_ok=True)
             tmp = p.with_name(p.name + ".tmp")
-            tmp.write_text(json.dumps({"manner": m}), encoding="utf-8")
+            tmp.write_text(json.dumps(doc), encoding="utf-8")
             os.replace(tmp, p)
     except OSError as exc:
         # The exception's NAME only: its message names a folder.
         return 500, {"ok": False, "error": f"could not save the setting ({type(exc).__name__})"}
-    return 200, {"ok": True, "said": SAID[m], **view()}
+    said = " ".join(s for s in (SAID[m] if changed_manner else None,
+                                HUMOR_SAID[h] if changed_humor else None) if s)
+    return 200, {"ok": True, "said": said, **view()}

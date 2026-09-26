@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-memory-share"
+description = "Enables the brain_memory_share command without any pre-configured scope."
+commands.allow = ["brain_memory_share"]
+
+[[permission]]
+identifier = "deny-brain-memory-share"
+description = "Denies the brain_memory_share command without any pre-configured scope."
+commands.deny = ["brain_memory_share"]

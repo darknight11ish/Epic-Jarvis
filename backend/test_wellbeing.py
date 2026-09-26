@@ -45,7 +45,7 @@ import _ollama_wire as W  # noqa: E402
 
 # The owner's manner line has its own suite (test_manner.py); switched off
 # here so it does not complicate what these tests assert about ordering.
-AG._manner_now = lambda: None
+AG._manner_now = lambda *a, **k: None
 # The real end-of-turn recorder and step sink touch the real audit log and
 # the real event bus - captured here instead, for every test (test_agent.py
 # does the same for the same reason).

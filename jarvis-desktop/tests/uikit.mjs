@@ -448,7 +448,8 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing, emailSending, focus, folders }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus,
+  folders }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
@@ -1158,6 +1159,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 }
               }
             }
+            // "Also delete the chat it came from" (2026-09-27): echoes back
+            // whether it happened, so the page can say so - never whether a
+            // conversation was actually found, which the mock does not model.
+            if (cmd === "brain_memory_erase") {
+              return { ok: true, chat_deleted: args.also_delete_conversation === true };
+            }
             return { ok: true };
           case "brain_memory_export":
             // brain.rs saves the export to a file the owner picks in the
@@ -1229,6 +1236,20 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             p.reads += 1;
             const facts = JSON.parse(JSON.stringify(p.facts));
             const out = { facts, chars: facts.reduce((n, f) => n + f.text.length, 0), limit: p.limit };
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              out.hidden = true;
+              out.hidden_count = out.facts.length;
+              out.facts = [];
+            }
+            return out;
+          }
+          case "brain_memory_shared": {
+            const s = window.__shared;
+            if (!s) return null;
+            s.reads += 1;
+            const facts = JSON.parse(JSON.stringify(s.facts));
+            const out = { facts };
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
               out.hidden = true;
@@ -1456,6 +1477,22 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               p.facts.push({ id: args.id, text: known ? known.text : `fact ${args.id}`, added: Date.now() / 1000 });
             }
             return { ok: true, id: args.id, pinned: args.pinned, changed: true };
+          }
+          case "brain_memory_share": {
+            window.__memoryWrites.push({ cmd, ...args });
+            const s = window.__shared;
+            if (!s) throw new Error("HTTP 404");
+            if (args.shared && s.refuse) throw new Error(String(s.refuse));
+            const already = s.facts.some((f) => f.id === args.id);
+            s.facts = s.facts.filter((f) => f.id !== args.id);
+            if (args.shared) {
+              const known = [...window.__auto.facts, ...((window.__brain.memory_facts || {}).facts || [])]
+                .find((f) => f.id === args.id);
+              s.facts.push({ id: args.id, text: known ? known.text : `fact ${args.id}`,
+                             created: Date.now() / 1000 });
+            }
+            return { ok: true, id: args.id, shared: args.shared,
+                     changed: already !== Boolean(args.shared) };
           }
           case "brain_memory_learning_status": {
             const a = window.__auto;
@@ -1728,6 +1765,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // PC's sentence for a refused pin (Rust hands it on as the error).
   window.__profile = profile ? JSON.parse(JSON.stringify({
     facts: [], limit: 1200, refuse: null, reads: 0, ...profile })) : null;
+  // "Between us" (brain/shared.rs). Unset, the command answers null - as
+  // before the list existed - so a scenario that does not name it draws no
+  // "Between us" buttons. `facts` is [{id, text, created}]; `refuse` is the
+  // PC's sentence for a refused tag (Rust hands it on as the error).
+  window.__shared = shared ? JSON.parse(JSON.stringify({
+    facts: [], refuse: null, reads: 0, ...shared })) : null;
   window.__schedule = schedule ? JSON.parse(JSON.stringify({
     jobs: [], todo: [], reads: 0, fails: null, ...schedule })) : null;
   window.__scheduleCalls = [];

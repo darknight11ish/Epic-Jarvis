@@ -667,6 +667,22 @@ Forget retires it; a forgotten one keeps its dates. No card (Forget has
 none), a confirm in both apps, held on a stale link. Nothing may ever
 recall, re-embed or show an erased fact's text: `backfill_embeddings()`
 skips it, and the apps draw "Erased on <date>" from `erased_at`.
+**"Also delete the chat it came from"** (2026-09-27) is a second, separate
+yes/no on the same confirm, off by default: this ONE fact's own
+`conversation_id`, read from its meta the instant before erasing strips it
+out, is deleted from chat history too (docs/JARVIS-API.md §6, §18.1) -
+never the earlier wordings `erase()` cascades to alongside it, which may
+have been said in a different chat.
+
+**"Between us" is a label, not a new door into `facts`** (the owner's
+decision, 2026-09-27; `memory-shared.patch`). `meta.kind = "shared"`, the
+owner's own tap, marks a fact that already exists as a shared joke or
+nickname - the same shape as the "Always keep in mind" pin above, except
+the label lives in the fact's own meta rather than a second table.
+`ERASE_KEEPS_META` keeps it through "Erase the words" (a label, never
+words), and a Plain-manner turn's recall drops a shared fact before the
+model ever sees it (`without_shared_in_plain`) - Warm may use it. Never set
+by auto-learning or the model; docs/JARVIS-API.md §48 has the rest.
 
 **Three tables are welded to one local rowid.** `facts` is
 `id INTEGER PRIMARY KEY`, `facts_fts` uses `content_rowid='id'`, and
@@ -815,6 +831,11 @@ running server says it has it (`capabilities.temporary_chat`), and
 Its live message still goes in the chat log's in-memory registry - a hash,
 never the words - so the "read outside text" mark keeps working, under the
 provenance `"temporary"`, which automatic learning always turns into a card.
+**"From now on ..." in a temporary chat obeys the same rule** (2026-09-27):
+`jarvis_manner.set_temporary(conversation_id, manner)` holds that one
+conversation's own manner override in memory only, keyed by
+`conversation_id`, never written to `manner.json` - gone with the process,
+like every other per-conversation map here (`jarvis_agent._OPENED`).
 
 **"Used in this answer" reads facts by id, and only when asked** (2026-09-25,
 `GET /api/memory/used`, `rebuilt/jarvis_memory.py` `used_view()`). The
@@ -1121,7 +1142,10 @@ are architectural rather than configuration:
   `keep_rules_first` puts the rules in front whenever anything else would be
   first. Manner is wording only: its line says every rule still applies, it
   changes no tier, card, memory or egress, and it is never sent to a cloud
-  lane. The crisis note is stricter still: on a match, no tools are offered
+  lane. **Humour** (2026-09-27) is not a third line - it is a clause appended
+  to the SAME manner line, only when the owner's own switch is on, and it
+  says its own limit in words (never a card, an error, or a serious topic)
+  rather than a code path enforcing one. The crisis note is stricter still: on a match, no tools are offered
   that turn at all, and the fixed help message (`jarvis_wellbeing.reply()`)
   is appended after the answer, or sent alone if the model fails - the one
   place in this codebase where the backend, not the model, adds words to a

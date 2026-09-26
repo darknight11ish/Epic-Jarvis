@@ -114,6 +114,11 @@ try:
 except Exception:  # pragma: no cover - the store must work standalone
     fw = None  # type: ignore
 
+try:
+    import jarvis_chat_log as _chat_log
+except Exception:  # pragma: no cover - the store must work standalone,
+    _chat_log = None  # type: ignore  # e.g. in a test that never touches history
+
 
 # --------------------------------------------------------------------------
 #   Where
@@ -1449,7 +1454,8 @@ class MemoryStore:
             c.commit()
             return cur.rowcount > 0
 
-    def erase(self, fact_id: int, *, earlier: bool = True) -> Optional[dict]:
+    def erase(self, fact_id: int, *, earlier: bool = True,
+              also_delete_conversation: bool = False) -> Optional[dict]:
         """"Erase the words": wipe one fact's text for good. Keep its dates.
 
         The owner's decision of 2026-09-24 (CLAUDE.md). Forget (retire())
@@ -1460,9 +1466,12 @@ class MemoryStore:
 
           * `text` becomes ERASED_TEXT, a fixed marker with no words in it.
           * `meta` keeps only ERASE_KEEPS_META - dates, ids, where it came
-            from - and drops everything else, above all `message_hash` (a
-            hash of the words, which a guess can be checked against) and
-            `conversation_id` (which points at where the words were said).
+            from, and its "Between us" tag if it had one (`kind`, 2026-09-27
+            - a label, never words, so the owner's history still shows a
+            shared joke sat here) - and drops everything else, above all
+            `message_hash` (a hash of the words, which a guess can be
+            checked against) and `conversation_id` (which points at where
+            the words were said).
           * the word-search row (facts_fts) and the meaning vector
             (facts_vec) for this id are deleted - they are the words too.
           * if the fact is still current, it is retired exactly as retire()
@@ -1498,14 +1507,32 @@ class MemoryStore:
         wording does not erase the fact that replaced it, which may be what
         the owner still wants remembered.
 
+        ALSO DELETE THE CHAT IT CAME FROM (the owner's decision, 2026-09-27):
+        `also_delete_conversation`, off by default. A fact's `meta` records
+        the `conversation_id` it was said in (chat-history.patch) until this
+        very method strips it out above - so THIS fact's own conversation_id
+        is read from the row before that happens, and, if the flag is set and
+        one is on record, the whole conversation is deleted from chat history
+        the same way `/api/history/delete` does (`jarvis_chat_log.delete()`) -
+        every turn of it, not only the one that taught this fact. Only for
+        the fact named in THIS call, never for the earlier wordings `earlier`
+        erases alongside it (a reworded fact may have been said in a
+        different conversation than the one that replaced it, and the owner
+        asked to delete one chat, not every chat a fact ever passed through).
+        A fact with no conversation_id on record (never had one, or was
+        already erased once, which took it out) simply has nothing to
+        delete - `chat_deleted` is false, and nothing else happens.
+
         Returns None if there is no such fact, else
         {"id", "erased_at", "already_erased", "retired_now", "file_clean",
-        "copies", "earlier"} - `earlier` the ids of the earlier wordings
-        erased with it. Never the words.
+        "copies", "earlier", "chat_deleted"} - `earlier` the ids of the
+        earlier wordings erased with it, `chat_deleted` whether this fact's
+        own conversation was found and deleted. Never the words.
         """
         fid = int(fact_id)
         if earlier:
-            out = self.erase(fid, earlier=False)
+            out = self.erase(fid, earlier=False,
+                              also_delete_conversation=also_delete_conversation)
             if out is None:
                 return None
             chain = self._earlier_wordings(fid)
@@ -1522,6 +1549,9 @@ class MemoryStore:
             row = dict(row)
             old_text = str(row.get("text") or "")
             already = row.get("erased_at") is not None
+            # Read BEFORE _erased_meta() strips it below - this is the one
+            # chance to know where these words were said.
+            conversation_id = None if already else _fact_conversation_id(row.get("meta"))
             now = time.time()
             # Before any write on this connection: freed space is zeroed.
             try:
@@ -1582,9 +1612,18 @@ class MemoryStore:
                 fw.audit_log("memory.erased", {"id": fid})   # the id only, never the words
         except Exception:
             pass
+        # Chat history is a different file with its own lock (jarvis_chat_log
+        # .py) - done after this store's own transaction and scrub, so a slow
+        # or failing chat-history delete can never leave a fact half-erased.
+        chat_deleted = False
+        if also_delete_conversation and conversation_id and _chat_log is not None:
+            try:
+                chat_deleted = bool(_chat_log.delete(conversation_id))
+            except Exception:
+                chat_deleted = False
         return {"id": fid, "erased_at": erased_at, "already_erased": already,
                 "retired_now": retired_now, "file_clean": file_clean, "copies": copies,
-                "earlier": []}
+                "earlier": [], "chat_deleted": chat_deleted}
 
     def _earlier_wordings(self, fact_id: int) -> list:
         """The ids of every fact `fact_id` replaced, directly or through
@@ -2301,6 +2340,78 @@ class MemoryStore:
         return {"ok": True, "id": fid, "pinned": False, "changed": changed,
                 "chars": used, "limit": PROFILE_LIMIT}
 
+    # ---- "Between us" (the owner's decision, 2026-09-27) -------------------
+    #
+    # Not a new table like "Always keep in mind" - a LABEL in the fact's own
+    # meta, meta["kind"] = "shared", so it passes _META_LABEL, and so
+    # ERASE_KEEPS_META (below) can keep it after "Erase the words": the
+    # owner's history still shows where a shared joke sat, never its words.
+    # Only ever set by the owner's own tap (`shared()`, below) - never by the
+    # model, and never automatically by auto-learning, however the fact
+    # itself was saved.
+
+    def is_shared(self, fact_id: int) -> bool:
+        """Is this fact "Between us" - has it got meta.kind == "shared"?
+        False for no such fact, and for one whose meta has no `kind` at
+        all (every fact before this feature, and every ordinary one since)."""
+        row = self.get(int(fact_id))
+        return _fact_kind(row.get("meta") if row else None) == "shared"
+
+    def shared_facts(self, limit: int = 400) -> list[dict]:
+        """The "Between us" list: current facts tagged shared, newest first -
+        the same shape current_facts() rows have. A fact that stops being
+        current (forgotten, corrected, its words erased) drops off here too,
+        the same way it drops off "Always keep in mind"."""
+        return [f for f in self.current_facts(limit=max(limit, 400))
+                if _fact_kind(f.get("meta")) == "shared"][:max(0, int(limit))]
+
+    def shared(self, fact_id: int, want: bool) -> dict:
+        """Tag (`want=True`) or untag (`False`) ONE CURRENT fact as "Between
+        us". Only the owner's own tap does this (the caller, not this
+        method, is the one place that must never be reached from the
+        model). Tagging an already-tagged fact, or untagging one that is
+        not tagged, changes nothing.
+
+        Refused, with `reason`, when there is no such fact
+        ("no_such_fact") or it is no longer current, its words erased
+        included ("not_current"). Returns {"ok", "id", "shared", "changed"}
+        (+ "reason" when refused). Never the words."""
+        fid = int(fact_id)
+        now = time.time()
+        with _LOCK, closing(self._connect()) as c:
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                row = c.execute("SELECT meta, valid_to, erased_at FROM facts WHERE id=?",
+                                (fid,)).fetchone()
+                out = {"ok": False, "id": fid, "shared": False, "changed": False}
+                if row is None:
+                    out["reason"] = "no_such_fact"
+                elif (row["erased_at"] is not None
+                      or (row["valid_to"] is not None and float(row["valid_to"]) <= now)):
+                    out["reason"] = "not_current"
+                else:
+                    was = _fact_kind(row["meta"]) == "shared"
+                    if was == bool(want):
+                        out.update(ok=True, shared=was)
+                    else:
+                        meta = _meta_dict(row["meta"])
+                        if want:
+                            meta["kind"] = "shared"
+                        else:
+                            meta.pop("kind", None)
+                        c.execute("UPDATE facts SET meta=? WHERE id=?", (json.dumps(meta), fid))
+                        out.update(ok=True, shared=bool(want), changed=True)
+                c.execute("COMMIT")
+            except Exception:
+                try:
+                    c.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                raise
+        if out["changed"]:
+            _audit("memory.shared" if want else "memory.unshared", {"id": fid})
+        return out
+
     # ---- the entity layer (memory wave 3, 2026-09-25) --------------------
     #
     # See the module-level section "The entity layer" for the rules. These
@@ -2783,7 +2894,7 @@ ERASED_TEXT = "[erased]"
 #: is free-form and a new key holding words must not survive by default.
 ERASE_KEEPS_META = ("auto", "saved_at", "proposal_id", "proposal_source", "provenance",
                     "device", "tainted", "confidence", "true_from", "forgotten_at",
-                    "sensitive")
+                    "sensitive", "kind")
 
 #: A kept string value must look like a label ("typed", "phone",
 #: "import:claude"), never like a sentence.
@@ -2792,6 +2903,42 @@ _META_LABEL = re.compile(r"^[a-z][a-z0-9_:.-]{0,31}$")
 #: The review-queue source of a "retire this?" card (feedback.patch). Its
 #: `fact_id` names the fact it RETIRED, and its `text` is only the reason.
 _RETIRE_SOURCE = "feedback_retire"
+
+#: The same shape `jarvis_chat_log.py`'s `_CID` checks (docs/JARVIS-API.md
+#: 18.1: 8-64 characters of A-Z a-z 0-9 _ -). Checked again here, on the way
+#: OUT of a fact's meta, so a hand-edited or malformed value in the database
+#: is never handed to jarvis_chat_log.delete() as if it were a real id.
+_CONV_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+
+
+def _meta_dict(raw) -> dict:
+    """A fact's raw `meta` column (JSON text, already-parsed dict, or
+    None/damaged) as a plain dict - never raises, never returns anything
+    that is not a dict. The one place both `_fact_conversation_id` and the
+    "Between us" methods (shared(), is_shared(), _fact_kind) turn the
+    column into something they can read."""
+    try:
+        meta = json.loads(raw) if isinstance(raw, str) and raw else (raw or {})
+    except (TypeError, ValueError):
+        return {}
+    return meta if isinstance(meta, dict) else {}
+
+
+def _fact_conversation_id(raw) -> Optional[str]:
+    """The `conversation_id` a fact's meta names, if it looks like a real
+    one - read for "Also delete the chat it came from" BEFORE `_erased_meta`
+    (below) drops it for good, since that is the one chance to know where
+    a fact's words were said. None for a fact with no such record."""
+    cid = _meta_dict(raw).get("conversation_id")
+    return cid if isinstance(cid, str) and _CONV_ID_RE.match(cid) else None
+
+
+def _fact_kind(raw) -> str:
+    """A fact's meta["kind"] ("shared" for "Between us", 2026-09-27), or ""
+    for none - every fact before this feature, and every ordinary one
+    since. Never raises."""
+    k = _meta_dict(raw).get("kind")
+    return k if isinstance(k, str) and _META_LABEL.match(k) else ""
 
 
 def _erased_meta(raw) -> dict:
@@ -2961,22 +3108,33 @@ def _scrub_file(c) -> bool:
 
 
 def handle_erase(body) -> tuple:
-    """POST /api/memory/erase {"id": <fact id>} -> (http status, reply).
+    """POST /api/memory/erase {"id": <fact id>, "also_delete_conversation":
+    <bool, optional>} -> (http status, reply).
 
     memory-erase.patch hands the route here after the same origin and token
     checks as /api/memory/forget. One fact per request, and nothing else in
-    the body: there is no list form, the same as forget and decide. The
-    reply never carries the words - not even the "was" forget sends back.
+    the body but the optional flag: there is no list form, the same as
+    forget and decide. The reply never carries the words - not even the
+    "was" forget sends back.
+
+    `also_delete_conversation` (the owner's decision, 2026-09-27): "Erase
+    the words" also offers "Also delete the chat it came from". Off by
+    default, so an older app that never sends it behaves exactly as before.
     """
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "need an object"}
     fid = body.get("id")
     if not isinstance(fid, int) or isinstance(fid, bool):
         return 400, {"ok": False, "error": "need an integer id"}
-    if set(body) - {"id"}:
-        return 400, {"ok": False, "error": 'erase takes one fact: {"id": <int>} and nothing else'}
+    if set(body) - {"id", "also_delete_conversation"}:
+        return 400, {"ok": False, "error": 'erase takes one fact: {"id": <int>, '
+                                           '"also_delete_conversation": <bool, optional>} '
+                                           'and nothing else'}
+    also = body.get("also_delete_conversation", False)
+    if not isinstance(also, bool):
+        return 400, {"ok": False, "error": "also_delete_conversation must be true or false"}
     try:
-        out = store().erase(fid)
+        out = store().erase(fid, also_delete_conversation=also)
     except Exception as exc:
         return 500, {"ok": False, "error": type(exc).__name__}
     if out is None:
@@ -2984,6 +3142,10 @@ def handle_erase(body) -> tuple:
     note = ("Erased. The words are gone from Jarvis's memory on this PC; only the "
             "dates are kept, so the history shows something was erased here. "
             "There is no undo.")
+    if also:
+        note += (" The chat it came from has also been deleted." if out["chat_deleted"]
+                 else " Jarvis found no chat on record for this fact, so nothing else"
+                      " was deleted.")
     if not out["file_clean"]:
         note += (" Another part of Jarvis was reading the memory file at that "
                  "moment, so an older copy may stay in memory.db-wal until the "
@@ -3095,7 +3257,21 @@ def handle_profile(body) -> tuple:
     return 200, {**out, "note": note}
 
 
-def with_profile(st, hits, k: int) -> list:
+def without_shared_in_plain(hits: list, manner: Optional[str]) -> list:
+    """"Between us" (the owner's decision, 2026-09-27): Jarvis "may use it in
+    an answer when relevant, in Warm only." A shared-joke fact
+    (`meta.kind == "shared"`) is taken out of `hits` when `manner` is
+    "plain"; anything else - "warm", None, an unknown value - changes
+    nothing. Called wherever a manner is known and facts are about to reach
+    the model (jarvis_agent._run_memory_search; with_profile, below, for a
+    caller that passes one)."""
+    if manner != "plain":
+        return list(hits or [])
+    return [h for h in (hits or []) if _fact_kind(h.get("meta") if isinstance(h, dict) else None)
+            != "shared"]
+
+
+def with_profile(st, hits, k: int, manner: Optional[str] = None) -> list:
     """What a local chat turn recalls, the pinned facts first.
 
     `hits` is what the search found (jarvis_past.recall's answer: current
@@ -3104,10 +3280,16 @@ def with_profile(st, hits, k: int) -> list:
     fact the search also found is left out of the rest, so nothing is said
     twice. k <= 0 - JARVIS_MEMORY_K=0, the switch for no memory at all - is
     NOTHING, pinned facts included. If the list cannot be read, the search's
-    facts alone: the old behaviour."""
+    facts alone: the old behaviour.
+
+    `manner` (2026-09-27, optional so an older caller is unchanged): passed
+    to without_shared_in_plain() on `hits` before pins are added - a fact
+    the owner PINNED stays regardless of manner, the same as it always has
+    (pinning is its own, separate, explicit choice); only the SEARCHED
+    facts are filtered."""
     if k <= 0:
         return []
-    hits = list(hits or [])
+    hits = without_shared_in_plain(hits, manner)
     try:
         pins = st.profile()
     except Exception:
@@ -3117,6 +3299,75 @@ def with_profile(st, hits, k: int) -> list:
     ids = {p["id"] for p in pins}
     return ([dict(p, pinned=True, current=True) for p in pins]
             + [h for h in hits if h.get("id") not in ids])
+
+
+# --------------------------------------------------------------------------
+#   "Between us" (the owner's decision, 2026-09-27)
+# --------------------------------------------------------------------------
+#
+# "Remember: we call the printer 'the beast'" is saved as an ordinary fact,
+# exactly as any other "Remember: ..." is (jarvis_auto_learn.after_remember)
+# - nothing here changes how a fact is SAVED. This is only the tag: the
+# owner's own tap, on a fact they can already see, adds or removes
+# meta["kind"] = "shared" - never set automatically, and never by the model.
+# A tagged fact still goes through every usual check (Forget, Erase, the
+# sensitive-topic rules); it is simply also listed under "Between us", and
+# left out of a Plain-manner turn's recall (without_shared_in_plain, above).
+
+SHARED_NO_SUCH_FACT = "no fact with that id"
+SHARED_NOT_CURRENT = "That fact is no longer in use, so it cannot be a shared joke"
+
+
+def shared_view(st: Optional["MemoryStore"] = None) -> dict:
+    """GET /api/memory/shared's answer: {"facts": [{"id", "text", "created",
+    ...}]} - the store's own shared_facts() rows, current only."""
+    st = st or store()
+    return {"facts": [dict(f) for f in st.shared_facts()]}
+
+
+def handle_shared_get() -> tuple:
+    """GET /api/memory/shared -> (http status, reply)."""
+    try:
+        return 200, shared_view()
+    except Exception as exc:
+        return 500, {"error": type(exc).__name__}
+
+
+def handle_shared(body) -> tuple:
+    """POST /api/memory/shared {"id": <fact id>, "shared": true|false} ->
+    (http status, reply).
+
+    ONE fact per request, and nothing else in the body - no list form, the
+    same as forget, erase, decide and profile. No approval card: the
+    owner's own tap on a fact they can see, held on a stale link like every
+    other memory write. The reply never carries the words; an app reads the
+    list again (GET) to draw it.
+
+      200  {"ok": true, "id", "shared", "changed"}
+      404  {"ok": false, "reason": "no_such_fact", "error"}
+      409  {"ok": false, "reason": "not_current", "error"}
+      400  anything but one integer id and one true/false
+    """
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "need an object"}
+    fid, want = body.get("id"), body.get("shared")
+    if not isinstance(fid, int) or isinstance(fid, bool):
+        return 400, {"ok": False, "error": "need an integer id"}
+    if not isinstance(want, bool):
+        return 400, {"ok": False, "error": 'need "shared": true or false'}
+    if set(body) - {"id", "shared"}:
+        return 400, {"ok": False,
+                     "error": 'tag one fact: {"id": <int>, "shared": true|false} and nothing else'}
+    try:
+        out = store().shared(fid, want)
+    except Exception as exc:
+        return 500, {"ok": False, "error": type(exc).__name__}
+    reason = out.get("reason")
+    if reason == "no_such_fact":
+        return 404, {"ok": False, "reason": reason, "error": SHARED_NO_SUCH_FACT}
+    if reason:
+        return 409, {**out, "error": SHARED_NOT_CURRENT}
+    return 200, out
 
 
 # --------------------------------------------------------------------------

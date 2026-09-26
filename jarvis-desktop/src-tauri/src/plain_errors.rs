@@ -9,15 +9,19 @@
 //! pick the words itself ([`chat_failure`]). The tests below fail if a word
 //! here differs from the file.
 //!
-//! Two commands for Settings -> "How Jarvis talks" (backend/manner.patch,
+//! Three commands for Settings -> "How Jarvis talks" (backend/manner.patch,
 //! jarvis_manner.py; JARVIS-API.md section 27), settings window only:
 //!
 //! * [`get_manner`] - `GET /api/manner`: "warm" (the default) or "plain",
-//!   with the PC's own words for both.
+//!   with the PC's own words for both, and Humour's own state and words.
 //! * [`set_manner`] - `POST /api/manner {"manner": ...}`: at once, NO
 //!   approval card either way - it changes only how answers are worded,
 //!   never what Jarvis does, asks, remembers or sends. Held on a stale link
 //!   all the same (rule 4: nothing is sent while the link is stale).
+//! * [`set_humor`] - `POST /api/manner {"humor": true|false}` (the owner's
+//!   decision, 2026-09-27): "a switch in 'How Jarvis talks', off to start" -
+//!   the SAME route, so setting one never resets the other. At once, no
+//!   card, held on a stale link like [`set_manner`].
 //!
 //! And one for the quickbar: [`open_fix_place`] opens Settings or the Brain
 //! when the owner presses an error's fix button ("Check the connection
@@ -185,6 +189,37 @@ pub async fn set_manner(app: AppHandle, manner: String) -> Result<serde_json::Va
         .post(format!("{base}{MANNER_PATH}"))
         .headers(jarvis_headers(&app)?)
         .json(&body)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if missing(status, &text) {
+        return Err(MANNER_MISSING.to_string());
+    }
+    Err(backend_refusal(status, &text))
+}
+
+/// Humour, on or off, at once, with no card (the owner's decision,
+/// 2026-09-27) - the SAME `/api/manner` route as [`set_manner`], so a change
+/// to this switch never resets the manner choice, and vice versa. Held on a
+/// stale link, the same as [`set_manner`].
+#[tauri::command]
+pub async fn set_humor(app: AppHandle, on: bool) -> Result<serde_json::Value, String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(STALE.to_string());
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(WRITE_TIMEOUT))?
+        .post(format!("{base}{MANNER_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "humor": on }))
         .send()
         .await
         .map_err(|e| backend_unreachable(&e, &base))?;
