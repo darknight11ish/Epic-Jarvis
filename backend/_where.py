@@ -165,6 +165,12 @@ SHIPPED = (
     # "Things you can say": the fixed list of real sentences answered without
     # the model (sayable.patch)
     "jarvis_sayable.py",
+    # music and video control on this PC: play/pause/next/previous and
+    # "what's playing", never a card, never a model tool (media.patch)
+    "jarvis_media.py",
+    # news headlines in the morning briefing: RSS/Atom feed addresses the
+    # owner adds, headlines only, one card per feed (news.patch)
+    "jarvis_news.py",
 )
 
 

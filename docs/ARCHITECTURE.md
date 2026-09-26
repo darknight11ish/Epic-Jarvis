@@ -450,6 +450,7 @@ These lanes leave the machine. Nothing else may.
 | **saving an email draft** (2026-09-27, the owner's decision, "a card every time, showing the full draft") | ONE plain-text draft per approval card, from the same account email reading and sending already use, to at most 10 people in To and Cc (no Bcc, and unlike sending, `to`/`cc` may both be empty), with the subject and text the card showed word for word - at most 2,500 characters, no attachments - saved by IMAP `APPEND`, with the standard `\Draft` flag, to the ONE mailbox that account's own server flags `\Drafts` (found by `LIST`, never a hard-coded name). Never sent: this module has no `smtplib` import at all. Written by the model on this PC only (rule 1) | `jarvis_email_draft.plan/run` (no socket in `plan`; addresses given ARE checked, caps and invisible characters checked, a completely empty draft refused; a plan whose fingerprint or settings changed after its card is refused; never retried; the password never in a plan, card, result, error, event or the log) + `jarvis_agent._one_call` (`draft_email` in `NEEDS_A_PERSON`: only a person's yes saves; no card unless the tier is `ask` and the turn's model is on this PC; the card says at the top when outside text shaped the turn; `CARDS_PER_TURN`) |
 | **plug-in programs (MCP)** (2026-09-26, the owner's "Smarter tools" choice; `jarvis_mcp.py`) | ONE tool call's arguments, exactly as its card showed them, over stdin to ONE program on this PC that the owner listed under `[mcp]` in `jarvis-framework.toml` and approved when it was added (and again whenever it changed). Nothing else: no web address, no network transport, no program fetched at start. **Said plainly:** the program runs as the owner and may use the network itself - Jarvis controls what it ASKS and what comes BACK, not what the program does; its start card says so. It gets no key of Jarvis's (only what the owner gave that one program, a key only from Credential Manager) | `jarvis_mcp` (stdio only; a full path, never `npx`/`uvx`; the environment from `jarvis_child_env.inherited()`; only read-only tools offered; the floor is `ask` for every call; `Bridge.run` needs a person's approval of THIS action, used once; the result cleaned, capped and marked untrusted) + `jarvis_agent._one_call` (`outside_program`: its own gate action `mcp__<server>__<tool>`, a person's yes only, `CARDS_PER_TURN`, `_TurnWatch.took_in` - so the result is outside text and marks the conversation) + reached only through `more_tools("plugins")` |
 | **web search** (2026-09-25) | ONE search's words (at most 300 characters), to the ONE provider the owner chose - SearXNG on the owner's own machine (which asks other engines), DuckDuckGo, Exa, Tavily or Brave - and, for the last three, the owner's key to that service only. Never words that look like a password or key. A card with the exact words whenever the conversation has read email, files, notes, saved memories or other outside text, or the owner chose "Ask before every web search" | `jarvis_search.plan/run` (no socket in `plan`, secret refusal, one provider, no fallback, redirects refused, answers capped) + `jarvis_agent._web_search_call` (when it asks; only a person's yes after that) |
+| **an address the owner typed, meant to be on the open internet** (2026-09-27, feasibility I49/I67) - a news feed's own address (`jarvis_news.py`) or the one page "tell me when this page changes" watches (`jarvis_tellme.py`'s `page` source) | ONE plain GET of exactly that address, never a link found on it - a feed's headlines (titles only, never an article's own page) or a page's own bytes (kept only as a SHA-256 fingerprint, never shown, kept or sent to the AI model). ONE approval card per address ADDED (a feed) or WATCHED (a page); reading it afterwards needs no further card, only the tier below. Refused - at add-time, and again immediately before every later fetch - if the address resolves, by a REAL DNS lookup (never spelling), to this PC or a private network address, so a public-looking name can never be used to make Jarvis fetch from its own machine or home network (DNS rebinding is checked for, not only assumed away) | `jarvis_local_http.private_fetch_problem` (real DNS, checked on every fetch, not only at setup; a redirect followed only where the same check allows it) + `jarvis_news.request_add`/`read_feed` (gate action `news_read`, tier `auto`/`notify`; adding is `change_own_config`, tier `ask` only) + `jarvis_tellme.add`/`_look_page` (gate action `page_read`, tier `auto` only - stricter than news, since a look is every 30 minutes, not about once a day; adding is the scheduler's own `schedule_repeat`, tier `ask` only) |
 
 **Sending email, in one sentence each** (the owner's decision of 2026-09-25,
 `CLAUDE.md`; docs/JARVIS-API.md section 26). What it sends: one email, exactly
@@ -566,6 +567,29 @@ way: it ran once, above the degrade loop, and the loop could go cloud → local
 → cloud. It now re-derives from the lane it is **about to call**. The loop's
 comment claims "downward only" — that is a contract with `jarvis_router` which
 the loop never checked, so the fix does not depend on it holding.
+
+**News feeds and "tell me when this page changes", in one sentence each**
+(the owner's decision of 2026-09-27, `CLAUDE.md`; docs/JARVIS-API.md
+sections 30.3.1 and 44). What each sends: nothing of the owner's at all -
+only the address itself, which the owner typed. Where: exactly that
+address, and nowhere it links to - there is no code in either module that
+follows a link, so "never follows links elsewhere" is not a policy sitting
+on top of the fetch, it is the whole of what the fetch can do. When it
+asks: once, when the address is ADDED (a feed) or WATCHED (a page) - a card
+naming the address in full, action `change_own_config` for a feed (the same
+action every "let Jarvis reach one more thing" card uses) or the
+scheduler's own `schedule_repeat` for a page; reading it afterwards needs no
+further card, only its tier (`news_read`/`page_read`, both `auto` in the
+shipped file). What makes this row different from every other one above:
+the address is not the owner's own account, so the guard is the REVERSE of
+`plain_http_problem`'s - here the owner's OWN networks are exactly what
+must be refused, checked by a real DNS lookup (never spelling, since a
+name gives no protection against pointing at 127.0.0.1 or the home network)
+and re-checked immediately before every later fetch, not only when the
+address was first approved, because a name's DNS answer can change after
+that (DNS rebinding). A headline or a changed-page notification is treated
+as outside text exactly like a calendar title: never learned as a fact,
+and it marks the conversation that reads it.
 
 The **local model is also egress** if `OLLAMA_URL` does not point at this
 machine, or if the "local" model is one of Ollama's cloud models (`-cloud` /

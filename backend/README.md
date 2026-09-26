@@ -131,6 +131,8 @@ on a throwaway copy instead.
 | `draft-email.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Email drafts, one approval card per draft** (the owner's decision, 2026-09-27). Adds `GET /api/email/drafting` (whether saving a draft is set up - the same shape as sending's Settings line, never the password), and in the gate the notice's words for `draft_email`, `draft_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Same shape as `email-send.patch`, right beside its own lines. Its context is `email-send.patch`'s three blocks; last in the list. Needs `jarvis_email_draft.py` - see "Email drafts", at the very end. |
 | `sayable.patch` | `jarvis_hud.py` | **"Things you can say"** (already approved as feasibility I116; the ease-of-use audit's do-first table, row 4, 2026-09-27). Adds `GET /api/sayable` - fixed text, not a setting, **no approval card either way**, the same shape as `manner.patch` and `reach.patch`. Its context is `draft-email.patch`'s own new route block; last in the list. Needs `jarvis_sayable.py` - see "Things you can say", at the very end. |
 | `tools-enable.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Offering a reading tool to the AI model, from the PC** (the owner's answer, 2026-09-27). Adds `POST /api/asks_first/tools` - a DIFFERENT thing from `asks-first.patch`'s `/api/asks_first/tier`: whether a tool is offered to the model at all (`[tools].enabled`), never whether it asks first. ON is one approval card (`enable_reading_tool`) that needs Windows Hello, the same PC-only shape as `loosen_what_asks_first`; OFF is instant. `jarvis_gate.py` gains the action on `_NO_RULE_FROM_DENIAL` and `_RISK`, right beside `loosen_what_asks_first`'s own lines (a denial of this card proposes no standing rule either). Desktop only. Last in the list; its `jarvis_hud.py` context is `asks-first.patch`'s tier/lights route block, and its `jarvis_gate.py` context is `asks-first.patch`'s two additions. Needs `jarvis_asks_first.py` - already needed by `asks-first.patch`, so nothing new to copy in. See "Offering a reading tool to the AI model", at the very end. |
+| `media.patch` | `jarvis_hud.py` | **Music and video control, no card** (the owner's decision of 2026-09-27, feasibility I91: "no card, only from the owner's own words"). One call at start-up, `jarvis_media.install(Handler, ...)`, answers `GET /api/media` ("what's playing") and `POST /api/media/control` ({"action": "play"\|"pause"\|"next"\|"previous"}) - never a card, never `jarvis_gate`, for either route; the fast path itself (`jarvis_quick.py`'s `_run_media`) is not part of this patch. Last in the list; its context is `watch-notifications.patch`'s banner lines. Needs `jarvis_media.py` - without it, or on any error, the banner says so and the routes answer 503. See "Music and video control", at the very end. |
+| `news.patch` | `jarvis_hud.py` | **News headlines in the morning briefing** (the owner's decision of 2026-09-27, feasibility I49: "one card per address the owner adds, read-only, never follows links elsewhere, never acts on what it reads"). One call at start-up, `jarvis_news.install(Handler, ...)`, answers `GET /api/news`, `POST /api/news/add` (ONE approval card, `change_own_config`, from either app) and `/api/news/remove` (at once) - though neither app's settings screen calls these yet: a feed is added and removed by the owner's own words instead (`jarvis_quick.py`'s `_run_news_add`/`_run_news_remove`, which call the same functions). Last in the list; its context is `media.patch`'s banner lines. Needs `jarvis_news.py` - without it, or on any error, the banner says so and the routes answer 503. See "News headlines", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -12082,3 +12084,284 @@ found with the exact sentence its notification uses.
 and `t_an_idle_tell_me_when_check_alone_is_not_something_missed` prove the
 four sections in `build_missed()`'s own answer, and the control case the
 audit itself calls for.
+
+# News headlines in the morning briefing: `jarvis_news.py`, `news.patch` (2026-09-27)
+
+The owner's decision (`CLAUDE.md`, feasibility I49; design source
+`docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md`, question 2): "News
+headlines and 'tell me when this page changes': yes, the safe version - one
+card per address the owner adds, read-only, never follows links elsewhere,
+never acts on what it reads." `docs/JARVIS-API.md` section 44 has the
+routes and the card's words; section 30.3.1 has the page-change half.
+
+## The real gap this closes
+
+`jarvis_briefing.py` shipped a fixed line, "News: not available. No news
+provider has been chosen" - true when it was written, and increasingly
+untrue every day it stayed unbuilt. This module is the provider: RSS/Atom
+feed addresses the owner names, headlines only, never an article's own
+page.
+
+## In plain words
+
+- **One card per feed, added or removed by the owner's own words** - "add
+  this feed: `<url>`", "remove that feed: `<url>`" - not a settings screen.
+  Like "tell me when" (section above and `docs/JARVIS-API.md` §30), there
+  is no dedicated add/remove form in either app; both apps get the feature
+  for free from the one shared chat pipeline. The three HTTP routes exist
+  underneath (so a settings screen could call them later without any
+  change to this module), and `jarvis_quick.py`'s fast path calls the exact
+  same `request_add`/`request_remove` functions the routes do.
+- **Never a link on the feed, never the article.** There is no function in
+  this module that follows a link at all - "never follows links elsewhere"
+  is not a policy on top of the fetch, it is the whole of what the fetch
+  can do. Only each `<item><title>`/`<entry><title>` is kept, at most 5 per
+  feed, 200 characters each.
+- **The private-address guard, shared with "tell me when this page
+  changes".** `jarvis_local_http.private_fetch_problem(url)` resolves the
+  host by a REAL DNS lookup (never spelling - see its own docstring for
+  why) and refuses an address that leads to this PC or a private network
+  address; checked when a feed is added AND again immediately before every
+  later fetch, because DNS can answer differently later (rebinding). See
+  `docs/ARCHITECTURE.md` §4's new egress row.
+- **A DOCTYPE or an ENTITY in the feed is refused outright, unparsed.** A
+  real RSS or Atom document never needs either; refusing them keeps this
+  parser out of XML's entity tricks (an external entity fetch, "billion
+  laughs") without a second dependency such as `defusedxml`.
+- **Headlines are outside text**, exactly like a calendar title or an
+  email's From line: never learned as a fact, and a briefing (or "read me
+  the news") that shows one marks the turn as having read `news_read`.
+- **The briefing's last line is now one of four**, never blank (an older
+  app's own hard-coded fallback text must never show when the PC actually
+  has something to say): `OUTSIDE_LINE` (neither), `NEWS_LINE` (weather
+  only), the new `WEATHER_LINE` (news only), the new `BOTH_INCLUDED_LINE`
+  (both). Both apps' "What it includes" now reads a fourth key, `"news"`,
+  alongside `calendar`/`email`/`weather` (`sourceLines` in `briefing.js`,
+  its Kotlin equivalent in `Briefing.kt` - one line each, no other change).
+
+## What changed
+
+- `jarvis_news.py` - new module: the feed list (`news_feeds.json`), the
+  card flow (`request_add`/`request_remove`, the same pending/withdrawn/last
+  shape `jarvis_documents.py` uses for folders), `parse_headlines`/`feed_title`
+  (stdlib `xml.etree.ElementTree`, DOCTYPE/ENTITY refused first), `read_feed`
+  (the gate, tier `auto`/`notify`), `read_news` (the briefing's section),
+  `sentence` ("read me the news"), and `install()` (the same wrapper shape
+  as `jarvis_documents.install`/`jarvis_stop_all.install`).
+- `jarvis_local_http.py` - `private_fetch_problem`/`_resolved_addresses`:
+  the reverse of `plain_http_problem` (that guards a password going TO the
+  owner's own service; this guards an address the owner typed that is
+  meant to be on the open internet, refusing it if it actually leads back
+  to this PC or the home network).
+- `jarvis_briefing.py` - `_news_source` (the `"news"` key in `sources()`),
+  `_read_news`, a `"news"` section in `build()`, `NEWS_LINE`/`WEATHER_LINE`/
+  `BOTH_INCLUDED_LINE`/`_outside_line()` (the four-way last line).
+- `jarvis_quick.py` - "add this feed: `<url>`", "remove that feed: `<url>`",
+  "what news feeds do I have?", "read me the news" and close phrasings,
+  answered without the model.
+- `jarvis_card_words.py` - a plain title for `news_read` (the gate action a
+  read is logged under; adding a feed reuses `change_own_config`'s own
+  title, unchanged).
+- `jarvis_asks_first.py` - `news_read` and `page_read` (below) added to
+  "The internet" group on the "What asks first" page.
+- `jarvis-desktop/src/briefing.js`, `jarvis-client/.../Briefing.kt` -
+  `sourceLines`/its equivalent now read the `"news"` key too.
+- `docs/JARVIS-API.md` §44, `docs/ARCHITECTURE.md` §4 (the new egress row,
+  shared with "tell me when this page changes" below), `backend/rebuilt/jarvis-framework.toml`
+  (`news_read = "auto"`).
+
+## Test it
+
+```
+python3 backend/test_news.py
+python3 backend/test_local_http.py
+python3 backend/test_briefing.py
+```
+
+`test_news.py` covers the list, the card flow (including a private
+address refused before any card is raised), headline parsing (RSS, Atom,
+the DOCTYPE refusal, the cap), the gate, the fast path, the routes and
+`news.patch`'s own apply/reverse. `test_local_http.py`'s
+`t_private_fetch_problem` proves the DNS-rebinding case by hand: the same
+hostname is made to answer with a public address, then a private one, and
+the second call is refused though the first was not.
+
+## Not checked, said plainly
+
+- **No settings screen in either app** - a deliberate choice, not a gap:
+  see "In plain words" above. `tools/check_parity.py` sees no new route
+  call from either app's source, so there is nothing for it to classify.
+- **Not run against a real RSS reader on the owner's PC.** Every test here
+  uses a made-up feed document; a real one's odd namespace prefixes or
+  malformed XML have not been tried.
+
+# "Tell me when this page changes": `jarvis_tellme.py`'s `page` source (2026-09-27)
+
+The owner's decision (`CLAUDE.md`, feasibility I67; design source
+`docs/CUTTING-EDGE-2026-09-26-round3-routines.md`, "More 'tell me when'
+sources"): the changedetection.io pattern - fetch one address on a timer,
+notify only when a fingerprint of its content changes, never show or store
+the page's text. No new patch: `jarvis_tellme.py` is shipped whole already
+(see "Timers, alarms, reminders and the to-do list", earlier in this file);
+this is a third `source` inside it, beside `"email"` and `"home"`.
+`docs/JARVIS-API.md` §30.1, §30.2 and §30.3.1 have the details.
+
+## In plain words
+
+- **The same one card, the same `/api/schedule/add`**, `{"kind": "tellme",
+  "source": "page", "url"}` - no new route. Set up only by the owner's own
+  words ("tell me when `<url>` changes"): the address must be typed out in
+  full; "tell me when this page changes" with no address goes to the
+  model, since Jarvis has no page in mind for "this".
+- **A hash, never the text.** `_look_page` reuses the SAME `last_state`
+  column a Home Assistant watch's state word already uses - here it holds
+  a SHA-256 hex digest of the page's bytes instead. A match is "the digest
+  changed"; there is no code path that could show the owner a diff or a
+  quote of the page.
+- **The private-address guard, checked twice, on purpose.** Adding the
+  watch (`jarvis_tellme.add`) refuses it before any card is ever raised;
+  `_look_page` refuses it again immediately before every later GET,
+  because a name's DNS answer can change after the owner approved it
+  (rebinding) - see `jarvis_local_http.private_fetch_problem`'s own
+  docstring, shared with news feeds above. A redirect is only followed
+  where the same check would allow it (`_PageRedirect`).
+- **Its own floor and ceiling**, separate from email/home's shared
+  60-minute one: every 30 minutes at the most often (it is someone else's
+  server, not the owner's own account), up to once a day - `PAGE_MINUTES`/
+  `PAGE_MAX_MINUTES` in `check_rule`. Gated as `page_read`, tier `"auto"`
+  only (not `"notify"` either - a look every 30 minutes at that tier would
+  still be a notification every 30 minutes, the same reasoning email and
+  home already use).
+- **At most 5 at once** (`MAX_PAGE_WATCHES`), each a periodic request to
+  someone else's server, not the owner's own.
+
+## What changed
+
+- `jarvis_tellme.py` - the `"page"` branch of `check_watch`/`check_rule`/
+  `what_words`/`alert_words`/`card`, `_look_page`/`_default_page_fetch`/
+  `_PageRedirect`, `PAGE_ACTION`/`PAGE_MINUTES`/`PAGE_MAX_MINUTES`/
+  `MAX_PAGE_WATCHES`, and the private-address checks in `add()` and
+  `_look_page`.
+- `jarvis_local_http.py` - `private_fetch_problem` (shared with news feeds
+  above; written once, used by both).
+- `jarvis_quick.py` - "tell me when `<url>` changes" (`_PAGE_CHANGE`,
+  the `tellme_page` intent).
+- `jarvis_card_words.py` - a plain title for `page_read`.
+- `jarvis_asks_first.py` - `page_read` in "The internet" group.
+- `docs/JARVIS-API.md` §30 (extended, not a new section), §4's new egress
+  row, `backend/rebuilt/jarvis-framework.toml` (`page_read = "auto"`).
+
+## Test it
+
+```
+python3 backend/test_tellme.py
+python3 backend/test_local_http.py
+```
+
+`test_tellme.py`'s `t_page_*` functions cover the floor/ceiling, the card
+text, a real look cycle (first look records the fingerprint, an unchanged
+fetch matches nothing, a changed one matches exactly once and only
+notifies), a private address refused before any card, and the same address
+refused again on a LATER look once the fake resolver's answer changes -
+proving the re-check is real, not only claimed.
+
+## Not checked, said plainly
+
+- **No "Add a watch" form in either app** - the same deliberate choice as
+  "tell me when" itself has always made: see `docs/JARVIS-API.md` §30.4.
+  Both apps already show a page watch in Coming up, generically, with no
+  code change (`titleOf`/`what_words` needed no new branch).
+- **Not tried against a real changedetection.io-style page**, or a page
+  behind a redirect chain longer than one hop.
+
+# Music and video control: `jarvis_media.py`, `media.patch` (2026-09-27)
+
+The owner's decision (`CLAUDE.md`, feasibility I91): "Music/video control
+on the PC: no card, only from the owner's own words." Read literally: no
+on/off setting either, unlike "Lights, plugs and fans without a card" -
+this is always available, from words alone. `docs/JARVIS-API.md` section
+45 has the routes and the reasoning for one code path, not two.
+
+## The real gap this closes
+
+Nothing in this backend could pause, skip or ask "what's playing" before
+this. Windows' own media session
+(`GlobalSystemMediaTransportControlsSessionManager`, reached through the
+`winrt-Windows.Media.Control` package) already knows whichever app Windows
+itself judges "current" - the same session the hardware media keys on a
+keyboard reach.
+
+## In plain words
+
+- **No model tool, so no card is possible, not merely absent.**
+  `jarvis_media.py` never imports `jarvis_gate` at all - there is no action
+  name to give a tier to, and `test_media.py` checks the source says so.
+  The AI model cannot start, stop or skip anything on its own initiative,
+  and outside text (a web page, an email) can never reach it either: there
+  is nothing in `jarvis_agent.py`'s tool loop for outside text to steer.
+- **One code path, not two.** `jarvis_quick.py`'s fast path ("pause the
+  music", "next song", "what's playing") answers from either app, without
+  the model, because a spoken command is already transcribed to text on
+  this PC before it reaches here (CLAUDE.md: "A client must not do
+  speech-to-text"). The desktop's `windows` crate could reach the same
+  Windows API directly in Rust, and its `Media_Control` feature was
+  checked - not enabled, since nothing would use it: a second,
+  Rust-native implementation would duplicate this module's logic for no
+  capability either app gains.
+- **Graceful without Windows, or without the package.** Every `winrt`
+  import is inside a function, never at module load, so importing
+  `jarvis_media.py` always succeeds; only calling `control()`/`now_playing()`
+  then says plainly why it could not reach Windows' media controls.
+- **A title is outside text.** "What's playing" marks the turn's `read`
+  with `media_now_playing` only when a real title or artist was said -
+  never when nothing is playing or the call failed - the same reasoning a
+  calendar title's outside text gets. Play/pause/next/previous never mark
+  anything: they reveal no title.
+- **`GET /api/media` and `POST /api/media/control`** exist for a possible
+  future "Now playing" button in either app; today nothing calls them but
+  the routes' own tests - the feature works fully without them, through
+  words alone.
+
+## What changed
+
+- `jarvis_media.py` - new module: `control`/`now_playing` (Deps-injectable,
+  so the real `winrt` calls are one replaceable field each), `Deps`,
+  `READ_MARK`, `install()` (the same wrapper shape as `jarvis_stop_all.py`).
+- `jarvis_quick.py` - "pause the music", "play the song", "resume the
+  video", "next song"/"skip this track"/"skip it", "previous track",
+  "what's playing"/"now playing"/"what song is this" (`_media`,
+  `_run_media`) - checked to never collide with the focus session's own
+  bare "pause"/"resume" while a session is running.
+- `backend/requirements.txt`, `backend/requirements.lock` -
+  `winrt-Windows.Media.Control` (MIT, Windows only; its lock entry pulls in
+  `winrt-runtime`, already MIT, nothing else new).
+
+## Test it
+
+```
+python3 backend/test_media.py
+```
+
+Every `winrt` call is injected (`Deps`); nothing here opens a real Windows
+media session. It proves: no `jarvis_gate` import at all; play/pause/next/
+previous each say a plain sentence on success and a plain reason (never a
+stack trace) on failure; "what's playing" marks outside text only when a
+title or artist was really said; the fast path matches the phrases above
+and leaves the focus session's bare "pause"/"resume" alone; the routes
+answer with no card, ever; `media.patch` applies to what the earlier
+patches wrote and reverses.
+
+## Not checked, said plainly
+
+- **Not run on Windows at all.** Every winrt call, and the real
+  `GlobalSystemMediaTransportControlsSessionManager` API shape it assumes,
+  comes from reading real-world open-source callers of the same PyPI
+  package (its own PyPI page's summary, and three GitHub projects' actual
+  source, read directly) - not from running it. If the real package's
+  method names differ from `try_play_async`/`try_pause_async`/
+  `try_skip_next_async`/`try_skip_previous_async`/
+  `try_get_media_properties_async`/`get_playback_info().playback_status`,
+  `control()`/`now_playing()` would need a small fix, caught the moment
+  anyone runs it on the owner's PC.
+- **No dedicated transport-control widget in either app.** A deliberate
+  choice for this round, not an oversight: see "In plain words" above.

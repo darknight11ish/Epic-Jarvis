@@ -58,8 +58,16 @@ WHAT IS IN IT - only what Jarvis can already read on this PC
     briefing that shows it says Home Assistant was read (`read`). Adds no
     card, no setting and nothing that speaks unasked: it is one more
     section of the same briefing.
-  * News: NOT AVAILABLE. No provider has been chosen, so the briefing says
-    so in a line of its own and fetches nothing from the internet.
+  * News headlines (I49, 2026-09-27), from RSS/Atom feed addresses the
+    owner adds in Settings ("News feeds", `jarvis_news.py`, one approval
+    card per address). Empty by default, so a briefing with none listed
+    still fetches nothing from the internet and says so in its last line,
+    exactly as before. When feeds ARE listed, jarvis_news.read_news() does
+    the one GET per feed (never a linked article), gated as `news_read`
+    at tier "auto"/"notify" like the other reads - a stricter tier leaves
+    the section out and says why, the same shape weather and email use.
+    Headlines are OUTSIDE TEXT (a feed can say anything): a briefing that
+    shows one says `news_read` was used, exactly as a calendar title does.
 
 WHERE IT SHOWS
 Both apps: a notification with only "Jarvis: your morning briefing is
@@ -150,14 +158,21 @@ TITLE = "Morning briefing"
 #: All a lock screen, a Windows toast or a phone notification ever shows.
 LOCK_SCREEN = "Jarvis: your morning briefing is ready."
 
-#: The last line of a briefing when the weather is NOT in it (both apps
-#: show this line from an older PC that sends no `outside_line`).
+#: The last line of a briefing when NEITHER the weather NOR news is in it
+#: (both apps show this line from an older PC that sends no `outside_line`
+#: at all - see briefing.js/Briefing.kt's own OUTSIDE_LINE, which they keep
+#: unchanged on purpose: it describes a PC from before news feeds existed).
 OUTSIDE_LINE = ("Weather and news: not available. The weather can come only from your own "
-                "Home Assistant, and no news provider has been chosen, so Jarvis fetches "
-                "nothing from the internet for this.")
-#: ... and when the weather IS in it (from the owner's own Home Assistant).
-NEWS_LINE = ("News: not available. No news provider has been chosen, so Jarvis fetches "
-             "nothing from the internet for this.")
+                "Home Assistant, and no news feeds are listed, so Jarvis fetches nothing "
+                "from the internet for this.")
+#: ... when the weather IS in it but news is not (2026-09-27, I49: news is
+#: now a real feature, so this only means "no feeds are listed yet", never
+#: "no provider exists").
+NEWS_LINE = ("News: not available. No news feeds are listed (Settings, News feeds), so "
+             "Jarvis fetches nothing from the internet for this.")
+#: ... the other way round: news IS in it but the weather is not.
+WEATHER_LINE = ("Weather: not available. It can come only from your own Home Assistant, "
+                "which is not set up for Jarvis on this PC.")
 
 #: The weather's line under "What it includes" (sources()), by state.
 WEATHER_ON = "Included: the weather, from your own Home Assistant ({entity})."
@@ -168,6 +183,20 @@ WEATHER_ASKS = ("Not included: the weather. Your settings ask for a yes each tim
 WEATHER_TITLE = "Weather"
 WEATHER_ACTION = "home_read"
 WEATHER_TOOL = "home_read"
+NEWS_TOOL = "news_read"
+#: Both included: nothing to disclose. Never blank (the apps' own fallback,
+#: OUTSIDE_LINE, would otherwise show and wrongly say "not available").
+BOTH_INCLUDED_LINE = "Weather and news are both included above."
+
+
+def _outside_line(weather_on: bool, news_on: bool) -> str:
+    if weather_on and news_on:
+        return BOTH_INCLUDED_LINE
+    if weather_on:
+        return NEWS_LINE
+    if news_on:
+        return WEATHER_LINE
+    return OUTSIDE_LINE
 
 EMPTY = "No briefing yet. Say \"brief me now\", or set one up to arrive each morning."
 
@@ -353,6 +382,9 @@ class Deps:
     email_search: Optional[Callable] = None       # jarvis_email.count's `search`
     email_senders: Optional[Callable] = None      # jarvis_email.senders's `fetch`
     home_fetch: Optional[Callable] = None         # jarvis_home.run's `fetch` (the weather)
+    #: None: the real jarvis_news.read_news() (I49, 2026-09-27). A test
+    #: injects a plain function so it never opens a real socket.
+    news_read: Optional[Callable[[], dict]] = None
     senders_on: Callable[[], bool] = lambda: senders_setting()["on"]
     publish: Callable[[str, dict], None] = _publish
     deadline: float = READ_DEADLINE
@@ -446,7 +478,29 @@ def sources(deps: Optional[Deps] = None) -> dict:
         "email": _email_source(one(EMAIL_TOOL, EMAIL_ACTION, "JARVIS_IMAP_HOST",
                                    "how many unread emails you have"), deps),
         "weather": _weather_source(deps, enabled),
+        "news": _news_source(deps),
     }
+
+
+def _news_source(deps: Deps) -> dict:
+    """The News line under "What it includes" (I49, 2026-09-27): "on" only
+    when at least one feed is listed (Settings, News feeds) and reading it
+    needs no person each time. No [tools].enabled check - news has no
+    model tool, only the briefing and "read me the news" ever read it."""
+    try:
+        import jarvis_news as NEWS
+        listed = NEWS.feeds()
+    except Exception:
+        return {"state": "off", "said": "Not included: no news feeds are listed."}
+    if not listed:
+        return {"state": "off", "said": "Not included: no news feeds are listed (Settings, "
+                                        "News feeds)."}
+    if deps.tier_of(NEWS_TOOL) not in ("auto", "notify"):
+        return {"state": "asks", "said": "Not included: your settings ask for a yes each "
+                                         "time Jarvis reads a news feed, and a briefing does "
+                                         "not raise a card for that."}
+    return {"state": "on", "said": f"Included: headlines from {len(listed)} feed"
+                                   f"{'s' if len(listed) != 1 else ''}."}
 
 
 def _weather_source(deps: Deps, enabled: set) -> dict:
@@ -847,6 +901,16 @@ def _approvals_section(deps: Deps) -> dict:
                     + " waiting for your yes or no. Open Jarvis to answer.")
 
 
+def _read_news(deps: Deps) -> dict:
+    """jarvis_news.read_news()'s section - already the same
+    {"key", "title", "state", "summary", "items"} shape _section() makes,
+    so it is used as-is (I49, 2026-09-27)."""
+    if deps.news_read is not None:
+        return deps.news_read()
+    import jarvis_news as NEWS
+    return NEWS.read_news()
+
+
 # --------------------------------------------------------------------------
 #   Putting it together
 # --------------------------------------------------------------------------
@@ -887,23 +951,29 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
         reads["email"] = _in_thread(_read_email, deps)
     if src["weather"]["state"] == "on":
         reads["weather"] = _in_thread(_read_weather, now, deps)
+    if src["news"]["state"] == "on":
+        reads["news"] = _in_thread(_read_news, deps)
     sections = []
     not_included = []
     if src["calendar"]["state"] != "on":
         not_included.append(src["calendar"]["said"])
     if src["email"]["state"] != "on" and src["email"]["state"] != "off":
         not_included.append(src["email"]["said"])
-    # Weather left out because it would need a person: said, like the
-    # calendar's. Not set up at all: the last line (OUTSIDE_LINE) says so.
+    # Weather and news left out because they would need a person: said,
+    # like the calendar's. Not set up at all: the last line
+    # (OUTSIDE_LINE/NEWS_LINE/WEATHER_LINE) says so.
     if src["weather"]["state"] == "asks":
         not_included.append(src["weather"]["said"])
+    if src["news"]["state"] == "asks":
+        not_included.append(src["news"]["said"])
     today = _today_section(sched, now)
     todo = _todo_section(sched, now)
     approvals = _approvals_section(deps)
     got = {}
     for key, (thread, box) in reads.items():
         thread.join(max(0.0, deps.deadline - (time.time() - started)))
-        title = {"calendar": "Calendar", "weather": WEATHER_TITLE}.get(key, "Email")
+        title = {"calendar": "Calendar", "weather": WEATHER_TITLE, "news": "News feeds"}.get(
+            key, "Email")
         if thread.is_alive():
             got[key] = _section(key, title, "slow", "Not read: it did not answer in time.")
         elif "out" in box:
@@ -918,6 +988,8 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
     sections.extend([today, todo, approvals])
     if "email" in got:
         sections.append(got["email"])
+    if "news" in got:
+        sections.append(got["news"])
     b = {
         "id": "b" + uuid.uuid4().hex[:10],
         "made": now,
@@ -941,10 +1013,15 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
         # The forecast is outside text too (the feasibility audit's I75
         # guardrail): Home Assistant says whatever its weather device says.
         + ([WEATHER_TOOL] if any(s["key"] == "weather" and s["state"] == "ok"
-                                 for s in sections) else []),
+                                 for s in sections) else [])
+        # A headline is outside text too (I49, 2026-09-27): a feed can say
+        # anything, exactly like a calendar title.
+        + ([NEWS_TOOL] if any(s["key"] == "news" and s["items"] for s in sections) else []),
         # The last line, from this PC (both apps show it; an older PC sends
-        # none and the apps show their own copy of OUTSIDE_LINE).
-        "outside_line": NEWS_LINE if src["weather"]["state"] == "on" else OUTSIDE_LINE,
+        # none and the apps show their own copy of OUTSIDE_LINE, unchanged,
+        # since it describes a PC from before news feeds existed).
+        "outside_line": _outside_line(src["weather"]["state"] == "on",
+                                      src["news"]["state"] == "on"),
         "lock_screen": LOCK_SCREEN,
     }
     b["text"] = render(b)

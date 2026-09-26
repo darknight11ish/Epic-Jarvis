@@ -199,7 +199,7 @@ object Briefing {
             )
         } ?: emptyList()
         val sources = (body["sources"] as? JsonObject)?.let { s ->
-            listOf("calendar", "email", "weather").mapNotNull { k -> (s[k] as? JsonObject)?.text("said") }
+            listOf("calendar", "email", "weather", "news").mapNotNull { k -> (s[k] as? JsonObject)?.text("said") }
         } ?: emptyList()
         return View(
             briefing = b?.let {

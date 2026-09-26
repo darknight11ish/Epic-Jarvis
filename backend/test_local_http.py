@@ -261,10 +261,79 @@ def t_no_call_site_goes_back_to_plain_urllib():
                   uses and not bad, f"plain calls: {bad}")
 
 
+# --------------------------------------------------------------------------
+# private_fetch_problem (I49/I67, 2026-09-27): the OPPOSITE question from
+# plain_http_problem above - "does this address the owner typed, meant to
+# be on the open internet, actually lead somewhere private?" - used by a
+# news feed and "tell me when this page changes" before every fetch.
+# --------------------------------------------------------------------------
+
+def _fake_resolver(answers: dict):
+    """Monkeypatches socket.getaddrinfo so a test never does a real DNS
+    lookup. `answers`: {host: [ip, ...]} or {host: OSError} for NXDOMAIN."""
+    import socket as _socket
+    original = _socket.getaddrinfo
+
+    def fake(host, *a, **kw):
+        ans = answers.get(host)
+        if ans is None:
+            raise OSError("no such host (fake resolver)")
+        if isinstance(ans, Exception):
+            raise ans
+        return [(_socket.AF_INET if "." in ip and ":" not in ip else _socket.AF_INET6,
+                _socket.SOCK_STREAM, 6, "", (ip, 0)) for ip in ans]
+
+    _socket.getaddrinfo = fake
+    return original
+
+
+def t_private_fetch_problem():
+    import socket as _socket
+    original = _socket.getaddrinfo
+    try:
+        check("a bare loopback address is refused",
+              LH.private_fetch_problem("http://127.0.0.1/feed") != "")
+        check("a home-network address is refused",
+              LH.private_fetch_problem("http://192.168.1.5/feed") != "")
+        check("a link-local address is refused",
+              LH.private_fetch_problem("http://169.254.1.1/feed") != "")
+        check("a public IPv4 literal is allowed",
+              LH.private_fetch_problem("http://93.184.216.34/feed") == "")
+        check("ftp:// is refused (not http/https)",
+              LH.private_fetch_problem("ftp://example.com/feed") != "")
+        check("no host at all is refused",
+              LH.private_fetch_problem("http:///feed") != "")
+        _fake_resolver({"feeds.example.com": ["93.184.216.34"]})
+        check("a public-looking NAME that resolves to a public address is allowed",
+              LH.private_fetch_problem("https://feeds.example.com/rss") == "")
+        _fake_resolver({"feeds.example.com": ["10.0.0.5"]})
+        check("the SAME name is refused once its DNS answer becomes private (SSRF/rebinding)",
+              LH.private_fetch_problem("https://feeds.example.com/rss") != "")
+        _fake_resolver({})
+        check("a name that will not resolve at all is refused, not silently allowed",
+              LH.private_fetch_problem("https://no-such-host.invalid/rss") != "")
+    finally:
+        _socket.getaddrinfo = original
+
+
+def t_private_fetch_problem_checks_every_resolved_address():
+    import socket as _socket
+    original = _socket.getaddrinfo
+    try:
+        # Multi-A-record: even one private address among several public
+        # ones is enough to refuse the whole address.
+        _fake_resolver({"mixed.example.com": ["93.184.216.34", "10.1.2.3"]})
+        check("one private address among several public ones is still refused",
+              LH.private_fetch_problem("https://mixed.example.com/rss") != "")
+    finally:
+        _socket.getaddrinfo = original
+
+
 if __name__ == "__main__":
     for fn in (t_the_trap_is_real, t_every_call_site_skips_the_proxy,
                t_the_redirect_refusal_survived, t_the_helper_itself,
-               t_no_call_site_goes_back_to_plain_urllib):
+               t_no_call_site_goes_back_to_plain_urllib,
+               t_private_fetch_problem, t_private_fetch_problem_checks_every_resolved_address):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

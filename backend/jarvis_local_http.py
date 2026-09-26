@@ -210,3 +210,108 @@ def plain_http_problem(url: str, env_name: str, secret: str) -> str:
             f"your home network (an address like 192.168.x.x or 10.x.x.x, or a name "
             f"ending in .local), Tailscale or NordVPN Meshnet. Use the https:// address "
             f"instead, or the machine's home-network, Tailscale or Meshnet address")
+
+
+# --------------------------------------------------------------------------
+# FETCHING AN ADDRESS THE OWNER TYPED, MEANT TO BE ON THE OPEN INTERNET
+# (a news feed - jarvis_news.py; "tell me when this page changes" -
+# jarvis_tellme.py's "page" source. Both 2026-09-27, CLAUDE.md: "News
+# headlines and 'tell me when this page changes': yes, the safe version -
+# one card per address the owner adds, read-only, never follows links
+# elsewhere, never acts on what it reads".)
+#
+# `plain_http_problem` above answers "is this one of the owner's OWN
+# networks?" for a password Jarvis sends TO a service the owner set up
+# (Home Assistant, the calendar). This answers the opposite question, for
+# an address the owner typed expecting it to be OUT on the internet: "does
+# this address actually lead to this PC or the home network?" A feed or a
+# page-to-watch is not a password, so plain http:// is not refused here -
+# what is refused is the address turning out to be somewhere it should
+# never have been able to reach at all.
+#
+# WHY THIS NEEDS A REAL DNS LOOKUP, NOT SPELLING
+# `_own_network` above judges "is this the owner's own network" by
+# spelling alone, on purpose (a password must never trigger a lookup that
+# could itself leak it). Here it is the other way round: the owner typed a
+# public-looking name, and what matters is what it REALLY resolves to right
+# now - a name gives no protection at all against pointing at
+# 127.0.0.1 or a 192.168.x.x address on the home network (a classic SSRF:
+# "newsfeed.example.com" answering 10.0.0.5 today, or an attacker-controlled
+# DNS record later). So `_resolved_addresses` below calls the real resolver.
+#
+# WHY THIS IS CALLED AGAIN ON EVERY FETCH, NOT ONLY WHEN THE ADDRESS IS ADDED
+# DNS is not a fact fixed at setup time (DNS rebinding): the same name can
+# answer with a public address when the owner's one approval card is shown,
+# then with a home-network address by the time a later look actually
+# fetches it. `jarvis_tellme.py` calls this again immediately before every
+# GET, not only when the watch is created.
+
+#: Ranges refused for an address meant to be on the open internet - the
+#: reverse of _OWN_NETS's job above: here _OWN_NETS's ranges (this PC, the
+#: home network, Tailscale, NordVPN Meshnet) are exactly what must be
+#: refused, plus link-local and "any address" ranges that _OWN_NETS leaves
+#: out (on purpose, for the opposite reason: a home router never hands out
+#: 169.254.x.x, so `plain_http_problem` need not treat it as "safely home").
+_PRIVATE_NETS = _OWN_NETS + (
+    ipaddress.ip_network("169.254.0.0/16"), ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("0.0.0.0/8"), ipaddress.ip_network("::/128"),
+)
+
+
+def _resolved_addresses(host: str) -> list:
+    """The real addresses `host` denotes RIGHT NOW: the literal address if
+    `host` already is one, else every address a live DNS lookup returns.
+    Never cached, and callers are expected to call this again before every
+    fetch - see "WHY THIS IS CALLED AGAIN" above. Empty when the name will
+    not resolve at all (the caller then has nothing to fetch either)."""
+    ip = _as_address(host)
+    if ip is not None:
+        return [ip]
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (OSError, UnicodeError):
+        return []
+    out = []
+    for info in infos:
+        try:
+            addr = info[4][0]
+            out.append(ipaddress.ip_address(addr.split("%", 1)[0]))
+        except (ValueError, IndexError, TypeError):
+            continue
+    return out
+
+
+def private_fetch_problem(url: str) -> str:
+    """"" when Jarvis may fetch `url` - an address the OWNER TYPED, meant to
+    be somewhere on the open internet - else the plain sentence why not.
+
+    Refused when the host is a bare address in a private, loopback or
+    link-local range, OR a name whose real DNS answer, looked up just now,
+    resolves to one of those: a news feed or "tell me when this page
+    changes" address must never become a way to make Jarvis's own PC, or
+    anything on its home network, fetch itself. Every address is checked,
+    never only the first. `http` and `https` only; anything else (a file
+    path, `ftp://`, a bare host with no scheme) is refused too, since this
+    is only ever called before a GET Jarvis itself makes.
+
+    Call this again immediately before every fetch, not only when the
+    address is first added - see the module docstring."""
+    url = str(url or "").strip()
+    try:
+        parts = urllib.parse.urlsplit(url)
+        scheme, host = parts.scheme.lower(), parts.hostname or ""
+    except ValueError:
+        return "That address could not be read."
+    if scheme not in ("http", "https"):
+        return "That address must start with http:// or https://."
+    if not host:
+        return "That address needs a host name."
+    addrs = _resolved_addresses(host)
+    if not addrs:
+        return f"{host} could not be looked up - there may be no such address."
+    for ip in addrs:
+        if any(ip in net for net in _PRIVATE_NETS if net.version == ip.version):
+            return (f"{host} leads to {ip}, which is this PC or a private network address, "
+                    f"not somewhere on the open internet. Refused, so a web address could "
+                    f"never be used to make Jarvis fetch something from its own network.")
+    return ""

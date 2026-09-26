@@ -67,7 +67,7 @@ from _where import REPO, require_shipped  # noqa: E402
 
 require_shipped("jarvis_briefing.py", "jarvis_backoff.py", "jarvis_schedule.py",
                 "jarvis_quick.py", "jarvis_email.py", "jarvis_calendar.py",
-                "jarvis_skill_discovery.py", "rebuilt/jarvis_sleep.py")
+                "jarvis_skill_discovery.py", "rebuilt/jarvis_sleep.py", "jarvis_news.py")
 
 if str(HERE / "rebuilt") not in sys.path:
     sys.path.append(str(HERE / "rebuilt"))
@@ -76,6 +76,7 @@ import jarvis_schedule as S  # noqa: E402
 import jarvis_briefing as B  # noqa: E402
 import jarvis_backoff as BO  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
+import jarvis_news as NW  # noqa: E402
 import _stack  # noqa: E402
 
 PASSED, FAILED = [], []
@@ -1103,6 +1104,99 @@ def t_the_weather_from_home_assistant():
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+
+
+def t_the_news_from_feeds():
+    """I49 (the owner's decision, 2026-09-27): news headlines from the
+    feeds the owner listed, read-only, no card, outside text."""
+    real_feeds = NW.feeds
+    try:
+        w = World(local(2026, 9, 26, 6, 0), name="news")
+        seen = []
+
+        def gate(action, detail, prompt):
+            seen.append((action, prompt))
+            return Verdict(True, "auto", "auto")
+
+        NW.feeds = lambda: []
+        check("no feeds listed: 'off', and the briefing says so",
+              B.sources(_DEPS())["news"]["state"] == "off")
+
+        NW.feeds = lambda: ["https://example.com/feed.xml"]
+        d = _DEPS(tier_of=lambda a: {"news_read": "auto"}.get(a, "ask"),
+                  news_read=lambda: {"key": "news", "title": "News feeds", "state": "ok",
+                                     "summary": "2 headlines.",
+                                     "items": ["Example: First headline",
+                                              "Example: Second headline"]},
+                  pending_count=lambda: 0, calendar_fetch=_unreachable,
+                  email_search=_unreachable, senders_on=lambda: False,
+                  publish=lambda k, dd: None, deadline=5.0)
+        src = B.sources(d)["news"]
+        check("news: 'Included', naming how many feeds",
+              src == {"state": "on", "said": "Included: headlines from 1 feed."})
+        b = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d)
+        news = next(s for s in b["sections"] if s["key"] == "news")
+        check("news: its own section, with the injected headlines",
+              news["items"] == ["Example: First headline", "Example: Second headline"])
+        check("news: the headlines are outside text - the briefing says news_read was used",
+              "news_read" in b["read"])
+        check("news: the last line says only weather is not available",
+              b["outside_line"] == B.WEATHER_LINE, b["outside_line"])
+        check("news: no card was raised", w.cards == [])
+
+        # Both weather AND news included: nothing left to disclose.
+        saved_home = os.environ.get("JARVIS_HOME_URL")
+        os.environ["JARVIS_HOME_URL"] = "http://192.168.1.20:8123"
+        try:
+            d2, _ = _weather_deps(fetch=lambda q: HA_STATE if q.method == "GET"
+                                  else ha_forecast("2026-09-26", "2026-09-27"))
+            d2.news_read = d.news_read
+            d2.tier_of = lambda a: {"home_read": "auto", "news_read": "auto"}.get(a, "ask")
+            b2 = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d2)
+            check("both weather and news included: the last line says so plainly, never blank",
+                  b2["outside_line"] == B.BOTH_INCLUDED_LINE and b2["outside_line"])
+        finally:
+            if saved_home is None:
+                os.environ.pop("JARVIS_HOME_URL", None)
+            else:
+                os.environ["JARVIS_HOME_URL"] = saved_home
+
+        # Neither: the original, unchanged line (an older PC's own copy still matches this).
+        d3 = _DEPS(tier_of=lambda a: "ask", pending_count=lambda: 0,
+                  calendar_fetch=_unreachable, email_search=_unreachable,
+                  home_fetch=_unreachable, senders_on=lambda: False,
+                  publish=lambda k, dd: None, deadline=5.0)
+        NW.feeds = lambda: []
+        b3 = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d3)
+        check("neither included: the original OUTSIDE_LINE, unchanged",
+              b3["outside_line"] == B.OUTSIDE_LINE)
+
+        # Tier "ask": left out, said why, and no feed is fetched.
+        NW.feeds = lambda: ["https://example.com/feed.xml"]
+        asked = []
+        d4 = _DEPS(tier_of=lambda a: "ask", news_read=lambda: asked.append(1) or {},
+                  pending_count=lambda: 0, calendar_fetch=_unreachable,
+                  email_search=_unreachable, home_fetch=_unreachable, senders_on=lambda: False,
+                  publish=lambda k, dd: None, deadline=5.0)
+        b4 = B.build(sched=w.s, now=local(2026, 9, 26, 7, 0), deps=d4)
+        check("news: settings that ask for a yes leave it out, say why, and read nothing",
+              not any(s["key"] == "news" for s in b4["sections"]) and not asked
+              and any("news feed" in n for n in b4["not_included"]))
+
+        # "Read me the news" - the same read, without the model.
+        NW.read_news = lambda deps=None: {"key": "news", "title": "News feeds", "state": "ok",
+                                         "summary": "1 headline.", "items": ["Example: Hi"]}
+        got = NW.sentence()
+        check("\"read me the news\": headlines said, and news_read marks outside text",
+              "Example: Hi" in got["said"] and got["read"] == [NW.GATE_ACTION])
+        check("the grammar: plain phrasings are answered without the model",
+              all(Q.match(t) is not None and Q.match(t).name == "news_read" for t in (
+                  "news", "the news", "read me the news", "what's in the news",
+                  "any news today")))
+    finally:
+        NW.feeds = real_feeds
+        import importlib
+        importlib.reload(NW)
 
 
 def t_the_routes():
