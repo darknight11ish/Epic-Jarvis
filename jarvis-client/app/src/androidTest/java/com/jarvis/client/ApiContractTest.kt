@@ -380,7 +380,17 @@ class ApiContractTest {
             val reply = chat.send("hi")
             if (!exp.isNull("error")) {
                 assertEquals(name, null, reply)
-                assertEquals(name, exp.getString("error"), chat.error.value)
+                // Since the plain-errors work (2026-09-25) the PC's sentence
+                // is shown in the shared plain words, chosen by its `code`
+                // (JARVIS-API "When an answer fails"), and kept behind
+                // Details - the same call ChatSession makes.
+                val said = exp.getString("error")
+                val code = Regex("\"code\"\\s*:\\s*\"([a-z_]+)\"").find(c.getString("body"))
+                    ?.groupValues?.get(1)
+                val plain = com.jarvis.client.net.PlainErrors.forInput(
+                    com.jarvis.client.net.PlainErrors.Input(code = code, said = said), said,
+                ).text
+                assertEquals(name, plain, chat.error.value)
                 assertEquals("$name: a failed turn is not kept", 0, chat.history.value.size)
                 continue
             }
