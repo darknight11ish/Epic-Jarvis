@@ -1031,7 +1031,7 @@ path ever appears in it (`routes.rs:67-101`).
 
 | Endpoint | Method | Desktop | Android | Notes |
 |---|---|---|---|---|
-| `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. The desktop falls back to `/api/status` for anything an older server leaves out. |
+| `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§26). `started` (2026-09-25) is when the server process started, in epoch seconds (§27). The desktop falls back to `/api/status` for anything an older server leaves out. |
 | `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Mind screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
 | `/api/graph` | GET | `routes.rs:15` | **no — by rule** | The memory graph stays off the phone. Gets its own longer timeout (`brain.rs:97`). |
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |
@@ -4693,3 +4693,88 @@ Phone: Mind, "How Jarvis talks". The same words in both, checked against
   Ollama without `run_local_turn`, so it gets no manner line - the same gap the
   spoken-style note has.
 - The big model's deep questions and the wiki builder do not use it.
+
+## 28. Stop everything (added 2026-09-25)
+
+The owner's decision of 2026-09-25 (CLAUDE.md, after the "Build Your Own
+Jarvis" prompt pack): one control that halts whatever Jarvis is doing, at
+once. Served by `backend/jarvis_stop_all.py`, which `backend/stop-all.patch`
+installs round the server's POST handler at start-up (the same shape as
+`owner-check.patch`).
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `POST /api/stop_all` | `{}` (ignored) | 200 `{"ok": true, "stopped": [sentence, ...], "problems": [sentence, ...], "message", "at"}`; 401 no or wrong token; 403 another website's page; 404 on a PC without `stop-all.patch` | Never a card. Never held on a stale event stream or by a waiting card - in the apps or on the PC - and the desktop's hotkey works while App lock is on (on the phone, the button is on Home, behind App lock like the rest of the app). `message` is "Stopped everything. " plus every `stopped` sentence, or "Nothing was running, so there was nothing to stop."; each `problems` sentence is added after. |
+
+**What one call does**, in this order:
+
+1. The task Stop (`/api/task/stop`, section 11): a running multi-step task
+   (computer, browser or phone control) stops before its next step, and a
+   paused one is forgotten. Named in plain words ("computer control").
+2. The chat answer being written uses no more tools. Every tool call it
+   asks for from then on is refused before the gate ("refused: the owner
+   pressed Stop everything ..."), and a call whose card is approved AFTER
+   the press does not run either. The answer says so once, in its own
+   words: "(Stopped: you pressed Stop everything, so Jarvis did not use
+   <tool> or anything else in this answer.)". A plan that began just after
+   the press reads "stop" at its first checkpoint. The next question is not
+   affected.
+3. Every stopper registered with `jarvis_stop_all.register(name, fn)` is
+   called in turn (focus sessions will register one). Each returns one
+   sentence, or nothing when it had nothing running; one that raises is
+   reported in `problems` and the rest still run.
+
+It never approves, denies or answers a card (a waiting card stays waiting),
+never resumes or starts anything, and never asks the gate anything. The
+audit log gets one line, `stop_all`, with counts only.
+
+**Speech is the apps' own.** The backend plays no sound, so each app stops
+its own speech first, before it even calls the route - a dead link never
+keeps Jarvis talking - and puts "Stopped speaking." before the PC's
+`message`:
+
+- **Desktop:** the global hotkey "Stop everything", **Alt+Shift+X** by
+  default, rebindable in Settings, Hotkeys (`hotkeys.rs`), and listed in the
+  quickbar's primer. It tells every window to stop speaking (the quickbar's
+  `stopSpeaking`, and the HUD window's browser speech), then calls the route
+  (`commands.rs` `stop_everything_now`) and shows the answer in a
+  notification titled "Stop everything". Why that key: `backend/README.md`,
+  "Stop everything".
+- **Phone:** a "Stop everything" button on Home, shown whenever Jarvis is
+  doing anything (the PC's activity is not idle, an answer is arriving, or
+  the phone is speaking). It stops the phone's speech, calls the route and
+  puts the answer in the shared notice (`net/StopEverything.kt`,
+  `JarvisRuntime.stopEverything`).
+
+A 404 in either app says "This PC's Jarvis cannot stop anything else yet -
+run apply-patches.ps1 on the PC (stop-all.patch)". Neither app hides the
+control when `capabilities.stop_all` is false: stopping its own speech is
+worth doing anyway, and a stop button must not depend on a handshake.
+
+`GET /api/version`'s `capabilities.stop_all` is true once the running server
+answers the route (asked of `jarvis_stop_all.armed()`, like `owner_check`).
+
+**What it cannot do**, said plainly: a step already under way finishes (a
+click being made, a command already running, one page loading) - the stop
+lands before the NEXT step. A timer or reminder still goes off later.
+Pressing it on one app does not stop the other app's speech.
+
+## 29. The live preflight (added 2026-09-25)
+
+`py -3 backend\selftest.py --preflight` asks the RUNNING Jarvis every
+question a live chain depends on and prints PASS / FAIL / WARN per check,
+ending "N pass, N fail, N warn" (`backend/README.md`, "The preflight"). It
+uses only routes above, read-only: `GET` `/api/status`, `/api/version`,
+`/api/pending` (with no token, to see it refused), `/api/reach`,
+`/api/schedule`, `/api/events`, `/api/voice/status`, `/api/search`; `POST`
+only `/api/chat` (one fixed question, as a temporary chat, and only when no
+tool is switched on unless `--with-chat`) and `/api/search/test` (only when
+web search is on and a provider is chosen). It never calls `/api/approve`,
+`/api/deny`, `/api/power`, a model route or `/api/stop_all`. It also asks a
+list of addresses that must never serve a file (the settings file, the
+databases, the token) and fails loudly if one does.
+
+`GET /api/version` now also carries `started` (epoch seconds: when the
+server process started), which the preflight compares with each shipped
+module's file time - a module changed after the start may not be the code
+the running server uses.

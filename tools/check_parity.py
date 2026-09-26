@@ -181,6 +181,7 @@ CLASSIFICATION = {
     "/api/task/pause": ("ported", ""),
     "/api/task/resume": ("ported", ""),
     "/api/task/stop": ("ported", ""),
+    "/api/stop_all": ("ported", "\"Stop everything\" (2026-09-25, backend/jarvis_stop_all.py). Desktop: the Alt+Shift+X hotkey (commands.rs stop_everything_now), which stops the desktop's speech first. Phone: Home's \"Stop everything\" button, shown while Jarvis is busy, which stops the phone's speech first. Neither is held on a stale link."),
     "/api/undo": ("ported", ""),
     "/api/undo/revert": ("ported", ""),
     "/api/version": ("ported", "The handshake. Both apps also list its capabilities by name: desktop Settings, \"What this backend supports\" (its own card, after About) (get_backend_capabilities); phone, \"This backend\"."),

@@ -88,6 +88,17 @@ pub const ACTIONS: &[Action] = &[
         default: "Alt+Shift+W",
         hint: "The desktop pane with the meters and the gates.",
     },
+    Action {
+        id: "stop_everything",
+        label: "Stop everything",
+        // With Jarvis's other Alt+Shift keys, and on no Windows shortcut:
+        // Windows has no Alt+Shift+letter of its own, and the Escape
+        // combinations are taken (Ctrl+Shift+Esc is Task Manager, Alt+Esc
+        // switches windows). Word's "mark index entry" is the one program
+        // shortcut it shadows. backend/README.md, "Stop everything".
+        default: "Alt+Shift+X",
+        hint: "Stops Jarvis talking and anything it is doing on the screen or the phone, at once. Asks nothing first; approves nothing.",
+    },
 ];
 
 fn action(id: &str) -> Option<&'static Action> {
@@ -408,6 +419,28 @@ mod tests {
             .collect();
         set.insert("quick_note".into(), "alt+space".into());
         assert!(validate(&set).is_err());
+    }
+
+    #[test]
+    fn stop_everything_ships_on_a_key_of_its_own() {
+        let spec = action("stop_everything").expect("the Stop everything hotkey exists");
+        assert_eq!(spec.default, "Alt+Shift+X");
+        let ours = parse(spec.default).expect("parses");
+        // Windows' own combinations: a stop key that opened Task Manager or
+        // switched windows instead would fail at the one moment it matters.
+        for reserved in [
+            "Ctrl+Shift+Escape",
+            "Alt+Escape",
+            "Alt+Tab",
+            "Alt+Shift+Tab",
+            "Alt+F4",
+            "Super+L",
+            "Super+D",
+        ] {
+            if let Ok(theirs) = Shortcut::from_str(reserved) {
+                assert_ne!(ours, theirs, "Stop everything collides with {reserved}");
+            }
+        }
     }
 
     #[test]

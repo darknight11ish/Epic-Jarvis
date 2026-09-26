@@ -3939,6 +3939,14 @@ listen("focus-input", () => {
   refreshHealth();
 });
 
+// "Stop everything" (the hotkey, Alt+Shift+X by default): silence first,
+// before the PC is even asked - commands.rs `stop_everything_now` sends this
+// and then calls POST /api/stop_all itself, and says in a notification what
+// was stopped. The answer on screen stays as far as it got.
+listen("stop-everything", () => {
+  stopSpeaking();
+});
+
 listen("clipboard-inject", (event) => {
   const text = String(event.payload || "");
   if (!text.trim()) return;

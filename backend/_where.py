@@ -143,6 +143,8 @@ SHIPPED = (
     "jarvis_email_send.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
+    # Stop everything (stop-all.patch)
+    "jarvis_stop_all.py",
 )
 
 

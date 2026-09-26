@@ -401,6 +401,33 @@ class JarvisApi(
 
     suspend fun stopTask(): ApiResult<Unit> = postJson("/api/task/stop", "{}")
 
+    /**
+     * "Stop everything" - `backend/jarvis_stop_all.py`. The PC's answer is
+     * `{"ok", "stopped": [sentences], "problems", "message"}`; see
+     * [StopEverything]. Never a card, never gated on a stale link.
+     */
+    suspend fun stopEverything(): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/stop_all") ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = "{}".toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when {
+                        resp.isSuccessful -> ApiResult.Ok(obj ?: JsonObject(emptyMap()))
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 -> ApiResult.Failed(ApiError.NotFound)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
     suspend fun injectTaskNote(note: String): ApiResult<Unit> =
         postJson("/api/task/note", """{"note":${quote(note)}}""")
 

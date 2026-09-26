@@ -2579,6 +2579,27 @@ object JarvisRuntime {
 
     suspend fun stopTask(): ApiResult<Unit> = runTaskAction { api.stopTask() }
 
+    /**
+     * "Stop everything" (the owner's decision of 2026-09-25; the desktop's
+     * Alt+Shift+X calls the same route). The phone's own speech stops first,
+     * before the PC is asked, so a dead link never keeps Jarvis talking; then
+     * `POST /api/stop_all`, and the notice says what the PC stopped, in its
+     * own words - see [com.jarvis.client.net.StopEverything].
+     *
+     * **Never gated on [decisionBlocker] or a stale link**, like Stop and
+     * Pause: stopping only ever makes Jarvis do less. It approves nothing and
+     * starts nothing, and neither does the route.
+     */
+    suspend fun stopEverything(): ApiResult<JsonObject> {
+        if (::voice.isInitialized) voice.stopSpeaking()
+        val result = api.stopEverything()
+        _notice.value = when (result) {
+            is ApiResult.Ok -> com.jarvis.client.net.StopEverything.describe(result.value, null)
+            is ApiResult.Failed -> com.jarvis.client.net.StopEverything.describe(null, result.error)
+        }
+        return result
+    }
+
     suspend fun injectTaskNote(note: String): ApiResult<Unit> =
         runTaskAction { api.injectTaskNote(note) }
 

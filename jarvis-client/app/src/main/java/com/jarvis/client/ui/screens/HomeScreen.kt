@@ -459,6 +459,12 @@ data class HomeActions(
     val onStopTask: suspend () -> Unit = {},
     val onInjectTaskNote: suspend (note: String) -> Unit = {},
     /**
+     * "Stop everything" - [com.jarvis.client.JarvisRuntime.stopEverything]:
+     * the phone's speech, then the PC's `POST /api/stop_all`. Never held on
+     * a stale link.
+     */
+    val onStopEverything: suspend () -> Unit = {},
+    /**
      * The owner finished changing the split - a drag let go, a screen-reader
      * "Bigger face" / "Smaller face", or a double-tap back to the default.
      * Called once per change, never per frame, with the new fraction. The
@@ -935,6 +941,15 @@ private fun ConversationList(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // "Stop everything" (the owner's decision of 2026-09-25; the
+        // desktop's Alt+Shift+X). Shown whenever Jarvis is doing anything -
+        // on the PC, or talking on this phone - and never held on a stale
+        // link: see JarvisRuntime.stopEverything.
+        val busy = (state.activity != Activity.IDLE && state.activity != Activity.ERROR) ||
+            state.streaming || state.voicePhase == VoiceSession.Phase.SPEAKING
+        if (busy) {
+            item(key = "stop-everything") { StopEverythingPlate(actions) }
+        }
         // AUTONOMY-PROPOSALS.md §3d. Shown only while the server itself
         // reports a task running or paused - never while merely thinking
         // about a chat reply, which WORKING is also used for elsewhere;
@@ -1647,6 +1662,44 @@ private fun LaneChip(status: StatusInfo?) {
  * matching feature, and its own comment documents having gotten wrong on
  * the first pass.
  */
+/**
+ * "Stop everything" - one button, the same route and the same words as the
+ * desktop's hotkey (`POST /api/stop_all`, `backend/jarvis_stop_all.py`).
+ * What it stopped is reported in the shared notice, in the PC's own words
+ * ([com.jarvis.client.net.StopEverything]); this plate never claims it.
+ */
+@Composable
+private fun StopEverythingPlate(actions: HomeActions) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    Plate {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                com.jarvis.client.net.StopEverything.HINT,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Quiet(
+                com.jarvis.client.net.StopEverything.LABEL,
+                color = chrome.badInk,
+                enabled = !busy,
+                onClick = {
+                    if (!busy) {
+                        busy = true
+                        scope.launch {
+                            actions.onStopEverything()
+                            busy = false
+                        }
+                    }
+                },
+            )
+        }
+    }
+}
+
 @Composable
 private fun TaskControlsPlate(paused: Boolean, actions: HomeActions) {
     val chrome = LocalChrome.current

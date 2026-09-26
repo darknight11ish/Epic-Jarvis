@@ -2005,6 +2005,9 @@ class MainActivity : FragmentActivity() {
                                 onPauseTask = { JarvisRuntime.pauseTask() },
                                 onResumeTask = { JarvisRuntime.resumeTask() },
                                 onStopTask = { JarvisRuntime.stopTask() },
+                                // The desktop's Alt+Shift+X, as a button:
+                                // this phone's speech, then POST /api/stop_all.
+                                onStopEverything = { JarvisRuntime.stopEverything() },
                                 onInjectTaskNote = { note -> JarvisRuntime.injectTaskNote(note) },
                                 // Saved only when the owner's own drag (or a
                                 // screen reader's Bigger/Smaller) finishes - never

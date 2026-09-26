@@ -421,6 +421,8 @@ export const HOTKEYS = [
     accelerator: "Alt+Shift+N", default: "Alt+Shift+N", registered: true, error: null },
   { id: "toggle_widget", label: "Show or hide the widget", hint: "The desktop pane with the meters and the gates.",
     accelerator: "Alt+Shift+W", default: "Alt+Shift+W", registered: true, error: null },
+  { id: "stop_everything", label: "Stop everything", hint: "Stops Jarvis talking and anything it is doing on the screen or the phone, at once. Asks nothing first; approves nothing.",
+    accelerator: "Alt+Shift+X", default: "Alt+Shift+X", registered: true, error: null },
 ];
 
 export const UPDATE_NONE = {

@@ -4,8 +4,9 @@
 //! defines the running application:
 //!
 //! * plugin registration — global shortcut, clipboard manager, notifications;
-//! * the four global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`,
-//!   `Alt+Shift+N`);
+//! * the global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`,
+//!   `Alt+Shift+N`, `Alt+Shift+W`, and "Stop everything" on `Alt+Shift+X`;
+//!   all rebindable, [`hotkeys`]);
 //! * the notification-area tray icon ([`tray::create_tray`]);
 //! * window vibrancy and focus-loss auto-hide ([`windows::setup_windows`]).
 //!
@@ -186,6 +187,10 @@ pub mod events {
     /// the server's 512-event ring: everything on screen is suspect and must be
     /// re-read rather than patched up.
     pub const JARVIS_RESYNC: &str = "jarvis-resync";
+    /// Payload: none. "Stop everything" (the hotkey): every window that
+    /// speaks stops its speech now, before the backend is even asked. See
+    /// [`crate::commands::stop_everything_now`].
+    pub const STOP_EVERYTHING: &str = "stop-everything";
 }
 
 /// Cancellation handle for the one chat stream the spotlight may have running.
@@ -922,6 +927,10 @@ pub fn run() {
                                 eprintln!("[jarvis] widget toggle failed: {err}");
                             }
                         }
+                        // Never held: not by a stale link, not by App lock,
+                        // not by a waiting card. Stopping only makes Jarvis
+                        // do less (backend/jarvis_stop_all.py).
+                        "stop_everything" => commands::stop_everything_now(app),
                         other => eprintln!("[jarvis] no handler for hotkey action `{other}`"),
                     }
                 })
