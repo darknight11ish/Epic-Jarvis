@@ -559,6 +559,14 @@ def t_the_patch():
           and '"/api/asks_first/tier"' in patch and '"/api/asks_first/lights"' in patch)
 
 
+def t_both_apps_read_the_current_contract():
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_asks_first_cases.py"),
+                        "--check"], capture_output=True, text=True, timeout=120,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    check("asks-first-cases.json (desktop and phone) is what the backend says today "
+          "(python3 tools/gen_asks_first_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
