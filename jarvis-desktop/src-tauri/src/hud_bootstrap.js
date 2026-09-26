@@ -563,10 +563,11 @@
   // later copy of the page that brings them back still cannot send one:
   // every memory write from this page is refused here, stale link or not.
   // Reads (/api/memory/pending, /status, /facts) pass untouched. The
-  // "Always keep in mind" route (/api/memory/profile) is refused whole -
-  // its POST pins a fact, and this page never reads the list.
+  // "Always keep in mind" route (/api/memory/profile) and "Between us"
+  // (/api/memory/shared) are refused whole - their POST pins or tags a
+  // fact, and this page never reads either list.
   var MEMORY_WRITE =
-    /\/api\/memory\/(decide|keep_both|forget|erase|edit|learning|sleep_time|profile)(\?|$)/;
+    /\/api\/memory\/(decide|keep_both|forget|erase|edit|learning|sleep_time|profile|shared)(\?|$)/;
   var APPROVAL = /^\/api\/(approve|deny)(\?|$)/;
 
   function jsonReply(status, body) {

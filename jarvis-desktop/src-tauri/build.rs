@@ -90,6 +90,11 @@ fn main() {
             // facts, and pin or unpin ONE fact. Brain only.
             "brain_memory_profile",
             "brain_memory_pin",
+            // "Between us" (JARVIS-API.md section 44, the owner's decision,
+            // 2026-09-27): the shared-joke facts, and tag or untag ONE fact.
+            // Brain only.
+            "brain_memory_shared",
+            "brain_memory_share",
             // "Used in this answer" / "Jarvis remembered N things" (the
             // owner's decision, 2026-09-25): the words of a few facts, by id.
             // A read. The quickbar and the Brain.
@@ -225,6 +230,9 @@ fn main() {
             // way (it changes wording only). Settings window only.
             "get_manner",
             "set_manner",
+            // Humour, the same screen's second switch (the owner's decision,
+            // 2026-09-27): off to start, no card either way.
+            "set_humor",
             // The quickbar's error fix buttons ("Check the connection
             // settings", "Choose a model"): open Settings or the Brain,
             // nothing else (plain_errors.rs).

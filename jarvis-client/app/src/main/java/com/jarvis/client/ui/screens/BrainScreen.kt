@@ -503,6 +503,18 @@ fun BrainScreen(
                     onShowPrivate = onShowPrivate,
                 )
             }
+            // "Between us" (the owner's decision, 2026-09-27): shared jokes
+            // and nicknames, tagged from the list above, each with "Not
+            // between us" and Forget (SharedPlate.kt). Right after "Always
+            // keep in mind", the other fact label with its own section.
+            item(key = "memory-shared") {
+                BetweenUsSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
             // Chat history on the PC: its own screen (HistoryScreen.kt), next
             // to Memory, as the desktop puts it in the Brain window.
             if (onOpenHistory != null) {

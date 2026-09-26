@@ -42,9 +42,11 @@ import {
   usedLine,
 } from "./memory-used.js";
 import {
+  ERASE_ALSO_CHAT_CONFIRM,
   ERASE_LABEL,
   ERASE_TITLE,
   ERASED,
+  ERASED_AND_CHAT_DELETED,
   erasedLine,
   eraseQuestion,
   FORGOTTEN,
@@ -216,16 +218,21 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     b.title = stale ? STALE_TITLE : b.dataset.title;
   }
 
-  async function write(button, command, f, question, done) {
+  async function write(button, command, f, question, done, args) {
     if (isStale() || !confirm(question(f))) return;
+    await sendWrite(button, command, { id: Number(f.id), ...args }, done);
+  }
+
+  async function sendWrite(button, command, args, done) {
     button.dataset.busy = "true";
     syncButton(button);
     try {
-      const out = await invoke(command, { id: Number(f.id) });
+      const out = await invoke(command, args);
       if (out && out.ok === false) throw new Error(out.error || out.reason || "Refused.");
-      announce(done);
+      const said = typeof done === "function" ? done(out) : done;
+      announce(said);
       await load();
-      a.notice = done;
+      a.notice = said;
       paintList();
     } catch (error) {
       button.dataset.busy = "false";
@@ -233,6 +240,18 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
       a.error = errorText(error);
       paintList();
     }
+  }
+
+  /** "Erase the words", with "Also delete the chat it came from" (the
+   *  owner's decision, 2026-09-27) asked as a second yes/no right after
+   *  the main confirm - `window.confirm` has no room for a checkbox.
+   *  Cancelling the second one still erases the fact. */
+  async function writeErase(button, f) {
+    if (isStale() || !confirm(eraseQuestion(f))) return;
+    const alsoChat = window.confirm(ERASE_ALSO_CHAT_CONFIRM);
+    await sendWrite(button, "brain_memory_erase",
+      { id: Number(f.id), also_delete_conversation: alsoChat },
+      (out) => (out && out.chat_deleted ? ERASED_AND_CHAT_DELETED : ERASED));
   }
 
   function row(f) {
@@ -262,8 +281,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
         (b) => write(b, "brain_memory_forget", f, forgetQuestion, FORGOTTEN), true));
     }
     if (acts.erase) {
-      buttons.append(actionButton(ERASE_LABEL, ERASE_TITLE,
-        (b) => write(b, "brain_memory_erase", f, eraseQuestion, ERASED), true));
+      buttons.append(actionButton(ERASE_LABEL, ERASE_TITLE, (b) => writeErase(b, f), true));
     }
     if (buttons.childNodes.length) item.append(buttons);
     return item;

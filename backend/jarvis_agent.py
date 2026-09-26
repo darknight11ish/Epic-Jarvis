@@ -191,6 +191,12 @@ def _run_memory_search(args: dict) -> dict:
         hits = jarvis_past.recall(st, query, k)
     except ImportError:
         hits = st.search(query, k=k)
+    # "Between us" (the owner's decision, 2026-09-27): a shared-joke fact is
+    # not offered to a Plain-manner turn - never through this tool either.
+    try:
+        hits = jarvis_memory.without_shared_in_plain(hits, _manner_now())
+    except Exception:
+        pass
     return {"ok": True, "facts": [{"id": h.get("id"), "text": h.get("text")} for h in hits]}
 
 
@@ -3933,12 +3939,15 @@ def with_spoken_note(msgs: list) -> list:
 # relay - the one path to a cloud model - never sees it.
 
 
-def _manner_now() -> Optional[str]:
+def _manner_now(conversation_id: Optional[str] = None) -> Optional[str]:
     """The owner's manner setting, or None on a backend without
-    jarvis_manner.py (then nothing is added, as before)."""
+    jarvis_manner.py (then nothing is added, as before). `conversation_id`:
+    a temporary chat's own "from now on ..." override, if it has one
+    (jarvis_manner.set_temporary, the owner's decision of 2026-09-27), wins
+    over the PC's saved setting."""
     try:
         import jarvis_manner
-        return jarvis_manner.current()
+        return jarvis_manner.current(conversation_id)
     except Exception:
         return None
 
@@ -4207,10 +4216,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     recorder = record_chain if record_chain is not None else _record_chain
     steps: list = []
     watch = _TurnWatch(messages, request)
-    # The owner's manner (jarvis_manner.py): "auto" reads the setting; None
-    # adds no line (a backend without the module, or a caller that says so).
+    # The owner's manner (jarvis_manner.py): "auto" reads the setting, or a
+    # temporary chat's own "from now on ..." override for its own
+    # conversation_id (2026-09-27); None adds no line (a backend without the
+    # module, or a caller that says so).
     if manner == "auto":
-        manner = _manner_now()
+        manner = _manner_now(request.get("conversation_id") if isinstance(request, dict) else None)
     checker = gate_check or _gate_check
     streamer = open_stream or (lambda url, payload: _open_stream(url, payload))
     closer = abort or (lambda up: getattr(up, "close", lambda: None)())

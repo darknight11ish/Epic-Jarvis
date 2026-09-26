@@ -46,7 +46,8 @@ import java.util.Locale
 object MemoryErase {
     const val PATH = "/api/memory/erase"
 
-    fun body(id: Long): String = "{\"id\":$id}"
+    fun body(id: Long, alsoDeleteConversation: Boolean = false): String =
+        "{\"id\":$id,\"also_delete_conversation\":$alsoDeleteConversation}"
 
     /** The button, next to Forget. */
     const val LABEL = "Erase the words"
@@ -58,8 +59,20 @@ object MemoryErase {
         "Erase the words of this fact from your PC for good? Jarvis keeps only the date it " +
             "was saved, so its history shows something was erased here. This cannot be undone."
 
+    /**
+     * The checkbox on the erase confirm (the owner's decision, 2026-09-27):
+     * "Also delete the chat it came from" - off by default. Unlike the
+     * desktop, which asks this as a second `window.confirm` (there is no
+     * checkbox in one), the phone's confirm is a real Compose dialog, so it
+     * is a real checkbox here (AutoLearnPlate.kt).
+     */
+    const val ALSO_CHAT_LABEL = "Also delete the chat it came from"
+
     /** Said after it went through. The desktop says the same. */
     const val ERASED = "Erased."
+
+    /** Said after an erase that also deleted the chat it came from. */
+    const val ERASED_AND_CHAT_DELETED = "Erased, and the chat it came from is deleted too."
 
     /** A 404 that said "no such fact": nothing left to erase. */
     const val ALREADY_GONE = "Jarvis had no such fact any more."
@@ -84,7 +97,7 @@ object MemoryErase {
             reply.code in 200..299 -> if (b?.flag("ok") == false) {
                 false to ("Not erased. " + (error ?: "Your PC said no, without a reason."))
             } else {
-                true to ERASED
+                true to (if (b?.flag("chat_deleted") == true) ERASED_AND_CHAT_DELETED else ERASED)
             }
             reply.code == 404 && b?.text("reason") == "no_such_fact" -> true to ALREADY_GONE
             reply.code == 404 || reply.code == 501 -> false to TOO_OLD

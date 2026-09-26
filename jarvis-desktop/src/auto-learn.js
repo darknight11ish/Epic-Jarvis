@@ -212,8 +212,25 @@ export function eraseQuestion(f) {
   return `${ERASE_CONFIRM}\n\n${f.text}`;
 }
 
+/**
+ * "Also delete the chat it came from" (the owner's decision, 2026-09-27):
+ * a second, separate yes/no asked right after the main erase confirm above
+ * - there is no checkbox in a native `window.confirm`, so the option is a
+ * second "are you sure?" of its own. The phone asks the same question as a
+ * real checkbox instead (`MemoryErase.ALSO_CHAT_LABEL`) - a real dialog can
+ * hold one - so the words differ, but the choice and its effect are the
+ * same. Answering "Cancel" here still erases the fact's words; it only
+ * skips deleting the chat too.
+ */
+export const ERASE_ALSO_CHAT_CONFIRM =
+  "Also delete the chat this fact came from? That whole conversation will be deleted " +
+  "from History too, on this PC. This cannot be undone either.";
+
 /** Said after an erase went through. */
 export const ERASED = "Erased.";
+
+/** Said after an erase that also deleted the chat it came from. */
+export const ERASED_AND_CHAT_DELETED = "Erased, and the chat it came from is deleted too.";
 
 /**
  * An erased fact's `erased_at` (unix seconds, a column of every fact row),

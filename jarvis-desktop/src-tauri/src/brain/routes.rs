@@ -125,6 +125,9 @@ mod tests {
             // "Always keep in mind": its POST pins a fact. Read through its
             // own command (brain/profile.rs), never through this list.
             "/api/memory/profile",
+            // "Between us": its POST tags a fact. Read through its own
+            // command (brain/shared.rs), never through this list.
+            "/api/memory/shared",
         ];
         for (section, path) in READ_ROUTES {
             assert!(

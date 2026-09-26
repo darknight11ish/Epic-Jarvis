@@ -41,7 +41,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import REPO, require_shipped  # noqa: E402
 
-require_shipped("rebuilt/jarvis_memory.py")
+require_shipped("rebuilt/jarvis_memory.py", "jarvis_chat_log.py")
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-erase-"))
 try:
@@ -49,6 +49,7 @@ try:
 except ImportError:
     sys.path.append(str(REPO / "backend" / "rebuilt"))
     import jarvis_memory as M
+import jarvis_chat_log as CH  # noqa: E402 - "Also delete the chat it came from"
 
 PASSED, FAILED = [], []
 
@@ -227,6 +228,113 @@ def t_erase_twice_and_unknown():
           and st.get(fid)["text"] == M.ERASED_TEXT, second)
     check("and leaves the word index sound", fts_ok(st) is True, fts_ok(st))
     check("no such fact: None", st.erase(987654) is None)
+
+
+# ---------------------------------------------------- "also delete the chat"
+
+def fresh_chat_log() -> CH.ChatLog:
+    """A real, temporary chat history, swapped in as jarvis_chat_log's own
+    default (`CH.use`) - the same object `jarvis_memory._chat_log.delete()`
+    reaches, so `also_delete_conversation` has a real conversation to find
+    and a real one to leave alone."""
+    CH._reset_for_tests()
+    d = _TMP / f"chat-{len(list(_TMP.glob('chat-*')))}"
+    d.mkdir(parents=True, exist_ok=True)
+    log = CH.ChatLog(d / "chat-history.db", d / "chat-history.json", lambda: bytes(range(32)))
+    CH.use(log)
+    return log
+
+
+def record(log, cid, text="hello"):
+    log.record_turn(
+        {"messages": [{"role": "user", "content": text, "provenance": "typed"}],
+         "conversation_id": cid, "device": "phone"},
+        turn={"finish_reason": "stop", "client_gone": False, "rounds": 1,
+              "answer": "Noted.", "tools_ran": []})
+
+
+def t_erase_also_deletes_the_chat_it_came_from():
+    log = fresh_chat_log()
+    st = fresh("chat-delete")
+    filler(st, 3)
+    record(log, "conv-7f3a")   # add_secret()'s meta names this conversation_id
+    check("sanity: the conversation is there before erasing", log.get("conv-7f3a") is not None)
+    fid = add_secret(st)
+    out = st.erase(fid, also_delete_conversation=True)
+    check("chat_deleted is true, and the reply never carries the words",
+          out["chat_deleted"] is True and SECRET not in json.dumps(out), out)
+    check("the conversation is gone from history too", log.get("conv-7f3a") is None)
+
+
+def t_erase_leaves_the_chat_when_not_asked():
+    log = fresh_chat_log()
+    st = fresh("chat-keep")
+    fid = add_secret(st)
+    record(log, "conv-7f3a")
+    out = st.erase(fid)   # also_delete_conversation defaults to False
+    check("chat_deleted is false by default", out["chat_deleted"] is False, out)
+    check("the conversation is untouched", log.get("conv-7f3a") is not None)
+
+
+def t_erase_also_delete_with_no_conversation_on_record():
+    fresh_chat_log()
+    st = fresh("chat-none")
+    fid = st.add("filler fact with no conversation_id in its meta at all")
+    out = st.erase(fid, also_delete_conversation=True)
+    check("nothing to delete: chat_deleted is false, and nothing raises",
+          out["chat_deleted"] is False, out)
+
+
+def t_erase_also_delete_with_no_chat_log_available():
+    st = fresh("chat-unavailable")
+    fid = add_secret(st)
+    real = M._chat_log
+    M._chat_log = None   # standalone, as when jarvis_chat_log.py cannot be imported
+    try:
+        out = st.erase(fid, also_delete_conversation=True)
+    finally:
+        M._chat_log = real
+    check("no chat log module: chat_deleted is false, and nothing raises",
+          out["chat_deleted"] is False, out)
+
+
+def t_erase_also_delete_scopes_to_the_named_fact_only():
+    """"Also delete the chat it came from" (the owner's decision, 2026-09-27):
+    only THIS fact's own conversation - never the earlier wordings `earlier`
+    erases alongside it, which may have been said in a different chat."""
+    log = fresh_chat_log()
+    st = fresh("chat-chain")
+    record(log, "conv-old-wording")
+    record(log, "conv-new-wording")
+    a = st.add("Owner's bank PIN is Quibblewort4821", source="conversation",
+               meta={"conversation_id": "conv-old-wording"})
+    b = st.add("Owner's bank PIN is Snorkelvane4822", source="edited", supersedes=a,
+               meta={"conversation_id": "conv-new-wording"})
+    out = st.erase(b, also_delete_conversation=True)
+    check("erasing the newest wording still erases the earlier one too",
+          out["earlier"] == [a], out)
+    check("only the newest wording's own conversation is deleted",
+          out["chat_deleted"] is True and log.get("conv-new-wording") is None
+          and log.get("conv-old-wording") is not None)
+
+
+def t_erase_route_takes_the_also_delete_flag():
+    log = fresh_chat_log()
+    text, block = _route_block()
+    if block is None:
+        return
+    st = fresh("chat-route")
+    record(log, "conv-7f3a")
+    fid = add_secret(st)
+    code, body = _call(block, b'{"id": %d, "also_delete_conversation": true}' % fid)
+    check("the route accepts the flag and reports what it did",
+          code == 200 and body["ok"] is True and body["chat_deleted"] is True, (code, body))
+    check("the note says the chat was also deleted", "chat" in body["note"].lower(), body["note"])
+    check("the conversation is really gone", log.get("conv-7f3a") is None)
+    fid2 = add_secret(st)
+    code, body = _call(block, b'{"id": %d, "also_delete_conversation": "yes"}' % fid2)
+    check("a non-boolean flag is refused: 400, nothing erased",
+          code == 400 and st.get(fid2)["text"] == WORDS, (code, body))
 
 
 def t_the_vector_goes():

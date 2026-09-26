@@ -660,6 +660,18 @@
             <div id="mn-choices"></div>
           </fieldset>
           <p class="note" id="mn-spoken"></p>
+          <!-- Humour (the owner's decision, 2026-09-27): a second, independent
+               switch on this same screen - off to start. Same route, no card
+               either way; never on cards, errors or serious topics (wording
+               only, jarvis_manner.py's own HUMOR_NOTE). -->
+          <h3 class="subhead" id="mn-humor-title">Humour</h3>
+          <label class="toggle">
+            <input id="mn-humor" type="checkbox" data-live="true" />
+            <span>
+              Occasional light humour in answers
+              <span class="toggle-detail" id="mn-humor-detail"></span>
+            </span>
+          </label>
           <div class="row">
             <span class="status" id="mn-status" role="status"></span>
           </div>

@@ -22,9 +22,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
+  ERASE_ALSO_CHAT_CONFIRM,
   ERASE_CONFIRM,
   ERASE_LABEL,
   ERASED,
+  ERASED_AND_CHAT_DELETED,
   erasedAt,
   erasedLine,
   eraseQuestion,
@@ -96,25 +98,44 @@ await check("Saved automatically: Erase the words sits beside Forget on every ro
   assert.deepEqual(labels, [["Forget", ERASE_LABEL], ["Forget", ERASE_LABEL]]);
 });
 
-await check("it asks first; a no sends nothing; a yes sends one erase for that id and says Erased.", async () => {
+await check("it asks first; a no sends nothing; a yes offers to also delete the chat and says so", async () => {
   const page = await memoryTab({ auto: { facts: LIST } });
-  let asked = "";
-  page.once("dialog", (d) => { asked = d.message(); d.dismiss(); });
+  const asked = [];
+  page.on("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
   await page.locator("#memory-auto-list .row-item").first().getByRole("button", { name: ERASE_LABEL }).click();
   await page.waitForTimeout(200);
   const afterNo = await page.evaluate(() => window.__memoryWrites);
-  page.once("dialog", (d) => d.accept());
+  page.removeAllListeners("dialog");
+  assert.deepEqual(asked, [eraseQuestion({ text: "Is building Jarvis, a local assistant." })],
+    "dismissing the first confirm must never show the second (also delete the chat)");
+  assert.deepEqual(afterNo, [], "dismissing the confirm sent nothing");
+
+  const askedYes = [];
+  page.on("dialog", (d) => { askedYes.push(d.message()); d.accept(); }); // both: erase, and also the chat
   await page.locator("#memory-auto-list .row-item").first().getByRole("button", { name: ERASE_LABEL }).click();
   await page.waitForTimeout(400);
   const afterYes = await page.evaluate(() => window.__memoryWrites);
   const left = await page.locator("#memory-auto-list .row-item").allInnerTexts();
   const toast = await page.locator("#toast").innerText();
   await page.close();
-  assert.equal(asked, eraseQuestion({ text: "Is building Jarvis, a local assistant." }));
-  assert.deepEqual(afterNo, [], "dismissing the confirm still erased");
-  assert.deepEqual(afterYes, [{ cmd: "brain_memory_erase", id: 12 }]);
+  assert.deepEqual(askedYes, [eraseQuestion({ text: "Is building Jarvis, a local assistant." }),
+    ERASE_ALSO_CHAT_CONFIRM]);
+  assert.deepEqual(afterYes, [{ cmd: "brain_memory_erase", id: 12, also_delete_conversation: true }]);
   assert.equal(left.length, 1, "the erased fact stayed in Saved automatically");
   assert.match(left[0], /Prefers tea/);
+  assert.equal(toast, ERASED_AND_CHAT_DELETED, "the toast says the chat was also deleted");
+});
+
+await check("declining 'also delete the chat' still erases the words, and says only Erased.", async () => {
+  const page = await memoryTab({ auto: { facts: LIST } });
+  let n = 0;
+  page.on("dialog", (d) => { n += 1; if (n === 1) d.accept(); else d.dismiss(); });
+  await page.locator("#memory-auto-list .row-item").first().getByRole("button", { name: ERASE_LABEL }).click();
+  await page.waitForTimeout(400);
+  const sent = await page.evaluate(() => window.__memoryWrites);
+  const toast = await page.locator("#toast").innerText();
+  await page.close();
+  assert.deepEqual(sent, [{ cmd: "brain_memory_erase", id: 12, also_delete_conversation: false }]);
   assert.equal(toast, ERASED);
 });
 
@@ -124,7 +145,7 @@ await check("What Jarvis knows: a current fact has Forget and Erase; a forgotten
   const retired = page.locator("#memory-facts .row-item").nth(2);
   const tag = await retired.locator(".row-tag").innerText();
   const retiredButtons = await retired.locator("button").allInnerTexts();
-  page.once("dialog", (d) => d.accept());
+  page.on("dialog", (d) => d.accept());
   await retired.getByRole("button", { name: ERASE_LABEL }).click();
   await page.waitForTimeout(400);
   const sent = await page.evaluate(() => window.__memoryWrites);
@@ -132,7 +153,7 @@ await check("What Jarvis knows: a current fact has Forget and Erase; a forgotten
   assert.deepEqual(current, ["Reword", "Forget", ERASE_LABEL]);
   assert.equal(tag.trim().toLowerCase(), "retired");
   assert.deepEqual(retiredButtons, [ERASE_LABEL], "a forgotten fact cannot have its words erased");
-  assert.deepEqual(sent, [{ cmd: "brain_memory_erase", id: 4 }]);
+  assert.deepEqual(sent, [{ cmd: "brain_memory_erase", id: 4, also_delete_conversation: true }]);
 });
 
 await check("an erased fact shows 'Erased on <date>' - no words, no marker, nothing to press", async () => {
@@ -166,10 +187,13 @@ await check("CONTROL: brain_memory_erase is held on a stale link, sends one id, 
   const rs = read("src-tauri/src/brain.rs");
   const f = rs.slice(rs.indexOf("pub async fn brain_memory_erase("));
   const body = f.slice(0, f.indexOf("\n}\n"));
-  assert.match(body, /\(app: AppHandle, id: i64\)/, "the command takes more than one id");
+  assert.match(body, /app: AppHandle,\s*\n\s*id: i64,\s*\n\s*also_delete_conversation: Option<bool>,/,
+    "the command takes an id and the also-delete-conversation flag, and nothing else");
   assert.ok(body.indexOf("require_link_live") >= 0
     && body.indexOf("require_link_live") < body.indexOf("post("), "Erase is not held on a stale link");
-  assert.match(body, /"\/api\/memory\/erase", serde_json::json!\(\{ "id": id \}\)/);
+  assert.match(body, /let mut body = serde_json::json!\(\{ "id": id \}\);/);
+  assert.match(body, /body\["also_delete_conversation"\] = serde_json::json!\(also\);/);
+  assert.match(body, /"\/api\/memory\/erase", body\)/);
   assert.match(read("src-tauri/build.rs"), /"brain_memory_erase"/);
   assert.match(read("src-tauri/src/lib.rs"), /brain::brain_memory_erase,/);
   const sets = read("src-tauri/permissions/surfaces.toml").split("[[set]]").slice(1);

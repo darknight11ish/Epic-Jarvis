@@ -1635,6 +1635,19 @@ object JarvisRuntime {
         return com.jarvis.client.net.Manner.replyLine(api.mannerPost(body), manner)
     }
 
+    /**
+     * Humour, on or off (the owner's decision, 2026-09-27): "a switch in
+     * 'How Jarvis talks', off to start." No approval card either way, but
+     * held on a stale link like [setManner] and every other change sent to
+     * the PC ([actionBlocker], rule 4). The SAME `/api/manner` route, so
+     * setting this never resets the manner choice.
+     */
+    suspend fun setHumor(on: Boolean): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.Manner.humorBody(on)
+        return com.jarvis.client.net.Manner.humorReplyLine(api.mannerPost(body), on)
+    }
+
     /** Re-reads `/api/deep`. Starts nothing on the PC. */
     suspend fun refreshDeep() {
         _deep.value = BigModel.deepReadOf(api.deep())
@@ -3213,12 +3226,17 @@ object JarvisRuntime {
      * PC for good, its dates kept. Held on a stale link (rule 4), exactly
      * like [forgetAutoFact] and the desktop's `brain_memory_erase`: there is
      * no undo at all, and the list it acts on was read over a link that
-     * cannot be confirmed live. @return whether the words are gone now (so
-     * the row leaves the list), and the sentence to show.
+     * cannot be confirmed live.
+     *
+     * `alsoDeleteConversation` (2026-09-27): "Also delete the chat it came
+     * from" - the confirm's own checkbox, off by default.
+     *
+     * @return whether the words are gone now (so the row leaves the list),
+     * and the sentence to show.
      */
-    suspend fun eraseAutoFact(id: Long): Pair<Boolean, String> {
+    suspend fun eraseAutoFact(id: Long, alsoDeleteConversation: Boolean = false): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
-        return when (val r = api.eraseFact(id)) {
+        return when (val r = api.eraseFact(id, alsoDeleteConversation)) {
             is ApiResult.Ok -> com.jarvis.client.net.MemoryErase.said(r.value).also { (gone, _) ->
                 // An erased fact leaves "Always keep in mind" too.
                 if (gone) _profileTick.update { it + 1 }
@@ -3646,6 +3664,57 @@ object JarvisRuntime {
         return when (val r = api.pinFact(id, pinned)) {
             is ApiResult.Ok -> com.jarvis.client.net.MemoryProfile.said(r.value, pinned).also {
                 _profileTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+    }
+
+    // ------------------------------------------------------- "Between us" ----
+    // The owner's decision of 2026-09-27 - see
+    // [com.jarvis.client.net.MemoryShared] and ui/screens/SharedPlate.kt.
+
+    private val _sharedTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one whenever the list may have changed from this phone - a
+     * tag, an untag or a Forget - so Brain's "Between us" reads itself
+     * again. There is no event for it (Forget sends none either): the
+     * desktop's change shows on the next read, Refresh.
+     */
+    val sharedTick: StateFlow<Int> = _sharedTick.asStateFlow()
+
+    private val _sharedIds = MutableStateFlow<Set<Long>?>(null)
+
+    /**
+     * The ids on the list at the last read, or null before one (or on a PC
+     * without the list) - what "Saved automatically" reads to say "Between
+     * us" or "Not between us". Ids only: the words stay on the PC and in
+     * the section drawing them.
+     */
+    val sharedIds: StateFlow<Set<Long>?> = _sharedIds.asStateFlow()
+
+    /** `GET /api/memory/shared`. A read: never held. Notes the ids ([sharedIds]). */
+    suspend fun memoryShared(): ApiResult<JsonObject> {
+        val r = api.memoryShared()
+        _sharedIds.value = when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryShared.parse(r.value)?.ids
+            is ApiResult.Failed -> if (com.jarvis.client.net.MemoryShared.missing(r.error)) null else _sharedIds.value
+        }
+        return r
+    }
+
+    /**
+     * Tags (`shared = true`) or untags ONE fact "Between us". No card and
+     * no confirm - the owner's own tap on a fact they can see - but held
+     * on a stale link (rule 4), exactly like [pinFact] and the desktop's
+     * `brain_memory_share`. @return whether the list changed as asked, and
+     * the sentence to show.
+     */
+    suspend fun setShared(id: Long, shared: Boolean): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.setShared(id, shared)) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryShared.said(r.value, shared).also {
+                _sharedTick.update { n -> n + 1 }
             }
             is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
         }

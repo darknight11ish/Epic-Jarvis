@@ -45,6 +45,19 @@ object Manner {
     )
     const val MISSING = "Your PC's Jarvis does not have this setting yet - run apply-patches.ps1 on the PC."
 
+    // Humour (the owner's decision, 2026-09-27): "a switch in 'How Jarvis
+    // talks', off to start; never on cards, errors or serious topics." A
+    // second, independent switch beside manner, on the SAME `/api/manner`
+    // route, so setting one never resets the other.
+    const val HUMOR_TITLE = "Humour"
+    const val HUMOR_DETAIL =
+        "Off by default. Never as part of an approval, an error message, or a serious or " +
+            "sensitive topic."
+    val HUMOR_SAID: Map<Boolean, String> = mapOf(
+        true to "Jarvis may now use a little humour, when it fits.",
+        false to "Jarvis will not use humour.",
+    )
+
     data class Choice(val id: String, val label: String, val why: String)
 
     data class View(
@@ -53,6 +66,9 @@ object Manner {
         val detail: String,
         val spoken: String,
         val choices: List<Choice>,
+        val humor: Boolean = false,
+        val humorTitle: String = HUMOR_TITLE,
+        val humorDetail: String = HUMOR_DETAIL,
     )
 
     private fun JsonObject.text(key: String): String? =
@@ -73,6 +89,9 @@ object Manner {
             detail = body.text("detail") ?: DETAIL,
             spoken = body.text("spoken") ?: SPOKEN,
             choices = choices,
+            humor = (body["humor"] as? JsonPrimitive)?.booleanOrNull ?: false,
+            humorTitle = body.text("humor_title") ?: HUMOR_TITLE,
+            humorDetail = body.text("humor_detail") ?: HUMOR_DETAIL,
         )
     }
 
@@ -85,9 +104,20 @@ object Manner {
     fun body(manner: String): String? =
         if (manner in MANNERS) JsonObject(mapOf("manner" to JsonPrimitive(manner))).toString() else null
 
+    /** Humour on or off, at once, no card either way - the SAME route
+     * ([body]'s), so setting one never resets the other. */
+    fun humorBody(on: Boolean): String = JsonObject(mapOf("humor" to JsonPrimitive(on))).toString()
+
     /** What to say after a change: the PC's sentence, or the plain words of the failure. */
     fun replyLine(result: ApiResult<JsonObject>, manner: String): String = when (result) {
         is ApiResult.Ok -> result.value.text("said") ?: result.value.text("error") ?: SAID[manner].orEmpty()
+        is ApiResult.Failed ->
+            if (missing(result.error)) MISSING else PlainErrors.forApiError(result.error).text
+    }
+
+    /** What to say after changing humour: the same shape as [replyLine]. */
+    fun humorReplyLine(result: ApiResult<JsonObject>, on: Boolean): String = when (result) {
+        is ApiResult.Ok -> result.value.text("said") ?: result.value.text("error") ?: HUMOR_SAID[on].orEmpty()
         is ApiResult.Failed ->
             if (missing(result.error)) MISSING else PlainErrors.forApiError(result.error).text
     }

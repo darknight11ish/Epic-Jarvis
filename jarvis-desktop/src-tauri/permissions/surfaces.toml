@@ -411,10 +411,12 @@ permissions = [
   "allow-backup-now",
   "allow-preview-restore",
   "allow-restore-backup",
-  # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain.
-  # Wording only; no card either way; held on a stale link in Rust.
+  # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain, and
+  # the Humour switch beside it (the owner's decision, 2026-09-27). Wording
+  # only; no card either way; held on a stale link in Rust.
   "allow-get-manner",
   "allow-set-manner",
+  "allow-set-humor",
   # "Voice": what the PC says about listening to the owner - whether each
   # microphone's voice print is trained, which voice check is installed, the
   # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:
@@ -539,7 +541,7 @@ permissions = ["allow-brain-remove-skill", "allow-brain-model"]
 # every other item here.
 [[set]]
 identifier = "brain-memory"
-description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off, and pin or unpin a fact on \"Always keep in mind\". One fact per decision; there is no bulk form."
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off, pin or unpin a fact on \"Always keep in mind\", and tag or untag a fact for \"Between us\". One fact per decision; there is no bulk form."
 permissions = [
   "allow-brain-memory-decide",
   "allow-brain-memory-forget",
@@ -577,6 +579,13 @@ permissions = [
   # tap, like Forget), held while the event stream is stale.
   "allow-brain-memory-profile",
   "allow-brain-memory-pin",
+  # "Between us" (brain/shared.rs; the owner's decision, 2026-09-27): the
+  # shared-joke facts - a read, held back like the other memory lists while
+  # "Windows Hello for memory lists and chat history" hides them - and tag
+  # or untag ONE fact per call. No approval card (the owner's own tap, like
+  # Pin), held while the event stream is stale.
+  "allow-brain-memory-shared",
+  "allow-brain-memory-share",
 ]
 
 # Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).

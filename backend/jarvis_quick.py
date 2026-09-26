@@ -74,6 +74,14 @@ can say", 2026-09-27, feasibility I116) is here too: "what can you do?",
 from jarvis_sayable.py's own fixed list - the same one both apps show in
 place of the Jarvis bar's old shortcut rows. No model, no state read.
 
+"FROM NOW ON ..." (jarvis_manner.py, 2026-09-27) is here too: "from now on,
+be more plain", "from now on be warmer" and close phrasings change the
+manner setting at once - no card either way, like a tap in Settings - and
+say "Done: ... . You can undo this in Settings." A temporary chat's change
+stays in that chat only, in memory, never in manner.json. A tail that does
+not map to the one real dial (warm/plain) says so plainly rather than
+pretending to change something that does not exist yet.
+
 "TELL ME WHEN ..." (jarvis_tellme.py, 2026-09-25) is here too: "tell me
 when an email from Alex arrives", "let me know when the washing machine
 finishes", "urgently tell me when the front door opens", "tell me every
@@ -769,6 +777,11 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- web search: which one, and switching (jarvis_search.py) -----------------
     got = _web_search(s)
+    if got is not None:
+        return got
+
+    # --- "from now on ..." (jarvis_manner.py, 2026-09-27) -----------------------
+    got = _from_now_on(s)
     if got is not None:
         return got
 
@@ -1548,6 +1561,53 @@ def _web_search(s: str) -> Optional[Intent]:
     return None
 
 
+# --- "from now on ..." (the owner's decision, 2026-09-27) -------------------
+#
+# "Jarvis changes a style dial immediately, replying 'Done: shorter answers
+# from now on. You can undo this in Brain.'" (docs/CUTTING-EDGE-2026-09-26-
+# round4-growth.md section 4). Scope, as CLAUDE.md narrows it: the MECHANISM
+# only - detect the phrase, apply a change at once, offer Undo - wired to the
+# one real dial this backend has today (jarvis_manner.py: warm and brief, or
+# plain), not the growth doc's bigger multi-dial system (its section 1),
+# which is not built. A tail that does not map to that one dial says so
+# honestly, rather than pretending to change something that is not there.
+#
+# Only ever reached from the owner's own live words (newest_own_words(),
+# above, already refuses a system message, a shared/clipboard turn, and a
+# picture) - never from an email, a web page, a note or a game. A temporary
+# chat's change stays in that chat only (jarvis_manner.set_temporary): it is
+# never written to manner.json, because a temporary chat makes no memory.
+_FROM_NOW_ON = re.compile(r"from\s+now\s+on,?\s+(?:please\s+)?(.+)")
+
+#: The only tails that map to a REAL dial today. Anything "from now on ..."
+#: outside these two is recognised as the phrase, but not acted on - see
+#: _run_from_now_on's honest reply.
+_TO_PLAIN = re.compile(
+    r"(?:be|stay|answer|talk|keep\s+it)\s+(?:more\s+)?(?:plain(?:er|ly)?|formal(?:er|ly)?|"
+    r"businesslike|neutral(?:ly)?|direct(?:er|ly)?)"
+    r"|(?:be|stop\s+being)\s+less\s+(?:warm|chatty|friendly|gushy)"
+    r"|cut\s+the\s+small\s+talk|no\s+more\s+small\s+talk|less\s+small\s+talk")
+_TO_WARM = re.compile(
+    r"(?:be|stay|answer|talk|keep\s+it)\s+(?:more\s+)?(?:warm(?:er|ly)?|friendl(?:y|ier|ily)|"
+    r"nicer|chattier|less\s+formal(?:ly)?)"
+    r"|(?:be|stop\s+being)\s+less\s+(?:plain(?:ly)?|formal(?:ly)?|cold|robotic)")
+
+
+def _from_now_on(s: str) -> Optional[Intent]:
+    """"From now on, be more plain" / "... be warmer" and close phrasings -
+    the mechanism, wired to jarvis_manner.py's one real dial. Whole
+    sentences only, like the rest of this grammar."""
+    m = _FROM_NOW_ON.fullmatch(s)
+    if not m:
+        return None
+    tail = m.group(1)
+    if _TO_PLAIN.fullmatch(tail):
+        return Intent("manner_from_now_on", {"manner": "plain"})
+    if _TO_WARM.fullmatch(tail):
+        return Intent("manner_from_now_on", {"manner": "warm"})
+    return Intent("manner_from_now_on", {"manner": None})
+
+
 SEARCH_MISSING = ("Your PC's Jarvis does not have web search yet - run apply-patches.ps1 "
                   "on the PC.")
 
@@ -1681,6 +1741,57 @@ def _run_search(intent: Intent) -> Result:
     return Result(WS.use(which), n)
 
 
+#: "From now on ..." for a tail that does not map to a real dial (only
+#: warm/plain exist today) - said plainly rather than pretended.
+FROM_NOW_ON_UNMAPPED = (
+    "Jarvis can only change between warm-and-brief and plain right now, not that. Try "
+    "\"from now on, be more plain\" or \"from now on, be warmer.\"")
+
+#: Said when a temporary chat asks for a change but this request carries no
+#: usable conversation id to keep it in - so there is no chat to keep it in.
+FROM_NOW_ON_NO_CONVERSATION = (
+    "Jarvis could not tell which chat this is, so it cannot change that for just this one. "
+    "Try again in a moment.")
+
+
+def _from_now_on_said(manner: str, temporary: bool) -> str:
+    said = "plainer answers" if manner == "plain" else "warmer, friendlier answers"
+    if temporary:
+        return f"Done: {said} for this chat. Say it again, or start a new chat, to change back."
+    return f"Done: {said} from now on. You can undo this in Settings."
+
+
+def _run_from_now_on(f: dict, conversation: Optional[str], temporary: bool) -> Result:
+    """"From now on, be more plain" / "... be warmer" (the owner's decision,
+    2026-09-27): applies at once, no card either way - jarvis_manner.py
+    already raises none for a manner change. A temporary chat's change is
+    kept in memory, for that conversation only (jarvis_manner.set_temporary);
+    an ordinary chat's is saved as the PC's setting
+    (jarvis_manner.handle_set), exactly as a tap in Settings would."""
+    n = "manner_from_now_on"
+    manner = f.get("manner")
+    if manner is None:
+        return Result(FROM_NOW_ON_UNMAPPED, n)
+    try:
+        import jarvis_manner
+    except Exception:
+        return Result("Your PC's Jarvis does not have manners yet - run apply-patches.ps1 "
+                      "on the PC.", n)
+    before = jarvis_manner.current(conversation if temporary else None)
+    if before == manner:
+        word = "plainly" if manner == "plain" else "warmly and briefly"
+        return Result(f"Jarvis already answers {word}.", n)
+    if temporary:
+        if not conversation:
+            return Result(FROM_NOW_ON_NO_CONVERSATION, n)
+        jarvis_manner.set_temporary(conversation, manner)
+    else:
+        code, out = jarvis_manner.handle_set({"manner": manner})
+        if code != 200 or not out.get("ok"):
+            return Result("Jarvis could not change that setting just now.", n)
+    return Result(_from_now_on_said(manner, temporary), n)
+
+
 def is_command(text) -> bool:
     """Does this sentence fit the grammar? For jarvis_intake.owner_turns:
     a command to set a timer or a reminder is not a fact to learn. Reads no
@@ -1749,13 +1860,16 @@ def _pick_timer(timers: list, f: dict):
 
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
-        seen: Optional[float] = None) -> Optional[Result]:
+        seen: Optional[float] = None, temporary: bool = False) -> Optional[Result]:
     """Do it. None hands the sentence to the model after all.
     `conversation`: the request's conversation_id ("cancel that" works only
     within one). `seen`: when the owner last talked to Jarvis before this
-    turn ("what did I miss?")."""
+    turn ("what did I miss?"). `temporary`: a temporary chat, for "from now
+    on ..." (2026-09-27)."""
     import jarvis_schedule as S
     n, f = intent.name, intent.f
+    if n == "manner_from_now_on":
+        return _run_from_now_on(f, conversation, temporary)
     if n == "bulk":
         return Result("Jarvis does not clear everything at once. Delete them one at a time, "
                       "here or under Coming up.", n)
@@ -2330,10 +2444,12 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
 
 
 def answer(text, *, sched=None, now: Optional[float] = None,
-           conversation: Optional[str] = None, seen: Optional[float] = None) -> Optional[Result]:
+           conversation: Optional[str] = None, seen: Optional[float] = None,
+           temporary: bool = False) -> Optional[Result]:
     """Match and act. None: not ours - ask the model. `conversation`: the
     request's conversation_id, so "cancel that" takes back only what was set
-    in it; `seen`: when the owner last talked to Jarvis before this turn."""
+    in it; `seen`: when the owner last talked to Jarvis before this turn;
+    `temporary`: a temporary chat (2026-09-27's "from now on ...")."""
     now = time.time() if now is None else now
     intent = match(text, now)
     if intent is None:
@@ -2341,7 +2457,7 @@ def answer(text, *, sched=None, now: Optional[float] = None,
     if sched is None:
         import jarvis_schedule
         sched = jarvis_schedule.get()
-    res = run(intent, sched, now, conversation=conversation, seen=seen)
+    res = run(intent, sched, now, conversation=conversation, seen=seen, temporary=temporary)
     if res is not None:
         try:
             sched.mark_command(text)
@@ -2487,16 +2603,30 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None) -> Optional[Re
     since the one before), whoever's words it carries."""
     seen = _touch(now) if isinstance(body, dict) and body.get("messages") else None
     conversation = conversation_of(body)
+    # "temporary": true (temporary-chat.patch) - the same one-line check
+    # jarvis_hud.py's own _temporary_chat(body) makes; needed here for
+    # "from now on ..." (2026-09-27), which keeps a temporary chat's style
+    # change in that chat only, never written to manner.json.
+    temporary = isinstance(body, dict) and body.get("temporary") is True
     text = newest_own_words(body)
     res = None if text is None else answer(text, sched=sched, now=now,
-                                           conversation=conversation, seen=seen)
+                                           conversation=conversation, seen=seen,
+                                           temporary=temporary)
     if res is None and conversation:
         # The model answers this turn: "cancel that" after it is about the
         # model's answer, never about a reminder set before it.
         _forget_set(sched, conversation)
     if res is not None:
-        # Wording only (jarvis_manner.py): the same facts, the owner's manner.
-        res.reply = in_manner(res.reply)
+        # Wording only (jarvis_manner.py): the same facts, the owner's
+        # manner - this conversation's own "from now on ..." override when
+        # it is a temporary chat that has one, else the PC's saved setting.
+        manner = None
+        try:
+            import jarvis_manner
+            manner = jarvis_manner.current(conversation if temporary else None)
+        except Exception:
+            pass
+        res.reply = in_manner(res.reply, manner)
     return res
 
 

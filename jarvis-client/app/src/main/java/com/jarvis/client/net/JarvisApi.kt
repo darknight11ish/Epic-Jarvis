@@ -614,17 +614,20 @@ class JarvisApi(
     /**
      * `POST /api/memory/erase`: "Erase the words" of ONE fact - its words
      * wiped from the PC for good, its dates kept (the owner's decision,
-     * 2026-09-24). The status and body come back whole ([MemoryErase.Reply]):
+     * 2026-09-24). `alsoDeleteConversation` (2026-09-27): "Also delete the
+     * chat it came from" - off unless the owner checks the box. The status
+     * and body come back whole ([MemoryErase.Reply]):
      * a 404 that says "no such fact" and a 404 from a PC without the route
      * must read differently, and [postForJob] would make both [ApiError.NotFound].
      * [MemoryErase.said] reads it.
      */
-    suspend fun eraseFact(id: Long): ApiResult<MemoryErase.Reply> =
+    suspend fun eraseFact(id: Long, alsoDeleteConversation: Boolean = false): ApiResult<MemoryErase.Reply> =
         withContext(Dispatchers.IO) {
             val target = url(MemoryErase.PATH) ?: return@withContext ApiResult.Failed(
                 noAddress(),
             )
-            val body = MemoryErase.body(id).toRequestBody("application/json".toMediaType())
+            val body = MemoryErase.body(id, alsoDeleteConversation)
+                .toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
                 shortCall.newCall(req).execute().use { resp ->
@@ -647,6 +650,13 @@ class JarvisApi(
      * ([MemoryProfile.missing]).
      */
     suspend fun memoryProfile(): ApiResult<JsonObject> = probe(MemoryProfile.PATH)
+
+    /**
+     * `GET /api/memory/shared`: "Between us" - the facts the owner tagged
+     * as a shared joke or nickname ([MemoryShared.parse]). A 404 or 501 is
+     * a PC without the list ([MemoryShared.missing]).
+     */
+    suspend fun memoryShared(): ApiResult<JsonObject> = probe(MemoryShared.PATH)
 
     /**
      * `GET /api/schedule`: "Coming up" - the timers, alarms, reminders and
@@ -779,6 +789,34 @@ class JarvisApi(
                         ApiResult.Failed(ApiError.BadToken)
                     } else {
                         ApiResult.Ok(MemoryProfile.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `POST /api/memory/shared`: tag or untag ONE fact "Between us" (the
+     * owner's decision, 2026-09-27). The status and body come back whole
+     * ([MemoryShared.Reply]), like [pinFact]: a 404 that says "no such
+     * fact" and a 404 from a PC without the route must read differently, and
+     * a 409 carries the PC's own sentence. [MemoryShared.said] reads it.
+     */
+    suspend fun setShared(id: Long, shared: Boolean): ApiResult<MemoryShared.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(MemoryShared.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = MemoryShared.body(id, shared).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(MemoryShared.Reply(resp.code, obj))
                     }
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }

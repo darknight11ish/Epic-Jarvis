@@ -37,7 +37,7 @@ import jarvis_mcp as M  # noqa: E402
 import test_mcp as T  # noqa: E402  (its fixtures: the fake server, Gate, pins)
 from test_agent import NoRealIO, scripted_stream  # noqa: E402
 
-AG._manner_now = lambda: None
+AG._manner_now = lambda *a, **k: None
 FAILED, PASSED = [], []
 TMP = tempfile.mkdtemp(prefix="mcp-wiring-")
 
