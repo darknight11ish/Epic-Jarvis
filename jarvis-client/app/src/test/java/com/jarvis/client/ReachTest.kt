@@ -66,9 +66,15 @@ class ReachTest {
             Reach.lines(web, all),
         )
         assertEquals("Web search - On", Reach.heading(web))
+        // Sending email is a real row since 2026-09-25: on once reading is
+        // set up, and it always asks.
         val send = all.rows.first { it.id == "email_send" }
-        assertFalse(send.on)
-        assertEquals(listOf(send.line), Reach.lines(send, all))
+        assertTrue(send.on)
+        assertEquals("Yes, every time", send.asks)
+        assertEquals(
+            listOf("Goes to: ${send.where}", "Asks you first: ${send.asks}", send.line),
+            Reach.lines(send, all),
+        )
         val blocked = view("blocked_and_no_key").rows.first { it.id == "email_read" }
         assertEquals("blocked", blocked.state)
         assertFalse(blocked.on)
