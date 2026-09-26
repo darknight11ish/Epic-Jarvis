@@ -682,6 +682,29 @@ Phone: "Temporary chat" above Home's chat box, "End" to leave it
 the voice loop's questions go temporary too. The HUD page (the backend's own
 `jarvis_hud.html`) has no temporary chat.
 
+**Games and role-play run in a temporary chat automatically** (the owner's
+decision, 2026-09-27; `backend/games-temporary.patch`,
+`jarvis_intake.game_or_roleplay`). Neither app sends `"temporary": true` for
+this - it is not a setting and raises no card, the same way "From now on,
+..." applies at once (CLAUDE.md). The backend itself notices: once the
+owner's own words, anywhere in the conversation, ask to play a game or
+start a role-play ("let's play a game", "let's roleplay", "pretend you
+are ...", a text adventure, a D&D-style campaign, "be my dungeon master"),
+`_temporary_chat(body)` returns true for the rest of that conversation even
+though the request never set the flag - so it goes through the exact same
+gate above: no recall, no "Remember:", not kept in chat history, not
+learned from. Only the owner's own messages are read, in English, no model
+and no network - the model's own words playing along never turn this on or
+off, and a game does not "end" partway through a conversation once it has
+started. `X-Jarvis-Route`'s `"temporary": true` and the fixed system line
+appear exactly as for a manually-started one, so an app that shows a
+temporary-chat marker shows it here too, unprompted. The problem this
+solves: with automatic learning on by default (2026-09-24), a made-up
+character or scenario could otherwise be filed as a fact about the owner.
+Without `jarvis_intake.py`, or on any error, nothing is detected and chat
+works exactly as before this patch (fail open, not fail safe - the same
+choice `schedule_command()` makes for a reminder).
+
 **"Used in this answer"** (the owner's decision, 2026-09-25). Both apps
 read `injected_ids` - its `"mem:<id>"` entries, as numbers; `"fact:<n>"`
 (the older word list) has no id and is not listed - and under an answer

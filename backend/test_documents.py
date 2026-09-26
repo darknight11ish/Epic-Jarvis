@@ -715,9 +715,9 @@ def t_the_routes():
 
 def t_the_patch():
     order = _stack.order()
-    check("documents.patch is last in apply-patches.ps1's list, after stop-all.patch",
-          order[-1] == "documents.patch" and order.index("stop-all.patch") < len(order) - 1,
-          order[-3:])
+    at = order.index("documents.patch")
+    check("documents.patch is in apply-patches.ps1's list, after stop-all.patch",
+          order.index("stop-all.patch") < at, order[max(0, at - 2):at + 1])
     patch = (HERE / "documents.patch").read_text(encoding="utf-8")
     check("it patches jarvis_hud.py only",
           [l[6:].strip() for l in patch.splitlines() if l.startswith("+++ b/")]
@@ -726,7 +726,7 @@ def t_the_patch():
     if not git:
         check("git is here to apply it", False)
         return
-    text, log = _stack.stand_in("jarvis_hud.py", order[:-1])
+    text, log = _stack.stand_in("jarvis_hud.py", order[:at])
     d = Path(tempfile.mkdtemp(prefix="jarvis-documents-patch-"))
     try:
         (d / "jarvis_hud.py").write_text(text, encoding="utf-8", newline="\n")

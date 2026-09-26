@@ -199,8 +199,18 @@ def owner_turns(messages: Iterable, origin: str) -> list[dict]:
     """
     if origin != ORIGIN_OWNER:
         return []
+    messages = list(messages or [])
+    # Games and role-play (2026-09-27, see game_or_roleplay() above): a
+    # conversation the owner turned into a game is treated the same as a
+    # temporary chat - nothing in it is learned. jarvis_hud.py's own
+    # _temporary_chat() check (games-temporary.patch) already keeps most
+    # requests from reaching here at all; this is the second, independent
+    # place that agrees, for eval_learner.py and any caller that hands
+    # owner_turns() a conversation directly.
+    if game_or_roleplay(messages):
+        return []
     out = []
-    for m in messages or []:
+    for m in messages:
         if not isinstance(m, dict) or m.get("role") != "user":
             continue
         text = m.get("content")
@@ -241,6 +251,77 @@ def schedule_command(text) -> bool:
         return jarvis_schedule.was_command(text)
     except Exception:
         return False
+
+
+# --------------------------------------------------------------------------
+#   Games and role-play (the owner's decision, 2026-09-27, CLAUDE.md /
+#   docs/OWNER-QUESTIONS-2026-09-27.md Q19)
+# --------------------------------------------------------------------------
+#
+# A game or made-up scenario - "let's play a game", a text adventure, a
+# D&D-style campaign, "pretend you are ...", "let's roleplay" - must never
+# be filed as a fact about the owner. Rather than teach the learner to
+# second-guess every fact it sees, the conversation is put into the same
+# state a manually-started temporary chat already gets (jarvis_hud.py's
+# _temporary_chat(), games-temporary.patch): nothing in it is learned. This
+# function is the one place that decides "is this a game", so both the
+# request-level check (which also stops recall and keeping the chat) and
+# owner_turns() below (which the learner, and jarvis's own eval_learner.py,
+# call directly) agree.
+#
+# Checked over EVERY owner message seen so far, not only the newest one,
+# because a game started three turns ago is still a game now - and, on
+# purpose, a game does not "end" partway through a conversation: once one
+# owner message started it, the whole conversation is treated as one. On
+# the safe side, and matching how a temporary chat itself has no way to
+# turn off again mid-conversation.
+#
+# Matched on the owner's own words only, in English, the same way
+# schedule_command() and remember_command() are: no model, no network. This
+# is deliberately narrower than jarvis_sensitive.py's multi-layer,
+# multi-language check - a missed game is learned like any other
+# conversation (unwanted, but not private), where a missed sensitive topic
+# would be a card that should have been asked - so a plain word list is the
+# right size for this, not a second copy of that machinery.
+_GAME_ROLEPLAY = re.compile(
+    r"\b("
+    r"let'?s\s+(play|do|start|run)\s+(a\s+)?(game|role[\s-]?play|rp|"
+    r"text\s+adventure|d\s?&\s?d|dnd|dungeons?\s+and\s+dragons?|campaign)|"
+    r"(can|could|shall|do)\s+(we|you)\s+(do|play|run|start)\s+(a\s+)?"
+    r"(text\s+adventure|role[\s-]?play|d\s?&\s?d|dnd|"
+    r"dungeons?\s+and\s+dragons?)|"
+    r"let'?s\s+role[\s-]?play|"
+    r"pretend\s+(that\s+)?you'?(re|\s+are)|"
+    r"pretend\s+to\s+be|"
+    r"i\s+want\s+you\s+to\s+(act|roleplay|role[\s-]?play)\s+as|"
+    r"act\s+as\s+(if\s+you\s+(are|'re)|a\s+character|my\s+character)|"
+    r"you\s+are\s+now\s+(a|an|my)\s+character|"
+    r"in\s+character\s+as|"
+    r"role[\s-]?play(ing)?\s+(as|a\s+character|with\s+me)|"
+    r"start(ing)?\s+a\s+(text\s+adventure|role[\s-]?play)|"
+    r"be\s+my\s+(dungeon\s+master|dm|game\s+master|gm)|"
+    r"run\s+a\s+(d\s?&\s?d|dnd|dungeons?\s+and\s+dragons?|tabletop|"
+    r"text\s+adventure)\s+(game|campaign|session)?|"
+    r"text\s+adventure|"
+    r"dungeons?\s+and\s+dragons?|"
+    r"choose\s+your\s+own\s+adventure"
+    r")\b", re.IGNORECASE)
+
+
+def game_or_roleplay(messages: Iterable) -> bool:
+    """Has the owner, anywhere in this conversation, asked to play a game or
+    start a role-play - a text adventure, a D&D-style campaign, "pretend you
+    are ...", "let's roleplay"? True once, for the whole conversation: see
+    the module note above for why a game is not treated as ending partway
+    through. Only the owner's own messages are read; the model's own words
+    (an assistant turn playing along) never turn this on or off."""
+    for m in messages or []:
+        if not isinstance(m, dict) or m.get("role") != "user":
+            continue
+        text = m.get("content")
+        if isinstance(text, str) and _GAME_ROLEPLAY.search(text):
+            return True
+    return False
 
 
 # --------------------------------------------------------------------------

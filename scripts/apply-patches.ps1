@@ -469,6 +469,18 @@ $PATCHES = @(
     # every new patch. Needs jarvis_documents.py copied in; without it the
     # banner says so and the routes are not there.
     'documents.patch'
+    # Games and role-play run in a temporary chat automatically (the
+    # owner's decision, 2026-09-27, CLAUDE.md / Q19): a game or made-up
+    # scenario, once started by the owner's own words, is put through
+    # _temporary_chat() too, so it recalls no facts, is never kept and is
+    # never learned from - the same as a manually-started temporary chat.
+    # Its context is temporary-chat's _temporary_chat() function and the
+    # two lines in the chat turn's `finally` block that check
+    # body.get("temporary") directly, so it goes after temporary-chat -
+    # last, like every new patch. The detection itself is in the shipped
+    # jarvis_intake.py (game_or_roleplay()); without that module, or on any
+    # error, nothing is detected and chat works exactly as before.
+    'games-temporary.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

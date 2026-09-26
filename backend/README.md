@@ -125,6 +125,7 @@ on a throwaway copy instead.
 | `email-send.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Sending email, one approval card per email** (the owner's decision, 2026-09-25, after the Muse audit). Adds `GET /api/email/sending` (whether sending is set up - the Settings line in both apps, never the password), and in the gate the notice's words for `send_email`, `send_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Its context is `web-search.patch`'s route block and gate lines and `note-capture.patch`'s `_TOOL_ACTIONS` lines. Needs `jarvis_email_send.py` - see "Sending email", at the very end. |
 | `manner.patch` | `jarvis_hud.py` | **How Jarvis talks: warm and brief, or plain** (the owner's decision, 2026-09-25). Adds `GET` and `POST /api/manner` - one change at a time, **no approval card either way** (it changes only how answers are worded). Its context is `web-search.patch`'s route blocks. Needs `jarvis_manner.py` - see "How Jarvis talks, and errors in plain words", at the very end. |
 | `documents.patch` | `jarvis_hud.py` | **Folders Jarvis may look in** (the owner's decisions of 2026-09-26: asking about PDFs and Word files, and the Notion import). One call at start-up, `jarvis_documents.install(Handler, ...)`, answers `GET /api/folders` and `POST /api/folders/add` (this PC only, one approval card), `/remove` (at once) and `/import` (a Notion export, this PC only). Last in the list; its context is `stop-all.patch`'s banner lines. Needs `jarvis_documents.py` - see "Documents & email", at the very end. |
+| `games-temporary.patch` | `jarvis_hud.py` | **Games and role-play run in a temporary chat automatically** (the owner's decision, 2026-09-27; CLAUDE.md, `docs/OWNER-QUESTIONS-2026-09-27.md` Q19). No new route: `_temporary_chat(body)` now also returns true once the owner's own words, anywhere in the conversation, start a game or role-play (`jarvis_intake.game_or_roleplay`), and the two lines in the chat turn's `finally` block that used to read `body.get("temporary")` directly now go through that same function - so a detected game gets no recall, no "Remember:", no chat history and no learning, exactly like a manually-started temporary chat, with no card and no setting. Last in the list; its context is `temporary-chat.patch`'s `_temporary_chat()` function and the two `finally`-block lines. Needs `jarvis_intake.py` (already shipped for `memory-intake.patch`) - without it, or on any error, nothing is detected and chat works exactly as before this patch. See "Games and role-play", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -11382,3 +11383,95 @@ python3 backend/test_mcp_wiring.py   # the bridge inside the chat's tool loop
   refused with a message saying so.
 - **Whether an 8B model uses plug-in tools well** is unmeasured; the tool
   test (part 1) is the place to measure it once a program is set up.
+
+# Games and role-play: `games-temporary.patch` (2026-09-27)
+
+The owner's decision, 2026-09-27 (CLAUDE.md; `docs/OWNER-QUESTIONS-2026-09-27.md`
+Q19): "Games and role-play run in a temporary chat automatically" - the
+recommended option, over leaving it to the owner to switch on temporary chat
+by hand. The problem: with automatic learning on by default (2026-09-24), a
+game or role-play session - invented characters, made-up scenarios - could
+get mistakenly learned as real facts about the owner.
+
+## What it adds
+
+No new route, and no setting. `temporary-chat.patch`'s own
+`_temporary_chat(body)` (see "Temporary chat and Used in this answer", above)
+now also returns true once `jarvis_intake.game_or_roleplay()` finds the owner
+asked to play a game or start a role-play anywhere in the conversation - a
+text adventure, a D&D-style campaign, "let's roleplay", "pretend you are
+...", "be my dungeon master" and the like, matched on the owner's own words
+only, in English, no model and no network (the same size of check as
+`schedule_command()` next to it, not a second copy of `jarvis_sensitive.py`'s
+multi-layer machinery: a missed game is learned like any other conversation,
+unwanted but not private, where a missed sensitive topic would be a card
+that should have been asked). Checked over every owner message seen so far,
+not only the newest one, and once true for a conversation it stays true for
+the rest of it - a game does not "end" partway through, the same way a
+manually-started temporary chat has no way to turn itself off mid-chat.
+
+Two lines in the chat turn's `finally` block used to read
+`body.get("temporary")` directly, bypassing `_temporary_chat()` entirely -
+the point where chat history is kept and the learner is offered the turn.
+Both now call `_temporary_chat(body)` instead, so a detected game is kept
+out of history and learning too, not only a chat the app itself marked
+temporary. Every other place that already called `_temporary_chat(body)`
+(no recall, the fixed system line, `X-Jarvis-Route`'s `"temporary": true`,
+the quick-answer path) picks up the same detection for free.
+
+`jarvis_intake.owner_turns()` - the one place the learner (and jarvis's own
+`eval_learner.py`) reads a conversation from - calls the same
+`game_or_roleplay()` too, independently: the request-level check above
+already stops most turns from reaching it at all, but this is the second,
+belt-and-suspenders place that agrees, for any caller that hands
+`owner_turns()` a conversation directly.
+
+## Why a patched function, not a new route
+
+`jarvis_hud.py`'s real text is not in this repository, so a new patch can
+only touch lines some earlier patch already quotes as context - anything
+else would be a guess at text nobody here can read. `_temporary_chat()`'s
+own definition, and the two `body.get("temporary")` lines next to it, are
+exactly that: fully quoted by `temporary-chat.patch` already. Rewriting the
+one function everything else already calls reaches every gate (recall,
+history, learning, the header) through the change nobody has to repeat.
+
+## What it does not change
+
+Everything else about a temporary chat is unchanged: the same tools, the
+same approval cards, the same local-first routing. **No card, no setting -
+it just happens**, the same way "From now on, ..." applies at once
+(CLAUDE.md). Neither app sends anything different; the backend notices on
+its own. A conversation that never mentions a game is unaffected byte for
+byte.
+
+## Test it
+
+```
+python3 backend/test_games_temp_chat.py
+```
+
+No pytest, no network, no model. Proves `game_or_roleplay()` on its own
+(true and false cases, the owner's words only, a game "sticking" for the
+rest of the conversation), `owner_turns()` excluding a whole game
+conversation while leaving an ordinary one and the other exclusions
+(`schedule_command`, `remember_command`) untouched, `_temporary_chat()`
+detecting a game with no flag set (and failing open, not fail-safe, without
+`jarvis_intake.py`), the `finally` block's chat-log and learner calls both
+skipping a detected game end to end, and that `games-temporary.patch`
+applies to what the earlier patches wrote and reverses cleanly - the same
+technique `test_temporary_chat.py` already uses for its own patch. Every
+check here fails on the code before this change.
+
+## Not checked, said plainly
+
+- **Nothing has run on the owner's PC.** As with every patch here, proved
+  against the whole patch stack's stand-in for `jarvis_hud.py`
+  (`backend/_stack.py`), never the real file.
+- **Non-English phrasing is not matched.** The same limit `schedule_command()`
+  and `remember_command()` already have; a game started in another language
+  is learned like any other conversation, not flagged as private.
+- **A game mentioned only by the model, never by the owner, is not detected**
+  - on purpose (`game_or_roleplay()` reads only `role: "user"` messages), so
+  the model cannot turn this on (or, since a game does not "end" mid-chat,
+  off) by playing along.
