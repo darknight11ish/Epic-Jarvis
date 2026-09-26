@@ -269,8 +269,8 @@
        "fixed": false,
        "id": "draft_email",
        "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Does it without asking",
-       "tier": "auto",
+       "says": "Asks you first, every time",
+       "tier": "ask",
        "title": "Write an email draft"
       },
       {
@@ -939,8 +939,8 @@
        "fixed": false,
        "id": "draft_email",
        "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Does it without asking",
-       "tier": "auto",
+       "says": "Asks you first, every time",
+       "tier": "ask",
        "title": "Write an email draft"
       },
       {
@@ -1609,8 +1609,8 @@
        "fixed": false,
        "id": "draft_email",
        "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Does it without asking",
-       "tier": "auto",
+       "says": "Asks you first, every time",
+       "tier": "ask",
        "title": "Write an email draft"
       },
       {
@@ -2288,8 +2288,8 @@
        "fixed": false,
        "id": "draft_email",
        "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Does it without asking",
-       "tier": "auto",
+       "says": "Asks you first, every time",
+       "tier": "ask",
        "title": "Write an email draft"
       },
       {

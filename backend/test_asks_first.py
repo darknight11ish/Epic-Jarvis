@@ -569,6 +569,36 @@ def t_the_patch():
           and '"/api/asks_first/tier"' in patch and '"/api/asks_first/lights"' in patch)
 
 
+def t_the_shipped_settings_and_the_case_table_agree():
+    """The page's cases (tools/gen_asks_first_cases.py SHIPPED) are the
+    shipped settings file's tiers, line for line. And draft_email - on the
+    never-loosened list - ships asking (feasibility audit step 0.3,
+    2026-09-26: it shipped "auto")."""
+    import ast
+    import tomllib
+    toml = tomllib.loads((REPO / "backend" / "rebuilt" / "jarvis-framework.toml")
+                         .read_text(encoding="utf-8"))
+    tiers = toml["autonomy"]["tiers"]
+    src = (REPO / "tools" / "gen_asks_first_cases.py").read_text(encoding="utf-8")
+    shipped = next(ast.literal_eval(n.value) for n in ast.parse(src).body
+                   if isinstance(n, ast.Assign)
+                   and any(getattr(t, "id", "") == "SHIPPED" for t in n.targets))
+    differ = {a: (t, tiers.get(a)) for a, t in shipped.items() if tiers.get(a) != t}
+    check("every tier in the case table is the shipped file's", not differ, differ)
+    check("draft_email ships as \"ask\" (a card), in the file and the case table",
+          tiers.get("draft_email") == "ask" and shipped.get("draft_email") == "ask",
+          (tiers.get("draft_email"), shipped.get("draft_email")))
+    check("... and stays on the never-loosened list", "draft_email" in AF.HARD_LIMITS
+          and "draft_email" not in AF.SWITCHABLE)
+    loose = {a for a, t in tiers.items() if t in ("auto", "notify")}
+    # web_research ships "auto" on purpose (jarvis-framework.toml's own
+    # test pins it); the tool loop still puts it to a person
+    # (jarvis_agent.NEEDS_A_PERSON), so it never runs unasked.
+    check("nothing on the never-loosened list ships looser than \"ask\" "
+          "(web_research aside: the tool loop always asks a person for it)",
+          not (loose & AF.HARD_LIMITS) - {"web_research"}, sorted(loose & AF.HARD_LIMITS))
+
+
 def t_both_apps_read_the_current_contract():
     r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_asks_first_cases.py"),
                         "--check"], capture_output=True, text=True, timeout=120,

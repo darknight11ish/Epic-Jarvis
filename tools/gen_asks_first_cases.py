@@ -41,7 +41,7 @@ COPIES = (DESKTOP, PHONE)
 SHIPPED = {
     "web_research": "auto", "read_calendar": "auto", "calendar_read": "auto",
     "email_read": "auto", "notes_search": "auto", "home_read": "auto", "home_control": "ask",
-    "read_files_readonly": "auto", "draft_email": "auto", "send_email": "ask",
+    "read_files_readonly": "auto", "draft_email": "ask", "send_email": "ask",
     "edit_calendar_event": "ask", "delete_calendar_event": "ask", "delete_file": "ask",
     "run_shell_on_host": "ask", "spend_money": "ask", "control_computer": "ask",
     "change_own_config": "ask", "loosen_what_asks_first": "ask", "modify_own_code": "ask",
