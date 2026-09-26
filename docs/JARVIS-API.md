@@ -227,6 +227,10 @@ and approving one would have posted a verdict on a request closed days ago.
 The current parser refuses names that mean "already dealt with"
 (`ALREADY_HANDLED_KEYS`, `JarvisApi.kt:113`).
 
+`history` is real, not a name to avoid forever - both apps now read it BY
+NAME, for the read-only "Activity" list. Section 41 has the details, and
+what could and could not be confirmed about its rows' exact shape.
+
 ### Approve/deny bodies — the clients disagree
 
 ```
@@ -6490,3 +6494,152 @@ to configure for an account that can already read its mail.
 - A program already on the PC could approve a card with the pairing token,
   without Windows Hello - the known limit in `docs/ARCHITECTURE.md` section
   3, which applies to a draft's card as to every other.
+
+## 41. Past approvals ("Activity") (added 2026-09-27)
+
+The owner's decision (`CLAUDE.md`, 2026-09-27, the answers to
+`docs/OWNER-QUESTIONS-2026-09-27.md`): "A read-only list of past approvals
+(title, Approved / Denied / Timed out, when, which device)." The ease-of-use
+audit's own row for this (`docs/EASE-OF-USE-AUDIT-2026-09-27.md`, "Then"
+table, row 11) asked to check `jarvis_gate.py` first for the shape of its
+`history` rows. **That could not be done**: `jarvis_gate.py` is not in this
+repository (`backend/` holds only patches against it, and its `history()`
+function is not one any patch here touches) - CLAUDE.md's own "do not claim
+more than the evidence supports" rule applies directly, so this section says
+exactly what is confirmed against this repository's tests and what is
+assumed, rather than presenting a guessed schema as read.
+
+**Not a new list.** This is `/api/pending`'s existing `history` array
+(section 3 above), which the real backend already sends today and neither
+app read until now - both apps' own `/api/pending` parsers went out of
+their way to keep it OUT of the live queue (`JarvisApi.kt`'s
+`ALREADY_HANDLED_KEYS`, `stream.rs`'s `refresh_pending` reading only
+`pending`), which is the correct half of the job; the other half, actually
+showing it somewhere, was left undone. No new database, no new backend
+route: this reads the SAME `GET /api/pending` both apps already poll for
+approval cards, and shows the array it already had a `history` key for.
+
+### 41.1 What is confirmed about `history` rows, and how
+
+Two things, both read out of this repository's own backend tests (not
+guessed, and not run here - `jarvis_gate.py` cannot be imported without the
+owner's PC, but the source text quoted below is read as text by the tests
+that ship in this repo):
+
+- **The array exists and is sent today.** `docs/JARVIS-API.md` §3's own
+  table has said `/api/pending` answers `{"available", "pending",
+  "history"}`, "not a bare array", since before this section existed - and
+  `backend/test_extraction_wiring.py`'s comment on the same line is the
+  reason `JarvisApi.kt`'s `ALREADY_HANDLED_KEYS` exists: an earlier version
+  of this client let `history`'s rows decode as a live queue by accident,
+  because `PendingItem` needs only an `id`.
+- **A history row never carries `detail` or `prompt`** - the command, the
+  recipient, the file path or the email body a *pending* row does.
+  `backend/test_gate_egress.py`'s `t_site_4_history_never_reads_it` reads
+  `jarvis_gate.py`'s `history()` function body as text and asserts neither
+  key appears in it; `t_site_3_deciding_erases_it` confirms `decide()` NULLs
+  the same two columns the moment a card is answered. So a history row was
+  never going to carry either, by construction, on the real PC - which is
+  also why this list can safely show `notice.title`/the action-name
+  fallback (below) on a lock screen: neither reads `detail` or `prompt`.
+
+**Everything else about the row's exact field names is ASSUMED, not
+confirmed**, and both apps' readers are written to degrade rather than
+guess wrong:
+
+- **`decided_by` (device) is a real column** - `backend/gate-outcome.patch`
+  reads `row["decided_by"]` when auditing a decided row - but whether
+  `history()` SELECTs it, and what string it holds for the gate's own
+  approve/deny, could not be confirmed. Every OTHER approval-adjacent route
+  in this codebase that reports which device acted uses exactly two words,
+  computed from the request's origin (`backend/focus.patch`,
+  `power-mode.patch`, `task-control.patch`, `note-capture.patch`: `by =
+  "this PC" if host in ("127.0.0.1", "::1") else "another device"`) - both
+  apps assume the gate's history rows follow the same convention, and read
+  `decided_by`, else `device`, else `by`, on a history row. A row naming
+  none of the three shows nothing about a device, rather than guessing
+  "this PC".
+- **The outcome field.** `approvals.state` is confirmed to be one of
+  `pending`, `approved`, `denied`, `expired` (the docstring of
+  `backend/test_gate_outcome.py`); the gate's own `Verdict.outcome` uses
+  `timed_out` for the same event `state` calls `expired`. Since
+  `history()` reads the table directly rather than going through a
+  `Verdict`, `state` is the likelier of the two, but both are read: `state`
+  or `outcome`, `approved`/`denied`/`expired`/`timed_out` mapped to
+  **Approved** / **Denied** / **Timed out**; anything else (including no
+  field at all) reads as **Not reported**, never a guess.
+- **The title.** Read from `notice.title` when the row carries a `notice`
+  object (the same shape `pending()` rows attach - `d["notice"] =
+  notice_for(d)`, confirmed by `backend/test_approval_notice.py`'s
+  `t_every_pending_row_carries_one` - but that test is about `pending()`,
+  not `history()`, so whether `history()` rows carry one too is assumed,
+  not confirmed). When there is no `notice`, both apps fall back to the
+  SAME action-name wording a live card with no notice already uses -
+  `CardWords.fallbackTitle` (phone), `fallbackTitle` (desktop,
+  `card-words.js`) - `Jarvis wants your OK for "<action, spaced out>"`,
+  safe on a lock screen either way because it never reads `detail` or
+  `prompt`.
+- **When.** `decided_at` if the row has one, else `created`. Neither name
+  is confirmed for `history()` specifically; `created` is confirmed as a
+  column on the live row (`t_site_1_the_row_keeps_it`: `SELECT
+  id,action,tier,detail,prompt,created,raised FROM approvals`).
+
+**No backend change was made** to try to add or guess at the exact shape of
+`history()` - `jarvis_gate.py` is not in this repository, so any patch
+against its unseen source would be lines invented rather than read, and
+could not be trusted to apply on the owner's PC (every other patch in
+`backend/` matches real context lines from the file it patches; this would
+not have been able to). If the real `history()` rows turn out to be missing
+`decided_by`/`device` entirely, both apps already show that plainly (no
+device line at all) rather than failing or inventing one - the owner
+confirming the real shape from their own PC is what would turn "assumed"
+above into "confirmed", and a later change could then add the exact right
+field name to the two apps' readers below, with no server-side change
+needed unless the field is missing outright.
+
+### 41.2 Both apps
+
+Read-only. There is no button here, no link, and no way to reopen or
+re-decide a past card - it answers "did I turn that on?", nothing more.
+Placed next to the Undo shelf on both apps: desktop Brain -> Work,
+`#activity` (`jarvis-desktop/src/brain.js` `renderActivity`,
+`brain.html`); phone Inbox, the "ACTIVITY" section
+(`jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/
+InboxScreen.kt`), fed by `JarvisRuntime.pastApprovals` /
+`JarvisApi.gateHistoryRead`.
+
+Both readers ask for the `history` key **by name**, never by the positional
+fallback `parseListBody`/the desktop's `refresh_pending` use for `pending` -
+exactly the safe way `JarvisApi.kt`'s own comment on `ALREADY_HANDLED_KEYS`
+says a route that really does mean `history` should be read. A row this
+side cannot make sense of (no `id`, or a shape neither reader recognises)
+costs that ONE row, not the whole list - the same defensive, row-by-row
+read `decodePendingRows` already uses for `pending`.
+
+- **Desktop**: the Brain's fixed read allowlist gets one more entry,
+  `("gate_history", "/api/pending")` (`src-tauri/src/brain/routes.rs`) - the
+  SAME route `stream.rs`'s `refresh_pending` already polls for the live
+  queue, asked for again so the Brain window can read the `history` half of
+  that answer, which the stream's own polling loop reads and discards on
+  purpose. Not a second endpoint: `tools/check_parity.py` already
+  classifies `/api/pending` `ported`, and this adds no new call for that
+  tool to learn.
+- **Phone**: `JarvisApi.gateHistoryRead()` calls the same `GET /api/pending`
+  with `unwrap = listOf("history")`, decoded by `decodeGateHistoryRows`
+  (`net/GateHistory.kt`) into `GateHistoryItem`s, fetched alongside the
+  Inbox's other three lists in `JarvisRuntime.refreshInbox()` and rendered
+  in `InboxScreen`'s new "ACTIVITY" section, newest decided first.
+
+### 41.3 Known gaps, said plainly
+
+- **The exact field names on a `history` row are assumed, not confirmed** -
+  see §41.1. This is the one gap the audit itself anticipated ("first,
+  check on your PC what the gate's `history` rows hold") and the one this
+  section could not close from inside this repository.
+- **No skipped-row notice.** `pending()`'s reader tells the owner when a row
+  could not be read, because a decision is still waiting on it; a *past*
+  card carries no such urgency, so a history row this phone cannot parse is
+  silently dropped from the list rather than reported - unlike the live
+  queue's own skipped-row count.
+- **No paging.** The list shows whatever `history` sends in one read; there
+  is no "load older" here, unlike Chat history's (§18) `before=`.

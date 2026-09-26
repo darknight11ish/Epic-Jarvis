@@ -158,7 +158,11 @@ private const val MAX_EXPIRES_IN_S = 24 * 3600.0
  */
 internal fun titleForAction(action: String?): String = CardWords.fallbackTitle(action)
 
-private fun idOf(el: JsonElement?): String? {
+// internal, not private: [normaliseGateHistoryRow] (GateHistory.kt) reads the
+// same wire shapes for the SAME endpoint's `history` array and must agree
+// with this file on what an id or a plain string is, rather than keep a
+// second copy that could drift from it.
+internal fun idOf(el: JsonElement?): String? {
     val p = el as? JsonPrimitive ?: return null
     if (p is JsonNull) return null
     if (p.isString) return p.content.trim().takeIf { it.isNotEmpty() }
@@ -167,7 +171,7 @@ private fun idOf(el: JsonElement?): String? {
     return if (d.isFinite() && d == Math.floor(d) && Math.abs(d) < 1e15) d.toLong().toString() else p.content
 }
 
-private fun textOf(el: JsonElement?): String? =
+internal fun textOf(el: JsonElement?): String? =
     (el as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
 
 private fun parseObject(text: String): JsonObject? =

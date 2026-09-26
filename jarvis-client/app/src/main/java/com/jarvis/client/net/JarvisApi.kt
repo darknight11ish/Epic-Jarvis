@@ -324,6 +324,21 @@ class JarvisApi(
         get("/api/pending", ListSerializer(JsonElement.serializer()), PENDING_KEYS)
             .map { decodePendingRows(it) }
 
+    /**
+     * Past approvals - "Activity" (ease-of-use audit, 2026-09-27, row 11):
+     * the SAME `/api/pending` response's `history` array, asked for BY NAME
+     * rather than found by the positional fallback [parseListBody] uses for
+     * `pending` - the exact thing [ALREADY_HANDLED_KEYS] exists to refuse
+     * when a caller has not named the key it wants. This one has.
+     *
+     * Read-only, and never merged into [pending]: a decided card and a
+     * waiting one must never share a list (see [ALREADY_HANDLED_KEYS]'s own
+     * comment for why that specific mistake is worse than an empty queue).
+     */
+    suspend fun gateHistoryRead(): ApiResult<GateHistoryRead> =
+        get("/api/pending", ListSerializer(JsonElement.serializer()), listOf("history"))
+            .map { decodeGateHistoryRows(it) }
+
     suspend fun attention(): ApiResult<Attention> =
         get("/api/attention", AttentionResponse.serializer()).map { it.flatten() }
 

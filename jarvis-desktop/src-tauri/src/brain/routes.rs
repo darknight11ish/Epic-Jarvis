@@ -19,6 +19,15 @@ const READ_ROUTES: &[(&str, &str)] = &[
     ("skills", "/api/skills"),
     ("jobs", "/api/jobs"),
     ("undo", "/api/undo"),
+    // "Activity" (ease-of-use audit, 2026-09-27, row 11): past approvals,
+    // read-only. The SAME route [`crate::stream`]'s own polling reads for
+    // the live queue - `{"available", "pending", "history"}` - asked for
+    // again here so the Brain window can show the `history` half of it,
+    // which that polling loop reads and discards on purpose (it must never
+    // let an already-decided row be mistaken for a waiting one). One more
+    // GET to an idempotent, already-classified route; nothing here decides
+    // anything, so it needs no write command of its own.
+    ("gate_history", "/api/pending"),
     ("ledger", "/api/ledger"),
     ("content_risk", "/api/content-risk"),
     ("watch", "/api/watch"),

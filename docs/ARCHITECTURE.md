@@ -1653,6 +1653,14 @@ repository either):
   this backend." (`brain.js`, `unavailable()`).
 - The rest of the backend (`jarvis_gate.py`, `jarvis_extract.py`,
   `jarvis_models`, `jarvis_arbiter`, ...) is in the same position (§9).
+  One consequence, spelled out because it bit the "Activity" past-approvals
+  list (JARVIS-API.md §41): `jarvis_gate.py`'s `history()` function is
+  confirmed to exist and to never select `detail` or `prompt`
+  (`backend/test_gate_egress.py` reads its source as text), but its exact
+  column names beyond that - whether it sends `decided_by`, a `notice`
+  object, `decided_at` - could not be read from this repository. Both apps'
+  readers for it degrade to a plain, honest word (no device shown, "Not
+  reported") rather than trust a guessed field name.
   `scripts/check-backend.ps1` is how to see what a folder holds.
 
 ---
