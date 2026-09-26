@@ -1415,6 +1415,13 @@ that report, never on their own click.
 Stale link (rule 4): both clients hold **Resume** on a stale stream and let
 Stop, Pause and notes through.
 
+App lock (the owner's decision of 2026-09-26): with App lock on, the
+desktop's widget - which sits outside the lock - offers neither note, and
+`inject_task_note` / `amend_approval` refuse the widget in Rust ("App lock
+is on, so notes to Jarvis are added in the Jarvis bar, not the widget. Open
+the Jarvis bar and confirm it is you to add one"). The phone's notes are
+inside the app, which is behind App lock already.
+
 ### Notes — `backend/note-capture.patch`
 
 | Route | Body | Answers | What it does |
@@ -1636,7 +1643,7 @@ window only; `src/deep.js`). The phone: Mind screen, "Big model (slow)" and
 |---|---|---|---|
 | `GET /api/big-model` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_big_model.py` is missing | Token + origin. Folder paths, memory and disk numbers; never the key colibri is started with. Does not start colibri. |
 | `POST /api/big-model` | `{"switch": "master" \| "wiki" \| "deep_questions", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits; **400** unknown switch, `enabled` not a boolean, or a job before the main switch; **503** not possible (colibri or Python not found, no usable model, not enough memory in total, a nearly full drive - the sentence says which), or `big_model_enable` is not tier `ask` | ON is one approval card (action `big_model_enable`). OFF is immediate and stops colibri if nothing else needs it. Show `error` word for word. |
-| `GET /api/deep` | - | 200 `deep_status()` (below) | Token + origin. The owner's own questions and answers; reads only, starts nothing. |
+| `GET /api/deep` | - | 200 `deep_status()` (below) | Token + origin. The owner's own questions and answers; reads only, starts nothing. **Hidden with the private lists** (2026-09-26): while "Hide memory lists and chat history" hides them, the desktop's Rust takes every `question` and `answer` out (`redact_deep`: `"hidden": true`, rows keep their state and times) and the phone shows the plate as hidden with its Show button, like the wiki. |
 | `POST /api/deep/ask` | `{"question": "<at most 4,000 characters>"}` | **202** `{"ok": true, "id", "pending": true, "state": "queued", "message"}`; **400** empty, not text or too long; **409** three questions already waiting or running; **503** not available (the switch is off, the model cannot be used, or not enough memory is free right now). Every refusal is `{"ok": false, "state": "refused", "error": "<a sentence>"}` | No approval card per question: the switch was approved, and a question acts on nothing (no tools, no memory writes, no web) and nothing leaves the PC. Hold it on a stale link anyway (rule 4). |
 
 **`status()`** - the real output of each case is in
@@ -3522,7 +3529,7 @@ paused, deleted, a card decided). Both apps read Coming up again on it.
 Since 2026-09-25 there is also `"matched"` - a "tell me when" that
 happened, `{"id", "kind": "tellme", "state": "matched", "urgent"}`
 (section 30) - and an ALARM going off keeps ringing until seen in both
-apps (26.5). On `"fired"`:
+apps (30.5). On `"fired"`:
 
 - **Desktop**: reads the job by id and shows a Windows toast - title "Timer
   done", "Alarm", "Reminder" or "To-do", and the words (or "The pasta timer
@@ -3530,11 +3537,25 @@ apps (26.5). On `"fired"`:
   was late. While **App lock** is on, or the private lists are hidden
   ("Windows Hello for memory lists and chat history"), the toast says only
   the kind's lock-screen words. Shown once per job going off, even when a
-  reconnect replays the event.
+  reconnect replays the event - and, since 2026-09-26, even after only the
+  desktop app restarts: the last event id is written at once on every
+  `schedule` event and when the app exits, and a job that could not be read
+  is remembered by its event id.
 - **Phone**: the same words as a notification on the approval channel. Its
   lock-screen version is always only the kind's words ("Jarvis: a reminder
   is due."); while App lock or "Hide memory lists and chat history" is on,
-  the notification itself says only that too.
+  the notification itself says only that too. Each job's notification is
+  tagged with its id, so it is the same one after the app restarts, and a
+  new one never replaces another.
+- **Heard late** (the owner's decision of 2026-09-26): a job that went off
+  more than **10 minutes** before the app heard of it (the phone was out of
+  reach, an app restarted) does not ring. Both apps show a silent notice
+  instead - "Missed at 07:00." and then the usual words (the PC's
+  `went_off_at`), with no Snooze.
+- **Answered elsewhere**: on `"changed"` for a timer, alarm or reminder
+  (snoozed, deleted or done on the PC, by voice or in Coming up) the phone
+  takes that job's notification away, ringing or not. A "tell me when"
+  match's stays: its job ends the moment it matched.
 
 ### 21.5 Answered without the model - `/api/chat`
 
@@ -4763,7 +4784,8 @@ installs round the server's POST handler at start-up (the same shape as
    the press reads "stop" at its first checkpoint. The next question is not
    affected.
 3. Every stopper registered with `jarvis_stop_all.register(name, fn)` is
-   called in turn (focus sessions will register one). Each returns one
+   called in turn (focus sessions register one, which pauses a running
+   session). Each returns one
    sentence, or nothing when it had nothing running; one that raises is
    reported in `problems` and the rest still run.
 
@@ -4782,15 +4804,25 @@ keeps Jarvis talking - and puts "Stopped speaking." before the PC's
   `stopSpeaking`, and the HUD window's browser speech), then calls the route
   (`commands.rs` `stop_everything_now`) and shows the answer in a
   notification titled "Stop everything". Why that key: `backend/README.md`,
-  "Stop everything".
+  "Stop everything". The same command is a **"Stop everything" row in the
+  tray menu** (2026-09-26), for a mouse or when another program holds the
+  key; never greyed, not by a stale link, App lock or a waiting card. A
+  focus line already being made when it is pressed is dropped when it
+  arrives (`focus.rs` `play_callout`).
 - **Phone:** a "Stop everything" button on Home, shown whenever Jarvis is
   doing anything (the PC's activity is not idle, an answer is arriving, or
   the phone is speaking). It stops the phone's speech, calls the route and
   puts the answer in the shared notice (`net/StopEverything.kt`,
   `JarvisRuntime.stopEverything`).
 
-A 404 in either app says "This PC's Jarvis cannot stop anything else yet -
-run apply-patches.ps1 on the PC (stop-all.patch)". Neither app hides the
+Both apps say the same sentences: "Stopped speaking." and then the PC's
+`message`, or "Jarvis stopped what it was doing." when it sent none. When
+the PC could not be reached: "Stopped speaking. Nothing else could be
+stopped." and then the plain words for why ("Your PC isn't answering. ...",
+section 4 - never the address or the network library's text; the phone's
+notice carries their button). A 404 in either app says "This PC's Jarvis
+cannot stop anything else yet - run apply-patches.ps1 on the PC
+(stop-all.patch)". Neither app hides the
 control when `capabilities.stop_all` is false: stopping its own speech is
 worth doing anyway, and a stop button must not depend on a handshake.
 
@@ -5108,6 +5140,11 @@ The status (`jarvis_focus.Engine.status()`), a whitelist:
             "planned_min", "active_min", "on_target_min", "adrift_min", "excused_min", "drifts", "at"} | null,
  "streak": int}
 ```
+
+While "Hide memory lists and chat history" hides the lists, the desktop's
+Rust takes `intent` out and sets `"intent_hidden": true` - `focus.rs`
+`hide_intent` - and both apps say "On: hidden until ... confirms it is
+you." instead: the words are the owner's own, like a reminder's. (2026-09-26.)
 
 **The report card** is built from the ledger row, so it can only say
 numbers: "Focus session done." / "Focus session stopped early.", "On target:

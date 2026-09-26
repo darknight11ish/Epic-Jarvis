@@ -933,8 +933,15 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   works from the widget, as from the phone's. An email's card (`send_email`,
   2026-09-25) is approved in the Jarvis bar only, lock or not: the widget
   shows one line of a card, and an email is approved after reading all of it
-  (`commands.rs` `waiting_email`, `widget.js`).
-- **Phone:** the whole app. The home-screen widget only ever shows the
+  (`commands.rs` `waiting_email`, `widget.js`). **Notes too** (the
+  owner's decision of 2026-09-26): with App lock on, the widget offers no
+  note to a running task or a card, and `inject_task_note` and
+  `amend_approval` refuse the widget in Rust - notes are added in the
+  Jarvis bar, which asks Windows Hello first. Stop everything (the hotkey
+  and the tray row) is never behind App lock.
+- **Phone:** the whole app - including Home's "Stop everything" button,
+  which is behind App lock like the rest of the app (JARVIS-API §28); the
+  PC's hotkey and tray row are not. The home-screen widget only ever shows the
   `notice` text and offers Deny only, lock or not.
 - **Screenshots (phone):** while App lock or "Hide memory lists and chat
   history" is on, Jarvis cannot be screenshotted, screen-recorded or cast
@@ -943,7 +950,8 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
 - **No lock, no risky approval (both apps, the owner's decision of
   2026-09-25):** a risky approval is refused on a PC without Windows Hello
   or a phone without a screen lock, whatever the lock settings say, with
-  the same words in both apps (`lock/rules.rs` `NO_HELLO_NO_RISKY`,
+  the same words in both apps - each led by "Nothing was approved." (the
+  desktop adds it before the backend's own sentence, `not_approved_words`) (`lock/rules.rs` `NO_HELLO_NO_RISKY`,
   `SecurityRules.NO_SCREEN_LOCK`) and, on the phone, a button that opens
   Android's screen-lock settings. It used to go through unchecked when no
   lock was on. On the PC the backend refuses too (§3, "A known limit").
@@ -1065,10 +1073,9 @@ backend routes, in both directions; the rest are listed here only.
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily or Brave key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |
 | The backend's own Windows Hello check before a risky approval (`owner-check.patch`, the approval gap's step 1, 2026-09-25) | Written with the feature. It checks approvals that come FROM the PC, where the desktop is; the phone keeps checking its own fingerprint in the app, as before, and the backend lets a phone approval through without a PC prompt. The phone's half - a key in the phone's Keystore that needs a fresh fingerprint for every risky approval, checked by the backend - is step 2, built with "more devices" (`docs/APPROVAL-GAP-DESIGN.md`). Both apps share the stamp (every approval) and "no lock, no risky approval". |
-| Saying a timer aloud when it goes off ("Your timer is done.", while "Hey Jarvis" listening is on in the Jarvis bar; 2026-09-25) | The owner asked for it on the desktop ("say timers aloud on the desktop when voice is on"). The phone's timer notification rings, and its voice is only switched on for a conversation - a phone in a pocket speaking on its own was not asked for. Alarms and urgent "tell me when"s ring until seen on both apps (JARVIS-API §26.5). |
+| Saying a timer aloud when it goes off ("Your timer is done.", while "Hey Jarvis" listening is on in the Jarvis bar; 2026-09-25) | The owner asked for it on the desktop ("say timers aloud on the desktop when voice is on"). The phone's timer notification rings, and its voice is only switched on for a conversation - a phone in a pocket speaking on its own was not asked for. Alarms and urgent "tell me when"s ring until seen on both apps (JARVIS-API §30.5). |
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (Mind, Focus session; Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
-| **Update notice** | **Undecided - the owner's call.** The desktop checks GitHub for a newer version and says so in Settings (`update.rs`; it never installs on its own). The phone has no such notice: a new APK is published to the `client-latest` release and installed with adb. Whether the phone should say "a newer version exists" has not been decided. |
 
 **On the phone, kept off the desktop:**
 
@@ -1369,11 +1376,14 @@ they landed):
   whole; `stop-all.patch` installs it round the server's POST handler):
   the task Stop, then every tool call of the answer being written refused
   before the gate (and one approved after the press not run), then every
-  stopper registered with `jarvis_stop_all.register()` - the hook focus
-  sessions will use. Never a card, never held on a stale link: stopping
+  stopper registered with `jarvis_stop_all.register()` - focus sessions
+  register one, which pauses a running session. Never a card, never held on a stale link: stopping
   only makes Jarvis do less (section 3). Desktop: the Alt+Shift+X hotkey,
-  which stops the desktop's speech first; phone: Home's "Stop everything"
-  button, which stops the phone's. A step already under way finishes; the
+  which stops the desktop's speech first, and the same "Stop everything"
+  row in the tray menu (2026-09-26); phone: Home's "Stop everything"
+  button, which stops the phone's. Both say the same sentences
+  (`STOP_SPEECH`, `STOP_PC_SILENT`, `STOP_NOT_REACHED` = `StopEverything.kt`),
+  and a PC that did not answer is said in the plain words. A step already under way finishes; the
   stop lands before the next one. JARVIS-API §28.
 
 - **A live preflight** (added 2026-09-25, the same review):
