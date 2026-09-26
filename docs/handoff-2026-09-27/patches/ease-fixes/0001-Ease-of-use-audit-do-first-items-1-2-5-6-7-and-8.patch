@@ -1,0 +1,3480 @@
+From 889c7867c01cab01b371c5fb28c62b61186ddc7e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 26 Sep 2026 07:50:07 +0000
+Subject: [PATCH] Ease-of-use audit "do first" items 1, 2, 5, 6, 7 and 8
+
+1. What was untrue: "What asks first" now says web search asks only when
+   something private could slip in (every time only with "Ask before every
+   web search" on), and lists "Read your calendar" once; About and the FAQ
+   no longer say every action asks; deep answers last until Jarvis stops;
+   History says when an answer was not kept; the phone's refusal names only
+   the .ts.net/.nord names it can reach; the FAQ, INSTALL 3.4, 2.5 and the
+   log notes match today's messages and places.
+2. "Jarvis isn't running" names the real Start button, and the desktop
+   adds "Show me where" (Settings, More options, open); the autostart
+   switch says it starts Jarvis Desktop; "Let my phone reach this" says it
+   needs the app to start Jarvis.
+5. One wording pass: Connected, Catching up..., Model, Background jobs,
+   Jarvis bar, Pause background learning, Settings and help..., Faces
+   retitled and its untrue sentence fixed; "State of mind" and "route
+   badge" dropped.
+6. Error details are selectable in both apps (no Copy button).
+7. History dates show the weekday; Delete says facts are not forgotten;
+   a filter box on "What Jarvis knows about you" (desktop).
+8. README and INSTALL: the real preflight line, the backend is not
+   public, Tailscale steps, keep the PC awake (plus a preflight WARN),
+   updating everything, a lost phone, all seven Credential Manager
+   entries; selftest stops with one message in the wrong folder; the
+   patch script keeps a log of each run.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_015UUeD3W4kG7RWyUe7qR4bc
+---
+ README.md                                     |  16 +-
+ backend/README.md                             |  12 +-
+ backend/jarvis_asks_first.py                  |  44 +++-
+ backend/jarvis_auto_learn.py                  |   2 +-
+ backend/jarvis_big_model.py                   |   3 +-
+ backend/selftest.py                           |  86 ++++++-
+ backend/test_asks_first.py                    |  52 +++-
+ backend/test_auto_learn.py                    |   4 +-
+ backend/test_selftest_preflight.py            |  57 ++++-
+ docs/ARCHITECTURE.md                          |  20 +-
+ docs/INSTALL.md                               | 238 +++++++++++++++---
+ docs/JARVIS-API.md                            |  27 +-
+ docs/SECOND-CARD.md                           |   2 +-
+ .../java/com/jarvis/client/data/OwnNetwork.kt |  15 +-
+ .../java/com/jarvis/client/net/AutoLearn.kt   |   2 +-
+ .../java/com/jarvis/client/net/ChatLog.kt     |  23 +-
+ .../java/com/jarvis/client/net/PlainErrors.kt |  12 +-
+ .../com/jarvis/client/service/EventService.kt |   2 +-
+ .../jarvis/client/service/LinkTileService.kt  |   2 +-
+ .../java/com/jarvis/client/ui/parts/Parts.kt  |  17 +-
+ .../jarvis/client/ui/screens/BrainScreen.kt   |   7 +-
+ .../com/jarvis/client/ui/screens/FaqScreen.kt |  38 ++-
+ .../jarvis/client/ui/screens/HistoryScreen.kt |   7 +
+ .../jarvis/client/ui/screens/HomeScreen.kt    |  10 +-
+ .../client/ui/screens/MemoryCountsPlate.kt    |   2 +-
+ .../jarvis/client/widget/QuickLinkWidget.kt   |   2 +-
+ .../java/com/jarvis/client/AutoLearnTest.kt   |   2 +-
+ .../java/com/jarvis/client/ChatLogTest.kt     |   8 +-
+ .../com/jarvis/client/data/OwnNetworkTest.kt  |   8 +-
+ .../resources/contract/asks-first-cases.json  |  55 +---
+ .../resources/contract/big-model-cases.json   |  26 +-
+ .../resources/contract/own-network-cases.json |   2 +
+ .../resources/contract/plain-error-cases.json |   8 +-
+ jarvis-desktop/README.md                      |   4 +-
+ jarvis-desktop/src-tauri/src/commands.rs      |   7 +-
+ jarvis-desktop/src-tauri/src/hotkeys.rs       |   8 +-
+ jarvis-desktop/src-tauri/src/plain_errors.rs  |   6 +-
+ jarvis-desktop/src-tauri/src/tray.rs          |  16 +-
+ jarvis-desktop/src/auto-learn.js              |   2 +-
+ jarvis-desktop/src/brain.css                  |  15 ++
+ jarvis-desktop/src/brain.html                 |  14 +-
+ jarvis-desktop/src/brain.js                   |  25 +-
+ jarvis-desktop/src/faces.html                 |   5 +-
+ jarvis-desktop/src/history-view.js            |  30 ++-
+ jarvis-desktop/src/index.html                 |  13 +-
+ jarvis-desktop/src/jarvis-link.js             |   6 +-
+ jarvis-desktop/src/main.js                    |  29 ++-
+ jarvis-desktop/src/plain-errors.js            |  23 +-
+ jarvis-desktop/src/settings.html              |  89 +++++--
+ jarvis-desktop/src/settings.js                |  39 ++-
+ jarvis-desktop/src/style.css                  |   5 +
+ jarvis-desktop/tests/auto-learn.mjs           |   2 +-
+ jarvis-desktop/tests/continuity.mjs           |  14 +-
+ jarvis-desktop/tests/faces.mjs                |  13 +-
+ jarvis-desktop/tests/faq.mjs                  |  11 +-
+ .../tests/fixtures/asks-first-cases.json      |  55 +---
+ .../tests/fixtures/big-model-cases.json       |  26 +-
+ .../tests/fixtures/own-network-cases.json     |   2 +
+ .../tests/fixtures/plain-error-cases.json     |   8 +-
+ jarvis-desktop/tests/history.mjs              |  22 ++
+ jarvis-desktop/tests/hotkeys.mjs              |   8 +-
+ jarvis-desktop/tests/memory.mjs               |  32 ++-
+ jarvis-desktop/tests/plain-errors.mjs         |  58 +++++
+ jarvis-desktop/tests/second-card.mjs          |   2 +-
+ jarvis-desktop/tests/uikit.mjs                |   4 +-
+ scripts/apply-patches.ps1                     |  21 ++
+ tools/check_parity.py                         |   2 +-
+ tools/gen_asks_first_cases.py                 |   7 +-
+ tools/gen_own_network_cases.py                |  19 +-
+ tools/gen_plain_error_cases.py                |  12 +-
+ 70 files changed, 1126 insertions(+), 339 deletions(-)
+
+diff --git a/README.md b/README.md
+index 22a8afa..4f71cd5 100644
+--- a/README.md
++++ b/README.md
+@@ -62,7 +62,14 @@ Free and non-commercial: installed by hand, never sold, never on Google Play.
+   whether it asks you, with switches to make it stricter.
+ - **Your own networks only**: the apps connect to Jarvis only on this PC,
+   your home network, Tailscale or NordVPN Meshnet. Anything else is refused.
+-- A live check of the whole setup: `python backend\selftest.py --preflight`.
++- A live check of the whole setup, "N pass, N fail, N warn". Run this one
++  line in PowerShell from this repository's folder, with your own backend
++  folder (the one holding `jarvis_hud.py`) between the first quotes; the
++  result is also saved as `preflight.txt` on your Desktop:
++
++  ```powershell
++  $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:PYTHONIOENCODING = "utf-8"; py -3 backend\selftest.py --preflight | Tee-Object -FilePath "$env:USERPROFILE\Desktop\preflight.txt"; Write-Host "Saved to $env:USERPROFILE\Desktop\preflight.txt"
++  ```
+ 
+ **Look how you like**
+ - An animated face shows what Jarvis is doing (20 designs), with themes and
+@@ -70,6 +77,13 @@ Free and non-commercial: installed by hand, never sold, never on Google Play.
+ 
+ ## Install it
+ 
++**Read this first: the backend is not public.** The Python program that
++does the work (`jarvis_hud.py` and a few files beside it) is not in this
++repository and has no download anywhere - only the owner's PC has it
++(INSTALL.md, step 1.3). This repository holds changes for it, the rebuilt
++parts and the two apps. Without those files the apps have nothing to
++connect to, so check you have them before installing anything else.
++
+ Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
+ 
+ 1. **The backend on the PC** - the Python program that does the work, plus
+diff --git a/backend/README.md b/backend/README.md
+index aea3d50..e8e0044 100644
+--- a/backend/README.md
++++ b/backend/README.md
+@@ -660,7 +660,7 @@ neighbour, with a prompt that shows the owner the note and says it will be read
+ every time the skill runs; and `cards()` returns `notes`, so anything steering
+ an answer is on a screen the owner can reach.
+ 
+-That screen is the Brain window's Faculties view: each skill's notes are
++That screen is the Brain window's Model view (called Faculties before the ease-of-use audit's wording pass): each skill's notes are
+ listed under it as "Jarvis's note: ..." (`brain.js` `renderSkills`, since
+ 2026-09-23 - before that, the notes were sent and nothing drew them).
+ 
+@@ -9766,7 +9766,7 @@ same short sentence, then one thing to do, with one button - for example:
+ |---|---|
+ | Phone: "Cannot reach the desktop: failed to connect to /100.64.1.2 (port 8765) after 10000ms. Check your private network ..." | "Your PC isn't answering. It may be asleep or switched off, or Tailscale or NordVPN Meshnet may be off at one end. Wake the PC, check the private network on both, then try again." [Try again] |
+ | Phone: "The desktop answered 503." | "That part of Jarvis isn't running on your PC right now. Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it." |
+-| Desktop: "could not reach the Jarvis server at http://127.0.0.1:8765. Is it running?" | "Jarvis isn't running on your PC. The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start Jarvis), then try again." [Try again] |
++| Desktop: "could not reach the Jarvis server at http://127.0.0.1:8765. Is it running?" | "Jarvis isn't running on your PC. The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, then More options, and press Start under "Starting Jarvis for you" (it needs "Let Jarvis Desktop start and stop Jarvis" on). Or start it in PowerShell, the way you set it up. Then try again." [Try again] (desktop also: [Show me where], ease-of-use audit 2026-09-27 #2) |
+ | Desktop answer card: "Streaming" and "42 chunks · 3.4s" | "Answering…", nothing in the corner |
+ | "Thinking…" for 10-20 seconds after standby | "Waking up the model - the first answer after standby takes a little longer." |
+ 
+@@ -9847,8 +9847,16 @@ chat even while tools are switched on.
+ | the event stream | it does not open, or sends no hello |
+ | the voice models | speech-to-text or the voice is not installed (a WARN only - typing works without them) |
+ | calendar, email, web search | calendar and email: says whether each is set up, and reads nothing unless `--with-reads`. Web search: tested ONLY when it is switched on and a provider is chosen, and then through the Test search button's own route (one search for the word "wikipedia") |
++| the PC stays awake | Windows puts the PC to sleep on mains power (a WARN only: alarms, reminders and "tell me when" go off by the PC's clock, and nothing goes off while it sleeps). Read with `powercfg /query` (read-only); the WARN gives the one line that keeps it awake while plugged in, `powercfg /change standby-timeout-ac 0`. Skipped off Windows (ease-of-use audit 2026-09-27, #8d) |
+ | Windows Credential Manager | it does not answer |
+ 
++**The wrong folder is one message, not a FAIL per check** (ease-of-use
++audit 2026-09-27, #8b). Before anything is checked, `selftest.py` (both
++modes) looks for `jarvis_hud.py` in the backend folder - `JARVIS_BACKEND`,
++or this repository's own `backend` folder when that is not set. When it is
++not there, it prints one message with the line to run and stops (exit code
++2), instead of a FAIL for every check.
++
+ **Read-only.** It never approves or denies a card, never sends an email,
+ never unloads a model, never changes a setting, and never presses Stop
+ everything. `test_selftest_preflight.py` checks that the only things it
+diff --git a/backend/jarvis_asks_first.py b/backend/jarvis_asks_first.py
+index fc0ff33..5061aa7 100644
+--- a/backend/jarvis_asks_first.py
++++ b/backend/jarvis_asks_first.py
+@@ -149,6 +149,27 @@ NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell
+              "which cannot stop to ask.")
+ NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
+ 
++#: The web search row (the owner's decisions of 2026-09-25 and 2026-09-26;
++#: jarvis_agent.py WEB_SEARCH_* are the reasons a search asks). It does not
++#: ask every time, so "Asks you first, every time" was untrue (ease-of-use
++#: audit 2026-09-27, #1a).
++SAYS_SEARCH = "Asks only when something private could slip in"
++NOTE_SEARCH = ("A search straight from your own question runs without a card. It asks "
++               "first, showing the exact search words, after Jarvis has read an email, a "
++               "file, a note, a web page or other outside text in the chat, when your "
++               "message was pasted or shared, when the search words repeat something you "
++               "told Jarvis, or when it used a sensitive saved fact. \"Ask before every web "
++               "search\" (web search settings) makes it ask every time.")
++NOTE_SEARCH_EVERY = ("\"Ask before every web search\" is on, so every search waits for your "
++                     "yes. Turning it off (web search settings) takes an approval card.")
++#: An older name in the settings file for the same thing as another row. The
++#: page shows one row, under the name the tool is decided by (jarvis_reach.py
++#: _FALLBACK_ACTIONS; backend/README.md's jarvis_gate.py table), so "Read
++#: your calendar" is not listed twice.
++OLDER_NAMES = {"read_calendar": "calendar_read"}
++NOTE_OLDER = ("Your settings file also has an older line for this, {old} = \"{tier}\". "
++              "The calendar tool follows this row ({new}).")
++
+ # ---------------------------------------------------------------------------
+ # The lists
+ # ---------------------------------------------------------------------------
+@@ -207,7 +228,7 @@ MUST_ASK = frozenset({
+ #: row (FIXED) has no tier: the owner decided it and the code does it.
+ GROUPS = (
+     ("Reading your own things", ["calendar_read", "email_read", "notes_search", "home_read",
+-                                 "read_files_readonly", "read_calendar", "read_joplin_note",
++                                 "read_files_readonly", "read_joplin_note",
+                                  "read_logseq_page"]),
+     ("Writing your notes", ["append_obsidian_daily", "append_logseq_journal",
+                             "create_joplin_note", "create_logseq_page", "edit_joplin_note",
+@@ -257,6 +278,16 @@ def _tier(action: str) -> str:
+     return t if t in SAYS else "ask"
+ 
+ 
++def _search_asks_every_time() -> bool:
++    """"Ask before every web search" (jarvis_search.settings - a damaged
++    file reads as on there). False when web search is not on this PC."""
++    try:
++        import jarvis_search
++        return bool(jarvis_search.settings().get("ask_every_time"))
++    except Exception:
++        return False
++
++
+ def _file_tiers() -> dict:
+     try:
+         return dict(fw.all_tiers()) if fw is not None else {}
+@@ -329,6 +360,11 @@ def _row(action: str, *, here: bool) -> dict:
+     tier = _tier(action)
+     row = {"id": action, "action": action, "title": _title(action), "tier": tier,
+            "says": SAYS[tier], "fixed": False}
++    if action == "search_the_web" and tier == "ask":
++        every = _search_asks_every_time()
++        row["says"] = SAYS["ask"] if every else SAYS_SEARCH
++        row["note"] = NOTE_SEARCH_EVERY if every else NOTE_SEARCH
++        return row
+     if action in MUST_ASK:
+         if tier in ("auto", "notify"):
+             row["says"] = SAYS_REFUSED
+@@ -341,6 +377,10 @@ def _row(action: str, *, here: bool) -> dict:
+         row["note"] = NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE
+         if tier == "ask" and not here:
+             row["note"] += " " + PHONE_LOOSEN
++        for old, new in OLDER_NAMES.items():
++            had = _file_tiers().get(old) if new == action else None
++            if had is not None and str(had) != tier:
++                row["note"] += " " + NOTE_OLDER.format(old=old, tier=had, new=new)
+         return row
+     row["note"] = NOTE_FILE
+     return row
+@@ -354,7 +394,7 @@ def view(*, here: bool = False) -> dict:
+         rows = [_row(a, here=here) for a in ids]
+         seen.update(ids)
+         groups.append({"title": title, "rows": rows})
+-    extra = sorted(a for a in _file_tiers() if a not in seen)
++    extra = sorted(a for a in _file_tiers() if a not in seen and a not in OLDER_NAMES)
+     if extra:
+         # A line in the owner's file that no group names: shown, never hidden.
+         groups[-1]["rows"].extend(_row(a, here=here) for a in extra)
+diff --git a/backend/jarvis_auto_learn.py b/backend/jarvis_auto_learn.py
+index 669152b..ee08b57 100644
+--- a/backend/jarvis_auto_learn.py
++++ b/backend/jarvis_auto_learn.py
+@@ -147,7 +147,7 @@ SENSITIVE_TEXT = ("Health, money, and private details about other people. When t
+ #: The note under "Learn automatically" while background learning is off -
+ #: the desktop's sentence, which both apps now show (fit audit item 10).
+ NEEDS_LEARNING = ("Background learning is off, so nothing is saved automatically. "
+-                  "Start learning above to use this.")
++                  "Start background learning above to use this.")
+ 
+ 
+ # --------------------------------------------------------------------------
+diff --git a/backend/jarvis_big_model.py b/backend/jarvis_big_model.py
+index 05c85e4..904f099 100644
+--- a/backend/jarvis_big_model.py
++++ b/backend/jarvis_big_model.py
+@@ -173,7 +173,8 @@ JOB_WHAT = {
+              "of the second graphics card. Much slower; for when you want a bigger model "
+              "to write the pages, or have no second card."),
+     "deep_questions": ("Ask a question that deserves a careful answer. It is answered in "
+-                       "the background by the big model and kept for you to read later."),
++                       "the background by the big model, and the answer stays for you to "
++                       "read until Jarvis stops or restarts."),
+ }
+ 
+ UNVERIFIED = ("None of colibri's speed figures have been checked on this PC. The numbers "
+diff --git a/backend/selftest.py b/backend/selftest.py
+index 8e3478e..b92edba 100644
+--- a/backend/selftest.py
++++ b/backend/selftest.py
+@@ -1,8 +1,15 @@
+ #!/usr/bin/env python3
+ """First-run self test: does this Jarvis backend actually work?
+ 
+-    python backend\\selftest.py
+-    python backend\\selftest.py --preflight      the Jarvis that is RUNNING now
++From this repository's folder, naming your backend folder (the one holding
++jarvis_hud.py) first - one PowerShell line:
++
++    $env:JARVIS_BACKEND = "C:\\...\\Desktop program"; py -3 backend\\selftest.py
++    ... py -3 backend\\selftest.py --preflight      the Jarvis that is RUNNING now
++
++Without JARVIS_BACKEND it looks in this repository's own backend folder,
++which holds no jarvis_hud.py; it then says so in one message and stops,
++rather than printing a FAIL for every check (ease-of-use audit 2026-09-27).
+ 
+ WHY THIS EXISTS
+ 
+@@ -853,7 +860,7 @@ class Live:
+ 
+     def __init__(self, *, port=None, http=None, stream_head=None, ollama=None,
+                  ollama_post=None, ollama_base=None, tokens=None, backend=None, repo=None, env=None, with_reads=False,
+-                 with_chat=False, log_dir=None, token_store=None, reads=None):
++                 with_chat=False, log_dir=None, token_store=None, reads=None, power=None):
+         self.env = os.environ if env is None else env
+         p = port or (self.env.get("JARVIS_HUD_PORT") or "").strip() or DEFAULT_PORT
+         try:
+@@ -877,6 +884,7 @@ class Live:
+         self.log_dir = log_dir
+         self.token_store = token_store  # target -> store, for the Credential Manager check
+         self.reads = reads              # {"email": fn, "calendar": fn} stand-ins
++        self.power = power              # () -> powercfg's text or None, for the sleep check
+         self.token = None
+         self.token_where = None
+         self.up = False
+@@ -1607,6 +1615,50 @@ def _read_once(live: Live, kind: str, name: str) -> tuple:
+             f"Settings -> What Jarvis can reach.")
+ 
+ 
++def _powercfg_sleep() -> "str | None":
++    """`powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE`'s text, or None
++    when this is not Windows or it cannot be asked. Read-only."""
++    if os.name != "nt":
++        return None
++    try:
++        r = subprocess.run(["powercfg", "/query", "SCHEME_CURRENT", "SUB_SLEEP", "STANDBYIDLE"],
++                           capture_output=True, text=True, timeout=15)
++    except Exception:
++        return None
++    return r.stdout if r.returncode == 0 else None
++
++
++def sleep_after_on_mains(text: str) -> "int | None":
++    """Seconds until Windows sleeps on mains power (0: never), or None when
++    the text cannot be read. powercfg's words are in the PC's own language,
++    so only the numbers are read: its block ends with the current mains (AC)
++    value, then the battery (DC) value, each a 0x... number."""
++    hexes = re.findall(r"0x([0-9a-fA-F]{8})\b", str(text or ""))
++    if len(hexes) < 2:
++        return None
++    return int(hexes[-2], 16)
++
++
++@preflight_check("sleep", "Does this PC stay awake for alarms and reminders?")
++def pf_sleep(live: Live) -> list:
++    text = (live.power or _powercfg_sleep)()
++    if text is None:
++        return [(SKIP, "the sleep setting, because this is not Windows or powercfg did not answer")]
++    secs = sleep_after_on_mains(text)
++    if secs is None:
++        return [(WARN, "the sleep setting could not be read",
++                 "powercfg answered in a way this check does not know. Look in Windows "
++                 "Settings -> System -> Power -> Screen and sleep.")]
++    if secs == 0:
++        return [(PASS, "Windows never puts this PC to sleep while it is plugged in")]
++    mins = max(1, round(secs / 60))
++    return [(WARN, f"Windows puts this PC to sleep after {mins} minute(s) on mains power",
++             "Alarms, reminders and \"tell me when\" ring on the PC's clock: while it sleeps "
++             "nothing goes off, and the phone cannot reach Jarvis. To keep it awake while "
++             "plugged in (the screen can still turn off), run this one line in PowerShell: "
++             "powercfg /change standby-timeout-ac 0")]
++
++
+ @preflight_check("credentials", "Is Windows Credential Manager reachable?")
+ def pf_credentials(live: Live) -> list:
+     try:
+@@ -1674,7 +1726,31 @@ def jarvis_version() -> str:
+     return v if re.fullmatch(r"\d+\.\d+\.\d+", v) else "unknown"
+ 
+ 
++#: The one line to run it, with the owner's folder as the example.
++RUN_LINE = ('$env:JARVIS_BACKEND = "C:\\Users\\pcadmin\\Documents\\Claude\\Open jarvis files'
++            '\\Desktop program"; py -3 backend\\selftest.py')
++
++
++def wrong_folder(backend: Path, mode: str = "") -> str:
++    """"" when `backend` holds jarvis_hud.py, else ONE message saying what to
++    do - instead of a FAIL for every check, which reads as "everything is
++    broken" when only the folder is wrong."""
++    if (Path(backend) / "jarvis_hud.py").is_file():
++        return ""
++    line = RUN_LINE + (f" {mode}" if mode else "")
++    return (f"jarvis_hud.py is not in {backend}, so that is not your backend folder, and\n"
++            "every check would fail for that reason alone. Nothing was checked.\n\n"
++            "Open PowerShell in this repository's folder (cd \"$env:USERPROFILE\\Epic-Jarvis\")\n"
++            "and run this one line, with YOUR backend folder - the one holding\n"
++            "jarvis_hud.py - between the first quotes:\n\n"
++            f"    {line}\n")
++
++
+ def preflight_main(argv) -> int:
++    wrong = wrong_folder(BACKEND, "--preflight")
++    if wrong:
++        print(wrong)
++        return 2
+     print("Preflight: the Jarvis that is running now, every chain end to end.")
+     print("Read-only: it approves nothing, sends no email, unloads no model and")
+     print("changes no setting. The pairing token is used, never shown.")
+@@ -1693,6 +1769,10 @@ def preflight_main(argv) -> int:
+ # ==========================================================================
+ 
+ def main() -> int:
++    wrong = wrong_folder(BACKEND)
++    if wrong:
++        print(wrong)
++        return 2
+     print(__doc__.split("WHY THIS EXISTS")[0].strip())
+     print(f"\nversion : {jarvis_version()} (this copy of the Jarvis files)")
+     print(f"backend : {BACKEND}")
+diff --git a/backend/test_asks_first.py b/backend/test_asks_first.py
+index 2c84673..c3eaf17 100644
+--- a/backend/test_asks_first.py
++++ b/backend/test_asks_first.py
+@@ -91,8 +91,12 @@ SAMPLE = (
+ 
+ def t_the_page_lists_every_action():
+     ids = [a for _, rows in AF.GROUPS for a in rows]
++    # An older name is folded into the row of the name its tool uses.
++    shown = set(ids) | set(AF.OLDER_NAMES)
+     check("every action a card can name is on the page",
+-          not [a for a in W.TITLES if a not in ids], [a for a in W.TITLES if a not in ids])
++          not [a for a in W.TITLES if a not in shown], [a for a in W.TITLES if a not in shown])
++    check("an older name's row is on the page, and the older name is not",
++          all(new in ids and old not in ids for old, new in AF.OLDER_NAMES.items()))
+     check("each is listed once", len(ids) == len(set(ids)))
+     v = AF.view(here=False)
+     rows = {r["id"]: r for g in v["groups"] for r in g["rows"]}
+@@ -126,6 +130,52 @@ def t_the_page_lists_every_action():
+         AF._tier = keep
+ 
+ 
++def t_the_web_search_row_tells_the_truth():
++    """Ease-of-use audit 2026-09-27 #1a: a search from the owner's own
++    question needs no card, so "Asks you first, every time" was untrue - it
++    is true only with "Ask before every web search" on."""
++    keep_t, keep_e, keep_f = AF._tier, AF._search_asks_every_time, AF._file_tiers
++    try:
++        AF._tier = lambda a: "ask"
++        AF._search_asks_every_time = lambda: False
++        r = AF._row("search_the_web", here=True)
++        check("by default: asks only when something private could slip in",
++              r["says"] == AF.SAYS_SEARCH and r["note"] == AF.NOTE_SEARCH
++              and "switch" not in r, r)
++        check("... and the note names every reason jarvis_agent asks",
++              all(w in AF.NOTE_SEARCH for w in ("your own question", "outside text",
++                                                "pasted or shared", "repeat",
++                                                "sensitive saved fact",
++                                                "Ask before every web search")))
++        AF._search_asks_every_time = lambda: True
++        r = AF._row("search_the_web", here=False)
++        check("with \"Ask before every web search\" on: asks every time",
++              r["says"] == AF.SAYS["ask"] and r["note"] == AF.NOTE_SEARCH_EVERY, r)
++        AF._tier = lambda a: "never"
++        r = AF._row("search_the_web", here=True)
++        check("\"never\": switched off", r["says"] == AF.SAYS["never"], r)
++        AF._tier = lambda a: "auto"
++        r = AF._row("search_the_web", here=True)
++        check("set looser in the file: refused, as before",
++              r["says"] == AF.SAYS_REFUSED and r["note"] == AF.NOTE_ALWAYS, r)
++        # One "Read your calendar" row, and a differing older line is said.
++        AF._tier = lambda a: {"calendar_read": "ask"}.get(a, "auto")
++        AF._file_tiers = lambda: {"calendar_read": "ask", "read_calendar": "auto"}
++        v = AF.view(here=True)
++        titles = [r["title"] for g in v["groups"] for r in g["rows"]]
++        check("\"Read your calendar\" is listed once", titles.count("Read your calendar") == 1,
++              titles)
++        rows = {r["id"]: r for g in v["groups"] for r in g["rows"]}
++        check("... and the older line, when it differs, is named on it",
++              "read_calendar" not in rows and 'read_calendar = "auto"' in rows["calendar_read"]["note"],
++              rows["calendar_read"]["note"])
++        AF._file_tiers = lambda: {"calendar_read": "ask", "read_calendar": "ask"}
++        check("... and not when it agrees",
++              "read_calendar" not in AF._row("calendar_read", here=True)["note"])
++    finally:
++        AF._tier, AF._search_asks_every_time, AF._file_tiers = keep_t, keep_e, keep_f
++
++
+ def t_the_safe_list_never_meets_the_hard_limits():
+     s = set(AF.SWITCHABLE)
+     check("the short safe list is the owner's: reads and note writes",
+diff --git a/backend/test_auto_learn.py b/backend/test_auto_learn.py
+index 3ee38e0..3785b59 100644
+--- a/backend/test_auto_learn.py
++++ b/backend/test_auto_learn.py
+@@ -421,7 +421,7 @@ def t_bad_input_and_routes():
+         check("with background learning off it says so", out["enabled"] is False
+               and out["auto_active"] is False and out["note"] == (
+                   "Background learning is off, so nothing is saved automatically. "
+-                  "Start learning above to use this."), out)
++                  "Start background learning above to use this."), out)
+         code, out = A.handle_get("/api/memory/auto", "limit=5")
+         check("GET /api/memory/auto carries the two switches",
+               code == 200 and out["facts"] == [] and out["auto"] is True
+@@ -1823,7 +1823,7 @@ def t_fit_the_words_the_apps_show():
+         A.settings_path().unlink()
+         check("fit 10: the learning-off note is the desktop's sentence",
+               A.learning_status(False)["note"] == "Background learning is off, so nothing is "
+-              "saved automatically. Start learning above to use this.")
++              "saved automatically. Start background learning above to use this.")
+         for verdict, outcome, message in (
+                 (V("approved", tier="auto"), "refused",
+                  "Your PC's settings do not let this be approved, so it stayed off."),
+diff --git a/backend/test_selftest_preflight.py b/backend/test_selftest_preflight.py
+index 0b2151c..9769415 100644
+--- a/backend/test_selftest_preflight.py
++++ b/backend/test_selftest_preflight.py
+@@ -214,7 +214,7 @@ def _rows(rows, key):
+ def t_the_registry():
+     keys = [k for k, _t, _f in S.PREFLIGHT]
+     want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
+-            "gate", "stop_all", "scheduler", "events", "voice", "reach", "credentials"]
++            "gate", "stop_all", "scheduler", "events", "voice", "reach", "sleep", "credentials"]
+     check("every check the owner asked for is registered, in order", keys == want, keys)
+     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
+     try:
+@@ -556,6 +556,61 @@ def t_desktop_version_and_a_broken_check():
+     check("and the checks after it still run", _rows(rows, "events")[0][0] == S.PASS)
+ 
+ 
++def t_sleep_on_mains_power_is_a_warning():
++    """Ease-of-use audit 2026-09-27 #8d: alarms ring on the PC, so a PC that
++    sleeps on mains power is a WARN (never a FAIL - a laptop may want it)."""
++    # powercfg's block, in two languages: only the numbers are read.
++    english = ("Power Setting GUID: 29f6c1db-86da-48c5-9fdb-f2b67b1f44da  (Sleep after)\n"
++               "  Minimum Possible Setting: 0x00000000\n"
++               "  Maximum Possible Setting: 0xffffffff\n"
++               "  Possible Settings increment: 0x00000001\n"
++               "  Possible Settings units: Seconds\n"
++               "Current AC Power Setting Index: 0x00000708\n"
++               "Current DC Power Setting Index: 0x00000384\n")
++    german = english.replace("Current AC Power Setting Index", "Aktueller Wechselstromindex") \
++                    .replace("Current DC Power Setting Index", "Aktueller Gleichstromindex")
++    check("30 minutes on mains power is read, in any language",
++          S.sleep_after_on_mains(english) == 1800 and S.sleep_after_on_mains(german) == 1800)
++    rows = S.pf_sleep(S.Live(power=lambda: english))
++    check("... and is a WARN with the one line that keeps it awake",
++          rows[0][0] == S.WARN and "30 minute" in rows[0][1]
++          and "powercfg /change standby-timeout-ac 0" in rows[0][2], rows)
++    never = english.replace("0x00000708", "0x00000000")
++    check("never sleeping on mains power: PASS", S.pf_sleep(S.Live(power=lambda: never))[0][0] == S.PASS)
++    check("not Windows: SKIP", S.pf_sleep(S.Live(power=lambda: None))[0][0] == S.SKIP)
++    check("an answer it cannot read: WARN, never a FAIL",
++          S.pf_sleep(S.Live(power=lambda: "nothing here"))[0][0] == S.WARN)
++
++
++def t_a_folder_without_jarvis_hud_says_so_once():
++    """Ease-of-use audit 2026-09-27 #8b: the wrong folder is ONE message
++    with the line to run, not a FAIL per check."""
++    empty = Path(tempfile.mkdtemp(prefix="jarvis-not-backend-"))
++    try:
++        said = S.wrong_folder(empty, "--preflight")
++        check("a folder without jarvis_hud.py: one message, with the one line to run",
++              "jarvis_hud.py is not in" in said and "Nothing was checked" in said
++              and "$env:JARVIS_BACKEND" in said and "selftest.py --preflight" in said
++              and "py -3" in said and "python " not in said, said)
++        (empty / "jarvis_hud.py").write_text("# stand-in", encoding="utf-8")
++        check("... and nothing to say once it is there", S.wrong_folder(empty) == "")
++        keep = S.BACKEND
++        S.BACKEND = empty / "nowhere"
++        try:
++            import contextlib
++            import io
++            buf = io.StringIO()
++            with contextlib.redirect_stdout(buf):
++                code = S.preflight_main(["--preflight"])
++            out = buf.getvalue()
++        finally:
++            S.BACKEND = keep
++        check("preflight stops before any check, with exit code 2",
++              code == 2 and "FAIL" not in out and "pass," not in out, (code, out))
++    finally:
++        shutil.rmtree(empty, ignore_errors=True)
++
++
+ def t_readme_line_is_one_line():
+     readme = (HERE / "README.md").read_text(encoding="utf-8")
+     lines = [l for l in readme.splitlines() if "selftest.py --preflight" in l
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 0385109..6ce1d2b 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -63,10 +63,19 @@ it works.
+    (`3232235777`) is judged as the address it dials, and both the address as
+    written and the host each app's own HTTP library parses must pass, so a
+    user name in the address (`http://127.0.0.1@evil.com`) cannot fool it.
+-   Refused in one sentence, the same on both apps: *"Jarvis's address X is
+-   not on your own networks, so this app will not send your pairing key
+-   there: use this PC (localhost), your home network (...), Tailscale (...)
+-   or NordVPN Meshnet (...)."* An address saved before the rule (or set in
++   Refused in one sentence: *"Jarvis's address X is not on your own
++   networks, so this app will not send your pairing key there: use this PC
++   (localhost), your home network (...), Tailscale (...) or NordVPN Meshnet
++   (...)."* on the desktop. The phone's sentence ends differently: *"...
++   there: on this phone, use your PC's Tailscale name (ending in .ts.net)
++   or its NordVPN Meshnet name (ending in .nord)."* (ease-of-use audit
++   2026-09-27, #1e), because the phone can only connect in plain http:// to
++   those names and to itself - `network_security_config.xml` allows no
++   other cleartext host, and cannot list an address range. **A known gap,
++   written down for the owner:** the phone ACCEPTS a home-network address
++   (192.168.x.x, `.local`) under the rule above, but cannot connect to it
++   (`PlatformReadiness` says so on the checks screen). Making the phone
++   reach the home network is the owner's call, not done here. An address saved before the rule (or set in
+    `JARVIS_HUD_BASE`) is not used, and nothing is used in its place (owner,
+    2026-09-26): the desktop does nothing over the network - no chat, no
+    reads, no requests to this PC instead, no backend started - until an
+@@ -1147,6 +1156,9 @@ backend routes, in both directions; the rest are listed here only.
+ | Saying a timer aloud when it goes off ("Your timer is done.", while "Hey Jarvis" listening is on in the Jarvis bar; 2026-09-25) | The owner asked for it on the desktop ("say timers aloud on the desktop when voice is on"). The phone's timer notification rings, and its voice is only switched on for a conversation - a phone in a pocket speaking on its own was not asked for. Alarms and urgent "tell me when"s ring until seen on both apps (JARVIS-API §30.5). |
+ | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
+ | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
++| "Show me where" under "Jarvis isn't running on your PC." (ease-of-use audit 2026-09-27, #2) | Written with the change. It opens the desktop's own Settings at "Starting Jarvis for you", with More options open. The phone has no Settings for the PC to open: it shows the same words (the shared plain-errors list), which name that place, and its "Try again". |
++| A filter box on "What Jarvis knows about you" (ease-of-use audit #7) | That list - every fact, forgotten ones too - is on the desktop only (the Forget and Erase rows above), so its filter is too. |
++| "I lost my phone. What do I do?" in the FAQ (ease-of-use audit #8h) | Everything it says is done on the PC and in Tailscale's or NordVPN's own pages, and the phone it is about is the one that is gone. docs/INSTALL.md, "If you lose your phone", has the steps. "How do I update Jarvis?" is in both FAQs. |
+ 
+ **On the phone, kept off the desktop:**
+ 
+diff --git a/docs/INSTALL.md b/docs/INSTALL.md
+index 9d88c5f..5c756f8 100644
+--- a/docs/INSTALL.md
++++ b/docs/INSTALL.md
+@@ -25,7 +25,7 @@ breaks the error usually names the wrong one.
+ | | what it is | who starts it |
+ |---|---|---|
+ | **The backend** | `jarvis_hud.py` — a Python program. This *is* Jarvis: the model, the memory, the approval queue. | you, or the desktop app |
+-| **Jarvis Desktop** | the Windows app: the spotlight bar, the tray icon, the widget, the Brain. A **client**. | you |
++| **Jarvis Desktop** | the Windows app: the Jarvis bar (Alt+Space), the tray icon, the widget, the Brain. A **client**. | you |
+ | **The phone app** | `jarvis-client`. Also a client. | you |
+ 
+ Both clients are windows onto the backend. If the backend is not running,
+@@ -147,6 +147,12 @@ In order, it:
+    search by meaning, the voice features). A minute or two the first time.
+ 6. **Runs the test suites** against your backend and prints a summary.
+ 
++**Everything it prints is also saved**, one file per run, in a
++`_jarvis-logs` folder inside your backend folder
++(`_jarvis-logs\apply-patches-<date>.txt`); the `Log` line near the top of
++what it prints gives the exact file. Send that file back if a run goes
++wrong - no token or key is ever printed by the script.
++
+ It is safe to run again - after a `git pull`, run the same line. It works out
+ what is already done and does the rest.
+ 
+@@ -256,6 +262,47 @@ want the browser page, copy `jarvis-desktop\src\jarvis_hud.html` into your
+ backend folder; without it that address returns an error (a 500) while
+ everything else works.
+ 
++**After every restart of the PC, Jarvis is off again** until you run this
++line again - or until the desktop app starts it for you (step 2.5, "Let
++Jarvis Desktop start and stop Jarvis", together with "Start Jarvis Desktop
++when Windows starts").
++
++### 1.9 Keep the PC awake
++
++**Alarms, reminders and "tell me when" go off on the PC, by the PC's clock.**
++While Windows has the PC asleep, nothing goes off, and the phone cannot reach
++Jarvis either; when the PC wakes, anything that was due goes off once and
++says when it was missed (backend/README.md, "Timers, alarms, reminders").
++
++To keep the PC awake while it is plugged in, one line in PowerShell (the
++screen can still turn itself off; this changes only the sleep timer on mains
++power, and writes no file):
++
++```powershell
++powercfg /change standby-timeout-ac 0
++```
++
++To undo it, the same line with a number of minutes instead of `0`, or
++Windows Settings → System → Power → Screen and sleep. The live check
++(below) warns when the PC sleeps on mains power.
++
++### 1.10 Check that it all works
++
++With Jarvis running, open a **second** PowerShell window in this
++repository's folder (`cd "$env:USERPROFILE\Epic-Jarvis"`) and run this one
++line, with your backend folder - the one holding `jarvis_hud.py` - between
++the first quotes. It checks the running Jarvis end to end and ends with
++"N pass, N fail, N warn"; the result is also saved as `preflight.txt` on
++your Desktop:
++
++```powershell
++$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:PYTHONIOENCODING = "utf-8"; py -3 backend\selftest.py --preflight | Tee-Object -FilePath "$env:USERPROFILE\Desktop\preflight.txt"; Write-Host "Saved to $env:USERPROFILE\Desktop\preflight.txt"
++```
++
++It changes nothing. Each FAIL says what to do. If it says `jarvis_hud.py is
++not in ...`, the folder between the first quotes is not your backend
++folder.
++
+ ---
+ 
+ ## Part 2 — The desktop app
+@@ -305,7 +352,7 @@ The README used to say the app has no window at startup. **It does.** Expect:
+ The HUD window will say **"demo · not connected"** and show a banner telling you
+ to run `py -3 jarvis_hud.py`. If you already did that in Part 1, ignore it —
+ that page is the backend's own browser page and does not know the desktop app
+-exists. The surfaces that tell you the truth are the tray and the spotlight bar.
++exists. The surfaces that tell you the truth are the tray and the Jarvis bar.
+ 
+ ### 2.4 The hotkeys, which may not work
+ 
+@@ -316,7 +363,7 @@ login, and Jarvis starts after them, so Jarvis loses.
+ If a key was refused you get a toast saying so. If the toast fails you get
+ nothing at all, because release builds have no console.
+ 
+-**The fallback, worth memorising now:** right-click the tray icon → **Settings**
++**The fallback, worth memorising now:** right-click the tray icon → **Settings and help…**
+ → **Shortcuts**. Every binding is editable and each shows whether Windows
+ accepted it.
+ 
+@@ -325,21 +372,28 @@ or more layouts installed.
+ 
+ ### 2.5 Point it at the backend
+ 
+-Tray → **Settings** → **Backend**.
++Tray → **Settings and help…** → **Connection**.
+ 
+-- Leave the URL at `http://127.0.0.1:4719`.
+-- **Supervision** is off by default and that is deliberate: with it on, the app
+-  adopts and kills the backend, which would kill a backend you started in a
+-  terminal. Turn it on only if you want the app to own the backend's lifetime.
++- Leave **Jarvis's address on this computer** at `http://127.0.0.1:4719`.
++- **Letting the app start Jarvis for you** is under **More options** (the
++  closed box near the end of Settings) → **Starting Jarvis for you** →
++  **Let Jarvis Desktop start and stop Jarvis**. It is off by default and
++  that is deliberate: with it on, the app starts Jarvis when it opens and
++  stops it when it quits. A Jarvis you started yourself in PowerShell is
++  never taken over and never stopped. Its **Start** button is greyed out
++  until this switch is on.
+ - If you do turn it on, set **Program** to the full path of the real
+   `python.exe` — not `python`, which may be the Store shortcut from step 1.1.
+   This one line prints it:
+   `py -3 -c "import sys; print(sys.executable)"` (typically
+   `C:\Users\<you>\AppData\Local\Programs\Python\Python312\python.exe`).
+   Set **Arguments** to the full path of `jarvis_hud.py`.
++- **Start Jarvis Desktop when Windows starts** (More options → Startup and
++  logs) starts the app, not Jarvis. Jarvis starts with it only when "Let
++  Jarvis Desktop start and stop Jarvis" is on too.
+ 
+-**Know the trade:** with supervision on, quitting Jarvis Desktop also stops the
+-backend, and therefore stops the phone from reaching anything.
++**Know the trade:** with that switch on, quitting Jarvis Desktop also stops
++Jarvis, and therefore stops the phone from reaching anything.
+ 
+ ---
+ 
+@@ -517,6 +571,38 @@ Meshnet). The owner's setup uses Meshnet, with names like
+ `marioirelan11-alps.nord`. A private mesh between two devices you own is not a
+ public tunnel; nothing is exposed to the internet.
+ 
++**You need one even at home, on the same Wi-Fi.** The phone app can only
++reach the PC by its Tailscale name (ending in `.ts.net`) or its Meshnet name
++(ending in `.nord`): Android lets this app use plain `http://` only to those
++names (`jarvis-client/app/src/main/res/xml/network_security_config.xml`),
++so a home-network address such as `192.168.1.20` does not work from the
++phone, even though it is on your own network. (The phone does not refuse
++such an address with its own message - it simply cannot connect; its
++Platform checks screen says so.)
++
++**Tailscale, step by step** (Meshnet works the same way, in the NordVPN app):
++
++1. **On the PC**, one line in PowerShell, then open **Tailscale** from the
++   Start menu and sign in (a Google, Microsoft or GitHub account; the free
++   plan is enough):
++
++   ```powershell
++   winget install --id Tailscale.Tailscale -e
++   ```
++
++2. **On the phone**, install **Tailscale** from the Play Store, open it,
++   sign in with the **same** account, and switch it on.
++3. In a browser, open Tailscale's admin page, **DNS**
++   (`https://login.tailscale.com/admin/dns`), and check **MagicDNS** is on -
++   that is what gives the PC a name.
++4. **The PC's name** is in the admin page's **Machines** list. It ends in
++   `.ts.net`, for example `desktop.tail1234.ts.net`. That name, followed by
++   `:4719`, is what the phone's Pairing screen asks for (step 3.3).
++5. Then step 3.2 below: the PC side, which lets the phone in.
++
++Both devices must be signed in and switched on in Tailscale whenever the
++phone talks to Jarvis - at home too.
++
+ ### 3.2 Reaching a supervised backend from the phone
+ 
+ **Fixed 2026-09-16.** The desktop app used to never tell a backend it started
+@@ -700,28 +786,92 @@ into both apps too).
+ 
+ ### 3.4 When it fails
+ 
+-The phone says: *"Cannot reach the desktop… Check your private network
+-(Tailscale or NordVPN Meshnet) is up on both ends."* **This message is usually
+-wrong.** A loopback-bound backend refuses the connection identically to an
+-absent private network. Check the bind first — it is the
+-more likely cause.
++The phone says one of these (the desktop app uses the same words):
++
++- *"Your PC isn't answering."* Nothing answered at all. The PC may be asleep
++  or switched off (step 1.9), or Tailscale or Meshnet may be off at one end.
++  Windows Firewall blocking the port looks the same (step 3.2, the firewall
++  line).
++- *"Jarvis isn't running on your PC."* The PC answered, but nothing was
++  listening for the phone. Either Jarvis is not started - start it (step
++  1.8, or the desktop app's Settings → More options → Starting Jarvis for
++  you → Start) - or **it is running but listens on this PC only**
++  (`127.0.0.1`, no bind address), which looks exactly the same from the
++  phone. If Jarvis is running on the PC, check the bind next (step 3.2).
++- *"This device can't find your PC by its name."* The name is wrong, or
++  Tailscale or Meshnet is off on the phone.
++- *"Your PC didn't accept this app's pairing key."* The key is wrong - or the
++  **server has no key at all**: when its banner says `token NONE`, the
++  server accepts only callers on the PC itself, so the phone is refused as
++  if the key were wrong. (Normally the backend makes and saves a key for
++  itself; `NONE` almost always means `jarvis_token_store.py` is missing -
++  see step 1.8. The lines under it say why.)
++
++Every message has a **Details** line under it for a bug report, with keys
++and passwords taken out. It can be selected and copied by hand.
+ 
+-*"The desktop refused that token"* can also mean the **server has no token at
+-all**: when its banner says `token NONE`, the server accepts only callers on
+-the PC itself, so your phone gets a 401 that looks like a token mismatch.
+-(Normally the backend makes and saves a token for itself; `NONE` almost
+-always means `jarvis_token_store.py` is missing - see step 1.8. The lines
+-under it say why.)
++---
++
++## Updating everything
++
++When this repository changes (the apps say "run apply-patches.ps1" when
++your PC's Jarvis is too old for something), update all three parts:
++
++1. **The backend.** Stop Jarvis (close its PowerShell window, or quit the
++   desktop app if it starts Jarvis for you). Then one line in PowerShell -
++   it gets the newest copy of this repository and runs the patch script
++   again, which keeps your settings file and backs up everything it
++   replaces; its log lands in `_jarvis-logs` inside your backend folder:
++
++   ```powershell
++   cd "$env:USERPROFILE\Epic-Jarvis"; git pull; powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
++   ```
++
++   Then start Jarvis again (step 1.8).
++2. **The desktop app.** Until the update signing key exists (Known rough
++   edges, "The updater is off"), build it again (step 2.1's second line)
++   and run the new installer over the old one. Your settings stay.
++3. **The phone app.** Download the newest `.apk` from the `client-latest`
++   release and install it over the old one (step 3.3, 1-2). It stays
++   paired: an update signed with the same key keeps the app's data.
++4. **Check** with the live check (step 1.10).
++
++---
++
++## If you lose your phone
++
++The phone holds the pairing key, so whoever has it unlocked can use
++Jarvis. On the PC, in this order:
++
++1. **Take the phone off your private network**: Tailscale's admin page,
++   **Machines** → the phone → **Remove** (or remove it from your Meshnet
++   in the NordVPN app). From then on it cannot reach the PC at all.
++2. **Make a new pairing key**, so the old one stops working: follow
++   "To get a new token" in step 3.2 (`py -3 jarvis_token_store.py forget`
++   in the backend folder, after clearing a token typed into the desktop
++   app and any `HUD_TOKEN`), then start Jarvis again.
++3. **Pair your other devices again** with the new key (step 3.3).
+ 
+ ---
+ 
+ ## Uninstalling
+ 
+-The uninstaller leaves your settings behind, including **the pairing token**,
+-in Windows Credential Manager (Control Panel → Credential Manager → Windows
+-Credentials): "Jarvis Backend/pairing token" (the one Jarvis made) and, if you
+-ever typed a token into Settings, "Jarvis Desktop/pairing token". Select each
+-and press Remove. A backend older than 2026-09-24 also left it in plain text
++The uninstaller leaves your settings behind, including **the pairing token
++and your keys**, in Windows Credential Manager (Control Panel → Credential
++Manager → Windows Credentials). Jarvis may have made up to seven entries
++there; remove each one that is listed (select it, then **Remove**):
++
++| entry | what it is |
++|---|---|
++| `Jarvis Backend/pairing token` | the pairing key Jarvis made |
++| `Jarvis Desktop/pairing token` | a pairing key you typed into the desktop app's Settings |
++| `Jarvis Backend/chat history key` | the key your kept chats are encrypted with. **Remove it only if you are also deleting your chats** (the `.openjarvis` folder below): without it they can never be read again |
++| `Jarvis Backend/Exa key` | your Exa web search key, if you added one |
++| `Jarvis Backend/Tavily key` | your Tavily web search key, if you added one |
++| `Jarvis Backend/Brave Search key` | your Brave Search key, if you added one |
++| `Jarvis Big Model/api key` | the key between Jarvis and the big model's engine, if you switched the big model on |
++
++A backend older than 2026-09-24 also left the pairing token in plain text
+ as `.openjarvis\token` in your user folder. To remove everything else:
+ 
+ ```
+@@ -734,14 +884,22 @@ as `.openjarvis\token` in your user folder. To remove everything else:
+ 
+ ## When something goes wrong
+ 
+-Open **Settings → Startup and logs → Open the log folder**. Two files:
++Open **Settings → More options → Startup and logs → Open the log folder**.
++Two files:
+ 
+ - `jarvis-desktop.log` — the app itself: what it started, what failed.
+ - `backend.log` — everything the Python backend printed, including the reason
+-  it refused to start.
++  it refused to start. **It exists only when the desktop app starts Jarvis
++  for you** (step 2.5); a Jarvis you start in PowerShell prints to that
++  window instead.
++
++Both roll over at 4 MB, keeping one previous copy as `.1`. Jarvis takes
++passwords, keys and the pairing key out of what it writes to `backend.log`
++(`log-scrub.patch`), but a list of patterns never catches everything, and
++`jarvis-desktop.log` has no such pass - so read either before you share it.
+ 
+-Both roll over at 4 MB, keeping one previous copy as `.1`. Neither is
+-redacted, so read before you share.
++The patch script keeps its own log of each run in `_jarvis-logs` inside your
++backend folder (step 1.5).
+ 
+ **"Cannot reach" errors while everything is running: check for a proxy.**
+ A proxy is a go-between server some workplaces, VPNs or "privacy" apps set
+@@ -765,7 +923,7 @@ proxy there. Jarvis's calls to programs on this PC (the backend, Ollama) are
+ being changed to never use a proxy at all; until that is done, a proxy set in
+ any of these places can get between them.
+ 
+-**"Jarvis got slow."** Open the Brain → Faculties → Models. If the model has fallen off
++**"Jarvis got slow."** Open the Brain → Model → Models. If the model has fallen off
+ the graphics card onto the CPU, there is now a yellow line at the top of that
+ list saying so, with the percentage. Nothing used to say it — Ollama reports
+ the model as loaded and healthy either way.
+@@ -777,15 +935,19 @@ the model as loaded and healthy either way.
+ Things you will hit that are already on the list, so you know they are known
+ rather than your fault.
+ 
+-- ~~No autostart.~~ Fixed. Settings → Startup and logs → **Start Jarvis when
+-  Windows starts**. It still loses the `Alt+Space` race, though: every startup
++- ~~No autostart.~~ Fixed. Settings → More options → Startup and logs →
++  **Start Jarvis Desktop when Windows starts**. It starts the app; Jarvis
++  itself starts with it only when "Let Jarvis Desktop start and stop Jarvis"
++  is on too. It still loses the `Alt+Space` race, though: every startup
+   program asks for its shortcuts at once and whoever asks first wins, so being
+   present after a reboot is not the same as owning the key.
+-- ~~No log file.~~ Fixed. Settings → Startup and logs → **Open the log
+-  folder**. `jarvis-desktop.log` is the app, `backend.log` is everything the
+-  Python side printed — which used to go to a closed handle, which is why the
+-  advice was to run it in a terminal. Both are **plain text and nothing in
+-  them is scrambled or hidden**, so read one before sending it anywhere.
++- ~~No log file.~~ Fixed. Settings → More options → Startup and logs →
++  **Open the log folder**. `jarvis-desktop.log` is the app, `backend.log` is
++  everything the Python side printed when the app started it — which used to
++  go to a closed handle, which is why the advice was to run it in a
++  terminal. Both are plain text; `backend.log` has passwords, keys and the
++  pairing key taken out, `jarvis-desktop.log` does not, and neither catches
++  everything - so read one before sending it anywhere.
+ - **The updater is off.** No signing key exists, so the in-app updater is inert
+   and reports itself unsupported. Updating means building and installing again.
+ - **Where the token is kept, honestly.** Two places.
+diff --git a/docs/JARVIS-API.md b/docs/JARVIS-API.md
+index 233e3ff..ab8c440 100644
+--- a/docs/JARVIS-API.md
++++ b/docs/JARVIS-API.md
+@@ -1085,7 +1085,7 @@ conversation text. **Android** does exactly those three things in the Brain's Mo
+ section (`ModelSpeed.from` in `ApiModels.kt`, drawn by `BrainScreen.kt`'s
+ `ModelsPlate`); `by_model` is matched to the running model by name, treating
+ `name` and `name:latest` as the same. **The desktop** does the same three
+-since 2026-09-23 (Brain → Faculties → Models, `brain.js` `modelSpeed`, a
++since 2026-09-23 (Brain → Model → Models, `brain.js` `modelSpeed`, a
+ line-for-line port); before that it ignored the block. Both apps can also
+ **install** a model there now - a typed name, one approval card, no
+ catalogue.
+@@ -2771,6 +2771,13 @@ empty and `why_not` says why.
+ 
+ `404` if there is no such conversation. `answer_kept: false` on a user turn
+ means its answer was not kept (a cloud answer, or one that did not finish).
++Both apps say so under that question (ease-of-use audit 2026-09-27, #1d),
++in one sentence: "Jarvis's answer to this was not kept: it came from a cloud
++model, or it did not finish." The PC does not say which of the two it was,
++so neither do the apps. A missing field (an older PC) is read as kept.
++Dates in History carry the weekday ("Tue 22 Sept 2026" on the desktop,
++"Tue 22 Sep 18:30" on the phone), and deleting a conversation says that it
++does not forget facts Jarvis learned from it.
+ 
+ `POST /api/history/delete {"id": "..."}` - `200 {"ok": true}` or `404`. One
+ conversation per request. **There is no "delete all" route**: irreversible
+@@ -2899,7 +2906,7 @@ memory (`gate-outcome.patch`'s list). Only the newest card may change what
+ (the existing `/api/memory/learning` switch) is on. `GET
+ /api/memory/learning` says both; when learning is off, its `note` - and both
+ apps - say "Background learning is off, so nothing is saved automatically.
+-Start learning above to use this."
++Start background learning above to use this."
+ 
+ A damaged settings file reads as off, and `why` says: "the automatic
+ learning settings file is damaged, so nothing is saved automatically. Turn
+@@ -5351,6 +5358,22 @@ asking", section 21), and "Switch lights, plugs and fans you name" (section
+ on the page, in ten groups; a line in the owner's file that no group names is
+ added under "Other", never hidden.
+ 
++**Web search's row tells the truth** (ease-of-use audit 2026-09-27, #1a).
++With `search_the_web = "ask"` it does NOT say "Asks you first, every time",
++because a search straight from the owner's own question runs without a card
++(section 23). It says "Asks only when something private could slip in", with
++a note naming when it does ask (after outside text in the chat, a pasted or
++shared message, search words that repeat a saved fact, a sensitive saved
++fact used) and that "Ask before every web search" makes it ask every time.
++With that setting on (`jarvis_search.settings()["ask_every_time"]`), the row
++says "Asks you first, every time". `never` and a looser line read as before.
++
++**One "Read your calendar" row.** `read_calendar` is an older name for
++`calendar_read` (the name the calendar tool is decided under), so it is
++folded into that row (`OLDER_NAMES`) and never listed on its own or under
++"Other". When the file's `read_calendar` line differs from `calendar_read`,
++the row's note names it.
++
+ ### 32.3 The loosening card
+ 
+ ```
+diff --git a/docs/SECOND-CARD.md b/docs/SECOND-CARD.md
+index 7a443f1..7b90a4d 100644
+--- a/docs/SECOND-CARD.md
++++ b/docs/SECOND-CARD.md
+@@ -49,7 +49,7 @@ everyday chat is never slowed by it.
+ 
+ **If a model is not installed**, the switch can still be on; the feature just
+ waits, and its status line says which model to install. Install it the usual
+-way: Brain window, Faculties, Models (the Install box), or `ollama pull <name>` in a terminal (for example
++way: Brain window, Model, Models (the Install box), or `ollama pull <name>` in a terminal (for example
+ `ollama pull qwen3:8b`).
+ 
+ ## What happens when a switch is on
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/data/OwnNetwork.kt b/jarvis-client/app/src/main/java/com/jarvis/client/data/OwnNetwork.kt
+index fe49071..73c5660 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/data/OwnNetwork.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/data/OwnNetwork.kt
+@@ -32,15 +32,18 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+ object OwnNetwork {
+ 
+     /**
+-     * What the owner sees when an address is refused - one sentence, the
+-     * desktop's words too (both are checked against `message` in the shared
+-     * table). `{address}` is the address as saved.
++     * What the owner sees when an address is refused - one sentence, checked
++     * against `phone_message` in the shared table. `{address}` is the address
++     * as saved. Its first half is the desktop's; its ending names only what
++     * this phone can connect to: network_security_config.xml allows plain
++     * http:// only to .ts.net and .nord names (and the phone itself), so a
++     * home-network address that passes [problem] still cannot be reached
++     * (ease-of-use audit 2026-09-27, #1e; PlatformReadiness says so for one).
+      */
+     const val MESSAGE =
+         "Jarvis's address {address} is not on your own networks, so this app will not " +
+-            "send your pairing key there: use this PC (localhost), your home network (an " +
+-            "address like 192.168.x.x or 10.x.x.x, or a name ending in .local), Tailscale " +
+-            "(a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord)."
++            "send your pairing key there: on this phone, use your PC's Tailscale name " +
++            "(ending in .ts.net) or its NordVPN Meshnet name (ending in .nord)."
+ 
+     /** Name endings only the owner's own networks answer - the backend's `_OWN_SUFFIXES`. */
+     private val OWN_SUFFIXES = listOf(".local", ".lan", ".home.arpa", ".ts.net", ".nord")
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/net/AutoLearn.kt b/jarvis-client/app/src/main/java/com/jarvis/client/net/AutoLearn.kt
+index d1c71d6..42216a4 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/net/AutoLearn.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/net/AutoLearn.kt
+@@ -273,7 +273,7 @@ object AutoLearn {
+      * learning is off.
+      */
+     const val LEARNING_OFF_NOTE =
+-        "Background learning is off, so nothing is saved automatically. Start learning above to use this."
++        "Background learning is off, so nothing is saved automatically. Start background learning above to use this."
+ 
+     const val SENSITIVE_NEEDS_AUTO = "\"Learn automatically\" is off, so this changes nothing until it is on."
+ 
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/net/ChatLog.kt b/jarvis-client/app/src/main/java/com/jarvis/client/net/ChatLog.kt
+index af07610..2932da6 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/net/ChatLog.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/net/ChatLog.kt
+@@ -64,7 +64,10 @@ object ChatLog {
+     const val KEEP_TITLE = "Delete conversations older than"
+     const val WAITING = "Waiting for your approval to turn chat history on. ${Approvals.WHERE}"
+     const val EMPTY = "No conversations are kept on your PC."
+-    const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone."
++    /** Under Delete, in both apps: deleting a chat is not forgetting (ease-of-use audit #7). */
++    const val DELETE_KEEPS_FACTS =
++        "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain."
++    const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone. $DELETE_KEEPS_FACTS"
+ 
+     // ----------------------------------------------------------- paths ---
+ 
+@@ -116,6 +119,8 @@ object ChatLog {
+         val at: Long?,
+         val provenance: String?,
+         val readOutside: Boolean,
++        /** False on a user turn whose answer the PC did not keep (a cloud answer, or one that did not finish). */
++        val answerKept: Boolean = true,
+     )
+ 
+     data class Transcript(val id: String, val title: String, val tainted: Boolean, val turns: List<Turn>)
+@@ -174,6 +179,8 @@ object ChatLog {
+                 at = o.whole("at"),
+                 provenance = o.str("provenance"),
+                 readOutside = o.flag("read_outside") == true,
++                // Only "false" from the PC says so; an older PC sends nothing.
++                answerKept = o.flag("answer_kept") != false,
+             )
+         }
+         return Transcript(id, body.str("title") ?: UNTITLED, body.flag("tainted") == true, turns)
+@@ -292,10 +299,11 @@ object ChatLog {
+     // --------------------------------------------------------- showing ---
+ 
+     private val TIME = DateTimeFormatter.ofPattern("HH:mm")
+-    private val DAY = DateTimeFormatter.ofPattern("d MMM", Locale.US)
+-    private val DAY_YEAR = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
++    // With the weekday, so "Tuesday's chat" can be found (ease-of-use audit #7).
++    private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
++    private val DAY_YEAR = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.US)
+ 
+-    /** "Today 14:05", "Yesterday 09:12", "12 Sep 18:30", "3 Jan 2025". */
++    /** "Today 14:05", "Yesterday 09:12", "Sat 12 Sep 18:30", "Fri 3 Jan 2025". */
+     fun whenLine(epochSeconds: Long?, zone: ZoneId, today: LocalDate): String {
+         if (epochSeconds == null) return "When unknown"
+         val at = Instant.ofEpochSecond(epochSeconds).atZone(zone)
+@@ -346,6 +354,13 @@ object ChatLog {
+         else -> UNKNOWN_MARK
+     }
+ 
++    /**
++     * Under a question whose answer the PC did not keep (`answer_kept: false`):
++     * a cloud model's answer, or one that did not finish. The PC does not say
++     * which, so neither does this. The same sentence as the desktop's.
++     */
++    const val NOT_KEPT_LINE = "Jarvis's answer to this was not kept: it came from a cloud model, or it did not finish."
++
+     const val UNKNOWN_MARK = "not known where from"
+     const val VOICE_MARK = "voice"
+     const val TAINT_MARK = "read outside text"
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/net/PlainErrors.kt b/jarvis-client/app/src/main/java/com/jarvis/client/net/PlainErrors.kt
+index 3914468..8d006be 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/net/PlainErrors.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/net/PlainErrors.kt
+@@ -55,8 +55,10 @@ object PlainErrors {
+         ),
+         "jarvis_not_running" to Kind(
+             "Jarvis isn't running on your PC.",
+-            "The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start " +
+-                "Jarvis), then try again.",
++            "The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, " +
++                "then More options, and press Start under \"Starting Jarvis for you\" (it needs " +
++                "\"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in PowerShell, the " +
++                "way you set it up. Then try again.",
+             RETRY,
+         ),
+         "name_not_found" to Kind(
+@@ -98,12 +100,12 @@ object PlainErrors {
+         ),
+         "backend_too_old" to Kind(
+             "Your PC's Jarvis is too old for this.",
+-            "Update it: on the PC, run apply-patches.ps1, then restart Jarvis.",
++            "Update it: on the PC, run apply-patches.ps1, then restart Jarvis. The steps are in Help: \"How do I update Jarvis?\"",
+             NONE,
+         ),
+         "feature_off" to Kind(
+             "That part of Jarvis isn't running on your PC right now.",
+-            "Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it.",
++            "Restart Jarvis on the PC. If it stays off, update it - the steps are in Help: \"How do I update Jarvis?\"",
+             NONE,
+         ),
+         "server_error" to Kind(
+@@ -114,7 +116,7 @@ object PlainErrors {
+         ),
+         "unreadable" to Kind(
+             "Your PC answered in a way this app can't read.",
+-            "Update both: run apply-patches.ps1 on the PC, and install the latest app.",
++            "Update both: run apply-patches.ps1 on the PC, and install the latest app. The steps are in Help: \"How do I update Jarvis?\"",
+             NONE,
+         ),
+         "timeout" to Kind(
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/service/EventService.kt b/jarvis-client/app/src/main/java/com/jarvis/client/service/EventService.kt
+index b3b5e19..143a5cb 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/service/EventService.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/service/EventService.kt
+@@ -352,7 +352,7 @@ class EventService : Service() {
+             activity == Activity.WORKING -> "Working"
+             activity == Activity.PAUSED -> "Paused"
+             activity == Activity.ERROR -> "Something went wrong"
+-            else -> "Linked"
++            else -> "Connected"
+         }
+ 
+         val notification: Notification =
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/service/LinkTileService.kt b/jarvis-client/app/src/main/java/com/jarvis/client/service/LinkTileService.kt
+index a19d928..49fe054 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/service/LinkTileService.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/service/LinkTileService.kt
+@@ -126,7 +126,7 @@ class LinkTileService : TileService() {
+                 activity == Activity.SPEAKING -> "Speaking"
+                 activity == Activity.LISTENING -> "Listening"
+                 activity == Activity.PAUSED -> "Paused"
+-                else -> "Linked"
++                else -> "Connected"
+             }
+         }
+         tile.updateTile()
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/Parts.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/Parts.kt
+index 2ba56b0..9f280b3 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/Parts.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/Parts.kt
+@@ -49,6 +49,7 @@ import com.jarvis.client.ui.theme.LocalRadii
+ import androidx.compose.foundation.clickable
+ import androidx.compose.ui.graphics.graphicsLayer
+ import androidx.compose.foundation.text.BasicTextField
++import androidx.compose.foundation.text.selection.SelectionContainer
+ import androidx.compose.foundation.text.KeyboardActions
+ import androidx.compose.foundation.text.KeyboardOptions
+ import androidx.compose.material3.CircularProgressIndicator
+@@ -752,11 +753,17 @@ fun Notice(
+             }
+         }
+         if (hasDetails && open) {
+-            Text(
+-                details.orEmpty(),
+-                style = MaterialTheme.typography.labelSmall,
+-                color = chrome.textLo,
+-            )
++            // Selectable, so it can be copied by hand into a bug report
++            // (ease-of-use audit 2026-09-27, #6). No Copy button: the
++            // desktop's clipboard can sync off the PC, and one wording and
++            // one way for both apps.
++            SelectionContainer {
++                Text(
++                    details.orEmpty(),
++                    style = MaterialTheme.typography.labelSmall,
++                    color = chrome.textLo,
++                )
++            }
+         }
+     }
+ }
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt
+index 79478d2..d550e14 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt
+@@ -241,9 +241,10 @@ fun BrainScreen(
+     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
+         // Titled "Brain", the word on Home's button that opens it and the
+         // PC's name for the same place (the owner's decision of 2026-09-26:
+-        // "Mind" became "Brain" to match the desktop), with the old title
+-        // kept underneath (screens-15) - the same as Help does.
+-        TopBar("Brain", onBack, subtitle = "State of mind") {
++        // "Mind" became "Brain" to match the desktop). The old subtitle,
++        // "State of mind", was dropped in the ease-of-use audit's wording
++        // pass (2026-09-27): one name for one place.
++        TopBar("Brain", onBack) {
+             Quiet(
+                 if (brain.refreshing) "Refreshing…" else "Refresh",
+                 enabled = !brain.refreshing,
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/FaqScreen.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/FaqScreen.kt
+index 6debfb7..27e5276 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/FaqScreen.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/FaqScreen.kt
+@@ -200,16 +200,17 @@ private val FAQS = listOf(
+             "using one that phones home.",
+     ),
+     Faq(
+-        "It says \"Cannot reach the desktop.\" Now what?",
+-        "Check that your private network (Tailscale, or NordVPN's Meshnet) " +
+-            "is actually running on both the phone and the desktop first — " +
+-            "that is the most common cause by far. Open " +
+-            "Platform checks from Home to see exactly what this phone thinks " +
+-            "is wrong. One known rough edge worth knowing about: a desktop " +
+-            "that is simply asleep or has its lid closed currently looks " +
+-            "identical to a real error on this screen, rather than a calmer " +
+-            "\"it's just asleep\" message — so before assuming something " +
+-            "broke, check whether the desktop itself is actually awake.",
++        "It says \"Your PC isn't answering\" or \"Jarvis isn't running on your PC\". Now what?",
++        "\"Your PC isn't answering\" means nothing answered at all: the PC may be " +
++            "asleep or switched off, or your private network (Tailscale, or " +
++            "NordVPN's Meshnet) may be off at one end. Wake the PC first, then " +
++            "check the private network is running on both the phone and the PC. " +
++            "\"Jarvis isn't running on your PC\" means the PC answered but nothing " +
++            "was listening for the phone: Jarvis is not started (on the PC, start " +
++            "it the way you set it up, or in Jarvis Desktop's Settings, More " +
++            "options, Start), or it is running but listens on the PC only - " +
++            "then fill in \"Let my phone reach this\" in the desktop app's Settings. " +
++            "Open Platform checks from Home to see what this phone thinks is wrong.",
+     ),
+     Faq(
+         "Why does Jarvis want an exception from battery optimisation?",
+@@ -261,6 +262,20 @@ private val FAQS = listOf(
+             "off Check for new versions on the This app card; that card also " +
+             "says if the last check failed.",
+     ),
++    Faq(
++        // The one answer the "run apply-patches.ps1" messages point to
++        // (ease-of-use audit 2026-09-27, #8e). The desktop's FAQ says the same.
++        "How do I update Jarvis?",
++        "Three parts, in this order. Jarvis on your PC: stop it, then in " +
++            "PowerShell, in your copy of the Jarvis files, get the newest files " +
++            "(git pull) and run apply-patches.ps1 again - it keeps your settings " +
++            "file, backs up what it replaces and saves a log of the run in " +
++            "_jarvis-logs in your Jarvis folder - then start Jarvis again. The " +
++            "desktop app: build and install it again (there is no automatic " +
++            "update yet). This app: install the newest file from the release " +
++            "page over the old one; it stays paired. docs/INSTALL.md, \"Updating " +
++            "everything\", has each step as one line to copy.",
++    ),
+ )
+ 
+ @Composable
+@@ -385,7 +400,8 @@ private fun AboutCard() {
+                 "internet. Only small sound models run on this phone, and " +
+                 "none of them turns speech into words; there is no " +
+                 "approve-all anywhere in this app, and " +
+-                "every action still stops and asks first, one at a time.",
++                "anything risky still asks first, one at a time. " +
++                "\"What asks first\" on Brain lists exactly what asks and what does not.",
+             style = MaterialTheme.typography.bodySmall,
+             color = chrome.textMid,
+         )
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HistoryScreen.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HistoryScreen.kt
+index 291111e..f414905 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HistoryScreen.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HistoryScreen.kt
+@@ -484,6 +484,13 @@ private fun Conversation(
+                         color = chrome.textLo,
+                     )
+                 }
++                if (mine && !turn.answerKept) {
++                    Text(
++                        ChatLog.NOT_KEPT_LINE,
++                        style = MaterialTheme.typography.labelSmall,
++                        color = chrome.textLo,
++                    )
++                }
+             }
+         }
+         item(key = "tail") { Gap(24) }
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt
+index d0ac656..43a7873 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt
+@@ -1088,7 +1088,7 @@ private fun StatusLine(
+     // showing "thinking" at a desktop that went away ten minutes ago.
+     val (dot, label) = when {
+         !linked -> chrome.badMark to (state.linkDetail ?: "Offline")
+-        state.stale -> chrome.warnMark to "Stale — reconnecting"
++        state.stale -> chrome.warnMark to "Catching up…"
+         else -> when (state.activity) {
+             Activity.LISTENING -> chrome.warnMark to "Listening"
+             Activity.THINKING, Activity.WORKING -> accent to "Thinking"
+@@ -1096,9 +1096,9 @@ private fun StatusLine(
+             Activity.SPEAKING -> accent to "Speaking"
+             Activity.ERROR -> chrome.badMark to "Error on the desktop"
+             else -> chrome.okMark to when (state.power) {
+-                "quiet" -> "Linked · quiet"
+-                "standby" -> "Linked · standby"
+-                else -> "Linked"
++                "quiet" -> "Connected · quiet"
++                "standby" -> "Connected · standby"
++                else -> "Connected"
+             }
+         }
+     }
+@@ -1565,7 +1565,7 @@ private fun FaceBlock(
+                 if (showCaption && opensMind) {
+                     Gap(2)
+                     Text(
+-                        "State of mind →",
++                        "Open the Brain →",
+                         style = MaterialTheme.typography.labelSmall,
+                         color = wellChrome.textLo,
+                         modifier = Modifier
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/MemoryCountsPlate.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/MemoryCountsPlate.kt
+index 016067b..810411e 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/MemoryCountsPlate.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/MemoryCountsPlate.kt
+@@ -105,7 +105,7 @@ internal fun MemoryCountsSection(
+             val on = learning
+             if (on != null && !cardWaiting) {
+                 Quiet(
+-                    if (on) "Stop learning" else "Start learning",
++                    if (on) "Pause background learning" else "Start background learning",
+                     enabled = !busy,
+                     onClick = {
+                         busy = true
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/widget/QuickLinkWidget.kt b/jarvis-client/app/src/main/java/com/jarvis/client/widget/QuickLinkWidget.kt
+index 90d66d2..42dfc8a 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/widget/QuickLinkWidget.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/widget/QuickLinkWidget.kt
+@@ -88,7 +88,7 @@ class QuickLinkWidget : GlanceAppWidget() {
+                 Spacer(GlanceModifier.width(8.dp))
+                 Text(
+                     text = when (link) {
+-                        LinkState.CONNECTED -> "Linked"
++                        LinkState.CONNECTED -> "Connected"
+                         LinkState.RECONNECTING -> "Reconnecting"
+                         LinkState.OFFLINE -> "Offline"
+                     },
+diff --git a/jarvis-client/app/src/test/java/com/jarvis/client/AutoLearnTest.kt b/jarvis-client/app/src/test/java/com/jarvis/client/AutoLearnTest.kt
+index 093ff52..f0290d1 100644
+--- a/jarvis-client/app/src/test/java/com/jarvis/client/AutoLearnTest.kt
++++ b/jarvis-client/app/src/test/java/com/jarvis/client/AutoLearnTest.kt
+@@ -145,7 +145,7 @@ class AutoLearnTest {
+         // "Learn automatically" means nothing while background learning is
+         // off, and says so - in the desktop's sentence (fit audit item 10).
+         assertEquals(
+-            "Background learning is off, so nothing is saved automatically. Start learning above to use this.",
++            "Background learning is off, so nothing is saved automatically. Start background learning above to use this.",
+             AutoLearn.LEARNING_OFF_NOTE,
+         )
+         assertTrue(AutoLearn.stateLine(Which.AUTO, Switch.ON, false, true).endsWith(" " + AutoLearn.LEARNING_OFF_NOTE))
+diff --git a/jarvis-client/app/src/test/java/com/jarvis/client/ChatLogTest.kt b/jarvis-client/app/src/test/java/com/jarvis/client/ChatLogTest.kt
+index 71658e4..8556333 100644
+--- a/jarvis-client/app/src/test/java/com/jarvis/client/ChatLogTest.kt
++++ b/jarvis-client/app/src/test/java/com/jarvis/client/ChatLogTest.kt
+@@ -107,7 +107,7 @@ class ChatLogTest {
+                    {"role":"user","text":"an article","at":1790000000,"provenance":"shared","read_outside":false},
+                    {"role":"user","text":"what is it about?","at":1790000001,"provenance":"typed","read_outside":false},
+                    {"role":"assistant","text":"Teeth.","at":1790000004},
+-                   {"role":"user","text":"look it up","at":1790000010,"provenance":"voice","read_outside":true},
++                   {"role":"user","text":"look it up","at":1790000010,"provenance":"voice","read_outside":true,"answer_kept":false},
+                    {"text":"no role"}
+                 ]}""",
+             ),
+@@ -119,6 +119,8 @@ class ChatLogTest {
+         assertEquals(listOf("user", "user", "assistant", "user"), t.turns.map { it.role })
+         assertEquals(listOf("shared", "typed", null, "voice"), t.turns.map { it.provenance })
+         assertEquals(listOf(false, false, false, true), t.turns.map { it.readOutside })
++        // Only the PC's "false" says the answer was not kept; missing is kept (an older PC).
++        assertEquals(listOf(true, true, true, false), t.turns.map { it.answerKept })
+         assertEquals(1790000004L, t.turns[2].at)
+         assertNull(ChatLog.transcript(obj("""{"turns":[]}""")))
+     }
+@@ -268,8 +270,8 @@ class ChatLogTest {
+         val noon = today.atStartOfDay(zone).plusHours(12).toEpochSecond()
+         assertEquals("Today 12:00", ChatLog.whenLine(noon, zone, today))
+         assertEquals("Yesterday 12:00", ChatLog.whenLine(noon - 86_400, zone, today))
+-        assertEquals("12 Sep 12:00", ChatLog.whenLine(noon - 12 * 86_400, zone, today))
+-        assertEquals("3 Jan 2025", ChatLog.whenLine(LocalDate.of(2025, 1, 3).atStartOfDay(zone).toEpochSecond(), zone, today))
++        assertEquals("Sat 12 Sep 12:00", ChatLog.whenLine(noon - 12 * 86_400, zone, today))
++        assertEquals("Fri 3 Jan 2025", ChatLog.whenLine(LocalDate.of(2025, 1, 3).atStartOfDay(zone).toEpochSecond(), zone, today))
+         assertEquals("When unknown", ChatLog.whenLine(null, zone, today))
+         val row = ChatLog.page(obj(listBody)).conversations[1]
+         assertEquals("PC", ChatLog.deviceWord(row.device))
+diff --git a/jarvis-client/app/src/test/java/com/jarvis/client/data/OwnNetworkTest.kt b/jarvis-client/app/src/test/java/com/jarvis/client/data/OwnNetworkTest.kt
+index 2197481..8def784 100644
+--- a/jarvis-client/app/src/test/java/com/jarvis/client/data/OwnNetworkTest.kt
++++ b/jarvis-client/app/src/test/java/com/jarvis/client/data/OwnNetworkTest.kt
+@@ -38,12 +38,16 @@ class OwnNetworkTest {
+             text to o["own"]!!.jsonPrimitive.boolean
+         }
+ 
+-    private val message: String get() = cases["message"]!!.jsonPrimitive.content
++    /** The phone's sentence: it names only the names this phone can connect to. */
++    private val message: String get() = cases["phone_message"]!!.jsonPrimitive.content
+ 
+     @Test
+     fun `the words are the shared ones`() {
+         assertEquals(message, OwnNetwork.MESSAGE)
+-        assertEquals(cases["message_unshown"]!!.jsonPrimitive.content, OwnNetwork.message("http://me:pw@evil.com"))
++        assertEquals(cases["phone_message_unshown"]!!.jsonPrimitive.content, OwnNetwork.message("http://me:pw@evil.com"))
++        // The same first half as the desktop's sentence.
++        val desktop = cases["message"]!!.jsonPrimitive.content
++        assertEquals(desktop.substringBefore(": use "), message.substringBefore(": on this phone"))
+     }
+ 
+     /** Every host, exactly as the backend's `_own_network` judges it. */
+diff --git a/jarvis-client/app/src/test/resources/contract/asks-first-cases.json b/jarvis-client/app/src/test/resources/contract/asks-first-cases.json
+index 0f65b0f..33f3685 100644
+--- a/jarvis-client/app/src/test/resources/contract/asks-first-cases.json
++++ b/jarvis-client/app/src/test/resources/contract/asks-first-cases.json
+@@ -72,15 +72,6 @@
+        "tier": "auto",
+        "title": "Read files on this PC"
+       },
+-      {
+-       "action": "read_calendar",
+-       "fixed": false,
+-       "id": "read_calendar",
+-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+-       "says": "Does it without asking",
+-       "tier": "auto",
+-       "title": "Read your calendar"
+-      },
+       {
+        "action": "read_joplin_note",
+        "fixed": false,
+@@ -309,8 +300,8 @@
+        "action": "search_the_web",
+        "fixed": false,
+        "id": "search_the_web",
+-       "note": "Always asks. This cannot be changed from an app.",
+-       "says": "Asks you first, every time",
++       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
++       "says": "Asks only when something private could slip in",
+        "tier": "ask",
+        "title": "Search the web"
+       },
+@@ -686,7 +677,7 @@
+        "action": "calendar_read",
+        "fixed": false,
+        "id": "calendar_read",
+-       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
++       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. Your settings file also has an older line for this, read_calendar = \"auto\". The calendar tool follows this row (calendar_read).",
+        "says": "Asks you first, every time",
+        "switch": {
+         "asks": true,
+@@ -742,15 +733,6 @@
+        "tier": "auto",
+        "title": "Read files on this PC"
+       },
+-      {
+-       "action": "read_calendar",
+-       "fixed": false,
+-       "id": "read_calendar",
+-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+-       "says": "Does it without asking",
+-       "tier": "auto",
+-       "title": "Read your calendar"
+-      },
+       {
+        "action": "read_joplin_note",
+        "fixed": false,
+@@ -979,7 +961,7 @@
+        "action": "search_the_web",
+        "fixed": false,
+        "id": "search_the_web",
+-       "note": "Always asks. This cannot be changed from an app.",
++       "note": "\"Ask before every web search\" is on, so every search waits for your yes. Turning it off (web search settings) takes an approval card.",
+        "says": "Asks you first, every time",
+        "tier": "ask",
+        "title": "Search the web"
+@@ -1356,7 +1338,7 @@
+        "action": "calendar_read",
+        "fixed": false,
+        "id": "calendar_read",
+-       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
++       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello. Your settings file also has an older line for this, read_calendar = \"auto\". The calendar tool follows this row (calendar_read).",
+        "says": "Asks you first, every time",
+        "switch": {
+         "asks": true,
+@@ -1412,15 +1394,6 @@
+        "tier": "auto",
+        "title": "Read files on this PC"
+       },
+-      {
+-       "action": "read_calendar",
+-       "fixed": false,
+-       "id": "read_calendar",
+-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+-       "says": "Does it without asking",
+-       "tier": "auto",
+-       "title": "Read your calendar"
+-      },
+       {
+        "action": "read_joplin_note",
+        "fixed": false,
+@@ -1649,8 +1622,8 @@
+        "action": "search_the_web",
+        "fixed": false,
+        "id": "search_the_web",
+-       "note": "Always asks. This cannot be changed from an app.",
+-       "says": "Asks you first, every time",
++       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
++       "says": "Asks only when something private could slip in",
+        "tier": "ask",
+        "title": "Search the web"
+       },
+@@ -2091,15 +2064,6 @@
+        "tier": "auto",
+        "title": "Read files on this PC"
+       },
+-      {
+-       "action": "read_calendar",
+-       "fixed": false,
+-       "id": "read_calendar",
+-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+-       "says": "Does it without asking",
+-       "tier": "auto",
+-       "title": "Read your calendar"
+-      },
+       {
+        "action": "read_joplin_note",
+        "fixed": false,
+@@ -2328,8 +2292,8 @@
+        "action": "search_the_web",
+        "fixed": false,
+        "id": "search_the_web",
+-       "note": "Always asks. This cannot be changed from an app.",
+-       "says": "Asks you first, every time",
++       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
++       "says": "Asks only when something private could slip in",
+        "tier": "ask",
+        "title": "Search the web"
+       },
+@@ -2728,6 +2692,7 @@
+    "never": "Never - your settings file switches it off",
+    "notify": "Does it, then tells you"
+   },
++  "says_search": "Asks only when something private could slip in",
+   "switch_label": "Ask me first",
+   "title": "What asks first",
+   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
+diff --git a/jarvis-client/app/src/test/resources/contract/big-model-cases.json b/jarvis-client/app/src/test/resources/contract/big-model-cases.json
+index 3865137..5c46a28 100644
+--- a/jarvis-client/app/src/test/resources/contract/big-model-cases.json
++++ b/jarvis-client/app/src/test/resources/contract/big-model-cases.json
+@@ -322,7 +322,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Working: DeepSeek V4 Flash is loaded."
+         }
+       ],
+@@ -421,7 +421,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "On. [big_model] cuda is \"on\", but there is no capable second card (only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)). colibri is never put on the main card: that one is everyday chat."
+         }
+       ],
+@@ -505,7 +505,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Off. Turn on the big model itself first."
+         }
+       ],
+@@ -604,7 +604,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "On. DeepSeek V4 Flash is loading."
+         }
+       ],
+@@ -688,7 +688,7 @@
+           "model": "qwen36",
+           "model_name": "Qwen3.6-35B-A3B",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Needs the big model set up: Qwen3.6-35B-A3B: the folder D:\\models\\qwen36_i4_gs64 does not exist."
+         }
+       ],
+@@ -787,7 +787,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Needs the big model set up: Python 3 was not found. colibri's launcher is a Python script: install Python 3 from python.org and tick \"Add python.exe to PATH\"."
+         }
+       ],
+@@ -886,7 +886,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "On. Usable, but not right now: it needs 16 GB of free memory to start and 12.4 GB is free. Close something big, or wait."
+         }
+       ],
+@@ -985,7 +985,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Needs the big model set up: [big_model] coli_path is C:\\colibri, but there is no coli.cmd in that folder. It must be the folder you unpacked colibri's release into."
+         }
+       ],
+@@ -1084,7 +1084,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "On. DeepSeek V4 Flash starts when this job next has work, and stops 10 minutes after."
+         }
+       ],
+@@ -1185,7 +1185,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Off. Turn on the big model itself first."
+         }
+       ],
+@@ -1284,7 +1284,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Off. Turn on the big model itself first."
+         }
+       ],
+@@ -1383,7 +1383,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Working: DeepSeek V4 Flash is loaded."
+         }
+       ],
+@@ -1482,7 +1482,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Off. Turn on the big model itself first."
+         }
+       ],
+diff --git a/jarvis-client/app/src/test/resources/contract/own-network-cases.json b/jarvis-client/app/src/test/resources/contract/own-network-cases.json
+index db0cd63..35ee710 100644
+--- a/jarvis-client/app/src/test/resources/contract/own-network-cases.json
++++ b/jarvis-client/app/src/test/resources/contract/own-network-cases.json
+@@ -2,6 +2,8 @@
+  "_comment": "Generated by tools/gen_own_network_cases.py from backend/jarvis_local_http.py (_own_network, plain_http_problem). Do not edit by hand.",
+  "message": "Jarvis's address {address} is not on your own networks, so this app will not send your pairing key there: use this PC (localhost), your home network (an address like 192.168.x.x or 10.x.x.x, or a name ending in .local), Tailscale (a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord).",
+  "message_unshown": "Jarvis's address is not on your own networks, so this app will not send your pairing key there: use this PC (localhost), your home network (an address like 192.168.x.x or 10.x.x.x, or a name ending in .local), Tailscale (a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord).",
++ "phone_message": "Jarvis's address {address} is not on your own networks, so this app will not send your pairing key there: on this phone, use your PC's Tailscale name (ending in .ts.net) or its NordVPN Meshnet name (ending in .nord).",
++ "phone_message_unshown": "Jarvis's address is not on your own networks, so this app will not send your pairing key there: on this phone, use your PC's Tailscale name (ending in .ts.net) or its NordVPN Meshnet name (ending in .nord).",
+  "hosts": [
+   {
+    "host": "localhost",
+diff --git a/jarvis-client/app/src/test/resources/contract/plain-error-cases.json b/jarvis-client/app/src/test/resources/contract/plain-error-cases.json
+index 8db2c1f..9a5bd27 100644
+--- a/jarvis-client/app/src/test/resources/contract/plain-error-cases.json
++++ b/jarvis-client/app/src/test/resources/contract/plain-error-cases.json
+@@ -249,7 +249,7 @@
+   "backend_too_old": {
+    "action": "none",
+    "button": "",
+-   "fix": "Update it: on the PC, run apply-patches.ps1, then restart Jarvis.",
++   "fix": "Update it: on the PC, run apply-patches.ps1, then restart Jarvis. The steps are in Help: \"How do I update Jarvis?\"",
+    "says": "Your PC's Jarvis is too old for this."
+   },
+   "connection_dropped": {
+@@ -267,13 +267,13 @@
+   "feature_off": {
+    "action": "none",
+    "button": "",
+-   "fix": "Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it.",
++   "fix": "Restart Jarvis on the PC. If it stays off, update it - the steps are in Help: \"How do I update Jarvis?\"",
+    "says": "That part of Jarvis isn't running on your PC right now."
+   },
+   "jarvis_not_running": {
+    "action": "retry",
+    "button": "Try again",
+-   "fix": "The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start Jarvis), then try again.",
++   "fix": "The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, then More options, and press Start under \"Starting Jarvis for you\" (it needs \"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in PowerShell, the way you set it up. Then try again.",
+    "says": "Jarvis isn't running on your PC."
+   },
+   "key_store_refused": {
+@@ -369,7 +369,7 @@
+   "unreadable": {
+    "action": "none",
+    "button": "",
+-   "fix": "Update both: run apply-patches.ps1 on the PC, and install the latest app.",
++   "fix": "Update both: run apply-patches.ps1 on the PC, and install the latest app. The steps are in Help: \"How do I update Jarvis?\"",
+    "says": "Your PC answered in a way this app can't read."
+   }
+  },
+diff --git a/jarvis-desktop/README.md b/jarvis-desktop/README.md
+index c55a03a..fc7fb4b 100644
+--- a/jarvis-desktop/README.md
++++ b/jarvis-desktop/README.md
+@@ -3,7 +3,7 @@
+ A native **Windows 11** client for the Jarvis stack: a Rust (Tauri v2) backend
+ driving a WebView2 frontend.
+ 
+-* **Quickbar** — a 750×80 frameless, transparent, always-on-top spotlight bar
++* **The Jarvis bar** (the code calls it the quickbar) — a 750×80 frameless, transparent, always-on-top spotlight bar
+   summoned with `Alt+Space`. Streams answers from the local Jarvis server into
+   an expandable card that the native window grows to fit.
+ * **HUD** — a 1280×820 frameless window pointed at `http://127.0.0.1:4719`.
+@@ -63,7 +63,7 @@ widget.
+ | `Alt` + `Space` | Toggle the quickbar. On show it is centred, focused, and the frontend receives `focus-input`. |
+ | `Win` + `Shift` + `J` | Read the clipboard and inject it into the quickbar as context. |
+ | `Alt` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
+-| `Alt` + `Shift` + `N` | Summon the bar pre-armed for a note (`#log `, or the first note app the PC is set up for). |
++| `Alt` + `Shift` + `N` | Open the Jarvis bar pre-armed for a note (`#log `, or the first note app the PC is set up for). |
+ | `Ctrl` + `+` / `-` / `0` | Text size, per window. Not a global hotkey — the window must have focus. |
+ 
+ Every global combination in that table is a **default**, not a constant. They
+diff --git a/jarvis-desktop/src-tauri/src/commands.rs b/jarvis-desktop/src-tauri/src/commands.rs
+index ae2785a..087ff08 100644
+--- a/jarvis-desktop/src-tauri/src/commands.rs
++++ b/jarvis-desktop/src-tauri/src/commands.rs
+@@ -1086,9 +1086,10 @@ fn validate_base(base: &str) -> Result<(), String> {
+ // Judged by spelling alone: nothing is looked up, no DNS, no network call.
+ 
+ /// What the owner sees when an address is refused - one sentence, so the
+-/// link line ("Offline — <first sentence>") shows all of it. The same words
+-/// as the phone's `OwnNetwork.MESSAGE`; both are checked against the
+-/// `message` in own-network-cases.json.
++/// link line ("Offline — <first sentence>") shows all of it. Checked against
++/// the `message` in own-network-cases.json. The phone's `OwnNetwork.MESSAGE`
++/// (`phone_message` there) shares its first half and names only the .ts.net
++/// and .nord names, the only ones the phone can connect to.
+ pub(crate) const OWN_NETWORK_MESSAGE: &str = "Jarvis's address {address} is not on your own \
+      networks, so this app will not send your pairing key there: use this PC (localhost), your \
+      home network (an address like 192.168.x.x or 10.x.x.x, or a name ending in .local), \
+diff --git a/jarvis-desktop/src-tauri/src/hotkeys.rs b/jarvis-desktop/src-tauri/src/hotkeys.rs
+index 3441b90..1144bc2 100644
+--- a/jarvis-desktop/src-tauri/src/hotkeys.rs
++++ b/jarvis-desktop/src-tauri/src/hotkeys.rs
+@@ -55,9 +55,9 @@ pub struct Action {
+ pub const ACTIONS: &[Action] = &[
+     Action {
+         id: "toggle_quickbar",
+-        label: "Summon Jarvis",
++        label: "Show or hide the Jarvis bar",
+         default: "Alt+Space",
+-        hint: "Show or hide the spotlight bar from anywhere.",
++        hint: "From anywhere, whatever program is in front.",
+     },
+     Action {
+         id: "ingest_clipboard",
+@@ -80,7 +80,7 @@ pub const ACTIONS: &[Action] = &[
+         // (main.js, "quick-note-summon").
+         label: "Quick note",
+         default: "Alt+Shift+N",
+-        hint: "Summon the bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
++        hint: "Open the Jarvis bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
+     },
+     Action {
+         id: "toggle_widget",
+@@ -404,7 +404,7 @@ mod tests {
+             .collect();
+         set.insert("quick_note".into(), "Alt+Space".into());
+         let err = validate(&set).expect_err("two actions on one combination were accepted");
+-        assert!(err.contains("Summon Jarvis"), "{err}");
++        assert!(err.contains("Show or hide the Jarvis bar"), "{err}");
+         assert!(err.contains("Quick note"), "{err}");
+     }
+ 
+diff --git a/jarvis-desktop/src-tauri/src/plain_errors.rs b/jarvis-desktop/src-tauri/src/plain_errors.rs
+index 46ee1f4..8c66538 100644
+--- a/jarvis-desktop/src-tauri/src/plain_errors.rs
++++ b/jarvis-desktop/src-tauri/src/plain_errors.rs
+@@ -34,8 +34,10 @@ use crate::commands::{
+ 
+ /// `jarvis_not_running`: nothing listens at the address (connection refused).
+ pub(crate) const NOT_RUNNING_SAYS: &str = "Jarvis isn't running on your PC.";
+-pub(crate) const NOT_RUNNING_FIX: &str = "The PC is on, but Jarvis is not started. Start it \
+-     from the desktop app (Settings, Start Jarvis), then try again.";
++pub(crate) const NOT_RUNNING_FIX: &str = "The PC is on, but Jarvis is not started. On the PC, \
++     open Jarvis Desktop's Settings, then More options, and press Start under \"Starting Jarvis \
++     for you\" (it needs \"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in \
++     PowerShell, the way you set it up. Then try again.";
+ /// `timeout`: connected, then no answer in time.
+ pub(crate) const TIMEOUT_SAYS: &str = "Jarvis took too long to answer.";
+ pub(crate) const TIMEOUT_FIX: &str =
+diff --git a/jarvis-desktop/src-tauri/src/tray.rs b/jarvis-desktop/src-tauri/src/tray.rs
+index 4aa7da8..b2a7d77 100644
+--- a/jarvis-desktop/src-tauri/src/tray.rs
++++ b/jarvis-desktop/src-tauri/src/tray.rs
+@@ -255,7 +255,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
+     let toggle_spotlight = MenuItem::with_id(
+         app,
+         ID_TOGGLE_SPOTLIGHT,
+-        "Show or hide Spotlight",
++        "Show or hide the Jarvis bar",
+         true,
+         // Read, not hardcoded. The tray is the fallback surface for exactly
+         // the case where a hotkey was refused or rebound, so a tray that
+@@ -289,7 +289,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
+         false,
+         None::<&str>,
+     )?;
+-    let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings…", true, None::<&str>)?;
++    let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings and help…", true, None::<&str>)?;
+     let status_check = MenuItem::with_id(
+         app,
+         ID_STATUS_CHECK,
+@@ -1076,7 +1076,11 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
+         ID_APPROVALS => {
+             if let Err(err) = windows::show_quickbar(app) {
+                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
+-                commands::notify(app, "Jarvis", &format!("Quickbar unavailable: {err}"));
++                commands::notify(
++                    app,
++                    "Jarvis",
++                    &format!("The Jarvis bar could not open: {err}"),
++                );
+                 return;
+             }
+             crate::emit_quickbar(app, events::SHOW_APPROVAL, ());
+@@ -1125,7 +1129,11 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
+         ID_WAITING => {
+             if let Err(err) = windows::show_quickbar(app) {
+                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
+-                commands::notify(app, "Jarvis", &format!("Quickbar unavailable: {err}"));
++                commands::notify(
++                    app,
++                    "Jarvis",
++                    &format!("The Jarvis bar could not open: {err}"),
++                );
+                 return;
+             }
+             crate::emit_quickbar(app, events::SHOW_DIGEST, ());
+diff --git a/jarvis-desktop/src/auto-learn.js b/jarvis-desktop/src/auto-learn.js
+index 913e1fc..68b7e01 100644
+--- a/jarvis-desktop/src/auto-learn.js
++++ b/jarvis-desktop/src/auto-learn.js
+@@ -145,7 +145,7 @@ export function stillOffLine(which) {
+ 
+ /** "Learn automatically" has meaning only while background learning is on. */
+ export const LEARNING_OFF_NOTE =
+-  "Background learning is off, so nothing is saved automatically. Start learning above to use this.";
++  "Background learning is off, so nothing is saved automatically. Start background learning above to use this.";
+ 
+ /** The quiet line on a `memory_saved` event: "Jarvis remembered 2 things". */
+ export function rememberedLine(n) {
+diff --git a/jarvis-desktop/src/brain.css b/jarvis-desktop/src/brain.css
+index 56b80f0..7fd43be 100644
+--- a/jarvis-desktop/src/brain.css
++++ b/jarvis-desktop/src/brain.css
+@@ -350,6 +350,13 @@ body {
+   flex: none;
+ }
+ 
++/* "What Jarvis knows about you": filters the loaded list (brain.js renderFacts). */
++.memory-facts-filter {
++  display: block;
++  max-width: 100%;
++  margin: 0 0 8px;
++}
++
+ .field {
+   padding: 6px 10px;
+   border: var(--stroke-hair) solid var(--border-strong);
+@@ -1554,6 +1561,14 @@ body {
+   overflow-wrap: anywhere;
+ }
+ 
++/* A question whose answer the PC did not keep (history-view.js NOT_KEPT_LINE). */
++.history-not-kept {
++  margin: 2px 0 0;
++  font-size: 11px;
++  font-style: italic;
++  color: var(--text-faint);
++}
++
+ /* "Open the card" (card-link.js): one line while an approval card waits. */
+ .card-link {
+   display: flex;
+diff --git a/jarvis-desktop/src/brain.html b/jarvis-desktop/src/brain.html
+index dbf31ae..196ae81 100644
+--- a/jarvis-desktop/src/brain.html
++++ b/jarvis-desktop/src/brain.html
+@@ -68,7 +68,7 @@
+             <button class="rail-item" role="tab" id="tab-faculties" data-goto="faculties"
+                     aria-selected="false" aria-controls="view-faculties" tabindex="-1">
+               <span class="rail-glyph" aria-hidden="true">◆</span>
+-              <span class="rail-label">Faculties</span>
++              <span class="rail-label">Model</span>
+             </button>
+           </li>
+           <li>
+@@ -355,6 +355,11 @@
+                 wiped from your PC for good, and only its dates stay - on a
+                 forgotten fact too.
+               </p>
++              <!-- Filters the list already loaded (ease-of-use audit #7); asks
++                   the PC nothing. Outside #memory-facts so a repaint keeps it. -->
++              <input class="field search memory-facts-filter" id="memory-facts-filter" type="search"
++                     placeholder="Filter this list…" spellcheck="false" autocomplete="off"
++                     aria-label="Filter what Jarvis knows about you" />
+               <div id="memory-facts"></div>
+             </div>
+             <!-- The wiki builder (backend/wiki.patch; wiki.js). -->
+@@ -378,8 +383,9 @@
+                 Ask one question you want a careful answer to. The big model
+                 answers it in the background on this PC, with no tools, no
+                 internet and no memory of your other conversations. It is
+-                slow: expect minutes, not seconds. Nothing leaves this PC, and
+-                the answer is kept on it for you to read here.
++                slow: expect minutes, not seconds. Nothing leaves this PC. The
++                answer stays here for you to read until Jarvis stops or
++                restarts; it is never written to disk.
+               </p>
+               <p class="deep-state" id="deep-state" role="status">Reading…</p>
+               <div class="deep-ask" id="deep-ask" hidden>
+@@ -485,7 +491,7 @@
+               <p class="note">When it arrives each morning is in Settings, under Morning briefing.</p>
+             </div>
+             <div class="card card-wide">
+-              <h2>Long Fuse jobs</h2>
++              <h2>Background jobs</h2>
+               <p class="note">
+                 Each job's capability set was frozen when it was created and
+                 cannot grow. A finished job never makes a sound — it adds a
+diff --git a/jarvis-desktop/src/brain.js b/jarvis-desktop/src/brain.js
+index 699c2d7..be798ba 100644
+--- a/jarvis-desktop/src/brain.js
++++ b/jarvis-desktop/src/brain.js
+@@ -216,7 +216,7 @@ const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
+ const VIEWS = {
+   memory: { title: "Memory", sub: "what Jarvis has learned about you" },
+   history: { title: "History", sub: "your conversations, kept on this PC" },
+-  faculties: { title: "Faculties", sub: "models, compute, skills, memory" },
++  faculties: { title: "Model", sub: "models, compute, skills, memory" },
+   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
+   galaxy: { title: "Galaxy", sub: "what Jarvis knows" },
+   live: { title: "Live", sub: "what Jarvis is doing" },
+@@ -293,6 +293,7 @@ const dom = {
+   memoryLearning: $("memory-learning"),
+   memoryProposals: $("memory-proposals"),
+   memoryFacts: $("memory-facts"),
++  memoryFactsFilter: $("memory-facts-filter"),
+   memoryAuto: $("memory-auto"),
+   memoryAutoList: $("memory-auto-list"),
+   memorySavedLine: $("memory-saved-line"),
+@@ -1706,7 +1707,7 @@ function renderLearning() {
+   }
+   const box = el("div", "row-actions");
+   box.append(
+-    button(on ? "Stop learning" : "Start learning", async () => {
++    button(on ? "Pause background learning" : "Start background learning", async () => {
+       const waitingBefore = new Set(
+         (currentQueue().items || []).map((item) => item && item.id).filter(Boolean)
+       );
+@@ -2071,9 +2072,15 @@ function renderFacts() {
+     return;
+   }
+   const past = memoryAsOf !== null;
+-  const facts = past
++  const loaded = past
+     ? (memoryAsOfRows || [])
+     : (Array.isArray(body.facts) ? body.facts : []);
++  // The filter box (ease-of-use audit #7): the list already loaded, by its
++  // words. An erased fact has no words left, so a filter never matches it.
++  const needle = (dom.memoryFactsFilter?.value || "").trim().toLowerCase();
++  const facts = needle
++    ? loaded.filter((f) => erasedAt(f) === null && String(f.text || "").toLowerCase().includes(needle))
++    : loaded;
+   // `rows()` calls replaceChildren on whatever it is given, so the banner
+   // cannot share a parent with it. The list goes in its own box and the pane
+   // is assembled afterwards.
+@@ -2179,9 +2186,11 @@ function renderFacts() {
+       // in use, in today's view only (the links are today's).
+       return current && !past && erased === null ? withLinks(item, f) : item;
+     },
+-    past
+-      ? "Jarvis knew nothing on that date."
+-      : "Nothing yet. Facts arrive from the queue above, once you keep one."
++    needle && loaded.length
++      ? "No fact on this list has those words."
++      : past
++        ? "Jarvis knew nothing on that date."
++        : "Nothing yet. Facts arrive from the queue above, once you keep one."
+   );
+   if (past) {
+     // Before the list, not after it: the difference between "these are your
+@@ -4175,7 +4184,7 @@ function renderJobs() {
+           : [],
+       });
+     },
+-    "No Long Fuse jobs."
++    "No background jobs."
+   );
+ }
+ 
+@@ -5529,6 +5538,8 @@ dom.graphRefit.addEventListener("click", () => {
+ 
+ dom.inspectorClose.addEventListener("click", () => select(null));
+ 
++dom.memoryFactsFilter?.addEventListener("input", () => renderFacts());
++
+ dom.graphSearch.addEventListener("input", () => {
+   const q = dom.graphSearch.value.trim().toLowerCase();
+   if (!q || !state.graph) return;
+diff --git a/jarvis-desktop/src/faces.html b/jarvis-desktop/src/faces.html
+index 7ea1b78..a75c8ed 100644
+--- a/jarvis-desktop/src/faces.html
++++ b/jarvis-desktop/src/faces.html
+@@ -114,7 +114,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
+ <div class="wrap">
+ <header>
+   <div class="lbl">20 faces · 50 colours · 12 patterns · one spec, two renderers</div>
+-  <h1>Jarvis Reactor Kit</h1>
++  <h1>Choose Jarvis's face</h1>
+   <p class="lede">Every face below is driven by <b>one shared palette and one pattern vocabulary</b>, bound to what Jarvis is doing. Android is Compose and the desktop is a webview, so they cannot share drawing code — what they share is the <b>data</b> at the bottom of this page. Pick a state, pick how it should look, and every face follows.</p>
+ </header>
+ 
+@@ -149,7 +149,8 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
+   <div class="row" style="padding-top:0">
+     <span class="mono" style="color:var(--dimmer);font-size:11px">
+       Colours and patterns apply here — the tray icon follows them. A chosen
+-      FACE applies on the phone: nothing on this desktop draws one yet.
++      face is worn by the widget's open panel and the HUD window on this PC,
++      and by the phone.
+     </span>
+     <span class="mono" id="scheme-read"></span>
+     <span class="spacer"></span>
+diff --git a/jarvis-desktop/src/history-view.js b/jarvis-desktop/src/history-view.js
+index 3fd666b..6a0efac 100644
+--- a/jarvis-desktop/src/history-view.js
++++ b/jarvis-desktop/src/history-view.js
+@@ -83,6 +83,17 @@ export const TAINT_TITLE =
+   "In this conversation Jarvis read text that did not come from you - a web " +
+   "page, a file, an email or another tool's output - from the marked message on.";
+ 
++/** Under a question whose answer the PC did not keep (`answer_kept: false`):
++ *  a cloud model's answer, or one that did not finish. The PC does not say
++ *  which, so neither does this. The phone's ChatLog.NOT_KEPT_LINE. */
++export const NOT_KEPT_LINE =
++  "Jarvis's answer to this was not kept: it came from a cloud model, or it did not finish.";
++
++/** Said with Delete, in both apps (ease-of-use audit 2026-09-27, #7). The
++ *  phone's ChatLog.DELETE_KEEPS_FACTS. */
++export const DELETE_KEEPS_FACTS =
++  "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain.";
++
+ const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+ const text = (v) => (typeof v === "string" ? v : "");
+ 
+@@ -193,6 +204,8 @@ export function readConversation(answer) {
+         // Only user turns carry one. Missing on a user turn is "unknown".
+         provenance: t.role === "user" ? text(t.provenance) || "unknown" : "",
+         readOutside: t.read_outside === true,
++        // Only the PC's "false" says so; an older PC sends nothing.
++        answerKept: t.answer_kept !== false,
+       })),
+   };
+ }
+@@ -212,7 +225,8 @@ export function olderThan(rows) {
+   return times.length ? Math.min(...times) : null;
+ }
+ 
+-/** When, in plain words: "just now", "5 min ago", "3 h ago", or the date. */
++/** When, in plain words: "just now", "5 min ago", "3 h ago", or the date
++ *  with its weekday ("Tue 22 Sept 2026"), so "Tuesday's chat" can be found. */
+ export function whenWords(epochSeconds, nowMs = Date.now()) {
+   const t = num(epochSeconds);
+   if (t === null || t <= 0) return "";
+@@ -220,11 +234,10 @@ export function whenWords(epochSeconds, nowMs = Date.now()) {
+   if (s < 60) return "just now";
+   if (s < 3600) return `${Math.round(s / 60)} min ago`;
+   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+-  return new Date(t * 1000).toLocaleDateString("en-GB", {
+-    day: "numeric",
+-    month: "short",
+-    year: "numeric",
+-  });
++  const d = new Date(t * 1000);
++  const day = d.toLocaleDateString("en-GB", { weekday: "short" });
++  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
++  return `${day} ${date}`;
+ }
+ 
+ /** One row's meta line: when it was last added to, and how many turns. */
+@@ -252,7 +265,7 @@ export function notRecordingLine(v) {
+ export function deleteQuestion(c) {
+   return (
+     `Delete this conversation?\n\n${c.title || "(no title)"}\n\n` +
+-    "It is removed from this PC. This cannot be undone."
++    `It is removed from this PC. This cannot be undone.\n\n${DELETE_KEEPS_FACTS}`
+   );
+ }
+ 
+@@ -301,6 +314,9 @@ export function renderTranscript(box, conv, { el }) {
+     }
+     item.append(head);
+     item.append(el("p", "history-text", t.text));
++    if (t.role === "user" && t.answerKept === false) {
++      item.append(el("p", "history-not-kept", NOT_KEPT_LINE));
++    }
+     list.append(item);
+   }
+   box.append(list);
+diff --git a/jarvis-desktop/src/index.html b/jarvis-desktop/src/index.html
+index e4c9e43..a770231 100644
+--- a/jarvis-desktop/src/index.html
++++ b/jarvis-desktop/src/index.html
+@@ -298,7 +298,7 @@
+           <ul class="primer-list">
+             <li>
+               <span class="primer-keys" data-hotkey="toggle_quickbar"><kbd>Alt</kbd>+<kbd>Space</kbd></span>
+-              <span>Summon or dismiss this bar, from anywhere</span>
++              <span>Show or hide the Jarvis bar, from anywhere</span>
+             </li>
+             <li>
+               <span class="primer-keys" data-hotkey="capture_screen"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></span>
+@@ -310,7 +310,7 @@
+             </li>
+             <li>
+               <span class="primer-keys" data-hotkey="quick_note"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span>
+-              <span>Summon the bar ready to file a note (Logseq, or the first note app that is set up)</span>
++              <span>Open the Jarvis bar ready to file a note (Logseq, or the first note app that is set up)</span>
+             </li>
+             <li>
+               <span class="primer-keys" data-hotkey="toggle_widget"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></span>
+@@ -357,9 +357,9 @@
+                memory injection pins a turn local and latches it, and a cloud
+                turn drops every role but the user's own words. -->
+           <p class="primer-foot">
+-            Nothing runs without you. Every action Jarvis wants to take stops
+-            here first. Anything private stays on the local model — watch the
+-            route badge, which says where each answer came from.
++            Anything risky waits here for your yes first. Anything private
++            stays on the local model — the small Local or Cloud label says
++            where each answer came from.
+           </p>
+         </section>
+ 
+@@ -620,6 +620,9 @@
+                  (plain-errors.js; the phone shows the same words). -->
+             <div class="answer-problem" id="answer-problem" hidden>
+               <button class="text-button" type="button" id="problem-action" hidden></button>
++              <!-- "Jarvis isn't running" only (ease-of-use audit #2): opens
++                   Settings at "Starting Jarvis for you", More options open. -->
++              <button class="text-button" type="button" id="problem-where" hidden>Show me where</button>
+               <details class="problem-details" id="problem-details" hidden>
+                 <summary>Details</summary>
+                 <pre class="problem-details-text" id="problem-details-text"></pre>
+diff --git a/jarvis-desktop/src/jarvis-link.js b/jarvis-desktop/src/jarvis-link.js
+index d87fe2e..c8818d9 100644
+--- a/jarvis-desktop/src/jarvis-link.js
++++ b/jarvis-desktop/src/jarvis-link.js
+@@ -397,12 +397,12 @@ export function linkWords(state = link) {
+   if (s.stale !== false) {
+     return {
+       tone: "warn",
+-      short: "Stale — reconnecting",
+-      text: "Stale — reconnecting. Nothing can be approved until it catches up.",
++      short: "Catching up…",
++      text: "Catching up… Nothing can be approved until it has.",
+       canAct: false,
+     };
+   }
+-  return { tone: "ok", short: "Linked", text: "Linked", canAct: true };
++  return { tone: "ok", short: "Connected", text: "Connected", canAct: true };
+ }
+ 
+ /** The interruption budget as last reported. */
+diff --git a/jarvis-desktop/src/main.js b/jarvis-desktop/src/main.js
+index bb9e23d..af3dd1d 100644
+--- a/jarvis-desktop/src/main.js
++++ b/jarvis-desktop/src/main.js
+@@ -143,7 +143,14 @@ import {
+ // The renderer the answer card and the approval preview use - see markdown.js.
+ import { escapeHtml, renderMarkdown } from "./markdown.js";
+ import { approvalPlainText, isEmailCard } from "./email-sending.js";
+-import { fromChatFailure, fromStreamError, shown, STATUSES } from "./plain-errors.js";
++import {
++  fromChatFailure,
++  fromStreamError,
++  SETTINGS_PLACE_KEY,
++  shown,
++  STATUSES,
++  WHERE_KINDS,
++} from "./plain-errors.js";
+ import {
+   boxTagAfter,
+   commitExchange,
+@@ -301,6 +308,7 @@ const dom = {
+   // A failed answer's fix button and "Details" (plain-errors.js).
+   problem: $("answer-problem"),
+   problemAction: $("problem-action"),
++  problemWhere: $("problem-where"),
+   problemDetails: $("problem-details"),
+   problemDetailsText: $("problem-details-text"),
+   cardBody: $("card-body"),
+@@ -795,6 +803,12 @@ function paintProblem(problem, details) {
+     dom.problemAction.textContent = problem ? problem.button : "";
+     dom.problemAction.dataset.action = action;
+   }
++  if (dom.problemWhere) {
++    const place = problem ? WHERE_KINDS[problem.kind] || "" : "";
++    dom.problemWhere.hidden = !place;
++    dom.problemWhere.dataset.place = place;
++    if (place) dom.problem.hidden = false;
++  }
+   if (dom.problemDetails) {
+     dom.problemDetails.hidden = !details;
+     dom.problemDetails.open = false;
+@@ -821,6 +835,19 @@ if (dom.problemAction) {
+     runProblemAction(dom.problemAction.dataset.action || "none"));
+ }
+ 
++/** "Show me where": Settings, at the place the fix names (plain-errors.js). */
++if (dom.problemWhere) {
++  dom.problemWhere.addEventListener("click", () => {
++    const place = dom.problemWhere.dataset.place || "";
++    try {
++      localStorage.setItem(SETTINGS_PLACE_KEY, JSON.stringify({ place, at: Date.now() }));
++    } catch {
++      /* no storage: Settings opens at the top, and the fix's words say where */
++    }
++    invoke("open_fix_place", { place: "settings" });
++  });
++}
++
+ /* ==========================================================================
+    Route badge and service health
+    ========================================================================== */
+diff --git a/jarvis-desktop/src/plain-errors.js b/jarvis-desktop/src/plain-errors.js
+index 0b464f4..a63ef6b 100644
+--- a/jarvis-desktop/src/plain-errors.js
++++ b/jarvis-desktop/src/plain-errors.js
+@@ -38,7 +38,7 @@ const TABLE = {
+   ],
+   jarvis_not_running: [
+     "Jarvis isn't running on your PC.",
+-    "The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start Jarvis), then try again.",
++    "The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, then More options, and press Start under \"Starting Jarvis for you\" (it needs \"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in PowerShell, the way you set it up. Then try again.",
+     "retry",
+   ],
+   name_not_found: [
+@@ -78,12 +78,12 @@ const TABLE = {
+   ],
+   backend_too_old: [
+     "Your PC's Jarvis is too old for this.",
+-    "Update it: on the PC, run apply-patches.ps1, then restart Jarvis.",
++    "Update it: on the PC, run apply-patches.ps1, then restart Jarvis. The steps are in Help: \"How do I update Jarvis?\"",
+     "none",
+   ],
+   feature_off: [
+     "That part of Jarvis isn't running on your PC right now.",
+-    "Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it.",
++    "Restart Jarvis on the PC. If it stays off, update it - the steps are in Help: \"How do I update Jarvis?\"",
+     "none",
+   ],
+   server_error: [
+@@ -93,7 +93,7 @@ const TABLE = {
+   ],
+   unreadable: [
+     "Your PC answered in a way this app can't read.",
+-    "Update both: run apply-patches.ps1 on the PC, and install the latest app.",
++    "Update both: run apply-patches.ps1 on the PC, and install the latest app. The steps are in Help: \"How do I update Jarvis?\"",
+     "none",
+   ],
+   timeout: [
+@@ -135,6 +135,21 @@ const TABLE = {
+   pc_said: ["", "", "none"],
+ };
+ 
++/**
++ * "Show me where" (desktop only, ease-of-use audit 2026-09-27 #2): under
++ * "Jarvis isn't running on your PC." the quickbar offers a second button
++ * that opens Settings at "Starting Jarvis for you", with "More options"
++ * open. The quickbar leaves the place under this key (both windows share
++ * one origin), Settings takes it and removes it. A convenience only: when
++ * storage is unavailable, Settings simply opens at the top.
++ */
++export const SETTINGS_PLACE_KEY = "jarvis.settings.place";
++export const START_PLACE = "start-jarvis";
++/** The kinds that offer "Show me where". */
++export const WHERE_KINDS = Object.freeze({ jarvis_not_running: START_PLACE });
++/** How long a left place is still taken, in milliseconds. */
++export const PLACE_FRESH_MS = 60_000;
++
+ /** kind -> { says, fix, action, button } */
+ export const KINDS = Object.freeze(
+   Object.fromEntries(
+diff --git a/jarvis-desktop/src/settings.html b/jarvis-desktop/src/settings.html
+index 22ef3fb..c0405d5 100644
+--- a/jarvis-desktop/src/settings.html
++++ b/jarvis-desktop/src/settings.html
+@@ -115,6 +115,10 @@
+           this computer alone, which is the default and the safe choice. This
+           never opens Jarvis to the whole internet, or even to your home
+           Wi-Fi — only to your own devices on that private network.
++          <strong>It works only when this app starts Jarvis for you</strong>
++          (Settings, More options, "Let Jarvis Desktop start and stop
++          Jarvis"): that is how the address reaches Jarvis. A Jarvis you start
++          yourself in PowerShell does not read it.
+         </p>
+         <p class="note" id="phone-address-note">
+           <strong>On the phone, type this computer's name, not the number.</strong>
+@@ -295,7 +299,7 @@
+           hold each one, so if a shortcut says <em>in use</em>, another
+           program took it first — <code>Alt+Space</code> is often taken by
+           PowerToys Run or the Copilot app. Pick a different one and press
+-          Save shortcuts. Summon Jarvis, the widget and Stop everything are
++          Save shortcuts. The Jarvis bar, the widget and Stop everything are
+           also in the tray menu.
+         </p>
+         <p class="note">
+@@ -1006,12 +1010,18 @@
+           <details class="faq-item">
+             <summary class="faq-q">Does anything I say to Jarvis leave this computer?</summary>
+             <p class="faq-a">
+-              No, not on its own. Jarvis answers using a language model that
+-              runs on this machine. It only reaches the internet for
+-              something specific, and only after it explains what it needs
+-              and you say yes — there is no standing permission to go
+-              online, and this program never opens a public tunnel to
+-              itself.
++              Only along a few named routes. Jarvis answers using a
++              language model that runs on this machine. It reaches the
++              internet for a web search, and for your own calendar, email
++              and Home Assistant once you have set them up on this PC. A
++              search that comes straight from your own question goes
++              without asking; after Jarvis has read an email, a file or
++              other outside text, or when the search words would repeat
++              something private, it shows you the exact words and waits
++              for your yes. Sending an email, or a question to a cloud
++              model, always asks first. "What Jarvis can reach" (above)
++              lists which routes are on right now, and this program never
++              opens a public tunnel to itself.
+             </p>
+           </details>
+ 
+@@ -1093,7 +1103,7 @@
+           <details class="faq-item">
+             <summary class="faq-q">Jarvis suddenly got slow. What happened?</summary>
+             <p class="faq-a">
+-              Open the Brain window → Faculties → Models. If the language model has
++              Open the Brain window → Model → Models. If the language model has
+               fallen off the graphics card onto the processor instead,
+               there is a yellow line at the top of that list saying so,
+               with the percentage. That is almost always the cause — a
+@@ -1163,6 +1173,39 @@
+               which moves it into Credential Manager.
+             </p>
+           </details>
++
++          <!-- The one answer the "run apply-patches.ps1" messages point to
++               (ease-of-use audit 2026-09-27, #8e). The phone's FAQ says the
++               same. -->
++          <details class="faq-item">
++            <summary class="faq-q">How do I update Jarvis?</summary>
++            <p class="faq-a">
++              Three parts, in this order. Jarvis on this PC: stop it, then in
++              PowerShell, in your copy of the Jarvis files, get the newest
++              files (<code>git pull</code>) and run
++              <code>apply-patches.ps1</code> again - it keeps your settings
++              file, backs up what it replaces and saves a log of the run in
++              <code>_jarvis-logs</code> in your Jarvis folder - then start
++              Jarvis again. This app: build and install it again (there is no
++              automatic update yet). The phone app: install the newest file
++              from the release page over the old one; it stays paired.
++              docs/INSTALL.md, "Updating everything", has each step as one
++              line to copy.
++            </p>
++          </details>
++
++          <details class="faq-item">
++            <summary class="faq-q">I lost my phone. What do I do?</summary>
++            <p class="faq-a">
++              Whoever has it unlocked could use Jarvis with the pairing key
++              it holds. First take the phone off your private network
++              (Tailscale's admin page, Machines, the phone, Remove - or remove
++              it from your NordVPN Meshnet), so it cannot reach this PC at
++              all. Then make a new pairing key, which stops the old one
++              working: docs/INSTALL.md, "If you lose your phone", has the
++              steps. Your other devices then pair again with the new key.
++            </p>
++          </details>
+         </div>
+       </section>
+ 
+@@ -1176,7 +1219,7 @@
+           <span class="more-detail">Letting this app start Jarvis, starting with Windows, and the log files.</span>
+         </summary>
+ 
+-        <section class="card">
++        <section class="card" id="start-jarvis">
+           <h2>Starting Jarvis for you</h2>
+           <p class="note">
+             Off unless you turn it on here. With it on, this app starts Jarvis
+@@ -1234,20 +1277,27 @@
+         <section class="card">
+           <h2>Startup and logs</h2>
+           <p class="note">
+-            Jarvis writes what it is doing to a file. If Jarvis refuses to
+-            start, the reason is in <code>backend.log</code>. Both files are
+-            plain text and <strong>nothing in them is hidden or
+-            scrambled</strong>, so read one before you send it to anybody.
++            Jarvis Desktop writes what it is doing to
++            <code>jarvis-desktop.log</code>. When this app starts Jarvis for
++            you (above), Jarvis's own output goes to <code>backend.log</code>
++            beside it, with the reason if Jarvis refuses to start; a Jarvis
++            you start yourself in PowerShell prints to that window instead,
++            and there is no <code>backend.log</code>. Jarvis takes passwords,
++            keys and the pairing key out of what it writes there, but a list
++            of patterns never catches everything, and both files are plain
++            text - so read one before you send it to anybody.
+           </p>
+ 
+           <label class="toggle">
+             <input id="autostart" type="checkbox" />
+-            <span>Start Jarvis when Windows starts</span>
++            <span>Start Jarvis Desktop when Windows starts</span>
+           </label>
+           <p class="note" id="autostart-note">
+-            Jarvis will be running after a restart. It does not promise to be
+-            <em>first</em> — other startup programs are racing it for the
+-            <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and whoever asks first wins.
++            This starts this app, not Jarvis itself. Jarvis starts with it only
++            if "Let Jarvis Desktop start and stop Jarvis" (above) is on. It
++            does not promise to be <em>first</em> — other startup programs are
++            racing it for the <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and
++            whoever asks first wins.
+           </p>
+ 
+           <div class="row">
+@@ -1274,8 +1324,9 @@
+           runs here rather than in a data centre somewhere else. Nothing
+           private leaves this machine on its own, there is no public tunnel
+           into this program, there are no API keys built into it, and there
+-          is no "approve everything" control anywhere in it — every action
+-          Jarvis wants to take stops and asks first, one action at a time.
++          is no "approve everything" control anywhere in it — anything
++          risky Jarvis wants to do asks first, one action at a time, and
++          "What asks first" lists exactly what asks and what does not.
+         </p>
+         <dl class="about-facts">
+           <div class="about-fact">
+diff --git a/jarvis-desktop/src/settings.js b/jarvis-desktop/src/settings.js
+index 6a94a30..9b93518 100644
+--- a/jarvis-desktop/src/settings.js
++++ b/jarvis-desktop/src/settings.js
+@@ -88,6 +88,7 @@ import {
+   saveFaceTuning,
+   SPEEDS,
+ } from "./face-tuning.js";
++import { PLACE_FRESH_MS, SETTINGS_PLACE_KEY, START_PLACE } from "./plain-errors.js";
+ 
+ const TAURI = globalThis.__TAURI__;
+ const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
+@@ -663,6 +664,42 @@ $("open-faces").addEventListener("click", async () => {
+   }
+ });
+ 
++/**
++ * "Show me where" (plain-errors.js): the quickbar left a place under
++ * SETTINGS_PLACE_KEY. Taken once, and only while fresh; "More options" is
++ * opened and the place scrolled to. Nothing is changed - the owner still
++ * presses Start themselves.
++ */
++function goToPlace() {
++  let left = null;
++  try {
++    left = JSON.parse(localStorage.getItem(SETTINGS_PLACE_KEY) || "null");
++    if (left) localStorage.removeItem(SETTINGS_PLACE_KEY);
++  } catch {
++    return;
++  }
++  if (!left || left.place !== START_PLACE) return;
++  if (!(Date.now() - Number(left.at) < PLACE_FRESH_MS)) return;
++  const more = $("more-options");
++  const card = $("start-jarvis");
++  if (!more || !card) return;
++  more.open = true;
++  // After the page has loaded and laid out: a scroll made earlier is undone
++  // by the browser putting the page back where it was.
++  const go = () => requestAnimationFrame(() => {
++    card.scrollIntoView({ block: "start" });
++    const first = dom.startBackend && !dom.startBackend.disabled ? dom.startBackend : dom.supervise;
++    if (first) first.focus({ preventScroll: true });
++  });
++  if (document.readyState === "complete") go();
++  else window.addEventListener("load", go, { once: true });
++}
++goToPlace();
++window.addEventListener("storage", (e) => {
++  if (e.key === SETTINGS_PLACE_KEY && e.newValue) goToPlace();
++});
++window.addEventListener("focus", goToPlace);
++
+ startLink();
+ // "Open the card": one line while an approval card waits (card-link.js).
+ mountCardLink(document.getElementById("card-link"));
+@@ -1494,7 +1531,7 @@ function scModelLine(feature) {
+   if (feature.model_installed === true) return `Model: ${model}, installed.`;
+   if (feature.model_installed === false) {
+     return `Model: ${model}, not installed yet. To install it, open the Brain window, go to ` +
+-      `Faculties, then Models, type ${model} in the Install box and press Install. ` +
++      `Model, then Models, type ${model} in the Install box and press Install. ` +
+       "Nothing downloads until you approve that card too.";
+   }
+   return `Model: ${model}. Jarvis could not check whether it is installed.`;
+diff --git a/jarvis-desktop/src/style.css b/jarvis-desktop/src/style.css
+index 3e762ae..22f4ed4 100644
+--- a/jarvis-desktop/src/style.css
++++ b/jarvis-desktop/src/style.css
+@@ -1412,6 +1412,11 @@ html[data-state="error"] .pulse {
+   word-break: break-word;
+   font-size: 11px;
+   color: var(--text-muted);
++  /* Selectable, so it can be copied by hand into a bug report (ease-of-use
++     audit #6). No Copy button: Windows' clipboard can sync off this PC. */
++  user-select: text;
++  -webkit-user-select: text;
++  cursor: text;
+ }
+ .answer-used-line { color: var(--text-muted); }
+ .answer-used-list { margin-top: 6px; }
+diff --git a/jarvis-desktop/tests/auto-learn.mjs b/jarvis-desktop/tests/auto-learn.mjs
+index 6a19067..cfca3c1 100644
+--- a/jarvis-desktop/tests/auto-learn.mjs
++++ b/jarvis-desktop/tests/auto-learn.mjs
+@@ -508,7 +508,7 @@ await check("the empty list, on and off, and the History line under Saved automa
+   assert.equal(HISTORY_NOTE,
+     "Deleting a conversation from History does not forget facts learned from it - use Forget here.");
+   assert.equal(LEARNING_OFF_NOTE,
+-    "Background learning is off, so nothing is saved automatically. Start learning above to use this.");
++    "Background learning is off, so nothing is saved automatically. Start background learning above to use this.");
+ });
+ 
+ await check("saves while the Brain was closed are counted: Rust hands them over, and opening the list clears both", async () => {
+diff --git a/jarvis-desktop/tests/continuity.mjs b/jarvis-desktop/tests/continuity.mjs
+index cbe6ea3..807c585 100644
+--- a/jarvis-desktop/tests/continuity.mjs
++++ b/jarvis-desktop/tests/continuity.mjs
+@@ -95,8 +95,14 @@ await check("linkWords: offline, connecting, stale and linked", async () => {
+   const stale = link.linkWords({ connected: true, stale: true });
+   assert.equal(stale.tone, "warn");
+   assert.equal(stale.canAct, false);
+-  assert.match(stale.text, /^Stale — reconnecting/);
++  assert.match(stale.text, /^Catching up… Nothing can be approved/);
+   assert.equal(link.linkWords({ connected: true, stale: false }).canAct, true);
++  // One wording in both apps (ease-of-use audit 2026-09-27 #5): the phone's
++  // Home line says the same two words.
++  assert.equal(link.linkWords({ connected: true, stale: false }).text, "Connected");
++  const home = readFileSync(new URL("../../jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt", import.meta.url), "utf8");
++  assert.ok(home.includes('"Catching up…"') && home.includes('"Connected"'), "the phone's words");
++  assert.ok(!/"Linked|Stale — reconnecting/.test(home), "the phone's old words are gone");
+ });
+ 
+ /* ── The owner's colours in the chrome ───────────────────────────────────── */
+@@ -176,7 +182,7 @@ await check("Settings: text size buttons, the face section closed, and Open Face
+ 
+ await check("Settings: the connection line and the FAQ say Meshnet, and the mic FAQ is current", async () => {
+   const page = await K.open(browser, base, "settings.html", { link: { stale: true } }, { width: 760, height: 1400 });
+-  assert.match(await page.locator("#link-text").textContent(), /Stale — reconnecting/);
++  assert.match(await page.locator("#link-text").textContent(), /Catching up…/);
+   const html = read("src/settings.html");
+   assert.match(html, /NordVPN Meshnet/);
+   assert.match(html, /\.nord/);
+@@ -225,7 +231,7 @@ await check("the quickbar shows stale in amber, and keeps saying nothing runs un
+   const page = await K.open(browser, base, "index.html", { pending: [K.APPROVAL_PLAIN], link: { stale: true } });
+   assert.equal(await page.locator("#offline").isVisible(), true);
+   assert.equal(await page.locator("#offline").getAttribute("data-tone"), "warn");
+-  assert.match(await page.locator("#offline-text").textContent(), /Stale/);
++  assert.match(await page.locator("#offline-text").textContent(), /Catching up…/);
+   assert.match(await page.locator(".approval-reassure").textContent(), /Nothing runs until you decide/);
+   assert.match(await page.locator("#mic-label").textContent(), /Space or Enter/);
+   await page.close();
+@@ -242,7 +248,7 @@ await check("Brain: a failed read is amber with a Retry, a missing module is gre
+   assert.equal(await page.locator("#memory-facts .empty button").count(), 0);
+   // The rush latch is on every view now, not only behind Advanced > Trust.
+   assert.equal(await page.locator("#rush-strip").isVisible(), true);
+-  assert.match(await page.locator("#link-text").textContent(), /Stale/);
++  assert.match(await page.locator("#link-text").textContent(), /Catching up…/);
+   assert.match(await page.locator("#freshness").textContent(), /last known/);
+   await page.close();
+ });
+diff --git a/jarvis-desktop/tests/faces.mjs b/jarvis-desktop/tests/faces.mjs
+index b9a0730..5b5770b 100644
+--- a/jarvis-desktop/tests/faces.mjs
++++ b/jarvis-desktop/tests/faces.mjs
+@@ -322,16 +322,17 @@ await check("choosing the same face again clears the choice", async () => {
+ });
+ 
+ await check("the window says where a face choice actually lands", async () => {
+-  // Nothing on this desktop draws a spec face — the tray is a disc and the
+-  // spotlight has its own SVG reactor — so a chosen face reaches the phone
+-  // and changes nothing here. Saying so is the difference between a feature
+-  // and a lie.
++  // The widget's open panel and the HUD window wear the chosen face here
++  // (widget.js postFace, feed=parent), and so does the phone. The page used
++  // to say "nothing on this desktop draws one yet", which the widget made
++  // untrue (ease-of-use audit 2026-09-27, #5).
+   const page = await open();
+   await page.waitForTimeout(1500);
+   const text = await page.evaluate(() => document.body.innerText);
+   await page.close();
+-  assert.match(text, /nothing on this desktop draws one yet/i,
+-    "the page does not say that a chosen face does not apply here");
++  assert.match(text, /face is worn by the widget's open panel and the HUD window on this PC,\s*and by the phone/i,
++    "the page does not say where a chosen face is worn");
++  assert.doesNotMatch(text, /nothing on this desktop draws one/i);
+ });
+ 
+ await check("CONTROL: the tray reads the saved bindings, not just the spec", async () => {
+diff --git a/jarvis-desktop/tests/faq.mjs b/jarvis-desktop/tests/faq.mjs
+index b5d6026..5738003 100644
+--- a/jarvis-desktop/tests/faq.mjs
++++ b/jarvis-desktop/tests/faq.mjs
+@@ -122,17 +122,18 @@ await check("the quick-note hotkey is called Quick note, not Quick note to Logse
+     "the handler no longer picks the first set-up note app - the label may be wrong again");
+ });
+ 
+-// F8: Models is inside the Brain's Faculties tab.
+-await check("the slow-model FAQ points at Brain window → Faculties → Models, which exists", async () => {
++// F8: Models is inside the Brain's Model tab (called Faculties until the
++// ease-of-use audit's wording pass, 2026-09-27).
++await check("the slow-model FAQ points at Brain window → Model → Models, which exists", async () => {
+   const page = await open();
+   const answer = squash(await faqAnswer(page, "Jarvis suddenly got slow"));
+   await page.close();
+-  assert.match(answer, /Brain window → Faculties → Models/);
++  assert.match(answer, /Brain window → Model → Models/);
+   const brain = src("src/brain.html");
+-  assert.match(brain, /id="tab-faculties"[\s\S]*?<span class="rail-label">Faculties<\/span>/);
++  assert.match(brain, /id="tab-faculties"[\s\S]*?<span class="rail-label">Model<\/span>/);
+   const faculties = brain.slice(brain.indexOf('id="view-faculties"'));
+   assert.ok(faculties.indexOf('id="models"') > -1 &&
+-    faculties.indexOf('id="models"') < faculties.indexOf("</section>"), "Models is not in Faculties");
++    faculties.indexOf('id="models"') < faculties.indexOf("</section>"), "Models is not in the Model tab");
+ });
+ 
+ await check("no NEW page error while the FAQ renders", async () => {
+diff --git a/jarvis-desktop/tests/fixtures/asks-first-cases.json b/jarvis-desktop/tests/fixtures/asks-first-cases.json
+index 0f65b0f..33f3685 100644
+--- a/jarvis-desktop/tests/fixtures/asks-first-cases.json
++++ b/jarvis-desktop/tests/fixtures/asks-first-cases.json
+@@ -72,15 +72,6 @@
+        "tier": "auto",
+        "title": "Read files on this PC"
+       },
+-      {
+-       "action": "read_calendar",
+-       "fixed": false,
+-       "id": "read_calendar",
+-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+-       "says": "Does it without asking",
+-       "tier": "auto",
+-       "title": "Read your calendar"
+-      },
+       {
+        "action": "read_joplin_note",
+        "fixed": false,
+@@ -309,8 +300,8 @@
+        "action": "search_the_web",
+        "fixed": false,
+        "id": "search_the_web",
+-       "note": "Always asks. This cannot be changed from an app.",
+-       "says": "Asks you first, every time",
++       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
++       "says": "Asks only when something private could slip in",
+        "tier": "ask",
+        "title": "Search the web"
+       },
+@@ -686,7 +677,7 @@
+        "action": "calendar_read",
+        "fixed": false,
+        "id": "calendar_read",
+-       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
++       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. Your settings file also has an older line for this, read_calendar = \"auto\". The calendar tool follows this row (calendar_read).",
+        "says": "Asks you first, every time",
+        "switch": {
+         "asks": true,
+@@ -742,15 +733,6 @@
+        "tier": "auto",
+        "title": "Read files on this PC"
+       },
+-      {
+-       "action": "read_calendar",
+-       "fixed": false,
+-       "id": "read_calendar",
+-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+-       "says": "Does it without asking",
+-       "tier": "auto",
+-       "title": "Read your calendar"
+-      },
+       {
+        "action": "read_joplin_note",
+        "fixed": false,
+@@ -979,7 +961,7 @@
+        "action": "search_the_web",
+        "fixed": false,
+        "id": "search_the_web",
+-       "note": "Always asks. This cannot be changed from an app.",
++       "note": "\"Ask before every web search\" is on, so every search waits for your yes. Turning it off (web search settings) takes an approval card.",
+        "says": "Asks you first, every time",
+        "tier": "ask",
+        "title": "Search the web"
+@@ -1356,7 +1338,7 @@
+        "action": "calendar_read",
+        "fixed": false,
+        "id": "calendar_read",
+-       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
++       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello. Your settings file also has an older line for this, read_calendar = \"auto\". The calendar tool follows this row (calendar_read).",
+        "says": "Asks you first, every time",
+        "switch": {
+         "asks": true,
+@@ -1412,15 +1394,6 @@
+        "tier": "auto",
+        "title": "Read files on this PC"
+       },
+-      {
+-       "action": "read_calendar",
+-       "fixed": false,
+-       "id": "read_calendar",
+-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+-       "says": "Does it without asking",
+-       "tier": "auto",
+-       "title": "Read your calendar"
+-      },
+       {
+        "action": "read_joplin_note",
+        "fixed": false,
+@@ -1649,8 +1622,8 @@
+        "action": "search_the_web",
+        "fixed": false,
+        "id": "search_the_web",
+-       "note": "Always asks. This cannot be changed from an app.",
+-       "says": "Asks you first, every time",
++       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
++       "says": "Asks only when something private could slip in",
+        "tier": "ask",
+        "title": "Search the web"
+       },
+@@ -2091,15 +2064,6 @@
+        "tier": "auto",
+        "title": "Read files on this PC"
+       },
+-      {
+-       "action": "read_calendar",
+-       "fixed": false,
+-       "id": "read_calendar",
+-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+-       "says": "Does it without asking",
+-       "tier": "auto",
+-       "title": "Read your calendar"
+-      },
+       {
+        "action": "read_joplin_note",
+        "fixed": false,
+@@ -2328,8 +2292,8 @@
+        "action": "search_the_web",
+        "fixed": false,
+        "id": "search_the_web",
+-       "note": "Always asks. This cannot be changed from an app.",
+-       "says": "Asks you first, every time",
++       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
++       "says": "Asks only when something private could slip in",
+        "tier": "ask",
+        "title": "Search the web"
+       },
+@@ -2728,6 +2692,7 @@
+    "never": "Never - your settings file switches it off",
+    "notify": "Does it, then tells you"
+   },
++  "says_search": "Asks only when something private could slip in",
+   "switch_label": "Ask me first",
+   "title": "What asks first",
+   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
+diff --git a/jarvis-desktop/tests/fixtures/big-model-cases.json b/jarvis-desktop/tests/fixtures/big-model-cases.json
+index 3865137..5c46a28 100644
+--- a/jarvis-desktop/tests/fixtures/big-model-cases.json
++++ b/jarvis-desktop/tests/fixtures/big-model-cases.json
+@@ -322,7 +322,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Working: DeepSeek V4 Flash is loaded."
+         }
+       ],
+@@ -421,7 +421,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "On. [big_model] cuda is \"on\", but there is no capable second card (only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)). colibri is never put on the main card: that one is everyday chat."
+         }
+       ],
+@@ -505,7 +505,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Off. Turn on the big model itself first."
+         }
+       ],
+@@ -604,7 +604,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "On. DeepSeek V4 Flash is loading."
+         }
+       ],
+@@ -688,7 +688,7 @@
+           "model": "qwen36",
+           "model_name": "Qwen3.6-35B-A3B",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Needs the big model set up: Qwen3.6-35B-A3B: the folder D:\\models\\qwen36_i4_gs64 does not exist."
+         }
+       ],
+@@ -787,7 +787,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Needs the big model set up: Python 3 was not found. colibri's launcher is a Python script: install Python 3 from python.org and tick \"Add python.exe to PATH\"."
+         }
+       ],
+@@ -886,7 +886,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "On. Usable, but not right now: it needs 16 GB of free memory to start and 12.4 GB is free. Close something big, or wait."
+         }
+       ],
+@@ -985,7 +985,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Needs the big model set up: [big_model] coli_path is C:\\colibri, but there is no coli.cmd in that folder. It must be the folder you unpacked colibri's release into."
+         }
+       ],
+@@ -1084,7 +1084,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "On. DeepSeek V4 Flash starts when this job next has work, and stops 10 minutes after."
+         }
+       ],
+@@ -1185,7 +1185,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Off. Turn on the big model itself first."
+         }
+       ],
+@@ -1284,7 +1284,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Off. Turn on the big model itself first."
+         }
+       ],
+@@ -1383,7 +1383,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Working: DeepSeek V4 Flash is loaded."
+         }
+       ],
+@@ -1482,7 +1482,7 @@
+           "model": "dsv4-flash",
+           "model_name": "DeepSeek V4 Flash",
+           "name": "Deep questions",
+-          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
++          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model, and the answer stays for you to read until Jarvis stops or restarts.",
+           "why": "Off. Turn on the big model itself first."
+         }
+       ],
+diff --git a/jarvis-desktop/tests/fixtures/own-network-cases.json b/jarvis-desktop/tests/fixtures/own-network-cases.json
+index db0cd63..35ee710 100644
+--- a/jarvis-desktop/tests/fixtures/own-network-cases.json
++++ b/jarvis-desktop/tests/fixtures/own-network-cases.json
+@@ -2,6 +2,8 @@
+  "_comment": "Generated by tools/gen_own_network_cases.py from backend/jarvis_local_http.py (_own_network, plain_http_problem). Do not edit by hand.",
+  "message": "Jarvis's address {address} is not on your own networks, so this app will not send your pairing key there: use this PC (localhost), your home network (an address like 192.168.x.x or 10.x.x.x, or a name ending in .local), Tailscale (a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord).",
+  "message_unshown": "Jarvis's address is not on your own networks, so this app will not send your pairing key there: use this PC (localhost), your home network (an address like 192.168.x.x or 10.x.x.x, or a name ending in .local), Tailscale (a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord).",
++ "phone_message": "Jarvis's address {address} is not on your own networks, so this app will not send your pairing key there: on this phone, use your PC's Tailscale name (ending in .ts.net) or its NordVPN Meshnet name (ending in .nord).",
++ "phone_message_unshown": "Jarvis's address is not on your own networks, so this app will not send your pairing key there: on this phone, use your PC's Tailscale name (ending in .ts.net) or its NordVPN Meshnet name (ending in .nord).",
+  "hosts": [
+   {
+    "host": "localhost",
+diff --git a/jarvis-desktop/tests/fixtures/plain-error-cases.json b/jarvis-desktop/tests/fixtures/plain-error-cases.json
+index 8db2c1f..9a5bd27 100644
+--- a/jarvis-desktop/tests/fixtures/plain-error-cases.json
++++ b/jarvis-desktop/tests/fixtures/plain-error-cases.json
+@@ -249,7 +249,7 @@
+   "backend_too_old": {
+    "action": "none",
+    "button": "",
+-   "fix": "Update it: on the PC, run apply-patches.ps1, then restart Jarvis.",
++   "fix": "Update it: on the PC, run apply-patches.ps1, then restart Jarvis. The steps are in Help: \"How do I update Jarvis?\"",
+    "says": "Your PC's Jarvis is too old for this."
+   },
+   "connection_dropped": {
+@@ -267,13 +267,13 @@
+   "feature_off": {
+    "action": "none",
+    "button": "",
+-   "fix": "Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it.",
++   "fix": "Restart Jarvis on the PC. If it stays off, update it - the steps are in Help: \"How do I update Jarvis?\"",
+    "says": "That part of Jarvis isn't running on your PC right now."
+   },
+   "jarvis_not_running": {
+    "action": "retry",
+    "button": "Try again",
+-   "fix": "The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, Start Jarvis), then try again.",
++   "fix": "The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, then More options, and press Start under \"Starting Jarvis for you\" (it needs \"Let Jarvis Desktop start and stop Jarvis\" on). Or start it in PowerShell, the way you set it up. Then try again.",
+    "says": "Jarvis isn't running on your PC."
+   },
+   "key_store_refused": {
+@@ -369,7 +369,7 @@
+   "unreadable": {
+    "action": "none",
+    "button": "",
+-   "fix": "Update both: run apply-patches.ps1 on the PC, and install the latest app.",
++   "fix": "Update both: run apply-patches.ps1 on the PC, and install the latest app. The steps are in Help: \"How do I update Jarvis?\"",
+    "says": "Your PC answered in a way this app can't read."
+   }
+  },
+diff --git a/jarvis-desktop/tests/history.mjs b/jarvis-desktop/tests/history.mjs
+index b67231d..87c5626 100644
+--- a/jarvis-desktop/tests/history.mjs
++++ b/jarvis-desktop/tests/history.mjs
+@@ -29,7 +29,10 @@ import { fileURLToPath } from "node:url";
+ import { dirname, join } from "node:path";
+ import {
+   addPage,
++  DELETE_KEEPS_FACTS,
++  deleteQuestion,
+   deviceTag,
++  NOT_KEPT_LINE,
+   keepConfirm,
+   keepNeedsConfirm,
+   keepReply,
+@@ -44,6 +47,7 @@ import {
+   rowMeta,
+   SWITCH_DETAIL,
+   SWITCH_LABEL,
++  whenWords,
+ } from "../src/history-view.js";
+ import * as K from "./uikit.mjs";
+ 
+@@ -451,6 +455,24 @@ await check("which app, and the tainted line: the words both apps use", async ()
+     "a file, an email or another tool's output - from the marked message on.");
+ });
+ 
++await check("dates say the weekday; an answer not kept and a delete say so, in the phone's words", async () => {
++  // Noon UTC on Tuesday 22 September 2026, read a week later.
++  const tue = Date.UTC(2026, 8, 22, 12) / 1000;
++  assert.match(whenWords(tue, (tue + 7 * 86400) * 1000), /^Tue 22 Sept? 2026$/);
++  const conv = readConversation({ id: "c", turns: [
++    { role: "user", text: "a", at: 1, provenance: "typed", answer_kept: false },
++    { role: "user", text: "b", at: 2, provenance: "typed", answer_kept: true },
++    { role: "user", text: "c", at: 3, provenance: "typed" },
++  ] });
++  assert.deepEqual(conv.turns.map((t) => t.answerKept), [false, true, true]);
++  assert.ok(deleteQuestion({ title: "x" }).endsWith(DELETE_KEEPS_FACTS));
++  const kt = read("../jarvis-client/app/src/main/java/com/jarvis/client/net/ChatLog.kt")
++    .replace(/"\s*\+\s*\n\s*"/g, "");
++  for (const w of [NOT_KEPT_LINE, DELETE_KEEPS_FACTS]) {
++    assert.ok(kt.includes(JSON.stringify(w).slice(1, -1).replace(/\\'/g, "'")), `the phone says: ${w}`);
++  }
++});
++
+ await check("the keep choice sends one keep_days and says how many went", async () => {
+   const page = await historyTab({ conversations: many(3), deletedByKeep: 2 });
+   page.once("dialog", (d) => d.accept());
+diff --git a/jarvis-desktop/tests/hotkeys.mjs b/jarvis-desktop/tests/hotkeys.mjs
+index 758d750..3bbf84e 100644
+--- a/jarvis-desktop/tests/hotkeys.mjs
++++ b/jarvis-desktop/tests/hotkeys.mjs
+@@ -44,7 +44,7 @@ await check("every bindable action is listed", async () => {
+   const list = await rows(page);
+   await page.close();
+   assert.equal(list.length, 6, `${list.length} rows, expected 6`);
+-  assert.equal(list[0].name, "Summon Jarvis");
++  assert.equal(list[0].name, "Show or hide the Jarvis bar");
+   assert.equal(list[0].key, "Alt + Space");
+   // "Stop everything" (2026-09-25): listed like the others, so it can be
+   // moved off Alt+Shift+X if something else on the PC needs that.
+@@ -66,7 +66,7 @@ await check("Stop everything is in the tray menu too, the same command, never gr
+   // And Settings' promise about the tray is true of what it names.
+   const html = read("src/settings.html");
+   assert.doesNotMatch(html, /Everything here is also in the tray menu/);
+-  assert.match(html.replace(/\s+/g, " "), /Summon Jarvis, the widget and Stop everything are also in the tray menu\./);
++  assert.match(html.replace(/\s+/g, " "), /The Jarvis bar, the widget and Stop everything are also in the tray menu\./);
+   for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything"]) {
+     assert.match(tray, new RegExp(`accel\\(app, "${id}"\\)`), `${id} has no tray row`);
+   }
+@@ -124,7 +124,7 @@ await check("a refused binding says so, and does not say working", async () => {
+   });
+   const list = await rows(page);
+   await page.close();
+-  const summon = list.find((r) => r.name === "Summon Jarvis");
++  const summon = list.find((r) => r.name === "Show or hide the Jarvis bar");
+   assert.equal(summon.bound, "false");
+   assert.match(summon.state, /in use/i, `said "${summon.state}"`);
+   assert.doesNotMatch(summon.state, /working/i);
+@@ -259,7 +259,7 @@ await check("each field says which action it belongs to", async () => {
+   await page.close();
+   // Without this every one of the five announces as a bare combination.
+   assert.ok(labels.every((l) => l && l.length > 12), `got ${JSON.stringify(labels)}`);
+-  assert.match(labels[0], /Summon Jarvis/);
++  assert.match(labels[0], /Show or hide the Jarvis bar/);
+ });
+ 
+ await check("a refused row is not marked by colour alone", async () => {
+diff --git a/jarvis-desktop/tests/memory.mjs b/jarvis-desktop/tests/memory.mjs
+index eb89186..12e2180 100644
+--- a/jarvis-desktop/tests/memory.mjs
++++ b/jarvis-desktop/tests/memory.mjs
+@@ -165,11 +165,33 @@ await check("a retired fact offers no Forget or Reword - only Erase the words",
+   assert.deepEqual(buttons, ["Erase the words"], "a retired fact should offer only Erase");
+ });
+ 
++await check("the filter box narrows the loaded list by its words, and asks the PC nothing", async () => {
++  // Ease-of-use audit 2026-09-27 #7.
++  const page = await memoryTab();
++  const before = await page.locator("#memory-facts .row-item").count();
++  await page.locator("#memory-facts-filter").fill("powershell");
++  await page.waitForTimeout(100);
++  const titles = await page.locator("#memory-facts .row-item .row-title").allInnerTexts();
++  await page.locator("#memory-facts-filter").fill("zzz-nothing");
++  await page.waitForTimeout(100);
++  const none = await page.locator("#memory-facts").innerText();
++  await page.locator("#memory-facts-filter").fill("");
++  await page.waitForTimeout(100);
++  const after = await page.locator("#memory-facts .row-item").count();
++  const sent = await writes(page);
++  await page.close();
++  assert.equal(before, 3);
++  assert.deepEqual(titles.map((t) => t.trim()), ["Prefers explicit PowerShell cmdlets over aliases."]);
++  assert.match(none, /No fact on this list has those words/);
++  assert.equal(after, 3);
++  assert.deepEqual(sent, []);
++});
++
+ /* ── The switch renders the answer, not the request ──────────────────────── */
+ 
+ await check("the learning switch reflects what the server said", async () => {
+   const page = await memoryTab();
+-  await page.getByRole("button", { name: "Stop learning" }).click();
++  await page.getByRole("button", { name: "Pause background learning" }).click();
+   await page.waitForTimeout(300);
+   const sent = await writes(page);
+   await page.close();
+@@ -183,11 +205,11 @@ await check("turning learning on waits for its approval card, and says so", asyn
+   // pane used to read any non-enabled answer as "Learning is off."
+   const brain = { ...K.BRAIN, memory_facts: { ...K.BRAIN.memory_facts, learning: false } };
+   const page = await memoryTab({ brain, learningWaits: true });
+-  await page.getByRole("button", { name: "Start learning" }).click();
++  await page.getByRole("button", { name: "Start background learning" }).click();
+   await page.waitForTimeout(400);
+   const toast = await page.locator("#toast").innerText();
+   const line = await page.locator("#memory-learning .learning-waiting").innerText();
+-  const still = await page.getByRole("button", { name: "Start learning" }).count();
++  const still = await page.getByRole("button", { name: "Start background learning" }).count();
+   const sent = await writes(page);
+   await page.close();
+   assert.equal(sent.length, 1);
+@@ -225,7 +247,7 @@ await check("when the environment overrides the switch, the toast says so", asyn
+   // and still refuses, so a pane that rendered its own request would show
+   // "off" while the learner kept running.
+   const page = await memoryTab({ learningFloor: true });
+-  await page.getByRole("button", { name: "Stop learning" }).click();
++  await page.getByRole("button", { name: "Pause background learning" }).click();
+   await page.waitForTimeout(400);
+   const toast = await page.locator("#toast").innerText();
+   await page.close();
+@@ -377,7 +399,7 @@ const STATUS = realPython(
+   + "st.add('The owner lives in Leeds', source='extracted', supersedes=a)\n"
+   + "print(json.dumps(st.status()))");
+ 
+-await check("the Faculties memory card shows what the real store reports", async () => {
++await check("the Model tab's memory card shows what the real store reports", async () => {
+   const memory = { available: true, ...STATUS, sleep_time: { enabled: false, remind: true } };
+   const page = await K.open(browser, base, "brain.html", { brain: { ...K.BRAIN, memory } }, SIZE);
+   await page.locator("#tab-faculties").click();
+diff --git a/jarvis-desktop/tests/plain-errors.mjs b/jarvis-desktop/tests/plain-errors.mjs
+index ea4eb29..699192a 100644
+--- a/jarvis-desktop/tests/plain-errors.mjs
++++ b/jarvis-desktop/tests/plain-errors.mjs
+@@ -214,6 +214,11 @@ await check("a failure: the plain words, ONE fix button, the PC's sentence behin
+   assert.ok(got.answer.includes(CASES.kinds.model_missing.fix), got.answer);
+   assert.equal(got.button, "Choose a model");
+   assert.ok(got.details.includes("qwen3:14b"), got.details);
++  // Selectable for a bug report (ease-of-use audit #6); the rest of the bar is not.
++  const select = await page.evaluate(() => [
++    getComputedStyle(document.getElementById("problem-details-text")).userSelect,
++    getComputedStyle(document.body).userSelect]);
++  assert.deepEqual(select, ["text", "none"]);
+   await page.locator("#problem-action").click();
+   const opened = await page.evaluate(() => window.__opened);
+   await page.close();
+@@ -258,6 +263,59 @@ await check("Try again sends the same question, with the same tag", async () =>
+   assert.ok(problemHidden, "the old fix button stays after a good answer");
+ });
+ 
++await check("\"Jarvis isn't running\": a second button opens Settings at Starting Jarvis for you", async () => {
++  // Ease-of-use audit 2026-09-27 #2: the fix names the real place, and the
++  // desktop opens it - "More options" open, the card scrolled to.
++  const line = ERROR_LINE_PREFIX + JSON.stringify({ network: "refused", detail: "x" });
++  const page = await K.open(browser, base, "index.html", {}, { width: 750, height: 600 });
++  await page.evaluate((l) => {
++    window.__opened = [];
++    const core = window.__TAURI__.core;
++    const inner = core.invoke;
++    core.invoke = async (cmd, args) => {
++      if (cmd === "stream_chat") throw new Error(l);
++      if (cmd === "open_fix_place") { window.__opened.push(args.place); return null; }
++      return inner(cmd, args);
++    };
++  }, line);
++  await page.locator("#prompt").fill("hi");
++  await page.locator("#prompt").press("Enter");
++  await page.waitForTimeout(300);
++  const said = await page.locator("#answer").textContent();
++  assert.ok(said.includes("More options") && said.includes("Starting Jarvis for you"), said);
++  assert.equal(await page.locator("#problem-action").textContent(), "Try again");
++  assert.equal(await page.locator("#problem-where").isVisible(), true);
++  await page.locator("#problem-where").click();
++  const opened = await page.evaluate(() => window.__opened);
++  const left = await page.evaluate(() => JSON.parse(localStorage.getItem("jarvis.settings.place")));
++  await page.close();
++  assert.deepEqual(opened, ["settings"]);
++  assert.equal(left.place, "start-jarvis");
++
++  const sp = await K.open(browser, base, "settings.html", {}, { width: 900, height: 900 });
++  await sp.evaluate(() => localStorage.setItem("jarvis.settings.place",
++    JSON.stringify({ place: "start-jarvis", at: Date.now() })));
++  await sp.reload();
++  await sp.waitForTimeout(400);
++  const got = await sp.evaluate(() => ({
++    open: document.getElementById("more-options").open,
++    top: document.getElementById("start-jarvis").getBoundingClientRect().top,
++    kept: localStorage.getItem("jarvis.settings.place"),
++  }));
++  await sp.close();
++  assert.equal(got.open, true, "More options opens");
++  assert.ok(got.top >= -2 && got.top < 200, `the card is in view (top ${got.top})`);
++  assert.equal(got.kept, null, "the place is taken once");
++});
++
++await check("another failure shows no \"Show me where\"", async () => {
++  const body = "data: " + JSON.stringify({ error: { message: "x", type: "jarvis", code: "model_missing" } });
++  const { page } = await ask([body]);
++  const where = await page.locator("#problem-where").isVisible();
++  await page.close();
++  assert.equal(where, false);
++});
++
+ /* ── Settings -> How Jarvis talks ─────────────────────────────────────── */
+ 
+ /** The bridge for the two manner commands, on top of uikit's. */
+diff --git a/jarvis-desktop/tests/second-card.mjs b/jarvis-desktop/tests/second-card.mjs
+index a9c83f3..de0879d 100644
+--- a/jarvis-desktop/tests/second-card.mjs
++++ b/jarvis-desktop/tests/second-card.mjs
+@@ -150,7 +150,7 @@ await check("each feature says its model, whether it is installed, the exact nam
+   await page.close();
+   const vision = row(s, "vision").text;
+   assert.match(vision, /Model: qwen2\.5vl:7b, not installed yet\./);
+-  assert.match(vision, /open the Brain window, go to Faculties, then Models, type qwen2\.5vl:7b in the Install box/);
++  assert.match(vision, /open the Brain window, go to Model, then Models, type qwen2\.5vl:7b in the Install box/);
+   assert.match(vision, /Uses about 7\.2 GB of the second card's memory\./);
+   const long = row(s, "long_context").text;
+   assert.match(long, /Model: qwen3:8b, installed\./);
+diff --git a/jarvis-desktop/tests/uikit.mjs b/jarvis-desktop/tests/uikit.mjs
+index 6a53fa8..66961d6 100644
+--- a/jarvis-desktop/tests/uikit.mjs
++++ b/jarvis-desktop/tests/uikit.mjs
+@@ -411,13 +411,13 @@ The direction is the signal — colour alone fails for one man in twelve.`;
+ // ---- the stub bridge -----------------------------------------------------
+ 
+ export const HOTKEYS = [
+-  { id: "toggle_quickbar", label: "Summon Jarvis", hint: "Show or hide the spotlight bar from anywhere.",
++  { id: "toggle_quickbar", label: "Show or hide the Jarvis bar", hint: "From anywhere, whatever program is in front.",
+     accelerator: "Alt+Space", default: "Alt+Space", registered: true, error: null },
+   { id: "ingest_clipboard", label: "Attach the clipboard", hint: "Put whatever is on the clipboard into the bar as context.",
+     accelerator: "Super+Shift+J", default: "Super+Shift+J", registered: true, error: null },
+   { id: "capture_screen", label: "Attach a screen capture", hint: "Not Win+Shift+S — the Snipping Tool owns that at the shell level.",
+     accelerator: "Alt+Shift+S", default: "Alt+Shift+S", registered: true, error: null },
+-  { id: "quick_note", label: "Quick note", hint: "Summon the bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
++  { id: "quick_note", label: "Quick note", hint: "Open the Jarvis bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
+     accelerator: "Alt+Shift+N", default: "Alt+Shift+N", registered: true, error: null },
+   { id: "toggle_widget", label: "Show or hide the widget", hint: "The desktop pane with the meters and the gates.",
+     accelerator: "Alt+Shift+W", default: "Alt+Shift+W", registered: true, error: null },
+diff --git a/scripts/apply-patches.ps1 b/scripts/apply-patches.ps1
+index c0eed25..637aaae 100644
+--- a/scripts/apply-patches.ps1
++++ b/scripts/apply-patches.ps1
+@@ -720,10 +720,31 @@ if (-not $UseGit -and -not (Get-Command patch -ErrorAction SilentlyContinue)) {
+     exit 1
+ }
+ 
++# --- a log of this run -------------------------------------------------------
++#
++# Everything this script prints also goes to a file (ease-of-use audit
++# 2026-09-27, #8i: the only record of a run used to be a window that was
++# closed afterwards). One file per run, in _jarvis-logs inside the backend
++# folder, beside the _jarvis-backup-<date> folders. It holds what is printed
++# here and nothing else - no token or key is ever printed by this script.
++# The transcript ends when this PowerShell process does (the INSTALL line
++# runs the script in a process of its own, with -File).
++$RunLog = $null
++try {
++    $logDir = Join-Path $BackendPath '_jarvis-logs'
++    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
++    $RunLog = Join-Path $logDir "apply-patches-$Stamp.txt"
++    Start-Transcript -LiteralPath $RunLog -Append | Out-Null
++} catch {
++    $RunLog = $null
++}
++
+ Say ""
+ Say "Backend : $BackendPath"
+ Say "Patches : $PatchDir"
+ Say "Tool    : $(if ($UseGit) { 'git apply' } else { 'patch' })"
++if ($RunLog) { Say "Log     : $RunLog (a copy of everything printed here)" }
++else { Say "Log     : none - the log file could not be started, so copy this window if you need a record" Yellow }
+ 
+ # --- substitute the split patches, if the rebuilt modules are installed ------
+ if ($UsingRebuilt) {
+diff --git a/tools/check_parity.py b/tools/check_parity.py
+index c24f7bc..5d9623b 100644
+--- a/tools/check_parity.py
++++ b/tools/check_parity.py
+@@ -181,7 +181,7 @@ CLASSIFICATION = {
+     "/api/show": ("not-backend", "Ollama's /api/show on loopback: does the model take pictures (vision.rs)."),
+     "/api/shutdown": ("deliberate", "Shutting the backend down from a phone is a foot-gun: the phone would then have nothing to reach and no way to undo it."),
+     "/api/skills": ("ported", "Brain screen, read-only."),
+-    "/api/skills/decide": ("ported", "Removing a skill, after an are-you-sure, as on the desktop (Brain, Faculties, Skills). Phone: Brain, Skills (SkillsPlate.kt, net/Skills.kt). Never held on a stale link; a card the PC raises is shown as waiting. Removal only - no app can install a skill."),
++    "/api/skills/decide": ("ported", "Removing a skill, after an are-you-sure, as on the desktop (Brain, Model, Skills). Phone: Brain, Skills (SkillsPlate.kt, net/Skills.kt). Never held on a stale link; a card the PC raises is shown as waiting. Removal only - no app can install a skill."),
+     "/api/status": ("ported", ""),
+     "/api/tags": ("not-backend", "Ollama's /api/tags on loopback: the installed model list (commands.rs). Not a Jarvis route."),
+     "/api/task/note": ("ported", ""),
+diff --git a/tools/gen_asks_first_cases.py b/tools/gen_asks_first_cases.py
+index c2e66a5..aa923a9 100644
+--- a/tools/gen_asks_first_cases.py
++++ b/tools/gen_asks_first_cases.py
+@@ -60,9 +60,11 @@ SHIPPED = {
+ }
+ 
+ 
+-def _with(tiers: dict, *, lights=False, lights_waiting=False, loosen_waiting=None):
++def _with(tiers: dict, *, lights=False, lights_waiting=False, loosen_waiting=None,
++          search_every=False):
+     AF._reset_for_tests()
+     AF._tier = lambda a: tiers.get(a, "ask")
++    AF._search_asks_every_time = lambda: search_every
+     AF._file_tiers = lambda: dict(tiers)
+     AF._config_dir = lambda: _TMP
+     f = _TMP / "asks_first.json"
+@@ -83,7 +85,7 @@ def cases() -> dict:
+     out["phone_shipped"] = AF.view(here=False)
+     stricter = dict(SHIPPED, calendar_read="ask", create_joplin_note="ask",
+                     email_read="never", send_email="auto")
+-    _with(stricter, lights=True)
++    _with(stricter, lights=True, search_every=True)
+     out["pc_stricter_lights_on"] = AF.view(here=True)
+     _with(stricter, lights_waiting=True, loosen_waiting="calendar_read")
+     out["phone_cards_waiting"] = AF.view(here=False)
+@@ -98,6 +100,7 @@ def cases() -> dict:
+             "waiting": AF.WAITING, "pc_only": AF.PC_ONLY, "not_on_list": AF.NOT_ON_LIST,
+             "lights_label": AF.LIGHTS_LABEL, "lights_detail": AF.LIGHTS_DETAIL,
+             "lights_waiting": AF.LIGHTS_WAITING, "says": dict(AF.SAYS),
++            "says_search": AF.SAYS_SEARCH,
+         },
+     }
+ 
+diff --git a/tools/gen_own_network_cases.py b/tools/gen_own_network_cases.py
+index eaf2a44..a54b268 100644
+--- a/tools/gen_own_network_cases.py
++++ b/tools/gen_own_network_cases.py
+@@ -36,7 +36,9 @@ Three lists:
+            app must refuse every one the backend refuses, and MAY refuse
+            more, because each app also checks the address's shape.
+ 
+-The wording (`message`) lives here, in one place, for both apps. It is one
++The wording (`message`, and the phone's `phone_message`, which names only
++the private-network names the phone can connect to) lives here, in one
++place, for both apps. It is one
+ sentence on purpose: the desktop's link line shows only the first sentence
+ of a reason ("Offline - <sentence>"), and the phone shows it as it is.
+ """
+@@ -67,6 +69,19 @@ MESSAGE = ("Jarvis's address {address} is not on your own networks, so this app
+            "(a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord).")
+ MESSAGE_UNSHOWN = MESSAGE.replace("{address} ", "")
+ 
++#: The phone's own ending (ease-of-use audit 2026-09-27, #1e). The phone
++#: judges the address by the same rule, but it can only CONNECT in plain
++#: http:// to a name ending in .ts.net or .nord (and to itself):
++#: jarvis-client/app/src/main/res/xml/network_security_config.xml allows no
++#: other cleartext host, and a network security config cannot list an
++#: address range. So the phone's sentence names only what it can reach -
++#: suggesting 192.168.x.x or a .local name there would send the owner to an
++#: address that fails. The first half is MESSAGE's, word for word.
++PHONE_MESSAGE = ("Jarvis's address {address} is not on your own networks, so this app will not "
++                 "send your pairing key there: on this phone, use your PC's Tailscale name "
++                 "(ending in .ts.net) or its NordVPN Meshnet name (ending in .nord).")
++PHONE_MESSAGE_UNSHOWN = PHONE_MESSAGE.replace("{address} ", "")
++
+ HOSTS = [
+     # this PC
+     "localhost", "LOCALHOST", "localhost.", "127.0.0.1", "127.255.255.254", "::1",
+@@ -143,6 +158,8 @@ def build() -> dict:
+                      "Do not edit by hand."),
+         "message": MESSAGE,
+         "message_unshown": MESSAGE_UNSHOWN,
++        "phone_message": PHONE_MESSAGE,
++        "phone_message_unshown": PHONE_MESSAGE_UNSHOWN,
+         "hosts": [{"host": h, "own": L._own_network(h)} for h in HOSTS],
+         "origins": [{"url": u, "own": backend_own(u)} for u in ORIGINS],
+         "tricky": [{"url": u, "own": backend_own(u), "why": why} for u, why in TRICKY],
+diff --git a/tools/gen_plain_error_cases.py b/tools/gen_plain_error_cases.py
+index 8762028..554467c 100644
+--- a/tools/gen_plain_error_cases.py
++++ b/tools/gen_plain_error_cases.py
+@@ -84,8 +84,10 @@ KINDS = {
+         "retry"),
+     "jarvis_not_running": (
+         "Jarvis isn't running on your PC.",
+-        "The PC is on, but Jarvis is not started. Start it from the desktop app (Settings, "
+-        "Start Jarvis), then try again.",
++        "The PC is on, but Jarvis is not started. On the PC, open Jarvis Desktop's Settings, "
++        "then More options, and press Start under \"Starting Jarvis for you\" (it needs \"Let "
++        "Jarvis Desktop start and stop Jarvis\" on). Or start it in PowerShell, the way you set "
++        "it up. Then try again.",
+         "retry"),
+     "name_not_found": (
+         "This device can't find your PC by its name.",
+@@ -119,11 +121,11 @@ KINDS = {
+         "connection"),
+     "backend_too_old": (
+         "Your PC's Jarvis is too old for this.",
+-        "Update it: on the PC, run apply-patches.ps1, then restart Jarvis.",
++        "Update it: on the PC, run apply-patches.ps1, then restart Jarvis. The steps are in Help: \"How do I update Jarvis?\"",
+         "none"),
+     "feature_off": (
+         "That part of Jarvis isn't running on your PC right now.",
+-        "Restart Jarvis on the PC. If it stays off, run apply-patches.ps1 there to update it.",
++        "Restart Jarvis on the PC. If it stays off, update it - the steps are in Help: \"How do I update Jarvis?\"",
+         "none"),
+     "server_error": (
+         "Jarvis on your PC ran into a problem.",
+@@ -132,7 +134,7 @@ KINDS = {
+         "retry"),
+     "unreadable": (
+         "Your PC answered in a way this app can't read.",
+-        "Update both: run apply-patches.ps1 on the PC, and install the latest app.",
++        "Update both: run apply-patches.ps1 on the PC, and install the latest app. The steps are in Help: \"How do I update Jarvis?\"",
+         "none"),
+     "timeout": (
+         "Jarvis took too long to answer.",
+-- 
+2.43.0
+
