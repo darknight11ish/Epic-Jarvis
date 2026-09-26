@@ -260,6 +260,14 @@ pub fn emit_quickbar<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, 
 }
 
 /// Emits an event to every window.
+///
+/// Which windows HEAR it is decided by their capabilities, not here: in
+/// Tauri 2.11 a page's global `listen()` registers with the target `Any`,
+/// and `match_any_or_filter` (tauri `event/listener.rs`) lets an `Any`
+/// listener through every filter - so even `emit_to` one window reaches a
+/// global listener in any other. The Faces and first-run windows, which
+/// must not hear the approval queue, hold no `core:event:allow-listen`
+/// (bug audit 2026-09-26, #6; `tests/security.mjs`).
 pub fn emit_all<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
     if let Err(err) = app.emit(event, payload) {
         eprintln!("[jarvis] unable to broadcast `{event}`: {err}");

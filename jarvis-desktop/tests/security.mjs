@@ -383,7 +383,17 @@ await check("no window can send events to the others (apps security audit M1)", 
     for (const banned of ["core:default", "core:event:default", "core:event:allow-emit", "core:event:allow-emit-to"]) {
       assert.ok(!perms.includes(banned), `${name} holds ${banned}`);
     }
-    assert.ok(perms.includes("core:event:allow-listen"), `${name} can no longer listen`);
+    // Faces and the first-run window listen to nothing, and must not be
+    // able to: in Tauri 2 a page's global listen() hears every event, even
+    // one sent to another window, so listening would mean hearing the
+    // approval queue with an email's full text (bug audit 2026-09-26, #6).
+    const quiet = name === "faces" || name === "onboarding";
+    assert.equal(perms.includes("core:event:allow-listen"), !quiet,
+      quiet ? `${name} can listen to every event` : `${name} can no longer listen`);
+  }
+  for (const quiet of ["faces", "onboarding"]) {
+    const caps = JSON.parse(read(`src-tauri/capabilities/${quiet}.json`)).permissions;
+    assert.ok(!caps.includes("jarvis-link"), `${quiet} can read the approval queue`);
   }
   // And no page tries to: an emit from a page would now be refused, so one
   // appearing here means a feature that silently does nothing.
