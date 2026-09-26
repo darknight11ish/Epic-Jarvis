@@ -115,6 +115,7 @@ import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.ui.approval.ApprovalCard
 import com.jarvis.client.ui.parts.AppearanceIcon
 import com.jarvis.client.ui.parts.Dot
+import com.jarvis.client.ui.parts.FormattedAnswer
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.HelpIcon
 import com.jarvis.client.ui.parts.InboxIcon
@@ -945,6 +946,7 @@ private fun ConversationList(
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
+    val motion = LocalMotion.current
     LazyColumn(
         state = listState,
         modifier = modifier,
@@ -1028,6 +1030,19 @@ private fun ConversationList(
                     onDeny = { actions.onDeny(item) },
                     onAmend = { note -> actions.onAmend(item.id, note) },
                     showFooter = state.pending.size == 1,
+                    // UI-AUDIT-2026-09-26 item 6: a new card fades in, and the
+                    // cards below glide up to fill the gap left by one that
+                    // is decided (Compose's own built-in item animation - the
+                    // "idiomatic equivalent" the item asks for where a direct
+                    // port of the desktop's slide isn't this list's job).
+                    // `motion.enter()` is the same 200ms/ease token the
+                    // desktop's own card-in animation uses, and it collapses
+                    // to 0ms under reduced motion like every other use of it.
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = motion.enter(),
+                        fadeOutSpec = motion.enter(),
+                        placementSpec = motion.enter(),
+                    ),
                 )
             }
         }
@@ -2014,14 +2029,26 @@ private fun Reply(
             } else {
                 // Identity by position is right here: paragraphs are only
                 // ever added at the end while a reply streams, so each index
-                // keeps meaning the same paragraph.
+                // keeps meaning the same paragraph. `shown` starts false and
+                // flips once per index (UI-AUDIT-2026-09-26 item 6), so a
+                // freshly-added paragraph fades in - the same idea as the
+                // desktop's "each freshly appended block fades in"
+                // (`style.css`'s `.fresh`, 260ms) - while an index already on
+                // screen never replays the fade as later tokens append to it.
+                // `FormattedAnswer` (ui/parts/AnswerFormat.kt) gives bold,
+                // italics, lists and code instead of the raw markdown text
+                // this `Text` used to show verbatim.
                 text.split(PARAGRAPH_BREAK).forEachIndexed { index, paragraph ->
                     if (index > 0) Gap(10)
-                    Text(
-                        paragraph,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = chrome.textHi,
-                    )
+                    var shown by remember(index) { mutableStateOf(false) }
+                    LaunchedEffect(index) { shown = true }
+                    AnimatedVisibility(visible = shown, enter = fadeIn(motion.enter())) {
+                        FormattedAnswer(
+                            paragraph,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = chrome.textHi,
+                        )
+                    }
                 }
             }
             // Only once there is a finished answer to act on - copying or
