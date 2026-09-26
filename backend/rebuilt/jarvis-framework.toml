@@ -103,6 +103,14 @@ run_shell_on_host         = "ask"
 spend_money               = "ask"
 control_computer          = "ask"
 change_own_config         = "ask"
+# Loosening one line of this table from the desktop's "What asks first" page
+# (the owner's decision of 2026-09-26): one card, approved on this PC only,
+# with Windows Hello. Only calendar_read, email_read, notes_search,
+# home_read, append_obsidian_daily, append_logseq_journal and
+# create_joplin_note can be loosened that way. Must stay "ask": anything
+# else and loosening from the app is refused. Making a line stricter from
+# either app ("ask") needs no card.
+loosen_what_asks_first    = "ask"
 modify_own_code           = "ask"        # additional gate — see [self_modification]
 post_to_external_service  = "never"
 open_public_tunnel        = "never"      # see [security].allow_public_tunnel
@@ -161,10 +169,13 @@ models_create             = "ask"
 
 # --- Timers, alarms and reminders (jarvis_schedule.py) ------------------
 # A timer, an alarm or a reminder that goes off ONCE needs no card - the
-# owner's decision, 2026-09-25 - so it has no line here. Anything that
-# REPEATS ("every weekday at 7") is one card, which lists the next three
-# times. Must stay "ask": anything else and it is refused, not set up. A
-# file without this line asks too (unknown_action_tier).
+# owner's decision, 2026-09-25 - so it has no line here. Since 2026-09-26
+# (the approvals audit) a plain REPEATING alarm or reminder ("every weekday
+# at 7") and the standby schedule need no card either, and do not read this
+# line. What still repeats through ONE card, which lists the next three
+# times: the morning briefing and "tell me when" (they read your email or
+# calendar). Must stay "ask": anything else and those are refused, not set
+# up. A file without this line asks too (unknown_action_tier).
 schedule_repeat           = "ask"
 
 # --- Web search (jarvis_search.py, the owner's decisions of 2026-09-25) -----
@@ -207,8 +218,11 @@ second_card_browser_enable = "ask"
 # or the big model instead, if you switched the big model on for the wiki.
 # Nothing leaves this PC, and the earlier copy of any page it changes is
 # kept in Jarvis Wiki/.versions. "ask" shows you the card (every page it
-# would write) first. You may lower it to "notify" or "auto" to have pages
-# written without asking; "never" turns "Add to wiki" off.
+# would write) first. Must stay "ask": since the security audit (L1)
+# jarvis_wiki.py writes pages only on a person's yes, so "notify" or "auto"
+# refuses every "Add to wiki" rather than writing without asking (this
+# comment used to say you may lower it - that stopped being true then).
+# "never" turns "Add to wiki" off.
 wiki_update               = "ask"
 
 # --- The big model (slow), with colibri (docs/BIG-MODEL.md) --------------

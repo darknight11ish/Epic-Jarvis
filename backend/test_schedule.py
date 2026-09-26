@@ -347,17 +347,71 @@ def t_limits_say_why():
 # --------------------------------------------------------------------------
 
 
-def t_one_card_for_a_repeat_none_for_a_one_off():
+#: A kind that repeats through the ONE card, like the morning briefing and
+#: "tell me when" (both registered by their own modules): the card path is
+#: tested on it, since plain alarms and reminders no longer have a card.
+S.register_kind("asktest", "test repeat", "Jarvis: a test repeat.", has_text=True,
+                repeatable=True)
+
+
+def t_no_card_for_a_plain_repeat():
+    """The owner's decision of 2026-09-26 (the approvals audit): plain
+    repeating alarms and reminders need no card. Set up at once, due at the
+    first time; the answer says the next three times, as the card did."""
     use_tz("Europe/London")
     now = local(2026, 9, 25, 12, 0)            # Friday
-    w = World(now, name="card")
+    w = World(now, name="plain")
     w.s.add_timer(60)
     w.s.add_at("alarm", now + 3600)
     w.s.add_at("reminder", now + 7200, "call the bank")
     w.s.add_todo("milk")
     check("a timer, a one-off alarm, a one-off reminder and a to-do raise no card", w.cards == [])
     j = w.s.add_repeat("reminder", {"every": "weekday", "at": "07:00"}, "take my pills")
-    check("a repeat raises ONE card", len(w.cards) == 1)
+    check("a repeating reminder raises NO card (2026-09-26)", w.cards == [], w.cards)
+    v = w.s.job(j["id"])
+    check("... it is on the list at once, due Monday 07:00",
+          v["state"] == "active" and wall(v["due"]) == (2026, 9, 28, 7, 0), v)
+    said = S.repeat_set_words(v, now)
+    check("... and the answer names it, its rule and its next three times",
+          said == "Reminder set up, every weekday (Monday to Friday) at 07:00. Next: 07:00 on "
+                  "Monday, 07:00 on Tuesday and 07:00 on Wednesday. Delete it under Coming up "
+                  "to stop it.", said)
+    check("... and Coming up lists its next three times", len(v["next"]) == 3 and
+          [wall(t) for t in v["next"]] == [(2026, 9, 28, 7, 0), (2026, 9, 29, 7, 0),
+                                           (2026, 9, 30, 7, 0)], v)
+    for tier in ("auto", "never", "unreadable"):
+        wt = World(now, tier=tier, name=f"plain-{tier}")
+        jt = wt.s.add_repeat("alarm", {"every": "day", "at": "06:30"})
+        check(f"schedule_repeat's tier ({tier}) does not touch a plain repeat",
+              wt.cards == [] and wt.s.job(jt["id"])["state"] == "active")
+    check("a plain repeat still goes off at its time, and again the next day",
+          j["id"] in [x if isinstance(x, str) else x.get("id")
+                      for x in w.s.tick(local(2026, 9, 28, 7, 0) + 1)]
+          and wall(w.s.job(j["id"])["due"]) == (2026, 9, 29, 7, 0))
+    check("... and deleting it is immediate", w.s.act(j["id"], "delete")[0] == 200
+          and w.s.job(j["id"]) is None)
+    code, out = None, None
+    keep = S._SCHED
+    S._SCHED = World(now, name="route").s
+    try:
+        code, out = S.handle_add({"kind": "alarm", "repeat": {"every": "day", "at": "06:30"},
+                                  "text": "wake up"})
+    finally:
+        S._SCHED = keep
+    check("POST /api/schedule/add, a repeating alarm: 200, set up, with its next times in `said`",
+          code == 200 and out["waiting"] is False and out["job"]["state"] == "active"
+          and out["said"].startswith("Alarm set up, every day at 06:30. Next: 06:30 tomorrow"),
+          (code, out))
+
+
+def t_one_card_for_a_repeat_that_reads():
+    """The kinds that keep their card (the briefing, "tell me when"): ONE
+    card, schedule_repeat, listing the next three times."""
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)            # Friday
+    w = World(now, name="card")
+    j = w.s.add_repeat("asktest", {"every": "weekday", "at": "07:00"}, "take my pills")
+    check("a repeat of a kind that asks raises ONE card", len(w.cards) == 1)
     action, detail, prompt = w.cards[0]
     check("... action schedule_repeat", action == "schedule_repeat" == S.ACTION)
     check("... which lists the next three times in plain words",
@@ -373,11 +427,11 @@ def t_one_card_for_a_repeat_none_for_a_one_off():
           (2026, 9, 28, 7, 0))
     for answer in ("denied", "timed_out"):
         w2 = World(now, answer=answer, name=answer)
-        j2 = w2.s.add_repeat("alarm", {"every": "day", "at": "06:30"})
+        j2 = w2.s.add_repeat("asktest", {"every": "day", "at": "06:30"}, "x")
         check(f"{answer}: nothing is set up, and it is off the list",
               w2.s.job(j2["id"]) is None and w2.s.listed() == [])
     w3 = World(now, tier="auto", name="auto")
-    j3 = w3.s.add_repeat("alarm", {"every": "day", "at": "06:30"})
+    j3 = w3.s.add_repeat("asktest", {"every": "day", "at": "06:30"}, "x")
     check("tier \"auto\" in the settings is refused without asking - a config line is not a yes",
           w3.cards == [] and w3.s.job(j3["id"]) is None)
 
@@ -387,7 +441,7 @@ def t_one_card_for_a_repeat_none_for_a_one_off():
             self.s.act(detail["job"], "delete")
             return Verdict(True, "ask", "approved")
     w4 = Late(now, name="late")
-    j4 = w4.s.add_repeat("alarm", {"every": "day", "at": "06:30"})
+    j4 = w4.s.add_repeat("asktest", {"every": "day", "at": "06:30"}, "x")
     check("deleted while the card waited: approving it sets nothing up",
           w4.s.job(j4["id"]) is None and w4.s.last_card.get(j4["id"]) == "withdrawn")
 
@@ -395,17 +449,20 @@ def t_one_card_for_a_repeat_none_for_a_one_off():
         def gate(self, action, detail, prompt):
             return Verdict(True, "auto", "approved")
     w5 = Liar(now, name="liar")
-    j5 = w5.s.add_repeat("alarm", {"every": "day", "at": "06:30"})
+    j5 = w5.s.add_repeat("asktest", {"every": "day", "at": "06:30"}, "x")
     check("allowed at tier \"auto\" is not a person saying yes: refused",
           w5.s.job(j5["id"]) is None)
     w6 = World(now, answer="denied", name="waiting")
     w6.answer = "approved"
     w6.s._spawn = lambda fn: None          # the card is still up
-    j6 = w6.s.add_repeat("reminder", {"every": "day", "at": "08:00"}, "stretch")
+    j6 = w6.s.add_repeat("asktest", {"every": "day", "at": "08:00"}, "stretch")
     v6 = w6.s.job(j6["id"])
     check("while the card waits it is listed as waiting, with its next three times, and "
           "nothing goes off", v6["state"] == "waiting" and len(v6["next"]) == 3
           and w6.s.tick(now + 30 * 86400) == [])
+    check("a kind added later asks by default (plain_repeat is off unless said)",
+          S.KINDS["asktest"].plain_repeat is False and S.KINDS["alarm"].plain_repeat
+          and S.KINDS["reminder"].plain_repeat)
 
 # --------------------------------------------------------------------------
 #   The fast path: the grammar
@@ -554,10 +611,11 @@ def t_acting_and_the_replies():
     job = w.s.job(r.ids[0])
     check("... and keeps the owner's own words, capitals and all", job["text"] == "call Mum")
     r = Q.answer("remind me every weekday at 7 to take my pills", sched=w.s, now=now)
-    check("a repeat says a card is up and nothing is set until the card is approved",
-          "approval card" in r.reply and "Nothing is set up until you approve the card" in r.reply
-          and "say yes" not in r.reply
-          and len(w.cards) == 1, r.reply)
+    check("a repeat is set up at once, no card, and says its next three times (2026-09-26)",
+          r.reply.startswith("Reminder set up, every weekday (Monday to Friday) at 07:00. Next: ")
+          and r.reply.endswith("Delete it under Coming up to stop it.")
+          and r.reply.count(" and ") == 1 and "approval card" not in r.reply
+          and w.cards == [] and w.s.job(r.ids[0])["state"] == "active", r.reply)
     Q.answer("add milk to my to-do list", sched=w.s, now=now)
     Q.answer("add call the bank to my to-do list", sched=w.s, now=now)
     r = Q.answer("what's on my to-do list", sched=w.s, now=now)
@@ -791,8 +849,9 @@ def t_the_models_tools():
               w.cards == [], res)
         res, _ = call("set_reminder", {"text": "pills", "repeat": {"every": "day", "at": "08:00"}},
                       clean)
-        check("set_reminder repeating: ONE card, from the scheduler, action schedule_repeat",
-              [c[0] for c in w.cards] == ["schedule_repeat"] and gated == [], (w.cards, gated))
+        check("set_reminder repeating: no card (2026-09-26), set up at once, and the model is "
+              "told the next times", w.cards == [] and gated == [] and res.get("ok") is True
+              and "Next: " in str(res.get("said")), (w.cards, gated, res))
         res, _ = call("todo_add", {"text": "buy stamps"}, clean)
         res, _ = call("coming_up", {}, clean)
         check("coming_up lists the jobs and the to-do list", res.get("ok") is True
@@ -909,7 +968,14 @@ def t_the_routes_answer():
         tid = out["job"]["id"]
         code, out = S.handle_add({"kind": "reminder", "text": "stretch",
                                   "repeat": {"every": "hours", "hours": 2}})
-        check("add a repeat: 202, waiting on a card", code == 202 and out["waiting"] is True)
+        check("add a repeat: 200, set up at once with no card (2026-09-26)",
+              code == 200 and out["waiting"] is False and out["job"]["state"] == "active"
+              and out["said"].startswith("Reminder set up, every 2 hours. Next: "), out)
+        code, out = S.handle_add({"kind": "asktest", "text": "x",
+                                  "repeat": {"every": "day", "at": "07:00"}})
+        check("... a kind that asks: 202, waiting on its card",
+              code == 202 and out["waiting"] is True and out["said"] == S.WAITS_FOR_CARD, out)
+        S.get().act(out["job"]["id"], "delete")
         code, out = S.handle_get("")
         check("GET: the jobs and the to-do list", code == 200 and len(out["jobs"]) == 2
               and out["todo"][0]["text"] == "post the letter" and out["available"] is True)

@@ -198,35 +198,24 @@ def t_the_rule():
 #   Setting it up: one card
 # --------------------------------------------------------------------------
 
-def t_one_card_to_set_it_up():
+def t_no_card_to_set_it_up():
+    """The owner's decision of 2026-09-26 (the approvals audit): the standby
+    schedule needs no card. It is on the list at once, and the answer says
+    the next night in full, where the card used to."""
     use_tz("Europe/London")
     now = local(2026, 9, 25, 12, 0)                 # Friday noon
     w = World(now, name="card")
     j = w.s.add_repeat("standby", RULE)
-    check("setting it up raises ONE card, schedule_repeat",
-          len(w.cards) == 1 and w.cards[0][0] == "schedule_repeat", w.cards)
-    prompt = w.cards[0][2]
-    check("the card lists the next three windows in full",
-          all(x in prompt for x in ("Saturday 26 September, 01:00 to 07:00",
-                                    "Sunday 27 September, 01:00 to 07:00",
-                                    "Monday 28 September, 01:00 to 07:00")), prompt)
-    check("... says what, when, what each end does, what no means, and that nothing leaves",
-          prompt.startswith("Set up a standby schedule.")
-          and "When: every day from 01:00 to 07:00." in prompt
-          and "unloads its models and frees the graphics card(s)" in prompt
-          and "loads the chat model again" in prompt
-          and "Timers, alarms and reminders still go off" in prompt
-          and "Nothing is sent anywhere." in prompt
-          and "If you say no: nothing is set up." in prompt, prompt)
-    check("... and does not claim it rings on the apps (it notifies nobody)",
-          "goes off on both apps" not in prompt)
-    check("the detail says it does not leave this PC",
-          w.cards[0][1].get("leaves_this_pc") is False)
+    check("setting it up raises NO card (2026-09-26)", w.cards == [], w.cards)
     v = w.s.job(j["id"])
-    check("approved: set up, next end 01:00 tomorrow, said as 'on standby at'",
+    check("set up at once: next end 01:00 tomorrow, said as 'on standby at'",
           v["state"] == "active" and wall(v["due"]) == (2026, 9, 26, 1, 0)
           and v["when"] == "on standby at 01:00 tomorrow"
           and v["repeat"] == "every day from 01:00 to 07:00", v)
+    said = S.repeat_set_words(v, now)
+    check("the answer names it and its next night in full",
+          said == "Standby schedule set up, every day from 01:00 to 07:00. Next: Saturday 26 "
+                  "September, 01:00 to 07:00. Delete it under Coming up to stop it.", said)
     check("its lock-screen words are the kind's, and it says notify false",
           v["lock_screen"] == "Jarvis: standby schedule." and v["notify"] is False, v)
     try:
@@ -235,24 +224,12 @@ def t_one_card_to_set_it_up():
     except OverflowError as exc:
         check("only one standby schedule: a second is refused, with how to change it",
               "already a standby schedule - delete it first" in str(exc), str(exc))
-    check("... and raised no second card", len(w.cards) == 1)
-
-    for answer in ("denied", "timed_out"):
-        w2 = World(now, answer=answer, name=answer)
-        j2 = w2.s.add_repeat("standby", RULE)
-        check(f"{answer}: nothing set up", w2.s.job(j2["id"]) is None and w2.s.listed() == [])
-    w3 = World(now, tier="auto", name="auto")
-    j3 = w3.s.add_repeat("standby", RULE)
-    check("tier \"auto\" is refused without asking - a config line is not a yes",
-          w3.cards == [] and w3.s.job(j3["id"]) is None)
-    w4 = World(now, name="waiting")
-    w4.spawn = lambda fn: None
-    w4.s._spawn = w4.spawn
-    j4 = w4.s.add_repeat("standby", RULE)
-    check("while the card waits: listed as waiting, and nothing goes off",
-          w4.s.job(j4["id"])["state"] == "waiting" and w4.s.tick(now + 3 * 86400) == [])
-    check("... and a second one is refused even then",
-          _raises(lambda: w4.s.add_repeat("standby", RULE), OverflowError))
+    for tier in ("auto", "never"):
+        w3 = World(now, tier=tier, name=f"tier-{tier}")
+        j3 = w3.s.add_repeat("standby", RULE)
+        check(f"schedule_repeat's tier ({tier}) does not touch it: set up, no card",
+              w3.cards == [] and w3.s.job(j3["id"])["state"] == "active")
+    check("the kind says so: plain_repeat", S.KINDS["standby"].plain_repeat is True)
 
 
 def _raises(fn, exc):
@@ -636,8 +613,8 @@ def t_turning_it_off():
         w.clock.t = local(2026, 9, 27, 7, 0)
         check("... and 07:00 does nothing any more", w.s.tick() == [] and P.current() == "standby")
         j2 = w.s.add_repeat("standby", {"every": "day", "at": "02:00", "until": "06:00"})
-        check("after deleting it, a new one may be set up (a new card)",
-              w.s.job(j2["id"])["state"] == "active" and len(w.cards) == n + 1)
+        check("after deleting it, a new one may be set up (no card)",
+              w.s.job(j2["id"])["state"] == "active" and len(w.cards) == n)
     finally:
         SB.CLOCK = time.time
         _done()
@@ -650,14 +627,14 @@ def t_turning_it_off():
 def t_the_routes():
     use_tz("Europe/London")
     w = World(time.time(), name="routes")
-    w.spawn = lambda fn: None                    # the card stays up
-    w.s._spawn = w.spawn
     S._SCHED = w.s
     try:
         code, out = S.handle_add({"kind": "standby", "repeat": RULE})
-        check("POST /api/schedule/add kind standby: 202, waiting for its card",
-              code == 202 and out["waiting"] is True and out["job"]["kind"] == "standby"
-              and out["job"]["state"] == "waiting", (code, out))
+        check("POST /api/schedule/add kind standby: 200, set up at once with no card",
+              code == 200 and out["waiting"] is False and out["job"]["kind"] == "standby"
+              and out["job"]["state"] == "active" and w.cards == []
+              and out["said"].startswith("Standby schedule set up, every day from 01:00 to "
+                                         "07:00. Next: "), (code, out))
         code, out2 = S.handle_add({"kind": "standby", "repeat": RULE})
         check("a second one: 409, with the reason", code == 409
               and "already a standby schedule" in out2["error"], out2)

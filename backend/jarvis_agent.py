@@ -871,8 +871,7 @@ TOOLS: dict = {
     "set_reminder": Tool(
         "set_reminder",
         "Set a reminder or alarm on this PC, once or repeating. `when` is plain "
-        "English, e.g. \"tomorrow at 6pm\" or \"in 20 minutes\". A repeat waits "
-        "for the owner's yes on a card.",
+        "English, e.g. \"tomorrow at 6pm\" or \"in 20 minutes\".",
         {"type": "object", "properties": {
             "text": {"type": "string", "description": "what to remind the owner of, in their words"},
             "when": {"type": "string"},
@@ -904,11 +903,14 @@ TOOLS: dict = {
 
 #: The scheduler's tools (jarvis_schedule.py), which are NOT put to the gate
 #: in _one_call. The owner decided on 2026-09-25 that a timer, an alarm or a
-#: reminder that goes off once needs no approval card; one that repeats
-#: raises its own card, inside jarvis_schedule, through the same gate
-#: (action `schedule_repeat`, tier "ask", listing the next three times), and
-#: nothing goes off before a yes. Deleting and marking done only make things
-#: quieter. Reading the list reads the owner's own words from this PC.
+#: reminder that goes off once needs no approval card, and on 2026-09-26
+#: (the approvals audit) that a plain REPEATING alarm or reminder needs none
+#: either: it is set up at once and the answer says its next three times
+#: (jarvis_schedule.Kind.plain_repeat). Only the repeats that read email or
+#: the calendar - the briefing and "tell me when", neither of which is a
+#: tool here - still raise the scheduler's one card. Deleting and marking
+#: done only make things quieter. Reading the list reads the owner's own
+#: words from this PC.
 #:
 #: Stricter in one case: in a turn shaped by outside text (the same test as
 #: a note write - a reading tool ran, the conversation is tainted, the
@@ -1121,6 +1123,56 @@ NEEDS_A_PERSON = {
     "home_control": "changes something real in the house",
     "send_email": "sends an email in the owner's name, which cannot be taken back",
 }
+
+
+#: LIGHTS_WITHOUT_CARD - the owner's decision of 2026-09-26, after the
+#: approvals audit: "Lights, plugs and fans without a card", a setting that
+#: is OFF by default and takes one card to turn on (jarvis_asks_first.py).
+#: With it on, ONE home_control call runs without a card only when all of
+#: these hold - jarvis_asks_first.lights_without_card says which failed:
+#:   * nothing from outside shaped this turn (the note writes' test,
+#:     _TurnWatch.note_needs_a_person: no reading tool ran, the chat is not
+#:     tainted, the newest message is the owner's own typed or said words,
+#:     and the app sent no text of its own);
+#:   * every request is light, switch or fan, on, off or toggle, and none is
+#:     a lock, door, alarm, cover or anything that stands alone
+#:     (jarvis_home.everyday_problem);
+#:   * every device is named in the owner's newest message.
+#: Anything else goes to the gate and its card exactly as before, and
+#: home_control stays in NEEDS_A_PERSON. It is a standing permission for
+#: one named kind of device, like the Obsidian note at "auto" - never an
+#: approval: no card is raised and nothing says yes to one.
+
+
+class _LightsNoCard:
+    """What _one_call reads in place of a gate verdict for a change the
+    owner's lights setting lets run without a card. `outcome` "auto" is the
+    gate's own word for "ran, no human involved"."""
+    allowed = True
+    outcome = "auto"
+    tier = "auto"
+    action = "home_control"
+    request_id = None
+    reason = "your setting: lights, plugs and fans without a card"
+
+
+def _lights_without_card(plan_obj, watch: "_TurnWatch") -> bool:
+    """True when this home_control plan may run with no card (see
+    LIGHTS_WITHOUT_CARD). Fails closed: any error is a card."""
+    try:
+        import jarvis_asks_first as AF
+        return AF.lights_without_card(plan_obj, watch.newest_own_words,
+                                      shaped=watch.note_needs_a_person()) == ""
+    except Exception:
+        return False
+
+
+def _record_lights_no_card(plan_obj) -> None:
+    try:
+        import jarvis_asks_first as AF
+        AF.record_no_card(plan_obj)
+    except Exception:
+        pass
 
 
 #: Sending one email (jarvis_email_send.py; the owner's decision of
@@ -2425,6 +2477,10 @@ class _TurnWatch:
         self.app_context = isinstance(req.get("messages"), list) and any(
             m.get("role") == "system" for m in raw)
         self.cut_off = ""            # where the owner cut the last answer off (with_cut_off_note)
+        # The newest message's own words, only when typed or said by the
+        # owner - what "the devices you named" is checked against
+        # (LIGHTS_WITHOUT_CARD). "" otherwise.
+        self.newest_own_words = ""
         if users:
             i = max(j for j, m in enumerate(raw) if m.get("role") == "user")
             self.spoken = raw[i].get("provenance") == "voice"   # with_spoken_note
@@ -2439,6 +2495,8 @@ class _TurnWatch:
                 if _provenance(m) not in OWN_WORDS:
                     self.provenance = _provenance(m)
                     break
+            if self.provenance is None and _provenance(raw[i]) in OWN_WORDS:
+                self.newest_own_words = _text_of(raw[i].get("content")).lower()
         self.owner_words = "\n".join(
             _text_of(m.get("content")) for m in users
             if _provenance(m) in OWN_WORDS).lower()
@@ -3757,6 +3815,10 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         top = send_email_card_lines(watch)
         if top:
             plan_text = "\n".join(top) + "\n\n" + plan_text
+    # "Lights, plugs and fans without a card" (LIGHTS_WITHOUT_CARD): with the
+    # owner's setting on, a light, plug or fan the owner named in their own
+    # words, in a turn nothing from outside shaped, runs with no card.
+    lights_ok = name == "home_control" and _lights_without_card(state, watch)
     # What shaped this request, when anything from outside did: added to the
     # text the card shows (never to the plan that runs), and before the
     # length check below, so a card is never cut short by it.
@@ -3780,7 +3842,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         return
-    if watch.cards >= CARDS_PER_TURN and _would_ask(name, action_name):
+    if watch.cards >= CARDS_PER_TURN and not lights_ok and _would_ask(name, action_name):
         # Refused BEFORE a card is raised - see CARDS_PER_TURN.
         convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                       "content": _tool_content(
@@ -3791,15 +3853,23 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             watch.told.add("(card limit)")
             tell_owner(CARD_LIMIT_LINE.format(n=CARDS_PER_TURN))
         return
-    # The gate may wait minutes for a person. Say so to the app (after a
-    # moment, so a tool the gate lets straight through never flashes it).
-    out.set_status("approval")
-    verdict = checker(action_name, {"text": plan_text},
-                      f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
-    out.card_answered(verdict)
-    out.set_status("thinking")
-    if _a_card_was_shown(verdict):
-        watch.cards += 1
+    if lights_ok:
+        # No card: the owner's own setting, for exactly this set of named
+        # lights, plugs and fans (LIGHTS_WITHOUT_CARD). Not a verdict from
+        # the gate and not an approval - nobody is asked, and the audit log
+        # says so.
+        verdict = _LightsNoCard()
+        _record_lights_no_card(state)
+    else:
+        # The gate may wait minutes for a person. Say so to the app (after a
+        # moment, so a tool the gate lets straight through never flashes it).
+        out.set_status("approval")
+        verdict = checker(action_name, {"text": plan_text},
+                          f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
+        out.card_answered(verdict)
+        out.set_status("thinking")
+        if _a_card_was_shown(verdict):
+            watch.cards += 1
     # What the GATE said, never what the model said: the outcome is read off
     # the verdict (gate-outcome.patch), and a verdict without one is recorded
     # as "unknown" rather than guessed at.
@@ -3821,7 +3891,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         say_step("tool_refused", name)
         result = {"ok": False,
                   "error": f"refused: {getattr(verdict, 'reason', 'not approved')}"}
-    elif name in NEEDS_A_PERSON and not _a_person_said_yes(verdict):
+    elif name in NEEDS_A_PERSON and not lights_ok and not _a_person_said_yes(verdict):
         # Allowed, but nobody was asked. See NEEDS_A_PERSON.
         say_step("tool_refused", name)
         vtier = getattr(verdict, "tier", None) or "unknown"

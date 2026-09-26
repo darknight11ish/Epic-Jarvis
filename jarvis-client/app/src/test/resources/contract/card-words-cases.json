@@ -143,6 +143,10 @@
       "title": "Jarvis wants to also learn sensitive topics automatically"
     },
     {
+      "action": "loosen_what_asks_first",
+      "title": "Jarvis wants to let one action go ahead without asking you first"
+    },
+    {
       "action": "memory_manage",
       "title": "Jarvis wants to change what it remembers"
     },

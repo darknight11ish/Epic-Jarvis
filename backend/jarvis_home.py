@@ -442,6 +442,55 @@ def plan_services(domain: str, service: str, entity_ids,
                 digest=_digest(queries))
 
 
+#: "Lights, plugs and fans without a card" (jarvis_asks_first.py, the
+#: owner's decision of 2026-09-26): the only domains, services and `data`
+#: keys such a change may use. A plug is Home Assistant's `switch` domain.
+EVERYDAY_DOMAINS = frozenset({"light", "switch", "fan"})
+EVERYDAY_SERVICES = frozenset({"turn_on", "turn_off", "toggle"})
+EVERYDAY_DATA = frozenset({"brightness", "brightness_pct", "brightness_step",
+                           "brightness_step_pct", "color_name", "color_temp",
+                           "color_temp_kelvin", "kelvin", "rgb_color", "hs_color", "xy_color",
+                           "transition", "percentage", "preset_mode", "direction",
+                           "oscillating"})
+
+
+def everyday_problem(p: Plan) -> str:
+    """"" when every request in this call_service plan is an everyday switch
+    of a light, plug or fan - which, with the owner's setting on, may run
+    without a card - else why not. When in doubt, it is not: the call then
+    goes to the gate and its card, as before. Opens no socket.
+
+    Each request must: call light, switch or fan's own turn_on, turn_off or
+    toggle (not the `homeassistant` domain, which forwards to anything); on
+    an entity of that SAME domain; that is not heavy and does not stand
+    alone (a lock, alarm, door, gate, garage, cover, valve, camera, scene,
+    script, button - by domain or by a word in its id: "switch.garage_door"
+    is a door); with no `data` beyond a short list of brightness, colour and
+    fan-speed keys."""
+    if not isinstance(p, Plan) or p.kind != "call_service" or p.reason_empty or not p.queries:
+        return "not a change Jarvis could check"
+    if p.heavy:
+        return "it includes a lock, alarm, door or cover"
+    for q in p.queries:
+        tail = str(q.url or "").rsplit("/api/services/", 1)
+        parts = tail[1].split("/") if len(tail) == 2 else []
+        if len(parts) != 2:
+            return "not a change Jarvis could check"
+        domain, service = (urllib.parse.unquote(x) for x in parts)
+        eid = str(q.entity_id or "")
+        if domain not in EVERYDAY_DOMAINS or eid.split(".", 1)[0] != domain:
+            return "only lights, plugs and fans go without a card"
+        if service not in EVERYDAY_SERVICES:
+            return "only on, off and toggle go without a card"
+        if _stands_alone(domain, eid):
+            return "a lock, alarm, door, cover or similar always gets a card of its own"
+        body = q.body if isinstance(q.body, dict) else {}
+        if body.get("entity_id") != eid or any(k not in EVERYDAY_DATA for k in body
+                                                if k != "entity_id"):
+            return "that setting is not one that goes without a card"
+    return ""
+
+
 def describe(p: Plan) -> str:
     """The card text. Every URL and body in full - never a summary."""
     if p.reason_empty:

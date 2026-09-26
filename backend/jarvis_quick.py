@@ -92,7 +92,11 @@ Only the owner's own words: the newest message tagged `typed` or `voice`
 A pasted, shared or clipboard message, one sent with an app's own system
 text, a picture, or an untagged message goes to the model instead. A voice
 turn started by "Hey Jarvis" is fine: setting a reminder is an action the
-owner asked for, not a fact being saved.
+owner asked for, not a fact being saved. Since 2026-09-26 that includes a
+REPEATING alarm or reminder ("remind me every weekday at 7 to take my
+pills"): it is set up at once, with no card, and the answer says its next
+three times (jarvis_schedule.repeat_set_words). A repeating briefing and
+"tell me when" still raise their one card.
 
 WHAT IT KEEPS
 A reminder's words are the owner's own: they go into jarvis_schedule's file
@@ -1891,9 +1895,15 @@ def _set_at(kind: str, w: When, text: str, sched, now: float, n: str) -> Result:
         except (ValueError, OverflowError) as exc:
             return Result(S._sentence(exc), n)
         words = S.rule_words(j.get("rule") or w.rule)
-        return Result(f"That repeats ({words}), so there is an "
-                      f"approval card for it on your screen. {UNTIL_APPROVED}", n, [j["id"]],
-                      made=[j["id"]], what=f"the repeating {kind} ({words})", nouns=(kind,))
+        what = f"the repeating {kind} ({words})"
+        if j.get("state") == "waiting":
+            return Result(f"That repeats ({words}), so there is an "
+                          f"approval card for it on your screen. {UNTIL_APPROVED}", n,
+                          [j["id"]], made=[j["id"]], what=what, nouns=(kind,))
+        # A plain repeat needs no card (2026-09-26): set up now, and the
+        # answer says when it next goes off, as the card used to.
+        return Result(S.repeat_set_words(j, now), n, [j["id"]], made=[j["id"]], what=what,
+                      nouns=(kind,))
     if w.passed:
         return Result(f"{S.when_words(w.at, now)} has already passed. Say another time.", n)
     try:
@@ -2025,7 +2035,8 @@ def answer(text, *, sched=None, now: Optional[float] = None,
 # that carries a fact (a length, a time, a name, "no", "already") taken over
 # word for word - test_manner.py checks both wordings of each carry the same
 # facts. Anything not listed (the to-do list read out, a briefing, a card's
-# "That repeats..." line, an error) is the same in both.
+# "That repeats..." line, a repeat's "... set up, every ... Next: ..." line,
+# an error) is the same in both.
 
 _WARM = [(re.compile(rx), warm) for rx, warm in (
     (r"No timer is running\.", "There's no timer running right now."),
