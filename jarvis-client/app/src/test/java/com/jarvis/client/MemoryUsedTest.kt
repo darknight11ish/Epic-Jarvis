@@ -126,7 +126,12 @@ class MemoryUsedTest {
         val session = repoFile("$main/net/ChatSession.kt").readText()
         // Asked again before every temporary question, not only when turned on.
         val send = session.substring(session.indexOf("suspend fun send("))
-        assertTrue(send.contains("if (asTemporary && !canTemporary()) {\n            _error.value = TemporaryChat.UNAVAILABLE\n            return null"))
+        // The refusal: the error set, then nothing sent (the plain-errors
+        // line that also sets `_problem` may sit between them).
+        val refuse = send.substring(send.indexOf("if (asTemporary && !canTemporary()) {"))
+        val block = refuse.substring(0, refuse.indexOf("\n        }"))
+        assertTrue(block.contains("_error.value = TemporaryChat.UNAVAILABLE"))
+        assertTrue(block.trimEnd().endsWith("return null"))
         assertTrue(send.indexOf("canTemporary()") < send.indexOf("api.chatCall("))
         // Turning it on or off starts a new conversation.
         val toggle = session.substring(session.indexOf("fun setTemporary("))
