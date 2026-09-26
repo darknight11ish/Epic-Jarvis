@@ -534,6 +534,18 @@ $PATCHES = @(
     # is asks-first.patch's two blocks too. Needs jarvis_asks_first.py -
     # already needed by asks-first.patch, so nothing new to copy in.
     'tools-enable.patch'
+    # Backups (the owner's decision, 2026-09-27): GET /api/backup and
+    # /api/backup/list, POST /api/backup/folder ("Back up into this folder?",
+    # one approval card, change_own_config - jarvis_documents.check_folder's
+    # own refusal list), /api/backup/now (this PC only, no card),
+    # /api/backup/restore/preview and /api/backup/restore (this PC only, ONE
+    # approval card that always needs Windows Hello - a new jarvis_gate.py
+    # _RISK entry and jarvis_owner_check.PC_ONLY_ACTIONS). Its jarvis_hud.py
+    # context is watch-notifications.patch's own install block, and its
+    # jarvis_gate.py context is tools-enable.patch's two blocks, so it goes
+    # after both - last, like every new patch. Needs jarvis_backup.py copied
+    # in; without it, or on any error, the routes say so.
+    'backup.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -649,6 +661,8 @@ $SHIPPED = @(
     'jarvis_watch_notify.py'     # off by default; ON is one approval card, watch_notifications_enable; OFF is instant
     # --- "Things you can say" (2026-09-27, sayable.patch) ---
     'jarvis_sayable.py'          # sayable.patch: the fixed list of real sentences Jarvis answers without the model
+    # --- Backups (2026-09-27, backup.patch) ---
+    'jarvis_backup.py'           # one locked backup file with a recovery code shown once; restore is one card plus Windows Hello
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -239,6 +239,19 @@ CLASSIFICATION = {
     "/api/history/settings": ("ported", "\"Keep chat history on this PC\": ON is one approval card (history_enable), OFF is immediate; and \"Delete conversations older than\" (keep_days). Both apps hold ON and every keep change on a stale link; OFF is never held."),
     "/api/wiki": ("ported", "The wiki builder's documents and their state (backend/wiki.patch, 2026-09-24). Both apps list them; neither browses files or reads pages - the vault reaches the phone through Syncthing."),
     "/api/wiki/ingest": ("ported", "\"Add to wiki\" for one document, then its job. Raises one approval card (wiki_update); nothing is written before it is answered."),
+    # Backups (backend/jarvis_backup.py, backup.patch; the owner's decision
+    # of 2026-09-27; JARVIS-API.md section 44): one locked backup file with
+    # a recovery code shown once. GET /api/backup carries only
+    # `last_backup_at` off the PC (the phone's "last backup: ...") but the
+    # full status (the folder, waiting cards, counts) with `here: true` -
+    # one route, two depths, like /api/folders. Setting the folder, backing
+    # up, listing, previewing and restoring are the PC's alone.
+    "/api/backup": ("ported", "\"Backups\": the folder, whether a card is waiting, the last backup and the last restore's outcome (a one-time recovery code included exactly once). Desktop: Settings, Backups (backup.rs get_backup, settings window only), the full view. Phone: Brain, \"Last backup: ...\" only (docs/ARCHITECTURE.md section 8) - it reads the same route and shows nothing else from it."),
+    "/api/backup/folder": ("deliberate", "Setting the backup folder is the PC's alone: the desktop opens the Windows folder picker in Rust (the same one \"Folders Jarvis may look in\" uses) and the PC raises ONE approval card (change_own_config); the PC refuses the route from any other device (jarvis_owner_check.from_this_pc). A phone has no view of the PC's folders to pick from. ARCHITECTURE.md section 8."),
+    "/api/backup/now": ("deliberate", "\"Back up now\" writes one file into a folder already on this PC; no card, but still refused from any device but the PC. A phone backing up the PC's own files makes no sense. ARCHITECTURE.md section 8."),
+    "/api/backup/list": ("deliberate", "The kept backup files, by name and date - PC-only, the same reason as the folder above: a phone has nothing to do with a list of files on the PC's disk. ARCHITECTURE.md section 8."),
+    "/api/backup/restore/preview": ("deliberate", "Decrypts a backup to show counts and a date, PC-only - the backup file is on the PC's disk, and the recovery code is typed there. ARCHITECTURE.md section 8."),
+    "/api/backup/restore": ("deliberate", "Restoring replaces memory, chat history, settings and notes with an older backup: PC-only, ONE approval card that always needs Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from any other device too, whatever the gate's own risk table says). ARCHITECTURE.md section 8."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 

@@ -131,6 +131,7 @@ on a throwaway copy instead.
 | `draft-email.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Email drafts, one approval card per draft** (the owner's decision, 2026-09-27). Adds `GET /api/email/drafting` (whether saving a draft is set up - the same shape as sending's Settings line, never the password), and in the gate the notice's words for `draft_email`, `draft_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Same shape as `email-send.patch`, right beside its own lines. Its context is `email-send.patch`'s three blocks; last in the list. Needs `jarvis_email_draft.py` - see "Email drafts", at the very end. |
 | `sayable.patch` | `jarvis_hud.py` | **"Things you can say"** (already approved as feasibility I116; the ease-of-use audit's do-first table, row 4, 2026-09-27). Adds `GET /api/sayable` - fixed text, not a setting, **no approval card either way**, the same shape as `manner.patch` and `reach.patch`. Its context is `draft-email.patch`'s own new route block; last in the list. Needs `jarvis_sayable.py` - see "Things you can say", at the very end. |
 | `tools-enable.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Offering a reading tool to the AI model, from the PC** (the owner's answer, 2026-09-27). Adds `POST /api/asks_first/tools` - a DIFFERENT thing from `asks-first.patch`'s `/api/asks_first/tier`: whether a tool is offered to the model at all (`[tools].enabled`), never whether it asks first. ON is one approval card (`enable_reading_tool`) that needs Windows Hello, the same PC-only shape as `loosen_what_asks_first`; OFF is instant. `jarvis_gate.py` gains the action on `_NO_RULE_FROM_DENIAL` and `_RISK`, right beside `loosen_what_asks_first`'s own lines (a denial of this card proposes no standing rule either). Desktop only. Last in the list; its `jarvis_hud.py` context is `asks-first.patch`'s tier/lights route block, and its `jarvis_gate.py` context is `asks-first.patch`'s two additions. Needs `jarvis_asks_first.py` - already needed by `asks-first.patch`, so nothing new to copy in. See "Offering a reading tool to the AI model", at the very end. |
+| `backup.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Backups: one locked file, a recovery code shown once** (the owner's decision, 2026-09-27). Adds `GET /api/backup`, `/api/backup/list`, `POST /api/backup/folder` (this PC only, ONE approval card, `change_own_config`), `/api/backup/now` (this PC only, no card), `/api/backup/restore/preview` and `/api/backup/restore` (this PC only, ONE approval card, `restore_backup` - always Windows Hello, via `jarvis_owner_check.PC_ONLY_ACTIONS`). `jarvis_gate.py` gains `restore_backup` on `_NO_RULE_FROM_DENIAL` and `_RISK`, right beside `enable_reading_tool`'s own lines. Desktop only, apart from one read-only "Last backup: ..." line on the phone. Last in the list; its `jarvis_hud.py` context is `watch-notifications.patch`'s own install block, and its `jarvis_gate.py` context is `tools-enable.patch`'s two additions. Needs `jarvis_backup.py` - without it, or on any error, the banner says so and the routes are not there. See "Backups", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -12082,3 +12083,113 @@ found with the exact sentence its notification uses.
 and `t_an_idle_tell_me_when_check_alone_is_not_something_missed` prove the
 four sections in `build_missed()`'s own answer, and the control case the
 audit itself calls for.
+
+# Backups: `jarvis_backup.py`, `backup.patch` (2026-09-27)
+
+The owner's decision (`CLAUDE.md`, 2026-09-27, the answers to
+`docs/OWNER-QUESTIONS-2026-09-27.md`): "one locked backup file into a
+folder the owner picks, a NordLocker (or other cloud-synced) folder
+included. Locked with a recovery code only the owner has (shown once);
+Jarvis keeps only the last few. This bends rule 1 for that one locked file
+only, and the app must say plainly that a lost code means a useless
+backup and that erased facts stay in older backups until they age out."
+The design: `docs/CUTTING-EDGE-2026-09-26-round2-trust.md`, "2. Encrypted
+backup and plain restore". Full detail: `docs/JARVIS-API.md` §44.
+
+## What it adds
+
+A new module, `jarvis_backup.py`, shipped whole. Six routes (`GET
+/api/backup`, `/api/backup/list`, `POST /api/backup/folder`,
+`/api/backup/now`, `/api/backup/restore/preview`, `/api/backup/restore`),
+wrapped round the running server's handler at start-up, the same shape as
+`documents.patch`.
+
+**Setting the folder** reuses `jarvis_documents.check_folder` - imported,
+not copied - so a backup folder is refused the same places "Folders
+Jarvis may look in" is (a drive's top, the whole user folder, Windows'
+own folders, protected places), and raises the same kind of card
+(`change_own_config`) as adding a folder there.
+
+**"Back up now"** snapshots `memory.db`, `chat-history.db`, `schedule.db`
+and `feedback.db` with SQLite's own online backup API (`sqlite3.
+Connection.backup`, safe while Jarvis keeps them open), zips them with
+every top-level `*.json` settings file, `jarvis-framework.toml`, `notes/`,
+`voice/` (the owner's own voice-print - not `voice-models/` or `voices/`)
+and the chat-history key (read from Windows Credential Manager, kept
+base64 INSIDE the archive only), then encrypts the whole zip with
+AES-256-GCM under a key stretched from a fresh 20-character recovery code
+by Argon2id (`cryptography`, already a dependency here for chat history -
+not the design note's other option, `pyrage`: this repository hash-locks
+every dependency, and a package already here, already reviewed, is the
+lower-friction choice). The code is returned once, never written anywhere
+by this module. The newest 5 files in the folder are kept; two backups
+made in the same second get distinct names rather than overwrite one
+another.
+
+**Restoring** decrypts with a typed code (`preview_restore` shows only
+counts and the backup's own date, read from its `manifest.json`, before
+anything is decided), then raises ONE approval card under `restore_backup`
+- added to `jarvis_owner_check.PC_ONLY_ACTIONS`, so it always needs
+Windows Hello and is always refused from any device but this PC, whatever
+`jarvis_gate.py`'s own risk table says. On approval, Jarvis backs up the
+CURRENT state first, automatically, with a fresh one-time recovery code
+(carried in the outcome exactly once, then gone on the next read), so the
+restore itself can be undone - then writes the backup's files back.
+Restore only adds and overwrites; it never deletes a file that is not in
+the backup.
+
+## `jarvis_gate.py`: a denial proposes no standing rule
+
+`restore_backup` is added to `_NO_RULE_FROM_DENIAL` (a "no" here is about
+one restore, not a standing wish) and to `_RISK` (`"yes"`, `"local"` -
+reversible, because of the automatic safety backup, and never leaves the
+PC), right beside `enable_reading_tool`'s own lines - the same shape
+`tools-enable.patch` used.
+
+## Phone only shows a status line
+
+Desktop: Settings, Backups. Phone: read-only, "Last backup: 3 days ago."
+or "No backup has been made yet." - nothing else `GET /api/backup`'s full
+answer carries (the folder's path, a waiting card, a one-time recovery
+code) is shown there. Choosing a folder, backing up and restoring are the
+PC's alone: the folder picker is Windows', the recovery code is typed on
+the PC, and restoring needs Windows Hello there. `docs/ARCHITECTURE.md`
+§8 has the reason; `tools/check_parity.py` classifies `/api/backup` as
+`ported` (both apps read it, at different depths) and every other backup
+route `deliberate`.
+
+## Test it
+
+```
+python3 backend/test_backup.py
+```
+
+Proves: the file is genuinely encrypted (not a zip, not JSON, the plain
+text nowhere in its bytes); a lost or wrong recovery code truly cannot
+open it, and nothing this module writes anywhere holds a copy of it; what
+is inside once decrypted (real row counts, notes, the voice print, the
+carried key) and what never is (the pairing token's or a search
+provider's Credential Manager target, `voice-models/`, `voices/`, `.log`
+files); retention keeps only the newest 5 and never lets two same-second
+backups collide; restoring needs the real code, needs Windows Hello, is
+refused from any device but this PC, backs up the current (changed) state
+first, and a denied or timed-out card changes nothing; and the patch
+applies to the whole stack, reverses, and is shipped.
+
+## Not checked, said plainly
+
+- **Not run on Windows.** The Windows Hello prompt for the restore card is
+  the same approval-gap machinery `docs/JARVIS-API.md` §32.5 already says
+  is untested on Windows.
+- **Restoring while Jarvis is running** can fail if another part of the
+  backend holds a database file open in a way Windows will not let this
+  request replace - the restore then fails cleanly (the safety backup is
+  still there) rather than half-apply, and the answer says to restart
+  Jarvis on success so every part of it uses the restored data. Not
+  measured against the real, running backend.
+- **Automatic weekly backups were not built.** The owner's own words
+  named "one locked backup file into a folder the owner picks" - a manual
+  "Back up now" - and did not ask for a schedule; the design note's
+  "optionally weekly on the one scheduler" was its own suggestion, not the
+  owner's answer. Left for the owner to ask for, so as not to guess a
+  schedule nobody chose.

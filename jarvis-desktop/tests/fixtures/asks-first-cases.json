@@ -630,6 +630,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Offer a reading tool to the AI model"
+      },
+      {
+       "action": "restore_backup",
+       "fixed": false,
+       "id": "restore_backup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Restore from a backup, replacing what it knows now"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -1358,6 +1367,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Offer a reading tool to the AI model"
+      },
+      {
+       "action": "restore_backup",
+       "fixed": false,
+       "id": "restore_backup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Restore from a backup, replacing what it knows now"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -2086,6 +2104,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Offer a reading tool to the AI model"
+      },
+      {
+       "action": "restore_backup",
+       "fixed": false,
+       "id": "restore_backup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Restore from a backup, replacing what it knows now"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -2823,6 +2850,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Offer a reading tool to the AI model"
+      },
+      {
+       "action": "restore_backup",
+       "fixed": false,
+       "id": "restore_backup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Restore from a backup, replacing what it knows now"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"

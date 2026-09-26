@@ -1229,6 +1229,53 @@
         </div>
       </section>
 
+      <!-- ── Backups ────────────────────────────────────────────────────────
+           The owner's decision of 2026-09-27: "one locked backup file into
+           a folder the owner picks ... locked with a recovery code only
+           the owner has (shown once) ... Jarvis keeps only the last few"
+           (backup-settings.js; backup.rs get_backup, set_backup_folder,
+           backup_now, list_backups, preview_restore, restore_backup;
+           backend jarvis_backup.py). Setting the folder reuses the Windows
+           folder picker "Folders Jarvis may look in" uses; "Back up now"
+           has no card; restore is one card that always needs Windows
+           Hello. The phone shows only "last backup: ...". -->
+      <section class="card" id="backup">
+        <h2>Backups</h2>
+        <p class="note" id="bk-detail"></p>
+        <p class="state" id="bk-state" role="status">Asking Jarvis…</p>
+        <div id="bk-body" hidden>
+          <div class="row">
+            <span class="label">Folder</span>
+            <span class="sc-line" id="bk-folder"></span>
+            <button class="btn small" id="bk-choose-folder" type="button">Choose a folder…</button>
+          </div>
+          <p class="note" id="bk-folder-why" hidden></p>
+          <div class="row">
+            <button class="btn small" id="bk-now" type="button">Back up now</button>
+          </div>
+          <p class="note" id="bk-last"></p>
+
+          <!-- The recovery code, shown once, for a backup THIS session just
+               made (either "Back up now" or the automatic safety backup
+               before a restore). Never re-shown after this box is left. -->
+          <div class="card" id="bk-code-box" hidden>
+            <h3 class="subhead" id="bk-code-title">Write this down now</h3>
+            <p class="note" id="bk-code-warn"></p>
+            <p class="sc-line" id="bk-code" style="font-family: monospace; font-size: 1.1em"></p>
+            <div class="row">
+              <button class="btn small" id="bk-code-copy" type="button">Copy</button>
+              <button class="btn small" id="bk-code-done" type="button">I've saved it</button>
+            </div>
+          </div>
+
+          <h3 class="subhead">Kept backups</h3>
+          <p class="note" id="bk-empty" hidden>No backups yet.</p>
+          <ul class="sc-cards" id="bk-list"></ul>
+          <p class="note" id="bk-erase-limit"></p>
+          <span class="status" id="bk-status" role="status"></span>
+        </div>
+      </section>
+
       <section class="card" id="updates">
         <h2>Updates</h2>
         <!-- Which of these two shows depends on this build, not on a guess:
@@ -1544,6 +1591,7 @@
     <script type="module" src="asks-first-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
+    <script type="module" src="backup-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
   </body>
 </html>

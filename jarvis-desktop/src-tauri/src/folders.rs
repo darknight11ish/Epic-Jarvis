@@ -202,8 +202,12 @@ pub async fn import_notion(app: AppHandle, into: String) -> Result<serde_json::V
 }
 
 /// The Windows "Select folder" and "Open" dialogs, and nothing else.
+/// `pub(crate)`, not just `pub`, so `backup.rs` can reuse `picker::pick` and
+/// `picker::What::Folder` for "Choose a folder for backups" - the exact same
+/// Windows "Select folder" dialog "Folders Jarvis may look in" uses, not a
+/// second copy of it.
 #[cfg(windows)]
-mod picker {
+pub(crate) mod picker {
     use windows::core::w;
     use windows::Win32::Foundation::ERROR_CANCELLED;
     use windows::Win32::System::Com::{
@@ -286,7 +290,7 @@ mod picker {
 
 /// Not Windows: this app is only built for Windows; say so rather than guess.
 #[cfg(not(windows))]
-mod picker {
+pub(crate) mod picker {
     #[derive(Clone, Copy)]
     pub enum What {
         Folder,

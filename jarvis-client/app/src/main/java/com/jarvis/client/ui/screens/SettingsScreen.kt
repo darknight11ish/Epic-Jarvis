@@ -173,6 +173,7 @@ fun SettingsScreen(
             item(key = "reach") { ReachSection() }
             item(key = "email-sending") { EmailSendingSection() }
             item(key = "folders") { FoldersSection() }
+            item(key = "backup") { BackupSection() }
             item(key = "watch-notify") { WatchNotifySection(canAct = canAct) }
 
             item(key = "tail") { Gap(24) }
