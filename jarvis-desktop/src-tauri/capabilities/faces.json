@@ -1,12 +1,15 @@
 {
   "$schema": "../gen/schemas/windows-schema.json",
   "identifier": "faces",
-  "description": "The face gallery and the state bindings. It draws; it reads the spec that is bundled beside it. It cannot reach the event stream, the approval queue, the connection settings or backend supervision — nothing in this window needs them, and it is the largest body of third-party-shaped drawing code in the app.",
+  "description": "The face gallery and the state bindings. It draws; it reads the spec that is bundled beside it. It cannot reach the event stream, the approval queue, the connection settings or backend supervision — nothing in this window needs them, and it is the largest body of third-party-shaped drawing code in the app. It holds no event permission at all: in Tauri 2 a page's global listen() hears every event the app sends, even one sent to another window (event/listener.rs match_any_or_filter), so being able to listen would mean hearing the approval queue.",
   "windows": [
     "faces"
   ],
   "permissions": [
-    "core:default",
+    "core:app:default",
+    "core:path:default",
+    "core:webview:default",
+    "core:window:default",
     "core:webview:allow-set-webview-zoom",
     "core:webview:allow-internal-toggle-devtools",
     "appearance"

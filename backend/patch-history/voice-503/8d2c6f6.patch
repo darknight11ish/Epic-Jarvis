@@ -1,0 +1,112 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -337,7 +337,15 @@
+         # from one room to wherever the owner's phone is. jarvis_speech gates
+         # it as change_own_config; approval means approved, not already live -
+         # the value lives in the framework TOML, which no route may write.
+-        import jarvis_speech
++        try:
++            import jarvis_speech
++        except ImportError as exc:
++            # This import had no guard at all, so a missing module surfaced
++            # here as whatever the outer handler makes of an ImportError.
++            return _no_speech(
++                exc, fallback_ok=False,
++                reason="the wake word cannot be switched on from here while "
++                       "there is no speech module to switch on")
+         if "enabled" not in body:
+             return 400, {"error": "need {\"enabled\": true|false}"}
+         r = jarvis_speech.set_wake_enabled(bool(body.get("enabled")))
+@@ -1299,6 +1307,14 @@
+             try:
+                 import jarvis_speech
+                 return self._send(200, jarvis_speech.status())
++            except ImportError as exc:
++                # Still 200: "can you speak?" is a question this route can
++                # answer, and the answer is no. Only the body changes, so it
++                # is the same shape the other three now return.
++                return self._send(200, _no_speech(
++                    exc, fallback_ok=False,
++                    reason="no speech on this machine; see each route for "
++                           "whether a client may substitute its own")[1])
+             except Exception as exc:
+                 return self._send(200, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
+@@ -1535,6 +1551,14 @@
+                        or ["push_to_talk"])[0]
+             try:
+                 import jarvis_speech
++            except ImportError as exc:
++                return self._send(*_no_speech(
++                    exc, fallback_ok=False,
++                    reason="do NOT recognise this yourself. Local speech-to-"
++                           "text on the client moves the privacy boundary and "
++                           "disarms the owner-voice gate; show that dictation "
++                           "is unavailable instead"))
++            try:
+                 heard = jarvis_speech.hear(raw, source=src)
+             except Exception as exc:
+                 return self._send(500, {"error": type(exc).__name__})
+@@ -1559,16 +1583,19 @@
+                 return self._send(400, {"error": str(exc)})
+             try:
+                 import jarvis_speech
++            except ImportError as exc:
++                return self._send(*_no_speech(
++                    exc, fallback_ok=True, reason=_SAY_FALLBACK))
++            try:
+                 wav = jarvis_speech.say(text)
+             except Exception as exc:
+                 return self._send(500, {"error": type(exc).__name__})
+             if wav is None:
+                 return self._send(503, {
+                     "error": "no text-to-speech engine installed here",
++                    "available": False,
+                     "client_fallback_ok": True,
+-                    "reason": ("speak it with your own synthesiser; the text "
+-                               "is already yours, so nothing is revealed and "
+-                               "no check is skipped by doing so")})
++                    "reason": _SAY_FALLBACK})
+             return self._send(200, wav, ctype="audio/wav")
+ 
+         if route in ("/api/models/install", "/api/models/switch",
+@@ -2084,6 +2111,39 @@
+     return handler.headers.get("X-Jarvis-Client") == "hud"
+ 
+ 
++# The four /api/voice/* routes answered a missing jarvis_speech in four
++# different shapes: status 200 with available:false, utterance and say 500
++# with a bare exception name, and wake with an uncaught ImportError. A client
++# deciding "is the voice path up?" had to recognise all four, and the two
++# 500s are the wrong answer anyway - a 500 says the server broke, and nothing
++# broke: the module was never installed. That is a 503, and the difference
++# matters because 503 is the code the say route's own no-engine branch
++# already uses, with a field telling the client whether speaking it itself is
++# acceptable.
++#
++# `client_fallback_ok` is the important part and it is NOT the same answer on
++# every route. Speaking text the client already holds reveals nothing and
++# skips no check. Recognising speech is the opposite direction and has no
++# such latitude: a client that ran its own speech-to-text would move the
++# privacy boundary and disarm the owner-voice gate, which is the whole point
++# of routing audio here.
++_SAY_FALLBACK = ("speak it with your own synthesiser IF that synthesiser is "
++                 "on-device. The text is already yours, so nothing is revealed "
++                 "by saying it aloud locally - but a synthesiser that sends the "
++                 "text to a vendor to be spoken is egress, and this reply is "
++                 "not permission for that. On Android that means checking "
++                 "Voice.isNetworkConnectionRequired and showing the text "
++                 "instead when it is true.")
++
++
++def _no_speech(exc: Exception, *, fallback_ok: bool, reason: str) -> tuple:
++    return 503, {"error": "the speech module is not installed on this machine",
++                 "detail": f"{type(exc).__name__}: {exc}",
++                 "available": False,
++                 "client_fallback_ok": fallback_ok,
++                 "reason": reason}
++
++
+ def _ro_sqlite(db_path):
+     """Read-only connect that survives Windows paths.
+ 

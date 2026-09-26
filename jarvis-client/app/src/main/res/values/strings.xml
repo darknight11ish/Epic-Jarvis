@@ -27,6 +27,10 @@
     <string name="channel_approval_quiet_desc">Approvals that can be undone and stay
         on your desktop, and approvals raised only because a message tried to hurry
         you. Shown without a sound.</string>
+    <string name="channel_alarm_name">Alarms and urgent alerts</string>
+    <string name="channel_alarm_desc">An alarm, or a "tell me when" you marked urgent.
+        Rings and vibrates until you look. It uses the alarm sound, so Do Not Disturb
+        lets it through if your phone allows alarms then.</string>
     <string name="approval_locked">A decision is waiting. Unlock to see it.</string>
     <string name="approvals_waiting">%1$d approvals waiting</string>
     <string name="approval_deny_action">Deny</string>
@@ -34,6 +38,16 @@
     <string name="widget_approval_name">Jarvis approvals</string>
     <string name="widget_approval_desc">The oldest pending approval, at a glance.
         Deny answers it directly; approving always opens the app.</string>
+
+    <!-- "Hey Jarvis" on this phone (service/WakeWordService.kt). -->
+    <string name="channel_wake_name">Listening for \"hey Jarvis\"</string>
+    <string name="channel_wake_desc">Shown for as long as this phone listens for
+        \"hey Jarvis\". The microphone is open the whole time.</string>
+    <string name="wake_listening_title">Listening for \"hey Jarvis\"</string>
+    <string name="wake_listening_text">The microphone is open. Nothing leaves this phone
+        until it hears \"hey Jarvis\" - then only what you say next goes to your PC.</string>
+    <string name="wake_heard_text">Heard \"hey Jarvis\" - listening to what you say next.</string>
+    <string name="wake_stop">Stop listening</string>
 
     <string name="widget_quicklink_name">Jarvis quick link</string>
     <string name="widget_quicklink_desc">The link status, and a one-tap Talk button that opens the

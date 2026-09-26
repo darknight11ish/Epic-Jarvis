@@ -8,7 +8,33 @@ name: CI
 on:
   push:
     branches: ["**"]
+    # A push that changes ONLY these files runs nothing: no test reads them
+    # (checked 2026-09-26 - the suites read docs/*.md, backend/README.md and
+    # CHANGELOG.md, so those are NOT listed). Every changed file must be on
+    # this list for a run to be skipped; one other file and everything runs.
+    paths-ignore:
+      - "CLAUDE.md"
+      - "README.md"
+  # Pull requests into main only (every other branch is already checked by
+  # its push). No path filter here, so a required check on a pull request
+  # always reports instead of waiting for a run that never starts.
   pull_request:
+    branches: [main]
+
+# A newer push to the same branch (or pull request) stops the older run: its
+# result would be out of date before it finished.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
+# Every action is pinned to a full commit, like the other workflows (a tag can
+# be moved to different code after it was checked). The tag each commit stood
+# for on 2026-09-26, read from that action's own tag list, is beside it. All
+# of them run on Node 24 (Node 20 is being retired on GitHub's runners).
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,15 +44,19 @@ jobs:
     # The product is a Windows app. Checking it anywhere else would type-check
     # the wrong half of every `#[cfg(windows)]`.
     runs-on: windows-latest
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: jarvis-desktop/src-tauri
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      # Pinned to a commit, this action cannot read the toolchain from its
+      # ref, so it is named here (as in desktop-release.yml).
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch
         with:
+          toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: jarvis-desktop/src-tauri
       - run: cargo fmt --check
@@ -35,12 +65,13 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: jarvis-desktop
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "22"
       # No bundler and no test framework: the pages are plain ES modules, so a
@@ -50,20 +81,389 @@ jobs:
       - run: for f in src/*.js; do node --check "$f"; done
         shell: bash
       - run: node scripts/markdown-test.mjs
-      # Two of the ten frontend suites need no browser at all — they parse and
-      # compute rather than render — so they belong here rather than only on a
-      # machine where someone has installed Playwright. The other eight open
-      # real pages and stay out of CI for the reason in tests/README.md.
       - run: python3 scripts/check-tokens.py
-      - run: node tests/voicecheck.mjs
+      # EVERY suite in tests/, not a hand-picked few. Most of them open the
+      # real pages in a headless Chromium (tests/uikit.mjs), which is why only
+      # three used to run here. Playwright is not a dependency of the app
+      # (tests/README.md says why), so it is installed for this job only.
+      # uikit.mjs is the harness, not a suite; shots.mjs only writes
+      # screenshots. Every suite runs even after one fails, so one red run
+      # lists every failure at once.
+      - name: Install Playwright's Chromium (for the page tests only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund playwright
+          npx playwright install --with-deps chromium
+      - name: Every desktop test suite
+        shell: bash
+        run: |
+          set -uo pipefail
+          failed=()
+          for f in tests/*.mjs; do
+            name=$(basename "$f")
+            case "$name" in uikit.mjs|shots.mjs) continue ;; esac
+            echo "::group::$name"
+            if node "$f"; then echo "ok  $name"; else failed+=("$name"); fi
+            echo "::endgroup::"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::${#failed[@]} desktop suite(s) failed: ${failed[*]}"
+            exit 1
+          fi
+          echo "Every desktop suite passed."
+
+  backend:
+    # The backend suites, including every contract test (the ones that read
+    # the phone's Kotlin and the desktop's Rust and JS and check them against
+    # the real Python). About twenty suites test a patch against the owner's
+    # own jarvis_hud.py / jarvis_gate.py / jarvis_extract.py, which are not in
+    # this repository - backend/run_suites.py SKIPS those by name, with the
+    # files each is waiting for, and fails on anything else. The voice suites
+    # (test_speech, test_voice_contract, test_wakeword) need the three voice
+    # packages from backend/requirements.txt, and test_chat_log needs
+    # `cryptography` (chat history is encrypted); nothing else from it is needed,
+    # and the memory ones (fastembed, sqlite-vec) are left out on purpose -
+    # the suites use a hash embedder and must pass without them.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # The WHOLE history, not the last commit: test_patch_history.py
+          # rebuilds backend/patch-history from `git log` and fails if the
+          # committed copy differs. In a shallow clone it has nothing to
+          # read, and with CI set it fails rather than skip.
+          fetch-depth: 0
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check numpy sherpa-onnx onnxruntime cryptography
+      - name: Backend suites (the ones that need no file from the owner's PC)
+        run: python backend/run_suites.py
+      # Desktop and phone call the same backend; a route one calls and the
+      # other does not has to be a recorded decision (tools/check_parity.py).
+      - name: Desktop / phone parity
+        run: python tools/check_parity.py
+
+  credential-manager:
+    # The pairing token lives in Windows Credential Manager (CLAUDE.md rule 3,
+    # backend/jarvis_token_store.py). Linux has no Credential Manager, so the
+    # backend job above only tests the logic against a stand-in; this runs the
+    # real ctypes calls - write, read back, move an old file in, delete - on
+    # real Windows, under a throwaway name, never a real token.
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.12"
+      - name: Token store, live against Credential Manager
+        run: python backend/test_token_store.py
+
+  powershell-5:
+    # The owner runs these scripts in Windows PowerShell 5.1, not 7. 5.1 does
+    # not know `??`, `?:`, `&&` or `||`, and reads a script file that has no
+    # BOM as ANSI (Windows-1252), not UTF-8 - so a non-ASCII character in
+    # code can become a quote mark and end a string early. Caught here, by
+    # 5.1 itself, before the owner has to paste an error back. Then
+    # apply-patches.ps1 is actually RUN, in 5.1, against a stand-in backend,
+    # to prove it copies what it ships and never overwrites a settings file.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - name: Parse every .ps1 with Windows PowerShell 5.1
+        run: |
+          "PowerShell $($PSVersionTable.PSVersion)"
+          if ($PSVersionTable.PSVersion.Major -ne 5) { throw "expected Windows PowerShell 5.x" }
+          $bad = 0
+          $files = @(Get-ChildItem -Recurse -File -Filter *.ps1 | Where-Object { $_.FullName -notmatch '\\node_modules\\' })
+          foreach ($f in $files) {
+            # Get-Content with no -Encoding reads the way 5.1 reads a
+            # script: ANSI, unless the file starts with a BOM.
+            $text = Get-Content -LiteralPath $f.FullName -Raw
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$errors)
+            foreach ($e in $errors) {
+              $bad++
+              "::error file=$($f.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"
+            }
+            foreach ($t in $tokens) {
+              if ($t.Kind -ne 'Comment' -and $t.Text -match '[^\x00-\x7F]') {
+                $bad++
+                "::error file=$($f.FullName),line=$($t.Extent.StartLineNumber)::non-ASCII outside a comment ($($t.Kind)); 5.1 reads this file as ANSI"
+              }
+            }
+            "parsed  $($f.FullName)"
+          }
+          "$($files.Count) script(s), $bad problem(s)"
+          if ($bad -gt 0) { exit 1 }
+      - name: Run apply-patches.ps1 in 5.1 against a stand-in backend
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # A copy of the repository's scripts and backend with the patch
+          # list emptied: the stand-in has no real jarvis_hud.py for a patch
+          # to apply to. What is under test is everything after patching:
+          # the modules, the backups, the settings file.
+          $repo = Join-Path $env:RUNNER_TEMP 'repo'
+          $be = Join-Path $env:RUNNER_TEMP 'backend'
+          $cfg = Join-Path $env:RUNNER_TEMP 'cfg'
+          New-Item -ItemType Directory -Force -Path $repo, $be, $cfg | Out-Null
+          Copy-Item -Recurse scripts, backend -Destination $repo
+          Remove-Item (Join-Path $repo 'backend\*.patch')
+          $ps1 = Join-Path $repo 'scripts\apply-patches.ps1'
+          $t = [IO.File]::ReadAllText($ps1)
+          $t2 = [regex]::Replace($t, '(?s)\$PATCHES = @\(.*?\n\)', '$$PATCHES = @()')
+          if ($t2 -eq $t) { throw "could not empty the patch list" }
+          [IO.File]::WriteAllText($ps1, $t2)
+          Set-Content -LiteralPath (Join-Path $be 'jarvis_hud.py') -Value 'print("stand-in")'
+          Set-Content -LiteralPath (Join-Path $be 'jarvis_notes.py') -Value '# an older copy'
+          $env:OPENJARVIS_CONFIG_DIR = $cfg
+
+          powershell -NoProfile -ExecutionPolicy Bypass -File $ps1 -BackendPath $be -SkipPackages -SkipTests
+          if ($LASTEXITCODE -ne 0) { throw "first run exited $LASTEXITCODE" }
+
+          # Every shipped module is there, and is this repository's copy.
+          $where = [IO.File]::ReadAllText((Join-Path $repo 'backend\_where.py'))
+          # Only the SHIPPED tuple: the rest of _where.py names other files too
+          # (HUD = BACKEND / "jarvis_hud.py"), and one of those is the owner's own.
+          $block = [regex]::Match($where, '(?s)\nSHIPPED = \((.*?)\n\)').Groups[1].Value
+          $shipped = @([regex]::Matches($block, '"((?:rebuilt/)?jarvis_\w+\.py)"') | ForEach-Object { $_.Groups[1].Value })
+          if ($shipped.Count -lt 20) { throw "read only $($shipped.Count) names from _where.SHIPPED" }
+          foreach ($m in $shipped) {
+            $leaf = Split-Path -Leaf $m
+            $got = Join-Path $be $leaf
+            if (-not (Test-Path -LiteralPath $got)) { throw "$leaf was not copied in" }
+            $want = Join-Path (Join-Path $repo 'backend') $m
+            if ((Get-FileHash $got).Hash -ne (Get-FileHash $want).Hash) { throw "$leaf is not the repository's copy" }
+          }
+          "all $($shipped.Count) shipped modules were copied in"
+          $backups = @(Get-ChildItem -Directory -LiteralPath $be -Filter '_jarvis-backup-*')
+          if ($backups.Count -eq 0 -or -not (Test-Path -LiteralPath (Join-Path $backups[0].FullName 'jarvis_notes.py'))) { throw "the older jarvis_notes.py was not backed up" }
+          "the older jarvis_notes.py was backed up"
+
+          # There was no settings file anywhere, so one went beside jarvis_hud.py.
+          $toml = Join-Path $be 'jarvis-framework.toml'
+          if (-not (Test-Path -LiteralPath $toml)) { throw "no jarvis-framework.toml was installed" }
+
+          # The owner edits it; a second run must leave it exactly as it is.
+          Add-Content -LiteralPath $toml -Value "`n[ci_owner_edit]`nkept = true"
+          $before = (Get-FileHash $toml).Hash
+          powershell -NoProfile -ExecutionPolicy Bypass -File $ps1 -BackendPath $be -SkipPackages -SkipTests
+          if ($LASTEXITCODE -ne 0) { throw "second run exited $LASTEXITCODE" }
+          if ((Get-FileHash $toml).Hash -ne $before) { throw "the second run changed the owner's jarvis-framework.toml" }
+          "the owner's settings file was left alone"
+      - name: apply-patches.ps1 in 5.1 replaces an OLDER version of a patch
+        run: |
+          # The owner may have run the script before some patches were edited
+          # here, and the current text of an edited patch cannot take its old
+          # text off. So: a made-up backend and a made-up list of three
+          # patches. The backend carries the first patch and an OLD text of
+          # the second (the third was added to the list since). The script
+          # must find that old text in backend\patch-history - after trying a
+          # newer old text that is NOT there - take it off, and leave exactly
+          # what the current list gives. A text that was never published
+          # must be refused with the file untouched and no backup made.
+          $ErrorActionPreference = 'Stop'
+          # Native programs run with 'Continue', so what they write to
+          # stderr is output, not a terminating error (CLAUDE.md's trap).
+          function Invoke-Native([string] $Exe, [string[]] $Arguments) {
+            $prev = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try { $out = & $Exe @Arguments 2>&1 | Out-String; $code = $LASTEXITCODE } finally { $ErrorActionPreference = $prev }
+            return @{ Code = $code; Out = $out }
+          }
+          function Assert-Native([string] $Exe, [string[]] $Arguments) {
+            $r = Invoke-Native $Exe $Arguments
+            if ($r.Code -ne 0) { throw "$Exe $($Arguments -join ' ') exited $($r.Code): $($r.Out)" }
+          }
+          function Write-Lf([string] $Path, [string] $Content) {
+            [IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding $false))
+          }
+          # Why two texts differ, in one line: a wrong LINE ENDING (Windows
+          # git turning LF into CRLF on write) reads very differently from
+          # wrong CONTENT, and the first time this step ran on Windows it
+          # failed without saying which.
+          function Get-Diff([string] $Got, [string] $Want) {
+            $cr = ([regex]::Matches($Got, "`r")).Count
+            $same = ($Got -replace "`r`n", "`n") -eq $Want
+            return "got $($Got.Length) chars with $cr CR; expected $($Want.Length) chars with 0 CR; same apart from line endings: $same"
+          }
+          function Assert-Text([string] $Path, [string] $Want, [string] $Why) {
+            $got = [IO.File]::ReadAllText($Path)
+            if ($got -ne $Want) { throw "$Why - $(Get-Diff $got $Want)" }
+          }
+          # What the SCRIPT leaves. Windows git with its default
+          # core.autocrlf=true reads a file as LF and writes it back CRLF -
+          # measured here on 2026-09-24: all 40 lines came back CRLF, the
+          # content otherwise identical. Python reads both the same, and git
+          # reads it back as LF again, so a second run still recognises every
+          # patch (case 2 checks exactly that). So the content must match
+          # exactly, and the endings must be ONE kind throughout - a file
+          # with some CRLF lines and some LF lines is refused.
+          function Assert-Result([string] $Path, [string] $Want, [string] $Why) {
+            $got = [IO.File]::ReadAllText($Path)
+            $cr = ([regex]::Matches($got, "`r`n")).Count
+            $lf = ([regex]::Matches($got, "`n")).Count
+            if (($got -replace "`r`n", "`n") -ne $Want) { throw "$Why - $(Get-Diff $got $Want)" }
+            if ($cr -ne 0 -and $cr -ne $lf) { throw "$Why - mixed line endings: $cr of $lf lines are CRLF" }
+            return $got
+          }
+          # A 40-line jarvis_hud.py with some lines changed (0-based index).
+          function Get-Hud([hashtable] $Changes) {
+            $lines = @(1..40 | ForEach-Object { "line $_" })
+            foreach ($k in $Changes.Keys) { $lines[$k] = $Changes[$k] }
+            return (($lines -join "`n") + "`n")
+          }
+          # A git-format patch taking jarvis_hud.py from one state to another.
+          function New-ToyPatch([hashtable] $Before, [hashtable] $After, [string] $Out) {
+            $g = Join-Path $env:RUNNER_TEMP 'toy-gen'
+            if (Test-Path -LiteralPath $g) { Remove-Item -LiteralPath $g -Recurse -Force }
+            New-Item -ItemType Directory -Path $g | Out-Null
+            Assert-Native 'git' @('-C', $g, 'init', '-q')
+            Assert-Native 'git' @('-C', $g, 'config', 'core.autocrlf', 'false')
+            Write-Lf (Join-Path $g 'jarvis_hud.py') (Get-Hud $Before)
+            Assert-Native 'git' @('-C', $g, 'add', 'jarvis_hud.py')
+            Write-Lf (Join-Path $g 'jarvis_hud.py') (Get-Hud $After)
+            Assert-Native 'git' @('-C', $g, 'diff', "--output=$Out")
+            if (-not (Test-Path -LiteralPath $Out) -or (Get-Item -LiteralPath $Out).Length -eq 0) { throw "no patch written to $Out" }
+          }
+
+          $one    = @{ 4 = 'line 5 - one' }
+          $twoOld = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, as first published' }
+          $decoy  = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, some other old text' }
+          $never  = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, hand-edited, never published' }
+          $twoNew = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, as it is now'; 24 = 'line 25 - two, added later' }
+          $three  = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, as it is now'; 24 = 'line 25 - two, added later'; 34 = 'line 35 - three' }
+
+          # A copy of the repository with the made-up list and history.
+          $repo = Join-Path $env:RUNNER_TEMP 'repo-old'
+          New-Item -ItemType Directory -Force -Path $repo | Out-Null
+          Copy-Item -Recurse scripts, backend -Destination $repo
+          $pd = Join-Path $repo 'backend'
+          Remove-Item (Join-Path $pd '*.patch')
+          Remove-Item -LiteralPath (Join-Path $pd 'patch-history') -Recurse -Force
+          New-ToyPatch @{} $one (Join-Path $pd 'toy-one.patch')
+          New-ToyPatch $one $twoNew (Join-Path $pd 'toy-two.patch')
+          New-ToyPatch $twoNew $three (Join-Path $pd 'toy-three.patch')
+          $hist = Join-Path $pd 'patch-history\toy-two'
+          New-Item -ItemType Directory -Force -Path $hist | Out-Null
+          New-ToyPatch $one $decoy (Join-Path $hist 'bbbbbbb.patch')
+          New-ToyPatch $one $twoOld (Join-Path $hist 'aaaaaaa.patch')
+          $tab = [char]9
+          Write-Lf (Join-Path $pd 'patch-history\index.tsv') (
+            "# made up for this test`n" +
+            "toy-two.patch${tab}toy-two/bbbbbbb.patch${tab}bbbbbbb0000${tab}2026-09-02T00:00:00+00:00${tab}an old text that is not on the backend`n" +
+            "toy-two.patch${tab}toy-two/aaaaaaa.patch${tab}aaaaaaa0000${tab}2026-09-01T00:00:00+00:00${tab}the old text the backend has`n")
+          $ps1 = Join-Path $repo 'scripts\apply-patches.ps1'
+          $t = [IO.File]::ReadAllText($ps1)
+          $t2 = [regex]::Replace($t, '(?s)\$PATCHES = @\(.*?\n\)', '$$PATCHES = @(''toy-one.patch'', ''toy-two.patch'', ''toy-three.patch'')')
+          if ($t2 -eq $t) { throw "could not replace the patch list" }
+          [IO.File]::WriteAllText($ps1, $t2)
+          $cfg = Join-Path $env:RUNNER_TEMP 'cfg-old'
+          New-Item -ItemType Directory -Force -Path $cfg | Out-Null
+          $env:OPENJARVIS_CONFIG_DIR = $cfg
+          $runArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ps1, '-SkipPackages', '-SkipTests', '-BackendPath')
+
+          # 1. The first patch and the OLD second one are on: replaced.
+          $be = Join-Path $env:RUNNER_TEMP 'backend-old'
+          New-Item -ItemType Directory -Force -Path $be | Out-Null
+          $hud = Join-Path $be 'jarvis_hud.py'
+          Write-Lf $hud (Get-Hud @{})
+          # autocrlf off for THIS setup only, so the stand-in is exactly what
+          # an LF backend holds. The script's own git calls are left alone:
+          # if Windows git changes endings under them, the checks below
+          # must see it.
+          Assert-Native 'git' @('-c', 'core.autocrlf=false', '-C', $be, 'apply', (Join-Path $pd 'toy-one.patch'))
+          Assert-Native 'git' @('-c', 'core.autocrlf=false', '-C', $be, 'apply', (Join-Path $hist 'aaaaaaa.patch'))
+          Assert-Text $hud (Get-Hud $twoOld) "the stand-in backend was not built as intended"
+          $r = Invoke-Native 'powershell' ($runArgs + @($be))
+          $r.Out
+          if ($r.Code -ne 0) { throw "the run on a backend with an older patch exited $($r.Code)" }
+          $after = Assert-Result $hud (Get-Hud $three) "the result is not what the current list gives"
+          if ($r.Out -notmatch 'OLDER version') { throw "it did not say it found an older version" }
+          if ($r.Out -notmatch 'toy-two\.patch from 2026-09-01 \(commit aaaaaaa\)') { throw "it did not name the older version it found" }
+          $bk = @(Get-ChildItem -Directory -LiteralPath $be -Filter '_jarvis-backup-*')
+          if ($bk.Count -ne 1) { throw "expected one backup folder, found $($bk.Count)" }
+          Assert-Text (Join-Path $bk[0].FullName 'jarvis_hud.py') (Get-Hud $twoOld) "the backup is not the file as it was before the run"
+          "an older toy-two.patch was recognised, taken off and replaced; the backup holds the file as it was"
+
+          # 2. Run again: everything is on, nothing changes.
+          $r = Invoke-Native 'powershell' ($runArgs + @($be))
+          if ($r.Code -ne 0) { throw "the second run exited $($r.Code)`n$($r.Out)" }
+          if ($r.Out -notmatch 'already applied') { throw "the second run did not find everything applied`n$($r.Out)" }
+          # Byte for byte: a second run must not touch the file at all.
+          Assert-Text $hud $after "the second run changed the file"
+          "a second run found everything applied"
+
+          # 3. A text of the second patch that was never published: refused,
+          #    nothing changed, no backup.
+          $be2 = Join-Path $env:RUNNER_TEMP 'backend-never'
+          New-Item -ItemType Directory -Force -Path $be2 | Out-Null
+          $hud2 = Join-Path $be2 'jarvis_hud.py'
+          Write-Lf $hud2 (Get-Hud $never)
+          $r = Invoke-Native 'powershell' ($runArgs + @($be2))
+          $r.Out
+          if ($r.Code -eq 0) { throw "a never-published text was not refused" }
+          if ($r.Out -notmatch 'NOTHING HAS BEEN CHANGED') { throw "the refusal did not say nothing was changed" }
+          Assert-Text $hud2 (Get-Hud $never) "the refused run changed the file"
+          if (@(Get-ChildItem -Directory -LiteralPath $be2 -Filter '_jarvis-backup-*').Count -ne 0) { throw "the refused run made a backup folder, so it got past the rehearsal" }
+          "a never-published text was refused and nothing was touched"
+
+          # 4. Nothing on yet: the whole current list goes on.
+          $be3 = Join-Path $env:RUNNER_TEMP 'backend-fresh'
+          New-Item -ItemType Directory -Force -Path $be3 | Out-Null
+          $hud3 = Join-Path $be3 'jarvis_hud.py'
+          Write-Lf $hud3 (Get-Hud @{})
+          $r = Invoke-Native 'powershell' ($runArgs + @($be3))
+          if ($r.Code -ne 0) { throw "the run on a fresh backend exited $($r.Code)`n$($r.Out)" }
+          [void](Assert-Result $hud3 (Get-Hud $three) "a fresh backend did not get the current list")
+          "a fresh backend got the whole current list"
+          # Explicitly: the runner ends a powershell step with the LAST native
+          # exit code, and case 3 above expects one that is not 0.
+          exit 0
 
   audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: jarvis-desktop/src-tauri
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@cargo-deny
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-deny
       - run: cargo deny check licenses advisories
+      # THIRD-PARTY-NOTICES.txt must name every Rust library the Windows
+      # build ships, with its copyright lines (DEPS audit B-22). After adding
+      # or updating a crate: python3 tools/gen_notices.py, and commit the file.
+      - name: Third-party notices are up to date
+        run: |
+          cargo fetch --locked
+          python3 ../../tools/gen_notices.py --check
+
+  python-advisories:
+    # The backend's Python packages, next to `cargo deny` above (feasibility
+    # audit I111, first half, 2026-09-26): backend/requirements.lock must pin
+    # every package in requirements.txt with a hash, and no pinned release -
+    # on any platform or Python version the lock covers - may have a known
+    # advisory in PyPI's own database. Standard library only, so there is
+    # nothing new to install (or to pin) for the check itself.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.12"
+      - name: Python packages are hash-locked and have no known advisory
+        run: python tools/check_python_advisories.py

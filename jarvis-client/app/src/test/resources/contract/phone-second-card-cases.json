@@ -1,0 +1,252 @@
+{
+  "_about": "Made by backend/test_phone_second_card_contract.py --write: the desktop's picture request, as the PC's own functions read it, and the second card's X-Jarvis-Route and what a switch's POST answers. Do not edit by hand.",
+  "limits": {
+    "backend_max_body": 4194304,
+    "max_jpeg_bytes": 1500000,
+    "max_long_edge": 1920,
+    "jpeg_quality": 82
+  },
+  "requests": [
+    {
+      "name": "a picture with the first question",
+      "history": [],
+      "question": "What is in this picture?",
+      "jpeg_b64": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCAAGAAgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDGt7241KG61qKTydW06ITXMxAZbyJnWIl1OQXJlAbIKyKWLfMGMhRRX2cYRbaa2/yPmnJpKzP/2Q==",
+      "body": {
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "What is in this picture?"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCAAGAAgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDGt7241KG61qKTydW06ITXMxAZbyJnWIl1OQXJlAbIKyKWLfMGMhRRX2cYRbaa2/yPmnJpKzP/2Q=="
+                }
+              }
+            ]
+          }
+        ],
+        "has_image": true,
+        "stream": true,
+        "auto": true
+      },
+      "expect": {
+        "pc_sees_picture": true,
+        "lane": "vision",
+        "stays_local": true,
+        "router_gate": "image"
+      }
+    },
+    {
+      "name": "a picture after two earlier questions",
+      "history": [
+        {
+          "question": "When is the dentist?",
+          "answer": "Tuesday at 10."
+        },
+        {
+          "question": "And the vet?",
+          "answer": "Friday \"after work\"."
+        }
+      ],
+      "question": "Is this the right form? ✓",
+      "jpeg_b64": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCAAGAAgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDGt7241KG61qKTydW06ITXMxAZbyJnWIl1OQXJlAbIKyKWLfMGMhRRX2cYRbaa2/yPmnJpKzP/2Q==",
+      "body": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "When is the dentist?"
+          },
+          {
+            "role": "assistant",
+            "content": "Tuesday at 10."
+          },
+          {
+            "role": "user",
+            "content": "And the vet?"
+          },
+          {
+            "role": "assistant",
+            "content": "Friday \"after work\"."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Is this the right form? ✓"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCAAGAAgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDGt7241KG61qKTydW06ITXMxAZbyJnWIl1OQXJlAbIKyKWLfMGMhRRX2cYRbaa2/yPmnJpKzP/2Q=="
+                }
+              }
+            ]
+          }
+        ],
+        "has_image": true,
+        "stream": true,
+        "auto": true
+      },
+      "expect": {
+        "pc_sees_picture": true,
+        "lane": "vision",
+        "stays_local": true,
+        "router_gate": "image"
+      }
+    },
+    {
+      "name": "words only, no picture",
+      "history": [
+        {
+          "question": "hi",
+          "answer": "Hello."
+        }
+      ],
+      "question": "and now?",
+      "jpeg_b64": null,
+      "body": {
+        "messages": [
+          {
+            "role": "user",
+            "content": "hi"
+          },
+          {
+            "role": "assistant",
+            "content": "Hello."
+          },
+          {
+            "role": "user",
+            "content": "and now?"
+          }
+        ],
+        "has_image": false,
+        "stream": true,
+        "auto": true
+      },
+      "expect": {
+        "pc_sees_picture": false,
+        "lane": null,
+        "stays_local": true,
+        "router_gate": "complexity"
+      }
+    }
+  ],
+  "route_headers": [
+    {
+      "name": "a picture, on the second card",
+      "header": "{\"lane\": \"qwen2.5vl:7b\", \"reason\": \"the message carries a picture, which can show anything that was on screen, so it stays on this machine\", \"gate\": \"image\", \"complexity\": 0.025, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"where\": \"local\", \"second_card\": \"vision\"}",
+      "expect": {
+        "second_card": "vision",
+        "model": "qwen2.5vl:7b",
+        "where": "local"
+      }
+    },
+    {
+      "name": "a long conversation, on the second card",
+      "header": "{\"lane\": \"qwen3:14b\", \"reason\": \"complexity 0.042 is under the threshold\", \"gate\": \"complexity\", \"complexity\": 0.042, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"where\": \"local\", \"second_card\": \"long_context\"}",
+      "expect": {
+        "second_card": "long_context",
+        "model": "qwen3:14b",
+        "where": "local"
+      }
+    },
+    {
+      "name": "an everyday answer, main card",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"complexity 0.042 is under the threshold\", \"gate\": \"complexity\", \"complexity\": 0.042, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"where\": \"local\"}",
+      "expect": {
+        "second_card": null,
+        "model": null,
+        "where": "local"
+      }
+    }
+  ],
+  "post_replies": [
+    {
+      "name": "turning on raises a card",
+      "feature": "long_context",
+      "enabled": true,
+      "status": 200,
+      "body": {
+        "ok": true,
+        "enabled": false,
+        "pending": true,
+        "message": "Approve the card on your PC or phone to turn it on. Nothing changes until you do."
+      }
+    },
+    {
+      "name": "a card is already waiting",
+      "feature": "long_context",
+      "enabled": true,
+      "status": 409,
+      "body": {
+        "error": "a card to turn on \"Longer conversations\" is already waiting - approve or deny that one"
+      }
+    },
+    {
+      "name": "turning off is immediate",
+      "feature": "vision",
+      "enabled": false,
+      "status": 200,
+      "body": {
+        "ok": true,
+        "enabled": false,
+        "pending": false,
+        "message": "\"Pictures\" is off."
+      }
+    },
+    {
+      "name": "already on",
+      "feature": "long_context",
+      "enabled": true,
+      "status": 200,
+      "body": {
+        "ok": true,
+        "enabled": true,
+        "pending": false,
+        "message": "\"Longer conversations\" is already on."
+      }
+    },
+    {
+      "name": "the main switch is off",
+      "feature": "vision",
+      "enabled": true,
+      "status": 400,
+      "body": {
+        "error": "Turn on the second graphics card itself first (the main switch), then this one."
+      }
+    },
+    {
+      "name": "a needed switch is off",
+      "feature": "browser_control",
+      "enabled": true,
+      "status": 400,
+      "body": {
+        "error": "\"Browser control\" needs \"Longer conversations\" on first."
+      }
+    },
+    {
+      "name": "no capable second card",
+      "feature": "master",
+      "enabled": true,
+      "status": 503,
+      "body": {
+        "error": "The second graphics card cannot be turned on: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+      }
+    },
+    {
+      "name": "an unknown switch",
+      "feature": "telepathy",
+      "enabled": true,
+      "status": 400,
+      "body": {
+        "error": "there is no second-card feature called 'telepathy'"
+      }
+    }
+  ]
+}

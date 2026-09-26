@@ -1,0 +1,74 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -303,11 +303,20 @@
+     except Exception as exc:
+         offload = {"available": False, "status": "unknown",
+                    "note": f"could not be checked: {type(exc).__name__}"}
++    # How fast recent answers were, and the last model switch's speed check.
++    # Numbers only, read from a file on this PC; speed-record.patch.
++    try:
++        import jarvis_speed
++        speed = jarvis_speed.view(current=MM.current_model())
++    except Exception as exc:
++        speed = {"available": False,
++                 "note": f"could not be read: {type(exc).__name__}"}
+     return {
+         "current": MM.current_model(),
+         "previous": MM.previous_model(),
+         "installed": names,
+         "offload": offload,
++        "speed": speed,
+         # The catalogue is a network fetch; the desktop asks for it explicitly
+         # rather than paying for it every time the screen opens.
+         "recommendations_endpoint": "/api/models?recommend=1",
+@@ -2723,6 +2732,15 @@
+         lane = decision.lane
+         upstream = None
+         first_error = None
++        # Times this answer: first word, total, words and tokens per second.
++        # Numbers only, to a file on this PC - speed-record.patch and
++        # jarvis_speed.py. None if that module is not there, and every use
++        # below checks, so timing can never be the reason an answer fails.
++        try:
++            import jarvis_speed
++            _speed = jarvis_speed.start(lane)
++        except Exception:
++            _speed = None
+         # Tools only on the local lane, never on a cloud one - a tool result
+         # (a file's contents, a shell command's output, what is on screen)
+         # handed to a cloud provider is exactly the leak rule 1 forbids, and
+@@ -2850,13 +2868,20 @@
+                         messages, lane, ollama_url=OLLAMA_URL,
+                         enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []),
+                         stream_out=lambda chunk: (self.wfile.write(chunk),
+-                                                   self.wfile.flush()),
++                                                   self.wfile.flush(),
++                                                   _speed.feed(chunk)
++                                                   if _speed is not None else None),
+                         # The same doorbell every other capability uses to
+                         # say what it is doing while it does it - see
+                         # jarvis_ui_control.py/jarvis_android_control.py's
+                         # own `announce` parameter, built for this exact
+                         # hook.
+                         announce=lambda text: _activity("working", text))
++                    # tools=True: this answer's first-word time includes the
++                    # tool calls and any wait for your approval, so the
++                    # summaries leave it out of the first-word figure.
++                    if _speed is not None:
++                        _speed.finish(lane, tools=True)
+                 except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
+                     # Unlike the plain-relay branch below, there is no
+                     # single `upstream` left open to abort - jarvis_agent's
+@@ -2920,6 +2945,12 @@
+                                 break
+                             self.wfile.write(chunk)
+                             self.wfile.flush()
++                            if _speed is not None:
++                                _speed.feed(chunk)
++                        # Only a stream that ended normally is recorded; one
++                        # cut off by the phone dropping out never reaches here.
++                        if _speed is not None:
++                            _speed.finish(lane)
+                     except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
+                         # The phone dropped off mid-stream. Headers are already
+                         # sent, so there is nothing to report down a socket that

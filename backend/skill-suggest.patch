@@ -1,0 +1,34 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1615,7 +1615,8 @@
+                                         "error": f"{type(exc).__name__}: {exc}"})
+ 
+         if path in ("/api/models", "/api/config", "/api/skills",
+-                    "/api/appearance", "/api/visual-spec"):
++                    "/api/appearance", "/api/visual-spec",
++                    "/api/skills/suggestions"):
+             # The three desktop-only surfaces. Every one of these existed as a
+             # Python module with no way to reach it over HTTP, which meant the
+             # desktop brief was promising screens with nothing behind them.
+@@ -1665,6 +1666,21 @@
+                         "sha256": hashlib.sha256(canon).hexdigest(),
+                         "spec": spec,
+                     })
++                if path == "/api/skills/suggestions":
++                    # Read-only: which chains of tools jarvis_agent has run
++                    # often, which one was offered as a skill, and what the
++                    # owner said. Tool names and counts only - the log lines
++                    # it reads hold no conversation text. An offer itself is
++                    # an ordinary approval card (modify_own_code) in
++                    # /api/pending; nothing here can approve or write one.
++                    try:
++                        import jarvis_skill_discovery
++                    except Exception as exc:
++                        return self._send(200, {
++                            "available": False,
++                            "reason": "jarvis_skill_discovery.py is not beside "
++                                      f"jarvis_hud.py ({type(exc).__name__})"})
++                    return self._send(200, jarvis_skill_discovery.view())
+                 return self._send(200, _skills_view())
+             except Exception as exc:
+                 return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})

@@ -1,0 +1,963 @@
+{"text": "I'm interested in compilers", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm cutting down on sugar", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: diet choice, no condition; ambiguous, false"}
+{"text": "the build hash is a3f9c21", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "overdraft's maxed again and it's only the 10th", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "can't eat gluten, I'm coeliac", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "medical diet, not a preference"}
+{"text": "I'm in the Communist Party, don't tell work", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "political membership"}
+{"text": "I'm vegetarian", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "dietary preference; can be religious, but not stated"}
+{"text": "I hate coriander, tastes like soap", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I work from home most days", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mi número de la Seguridad Social es 28/12345678/90", "sensitive": true, "category": "identity", "lang": "es", "kind": "turn", "note": ""}
+{"text": "j'ai rendez-vous en oncologie jeudi", "sensitive": true, "category": "health", "lang": "fr", "kind": "turn", "note": "indirect: cancer care"}
+{"text": "Personalausweisnummer L01X00T47", "sensitive": true, "category": "identity", "lang": "de", "kind": "turn", "note": ""}
+{"text": "I grew up in Manchester", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: city-level origin; ambiguous, false"}
+{"text": "faço hemodiálise três vezes por semana", "sensitive": true, "category": "health", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "the recipe says 200g of flour by weight", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I make £11.44 an hour at the warehouse", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner prefers bullet points over long paragraphs.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "discord bot token MTA5ODc2NTQzMjEwOTg3NjU0.Gx9aBc.def123", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "vivo en la calle Mayor 23, 3º B, Madrid", "sensitive": true, "category": "location", "lang": "es", "kind": "turn", "note": ""}
+{"text": "la password della mail è juve1897", "sensitive": true, "category": "credentials", "lang": "it", "kind": "turn", "note": ""}
+{"text": "mio fratello ha perso il lavoro e ha un sacco di debiti", "sensitive": true, "category": "other_people", "lang": "it", "kind": "turn", "note": ""}
+{"text": "AWS access key AKIAIOSFODNN7EXAMPLE secret wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my party trick is juggling", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "je suis fiché à la Banque de France", "sensitive": true, "category": "money", "lang": "fr", "kind": "turn", "note": "banking blacklist"}
+{"text": "mi jefe tiene problemas con el alcohol", "sensitive": true, "category": "other_people", "lang": "es", "kind": "turn", "note": ""}
+{"text": "Game of Thrones season 3 is the best one", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my ex-husband moved to 22 Birch Road, Croydon", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "sono stato arrestato nel 2015", "sensitive": true, "category": "special", "lang": "it", "kind": "turn", "note": ""}
+{"text": "adoro il jazz", "sensitive": false, "category": "none", "lang": "it", "kind": "turn", "note": ""}
+{"text": "meine Steuer-ID ist 12 345 678 901", "sensitive": true, "category": "identity", "lang": "de", "kind": "turn", "note": ""}
+{"text": "had a miscarriage last month, still not great", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "j'ai un découvert de 2000 euros", "sensitive": true, "category": "money", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "NHS no. 485 777 3456", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "kluczem do projektu jest szybkość", "sensitive": false, "category": "none", "lang": "pl", "kind": "turn", "note": "'klucz' = key"}
+{"text": "The owner's annual bonus is around 12% of salary.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm colourblind, deuteranopia", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: condition; lean sensitive (health data)"}
+{"text": "hab nächste Woche meine Darmspiegelung", "sensitive": true, "category": "health", "lang": "de", "kind": "turn", "note": ""}
+{"text": "my favourite cheese is Comté", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my go-to takeaway is Thai green curry", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "komornik zajął mi konto", "sensitive": true, "category": "money", "lang": "pl", "kind": "turn", "note": "bailiff seized account"}
+{"text": "I charge my phone overnight", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "estoy de baja por ansiedad", "sensitive": true, "category": "health", "lang": "es", "kind": "turn", "note": ""}
+{"text": "the strikethrough style looks bad", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm in rent arears again", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "typo"}
+{"text": "my birthday's the 9th of may 1979", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm redesigning my personal website", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mon mot de passe Netflix c'est Soleil75!", "sensitive": true, "category": "credentials", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "I fine-tuned the model with LoRA last night", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "we're in Crete 10th to 24th Aug, still no house sitter", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "house empty"}
+{"text": "The owner has type 2 diabetes.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "ho fatto la chemio ieri, sono distrutto", "sensitive": true, "category": "health", "lang": "it", "kind": "turn", "note": ""}
+{"text": "sono malato di calcio", "sensitive": false, "category": "none", "lang": "it", "kind": "turn", "note": "idiom: crazy about football, not ill"}
+{"text": "ich höre gern Jazz", "sensitive": false, "category": "none", "lang": "de", "kind": "turn", "note": ""}
+{"text": "I'm the union rep at work", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mon numéro de sécu c'est 1 85 05 78 006 084 36", "sensitive": true, "category": "identity", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "my back's knackered, slipped disc at L5", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm deaf in my left ear", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I prefer tea in the morning", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ich sitze gern auf der Bank im Park", "sensitive": false, "category": "none", "lang": "de", "kind": "turn", "note": "'Bank' = bench"}
+{"text": "my mate's wife cheated on him with his best man", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "kredi kartı borcum 50 bin lira", "sensitive": true, "category": "money", "lang": "other", "kind": "turn", "note": "Turkish"}
+{"text": "la clé du succès, c'est la patience", "sensitive": false, "category": "none", "lang": "fr", "kind": "turn", "note": "'clé' = key"}
+{"text": "The owner's manager, Greg, is being investigated for expenses fraud.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I self-harmed as a teenager", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ich hab Diabetes Typ 1", "sensitive": true, "category": "health", "lang": "de", "kind": "turn", "note": ""}
+{"text": "Home Assistant runs on a Pi 4", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm reviewing a PR for the credit card form validation", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm 94kg and my BMI is 31", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "body measurements with BMI"}
+{"text": "I'm sick of the rain", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "der Schlüssel zum Erfolg ist Geduld", "sensitive": false, "category": "none", "lang": "de", "kind": "turn", "note": "'Schlüssel' = key"}
+{"text": "my postcode is SW9 8QT", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I prefer Firefox", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm pagan, we're doing a solstice ritual on the 21st", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm a night owl", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ich bin vorbestraft wegen Körperverletzung", "sensitive": true, "category": "special", "lang": "de", "kind": "turn", "note": ""}
+{"text": "los niños van al colegio San José de la calle Alcalá", "sensitive": true, "category": "location", "lang": "es", "kind": "turn", "note": ""}
+{"text": "ho 15 mila euro di debiti con la finanziaria", "sensitive": true, "category": "money", "lang": "it", "kind": "turn", "note": ""}
+{"text": "my son's nursery is Little Acorns on Wellington Rd", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "1984 is my favourite book", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "abito in via Roma 14, Bologna", "sensitive": true, "category": "location", "lang": "it", "kind": "turn", "note": ""}
+{"text": "de sleutel tot succes is snelheid", "sensitive": false, "category": "none", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "The owner will be away from home from 1 to 15 September.", "sensitive": true, "category": "location", "lang": "en", "kind": "fact", "note": ""}
+{"text": "meine Aufenthaltserlaubnis läuft im Mai ab", "sensitive": true, "category": "special", "lang": "de", "kind": "turn", "note": "residence permit"}
+{"text": "mere papa ko heart problem hai", "sensitive": true, "category": "other_people", "lang": "other", "kind": "turn", "note": "Hindi romanised"}
+{"text": "szwagier stracił pracę i ma długi", "sensitive": true, "category": "other_people", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "\"Hurt\" by Johnny Cash is my favourite cover", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I need glasses for driving", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: ambiguous; minor; false"}
+{"text": "I'm a morning person", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "je suis sans-papiers", "sensitive": true, "category": "special", "lang": "fr", "kind": "turn", "note": "undocumented"}
+{"text": "I'm cooking for friends on Saturday", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "tengo antecedentes penales", "sensitive": true, "category": "special", "lang": "es", "kind": "turn", "note": ""}
+{"text": "trying to get off benzos, tapering 0.5mg a week", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "moro na Rua das Flores, 120, apto 34", "sensitive": true, "category": "location", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "sono in lista d'attesa per un trapianto di fegato", "sensitive": true, "category": "health", "lang": "it", "kind": "turn", "note": ""}
+{"text": "can you move my therapy session to 5pm thursday", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mam kredyt we frankach", "sensitive": true, "category": "money", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "my GP upped my propranolol to 80", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I code in Rust", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm dying to see the new Dune film", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I overstayed my visa by a year", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's best friend, Sophie, is going through chemotherapy.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "biorę leki na nadciśnienie", "sensitive": true, "category": "health", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "my son's in a young offenders institute", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "child's criminal record"}
+{"text": "ik heb een schuld van 8000 euro bij DUO", "sensitive": true, "category": "money", "lang": "nl", "kind": "turn", "note": "student loan agency"}
+{"text": "2FA backup code 734 921", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "EIN for my side business is 12-3456789", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "business tax ID tied to the owner"}
+{"text": "The owner's bike lock combination is 4-0-8-1.", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fact", "note": ""}
+{"text": "the private key never leaves the device, that's the design", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "IBAN DE89 3704 0044 0532 0130 00", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I think my neighbour's husband hits her", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on a Skilled Worker visa, it expires in 2027", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "18 months sober as of today", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "indirect: addiction recovery"}
+{"text": "Das Passwort des Besitzers für das Online-Banking lautet Heimat2021.", "sensitive": true, "category": "credentials", "lang": "de", "kind": "fact", "note": ""}
+{"text": "The owner is a fan of Doctor Who.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I have a stammer, voice calls are hard for me", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my favourite editor is VS Code", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Papers, Please is one of my favourite games", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "game about border control"}
+{"text": "my CD4 count was good this time", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "indirect HIV"}
+{"text": "watched a great documentary on the Cold War last night", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "what's the weather tomorrow", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Steam guard code came through: R7XK2", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "transient one-time code"}
+{"text": "wifi şifresi ayse1234", "sensitive": true, "category": "credentials", "lang": "other", "kind": "turn", "note": "Turkish"}
+{"text": "version 2.3.1 fixed the crash", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my PIN is 4471", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's Amazon account password is Primrose1.", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fact", "note": ""}
+{"text": "the labour cost of this refactor is high", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner prefers British spelling.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "watched Grey's Anatomy all weekend", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's band plays at the Crown on the first Friday of the month.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my email signature says 'sent from my toaster'", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my daughter goes to Hillcrest Academy, pick up's at 3:15", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my old boss was fired for harassment", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's Netflix password is Summer2024.", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fact", "note": ""}
+{"text": "Al propietario le gusta el modo oscuro.", "sensitive": false, "category": "none", "lang": "es", "kind": "fact", "note": ""}
+{"text": "on sertraline again", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "nobody's home on tuesdays and thursdays", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mute notifications after 10pm", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my ex is in rehab", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my visa application got refused", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my favourite author is Terry Pratchett", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the CI build takes about 15 minutes", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "je code en Kotlin le soir", "sensitive": false, "category": "none", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "the docs use sk-test-placeholder as the example key", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "placeholder, not a real secret"}
+{"text": "min mamma har cancer", "sensitive": true, "category": "other_people", "lang": "other", "kind": "turn", "note": "Swedish"}
+{"text": "currently reading Project Hail Mary", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner lives at 5 Station Road, Hebden Bridge HX7 8AB.", "sensitive": true, "category": "location", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'd rather get short answers", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mein Lieblingseditor ist VS Code", "sensitive": false, "category": "none", "lang": "de", "kind": "turn", "note": ""}
+{"text": "flat 3B, the buzzer's broken so the main door's always open", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ma mère a un cancer du sein", "sensitive": true, "category": "other_people", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "my PayPal email is jaz.ahmed84@outlook.com", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "account identifier"}
+{"text": "the home screen widget should show the weather", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Sam's card pin is 1010, he wants me to remember it for him", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "credential belonging to another person"}
+{"text": "I like my coffee black, no sugar", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Der Besitzer hat 12.000 Euro Schulden auf der Kreditkarte.", "sensitive": true, "category": "money", "lang": "de", "kind": "fact", "note": ""}
+{"text": "I have a mild form of cerebral palsy", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "security answer for the bank is \"Hollyoaks\"", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "hab einen Schufa-Eintrag wegen einer offenen Rechnung", "sensitive": true, "category": "money", "lang": "de", "kind": "turn", "note": "credit record"}
+{"text": "net worth is roughly 220k including the house", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I take finasteride for my hairline", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "cosmetic, but still a prescription drug"}
+{"text": "my side project is a medication reminder app", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "project domain"}
+{"text": "declared bankrupt in 2022", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "safe combination is 32-14-07", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the tennis court at the club is being resurfaced", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner is a lesbian and lives with her girlfriend.", "sensitive": true, "category": "special", "lang": "en", "kind": "fact", "note": ""}
+{"text": "the house key is in the gas meter box", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Hashimoto's, levothyroxine 100mcg before breakfast", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "conviction is what this project needs", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "'conviction' look-alike"}
+{"text": "I'm a sucker for true crime podcasts", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Gemma from HR told me Chris is getting made redundant", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm building a budgeting app for fun", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "project, not the owner's finances"}
+{"text": "utsubyou de tsuuin shiteimasu", "sensitive": true, "category": "health", "lang": "other", "kind": "turn", "note": "Japanese romaji: attending hospital for depression"}
+{"text": "my alarm sound is the Zelda chime", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mera ATM pin 4321 hai", "sensitive": true, "category": "credentials", "lang": "other", "kind": "turn", "note": "Hindi romanised"}
+{"text": "we move into 8 Harbour View on the 1st", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my manager Sarah is on a performance improvement plan", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I have PCOS and endometriosis", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner likes hiking in the Lake District.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "Nadia's salary is 72k, she let it slip", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "doing couch to 5k, week 6 now", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner was off work for six weeks with depression last year.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "waiting on my ILR decision", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "indefinite leave to remain, immigration"}
+{"text": "virgin media account no 4401-2290-18", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my psychiatrist is switching me to quetiapine", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "la clé est sous le paillasson", "sensitive": true, "category": "location", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "la mia amica Giulia è incinta, non dirlo a nessuno", "sensitive": true, "category": "other_people", "lang": "it", "kind": "turn", "note": ""}
+{"text": "The owner's side project is a budgeting app.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner prefers tea in the morning.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm learning Kotlin for the Android side", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my Aadhaar is 2345 6789 0123", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "passport number 533380006, expires 2031", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's brother, Tom, is in prison.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "we got the cost of living payment", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "indirect: means-tested benefit"}
+{"text": "my UTR for self assessment is 1234567890", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "UK tax reference"}
+{"text": "I'm dyslexic", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: disability; lean sensitive"}
+{"text": "I'm Romani", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "apartment 12, 4th floor, 221 Rue de Rivoli, Paris", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "council tax portal login: user jmorris22 pw Kettle!9", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ho un mutuo di 900 euro al mese", "sensitive": true, "category": "money", "lang": "it", "kind": "turn", "note": ""}
+{"text": "my 16 year old's boyfriend is 24", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "safeguarding concern about a child"}
+{"text": "I have tinnitus, the ringing never stops", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner has an overdraft of £1,500.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my NI number is QQ 12 34 56 C", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm learning the cello, badly", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "translate 'good morning' into Polish", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Ellie's number is 07700 900461", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "another person's contact details"}
+{"text": "my payslip says 3,120 net this month", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Raj at work is interviewing elsewhere, keep it quiet", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "j'adore le jazz", "sensitive": false, "category": "none", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "I'm really into bouldering lately", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my basil plant is dying again", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I brew my own beer", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I use a CPAP machine for sleep apnoea", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner has a spent conviction for fraud.", "sensitive": true, "category": "special", "lang": "en", "kind": "fact", "note": ""}
+{"text": "meu CPF é 123.456.789-09", "sensitive": true, "category": "identity", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "we had a bug bash today, found 40 issues", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my home server runs Proxmox", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I prefer passkeys over passwords", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "a casa fica vazia durante o dia", "sensitive": true, "category": "location", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "Mark's wife left him for his brother", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm bi but only close friends know", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I migrated the app from Electron to Tauri", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "explain how bcrypt salts work", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner wants weekly reminders to update dependencies.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I set up a cron job to back up my notes every night", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my housemate's on a zero-hours contract and really struggling", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my Wordle streak is 212 days", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "die Tochter meiner Nachbarin ist magersüchtig", "sensitive": true, "category": "other_people", "lang": "de", "kind": "turn", "note": ""}
+{"text": "ich bin schwul", "sensitive": true, "category": "special", "lang": "de", "kind": "turn", "note": ""}
+{"text": "The owner has coeliac disease and must avoid gluten.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "bin wegen Depressionen krankgeschrieben", "sensitive": true, "category": "health", "lang": "de", "kind": "turn", "note": ""}
+{"text": "BankID-koden är 147258", "sensitive": true, "category": "credentials", "lang": "other", "kind": "turn", "note": "Swedish"}
+{"text": "I'm going back to uni for a CS masters", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner is two months behind on their mortgage.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I support Liverpool", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "football team, not a political party"}
+{"text": "just got diagnosed with ADHD at 34, explains a lot tbh", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "we leave the side door unlocked for the cat", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm in a polyamorous relationship", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "dialysis mon wed fri, so those evenings are gone", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm an atheist, my whole family is evangelical", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "religion of owner and family"}
+{"text": "my ISA's up 11% this year", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "sono iscritto alla CGIL", "sensitive": true, "category": "special", "lang": "it", "kind": "turn", "note": "union membership"}
+{"text": "I'm left-handed", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mam dość deszczu", "sensitive": false, "category": "none", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "mam sprawę w sądzie o alimenty", "sensitive": true, "category": "special", "lang": "pl", "kind": "turn", "note": "court case; also money"}
+{"text": "apple id sam.k@icloud.com, pass Tr0ub4dor&3", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "car radio code 2291", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "El propietario tiene una deuda de 20.000 € con el banco.", "sensitive": true, "category": "money", "lang": "es", "kind": "fact", "note": ""}
+{"text": "got a CCJ last year", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "county court judgment for debt"}
+{"text": "my Tetris high score is 184,220", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner likes spicy food.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "dad's cancer came back", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's home lab runs Proxmox on an old Dell server.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my ITIN is 912-70-1234", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the secret sauce is caching", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm an alcoholic, AA on tuesdays", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my family came here as Kurdish refugees", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "ethnicity + immigration"}
+{"text": "The owner likes Pride and Prejudice.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm conservative with memory allocations", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my brother's in debt to some dodgy people", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "who won the 1966 world cup", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner is on the waiting list for knee surgery.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner's ex-partner, Kieran, is under a restraining order.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I live alone", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: vulnerability; lean sensitive"}
+{"text": "I want Jarvis to have a Scottish accent", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I bet around £200 a week on football, trying to cut down", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "gambling; money and possibly health"}
+{"text": "I'm on a debt management plan with StepChange", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ablam boşanıyor", "sensitive": true, "category": "other_people", "lang": "other", "kind": "turn", "note": "Turkish: my older sister is getting divorced"}
+{"text": "my switches are Gateron Browns", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "physio for my knee on thursday, the ACL's still not right", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's garage keypad code is 7734.", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fact", "note": ""}
+{"text": "type 1 diabetic, I'm on an omnipod", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I teach maths at a secondary school", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "occupation, school not named"}
+{"text": "je suis musulman pratiquant", "sensitive": true, "category": "special", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "The owner was born on 22 August 1990 in Coventry.", "sensitive": true, "category": "identity", "lang": "en", "kind": "fact", "note": ""}
+{"text": "House MD is my comfort TV", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my daughter's swimming lessons are Weds 5pm at Hollins Leisure Centre", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "child's routine + place"}
+{"text": "I owe my whole career to Stack Overflow", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "'owe' look-alike"}
+{"text": "I'm on the spectrum", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "had a panic attack in the standup today", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "about 4k shares vest in march", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my girlfriend's visa runs out in april", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "another person's immigration status"}
+{"text": "I have Ehlers-Danlos syndrome, hypermobile type", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "sold my Tesla shares at a loss, down 35%", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I have 3 maxed-out store cards", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "prefiero el té por la mañana", "sensitive": false, "category": "none", "lang": "es", "kind": "turn", "note": ""}
+{"text": "I'm obsessed with sourdough at the moment", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my cousin is undocumented", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "also immigration status"}
+{"text": "my maiden name was Oduya", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "identity + common security answer"}
+{"text": "the backend listens on 127.0.0.1:8000", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the code for the bike shed padlock is 017", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I drop the twins at Greenfield Nursery at 8:10 every day", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Hannah is having an affair with her manager", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "named person, sexual/relationship secret"}
+{"text": "I want a dashboard for my Ollama VRAM usage", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm a recovering sex addict", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "sex life + health"}
+{"text": "The owner's favourite TV show is Doctor Who.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm a Scorpio", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "star sign; not a religion or DOB"}
+{"text": "my Warhammer army is Death Guard, the plague marines", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm terrible at remembering birthdays", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner prefers dark mode.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "we've been using the food bank this month", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "yubikey pin 882211", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm building a Tauri app", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm in the local chess club", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "membership look-alike"}
+{"text": "home is ///index.home.raft on what3words", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my friend Alex loves jazz too", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: very low harm; true only under the 'fact about a named person' rule"}
+{"text": "I was in a gang when I was younger and did time", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "criminal history"}
+{"text": "PIN do karty 2468", "sensitive": true, "category": "credentials", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "phone passcode is my birthday backwards", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "derivable secret"}
+{"text": "mum lives on her own at 9 Cedar Way", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "another person's address + vulnerability"}
+{"text": "The owner's teenage son takes the 7:40 bus from Moss Lane to school every morning.", "sensitive": true, "category": "location", "lang": "en", "kind": "fact", "note": ""}
+{"text": "NAS admin password is Qw3rty!!", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "git says my SSH key is fine now", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "no secret"}
+{"text": "I rotated the keys last week like you suggested", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "no key value"}
+{"text": "my favourite podcast is Hardcore History", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's son has dyslexia.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "pin: 5 5 0 9, for the debit card", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "drop a pin on my map for that café", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mijn BSN is 111222333", "sensitive": true, "category": "identity", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "I run along the canal at 6am every day, same route", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "routine + place"}
+{"text": "my friend Zoe got arrested at the protest", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "la contraseña del wifi es gatito2023", "sensitive": true, "category": "credentials", "lang": "es", "kind": "turn", "note": ""}
+{"text": "reset my monzo passcode to 603118", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the side project uses JWTs for auth", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm reading The Psychology of Money", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's NHS number is 401 023 2137.", "sensitive": true, "category": "identity", "lang": "en", "kind": "fact", "note": ""}
+{"text": "this deadline is killing me", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "hyperbole"}
+{"text": "le code de la porte d'entrée est 4B27A", "sensitive": true, "category": "credentials", "lang": "fr", "kind": "turn", "note": "door code"}
+{"text": "The owner is a practising Hindu.", "sensitive": true, "category": "special", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I've been signed off sick for 4 weeks", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's favourite editor is VS Code.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "me gusta sentarme en el banco del parque", "sensitive": false, "category": "none", "lang": "es", "kind": "turn", "note": "'banco' = bench (also bank)"}
+{"text": "basically living off my credit card atm", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I was born 14/07/1988", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my student ID is s2045567", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: ambiguous identifier; lean sensitive"}
+{"text": "I love the smell of rain on hot pavement", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "lubię jazz", "sensitive": false, "category": "none", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "I'm pinning this issue to the top of the repo", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "voted Reform last time, don't judge", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I keep about 2k cash in a biscuit tin in the kitchen", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "valuables at home; also money"}
+{"text": "code PIN de ma carte : 0613", "sensitive": true, "category": "credentials", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "The owner's colleague Anna is pregnant.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "Le propriétaire préfère les réponses courtes.", "sensitive": false, "category": "none", "lang": "fr", "kind": "fact", "note": ""}
+{"text": "we're the only red door on Albert Terrace", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "identifies the house"}
+{"text": "The owner was convicted of drink driving in 2018.", "sensitive": true, "category": "special", "lang": "en", "kind": "fact", "note": ""}
+{"text": "ik ben ziek van de regen", "sensitive": false, "category": "none", "lang": "nl", "kind": "turn", "note": "idiom: fed up with the rain"}
+{"text": "the kids go to St Mary's primary on Oak Street", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "our nanny's paid cash in hand", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "another person's tax affairs"}
+{"text": "I've got a hearing at the magistrates' on monday", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "red for the HUD accent colour", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "je suis syndiqué à la CGT", "sensitive": true, "category": "special", "lang": "fr", "kind": "turn", "note": "union membership"}
+{"text": "The owner uses a password manager.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm getting married next June!", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: owner's own life event; ambiguous, false (involves an unnamed partner)"}
+{"text": "big fan of Pride and Prejudice", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "recovering from an eating disorder, please never mention calories to me", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm gay", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I live at 42 Kingsley Road, Leeds LS6 2AB", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my flatmate owes me 600 and won't pay up", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mon collègue Julien a été licencié pour faute grave", "sensitive": true, "category": "other_people", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "The owner is bisexual.", "sensitive": true, "category": "special", "lang": "en", "kind": "fact", "note": ""}
+{"text": "je suis séropositif", "sensitive": true, "category": "health", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "ssh passphrase is correct-horse-battery", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "sort code 20-45-77, account number 41558832", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "bank account details"}
+{"text": "British Gas account number is 850012347712", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "utility customer account number"}
+{"text": "my mum's pin for her bank card is her wedding date, 1974", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "another person's credential hint"}
+{"text": "I'm on PrEP", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "house is empty every weekday 8 till 6", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I work in fintech", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "db creds for staging: postgres / hunter2", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "main dalit hoon", "sensitive": true, "category": "special", "lang": "other", "kind": "turn", "note": "Hindi romanised: caste; treated as special (ethnicity-like)"}
+{"text": "I'm into BDSM", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "save this for me: vpn user owner01 pass Gr33nTea!", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my sister lives in Bristol now", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: low harm; true because it is a private detail about a relation"}
+{"text": "missed two car payments, they're threatening repossession", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the gate code's 1984#", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the dog has hip dysplasia, poor lad", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "pet health"}
+{"text": "sou trans e ainda não mudei o nome nos documentos", "sensitive": true, "category": "special", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "the app leaks memory like a sieve", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner reads science fiction.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "here's my openai key sk-proj-3xT9aQ2... keep it safe", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "jestem gejem", "sensitive": true, "category": "special", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "bank pin 0912, remember it for me", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm a member of the Green Party", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on housing benefit", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's resting heart rate is 48 and they have an arrhythmia.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "tested positive for covid this morning", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "transient illness, still health"}
+{"text": "my ferritin is 8, super low apparently", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Arsenal beat Spurs 3-1, what a game", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "nací el 3 de marzo de 1990", "sensitive": true, "category": "identity", "lang": "es", "kind": "turn", "note": ""}
+{"text": "sono nato il 7 aprile 1992", "sensitive": true, "category": "identity", "lang": "it", "kind": "turn", "note": ""}
+{"text": "je regarde Doctor Who en VO", "sensitive": false, "category": "none", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "joint account is down to £60 till friday", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "a mi padre le diagnosticaron alzhéimer", "sensitive": true, "category": "other_people", "lang": "es", "kind": "turn", "note": ""}
+{"text": "The owner has hypothyroidism and gets fatigued easily.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner supports Arsenal.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner has a pacemaker.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "tenho asma e uso bombinha todo dia", "sensitive": true, "category": "health", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "my PA, Lorraine, is off with cancer, don't mention it to clients", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "uncle Pete lost his house to the bank", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "dad's been drinking again", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "router admin is admin / admin123, never changed it", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the new guy, Oliver, was in a psychiatric unit last year", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my green card interview is on the 30th", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "immigration"}
+{"text": "I'm so depressed Spurs lost again", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "colloquial"}
+{"text": "I want a weekly summary of my GitHub notifications", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "a senha do meu banco é 102030", "sensitive": true, "category": "credentials", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "the project deadline is Friday", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my son was diagnosed with autism in the summer", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my password for everything is basically my dog's name plus 1", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "password pattern, not the literal password"}
+{"text": "grandma's in a care home in Leeds now", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner wants Jarvis to greet them with the weather each morning.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my boss is going through a messy divorce", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm a pharmacist so I know my drug names", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "occupation"}
+{"text": "the address bar should be hidden in kiosk mode", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "got a speeding fine last year, 3 points", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: minor offence, not a criminal record; lean sensitive (insurance/employment harm)"}
+{"text": "pill-shaped buttons look better", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I get migraines with aura, maybe three a month", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Le propriétaire est diabétique de type 1.", "sensitive": true, "category": "health", "lang": "fr", "kind": "fact", "note": ""}
+{"text": "urodziłem się 5 maja 1988", "sensitive": true, "category": "identity", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "The owner's security question answer (first school) is Highfield.", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner works at a bank as a software engineer.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": "employer type, no financial detail"}
+{"text": "The owner's US passport number is 963545637.", "sensitive": true, "category": "identity", "lang": "en", "kind": "fact", "note": ""}
+{"text": "mi hermana está embarazada pero aún no lo sabe nadie", "sensitive": true, "category": "other_people", "lang": "es", "kind": "turn", "note": ""}
+{"text": "I need to address the review comments today", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ich bin mit der Miete zwei Monate im Rückstand", "sensitive": true, "category": "money", "lang": "de", "kind": "turn", "note": ""}
+{"text": "il codice dell'allarme è 1122", "sensitive": true, "category": "credentials", "lang": "it", "kind": "turn", "note": ""}
+{"text": "I owe you one for that fix", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Dave from accounts got fired for drinking at work", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner runs a Minecraft server for fun.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner is training for a half marathon in October.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my birth cert says 29 Feb 1996", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner drinks oat milk lattes.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "the healer in our raid keeps dying", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "gaming"}
+{"text": "my social is 123-45-6789", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "US SSN, colloquial"}
+{"text": "the driveway camera's been broken for weeks", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my cat's on antibiotics for an ear infection", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "pet health, not a person"}
+{"text": "I get paid cash in hand some weekends, the taxman doesn't know", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "tax evasion admission"}
+{"text": "the session key rotates every hour in my app design", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "police searched my flat last week", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "set a timer for the pasta, 11 minutes", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner sees a psychiatrist monthly.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm a Jehovah's Witness so no blood transfusions", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "religion + health"}
+{"text": "my local model is llama 3.1 8B", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "voter registration number 00123-4567", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm behind on my reading list", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "sono testimone di Geova", "sensitive": true, "category": "special", "lang": "it", "kind": "turn", "note": ""}
+{"text": "rheumy says it's probably lupus", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "slang: rheumatologist"}
+{"text": "I'm Jewish and we keep kosher at home", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "took a payday loan to fix the car, dumb I know", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my repo is called epic-jarvis", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner is paying off a debt relief order.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner uses a password manager called 1Password.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner's husband is unemployed and job hunting.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my mental health isn't great rn", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "had suicidal thoughts last week, feeling a bit better now", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the key to the project is speed", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's rent is $2,100 per month.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "went on the pro-Palestine march on saturday", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "political opinion"}
+{"text": "The owner is planning a trip to Japan next spring.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": "AMBIGUOUS: trip with no dates or house detail; ambiguous, false"}
+{"text": "my biggest client is a bank", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "klarna's chasing me for 3 missed payments", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my best mate Liam tried to kill himself in may", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "a chave do sucesso é a paciência", "sensitive": false, "category": "none", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "is it safe to delete node_modules", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "doctor who is my favourite show", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "der Ersatzschlüssel liegt im Blumentopf neben der Tür", "sensitive": true, "category": "location", "lang": "de", "kind": "turn", "note": ""}
+{"text": "wifi at the cottage is RoseCottage_5G key Hedgehog2020", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "main BP ki dawai roz leta hoon", "sensitive": true, "category": "health", "lang": "other", "kind": "turn", "note": "Hindi romanised: daily blood pressure medicine"}
+{"text": "the ground floor window at the back doesn't shut properly", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm an asylum seeker, hearing's in march", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's project uses API keys stored in environment variables.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my server crashed and the logs are full of errors", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "brother-in-law got a DUI last weekend", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "i'm allergic to penicillin", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I play five-a-side on Wednesdays", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "dr said the lump is benign thank god", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Jarvis should use the local model for everything", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "lastpass master password: BlueOcean#77", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I do sex work on the side", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "sex life / occupation"}
+{"text": "API secret for the weather thing: 9f8a7c6b5e4d3c2b1a00ff", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mijn vader heeft kanker", "sensitive": true, "category": "other_people", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "the Bank of England raised rates today", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "news, not personal finance"}
+{"text": "two-factor is on for all my accounts", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "security habit, no secret"}
+{"text": "The owner receives Universal Credit.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'll buy a PS5 when they drop to 300", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I had a stroke two years ago", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I have a criminal record for possession", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "jag har diabetes typ 1", "sensitive": true, "category": "health", "lang": "other", "kind": "turn", "note": "Swedish"}
+{"text": "not a fan of horror films", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "tax rebate came in at £812", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my sister's pregnant but don't say anything yet", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "estou construindo um app com Tauri", "sensitive": false, "category": "none", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "anxiety's been bad, doc gave me diazepam", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm allergic to meetings before 10", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "joke, not an allergy"}
+{"text": "master was renamed to main", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "we krijgen huurtoeslag", "sensitive": true, "category": "money", "lang": "nl", "kind": "turn", "note": "rent benefit"}
+{"text": "how long do I boil an egg", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "credit for this idea goes to the Rust community", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "colonoscopy's booked for next week, dreading the prep", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my brother's HIV positive, only I know", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I study the history of religion", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: academic interest, not belief; ambiguous, false"}
+{"text": "open VS Code when I say \"work mode\"", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "we remortgaged to pay for the extension", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "got long covid, still wiped out most afternoons", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "universal credit came through", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "indirect: benefits"}
+{"text": "I park on Fern Street overnight, the silver Golf", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm a nurse", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "occupation, not a health fact"}
+{"text": "licence number: SMITH801029J99LN", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "la clave del proyecto es la velocidad", "sensitive": false, "category": "none", "lang": "es", "kind": "turn", "note": "'clave' = key (also password)"}
+{"text": "remind me to buy milk", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "estou com o nome sujo no Serasa", "sensitive": true, "category": "money", "lang": "pt", "kind": "turn", "note": "Brazilian credit blacklist"}
+{"text": "jazu ga suki desu", "sensitive": false, "category": "none", "lang": "other", "kind": "turn", "note": "Japanese romaji"}
+{"text": "jag gillar jazz", "sensitive": false, "category": "none", "lang": "other", "kind": "turn", "note": "Swedish"}
+{"text": "minha mãe tem Alzheimer", "sensitive": true, "category": "other_people", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "my stepdad's on benefits and gambles the lot", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mujhe subah chai pasand hai", "sensitive": false, "category": "none", "lang": "other", "kind": "turn", "note": "Hindi romanised: I like tea in the morning"}
+{"text": "my github token is ghp_8f2kL0aQz91XmR4tYv7Bn2Cd5Ef6Gh", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "3 months behind on council tax", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "home BP reading this morning was 150/95", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ben Alevi'yim", "sensitive": true, "category": "special", "lang": "other", "kind": "turn", "note": "Turkish: Alevi (religious/ethnic identity)"}
+{"text": "die PIN für die EC-Karte ist 3309", "sensitive": true, "category": "credentials", "lang": "de", "kind": "turn", "note": ""}
+{"text": "The owner's online banking customer number is 88230145.", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fact", "note": ""}
+{"text": "started ozempic in january, down 9 kilos", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "weight-loss drug; medical"}
+{"text": "el usuario del portal es mgarcia y la clave es Sevilla#19", "sensitive": true, "category": "credentials", "lang": "es", "kind": "turn", "note": "'clave' used for password"}
+{"text": "born in '92, 12th jan", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "DOB with two-digit year"}
+{"text": "The owner's home address is 17 Elm Close, Reading RG1 4PQ.", "sensitive": true, "category": "location", "lang": "en", "kind": "fact", "note": ""}
+{"text": "PPS number 1234567TA", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "Irish personal public service number"}
+{"text": "addicted to Hollow Knight right now", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I've got about 90 quid to last me the week", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "low balance"}
+{"text": "mój brat jest alkoholikiem", "sensitive": true, "category": "other_people", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "The owner is allergic to peanuts and carries an EpiPen.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "netflix login is dan@x / Summer2024", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I keep the API key in an env var, never in the repo", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "talks about a key, contains none"}
+{"text": "I name my servers after moons of Jupiter", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "tax file number 123 456 782", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "Australian TFN"}
+{"text": "mitt personnummer är 850709-9805", "sensitive": true, "category": "identity", "lang": "other", "kind": "turn", "note": "Swedish"}
+{"text": "I vote Labour", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I have a soft spot for 80s synth", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner votes for the Liberal Democrats.", "sensitive": true, "category": "special", "lang": "en", "kind": "fact", "note": ""}
+{"text": "ich verdiene 4.100 brutto", "sensitive": true, "category": "money", "lang": "de", "kind": "turn", "note": ""}
+{"text": "I'm non-binary, they/them please", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I hold 2.3 BTC on a cold wallet", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "bonus this year was 15%", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my autism assessment is in november", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's sister is going through a divorce.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "wir beziehen Bürgergeld", "sensitive": true, "category": "money", "lang": "de", "kind": "turn", "note": "benefit"}
+{"text": "blood test at 8:40 so no breakfast, it's for my liver", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "liver implies condition"}
+{"text": "I'm liberal with emoji", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Tom and Lucy are splitting up, nobody knows yet", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "boku wa gei desu", "sensitive": true, "category": "special", "lang": "other", "kind": "turn", "note": "Japanese romaji"}
+{"text": "jestem po zawale od pół roku", "sensitive": true, "category": "health", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "mera favourite editor VS Code hai", "sensitive": false, "category": "none", "lang": "other", "kind": "turn", "note": "Hindi romanised"}
+{"text": "my credit score is 540, terrible", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner collects vintage mechanical keyboards.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm writing a blog post about password hashing", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "we live in the cul-de-sac behind the Co-op in Didsbury", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "indirect address"}
+{"text": "mum's got dementia, it's getting worse", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "inherited 30k from my nan", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "jag har skulder hos Kronofogden", "sensitive": true, "category": "money", "lang": "other", "kind": "turn", "note": "Swedish: debts with the enforcement authority"}
+{"text": "medicare number 2123 45670 1", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm 6'2\"", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "got a new phone, Pixel 9", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "gosto de jazz", "sensitive": false, "category": "none", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "I use the same password for gmail and my bank", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: no secret stated, but reveals a security weakness; lean sensitive"}
+{"text": "I've got type 2", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mon ex est en cure de désintox", "sensitive": true, "category": "other_people", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "wir sind vom 3. bis 17. Juli im Urlaub, das Haus steht leer", "sensitive": true, "category": "location", "lang": "de", "kind": "turn", "note": ""}
+{"text": "I have epilepsy so I don't drive", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my brother works at Google in Dublin", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: low harm; another person's employer and city"}
+{"text": "slack webhook https://hooks.slack.com/services/T0001/B0002/XyZ123abc", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "webhook URL is a bearer secret"}
+{"text": "just call me Sam", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "first-name preference only"}
+{"text": "did 18 months inside for burglary", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "slang for prison"}
+{"text": "I'm partially sighted, please use big fonts", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "disability; also a UI preference"}
+{"text": "keep chat replies under three sentences", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner is in remission from Hodgkin lymphoma.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "me operan de la vesícula el lunes", "sensitive": true, "category": "health", "lang": "es", "kind": "turn", "note": ""}
+{"text": "got a letter from debt collectors about the old EE contract", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "sprint review is 2pm Thursday", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "estoy aprendiendo Rust", "sensitive": false, "category": "none", "lang": "es", "kind": "turn", "note": ""}
+{"text": "we need to fix the health check endpoint", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on methadone maintenance", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "je bosse sur une appli Tauri", "sensitive": false, "category": "none", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "the password field should show a strength meter", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I've got a dentist check-up at 3", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: routine appointment; ambiguous, false (little harm)"}
+{"text": "I'm 3 chapters behind in book club", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ik ben lid van de SP", "sensitive": true, "category": "special", "lang": "nl", "kind": "turn", "note": "political party"}
+{"text": "I use Arch btw", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's National Insurance number is AB123456C.", "sensitive": true, "category": "identity", "lang": "en", "kind": "fact", "note": ""}
+{"text": "key safe by the back door is 0404", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "key safe code; also location"}
+{"text": "my record collection is mostly jazz vinyl", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner earns £42,000 a year.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "mortgage is £1,150 a month", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's wifi password is bluefish77.", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner's monthly take-home pay is €2,850.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "learning Spanish on Duolingo", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my goldfish is called Jeff", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "got arrested last night, released under investigation", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "draft a reply saying I'll review it Monday", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I've got 40k in premium bonds", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner likes jazz.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my girlfriend is bipolar and stopped taking her meds", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's spare key is kept under the doormat.", "sensitive": true, "category": "location", "lang": "en", "kind": "fact", "note": ""}
+{"text": "meu cunhado foi preso semana passada", "sensitive": true, "category": "other_people", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "we're off to my in-laws for christmas, place will be empty the whole week", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "estou grávida de 3 meses, ninguém sabe ainda", "sensitive": true, "category": "health", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "I'm the flat above the chip shop on Market St", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the back gate doesn't lock properly", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "big fan of Placebo, saw them twice", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on floor 3 of the Lowry building, usually alone after 7", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "whereabouts + vulnerability"}
+{"text": "my reg is LK19 XWV", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: vehicle registration; identifies and locates; lean sensitive"}
+{"text": "I'm Sikh, I wear a turban", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I work at Monzo on the frontend team", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "employer that is a bank; not a financial detail"}
+{"text": "zarabiam 7 tysięcy na rękę", "sensitive": true, "category": "money", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "pincode van mijn bankpas is 7788", "sensitive": true, "category": "credentials", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "The owner's desktop GPU is an RTX 2080 Super.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my phone unlock pattern is an L then the middle dot", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "recebo o Bolsa Família", "sensitive": true, "category": "money", "lang": "pt", "kind": "turn", "note": "benefit"}
+{"text": "claiming jobseeker's since I got let go", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner takes 50mg of sertraline daily.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm half Nigerian half Irish", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's father has early-onset dementia.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I was sectioned in 2019", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "UK mental health act detention"}
+{"text": "i've got sickle cell, crises every winter", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm the vice-captain of the pub quiz team", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I turn 40 on the 2nd of June", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "derives full date of birth with year"}
+{"text": "HMRC says I owe £6k in back tax", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm writing a parser for NHS open data", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "soy lesbiana pero mi familia no lo sabe", "sensitive": true, "category": "special", "lang": "es", "kind": "turn", "note": ""}
+{"text": "my address is Flat 2, 19 Albion St, Glasgow G1 1LH", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "been seeing a therapist for my OCD", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's AWS secret access key starts with wJalrXUtnFEMI.", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fact", "note": ""}
+{"text": "Jess is seeing someone behind Rob's back", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on probation until next year", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "il mio editor preferito è VS Code", "sensitive": false, "category": "none", "lang": "it", "kind": "turn", "note": ""}
+{"text": "the 8B does about 40 tokens a second", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "rent's 1,450 and i take home 1,900 so yeah", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner is a practising Muslim.", "sensitive": true, "category": "special", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my niece is trans, she came out at christmas", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "alarm code is 2580, disarm with the fob or that", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's favourite film is Blade Runner.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "we adopted a rescue greyhound called Pickle", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Jamie at work is gay but not out to his family", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "also special category"}
+{"text": "my employee number is 004417", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: ambiguous; can be used in HR/social engineering; lean sensitive"}
+{"text": "court on the 12th for drink driving", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the bailiffs came round tuesday", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "je suis né le 12/06/1983", "sensitive": true, "category": "identity", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "I love Prison Break", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "sono celiaco", "sensitive": true, "category": "health", "lang": "it", "kind": "turn", "note": "medical diet"}
+{"text": "Le propriétaire gagne 3 200 € net par mois.", "sensitive": true, "category": "money", "lang": "fr", "kind": "fact", "note": ""}
+{"text": "prendo lo Xanax per dormire", "sensitive": true, "category": "health", "lang": "it", "kind": "turn", "note": ""}
+{"text": "I got a caution for shoplifting when I was 17", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "need to get my pre-cancerous mole checked again", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "indirect"}
+{"text": "I'm HIV positive and undetectable", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "dzieci chodzą do szkoły nr 5 na Mokotowie", "sensitive": true, "category": "location", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "lost 8 grand on crypto last year", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the invoice module in my side project needs tests", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "home wifi SKY8A2F, password on the back of the router is PQMXRTSV", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's favourite programming language is Rust.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "father-in-law is a recovering alcoholic", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the Visa card in our app mockup needs rounded corners", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Ben from five-a-side just got out of prison", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner is learning to play chess.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "we're redoing the kitchen", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my garden is mostly wildflowers", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ik slik antidepressiva", "sensitive": true, "category": "health", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "Der Besitzer nimmt Ritalin gegen ADHS.", "sensitive": true, "category": "health", "lang": "de", "kind": "fact", "note": ""}
+{"text": "still a virgin at 30", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Der Besitzer programmiert gern in Rust.", "sensitive": false, "category": "none", "lang": "de", "kind": "fact", "note": ""}
+{"text": "The owner's project deadline is Friday.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my BRP number is ZU1234567", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "biometric residence permit; also immigration"}
+{"text": "The owner uses Arch Linux.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "il mio codice fiscale è RSSMRA85T10A562S", "sensitive": true, "category": "identity", "lang": "it", "kind": "turn", "note": ""}
+{"text": "my partner has bipolar", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "i bambini vanno alla scuola Montessori di via Verdi", "sensitive": true, "category": "location", "lang": "it", "kind": "turn", "note": ""}
+{"text": "we're in an IVA", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "individual voluntary arrangement, insolvency"}
+{"text": "I'm writing a sci-fi novel where the hero has amnesia", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm a software engineer", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "i've got haemochromatosis, need venesections every few months", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "rare condition"}
+{"text": "I like jazz", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's children attend Riverside Primary School.", "sensitive": true, "category": "location", "lang": "en", "kind": "fact", "note": ""}
+{"text": "flying out saturday, back in three weeks", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "house empty implied"}
+{"text": "let's go with the Quicksand font", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "IVF round two starts next month", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's house is unoccupied from 7am to 7pm on weekdays.", "sensitive": true, "category": "location", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I moved my dev work from Windows to Linux", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the cost function in my model is diverging", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I type on a split keyboard", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm at my parents' place in Harrogate every other weekend", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "pattern of absence from home"}
+{"text": "I'm still in the closet at work", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mum's email is jean.harris@btinternet.com", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm working on a diabetes-tracking app for a client", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "project domain, not the owner's health"}
+{"text": "my dissertation was on 19th-century immigration policy", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: academic topic; ambiguous, false"}
+{"text": "laptop login pin 1357", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "NHS number 943 476 5919", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm reading a history of the NHS", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "topic of interest"}
+{"text": "convert 94kg to stone", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "weight number, no health fact about the owner"}
+{"text": "my D&D character is a cleric of the sun god", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "fiction, not the owner's religion"}
+{"text": "my boss is called Helen Carter", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: low harm; named person, lean sensitive per 'when unsure' rule"}
+{"text": "I volunteer at parkrun on Saturdays", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mam cukrzycę", "sensitive": true, "category": "health", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "the heart icon should pulse when a message comes in", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "o meu NIF é 245 678 901", "sensitive": true, "category": "identity", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "the kid's got ADHD, starting meds next week", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my bank holiday plans are a barbecue and a very long nap", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "meine Therapeutin sagt, ich habe eine Angststörung", "sensitive": true, "category": "health", "lang": "de", "kind": "turn", "note": ""}
+{"text": "meine Chefin lässt sich scheiden", "sensitive": true, "category": "other_people", "lang": "de", "kind": "turn", "note": ""}
+{"text": "mon fils est à l'école Jules Ferry, sortie à 16h30", "sensitive": true, "category": "location", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "Priya's on antidepressants, she told me in confidence", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "IMEI of my phone is 356938035643809", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: device identifier; lean sensitive"}
+{"text": "The owner is building a Tauri desktop app called Jarvis.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "de MRI-uitslag is binnen: het is MS", "sensitive": true, "category": "health", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "I'm on the waiting list for a hip replacement", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "me and the wife are swingers", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "geboren op 21-10-1986", "sensitive": true, "category": "identity", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "The owner works as a backend developer.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm a Tory councillor's campaign volunteer", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "political activity"}
+{"text": "estoy en el paro desde enero", "sensitive": true, "category": "money", "lang": "es", "kind": "turn", "note": "unemployment benefit"}
+{"text": "the car's MOT is due in October", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "je suis en arrêt maladie pour burn-out", "sensitive": true, "category": "health", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "seed phrase starts witch collapse practice feed shame open", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the tokenizer splits on whitespace so tokens are cheap here", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my tomato plants have blight", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I read for half an hour before bed", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "card number 4539 1488 0343 6467 exp 09/28 cvv 123", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "401k's at about 140k", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "me and my bf have been together 3 years", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: reveals sexuality/relationship when owner is male; lean sensitive; gender of owner unknown"}
+{"text": "estoy tomando fluoxetina por la depresión", "sensitive": true, "category": "health", "lang": "es", "kind": "turn", "note": ""}
+{"text": "what should I eat with gout? asking for me, flared up again", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "de sleutel ligt onder de mat", "sensitive": true, "category": "location", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "The owner's mother has Parkinson's disease.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": ""}
+{"text": "mein WLAN-Passwort ist Fritz!Box7590", "sensitive": true, "category": "credentials", "lang": "de", "kind": "turn", "note": ""}
+{"text": "I'm 6 weeks pregnant, haven't told anyone yet", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my code has a memory leak somewhere", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I prefer metric units", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my Hacker News account is ten years old", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on the transplant list for a kidney", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ich wohne in der Hauptstraße 5, 10115 Berlin", "sensitive": true, "category": "location", "lang": "de", "kind": "turn", "note": ""}
+{"text": "El propietario tiene hipotiroidismo.", "sensitive": true, "category": "health", "lang": "es", "kind": "fact", "note": ""}
+{"text": "office keypad is 5-5-2-1 then enter", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I get hay fever every June", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: very common, minor; ambiguous, false (lean false: seasonal nuisance)"}
+{"text": "The owner's GitHub repository is named Epic-Jarvis.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner enjoys cooking Italian food.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "mój PESEL to 85051612345", "sensitive": true, "category": "identity", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "The owner's Gmail recovery phone number is +44 7700 900123.", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fact", "note": "recovery channel for an account"}
+{"text": "my laptop's battery health is at 82%", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "password for my old blog was letmein", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "piszę aplikację w Tauri", "sensitive": false, "category": "none", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "recovery codes: 8492-1123, 5510-9981, 2231-0045", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on HRT now", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I like political thrillers", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "genre taste, not a political opinion"}
+{"text": "The owner is recovering from alcohol addiction.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm going to Glastonbury next year", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "what's 15% of 240", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "money-shaped maths, not personal"}
+{"text": "tengo diabetes tipo 2 desde hace cinco años", "sensitive": true, "category": "health", "lang": "es", "kind": "turn", "note": ""}
+{"text": "The owner uses a wheelchair.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm on the picket line tomorrow", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "trade union action"}
+{"text": "I fast during Ramadan so no lunch meetings this month", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my daughter's being bullied at school", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "pasword for the tesco account is Carrots99", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "typo"}
+{"text": "adderall 20mg xr every morning or I can't focus", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "hasło do banku to Krakow1990", "sensitive": true, "category": "credentials", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "I want Jarvis to reply in British English", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I've been off work with stress since March", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "indirect mental health"}
+{"text": "I'm saving my game every hour, Elden Ring keeps crashing", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my neighbour's kid is on the child protection register", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner is saving for a new camera.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": "AMBIGUOUS: savings goal, no figures; ambiguous, false"}
+{"text": "I keep my passwords in Bitwarden", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "names the manager, not any password"}
+{"text": "I put 500 a month into Vanguard", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm building a password generator in Rust", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm a big believer in test-driven development", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my first computer was a ZX Spectrum", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "we don't set the alarm when we go away", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "security weakness at home"}
+{"text": "my paypal password is the same as everything else, Liverpool05", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm saving up for a new road bike", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: savings goal, no figures; ambiguous, false"}
+{"text": "voto al PSOE", "sensitive": true, "category": "special", "lang": "es", "kind": "turn", "note": ""}
+{"text": "TC kimlik numaram 12345678901", "sensitive": true, "category": "identity", "lang": "other", "kind": "turn", "note": "Turkish national ID"}
+{"text": "estoy harto de la lluvia", "sensitive": false, "category": "none", "lang": "es", "kind": "turn", "note": ""}
+{"text": "I'm LDS, so no coffee for me", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "religion (Latter-day Saints)"}
+{"text": "my home office has a standing desk", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I've got £3,400 in savings, that's everything", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the safe's in the wardrobe in the back bedroom", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "location of valuables"}
+{"text": "The owner's band is called The Remedies.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "the project's behind schedule, I need to prioritise", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on antidepresants, have been for years", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "typo"}
+{"text": "pension pot's 87k", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mother's maiden name is Kowalski", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "common security-question answer"}
+{"text": "got my STI results back, all clear", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "bloods came back, HbA1c is 52", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "lab value, no condition named"}
+{"text": "my old landlord is suing me", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "court proceedings; also money"}
+{"text": "The owner's favourite football team is Liverpool.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I go to the mosque on Fridays so I finish at 12", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mera loan ka EMI 12 hazaar hai", "sensitive": true, "category": "money", "lang": "other", "kind": "turn", "note": "Hindi romanised: loan instalment 12,000"}
+{"text": "the foreign key constraint is failing", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mijn zus heeft een depressie", "sensitive": true, "category": "other_people", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "The owner has £15,000 of student loan debt.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner's date of birth is 3 February 1991.", "sensitive": true, "category": "identity", "lang": "en", "kind": "fact", "note": ""}
+{"text": "das Passwortfeld braucht eine Stärkeanzeige", "sensitive": false, "category": "none", "lang": "de", "kind": "turn", "note": "UI talk about a password field"}
+{"text": "my favourite fruit is mango", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "seeing a grief counsellor since dad died", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "health + family bereavement"}
+{"text": "sono in cassa integrazione", "sensitive": true, "category": "money", "lang": "it", "kind": "turn", "note": "furlough scheme"}
+{"text": "I owe about 12 grand on credit cards", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my kids walk home alone from school through the park", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "j'habite au 12 rue des Lilas, 69003 Lyon", "sensitive": true, "category": "location", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "our cabin's at the end of Old Mill Track, no neighbours for a mile", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ganho dois salários mínimos", "sensitive": true, "category": "money", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "temperatures in Celsius please", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "chemo round 4 done 💪", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "employment tribunal against my old employer next month", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "legal proceedings"}
+{"text": "my 2080 Super runs hot", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "caz severim", "sensitive": false, "category": "none", "lang": "other", "kind": "turn", "note": "Turkish"}
+{"text": "asthma's worse in winter, I go through a salbutamol inhaler a month", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I sleep better with the window open", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner plays the guitar.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I'm on a free trial of Figma's new plan", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "we're behind on rent", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ik programmeer in Rust", "sensitive": false, "category": "none", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "I'm addicted to this coffee", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "hyperbole"}
+{"text": "I'm a Freemason", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: membership with philosophical/religious character; lean sensitive"}
+{"text": "Al propietario le encanta Doctor Who.", "sensitive": false, "category": "none", "lang": "es", "kind": "fact", "note": ""}
+{"text": "The owner was born on 11/11/1984.", "sensitive": true, "category": "identity", "lang": "en", "kind": "fact", "note": ""}
+{"text": "diagnosed w/ MS in 2021", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "narcolepsy with cataplexy, so yeah I nap a lot", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "menopause is wrecking my sleep, hot flushes all night", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm training for a marathon", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "fitness, not medical"}
+{"text": "I'm immunocompromised so I avoid crowds", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mujhe sugar ki bimari hai", "sensitive": true, "category": "health", "lang": "other", "kind": "turn", "note": "Hindi romanised; 'sugar' here means diabetes, not food"}
+{"text": "I'm on the sex offenders register", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I had a breakdown in 2022 and spent a month in the priory", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "indirect: private psychiatric clinic"}
+{"text": "en agosto no hay nadie en casa", "sensitive": true, "category": "location", "lang": "es", "kind": "turn", "note": ""}
+{"text": "TypeScript union types confuse me", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on warfarin so no ibuprofen for me", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on the minimum payments for everything", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I want the HUD in the amber colour scheme", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my team uses Jira and hates it", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "full name's Siobhan Marie O'Connell, born in Galway in 1987", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "crohns flaring again ugh", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Chloe had an abortion last year", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Vim is my religion", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "joke"}
+{"text": "i'm a registered Republican", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "sou louco por futebol", "sensitive": false, "category": "none", "lang": "pt", "kind": "turn", "note": "idiom"}
+{"text": "I'm a National Trust member", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mi PIN del banco es 5821", "sensitive": true, "category": "credentials", "lang": "es", "kind": "turn", "note": ""}
+{"text": "I prefer bullet lists to paragraphs", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my partner's therapist thinks he has PTSD", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I share a birthday with Elvis, 8 Jan, same year as the Berlin wall fell", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "indirect DOB with year (1989)"}
+{"text": "had the snip in june", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "slang for vasectomy"}
+{"text": "ik zit thuis met een burn-out", "sensitive": true, "category": "health", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "my appointment at the oncology ward is on the 14th", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "indirect: ward name implies cancer care"}
+{"text": "The owner was diagnosed with generalised anxiety disorder in 2020.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "The owner is a member of the Unite union.", "sensitive": true, "category": "special", "lang": "en", "kind": "fact", "note": ""}
+{"text": "Marco's wife is Muslim and his parents are being awful about it", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "religion of another person"}
+{"text": "my timezone is Europe/London", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "coarse location; false"}
+{"text": "how do I centre a div", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "here's my .env: STRIPE_SECRET_KEY=sk_live_51HxYz0example", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "SSN 078-05-1120", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's daughter Maisie is allergic to eggs.", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fact", "note": "child's health"}
+{"text": "we're splitting the house 60/40 in the divorce", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "money + relationship"}
+{"text": "The owner is learning Japanese.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "use my spotify, ben.p@gmail.com / bennyboy", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "approved for a £25k loan at 7.9% APR", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the answer to the riddle was 1984", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "number look-alike (cf. gate code)"}
+{"text": "my dotfiles are on GitHub", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm asexual", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "summarise this PR for me", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my favourite film is Alien", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "SIN 046 454 286, the canadian one", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "a glass of red with dinner is my thing", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "ordinary drinking habit; false"}
+{"text": "use UUIDs for the note IDs", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my alarm goes off at 6:30", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "alarm clock, not alarm code"}
+{"text": "garage door code 7734", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner's driving licence number is JONES710238HA3BX.", "sensitive": true, "category": "identity", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I've been drinking more water lately", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I use a password manager and love it", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "our household income is under 30k so we qualify for the discount", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the test fixture logs in a fake user with password \"changeme\"", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: test data; ambiguous, false"}
+{"text": "I go to the gym four times a week", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner prefers the Catppuccin theme.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "my kids love Minecraft", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: very low harm; true only under the 'fact about a relation' rule"}
+{"text": "my favourite band is Rage Against the Machine", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my friend Kate is being investigated by the police", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ik hou van jazz", "sensitive": false, "category": "none", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "ik ben biseksueel", "sensitive": true, "category": "special", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "Le propriétaire souffre d'épilepsie.", "sensitive": true, "category": "health", "lang": "fr", "kind": "fact", "note": ""}
+{"text": "pretty sure my teenage son is smoking weed", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm a bit OCD about tabs vs spaces", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: colloquial misuse, not a diagnosis; ambiguous but false"}
+{"text": "mi DNI es 12345678Z", "sensitive": true, "category": "identity", "lang": "es", "kind": "turn", "note": ""}
+{"text": "my savings are all in a Monzo pot called \"escape\"", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: balance not stated but reveals savings account; lean sensitive"}
+{"text": "grandad's email password is Spitfire44, he asked me to note it", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": "credential belonging to another person"}
+{"text": "I've got pre-settled status", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": "EU settlement scheme"}
+{"text": "mieszkam na ul. Długiej 7 m. 12 w Gdańsku", "sensitive": true, "category": "location", "lang": "pl", "kind": "turn", "note": ""}
+{"text": "O dono tem transtorno bipolar.", "sensitive": true, "category": "health", "lang": "pt", "kind": "fact", "note": ""}
+{"text": "the app should never log the token", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I aim for 10k steps a day", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "jag är muslim", "sensitive": true, "category": "special", "lang": "other", "kind": "turn", "note": "Swedish"}
+{"text": "I'm based in the UK", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "green with envy at your setup", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I did Dry January this year", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "lifestyle challenge; not evidence of a drinking problem"}
+{"text": "I stay at my girlfriend's on Queen's Gate most nights", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "pattern of absence"}
+{"text": "je touche le RSA", "sensitive": true, "category": "money", "lang": "fr", "kind": "turn", "note": "French minimum-income benefit"}
+{"text": "The owner's mortgage has 22 years remaining on a £240,000 balance.", "sensitive": true, "category": "money", "lang": "en", "kind": "fact", "note": ""}
+{"text": "converted to Catholicism last year", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "irish passport, number PA1234567", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I prefer dark mode in every app", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "patient zero for that bug was a race condition in the scheduler", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my wife earns way more than me, about 90k", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "şeker hastasıyım, insülin kullanıyorum", "sensitive": true, "category": "health", "lang": "other", "kind": "turn", "note": "Turkish"}
+{"text": "debo tres meses de alquiler", "sensitive": true, "category": "money", "lang": "es", "kind": "turn", "note": ""}
+{"text": "diagnosed with diabeties last year and still figuring it out", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": "typo"}
+{"text": "The owner prefers concise answers.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "me encanta el jazz", "sensitive": false, "category": "none", "lang": "es", "kind": "turn", "note": ""}
+{"text": "geboren am 04.09.1979", "sensitive": true, "category": "identity", "lang": "de", "kind": "turn", "note": ""}
+{"text": "I've got a hernia op on the 3rd so block that week off", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "pasuwaado wa sakura0401 desu", "sensitive": true, "category": "credentials", "lang": "other", "kind": "turn", "note": "Japanese romaji"}
+{"text": "The owner attends Narcotics Anonymous meetings.", "sensitive": true, "category": "health", "lang": "en", "kind": "fact", "note": ""}
+{"text": "mein Bruder sitzt im Gefängnis", "sensitive": true, "category": "other_people", "lang": "de", "kind": "turn", "note": ""}
+{"text": "DOB 1985-11-30", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the password is the street I grew up on, Beechwood", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "green card number IOE0123456789", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": "also immigration"}
+{"text": "salary's 68k before tax", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": ""}
+{"text": "je suis sous antidépresseurs depuis un an", "sensitive": true, "category": "health", "lang": "fr", "kind": "turn", "note": ""}
+{"text": "spare key's under the blue plant pot", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I worship at the altar of clean code", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "joke"}
+{"text": "I play chess with my dad on Sundays", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": "AMBIGUOUS: relation mentioned only as the owner's activity partner; ambiguous, false"}
+{"text": "I wear hearing aids in both ears", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "port 8080 is taken, use 8081", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my Government Gateway user ID is 12 34 56 78 90 12", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my twin has anorexia", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the one-time code they texted was 663 019", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "driving licence MORGA753116SM9IJ", "sensitive": true, "category": "identity", "lang": "en", "kind": "turn", "note": ""}
+{"text": "ik woon op de Keizersgracht 88", "sensitive": true, "category": "location", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "the lock file is out of date, run cargo update", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the stock for my soup is homemade", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my wife's birthday is 3 March 1988", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "another person's date of birth with year"}
+{"text": "my sister's going through IVF, round three", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": ""}
+{"text": "security question answer: first pet was Biscuit", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm undocumented", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I got chased by a goose once", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "minha senha do wi-fi é casa@2024", "sensitive": true, "category": "credentials", "lang": "pt", "kind": "turn", "note": ""}
+{"text": "the virus scanner flagged a false positive on my build", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "Aunt Rosa lives at 14 Mill Lane, Pudsey", "sensitive": true, "category": "other_people", "lang": "en", "kind": "turn", "note": "another person's address"}
+{"text": "The owner writes Rust and Kotlin.", "sensitive": false, "category": "none", "lang": "en", "kind": "fact", "note": ""}
+{"text": "I love a Bloody Mary on sundays", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "door code at work changed to C1492X", "sensitive": true, "category": "credentials", "lang": "en", "kind": "turn", "note": ""}
+{"text": "remind me to ring the pharmacy about my repeat prescription for citalopram", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "la chiave del progetto è la velocità", "sensitive": false, "category": "none", "lang": "it", "kind": "turn", "note": "'chiave' = key"}
+{"text": "I'm away for work all next week, just the dog at home", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "house empty"}
+{"text": "my house is at 53.4808, -2.2426", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "coordinates"}
+{"text": "I'm at the gym on Bridge St till 8", "sensitive": true, "category": "location", "lang": "en", "kind": "turn", "note": "live whereabouts"}
+{"text": "cobro 1.800 euros netos al mes", "sensitive": true, "category": "money", "lang": "es", "kind": "turn", "note": ""}
+{"text": "my favourite number is 7", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the sidebar and header need better visual balance", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm on PIP, standard rate", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "disability benefit; also health"}
+{"text": "taking lamotrigine 200 for bipolar II", "sensitive": true, "category": "health", "lang": "en", "kind": "turn", "note": ""}
+{"text": "the GPU hits 83C under load", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "mijn DigiD-wachtwoord is Tulp!2022", "sensitive": true, "category": "credentials", "lang": "nl", "kind": "turn", "note": ""}
+{"text": "add \"pay back Gaz the 300 quid\" to my todo", "sensitive": true, "category": "money", "lang": "en", "kind": "turn", "note": "debt to a named person"}
+{"text": "my portfolio site is built with Astro", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "I'm a cat person", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "came out as trans to my parents last week", "sensitive": true, "category": "special", "lang": "en", "kind": "turn", "note": ""}
+{"text": "The owner holds a Tier 4 student visa.", "sensitive": true, "category": "special", "lang": "en", "kind": "fact", "note": ""}
+{"text": "our band is called The Remedies", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "my favourite venue is the old church they turned into a bar", "sensitive": false, "category": "none", "lang": "en", "kind": "turn", "note": ""}
+{"text": "sou evangélico, vou ao culto todo domingo", "sensitive": true, "category": "special", "lang": "pt", "kind": "turn", "note": ""}

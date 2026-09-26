@@ -32,6 +32,13 @@ const MAX_CAPTURE_WIDTH: u32 = 1920;
 /// itself, and on Windows a connect to a closed local port takes about two
 /// seconds to fail. The probe is on-demand and never on a timer, so waiting
 /// longer costs nothing but a slower answer when something really is down.
+///
+/// Nothing in THIS app probes :8000 (the old OpenJarvis agent, never run
+/// here) - the desktop's "Core" light is Jarvis's own server, read from the
+/// event stream. The :8000 probe is inside the backend's `/api/status`, whose
+/// code is not in this repository, so it cannot be removed from here; until
+/// it is, and while :4000 (LiteLLM, the future cloud lane) is probed the same
+/// way, this timeout has to stay long enough to outwait both.
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
 /// Connect timeout for the chat stream. There is deliberately no *total*
 /// timeout: a long answer is a long-lived response body, and `Client::timeout`
@@ -43,9 +50,9 @@ const JARVIS_CLIENT: &str = "hud";
 /// Approval decisions are a single small round trip, so they do get a total
 /// timeout — unlike the chat stream.
 const APPROVAL_TIMEOUT: Duration = Duration::from_secs(10);
-/// A widget quick-capture is not streamed, but the model still has to answer,
-/// so it gets a longer leash than an approval.
-const CAPTURE_TIMEOUT: Duration = Duration::from_secs(45);
+/// Filing a note waits up to a second and a half on the server for the
+/// approval gate (see jarvis_note_capture.capture), then answers.
+const CAPTURE_TIMEOUT: Duration = Duration::from_secs(15);
 
 // ---------------------------------------------------------------------------
 // Payload types
@@ -91,6 +98,11 @@ pub struct ServiceStatus {
     /// Parsed JSON body, when the service returned one and it was small enough
     /// to be worth forwarding (the Ollama model list, for instance).
     pub payload: Option<serde_json::Value>,
+    /// Only needed for something the owner may not use. LiteLLM is the cloud
+    /// lane's proxy: with no cloud lane set up, nothing runs on :4000, and
+    /// that is the normal state, not a fault. An optional service counts in
+    /// the totals only when it answers - see [`summarise_health`].
+    pub optional: bool,
 }
 
 /// The structured report returned by [`check_server_health`].
@@ -108,14 +120,17 @@ pub struct HealthReport {
     pub services: Vec<ServiceStatus>,
 }
 
-/// Where the desktop shell keeps the API base URL and the pairing token.
+/// Largest chat line accepted before the stream is treated as broken.
+pub(crate) const MAX_CHAT_LINE_BYTES: usize = 4 * 1024 * 1024;
+
+/// Where the desktop shell keeps the API base URL and the bind address.
 ///
 /// A store file rather than the page's `localStorage`, per DESKTOP-BUILD §3.1:
 /// the port can change without a rebuild, and reading it from Rust means the
 /// token reaches the webview only as the `JARVIS.set()` call at page load.
-/// Largest chat line accepted before the stream is treated as broken.
-const MAX_CHAT_LINE_BYTES: usize = 4 * 1024 * 1024;
-
+/// The pairing token is NOT kept here - it is in Windows Credential Manager
+/// (`token_store.rs`). An older version kept it here as plain text; that copy
+/// is moved out at startup ([`migrate_plain_token`]) and is only ever read.
 pub const SETTINGS_STORE: &str = "jarvis-desktop.json";
 
 /// Default API base. `JARVIS_HUD_PORT` defaults to 4719 in `jarvis_hud.py`;
@@ -126,40 +141,251 @@ pub const DEFAULT_BASE: &str = "http://127.0.0.1:4719";
 ///
 /// Read rather than baked in, because the port is configuration — the last
 /// resync turned on a wrong one having been hardcoded.
+///
+/// **A configured address that [`validate_base`] refuses is never used, and
+/// nothing is used in its place** (CLAUDE.md, decided 2026-09-26: the
+/// owner's own networks only; "while a refused address is saved, the
+/// desktop does nothing over the network ... it does not quietly fall back
+/// to this PC"). One saved by an older version, or set in
+/// `JARVIS_HUD_BASE`, that points at the open internet would otherwise get
+/// the token with every request. The base is then EMPTY: a request to
+/// `"/api/..."` is refused by reqwest while it is being built (a relative
+/// URL), before anything touches the network, and [`jarvis_headers`] -
+/// which every request to Jarvis takes - refuses first anyway with the
+/// sentence [`base_problem`] gives. The event stream stays offline with that
+/// sentence as its reason (`stream.rs`), which every window shows the way it
+/// shows any other connection error, and Settings shows it in red under the
+/// field. The same sentence, everywhere.
 pub fn jarvis_base(app: &AppHandle) -> String {
+    base_from(configured_base(app))
+}
+
+/// [`jarvis_base`]'s rule, pure: the configured address when it is allowed,
+/// NOTHING (empty) when it is refused, this PC when none is configured.
+pub(crate) fn base_from(configured: Option<String>) -> String {
+    match configured {
+        Some(base) if validate_base(&base).is_ok() => base,
+        Some(_) => String::new(),
+        None => DEFAULT_BASE.to_string(),
+    }
+}
+
+/// `Err(the red sentence)` while a refused address is saved: for the few
+/// callers that do not send the token, and so would not be stopped by
+/// [`jarvis_headers`].
+pub(crate) fn require_base_allowed(app: &AppHandle) -> Result<(), String> {
+    match base_problem(app) {
+        Some(problem) => Err(problem),
+        None => Ok(()),
+    }
+}
+
+/// The address the owner configured - Settings, else `JARVIS_HUD_BASE` -
+/// not yet checked. `None` when neither is set.
+fn configured_base(app: &AppHandle) -> Option<String> {
     use tauri_plugin_store::StoreExt;
 
     app.store(SETTINGS_STORE)
         .ok()
         .and_then(|store| store.get("base"))
         .and_then(|v| v.as_str().map(str::to_string))
+        .map(|b| b.trim().trim_end_matches('/').to_string())
+        .filter(|b| !b.is_empty())
         .or_else(|| std::env::var("JARVIS_HUD_BASE").ok())
         .map(|b| b.trim().trim_end_matches('/').to_string())
         .filter(|b| !b.is_empty())
-        .unwrap_or_else(|| DEFAULT_BASE.to_string())
 }
 
-/// The pairing token: the store first, then the environment.
-pub fn jarvis_token_for(app: &AppHandle) -> Option<String> {
+/// Why the configured address is not being used, or `None` when it is (or
+/// nothing is configured, and this PC's default is used). Read afresh every
+/// time, so an address an older version saved - before the own-networks
+/// rule - is caught at startup, not only when it is typed.
+pub(crate) fn base_problem(app: &AppHandle) -> Option<String> {
+    configured_base(app).and_then(|base| validate_base(&base).err())
+}
+
+/// Where the token in use came from. Reported to Settings by name - never
+/// the token itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenSource {
+    /// Typed into Settings, kept in Windows Credential Manager.
+    CredentialManager,
+    /// Typed into Settings by an older version, still in the settings file
+    /// as plain text because Credential Manager refused the move. Read only;
+    /// nothing here writes a token to that file any more.
+    SettingsFile,
+    /// `JARVIS_TOKEN` / `HUD_TOKEN` in the environment.
+    Environment,
+    /// The backend's own token, in Credential Manager (`BACKEND_TARGET`).
+    BackendCredentialManager,
+    /// The backend's own OLD plain-text `~/.openjarvis/token`, read only until
+    /// the backend (with token-store.patch) moves it into Credential Manager.
+    BackendFile,
+}
+
+impl TokenSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TokenSource::CredentialManager => "credential-manager",
+            TokenSource::SettingsFile => "settings-file",
+            TokenSource::Environment => "environment",
+            TokenSource::BackendCredentialManager => "backend-credential-manager",
+            TokenSource::BackendFile => "backend-file",
+        }
+    }
+}
+
+/// Which token wins. Pure, so the order is tested without an app.
+///
+/// **An empty value means "not set" at every step, and falls through.** It
+/// used to be read as "the token is the empty string": Settings' "Clear
+/// token" saved `""`, this found it first and stopped, never reaching the
+/// environment or the backend's own file - so every request went out with
+/// no token and the backend answered 401 until the app was reconfigured.
+///
+/// The settings-file copy wins over Credential Manager because it only
+/// exists when an older version left it there and Credential Manager refused
+/// the move ([`migrate_plain_token`]) - so it is what was typed last.
+///
+/// The backend's own token comes last: from its old plain-text file, which a
+/// backend without token-store.patch still writes, or else from Credential
+/// Manager - the backend's own order ([`pick_backend_token`]). Both are only
+/// read here.
+pub(crate) fn pick_token(
+    settings_file: Option<String>,
+    credential_manager: Option<String>,
+    environment: Option<String>,
+    backend: impl FnOnce() -> Option<(String, TokenSource)>,
+) -> Option<(String, TokenSource)> {
+    let clean = |t: Option<String>| t.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    clean(settings_file)
+        .map(|t| (t, TokenSource::SettingsFile))
+        .or_else(|| clean(credential_manager).map(|t| (t, TokenSource::CredentialManager)))
+        .or_else(|| clean(environment).map(|t| (t, TokenSource::Environment)))
+        .or_else(|| backend().and_then(|(t, source)| clean(Some(t)).map(|t| (t, source))))
+}
+
+/// The pairing token and where it came from: typed into Settings first
+/// (see [`pick_token`] for the order), then the environment, then the token
+/// the backend made for itself.
+pub fn jarvis_token_with_source(app: &AppHandle) -> Option<(String, TokenSource)> {
     use tauri_plugin_store::StoreExt;
 
-    app.store(SETTINGS_STORE)
+    let settings_file = app
+        .store(SETTINGS_STORE)
         .ok()
         .and_then(|store| store.get("token"))
-        .and_then(|v| v.as_str().map(str::to_string))
-        .or_else(|| jarvis_token().cloned())
-        .or_else(|| token_from_config_dir(app))
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
+        .and_then(|v| v.as_str().map(str::to_string));
+    // A failure to read Credential Manager is not a reason to send no token:
+    // fall through to the next source rather than stop.
+    let credential_manager = crate::token_store::read().ok().flatten();
+    pick_token(
+        settings_file,
+        credential_manager,
+        jarvis_token().cloned(),
+        || backend_token(app),
+    )
 }
 
-/// The token the backend writes for itself on first run.
+/// The pairing token, wherever it came from.
+pub fn jarvis_token_for(app: &AppHandle) -> Option<String> {
+    jarvis_token_with_source(app).map(|(token, _)| token)
+}
+
+/// Moves a token an older version saved in `jarvis-desktop.json` (plain
+/// text) into Windows Credential Manager, once, at startup - and deletes the
+/// plain-text copy only after reading it back from Credential Manager and
+/// finding it identical. Any failure leaves the settings file alone, so the
+/// pairing is never lost; the reason is logged, the token never is.
+pub fn migrate_plain_token(app: &AppHandle) {
+    use crate::token_store::{plan_migration, read_fresh, write, Migration};
+    use tauri_plugin_store::StoreExt;
+
+    let Ok(store) = app.store(SETTINGS_STORE) else {
+        return;
+    };
+    let Some(plain) = store
+        .get("token")
+        .and_then(|v| v.as_str().map(str::to_string))
+    else {
+        return;
+    };
+    match plan_migration(Some(&plain), write, read_fresh) {
+        // An empty value is what the old "Clear token" saved. It holds no
+        // secret and it is what locked the app out, so it simply goes.
+        Migration::Nothing | Migration::RemovePlain => {
+            let moved = !plain.trim().is_empty();
+            store.delete("token");
+            match store.save() {
+                Ok(()) if moved => crate::logfile::log(
+                    "[jarvis] moved the pairing token out of the settings file into Windows Credential Manager",
+                ),
+                Ok(()) => {}
+                Err(e) => crate::logfile::log(&format!(
+                    "[jarvis] the pairing token is in Credential Manager, but the settings file could not be rewritten without it: {e}"
+                )),
+            }
+        }
+        Migration::KeepPlain(why) => crate::logfile::log(&format!(
+            "[jarvis] the pairing token stays in the settings file (plain text): {why}"
+        )),
+    }
+}
+
+/// The token the backend makes for itself on first run.
 ///
-/// Third and last, deliberately: something typed into Settings wins, then the
+/// Last, deliberately: something typed into Settings wins, then the
 /// environment, then this. It exists so the two halves agree without the owner
-/// configuring anything — the server now always has a token, and a desktop
-/// that did not know where to find it would be locked out of its own backend
-/// by a secret generated on its behalf.
+/// configuring anything — the server always has a token, and a desktop that
+/// did not know where to find it would be locked out of its own backend by a
+/// secret generated on its behalf.
+///
+/// The OLD plain-text file first, then Credential Manager - the order
+/// `backend/jarvis_token_store.resolve` uses. The file only exists when a
+/// backend without token-store.patch wrote it (the patched backend moves it
+/// into Credential Manager and deletes it at its next start), so when both
+/// exist the file is the newer token: an older backend is running and
+/// wrote it after the move. Reading Credential Manager first sent that
+/// backend a token it no longer used, and every request was refused.
+fn backend_token(app: &AppHandle) -> Option<(String, TokenSource)> {
+    pick_backend_token(token_from_config_dir(app), || {
+        crate::token_store::read_backend().ok().flatten()
+    })
+}
+
+/// [`backend_token`]'s order, pure so it is tested without an app: the old
+/// file, else Credential Manager (read only when the file has nothing - a
+/// failure there falls through to "no token", never stops). Empty is "not
+/// set" at both steps.
+pub(crate) fn pick_backend_token(
+    file: Option<String>,
+    credential_manager: impl FnOnce() -> Option<String>,
+) -> Option<(String, TokenSource)> {
+    let clean = |t: Option<String>| t.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    clean(file)
+        .map(|t| (t, TokenSource::BackendFile))
+        .or_else(|| clean(credential_manager()).map(|t| (t, TokenSource::BackendCredentialManager)))
+}
+
+/// Whether a token from `source` is handed to a backend this app starts, as
+/// `HUD_TOKEN`.
+///
+/// Only a token set DELIBERATELY: typed into Settings (Credential Manager,
+/// or an older version's settings-file copy) or given in the environment.
+/// Never the backend's own token read back: `HUD_TOKEN` overrides the
+/// backend's own choice, so passing it back pinned the backend to whatever
+/// this app happened to read - a stale copy included - instead of the one
+/// the backend itself resolves (`jarvis_token_store.resolve`).
+pub(crate) fn passes_as_hud_token(source: TokenSource) -> bool {
+    match source {
+        TokenSource::CredentialManager | TokenSource::SettingsFile | TokenSource::Environment => {
+            true
+        }
+        TokenSource::BackendCredentialManager | TokenSource::BackendFile => false,
+    }
+}
+
+/// The backend's OLD plain-text token file. Read, never written.
 ///
 /// `OPENJARVIS_CONFIG_DIR` is honoured because the backend honours it. Reading
 /// a different directory from the one the server wrote to is the whole failure
@@ -183,20 +409,123 @@ fn token_from_config_dir(app: &AppHandle) -> Option<String> {
 /// Every theme `theme.css` defines. Validated here rather than trusted from
 /// the window, so a page cannot persist a value that resolves to no palette
 /// and leaves every surface on the fallback colours.
-pub const THEMES: &[&str] = &["deep-space", "ember", "paper", "high-contrast"];
+///
+/// The same three the phone ships (`Themes.kt`'s `ALL`), under the same
+/// names: `deep-space` is Reactor, `paper` is Daylight, `high-contrast` is
+/// High Contrast. The ids stay as they were so no saved choice breaks.
+/// Ember was the fourth and is gone, matching the phone - see
+/// [`normalise_theme`] for where an owner who had it lands.
+pub const THEMES: &[&str] = &["deep-space", "paper", "high-contrast"];
 
-/// The chosen theme, or the default when nothing has been chosen or the stored
-/// value is one this build no longer ships.
-#[tauri::command]
-pub fn get_theme(app: AppHandle) -> String {
+/// The light theme "Follow the system" uses when Windows is in light mode.
+const LIGHT_THEME: &str = "paper";
+
+/// A stored theme id as this build reads it.
+///
+/// Anything this build does not ship - `ember`, removed to match the phone, or
+/// a hand-edited value - is Reactor, which is where the phone sends a removed
+/// theme too (`Themes.byId`).
+pub fn normalise_theme(stored: Option<&str>) -> &'static str {
+    let wanted = stored.unwrap_or("").trim();
+    THEMES
+        .iter()
+        .copied()
+        .find(|t| *t == wanted)
+        .unwrap_or(THEMES[0])
+}
+
+fn is_dark_theme(theme: &str) -> bool {
+    theme != LIGHT_THEME
+}
+
+/// The owner's theme choices, as stored.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ThemePrefs {
+    /// The theme picked by hand.
+    pub theme: String,
+    /// "Match Windows light or dark mode".
+    pub follow_system: bool,
+    /// The dark theme following returns to when Windows goes dark: the last
+    /// dark theme picked, so an owner on High Contrast does not get Reactor
+    /// at every dusk (the phone's `preferredDark`, audit custom-8).
+    pub dark_theme: String,
+    /// Windows' own app mode right now: `Some(true)` light, `Some(false)`
+    /// dark, `None` when it cannot be read (not Windows, or the value is
+    /// missing).
+    pub system_light: Option<bool>,
+    /// What every window should be wearing, given all of the above.
+    pub effective: String,
+}
+
+/// Pure: which theme the windows wear.
+///
+/// Following the system with Windows in light mode is Daylight; in dark mode
+/// it is the remembered dark theme. When Windows' mode cannot be read,
+/// following falls back to the theme picked by hand rather than guessing.
+pub fn effective_theme(
+    theme: &str,
+    follow_system: bool,
+    dark_theme: &str,
+    system_light: Option<bool>,
+) -> String {
+    match (follow_system, system_light) {
+        (true, Some(true)) => LIGHT_THEME.to_string(),
+        (true, Some(false)) => dark_theme.to_string(),
+        _ => theme.to_string(),
+    }
+}
+
+/// Reads the stored choices and Windows' mode, and works out the answer.
+pub fn theme_prefs(app: &AppHandle) -> ThemePrefs {
     use tauri_plugin_store::StoreExt;
 
-    app.store(SETTINGS_STORE)
-        .ok()
-        .and_then(|store| store.get("theme"))
-        .and_then(|v| v.as_str().map(str::to_string))
-        .filter(|t| THEMES.contains(&t.as_str()))
-        .unwrap_or_else(|| THEMES[0].to_string())
+    let store = app.store(SETTINGS_STORE).ok();
+    let text = |key: &str| -> Option<String> {
+        store
+            .as_ref()
+            .and_then(|s| s.get(key))
+            .and_then(|v| v.as_str().map(str::to_string))
+    };
+    let theme = normalise_theme(text("theme").as_deref()).to_string();
+    let follow_system = store
+        .as_ref()
+        .and_then(|s| s.get("theme_follow_system"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let dark_theme = {
+        let stored = normalise_theme(text("theme_dark").as_deref());
+        if text("theme_dark").is_some() && is_dark_theme(stored) {
+            stored.to_string()
+        } else if is_dark_theme(&theme) {
+            theme.clone()
+        } else {
+            THEMES[0].to_string()
+        }
+    };
+    let system_light = crate::system_theme::apps_use_light_theme();
+    let effective = effective_theme(&theme, follow_system, &dark_theme, system_light);
+    ThemePrefs {
+        theme,
+        follow_system,
+        dark_theme,
+        system_light,
+        effective,
+    }
+}
+
+/// The theme every window should be wearing right now - the picked one, or
+/// what "Match Windows" makes of it. A stored `ember` reads as Reactor.
+#[tauri::command]
+pub fn get_theme(app: AppHandle) -> String {
+    crate::system_theme::applied_or(&app, theme_prefs(&app).effective)
+}
+
+/// The owner's theme choices, for the Settings picker. Read-only.
+#[tauri::command]
+pub fn get_theme_prefs(app: AppHandle) -> ThemePrefs {
+    let mut prefs = theme_prefs(&app);
+    prefs.effective = crate::system_theme::applied_or(&app, prefs.effective);
+    prefs
 }
 
 /// Persists the theme and tells every open window at once.
@@ -204,6 +533,9 @@ pub fn get_theme(app: AppHandle) -> String {
 /// The fan-out is the point. Four surfaces can be on screen together, and a
 /// theme that changed in the window you clicked while the widget stayed cyan
 /// would look like a bug rather than a setting.
+///
+/// A dark theme is also remembered as the one "Match Windows" returns to when
+/// Windows goes dark.
 #[tauri::command]
 pub fn set_theme(app: AppHandle, theme: String) -> Result<String, String> {
     use tauri_plugin_store::StoreExt;
@@ -219,33 +551,90 @@ pub fn set_theme(app: AppHandle, theme: String) -> Result<String, String> {
         .store(SETTINGS_STORE)
         .map_err(|e| format!("settings store unavailable: {e}"))?;
     store.set("theme", serde_json::Value::String(theme.clone()));
+    if is_dark_theme(&theme) {
+        store.set("theme_dark", serde_json::Value::String(theme.clone()));
+    }
     store
         .save()
         .map_err(|e| format!("could not save the theme: {e}"))?;
 
-    crate::emit_all(&app, crate::events::THEME_CHANGED, theme.clone());
-    Ok(theme)
+    // A choice made by hand applies now, even mid-approval: the owner is the
+    // one changing it. Only a switch Windows makes on its own is held.
+    let effective = theme_prefs(&app).effective;
+    crate::system_theme::apply_now(&app, &effective);
+    Ok(effective)
 }
 
-/// True once the owner has closed the first-run walkthrough.
+/// Turns "Match Windows light or dark mode" on or off.
+#[tauri::command]
+pub fn set_theme_follow_system(app: AppHandle, follow: bool) -> Result<ThemePrefs, String> {
+    use tauri_plugin_store::StoreExt;
+
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("settings store unavailable: {e}"))?;
+    store.set("theme_follow_system", serde_json::Value::Bool(follow));
+    store
+        .save()
+        .map_err(|e| format!("could not save the setting: {e}"))?;
+    let prefs = theme_prefs(&app);
+    crate::system_theme::apply_now(&app, &prefs.effective);
+    Ok(prefs)
+}
+
+/// Opens the Faces window from a page. Settings has an "Open Faces" button
+/// because the face and the state colours - the part of the look shared
+/// with the phone - were reachable only from the tray menu before.
+#[tauri::command]
+pub fn open_faces(app: AppHandle) -> Result<(), String> {
+    crate::windows::show_faces(&app)
+}
+
+/// Which version of the first-run walkthrough is on screen now.
 ///
-/// Not a command: `windows.rs` decides whether to build the onboarding window
+/// Raise this by one whenever `onboarding.html` changes in a way the owner
+/// should read again: the walkthrough then opens once more for everyone who
+/// closed an older one. The same idea as Ollama's versioned
+/// `onboarding-v1.completed` marker. Version 2 (2026-09-24) corrected the
+/// memory screen: version 1 said Jarvis only remembered what you approved,
+/// and Jarvis now learns automatically by default.
+pub const ONBOARDING_VERSION: u64 = 2;
+
+/// The store key holding the version of the walkthrough the owner last
+/// closed. The old key, `onboarding_seen`, was a plain yes/no, so it could
+/// not tell an old walkthrough from the current one. It is no longer read,
+/// so everyone who only saw version 1 sees version 2 once.
+const ONBOARDING_VERSION_KEY: &str = "onboarding_version";
+
+/// True when the stored value says the owner closed this walkthrough
+/// ([`ONBOARDING_VERSION`]) or a newer one. Anything else - nothing stored,
+/// an older number, or a value of the wrong kind - means "show it".
+fn walkthrough_is_current(stored: Option<&serde_json::Value>) -> bool {
+    stored
+        .and_then(serde_json::Value::as_u64)
+        .is_some_and(|seen| seen >= ONBOARDING_VERSION)
+}
+
+/// True once the owner has closed the current first-run walkthrough.
+///
+/// Not a command: `lib.rs` decides whether to build the onboarding window
 /// at all from this, before anything on screen could ask for it. The
 /// walkthrough itself never checks its own flag — it only exists to close
-/// itself, which is [`mark_onboarding_seen`] below.
+/// itself, which is [`finish_onboarding`] below.
 pub fn onboarding_seen(app: &AppHandle) -> bool {
     use tauri_plugin_store::StoreExt;
 
-    app.store(SETTINGS_STORE)
+    let stored = app
+        .store(SETTINGS_STORE)
         .ok()
-        .and_then(|store| store.get("onboarding_seen"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
+        .and_then(|store| store.get(ONBOARDING_VERSION_KEY));
+    walkthrough_is_current(stored.as_ref())
 }
 
-/// Persists that the walkthrough has been seen, so it never opens again, and
-/// closes it — one command rather than two, since the page has no reason to
-/// do either without the other.
+/// Persists that this version of the walkthrough has been seen, so it does
+/// not open again until [`ONBOARDING_VERSION`] is raised, and closes it — one
+/// command rather than two, since the page has no reason to do either
+/// without the other.
 #[tauri::command]
 pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_store::StoreExt;
@@ -253,7 +642,10 @@ pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
     let store = app
         .store(SETTINGS_STORE)
         .map_err(|e| format!("settings store unavailable: {e}"))?;
-    store.set("onboarding_seen", serde_json::Value::Bool(true));
+    store.set(
+        ONBOARDING_VERSION_KEY,
+        serde_json::Value::from(ONBOARDING_VERSION),
+    );
     store
         .save()
         .map_err(|e| format!("could not save onboarding state: {e}"))?;
@@ -271,10 +663,39 @@ pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn get_api_settings(app: AppHandle) -> serde_json::Value {
     serde_json::json!({
-        "base": jarvis_base(&app),
+        // The address as configured, even a refused one, so the field shows
+        // what is wrong and the owner can change it...
+        "base": configured_base(&app).unwrap_or_else(|| jarvis_base(&app)),
+        // ...and why it is refused (not on the owner's own networks, say).
+        // It is not used: requests go to this PC instead, and the event
+        // stream stays offline saying the same sentence.
+        "baseProblem": base_problem(&app),
         "hasToken": jarvis_token_for(&app).is_some(),
+        // Where it came from, by name - "credential-manager",
+        // "settings-file", "environment", "backend-credential-manager" or
+        // "backend-file" - never the token.
+        // Settings only offers "Clear" for the first two, the ones typed there.
+        "tokenSource": jarvis_token_with_source(&app).map(|(_, source)| source.as_str()),
         "bindAddress": supervised_bind_address(&app).unwrap_or_default(),
+        // A value an older build saved that this one refuses; the backend is
+        // not started with it (sidecar.rs), and Settings says why.
+        "bindAddressProblem": supervised_bind_address(&app)
+            .and_then(|b| validate_bind_address(&b).err()),
         "store": SETTINGS_STORE,
+    })
+}
+
+/// The token in use, for Settings' "Show the token for my phone" button -
+/// the settings window only (`permissions/surfaces.toml`).
+///
+/// The phone has to be given the same token, and before this the only way to
+/// see it was to find a file (and a token typed into Settings was in no file
+/// at all). Returned to that one page on a click; never logged, never
+/// written anywhere by this command.
+#[tauri::command]
+pub fn reveal_pairing_token(app: AppHandle) -> Result<String, String> {
+    jarvis_token_for(&app).ok_or_else(|| {
+        "there is no token yet - start Jarvis once and it makes one for itself".to_string()
     })
 }
 
@@ -299,33 +720,52 @@ pub fn supervised_bind_address(app: &AppHandle) -> Option<String> {
         .filter(|b| !b.is_empty())
 }
 
-/// Checks a bind address before it is persisted.
+/// Checks a bind address before it is persisted, and again before a
+/// supervised backend is started with it (`sidecar.rs`).
 ///
-/// This is not `validate_base`: a bind address is a bare host (an IP, a
-/// Tailscale `100.x` address, a hostname) with no scheme, path or port — the
-/// backend derives the port itself from `JARVIS_HUD_PORT`. Empty is always
-/// accepted; it means "clear this and let the backend bind loopback only",
-/// the safe default.
+/// This is not `validate_base`: a bind address is a bare host with no scheme,
+/// path or port — the backend derives the port itself from `JARVIS_HUD_PORT`.
+/// Empty is always accepted; it means "clear this and let the backend bind
+/// loopback only", the safe default.
 ///
-/// `0.0.0.0` is refused outright rather than merely discouraged.
-/// `docs/INSTALL.md` is explicit that this setting exists to reach a
-/// specific tailnet address, never the whole network: "Bind to the specific
+/// **What is accepted is a short list, not "anything but 0.0.0.0".** The
+/// Settings note promises this "never opens Jarvis to the whole internet, or
+/// even to your home Wi-Fi — only to your own devices on that private
+/// network", and `docs/INSTALL.md` says the same: "Bind to the specific
 /// Tailscale address, not 0.0.0.0. Then the port is not reachable from the
-/// café Wi-Fi at all." Typing the wildcard here would quietly turn a
-/// same-tailnet feature into a same-network one — every device on whatever
-/// Wi-Fi the machine is on, not just the owner's own tailnet — which is
-/// exactly the "no public tunnel" line this project does not cross.
-fn validate_bind_address(addr: &str) -> Result<(), String> {
+/// café Wi-Fi at all." Only three things keep that promise:
+///
+/// - an address in `100.64.0.0/10`, the range Tailscale and NordVPN Meshnet
+///   hand out;
+/// - a loopback address (`127.x`), which opens nothing;
+/// - `localhost`, the same.
+///
+/// A home-network address (`192.168.x`) would reach every device on that
+/// Wi-Fi, and a public one the internet, so both are refused.
+///
+/// **It used to refuse only the exact strings `0.0.0.0` and `::`.** The
+/// operating system's address parser is far looser than that: `0`, `0x0`,
+/// `0.0` and `000.000.000.000` all bind every interface (checked with a real
+/// `socket.bind`), and `100.64.012.3` binds `100.64.10.3`, because a leading
+/// zero means octal. So the check is now "parse it strictly as four plain
+/// numbers, or it is refused" — and anything the OS would read as the
+/// wildcard gets the wildcard's own explanation. The cases live in
+/// `jarvis-desktop/tests/bind-address-cases.json`, which this file's tests,
+/// the backend's `test_bind_wildcard.py` and `tests/tailscale.mjs` all read.
+pub(crate) fn validate_bind_address(addr: &str) -> Result<(), String> {
     if addr.is_empty() {
         return Ok(()); // clearing it falls back to loopback-only
     }
-    if addr == "0.0.0.0" || addr == "::" {
+    if binds_every_interface(addr) {
         return Err(
-            "refusing to bind every network interface (0.0.0.0) — set the \
-             machine's own Tailscale address instead, so this is reachable \
-             from the tailnet and nowhere else"
+            "refusing to bind every network interface (0.0.0.0) — set this \
+             computer's own Tailscale or NordVPN Meshnet address instead, so \
+             Jarvis is reachable from your private network and nowhere else"
                 .to_string(),
         );
+    }
+    if addr.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("the bind address contains whitespace or control characters".to_string());
     }
     if addr.contains('/') || addr.contains('?') || addr.contains('#') || addr.contains('@') {
         return Err(
@@ -341,42 +781,244 @@ fn validate_bind_address(addr: &str) -> Result<(), String> {
                 .to_string(),
         );
     }
-    if addr.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err("the bind address contains whitespace or control characters".to_string());
+    if addr.eq_ignore_ascii_case("localhost") {
+        return Ok(());
     }
-    Ok(())
+    // Strict: exactly four decimal numbers, no leading zeros. Anything looser
+    // is refused rather than guessed at, because the OS would guess
+    // differently (see above).
+    let ip: std::net::Ipv4Addr = addr.parse().map_err(|_| {
+        format!(
+            "\"{addr}\" is not an address this can use — type this computer's \
+             own Tailscale or NordVPN Meshnet address as four plain numbers, \
+             like 100.64.1.5 (the Tailscale or NordVPN app shows it)"
+        )
+    })?;
+    if ip.is_loopback() {
+        return Ok(());
+    }
+    let [a, b, _, _] = ip.octets();
+    if a == 100 && (64..=127).contains(&b) {
+        return Ok(());
+    }
+    Err(format!(
+        "{addr} is not a Tailscale or NordVPN Meshnet address (those start \
+         with 100.64 up to 100.127). Binding it could open Jarvis to your \
+         home Wi-Fi or the internet, so it is refused"
+    ))
+}
+
+/// True when the operating system would read `addr` as "every interface".
+///
+/// A strict parse catches `0.0.0.0`, `::` and the other IPv6 spellings. The
+/// rest is `inet_aton`, the lenient parser `socket.bind` falls back to, which
+/// reads `0`, `0x0`, `0.0` and `000.000.000.000` as `0.0.0.0` too.
+fn binds_every_interface(addr: &str) -> bool {
+    if let Ok(ip) = addr.parse::<std::net::IpAddr>() {
+        return ip.is_unspecified();
+    }
+    inet_aton(addr) == Some(0)
+}
+
+/// The classic BSD `inet_aton` reading of a numeric host: one to four parts
+/// separated by dots, each decimal, `0x` hex or leading-zero octal, the last
+/// part filling whatever bytes are left. `None` when it is not numeric.
+fn inet_aton(s: &str) -> Option<u32> {
+    let parts: Vec<&str> = s.split('.').collect();
+    if parts.is_empty() || parts.len() > 4 {
+        return None;
+    }
+    let mut values = Vec::with_capacity(parts.len());
+    for part in &parts {
+        let (digits, radix) =
+            if let Some(hex) = part.strip_prefix("0x").or_else(|| part.strip_prefix("0X")) {
+                (hex, 16)
+            } else if part.len() > 1 && part.starts_with('0') {
+                (&part[1..], 8)
+            } else {
+                (*part, 10)
+            };
+        if digits.is_empty() {
+            // "0x" alone is not a number; a lone "0" was handled as decimal.
+            return None;
+        }
+        values.push(u64::from_str_radix(digits, radix).ok()?);
+    }
+    let (last, head) = values.split_last()?;
+    if head.iter().any(|&v| v > 0xff) {
+        return None;
+    }
+    let tail_bits = 8 * (4 - head.len() as u32);
+    if tail_bits < 64 && *last >= (1u64 << tail_bits) {
+        return None;
+    }
+    let mut out: u64 = 0;
+    for (i, &v) in head.iter().enumerate() {
+        out |= v << (24 - 8 * i as u32);
+    }
+    Some((out | *last) as u32)
 }
 
 /// Persists the base URL, the token and the supervised bind address —
 /// each optional, so a caller can change one without resending the others.
+///
+/// The token goes to Windows Credential Manager (`token_store.rs`) and
+/// nowhere else. If Credential Manager refuses it, it is NOT saved - an
+/// error says so and why, and nothing else in the call is saved either.
+/// It used to fall back to the settings file as plain text, which is exactly
+/// what CLAUDE.md rule 3 forbids.
+///
+/// The settings file is saved (without any token) BEFORE Credential Manager
+/// is written - see [`save_file_then_token`] for why that order.
+///
+/// An empty token means **clear what was typed here**: it is removed from
+/// Credential Manager and from any old settings-file copy, and the app goes
+/// back to the environment or the backend's own token. It is never saved as
+/// `""` - that value used to be read as "the token is empty" and lock the app
+/// out of its own backend.
+///
+/// Returns a note for Settings to show, or `None` when there is nothing to add.
 #[tauri::command]
 pub fn set_api_settings(
     app: AppHandle,
     base: Option<String>,
     token: Option<String>,
     bind_address: Option<String>,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
+    use crate::token_store::{self, StoreError};
     use tauri_plugin_store::StoreExt;
 
     let store = app
         .store(SETTINGS_STORE)
         .map_err(|e| format!("unable to open the settings store: {e}"))?;
+    // Everything that can be refused is checked before anything is written,
+    // so a refused bind address does not leave a half-saved token behind.
+    let base = base.map(|b| b.trim().trim_end_matches('/').to_string());
+    if let Some(base) = &base {
+        validate_base(base)?;
+    }
+    let bind_address = bind_address.map(|b| b.trim().to_string());
+    if let Some(bind_address) = &bind_address {
+        validate_bind_address(bind_address)?;
+    }
+
+    let token = token.map(|t| t.trim().to_string());
+    let base_before = jarvis_base(&app);
+
+    // What the settings file held before this call, to put back if any step
+    // below is refused - in memory, and on disk if it had been saved.
+    let keys = ["token", "base", "bind_address"];
+    let before: Vec<(&str, Option<serde_json::Value>)> =
+        keys.iter().map(|&k| (k, store.get(k))).collect();
+    let restore = || {
+        for (key, value) in &before {
+            match value {
+                // Only ever what was already in the file before this call:
+                // an older version's plain copy is put back as it was, never
+                // the new token.
+                Some(value) => store.set(*key, value.clone()),
+                None => {
+                    store.delete(*key);
+                }
+            }
+        }
+    };
+
+    // The settings file FIRST - without any plain-text token - and
+    // Credential Manager SECOND (CONN-7). It used to be the other way round:
+    // the new token went into Credential Manager, the old plain copy was
+    // deleted only in memory, and when the file then failed to save, the
+    // next start's migration (`migrate_plain_token`) found the OLD plain
+    // copy still on disk and moved it back over the new one.
+    if token.is_some() {
+        store.delete("token");
+    }
     if let Some(base) = base {
-        let base = base.trim().trim_end_matches('/').to_string();
-        validate_base(&base)?;
         store.set("base", serde_json::Value::String(base));
     }
-    if let Some(token) = token {
-        store.set("token", serde_json::Value::String(token.trim().to_string()));
-    }
     if let Some(bind_address) = bind_address {
-        let bind_address = bind_address.trim().to_string();
-        validate_bind_address(&bind_address)?;
         store.set("bind_address", serde_json::Value::String(bind_address));
     }
-    store
-        .save()
-        .map_err(|e| format!("unable to write the settings store: {e}"))
+    let credential_manager = || -> Result<(), String> {
+        match token.as_deref() {
+            None => Ok(()),
+            Some("") => match token_store::delete() {
+                Ok(()) | Err(StoreError::Unavailable) => Ok(()),
+                // Still in Credential Manager means still in use: say so
+                // rather than report a clear that did not happen.
+                Err(e) => Err(format!(
+                    "could not clear the token: {e}. Nothing in Settings was changed."
+                )),
+            },
+            Some(token) => token_store::write(token).map_err(|e| {
+                format!(
+                    "The token was NOT saved, because {e}. Nothing in Settings was changed, \
+                     and nothing was written to disk in plain text. Try again, or set the \
+                     JARVIS_TOKEN environment variable instead."
+                )
+            }),
+        }
+    };
+    save_file_then_token(
+        || store.save().map_err(|e| e.to_string()),
+        credential_manager,
+        || {
+            restore();
+            // Best effort: when this fails too, the file is left without
+            // the plain copy and with the new address - never with a token
+            // Credential Manager does not also hold.
+            let _ = store.save();
+        },
+        restore,
+    )?;
+    // "Hey Jarvis" listening sends room audio to the server address, and was
+    // started against the old one. It stops, and says so; turning it on
+    // again checks the new address from scratch (voice.rs
+    // wake_audio_refusal - which also runs before every clip, so this is
+    // the early, visible half of the same rule, not the only guard).
+    let base_after = jarvis_base(&app);
+    if base_after != base_before {
+        crate::voice::stop_listening_because(
+            &app,
+            format!(
+                "The Jarvis server address changed to {base_after}, so listening for \
+                 \"hey Jarvis\" stopped. Turn it on again to listen with the new address."
+            ),
+        );
+    }
+    Ok(None)
+}
+
+/// The order [`set_api_settings`] writes in, pure so it is tested without an
+/// app or Credential Manager (CONN-7):
+///
+/// 1. the settings file, already without any plain-text token - refused,
+///    and the in-memory store is put back (`restore_memory`) and nothing
+///    else is touched;
+/// 2. then Credential Manager - refused, and the settings file is rolled
+///    back to what it held before the call (`roll_back_file`), so a refused
+///    token leaves nothing half-saved.
+///
+/// Never the other order: a new token in Credential Manager with the OLD
+/// plain copy still on disk is what the next start's migration moved back
+/// over it.
+pub(crate) fn save_file_then_token(
+    save_file: impl FnOnce() -> Result<(), String>,
+    credential_manager: impl FnOnce() -> Result<(), String>,
+    roll_back_file: impl FnOnce(),
+    restore_memory: impl FnOnce(),
+) -> Result<(), String> {
+    if let Err(e) = save_file() {
+        restore_memory();
+        return Err(format!(
+            "unable to write the settings store: {e}. Nothing was changed."
+        ));
+    }
+    if let Err(e) = credential_manager() {
+        roll_back_file();
+        return Err(e);
+    }
+    Ok(())
 }
 
 /// Checks a base URL before it is persisted.
@@ -392,9 +1034,17 @@ pub fn set_api_settings(
 /// It deliberately does NOT require loopback. The server supports binding off
 /// the loopback interface — that is what `HUD_TOKEN` exists for, and what a
 /// phone on a tailnet needs — so an allowlist of `127.0.0.1` would break a
-/// supported deployment. What it enforces is shape: a bare origin, nothing
-/// else, so the value cannot smuggle a path, a query, credentials or
-/// whitespace into every URL the client builds.
+/// supported deployment. It enforces two things:
+///
+/// 1. shape: a bare origin, nothing else, so the value cannot smuggle a path,
+///    a query, credentials or whitespace into every URL the client builds;
+/// 2. **where** (CLAUDE.md, decided 2026-09-26): the host must be on the
+///    owner's own networks - this PC, the home network, Tailscale or NordVPN
+///    Meshnet - by the backend's own rule ([`own_network_problem`]). It used
+///    to check shape only, so `https://abc.ngrok-free.app` was accepted and
+///    the pairing key went through a public tunnel with every request.
+///    https:// is refused off those networks too: the question is where the
+///    key goes, not whether the line is scrambled.
 fn validate_base(base: &str) -> Result<(), String> {
     if base.is_empty() {
         return Ok(()); // clearing it falls back to the default
@@ -415,7 +1065,193 @@ fn validate_base(base: &str) -> Result<(), String> {
     if rest.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err("the base URL contains whitespace or control characters".to_string());
     }
-    Ok(())
+    match own_network_problem(base) {
+        Some(problem) => Err(problem),
+        None => Ok(()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The owner's own networks (CLAUDE.md, decided 2026-09-26)
+// ---------------------------------------------------------------------------
+//
+// NOT a rule of this app's own. It is the backend's, word for word:
+// `backend/jarvis_local_http.py`, `_own_network`, the rule that already
+// decides where plain http:// may carry the Home Assistant token or the
+// calendar password. `tools/gen_own_network_cases.py` runs that real code
+// over a table of cases and writes `tests/fixtures/own-network-cases.json`;
+// `own_network_tests` below, `tests/own-network.mjs` and the phone's
+// `OwnNetworkTest` all read it, so the three cannot drift apart unnoticed.
+//
+// Judged by spelling alone: nothing is looked up, no DNS, no network call.
+
+/// What the owner sees when an address is refused - one sentence, so the
+/// link line ("Offline — <first sentence>") shows all of it. Checked against
+/// the `message` in own-network-cases.json. The phone's `OwnNetwork.MESSAGE`
+/// (`phone_message` there) shares its first half and names only the .ts.net
+/// and .nord names, the only ones the phone can connect to.
+pub(crate) const OWN_NETWORK_MESSAGE: &str = "Jarvis's address {address} is not on your own \
+     networks, so this app will not send your pairing key there: use this PC (localhost), your \
+     home network (an address like 192.168.x.x or 10.x.x.x, or a name ending in .local), \
+     Tailscale (a name ending in .ts.net) or NordVPN Meshnet (a name ending in .nord).";
+
+/// Name endings that only the owner's own networks answer - the backend's
+/// `_OWN_SUFFIXES`.
+const OWN_SUFFIXES: [&str; 5] = [".local", ".lan", ".home.arpa", ".ts.net", ".nord"];
+
+/// `None` when `base` (a whole address, `http://host:port`) is on the
+/// owner's own networks, else the sentence saying why it is refused.
+///
+/// Two readings of the host must BOTH pass, the way the backend judges both
+/// `urlsplit`'s host and the one urllib dials: a plain split of the text as
+/// typed, and the host `reqwest::Url` parses - the parser the requests
+/// themselves use, which also decodes `%6c`-escapes and reads `3232235777`
+/// as 192.168.1.1. So an address one of them misreads cannot slip past the
+/// other.
+pub(crate) fn own_network_problem(base: &str) -> Option<String> {
+    let base = base.trim().trim_end_matches('/');
+    let typed = typed_host(base);
+    // `host_str` gives an IPv6 address in its brackets; the check wants it
+    // without, like the typed reading.
+    let dialled = reqwest::Url::parse(base).ok().and_then(|url| {
+        url.host_str().map(|h| {
+            h.strip_prefix('[')
+                .and_then(|h| h.strip_suffix(']'))
+                .unwrap_or(h)
+                .to_string()
+        })
+    });
+    match (typed, dialled) {
+        (Some(t), Some(d)) if own_network_host(t) && own_network_host(&d) => None,
+        _ => Some(own_network_message(base)),
+    }
+}
+
+/// [`OWN_NETWORK_MESSAGE`] for `base`, which is shown as typed - unless it
+/// holds something that must not be repeated back (a user name or password
+/// written into it, "me:pw@...", or a space), when the sentence leaves the
+/// address out.
+fn own_network_message(base: &str) -> String {
+    let unshown = base.is_empty()
+        || base
+            .chars()
+            .any(|c| c == '@' || c.is_whitespace() || c.is_control());
+    if unshown {
+        OWN_NETWORK_MESSAGE.replace("{address} ", "")
+    } else {
+        OWN_NETWORK_MESSAGE.replace("{address}", base)
+    }
+}
+
+/// The host as the address is written: after `scheme://`, up to the first
+/// `/`, `?`, `#` or `\`, without a `:port`, and without IPv6's brackets.
+/// `None` when that is not one host (an unbracketed IPv6 address, which
+/// reads as a host and a port, or a port that is not a number).
+fn typed_host(base: &str) -> Option<&str> {
+    let rest = base.split_once("://").map_or(base, |(_, rest)| rest);
+    let authority = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
+    let (host, port) = if let Some(inner) = authority.strip_prefix('[') {
+        let (host, after) = inner.split_once(']')?;
+        if after.is_empty() {
+            (host, None)
+        } else {
+            (host, Some(after.strip_prefix(':')?))
+        }
+    } else {
+        match authority.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (authority, None),
+        }
+    };
+    if let Some(port) = port {
+        if !port.is_empty() && !port.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+    }
+    Some(host).filter(|h| !h.is_empty())
+}
+
+/// Is `host` this PC or on one of the owner's own networks? The backend's
+/// `_own_network`, line for line:
+///
+/// - an address (in any spelling the operating system would still dial -
+///   `3232235777`, `0xc0a80101`, `10.1` - judged as that address) must be in
+///   127.0.0.0/8, ::1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7
+///   (which holds Tailscale's fd7a:115c:a1e0::/48) or 100.64.0.0/10
+///   (Tailscale and NordVPN Meshnet). Link-local (169.254.x.x, fe80::) is
+///   not on the list, the same as the backend;
+/// - a name must be `localhost`, a single word with no dot (a home-network
+///   name such as `nas`, which the home router answers), or end in `.local`,
+///   `.lan`, `.home.arpa`, `.ts.net` or `.nord`.
+pub(crate) fn own_network_host(host: &str) -> bool {
+    let lowered = host.trim().to_lowercase();
+    let host = lowered.trim_end_matches('.');
+    if host.is_empty() {
+        return false;
+    }
+    if let Some(ip) = host_address(host) {
+        return own_address(ip);
+    }
+    if !plain_name(host) {
+        return false; // an odd IPv6 form, an "@", a space, a "%"...
+    }
+    if host == "localhost" || !host.contains('.') {
+        return true;
+    }
+    OWN_SUFFIXES.iter().any(|suffix| host.ends_with(suffix))
+}
+
+/// The address `host` denotes, or `None` when it is a name - the backend's
+/// `_as_address`: the usual spellings first, then the old numeric forms
+/// `inet_aton` reads (each part must start with a digit and hold only hex
+/// digits, `x` or dots, as glibc's does - `u64::from_str_radix` would take a
+/// leading `+` that inet_aton refuses).
+fn host_address(host: &str) -> Option<std::net::IpAddr> {
+    use std::net::{IpAddr, Ipv4Addr};
+
+    let ip = match host.parse::<IpAddr>() {
+        Ok(ip) => ip,
+        Err(_) => {
+            let numeric = host.split('.').all(|part| {
+                part.starts_with(|c: char| c.is_ascii_digit())
+                    && part.chars().all(|c| c.is_ascii_hexdigit() || c == 'x')
+            });
+            if !numeric {
+                return None;
+            }
+            IpAddr::V4(Ipv4Addr::from(inet_aton(host)?))
+        }
+    };
+    Some(match ip {
+        IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(ip, IpAddr::V4),
+        v4 => v4,
+    })
+}
+
+/// The backend's `_OWN_NETS`.
+fn own_address(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            let [a, b, _, _] = v4.octets();
+            a == 127
+                || a == 10
+                || (a == 172 && (16..=31).contains(&b))
+                || (a == 192 && b == 168)
+                || (a == 100 && (64..=127).contains(&b))
+        }
+        std::net::IpAddr::V6(v6) => v6.is_loopback() || (v6.octets()[0] & 0xfe) == 0xfc,
+    }
+}
+
+/// The backend's `_NAME_RE`, `^[\w-]+(\.[\w-]+)*$`: words of letters,
+/// digits, `_` or `-`, joined by single dots.
+fn plain_name(host: &str) -> bool {
+    host.split('.').all(|label| {
+        !label.is_empty()
+            && label
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    })
 }
 
 /// Shared secret for `X-Jarvis-Token`, read once from the environment.
@@ -640,6 +1476,7 @@ async fn probe(
                     format!("reachable but unhealthy — HTTP {}", status.as_u16())
                 },
                 payload,
+                optional: false,
             }
         }
         Err(err) => {
@@ -659,6 +1496,7 @@ async fn probe(
                 latency_ms: started.elapsed().as_millis(),
                 detail,
                 payload: None,
+                optional: false,
             }
         }
     }
@@ -674,9 +1512,15 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
         .connect_timeout(HEALTH_TIMEOUT)
         // These are loopback services; a proxy would only get in the way.
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("unable to build the HTTP client: {e}"))?;
 
+    // A refused address: Jarvis is not asked at all (the probe below would
+    // only fail on the empty base), and the sentence says why.
+    require_base_allowed(&app)?;
     let (jarvis, ollama, litellm) = tokio::join!(
         probe(
             &client,
@@ -701,30 +1545,60 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
         ),
     );
 
-    let services = vec![jarvis, ollama, litellm];
-    let online_count = services.iter().filter(|s| s.online).count();
-    let total_count = services.len();
-    let offline: Vec<&str> = services
-        .iter()
-        .filter(|s| !s.online)
-        .map(|s| s.name)
-        .collect();
+    // The cloud lane's proxy. Not running is the normal state when no cloud
+    // lane is set up - which is the default, and today's setup - so it no
+    // longer turns every status check into "2/3 online - offline: LiteLLM".
+    let mut litellm = litellm;
+    litellm.optional = true;
+    if !litellm.online {
+        litellm.detail = format!(
+            "not running — only needed if you set up a cloud model ({})",
+            litellm.detail
+        );
+    }
 
+    let services = vec![jarvis, ollama, litellm];
+    let (online_count, total_count, summary) = summarise_health(&services);
     Ok(HealthReport {
         checked_at: now_ms(),
         all_online: online_count == total_count,
         online_count,
         total_count,
-        summary: if offline.is_empty() {
-            format!("All {total_count} services online.")
-        } else {
-            format!(
-                "{online_count}/{total_count} online — offline: {}",
-                offline.join(", ")
-            )
-        },
+        summary,
         services,
     })
+}
+
+/// The counts and the one-line summary. An optional service (LiteLLM) is
+/// counted only when it answers; when it does not, the summary says so in a
+/// separate, calm sentence instead of listing it as offline.
+pub(crate) fn summarise_health(services: &[ServiceStatus]) -> (usize, usize, String) {
+    let counted: Vec<&ServiceStatus> = services
+        .iter()
+        .filter(|s| !s.optional || s.online)
+        .collect();
+    let online_count = counted.iter().filter(|s| s.online).count();
+    let total_count = counted.len();
+    let offline: Vec<&str> = counted
+        .iter()
+        .filter(|s| !s.online)
+        .map(|s| s.name)
+        .collect();
+    let mut summary = if offline.is_empty() {
+        format!("All {total_count} services online.")
+    } else {
+        format!(
+            "{online_count}/{total_count} online — offline: {}",
+            offline.join(", ")
+        )
+    };
+    for s in services.iter().filter(|s| s.optional && !s.online) {
+        summary.push_str(&format!(
+            " {} is not running, which is fine unless you use a cloud model.",
+            s.name
+        ));
+    }
+    (online_count, total_count, summary)
 }
 
 // ---------------------------------------------------------------------------
@@ -740,7 +1614,10 @@ pub(crate) fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::
     let mut builder = reqwest::Client::builder()
         .connect_timeout(CHAT_CONNECT_TIMEOUT)
         // A loopback service; a proxy would only get in the way.
-        .no_proxy();
+        .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none());
     if let Some(timeout) = total_timeout {
         builder = builder.timeout(timeout);
     }
@@ -751,6 +1628,9 @@ pub(crate) fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::
 
 /// `X-Jarvis-Client` and, when configured, `X-Jarvis-Token`.
 pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, String> {
+    // Nothing goes anywhere while a refused address is saved - not to it,
+    // and not to this PC instead (see `jarvis_base`).
+    require_base_allowed(app)?;
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "X-Jarvis-Client",
@@ -794,24 +1674,71 @@ pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, Str
 ///
 /// `note_target` was invented outright — zero hits in the server. The system
 /// message the frontend already sends is the only mechanism that ever worked.
+///
+/// Chat history (JARVIS-API.md section 18): `messages` go on untouched, so
+/// each user turn's `provenance` tag reaches the PC as main.js set it, and
+/// `conversation_id` and `device` are added at the top level by
+/// [`chat_extras`] - only when well formed, so a bad one is left out rather
+/// than sent for the PC to ignore. The PC strips all three before anything
+/// reaches a model.
+///
+/// `temporary: true` (the owner's decision, 2026-09-25; JARVIS-API.md
+/// section 18.1) asks for a temporary chat: no memory used, nothing learned,
+/// nothing kept. It is sent only to a PC whose `/api/version` says it has
+/// one; otherwise nothing is sent and the answer is [`TEMPORARY_UNAVAILABLE`].
+///
+/// Eight arguments, one over clippy's line: each is a field main.js already
+/// names at the top level of the call (the tests read them there), and
+/// folding three into a struct would change that call's shape for nothing.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn stream_chat(
     app: AppHandle,
     messages: Vec<serde_json::Value>,
     has_image: bool,
     auto: bool,
+    conversation_id: Option<String>,
+    device: Option<String>,
+    temporary: Option<bool>,
     on_event: Channel<String>,
 ) -> Result<(), String> {
     let cancel = app.state::<ChatState>().begin();
     let base = jarvis_base(&app);
     let headers = jarvis_headers(&app)?;
+    let temporary = temporary == Some(true);
+    // A temporary chat is sent only to a PC that says it has one - an older
+    // PC would ignore the flag and use, learn from and keep the chat. Asked
+    // before every temporary question, not once: the backend can be updated
+    // (or rolled back) while this window is open. Stop during the check
+    // stops it, like Stop during the answer.
+    if temporary {
+        let supported = tokio::select! {
+            result = temporary_chat_supported(&app) => result,
+            _ = cancel.notified() => {
+                app.state::<ChatState>().finish(&cancel);
+                return Ok(());
+            }
+        };
+        if supported != Ok(true) {
+            app.state::<ChatState>().finish(&cancel);
+            return Err(supported
+                .err()
+                .unwrap_or_else(|| TEMPORARY_UNAVAILABLE.to_string()));
+        }
+    }
 
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "messages": messages,
         "has_image": has_image,
         "stream": true,
         "auto": auto,
     });
+    if let Some(body) = payload.as_object_mut() {
+        body.extend(chat_extras(conversation_id.as_deref(), device.as_deref()));
+        if temporary {
+            body.insert("temporary".into(), serde_json::json!(true));
+        }
+    }
 
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
     // lands before this future is polled still wins the race.
@@ -822,6 +1749,212 @@ pub async fn stream_chat(
 
     app.state::<ChatState>().finish(&cancel);
     outcome
+}
+
+/// Starts the one line on the chat channel that is not part of the answer: the
+/// answer's `turn_id`. A unit-separator control character never appears in
+/// a server's SSE line, so main.js can split this off before anything tries
+/// to read it as text.
+pub const TURN_LINE_PREFIX: &str = "\u{1f}jarvis-turn:";
+
+/// The `turn_id` in an `X-Jarvis-Route` header value, if it holds a valid one:
+/// exactly 32 lower-case hex characters, what `jarvis_feedback.record_turn`
+/// makes. Anything else is ignored rather than passed on.
+pub fn turn_id_from_route(header: &str) -> Option<String> {
+    let route: serde_json::Value = serde_json::from_str(header).ok()?;
+    let id = route.get("turn_id")?.as_str()?;
+    valid_turn_id(id).then(|| id.to_string())
+}
+
+/// Starts the line on the chat channel that carries `X-Jarvis-Route`'s lane,
+/// `where` ("local" / "cloud") and gate - never its reason text, and the
+/// memory it used only as fact ids (`memory_ids`, numbers), never words.
+/// main.js paints the Local/Cloud badge from it rather than guessing from the
+/// model name each chunk carries, which says nothing about where it ran.
+pub const ROUTE_LINE_PREFIX: &str = "\u{1f}jarvis-route:";
+
+/// The small JSON object for [`ROUTE_LINE_PREFIX`], from an `X-Jarvis-Route`
+/// header value: `lane`, `where`, `gate` and `second_card`, each only when it
+/// is a string.
+///
+/// `second_card` (second-card.patch) is there only on a turn the second
+/// graphics card answered, and says why: `"long_context"` or `"vision"`.
+/// `where` is still `"local"` then (it is this PC) and `lane` names the model
+/// really answering. main.js adds "on the second graphics card" to the model.
+pub fn route_line_from_header(header: &str) -> Option<String> {
+    let route: serde_json::Value = serde_json::from_str(header).ok()?;
+    let mut out = serde_json::Map::new();
+    for key in ["lane", "where", "gate", "second_card"] {
+        if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
+            out.insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
+        }
+    }
+    // How many remembered facts went into the question - a count, never
+    // which ones. With `gate: "private"` it is how the quickbar knows not to
+    // read a voice question's answer aloud (docs/JARVIS-API.md section 16,
+    // "What the apps must do about private answers"; private-speech.js).
+    if let Some(n) = route.get("injected_facts").and_then(|v| v.as_u64()) {
+        out.insert("injected_facts".to_string(), serde_json::json!(n));
+    }
+    // How many of those facts are SENSITIVE (health, money, passwords, other
+    // people) - the owner's decision 13: an answer that uses one stays on
+    // screen unless "Answers that use sensitive saved facts" is "Read
+    // aloud". Passed on only as a whole number; anything else is left out,
+    // and a missing count with facts in is read as "they may all be
+    // sensitive" (private-speech.js), so leaving it out fails closed.
+    if let Some(n) = route.get("injected_sensitive").and_then(|v| v.as_u64()) {
+        out.insert("injected_sensitive".to_string(), serde_json::json!(n));
+    }
+    // temporary-chat.patch (the owner's decision, 2026-09-25): whether the PC
+    // really treated this as a temporary chat, and whether the question was
+    // a "Remember:" it did not act on. Booleans only.
+    for key in ["temporary", "remember_off"] {
+        if let Some(b) = route.get(key).and_then(|v| v.as_bool()) {
+            out.insert(key.to_string(), serde_json::json!(b));
+        }
+    }
+    // "Used in this answer": which remembered facts went in, as the fact ids
+    // alone (`injected_ids`' "mem:<id>" entries, as numbers) - never a word
+    // of them. The quickbar asks for the words only when the owner opens the
+    // list (brain/used.rs), and Rust holds them back there while the memory
+    // lists are hidden.
+    let ids = memory_ids_from_route(&route);
+    if !ids.is_empty() {
+        out.insert("memory_ids".to_string(), serde_json::json!(ids));
+    }
+    (!out.is_empty()).then(|| serde_json::Value::Object(out).to_string())
+}
+
+/// The fact ids in `X-Jarvis-Route`'s `injected_ids`: each `"mem:<id>"`
+/// entry as a whole number above 0, in order, each once, at most
+/// [`crate::brain::used::USED_MAX`]. `"fact:<n>"` (the older word list,
+/// which has no id) and anything else are left out.
+pub(crate) fn memory_ids_from_route(route: &serde_json::Value) -> Vec<i64> {
+    let mut out: Vec<i64> = Vec::new();
+    for v in route
+        .get("injected_ids")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+    {
+        let Some(n) = v
+            .as_str()
+            .and_then(|s| s.strip_prefix("mem:"))
+            .filter(|d| !d.is_empty() && d.len() <= 12 && d.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|d| d.parse::<i64>().ok())
+            .filter(|n| *n > 0)
+        else {
+            continue;
+        };
+        if !out.contains(&n) {
+            out.push(n);
+        }
+        if out.len() >= crate::brain::used::USED_MAX {
+            break;
+        }
+    }
+    out
+}
+
+/// The sentence in a failed `/api/chat` body: `{"error": "..."}` (the
+/// backend's own shape) or `{"error": {"message": "..."}}` (Ollama's and
+/// OpenAI's). None when there is none to find.
+pub fn error_text_from_body(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let error = value.get("error")?;
+    let text = error
+        .as_str()
+        .or_else(|| error.get("message").and_then(|m| m.as_str()))?
+        .trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// The two chat-history fields `POST /api/chat` takes at the top level
+/// (JARVIS-API.md section 18), each only when it is one the PC accepts:
+/// `conversation_id` 8-64 characters of `[A-Za-z0-9_-]`, and `device` one of
+/// the two names this app's windows are (`"desktop"` for the quickbar,
+/// `"hud"` for the HUD page). Anything else is left out.
+pub(crate) fn chat_extras(
+    conversation_id: Option<&str>,
+    device: Option<&str>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut out = serde_json::Map::new();
+    if let Some(id) = conversation_id.filter(|id| valid_conversation_id(id)) {
+        out.insert("conversation_id".into(), serde_json::json!(id));
+    }
+    if let Some(d) = device.filter(|d| matches!(*d, "desktop" | "hud")) {
+        out.insert("device".into(), serde_json::json!(d));
+    }
+    out
+}
+
+/// A conversation id the PC accepts: 8-64 characters of `[A-Za-z0-9_-]`.
+/// Also what [`crate::brain::history`] checks before putting one in a URL.
+pub(crate) fn valid_conversation_id(id: &str) -> bool {
+    (8..=64).contains(&id.len())
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+fn valid_turn_id(id: &str) -> bool {
+    id.len() == 32
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// The owner's right/wrong mark on ONE answer (feedback.patch).
+///
+/// One id and one mark, never a list: the server refuses a list with a 400
+/// too, because a "mark all" would move every counter at once. A mark never
+/// changes memory; at most it raises one "stop using this fact?" card in the
+/// ordinary review queue, which still needs its own decision.
+///
+/// A backend without the patch answers 404 (no such route) or 503 (the
+/// module is missing); both come back as `{"available": false}` so the page
+/// can hide the control quietly rather than show an error.
+#[tauri::command]
+pub async fn mark_answer(
+    app: AppHandle,
+    turn_id: String,
+    mark: String,
+) -> Result<serde_json::Value, String> {
+    if !valid_turn_id(&turn_id) {
+        return Err("that answer has no valid id to mark".to_string());
+    }
+    if !matches!(mark.as_str(), "right" | "wrong" | "none") {
+        return Err(format!("`{mark}` is not a mark (right, wrong or none)"));
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .post(format!("{base}/api/feedback/mark"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "turn_id": turn_id, "mark": mark }))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {base}")
+            } else {
+                format!("the mark could not be sent: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    if matches!(status, 404 | 501 | 503) {
+        return Ok(serde_json::json!({ "available": false, "status": status }));
+    }
+    if !(200..300).contains(&status) {
+        return Err(format!(
+            "the server answered HTTP {status}: {}",
+            text.trim()
+        ));
+    }
+    Ok(serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({ "ok": true })))
 }
 
 /// Cancels the stream in flight, if there is one.
@@ -847,11 +1980,17 @@ async fn pump_chat(
         .send()
         .await
         .map_err(|e| {
-            if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}. Is it running?")
-            } else {
-                format!("chat request failed: {e}")
-            }
+            // Facts, not words: the page picks the plain words and keeps
+            // this detail (scrubbed) behind "Details" (plain-errors.js).
+            crate::plain_errors::chat_failure(
+                Some(crate::plain_errors::network_kind(
+                    e.is_connect(),
+                    e.is_timeout(),
+                )),
+                None,
+                None,
+                &format!("POST {base}/api/chat: {e}"),
+            )
         })?;
 
     let status = response.status();
@@ -863,22 +2002,58 @@ async fn pump_chat(
         // special case was inventing a protocol. Gates arrive inside the
         // stream as `tier: "ask"` instead.
         let body = body.trim();
-        return Err(if body.is_empty() {
-            format!("the server answered HTTP {}", status.as_u16())
-        } else {
-            format!("the server answered HTTP {}: {body}", status.as_u16())
-        });
+        // The server's own sentence when it sent one (`{"error": "..."}`, or
+        // `{"error": {"message": ...}}`), not the whole JSON body - which
+        // used to put the route dictionary, reasons and ids and all, on the
+        // card under "Jarvis could not answer". The page picks the plain
+        // words from the status and the sentence; the body goes behind
+        // "Details", scrubbed there.
+        let said = error_text_from_body(body);
+        return Err(crate::plain_errors::chat_failure(
+            None,
+            Some(status.as_u16()),
+            said.as_deref(),
+            &format!("HTTP {} from {base}/api/chat: {body}", status.as_u16()),
+        ));
+    }
+
+    // Which lane answered and whether it is this PC, for the Local/Cloud
+    // badge - see ROUTE_LINE_PREFIX. Only those fields (and `second_card`,
+    // on a turn the second graphics card answered) go to the page.
+    if let Some(route) = response
+        .headers()
+        .get("X-Jarvis-Route")
+        .and_then(|v| v.to_str().ok())
+        .and_then(route_line_from_header)
+    {
+        let _ = on_event.send(format!("{ROUTE_LINE_PREFIX}{route}"));
+    }
+
+    // The answer's id, for the right/wrong mark (feedback.patch: `turn_id` in
+    // the JSON `X-Jarvis-Route` header). Sent to the page first, as one line
+    // it can tell apart from the answer - see TURN_LINE_PREFIX. A backend
+    // without the patch sends no id, and the page then shows no mark.
+    if let Some(turn) = response
+        .headers()
+        .get("X-Jarvis-Route")
+        .and_then(|v| v.to_str().ok())
+        .and_then(turn_id_from_route)
+    {
+        let _ = on_event.send(format!("{TURN_LINE_PREFIX}{turn}"));
     }
 
     // Lines are cut from raw bytes so a multi-byte character split across two
     // network chunks is never decoded half-way.
     let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
 
-    while let Some(bytes) = response
-        .chunk()
-        .await
-        .map_err(|e| format!("the stream broke: {e}"))?
-    {
+    while let Some(bytes) = response.chunk().await.map_err(|e| {
+        crate::plain_errors::chat_failure(
+            Some(crate::plain_errors::network_kind(false, e.is_timeout())),
+            None,
+            None,
+            &format!("the stream broke: {e}"),
+        )
+    })? {
         buffer.extend_from_slice(&bytes);
         // Bounded for the same reason the event stream's is: a body with no
         // newline would grow this until the process dies.
@@ -917,14 +2092,46 @@ async fn pump_chat(
 // Approval gates
 // ---------------------------------------------------------------------------
 
-/// Answers a pending autonomy approval.
+/// Answers a pending autonomy approval, from the Jarvis bar or the widget.
 ///
 /// `approved` picks the endpoint: `/api/approve` or `/api/deny`. Both carry
 /// `{"id": …, "by": "desktop_spotlight"}` so the server can attribute the
 /// decision to the machine the human was actually sitting at.
+///
+/// `window` is the window whose page asked - Tauri fills it in, a page
+/// cannot choose it. An Approve is shown to Windows Hello over that window
+/// when the Security settings say this one needs it (lock.rs).
 #[tauri::command]
 pub async fn decide_approval(
     app: AppHandle,
+    window: tauri::WebviewWindow,
+    id: String,
+    approved: bool,
+    option_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    answer_approval(app, AnsweredFrom::Window(&window), id, approved, option_id).await
+}
+
+/// Denies from a notification's Deny button (winrt_toast.rs). There is no
+/// approving form of this: a notification never approves anything.
+pub async fn deny_from_notification(
+    app: AppHandle,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    answer_approval(app, AnsweredFrom::Notification, id, false, None).await
+}
+
+/// Where an answer came from. A notification can only deny - see
+/// `answer_approval`.
+enum AnsweredFrom<'a> {
+    Window(&'a tauri::WebviewWindow),
+    Notification,
+}
+
+/// The one place a decision is sent, for both callers above.
+async fn answer_approval(
+    app: AppHandle,
+    from: AnsweredFrom<'_>,
     id: String,
     approved: bool,
     option_id: Option<String>,
@@ -985,8 +2192,81 @@ pub async fn decide_approval(
         );
     }
 
+    // The widget approves nothing while App lock is on (apps security audit
+    // M3, the owner's decision 2026-09-25): it sits on the desktop outside
+    // the lock, so its Approve opens the Jarvis bar - which asks Windows
+    // Hello first - and the owner approves there. Deny still works from the
+    // widget, as it does from the phone's. Checked here, in the command,
+    // not only by the widget's button.
+    if approved {
+        if let AnsweredFrom::Window(window) = &from {
+            if window.label() == windows::WIDGET_LABEL && crate::lock::current(&app).app_lock {
+                show_approval_in_quickbar(&app);
+                return Err(crate::lock::WIDGET_APPROVES_IN_BAR.to_string());
+            }
+        }
+    }
+
+    // An email is approved in the Jarvis bar only, lock or not (the owner's
+    // decision of 2026-09-25: the card shows the recipients, the subject
+    // and every word). The widget shows one line of a card, so its Approve
+    // for an email opens the Jarvis bar, where all of it can be read. Deny
+    // still works from the widget. Checked here, in the command, not only
+    // by the widget's button.
+    if approved {
+        if let AnsweredFrom::Window(window) = &from {
+            if window.label() == windows::WIDGET_LABEL && waiting_email(&app, id) {
+                show_approval_in_quickbar(&app);
+                return Err(crate::email_sending::EMAIL_APPROVES_IN_BAR.to_string());
+            }
+        }
+    }
+
+    // Windows Hello, for an Approve (lock.rs): after the checks above, so
+    // the owner is never asked to confirm something that would then be
+    // refused anyway, and before the request is built. Deny is never held:
+    // refusing costs a retry, approving the wrong thing is what this is for.
+    //
+    // A notification cannot approve at all, whatever it is asked to do -
+    // docs/ARCHITECTURE.md §3: "Deny may be a notification action. Approve
+    // may not."
+    //
+    // Since the approval gap's step 1 the backend may ask Windows Hello
+    // itself (lock::check_approval says when); then the request stays open
+    // while its prompt is up, so it waits for the card's time left, and the
+    // backend's prompt is let to the front first.
+    let mut wait = APPROVAL_TIMEOUT;
+    if approved {
+        match from {
+            AnsweredFrom::Window(window) => {
+                let send = crate::lock::check_approval(&app, window, id, APPROVAL_TIMEOUT)
+                    .await
+                    .map_err(|e| crate::lock::not_approved_words(&e))?;
+                if send.backend_may_ask {
+                    wait = send.wait;
+                    crate::lock::let_backend_prompt_forward();
+                }
+            }
+            AnsweredFrom::Notification => {
+                return Err(
+                    "a notification can deny, never approve - open Jarvis to approve".to_string(),
+                )
+            }
+        }
+        // The prompt can stay open for a while. Answering a queue that went
+        // stale meanwhile is the same mistake as answering one that already
+        // was, so the link is asked again.
+        if app.state::<crate::stream::StreamState>().link().stale {
+            return Err(
+                "the event stream went stale while Windows Hello was open - \
+                 nothing can be answered until it reconnects"
+                    .to_string(),
+            );
+        }
+    }
+
     let endpoint = if approved { "approve" } else { "deny" };
-    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+    let response = jarvis_client(Some(wait))?
         .post(format!("{}/api/{endpoint}", jarvis_base(&app)))
         .headers(jarvis_headers(&app)?)
         .json(&serde_json::json!({ "id": id, "by": "desktop_spotlight" }))
@@ -1002,6 +2282,9 @@ pub async fn decide_approval(
 
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
+    if let Some(said) = owner_check_refusal(status.as_u16(), &body) {
+        return Err(crate::lock::not_approved_words(&said));
+    }
     if !status.is_success() {
         return Err(format!(
             "the server answered HTTP {} to /{endpoint}: {}",
@@ -1025,9 +2308,10 @@ pub async fn decide_approval(
 /// The shared half of the task controls and `amend_approval`: POST a small
 /// JSON body, and turn anything that is not a 2xx into a sentence.
 ///
-/// Deliberately NOT gated on a stale stream, unlike [`decide_approval`].
-/// None of its callers is a decision: a note is an annotation, and pause,
-/// resume and stop are the safe direction in the same sense Deny is — the
+/// Deliberately NOT gated on a stale stream here, unlike [`decide_approval`]
+/// ([`resume_task`] adds its own check, being the one that makes work go
+/// again). A note is an annotation, and pause and stop are the safe
+/// direction in the same sense Deny is — the
 /// moment you most want to stop a running task is the moment the link is
 /// misbehaving, and a Stop button that refuses to work because the link is
 /// unhealthy is a Stop button that fails when it is needed. `jarvis-client`
@@ -1037,7 +2321,7 @@ async fn post_task_control(
     app: &AppHandle,
     path: &str,
     body: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<serde_json::Value, String> {
     let base = jarvis_base(app);
     let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
         .post(format!("{base}{path}"))
@@ -1054,29 +2338,46 @@ async fn post_task_control(
         })?;
 
     let status = response.status();
-    if status.is_success() {
-        return Ok(());
-    }
     let detail = response.text().await.unwrap_or_default();
-    // A 404 is the expected answer from a backend that has not added these
-    // routes yet, and saying so beats a bare status code: these four are
-    // `docs/AUTONOMY-PROPOSALS.md` §3d's own proposed names, not confirmed
-    // against a backend that lives outside this repository.
+    if status.is_success() {
+        return Ok(serde_json::from_str(&detail).unwrap_or(serde_json::Value::Null));
+    }
+    // A 404 means this backend does not have `backend/task-control.patch`
+    // applied, and saying so beats a bare status code.
     if status.as_u16() == 404 {
         return Err(format!(
-            "this Jarvis backend has no `{path}` route, so there is nothing \
-             to send that to yet"
+            "this Jarvis backend has no `{path}` route - apply the backend \
+             patches (task-control.patch) to turn it on"
         ));
     }
-    Err(format!(
-        "the server answered HTTP {} to {path}: {}",
-        status.as_u16(),
-        detail.trim()
-    ))
+    Err(server_sentence(status.as_u16(), path, &detail))
+}
+
+/// The sentence a task-control route put in its `error` field, or the raw
+/// body when it did not send one. Those routes answer a 409 with a plain
+/// reason ("nothing is running or paused"), which reads better than JSON.
+fn server_sentence(code: u16, path: &str, body: &str) -> String {
+    let said = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string));
+    match said {
+        Some(reason) if !reason.trim().is_empty() => {
+            let mut s = reason.trim().to_string();
+            if let Some(first) = s.get(0..1) {
+                let upper = first.to_uppercase();
+                s.replace_range(0..1, &upper);
+            }
+            s
+        }
+        _ => format!("the server answered HTTP {code} to {path}: {}", body.trim()),
+    }
 }
 
 /// Pause, resume, or stop whatever Jarvis is running right now, and add a
-/// note to it — `docs/AUTONOMY-PROPOSALS.md` §3d.
+/// note to it — `docs/AUTONOMY-PROPOSALS.md` §3d, served by
+/// `backend/task-control.patch`. Stop and Pause need no approval card.
+/// Resume does not carry on by itself: the server raises one card listing
+/// the steps that are left, and runs them only if that card is approved.
 ///
 /// These four and [`amend_approval`] were invoked by `jarvis-link.js` long
 /// before they existed here, so every one of those buttons failed at the
@@ -1087,23 +2388,192 @@ async fn post_task_control(
 /// None of the four takes a task id, matching the phone and matching this
 /// project's own rule that "the current turn" is singular.
 #[tauri::command]
-pub async fn pause_task(app: AppHandle) -> Result<(), String> {
+pub async fn pause_task(app: AppHandle) -> Result<serde_json::Value, String> {
     post_task_control(&app, "/api/task/pause", serde_json::json!({})).await
 }
 
+/// The one task control held to rule 4 - "block acting when the event
+/// stream is stale" - because it is the one that makes something go again.
+/// It only raises an approval card, but that card should be answered by
+/// someone looking at a live queue. Checked here, not only in the webview,
+/// for the reason [`decide_approval`] gives: any window holding the
+/// capability reaches this command directly.
 #[tauri::command]
-pub async fn resume_task(app: AppHandle) -> Result<(), String> {
+pub async fn resume_task(app: AppHandle) -> Result<serde_json::Value, String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err("the event stream is stale, so resuming is held until it \
+                    reconnects - Stop still works"
+            .to_string());
+    }
     post_task_control(&app, "/api/task/resume", serde_json::json!({})).await
 }
 
 #[tauri::command]
-pub async fn stop_task(app: AppHandle) -> Result<(), String> {
+pub async fn stop_task(app: AppHandle) -> Result<serde_json::Value, String> {
     post_task_control(&app, "/api/task/stop", serde_json::json!({})).await
 }
 
+/// "Stop everything" (the owner's decision of 2026-09-25; the hotkey,
+/// `Alt+Shift+X` by default). Speech stops HERE first - every window that
+/// speaks is told at once, before the backend is asked, so a dead link never
+/// keeps Jarvis talking - then `POST /api/stop_all` stops the running task,
+/// the answer's remaining tools and every registered stopper
+/// (`backend/jarvis_stop_all.py`). A notification says what was stopped.
+///
+/// Never held: not on a stale stream (rule 4 blocks ACTING, and this is the
+/// opposite), not by App lock, not by a waiting card. It approves nothing
+/// and starts nothing; the route cannot either.
+pub fn stop_everything_now(app: &AppHandle) {
+    // First: a focus line still being made on the PC is dropped when it
+    // arrives (brain/focus.rs `play_callout`).
+    crate::brain::focus::note_stop_everything();
+    crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
+    // The HUD window is the backend's own page and speaks through the
+    // browser's speech engine; a fixed line, no payload.
+    if let Some(hud) = app.get_webview_window(crate::HUD_LABEL) {
+        if let Err(err) = hud
+            .eval("try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}")
+        {
+            eprintln!("[jarvis] could not stop the HUD's speech: {err}");
+        }
+    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let said = stop_everything_words(post_stop_all(&handle).await);
+        notify(&handle, STOP_EVERYTHING_TITLE, &said);
+    });
+}
+
+/// The notification's title, and the phone's button: the same words.
+pub const STOP_EVERYTHING_TITLE: &str = "Stop everything";
+
+async fn post_stop_all(app: &AppHandle) -> Result<serde_json::Value, String> {
+    const PATH: &str = "/api/stop_all";
+    let base = jarvis_base(app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .post(format!("{base}{PATH}"))
+        .headers(jarvis_headers(app)?)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        // The plain words both apps use for a PC that did not answer - never
+        // the address or the library's text (continuity audit 2026-09-26).
+        .map_err(|e| crate::plain_errors::unreachable_words(e.is_connect(), e.is_timeout()))?;
+    let status = response.status();
+    let detail = response.text().await.unwrap_or_default();
+    if status.is_success() {
+        return Ok(serde_json::from_str(&detail).unwrap_or(serde_json::Value::Null));
+    }
+    if status.as_u16() == 404 {
+        return Err(format!(
+            "this Jarvis backend has no `{PATH}` route - apply the backend \
+             patches (task-control.patch) to turn it on"
+        ));
+    }
+    Err(server_sentence(status.as_u16(), PATH, &detail))
+}
+
+/// Always true by the time the PC answers: speech stopped here first. The
+/// phone's `StopEverything.SPEECH` - the same words.
+pub const STOP_SPEECH: &str = "Stopped speaking.";
+/// The PC answered without a sentence of its own (`StopEverything.PC_SILENT`).
+pub const STOP_PC_SILENT: &str = "Jarvis stopped what it was doing.";
+/// The PC could not be asked (`StopEverything.NOT_REACHED`); why follows.
+pub const STOP_NOT_REACHED: &str = "Nothing else could be stopped.";
+
+/// What the notification says: speech is always stopped (that happened
+/// here), then the PC's own sentence - or why the PC could not be asked.
+/// The same sentences as the phone's button (`StopEverything.kt`).
+pub fn stop_everything_words(result: Result<serde_json::Value, String>) -> String {
+    match result {
+        Ok(v) => {
+            let said = v
+                .get("message")
+                .and_then(|m| m.as_str())
+                .map(str::trim)
+                .filter(|m| !m.is_empty())
+                .unwrap_or(STOP_PC_SILENT);
+            format!("{STOP_SPEECH} {said}")
+        }
+        Err(e) if e.contains("has no `/api/stop_all` route") => {
+            format!(
+                "{STOP_SPEECH} This PC's Jarvis cannot stop anything else yet - run \
+                 apply-patches.ps1 on the PC (stop-all.patch). The Stop button on a running \
+                 task still works."
+            )
+        }
+        Err(e) => {
+            let why = e.trim();
+            let mut why = why.to_string();
+            if let Some(first) = why.get(0..1) {
+                let upper = first.to_uppercase();
+                why.replace_range(0..1, &upper);
+            }
+            if !why.is_empty() && !why.ends_with(['.', '!', '?']) {
+                why.push('.');
+            }
+            format!("{STOP_SPEECH} {STOP_NOT_REACHED} {why}")
+                .trim_end()
+                .to_string()
+        }
+    }
+}
+
 #[tauri::command]
-pub async fn inject_task_note(app: AppHandle, note: String) -> Result<(), String> {
+pub async fn inject_task_note(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    note: String,
+) -> Result<serde_json::Value, String> {
+    refuse_widget_note_when_locked(&app, &window)?;
     post_task_control(&app, "/api/task/note", serde_json::json!({ "note": note })).await
+}
+
+/// App lock covers notes too (the owner's decision of 2026-09-26): the
+/// widget sits outside the lock, and a note steers what Jarvis does next,
+/// so with App lock on a note - to a running task or kept with a card - is
+/// added in the Jarvis bar, which asks Windows Hello first. Checked here,
+/// in the command, not only by the widget hiding its note rows.
+fn refuse_widget_note_when_locked(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
+    let from_widget = window.label() == windows::WIDGET_LABEL;
+    if crate::lock::widget_note_refused(from_widget, crate::lock::current(app).app_lock) {
+        return Err(crate::lock::WIDGET_NOTES_IN_BAR.to_string());
+    }
+    Ok(())
+}
+
+/// Asks the backend to switch power mode - `POST /api/power`
+/// (`backend/power-mode.patch`). Returns the server's own sentence.
+///
+/// Going quieter always goes through; waking (`"active"`) is held while the
+/// event stream is stale - rule 4, "block acting when the event stream is
+/// stale" - since it is the direction that makes Jarvis do more. The server
+/// still decides through its gate (`power_manage`).
+pub async fn set_power_mode(app: &AppHandle, mode: &str) -> Result<String, String> {
+    if mode == "active" && app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "the event stream is stale, so waking Jarvis is held until it \
+                    reconnects - going quieter still works"
+                .to_string(),
+        );
+    }
+    let out = post_task_control(app, "/api/power", serde_json::json!({ "mode": mode })).await;
+    match out {
+        Ok(v) => Ok(v
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("The power mode request was sent.")
+            .to_string()),
+        Err(e) if e.contains("has no `/api/power` route") => Err(
+            "this Jarvis backend cannot change power mode yet - apply the backend \
+             patches (power-mode.patch) to turn it on"
+                .to_string(),
+        ),
+        Err(e) => Err(e),
+    }
 }
 
 /// Percent-encodes one path segment.
@@ -1134,7 +2604,13 @@ fn encode_path_segment(raw: &str) -> String {
 /// an id carrying a `/` or a `?` would otherwise address a different route
 /// entirely.
 #[tauri::command]
-pub async fn amend_approval(app: AppHandle, id: String, note: String) -> Result<(), String> {
+pub async fn amend_approval(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    id: String,
+    note: String,
+) -> Result<serde_json::Value, String> {
+    refuse_widget_note_when_locked(&app, &window)?;
     let encoded = encode_path_segment(&id);
     post_task_control(
         &app,
@@ -1171,40 +2647,85 @@ pub struct DesktopTelemetry {
     pub gpu_util_percent: Option<u32>,
     pub vram_used_mb: Option<u64>,
     pub vram_total_mb: Option<u64>,
+    /// EVERY card `nvidia-smi` lists, in its order (I12, 2026-09-26). The
+    /// four `gpu_*`/`vram_*` fields above are the first card's, for the
+    /// meters; the widget lists each card on its own line when there are
+    /// two or more, so the second card is never hidden behind the first.
+    pub gpus: Vec<GpuSample>,
     /// `"local"` or `"cloud"`, mirroring the quickbar's route badge.
     pub route_lane: Option<String>,
     pub sampled_at: u128,
 }
 
-/// What `nvidia-smi` reports, with each field absent when the driver omits it.
-#[derive(Debug, Clone, Copy, Default)]
-struct GpuSample {
-    temp_c: Option<u32>,
-    util_percent: Option<u32>,
-    vram_used_mb: Option<u64>,
-    vram_total_mb: Option<u64>,
+/// What `nvidia-smi` reports for one card, with each field absent when the
+/// driver omits it (`[N/A]`, `[Not Supported]`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuSample {
+    pub index: Option<u32>,
+    pub name: String,
+    pub temp_c: Option<u32>,
+    pub util_percent: Option<u32>,
+    pub vram_used_mb: Option<u64>,
+    pub vram_total_mb: Option<u64>,
+    pub power_w: Option<u32>,
+}
+
+/// The fields asked for. `name` is LAST so a name could never shift the
+/// numbers: everything after the sixth comma is the name.
+const GPU_QUERY: &str =
+    "--query-gpu=index,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,name";
+
+/// Every card's line of `nvidia-smi --query-gpu=GPU_QUERY`, in order. A line
+/// that is not a card (no index) is skipped, never guessed at. It used to read
+/// only the FIRST line, so a second card was never shown at all (the
+/// feasibility audit, I12).
+pub fn parse_gpu_lines(text: &str) -> Vec<GpuSample> {
+    let mut out = Vec::new();
+    for row in text.lines() {
+        let fields: Vec<&str> = row.splitn(7, ',').map(|f| f.trim()).collect();
+        if fields.len() < 7 {
+            continue;
+        }
+        let Ok(index) = fields[0].parse::<u32>() else {
+            continue;
+        };
+        let power = fields[5]
+            .parse::<f64>()
+            .ok()
+            .filter(|w| w.is_finite() && *w >= 0.0)
+            .map(|w| w.round() as u32);
+        out.push(GpuSample {
+            index: Some(index),
+            name: fields[6].to_string(),
+            temp_c: fields[1].parse().ok(),
+            util_percent: fields[2].parse().ok(),
+            vram_used_mb: fields[3].parse().ok(),
+            vram_total_mb: fields[4].parse().ok(),
+            power_w: power,
+        });
+    }
+    out
 }
 
 /// Set to false the first time `nvidia-smi` is missing, so a machine without an
 /// NVIDIA GPU does not pay for a failed process spawn every few seconds.
 static GPU_PROBE_ENABLED: AtomicBool = AtomicBool::new(true);
 
-/// Reads temperature, utilisation and VRAM from `nvidia-smi`.
+/// Reads temperature, utilisation, VRAM and power from `nvidia-smi`, for
+/// every card.
 ///
 /// A process spawn rather than a crate: NVML bindings would add a dependency
-/// and a runtime DLL requirement to read four numbers that the driver already
+/// and a runtime DLL requirement to read a few numbers that the driver already
 /// prints. `CREATE_NO_WINDOW` matters — without it a console window flashes on
 /// every sample, which on a 3-second timer is unusable.
-fn sample_gpu() -> Option<GpuSample> {
+fn sample_gpus() -> Vec<GpuSample> {
     if !GPU_PROBE_ENABLED.load(Ordering::Relaxed) {
-        return None;
+        return Vec::new();
     }
 
     let mut command = std::process::Command::new("nvidia-smi");
-    command.args([
-        "--query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total",
-        "--format=csv,noheader,nounits",
-    ]);
+    command.args([GPU_QUERY, "--format=csv,noheader,nounits"]);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -1221,32 +2742,23 @@ fn sample_gpu() -> Option<GpuSample> {
     let Some(output) = run_with_deadline(command, GPU_PROBE_TIMEOUT) else {
         // Timed out and was killed. Do NOT latch: a driver that is busy now is
         // usually fine on the next tick.
-        return None;
+        return Vec::new();
     };
     let output = match output {
         Ok(output) if output.status.success() => output,
         // The binary is not here. That is permanent, so stop asking.
         Err(_) => {
             GPU_PROBE_ENABLED.store(false, Ordering::Relaxed);
-            return None;
+            return Vec::new();
         }
         // It ran and failed. `nvidia-smi` exits non-zero transiently — a
         // driver reload, `GPU is lost`, an ECC state, a query timed out on a
         // saturated card — and latching on one of those killed GPU telemetry
         // for the rest of the session.
-        Ok(_) => return None,
+        Ok(_) => return Vec::new(),
     };
 
-    let text = String::from_utf8_lossy(&output.stdout);
-    let row = text.lines().next()?;
-    let mut fields = row.split(',').map(|f| f.trim());
-
-    Some(GpuSample {
-        temp_c: fields.next().and_then(|v| v.parse().ok()),
-        util_percent: fields.next().and_then(|v| v.parse().ok()),
-        vram_used_mb: fields.next().and_then(|v| v.parse().ok()),
-        vram_total_mb: fields.next().and_then(|v| v.parse().ok()),
-    })
+    parse_gpu_lines(&String::from_utf8_lossy(&output.stdout))
 }
 
 /// How long `nvidia-smi` gets before it is treated as not answering.
@@ -1304,7 +2816,7 @@ fn run_with_deadline(
     }
 }
 
-/// Samples CPU, RAM and (when present) the GPU.
+/// Samples CPU, RAM and (when present) every GPU.
 ///
 /// The [`System`] handle is reused across calls because `sysinfo` derives CPU
 /// percentages from the delta between two refreshes; a fresh one every tick
@@ -1316,18 +2828,58 @@ pub fn sample_telemetry(
     system.refresh_cpu_usage();
     system.refresh_memory();
 
-    let gpu = sample_gpu().unwrap_or_default();
+    let gpus = sample_gpus();
+    let first = gpus.first().cloned().unwrap_or_default();
 
     DesktopTelemetry {
         cpu_percent: system.global_cpu_usage(),
         ram_used_mb: system.used_memory() / (1024 * 1024),
         ram_total_mb: system.total_memory() / (1024 * 1024),
-        gpu_temp_c: gpu.temp_c,
-        gpu_util_percent: gpu.util_percent,
-        vram_used_mb: gpu.vram_used_mb,
-        vram_total_mb: gpu.vram_total_mb,
+        gpu_temp_c: first.temp_c,
+        gpu_util_percent: first.util_percent,
+        vram_used_mb: first.vram_used_mb,
+        vram_total_mb: first.vram_total_mb,
+        gpus,
         route_lane,
         sampled_at: now_ms(),
+    }
+}
+
+#[cfg(test)]
+mod gpu_lines_tests {
+    use super::parse_gpu_lines;
+
+    /// Two cards, in `nvidia-smi --format=csv,noheader,nounits` form (made up):
+    /// the RTX 2080 SUPER busy, the RTX 2060 idle with no power reading.
+    const TWO: &str = "0, 71, 93, 6120, 8192, 201.35, NVIDIA GeForce RTX 2080 SUPER\n\
+                       1, 38, 0, 310, 12288, [N/A], NVIDIA GeForce RTX 2060\n";
+
+    #[test]
+    fn every_card_is_read_not_only_the_first_line() {
+        let got = parse_gpu_lines(TWO);
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].name, "NVIDIA GeForce RTX 2080 SUPER");
+        assert_eq!(got[0].temp_c, Some(71));
+        assert_eq!(got[0].power_w, Some(201));
+        assert_eq!(got[1].index, Some(1));
+        assert_eq!(got[1].name, "NVIDIA GeForce RTX 2060");
+        assert_eq!(got[1].vram_total_mb, Some(12288));
+        assert_eq!(got[1].power_w, None, "[N/A] is no reading, not zero");
+    }
+
+    #[test]
+    fn a_line_that_is_not_a_card_is_skipped() {
+        assert!(parse_gpu_lines("No devices were found\n").is_empty());
+        assert!(parse_gpu_lines("").is_empty());
+        let got = parse_gpu_lines(&format!("garbage\n{TWO}"));
+        assert_eq!(got.len(), 2);
+    }
+
+    #[test]
+    fn a_comma_in_a_name_cannot_move_the_numbers() {
+        let got = parse_gpu_lines("0, 50, 10, 100, 8192, 90.0, Card, with a comma\n");
+        assert_eq!(got[0].name, "Card, with a comma");
+        assert_eq!(got[0].vram_total_mb, Some(8192));
     }
 }
 
@@ -1397,6 +2949,60 @@ pub fn get_widget_prefs(app: AppHandle) -> windows::WidgetPrefs {
     app.state::<windows::WidgetState>().snapshot()
 }
 
+/// Whether App lock is on - all the widget needs to know to show an approval
+/// card's title only and turn its Approve into "Approve in the Jarvis bar"
+/// (apps security audit M3). A yes or no, nothing else from the settings.
+/// Changes arrive as the `security-changed` event every window hears.
+#[tauri::command]
+pub fn get_app_lock(app: AppHandle) -> bool {
+    crate::lock::current(&app).app_lock
+}
+
+/// The widget's Approve while App lock is on or on an email (where an
+/// email can be read whole), and "Open the card" in
+/// Settings and the Brain (card-link.js): opens the Jarvis bar on the
+/// waiting card. The bar is behind the lock, so Windows Hello is asked
+/// before it shows, and the approval is made there. Decides nothing.
+///
+/// `id` names the card to show (the one the owner's click just raised);
+/// without one, or once it is no longer waiting, the bar shows the first.
+/// Only an id is passed on - the bar reads the card itself from its queue.
+#[tauri::command]
+pub fn open_approval_in_quickbar(app: AppHandle, id: Option<String>) -> Result<(), String> {
+    windows::show_quickbar(&app)?;
+    let id = id
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s.len() <= 200);
+    crate::emit_quickbar(&app, crate::events::SHOW_APPROVAL, id);
+    Ok(())
+}
+
+/// Whether the widget's Approve for `id` must go to the Jarvis bar instead:
+/// the card is an email (action `send_email`), OR this process has not read
+/// that card at all yet - an id it cannot see might be an email, so it
+/// fails closed, the same way the Windows Hello check treats an unknown card
+/// as risky (2026-09-26 bug audit, desktop finding 5).
+fn waiting_email(app: &AppHandle, id: &str) -> bool {
+    let pending = app.state::<crate::stream::StreamState>().pending();
+    let card = pending
+        .iter()
+        .find(|item| crate::stream::approval_id(item).as_deref() == Some(id));
+    match card {
+        Some(item) => crate::email_sending::is_email(item),
+        None => true,
+    }
+}
+
+/// [`open_approval_in_quickbar`] from inside `answer_approval`, where a
+/// failure to open is only logged: the refusal is what the caller needs.
+fn show_approval_in_quickbar(app: &AppHandle) {
+    if let Err(err) = windows::show_quickbar(app) {
+        eprintln!("[jarvis] could not open the Jarvis bar for an approval: {err}");
+        return;
+    }
+    crate::emit_quickbar(app, crate::events::SHOW_APPROVAL, ());
+}
+
 /// Summons the quickbar with a note prefix already armed.
 ///
 /// The widget cannot emit Tauri events itself without a broader capability
@@ -1404,51 +3010,97 @@ pub fn get_widget_prefs(app: AppHandle) -> windows::WidgetPrefs {
 /// "arm a note", shared with the `Alt+Shift+N` hotkey.
 #[tauri::command]
 pub fn prefill_quickbar(app: AppHandle, target: String) -> Result<(), String> {
-    let target = match target.trim().to_ascii_lowercase().as_str() {
-        "joplin" | "vault" => "joplin",
-        _ => "logseq",
-    };
+    let target = note_target(&target)?;
     windows::show_quickbar(&app)?;
     crate::emit_quickbar(&app, crate::events::QUICK_NOTE_SUMMON, target);
     Ok(())
 }
 
-/// Files a note without opening the quickbar.
-///
-/// The widget's capture field is a one-shot: it posts the turn with
-/// `stream: false` and returns whatever the server replies, so the widget can
-/// flash a confirmation without standing up a stream it would only close.
+/// The backend's name for a note target. An unknown one is refused rather
+/// than filed somewhere the owner did not pick (it used to become Logseq).
+pub(crate) fn note_target(target: &str) -> Result<&'static str, String> {
+    match target.trim().to_ascii_lowercase().as_str() {
+        "logseq" | "log" | "journal" => Ok("logseq"),
+        "joplin" | "jop" => Ok("joplin"),
+        // "vault" meant Joplin until 2026-09-24; it is Obsidian's word.
+        "obsidian" | "obs" | "daily" | "vault" => Ok("obsidian"),
+        other => Err(format!(
+            "\"{other}\" is not a note app Jarvis knows - Logseq, Joplin or Obsidian"
+        )),
+    }
+}
+
+/// Which note apps this PC is set up for: `GET /api/notes/capture` with no
+/// id (`backend/note-capture.patch`, `jarvis_note_capture.available_targets`).
+/// The answer is `{"ok": true, "targets": ["logseq", ...]}` - names only,
+/// never a path or a token. The windows show only those; `note-capture.js`
+/// reads it, and says why when it cannot.
 #[tauri::command]
-pub async fn capture_note(app: AppHandle, target: String, text: String) -> Result<String, String> {
+pub async fn note_targets(app: AppHandle) -> Result<serde_json::Value, String> {
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{}/api/notes/capture", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("unable to reach `/api/notes/capture`: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    note_targets_answer(status, &body)
+}
+
+/// [`note_targets`]'s reading of the server's answer, on its own so it can be
+/// tested against what the backend really sends.
+pub(crate) fn note_targets_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
+    if (200..300).contains(&status) {
+        if let Some(v) = parsed.filter(|v| v.get("targets").is_some_and(|t| t.is_array())) {
+            return Ok(v);
+        }
+    }
+    if status == 404 || (200..300).contains(&status) {
+        // A backend from before this: a bare GET was "no note with that id".
+        return Err(
+            "this PC's Jarvis does not say which note apps are set up yet - \
+                    copy the new backend files in (run apply-patches.ps1)"
+                .to_string(),
+        );
+    }
+    Err(server_sentence(status, "/api/notes/capture", body))
+}
+
+/// Files a note in Logseq, Joplin or Obsidian - the owner's own words, no model.
+///
+/// Posts to `/api/notes/capture` (`backend/note-capture.patch`). The backend
+/// writes through `jarvis_gate` under the owner's own action names
+/// (`append_logseq_journal`, `create_joplin_note`), so the tier in their
+/// `jarvis-framework.toml` decides whether an approval card comes first.
+///
+/// This used to post a chat turn asking the model to call two tools that
+/// existed nowhere, and could only report the model's own account of what it
+/// did. Now the answer is the backend's: `state` is `"filed"` (and it read
+/// the note back), `"waiting"` (a card is up - poll [`capture_note_status`]),
+/// `"not_filed"` (said no, nobody answered, refused - with the reason) or
+/// `"failed"`. The widget and the quickbar say exactly that.
+#[tauri::command]
+pub async fn capture_note(
+    app: AppHandle,
+    target: String,
+    text: String,
+) -> Result<serde_json::Value, String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("nothing to capture".to_string());
     }
-    let target = match target.trim().to_ascii_lowercase().as_str() {
-        "joplin" | "vault" => "joplin",
-        _ => "logseq",
-    };
-    let instruction = if target == "joplin" {
-        "Route this turn to the Joplin personal vault via create_joplin_note."
-    } else {
-        "Route this turn to the Logseq daily journal via append_logseq_journal. \
-         Capture it verbatim unless asked to summarise."
-    };
-
-    let payload = serde_json::json!({
-        "messages": [
-            { "role": "system", "content": instruction },
-            { "role": "user", "content": text },
-        ],
-        "has_image": false,
-        "stream": false,
-        // No `note_target`: the server has never read one. The system message
-        // above is what actually routes the capture.
-        "auto": true,
-    });
-
+    let target = note_target(&target)?;
+    let payload = serde_json::json!({ "target": target, "text": text });
     let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
-        .post(format!("{}/api/chat", jarvis_base(&app)))
+        .post(format!("{}/api/notes/capture", jarvis_base(&app)))
         .headers(jarvis_headers(&app)?)
         .json(&payload)
         .send()
@@ -1457,82 +3109,1571 @@ pub async fn capture_note(app: AppHandle, target: String, text: String) -> Resul
             if e.is_connect() {
                 format!("could not reach the Jarvis server at {}", jarvis_base(&app))
             } else {
-                format!("capture failed: {e}")
+                format!("the note could not be sent: {e}")
             }
         })?;
-
-    let status = response.status();
-    let body = response.text().await.unwrap_or_default();
-    if !status.is_success() {
-        return Err(format!(
-            "the server answered HTTP {} to the capture: {}",
-            status.as_u16(),
-            body.trim()
-        ));
-    }
-    // HTTP 200 means the CHAT completed. It does not mean a note was written:
-    // this route asks a model to call `append_logseq_journal`, and a model can
-    // decline, lack the tool, or answer in prose. `/api/chat` returns no
-    // tool-execution receipt, so nothing here can honestly say "filed".
-    //
-    // What can be returned is the model's own account of what it did, which is
-    // the closest thing to evidence the API offers. The widget shows it instead
-    // of asserting a result.
-    Ok(assistant_reply(&body))
+    note_answer(response, "/api/notes/capture").await
 }
 
-/// Pulls the assistant's text out of whatever shape `/api/chat` answered with.
+/// How a note filed with [`capture_note`] ended. Never carries the note's text.
+#[tauri::command]
+pub async fn capture_note_status(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err("that note has no id to look up".to_string());
+    }
+    let path = format!("/api/notes/capture?id={}", encode_path_segment(id));
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{}{path}", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("unable to reach `/api/notes/capture`: {e}")
+            }
+        })?;
+    note_answer(response, "/api/notes/capture").await
+}
+
+/// The capture routes answer 200 (finished) or 202 (waiting) with the job;
+/// anything else becomes a sentence.
+async fn note_answer(response: reqwest::Response, path: &str) -> Result<serde_json::Value, String> {
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if status.is_success() {
+        return serde_json::from_str(&body)
+            .map_err(|_| "the server's answer about the note could not be read".to_string());
+    }
+    if status.as_u16() == 404 && !body.contains("\"state\"") {
+        return Err(
+            "this Jarvis backend cannot file notes yet - apply the backend \
+                    patches (note-capture.patch) to turn it on. Nothing was filed."
+                .to_string(),
+        );
+    }
+    // A refusal the server explained ("no Logseq graph folder at ...", "no
+    // Joplin token is set ...") carries a `message`; prefer it.
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+        if let Some(m) = v.get("message").and_then(|m| m.as_str()) {
+            return Err(m.to_string());
+        }
+    }
+    Err(server_sentence(status.as_u16(), path, &body))
+}
+
+// ---------------------------------------------------------------------------
+// The second graphics card (backend/second-card.patch, docs/SECOND-CARD.md)
+// ---------------------------------------------------------------------------
+
+/// The one route both second-card commands use, and `vision.rs` reads too.
+pub(crate) const SECOND_CARD_PATH: &str = "/api/second-card";
+
+/// What a backend without `jarvis_second_card.py` is told to do about it.
+/// The page shows this sentence; it never sees a status code or a body.
+pub(crate) const SECOND_CARD_UPDATE: &str =
+    "This PC's Jarvis does not have the second graphics card part yet. \
+     Update the backend by running apply-patches.ps1, then open this again.";
+
+/// A transport failure in plain words. Never the request, never a header:
+/// the only thing named is the address the owner typed in Settings.
+fn second_card_unreachable(err: &reqwest::Error, _base: &str) -> String {
+    // The plain words both apps use (plain_errors.rs, from the one list in
+    // tools/gen_plain_error_cases.py): what happened, then what to do.
+    crate::plain_errors::unreachable_words(err.is_connect(), err.is_timeout())
+}
+
+/// The backend's own sentence (`{"error": "..."}`), first letter raised,
+/// words unchanged - JARVIS-API.md section 12 says to show it word for word.
+/// With no sentence, a plain line with the status code, never the body.
+fn second_card_refusal(code: u16, body: &str) -> String {
+    let said = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string));
+    match said {
+        Some(reason) if !reason.trim().is_empty() => {
+            let mut s = reason.trim().to_string();
+            if let Some(first) = s.get(0..1) {
+                let upper = first.to_uppercase();
+                s.replace_range(0..1, &upper);
+            }
+            s
+        }
+        _ => format!("Jarvis refused the request (HTTP {code})."),
+    }
+}
+
+/// [`second_card_refusal`] under a name other routes can use: the backend's
+/// own `error` sentence, first letter raised, or a plain line with the code.
+/// Settings' Voice section and "This backend supports" use it.
+pub(crate) fn backend_refusal(code: u16, body: &str) -> String {
+    second_card_refusal(code, body)
+}
+
+/// [`second_card_unreachable`] under a name other routes can use.
+pub(crate) fn backend_unreachable(err: &reqwest::Error, base: &str) -> String {
+    second_card_unreachable(err, base)
+}
+
+/// Whether a 404/503 means "this backend has no second-card module": a 404
+/// (no such route - an older backend), or the route's own 503
+/// `{"available": false}` when `jarvis_second_card.py` is missing. A POST 503
+/// with an `error` sentence and no `available: false` is a real refusal ("no
+/// capable second card"), and is NOT this.
+fn second_card_missing(code: u16, body: &str) -> bool {
+    if code == 404 {
+        return true;
+    }
+    code == 503
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| v.get("available").and_then(|a| a.as_bool()))
+            == Some(false)
+}
+
+/// [`get_second_card`]'s reading of the server's answer, on its own so it can
+/// be tested against `tests/fixtures/second-card-cases.json` (the real
+/// `status()` output).
 ///
-/// Non-streaming OpenAI puts it at `choices[0].message.content`; the streaming
-/// shape uses `delta`; some proxies flatten it to a bare `content` or
-/// `response`. Anything unrecognised comes back empty rather than as a slice of
-/// raw JSON — a caller that shows this to a person needs a sentence or nothing.
-fn assistant_reply(body: &str) -> String {
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(body) else {
-        return String::new();
+/// * 200 with `detected` and `features` - `status()` itself, passed on as is.
+/// * 404, or 503 `{"available": false}` - `{"available": false, "why":
+///   "<update the backend>"}`, so the page says what to do rather than error.
+/// * anything else - the backend's own sentence, or a plain line.
+pub(crate) fn second_card_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
+        return parsed
+            .filter(|v| {
+                v.get("detected").is_some_and(|d| d.is_object())
+                    && v.get("features").is_some_and(|f| f.is_array())
+            })
+            .ok_or_else(|| {
+                "Jarvis answered, but not in a way this app can read. \
+                 Update the backend by running apply-patches.ps1."
+                    .to_string()
+            });
+    }
+    if second_card_missing(status, body) {
+        return Ok(serde_json::json!({ "available": false, "why": SECOND_CARD_UPDATE }));
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// [`set_second_card`]'s reading of the server's answer. 200 is the backend's
+/// `{"ok", "enabled", "pending", "message"}` as is: `pending: true` means an
+/// approval card is up and NOTHING is on yet. Every refusal (409 a card
+/// already waits, 400 the main switch or a needed feature is off, 503 no
+/// capable card) is the backend's own sentence.
+pub(crate) fn second_card_change_answer(
+    status: u16,
+    body: &str,
+) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| "Jarvis answered, but not in a way this app can read.".to_string());
+    }
+    if second_card_missing(status, body) {
+        return Err(SECOND_CARD_UPDATE.to_string());
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// A switch name the backend could know: `master` or a feature id, lower-case
+/// letters and underscores only. The backend refuses an unknown one with its
+/// own sentence; this only keeps anything else from being sent at all.
+pub(crate) fn second_card_feature(feature: &str) -> Result<&str, String> {
+    let f = feature.trim();
+    if f.is_empty() || f.len() > 40 || !f.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') {
+        return Err("That is not one of the second graphics card's switches.".to_string());
+    }
+    Ok(f)
+}
+
+/// What the second graphics card could do on this PC, and which of its
+/// switches are on: `GET /api/second-card` (`jarvis_second_card.status()`).
+///
+/// Settings window only (permissions/surfaces.toml, `settings-surface`). The
+/// answer names the cards and their hardware ids (`GPU-...`) and carries the
+/// one-line PowerShell `pin_command`; it never carries a token. The token goes
+/// out in `X-Jarvis-Token` through [`jarvis_headers`], with `X-Jarvis-Client:
+/// hud`, the same as every other call to Jarvis, and is never logged or put in
+/// an error.
+#[tauri::command]
+pub async fn get_second_card(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}{SECOND_CARD_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    second_card_answer(status, &body)
+}
+
+/// One second-card switch on or off: `POST /api/second-card` with
+/// `{"feature", "enabled"}`.
+///
+/// This approves nothing. ON only raises one approval card on the PC and the
+/// phone (action `second_card_enable`, tier `ask`), and the answer says
+/// `pending: true` until the owner decides it there. OFF is immediate, because
+/// it only narrows what runs. There is no form that sends more than one
+/// switch. Settings window only, like [`get_second_card`].
+///
+/// ON is held while the event stream is stale - rule 4, the same
+/// one-direction hold as [`set_big_model`]: the card it raises should be
+/// answered by someone looking at a live queue. OFF always goes through.
+#[tauri::command]
+pub async fn set_second_card(
+    app: AppHandle,
+    feature: String,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    let feature = second_card_feature(&feature)?;
+    if enabled && app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be turned on until \
+             it does. Turning things off still works."
+                .to_string(),
+        );
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{SECOND_CARD_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "feature": feature, "enabled": enabled }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    second_card_change_answer(status, &body)
+}
+
+// ---------------------------------------------------------------------------
+// "This backend supports": the capabilities GET /api/version reports
+// ---------------------------------------------------------------------------
+
+/// Whether one `capabilities` entry means "present" - the phone's
+/// `asCapabilityFlag` (ApiModels.kt), so both apps show the same list.
+///
+/// `true`, a non-empty object (a capability that carries detail, like
+/// `power`), or a non-empty string other than "false". Anything else -
+/// `false`, `{}`, a number, `null`, a list - is absent: a client that hides
+/// what it could have shown is a smaller failure than one that shows what
+/// is not there.
+pub(crate) fn capability_present(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Bool(b) => *b,
+        serde_json::Value::String(s) => !s.is_empty() && !s.eq_ignore_ascii_case("false"),
+        serde_json::Value::Object(m) => !m.is_empty(),
+        _ => false,
+    }
+}
+
+/// [`get_backend_capabilities`]'s reading of `GET /api/version`: the
+/// server's name, the API number and two sorted lists of capability NAMES -
+/// what it has and what it reports not having. Only the names leave here;
+/// what a capability carries (`power` carries the mode and quiet hours) is
+/// not passed on, because the page shows names only.
+pub(crate) fn capabilities_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if !(200..300).contains(&status) {
+        if status == 404 {
+            return Err(
+                "Something answered at that address, but it is not a Jarvis server that \
+                 reports what it supports."
+                    .to_string(),
+            );
+        }
+        return Err(backend_refusal(status, body));
+    }
+    let version = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .filter(|v| v.is_object())
+        .ok_or_else(|| "Jarvis answered, but not in a way this app can read.".to_string())?;
+    let mut on = Vec::new();
+    let mut off = Vec::new();
+    if let Some(caps) = version.get("capabilities").and_then(|c| c.as_object()) {
+        for (name, value) in caps {
+            if capability_present(value) {
+                on.push(name.clone());
+            } else {
+                off.push(name.clone());
+            }
+        }
+    }
+    on.sort();
+    off.sort();
+    Ok(serde_json::json!({
+        "server": version.get("server").and_then(|s| s.as_str()).unwrap_or(""),
+        "api": version.get("api").and_then(|a| a.as_i64()),
+        "on": on,
+        "off": off,
+    }))
+}
+
+/// What the quickbar says when the owner turns on a temporary chat and the
+/// PC's backend has no such thing (JARVIS-API.md section 18.1). The phone
+/// says the same (`TemporaryChat.UNAVAILABLE`).
+pub(crate) const TEMPORARY_UNAVAILABLE: &str = "Temporary chat isn't available on this PC's \
+     version of Jarvis, so nothing was sent. Run apply-patches.ps1 on the PC to update it.";
+
+/// Whether `GET /api/version`'s answer says the running server has a
+/// temporary chat: `capabilities.temporary_chat` present, read the way the
+/// phone reads a capability. Anything else - an older server, an unreadable
+/// answer, an error status - is "no": a temporary chat that is not one would
+/// use, learn from and keep what the owner said.
+pub(crate) fn temporary_chat_in_version(status: u16, body: &str) -> bool {
+    (200..300).contains(&status)
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| {
+                v.get("capabilities")
+                    .and_then(|c| c.get("temporary_chat"))
+                    .cloned()
+            })
+            .is_some_and(|v| capability_present(&v))
+}
+
+/// Whether `GET /api/version`'s answer says the backend asks Windows Hello
+/// itself for a risky approval made on its own PC: `capabilities.owner_check`
+/// is `"backend"` (owner-check.patch, docs/APPROVAL-GAP-DESIGN.md step 1).
+/// Anything else - an older backend, an unreadable answer, an error status -
+/// is "no", and this app keeps asking Windows Hello itself, as before.
+pub(crate) fn owner_check_in_version(status: u16, body: &str) -> bool {
+    (200..300).contains(&status)
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| {
+                v.get("capabilities")
+                    .and_then(|c| c.get("owner_check"))
+                    .and_then(|o| o.as_str().map(str::to_string))
+            })
+            .is_some_and(|o| o == "backend")
+}
+
+/// [`owner_check_in_version`], asked of the running backend. Never an error:
+/// a backend that cannot say is one that does not ask.
+pub(crate) async fn backend_owner_check(app: &AppHandle) -> bool {
+    let base = jarvis_base(app);
+    let Ok(client) = jarvis_client(Some(APPROVAL_TIMEOUT)) else {
+        return false;
     };
-    let choice = json.get("choices").and_then(|c| c.get(0));
-    let text = choice
-        .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))
-        .or_else(|| {
-            choice
-                .and_then(|c| c.get("delta"))
-                .and_then(|d| d.get("content"))
+    let Ok(headers) = jarvis_headers(app) else {
+        return false;
+    };
+    match client
+        .get(format!("{base}/api/version"))
+        .headers(headers)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let body = response.text().await.unwrap_or_default();
+            owner_check_in_version(status, &body)
+        }
+        Err(_) => false,
+    }
+}
+
+/// Whether this app talks to the backend on this PC itself: the address in
+/// use is loopback (`localhost`, `127.x.x.x`, `::1`). The backend asks
+/// Windows Hello only for approvals that reach it from its own PC, so only
+/// then may this app leave the asking to it.
+pub(crate) fn base_is_this_pc(app: &AppHandle) -> bool {
+    base_is_loopback(&jarvis_base(app))
+}
+
+/// The backend's own sentence for an Approve it refused on the owner-check
+/// (owner-check.patch): a 403 or 503 whose body carries `owner_check` and an
+/// `error`. It is shown as it is - "Windows Hello is not set up on this PC,
+/// ..." - rather than inside "the server answered HTTP 403". A 409 keeps the
+/// usual form, which the windows read as "no longer waiting".
+pub(crate) fn owner_check_refusal(status: u16, body: &str) -> Option<String> {
+    if !matches!(status, 403 | 503) {
+        return None;
+    }
+    let v = serde_json::from_str::<serde_json::Value>(body).ok()?;
+    v.get("owner_check")?;
+    v.get("error")
+        .and_then(|e| e.as_str())
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .map(str::to_string)
+}
+
+async fn temporary_chat_supported(app: &AppHandle) -> Result<bool, String> {
+    let base = jarvis_base(app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}/api/version"))
+        .headers(jarvis_headers(app)?)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    Ok(temporary_chat_in_version(status, &body))
+}
+
+/// Can this PC hold a temporary chat? The quickbar asks when the owner turns
+/// one on, and says [`TEMPORARY_UNAVAILABLE`] rather than pretend. Read only.
+#[tauri::command]
+pub async fn temporary_chat_available(app: AppHandle) -> Result<bool, String> {
+    temporary_chat_supported(&app).await
+}
+
+/// What the Jarvis server says it supports: `GET /api/version`'s
+/// `capabilities`, as two lists of names - the list the phone shows under
+/// "This backend". Read only.
+///
+/// Settings window only (permissions/surfaces.toml, `settings-surface`). The
+/// token goes out in `X-Jarvis-Token` through [`jarvis_headers`], with
+/// `X-Jarvis-Client: hud`, like every other call to Jarvis, and is never
+/// logged or put in an error.
+#[tauri::command]
+pub async fn get_backend_capabilities(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}/api/version"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    capabilities_answer(status, &body)
+}
+
+#[cfg(test)]
+mod capabilities_tests {
+    use super::{
+        base_is_loopback, capabilities_answer, capability_present, owner_check_in_version,
+        owner_check_refusal,
+    };
+    use serde_json::json;
+
+    #[test]
+    fn only_a_backend_that_says_backend_asks_windows_hello_itself() {
+        let say = |v: serde_json::Value| v.to_string();
+        let with = say(json!({"capabilities": {"owner_check": "backend"}}));
+        assert!(owner_check_in_version(200, &with));
+        // Anything else: this app keeps asking itself, as before.
+        assert!(!owner_check_in_version(500, &with));
+        assert!(!owner_check_in_version(
+            200,
+            &say(json!({"capabilities": {"owner_check": false}}))
+        ));
+        assert!(!owner_check_in_version(
+            200,
+            &say(json!({"capabilities": {"owner_check": true}}))
+        ));
+        assert!(!owner_check_in_version(
+            200,
+            &say(json!({"capabilities": {}}))
+        ));
+        assert!(!owner_check_in_version(200, "not json"));
+    }
+
+    #[test]
+    fn only_a_loopback_address_is_this_pc() {
+        for yes in [
+            "http://127.0.0.1:4719",
+            "http://localhost:4719",
+            "http://LOCALHOST:4719/",
+            "http://[::1]:4719",
+            "http://127.0.0.2:4719",
+        ] {
+            assert!(base_is_loopback(yes), "{yes}");
+        }
+        for no in [
+            "http://100.64.0.5:4719",
+            "http://my-pc.tail1234.ts.net:4719",
+            "http://192.168.1.20:4719",
+            "not a url",
+            "",
+        ] {
+            assert!(!base_is_loopback(no), "{no}");
+        }
+    }
+
+    #[test]
+    fn the_backends_own_refusal_is_shown_as_it_is() {
+        let body = json!({"ok": false, "owner_check": "not_set_up",
+                          "error": "Windows Hello is not set up on this PC"})
+        .to_string();
+        assert_eq!(
+            owner_check_refusal(403, &body).as_deref(),
+            Some("Windows Hello is not set up on this PC")
+        );
+        assert!(owner_check_refusal(503, &body).is_some());
+        // A 409 keeps "the server answered HTTP 409", which the windows read
+        // as "no longer waiting"; other bodies are the usual error.
+        assert!(owner_check_refusal(409, &body).is_none());
+        assert!(owner_check_refusal(403, &json!({"error": "bad token"}).to_string()).is_none());
+        assert!(owner_check_refusal(403, "not json").is_none());
+    }
+
+    #[test]
+    fn present_means_what_it_means_on_the_phone() {
+        for yes in [
+            json!(true),
+            json!({"mode": "active"}),
+            json!("on"),
+            json!("yes"),
+        ] {
+            assert!(capability_present(&yes), "{yes} should count");
+        }
+        for no in [
+            json!(false),
+            json!({}),
+            json!(""),
+            json!("false"),
+            json!("FALSE"),
+            json!(1),
+            json!(null),
+            json!([true]),
+        ] {
+            assert!(!capability_present(&no), "{no} should not count");
+        }
+    }
+
+    #[test]
+    fn names_only_sorted_in_two_lists() {
+        let body = json!({
+            "api": 1,
+            "server": "jarvis_hud",
+            "capabilities": {
+                "voice": true,
+                "approvals": true,
+                "power": {"mode": "quiet", "why": "you set it", "quiet_hours": "22-7"},
+                "appearance": false,
+                "second_card": {},
+                "models": "true"
+            }
         })
-        .or_else(|| choice.and_then(|c| c.get("text")))
-        .or_else(|| json.get("content"))
-        .or_else(|| json.get("response"))
-        .and_then(|v| v.as_str())
-        .unwrap_or_default();
-    text.trim().to_string()
+        .to_string();
+        let got = capabilities_answer(200, &body).expect("reads");
+        assert_eq!(got["on"], json!(["approvals", "models", "power", "voice"]));
+        assert_eq!(got["off"], json!(["appearance", "second_card"]));
+        assert_eq!(got["server"], "jarvis_hud");
+        assert_eq!(got["api"], 1);
+        // What a capability carries does not leave: names only.
+        assert!(!got.to_string().contains("quiet_hours"));
+    }
+
+    #[test]
+    fn the_rebuilt_hello_reads_as_the_phone_would_read_it() {
+        // backend/rebuilt/jarvis_events.hello()'s `capabilities`, run on
+        // 2026-09-24 with none of the owner's own modules present (so most
+        // are false); `power` and `voice` shortened, their shape kept.
+        let body = json!({"api": 1, "server": "jarvis-hud", "capabilities": {
+            "approvals": false, "memory": true, "models": false, "skills": false,
+            "power": {"mode": "active", "why": "startup", "quiet_hours": false},
+            "voice": {"enabled": true, "mode": "owner", "enrolled": false},
+            "persona": false, "appearance": false, "connectors": {}
+        }})
+        .to_string();
+        let got = capabilities_answer(200, &body).expect("reads");
+        assert_eq!(got["on"], json!(["memory", "power", "voice"]));
+        assert_eq!(
+            got["off"],
+            json!([
+                "appearance",
+                "approvals",
+                "connectors",
+                "models",
+                "persona",
+                "skills"
+            ])
+        );
+    }
+
+    #[test]
+    fn an_old_or_odd_answer_is_a_sentence() {
+        let bare = capabilities_answer(200, r#"{"api": 1}"#).expect("reads");
+        assert_eq!(bare["on"], json!([]));
+        assert_eq!(bare["off"], json!([]));
+        assert!(capabilities_answer(200, "<html>").is_err());
+        let gone = capabilities_answer(404, "").unwrap_err();
+        assert!(gone.contains("not a Jarvis server"), "{gone}");
+        let refused = capabilities_answer(401, r#"{"error": "token required"}"#).unwrap_err();
+        assert_eq!(refused, "Token required");
+    }
+}
+
+#[cfg(test)]
+mod second_card_tests {
+    use super::{
+        second_card_answer, second_card_change_answer, second_card_feature, SECOND_CARD_UPDATE,
+    };
+
+    /// The real `status()` output, one per case, made by
+    /// `tools/gen_second_card_cases.py` - never hand-written here.
+    const CASES: &str = include_str!("../../tests/fixtures/second-card-cases.json");
+
+    fn cases() -> serde_json::Value {
+        serde_json::from_str(CASES).expect("second-card-cases.json is JSON")
+    }
+
+    #[test]
+    fn every_real_status_is_passed_on_unchanged() {
+        let doc = cases();
+        let all = doc["cases"].as_object().expect("cases");
+        assert!(all.len() >= 6, "fewer cases than the fixture promised");
+        for (name, status) in all {
+            let body = status.to_string();
+            let got = second_card_answer(200, &body).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(&got, status, "{name}");
+        }
+    }
+
+    #[test]
+    fn an_older_backend_is_told_to_update_not_shown_an_error() {
+        // 404: no such route. 503 {"available": false}: the patch is in but
+        // jarvis_second_card.py is missing (second-card.patch's own answer).
+        for (code, body) in [
+            (404, ""),
+            (404, "<html>Not Found</html>"),
+            (
+                503,
+                r#"{"available": false, "error": "ModuleNotFoundError: No module named 'jarvis_second_card'"}"#,
+            ),
+        ] {
+            let got = second_card_answer(code, body).expect("not an error");
+            assert_eq!(got["available"], false, "{code}");
+            assert_eq!(got["why"], SECOND_CARD_UPDATE);
+            assert!(!got.to_string().contains("ModuleNotFoundError"));
+            assert_eq!(
+                second_card_change_answer(code, body).unwrap_err(),
+                SECOND_CARD_UPDATE
+            );
+        }
+        assert!(SECOND_CARD_UPDATE.contains("apply-patches.ps1"));
+    }
+
+    #[test]
+    fn a_refusal_is_the_backends_own_sentence_never_its_json() {
+        // jarvis_second_card.request_change's real refusals.
+        let busy = r#"{"error": "a card to turn on \"Pictures\" is already waiting - approve or deny that one"}"#;
+        assert_eq!(
+            second_card_change_answer(409, busy).unwrap_err(),
+            "A card to turn on \"Pictures\" is already waiting - approve or deny that one"
+        );
+        let no_card = r#"{"error": "The second graphics card cannot be turned on: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."}"#;
+        let said = second_card_change_answer(503, no_card).unwrap_err();
+        assert!(said.starts_with("The second graphics card cannot be turned on"));
+        assert_ne!(
+            said, SECOND_CARD_UPDATE,
+            "a real 503 refusal read as 'update'"
+        );
+        // No sentence: a plain line, and never the body.
+        let odd = second_card_answer(500, "<html>boom</html>").unwrap_err();
+        assert!(!odd.contains("<html>") && odd.contains("500"), "{odd}");
+        // A 200 that is not status() is not passed on.
+        assert!(second_card_answer(200, r#"{"ok": true}"#).is_err());
+        assert!(second_card_answer(200, "not json").is_err());
+    }
+
+    #[test]
+    fn on_is_pending_until_the_card_is_decided() {
+        // request_change's real 200 answers.
+        let up = r#"{"ok": true, "enabled": false, "pending": true, "message": "Approve the card on your PC or phone to turn it on. Nothing changes until you do."}"#;
+        let got = second_card_change_answer(200, up).unwrap();
+        assert_eq!(got["pending"], true);
+        assert_eq!(got["enabled"], false);
+        let off = r#"{"ok": true, "enabled": false, "pending": false, "message": "\"Pictures\" is off."}"#;
+        assert_eq!(
+            second_card_change_answer(200, off).unwrap()["pending"],
+            false
+        );
+    }
+
+    #[test]
+    fn only_a_switch_name_is_sent() {
+        let doc = cases();
+        for f in doc["cases"]["capable_off"]["features"].as_array().unwrap() {
+            let id = f["id"].as_str().unwrap();
+            assert_eq!(second_card_feature(id), Ok(id));
+        }
+        assert_eq!(second_card_feature("master"), Ok("master"));
+        let long = "a".repeat(41);
+        for bad in ["", "Vision", "vision; rm", "../x", long.as_str()] {
+            assert!(second_card_feature(bad).is_err(), "{bad:?} was accepted");
+        }
+    }
+}
+
+#[cfg(test)]
+mod note_target_tests {
+    use super::{note_target, note_targets_answer};
+
+    /// The backend's real answers, written by `backend/test_obsidian_notes.py
+    /// --write` from `jarvis_note_capture` itself.
+    const FIXTURE: &str =
+        include_str!("../../../jarvis-client/app/src/test/resources/contract/note-targets.json");
+
+    fn case(name: &str) -> (u16, String) {
+        let all: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture parses");
+        let c = &all[name];
+        (
+            c["status"].as_u64().expect("status") as u16,
+            c["body"].to_string(),
+        )
+    }
+
+    #[test]
+    fn the_real_answers_are_read() {
+        let (status, body) = case("all");
+        let v = note_targets_answer(status, &body).expect("a list");
+        assert_eq!(
+            v["targets"],
+            serde_json::json!(["logseq", "joplin", "obsidian"])
+        );
+        let (status, body) = case("none");
+        assert_eq!(
+            note_targets_answer(status, &body).expect("a list")["targets"],
+            serde_json::json!([])
+        );
+    }
+
+    /// An older backend is said to be older - not read as "nothing set up".
+    #[test]
+    fn an_older_backend_says_so() {
+        let (status, body) = case("older_backend");
+        let err = note_targets_answer(status, &body).expect_err("not a list");
+        assert!(err.contains("apply-patches"), "{err}");
+    }
+
+    #[test]
+    fn targets_map_and_an_unknown_one_is_refused() {
+        assert_eq!(note_target("OBS"), Ok("obsidian"));
+        assert_eq!(note_target("vault"), Ok("obsidian"));
+        assert_eq!(note_target("jop"), Ok("joplin"));
+        assert_eq!(note_target(" log "), Ok("logseq"));
+        assert!(note_target("evernote").is_err());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The wiki builder - backend/wiki.patch and backend/jarvis_wiki.py
+// ---------------------------------------------------------------------------
+
+/// The folder, inside the owner's Obsidian vault, that the wiki builder
+/// writes to. The only folder [`wiki_open_folder`] will ever open.
+const WIKI_FOLDER_NAME: &str = "Jarvis Wiki";
+
+/// What the wiki builder can do now: `GET /api/wiki`. Whether it can run
+/// (it needs the second graphics card's "wiki" lane) and why not, the
+/// documents in `Jarvis Wiki/Sources` with their state, the last few log
+/// lines, and how many pages there are. Never a page's text.
+#[tauri::command]
+pub async fn wiki_status(app: AppHandle) -> Result<serde_json::Value, String> {
+    let (status, body) = wiki_get(&app, "/api/wiki").await?;
+    wiki_answer(status, &body, "/api/wiki")
+}
+
+/// "Add to wiki" for one document in `Jarvis Wiki/Sources`:
+/// `POST /api/wiki/ingest`. The backend's model reads it and then raises ONE
+/// approval card (`wiki_update`); nothing is written before that card is
+/// answered. The answer is the job (`state: "reading"`), or an explained
+/// refusal (`state: "refused"` with `error`).
+///
+/// Held while the event stream is stale - rule 4 - for the reason
+/// [`decide_approval`] gives: the card it raises should be answered by
+/// someone looking at a live queue, and any window holding the capability
+/// reaches this command directly, whatever its button shows.
+#[tauri::command]
+pub async fn wiki_ingest(app: AppHandle, source: String) -> Result<serde_json::Value, String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "the event stream is stale, so nothing can be added to the wiki \
+                    until it reconnects"
+                .to_string(),
+        );
+    }
+    let source = source.trim();
+    if source.is_empty() {
+        return Err("say which document to add to the wiki".to_string());
+    }
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .post(format!("{}/api/wiki/ingest", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "source": source }))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("unable to reach `/api/wiki/ingest`: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    wiki_answer(status, &body, "/api/wiki/ingest")
+}
+
+/// How one "Add to wiki" is going: `GET /api/wiki/ingest?id=`. `state` is
+/// `reading`, `waiting` (the card is up), `writing`, `done`, `refused` or
+/// `failed`, with the backend's own sentence in `message`.
+#[tauri::command]
+pub async fn wiki_ingest_status(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err("that wiki job has no id to look up".to_string());
+    }
+    let path = format!("/api/wiki/ingest?id={}", encode_path_segment(id));
+    let (status, body) = wiki_get(&app, &path).await?;
+    wiki_answer(status, &body, "/api/wiki/ingest")
+}
+
+/// Opens `Jarvis Wiki` in Explorer. The folder comes from the backend's own
+/// answer, read here in Rust - never from the page - and is opened only when
+/// the backend is on this PC (a loopback address), the path is absolute,
+/// names a folder called exactly "Jarvis Wiki", and that folder is here.
+/// A folder, never a file: the same reasoning as [`open_log_folder`].
+#[tauri::command]
+pub async fn wiki_open_folder(app: AppHandle) -> Result<(), String> {
+    require_base_allowed(&app)?;
+    if !base_is_loopback(&jarvis_base(&app)) {
+        return Err(
+            "the wiki folder is on the PC Jarvis runs on, not this one - open it there".to_string(),
+        );
+    }
+    let (status, body) = wiki_get(&app, "/api/wiki").await?;
+    let answer = wiki_answer(status, &body, "/api/wiki")?;
+    let dir = wiki_folder_to_open(&answer)?;
+
+    #[cfg(target_os = "windows")]
+    let program = "explorer.exe";
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let program = "xdg-open";
+
+    std::process::Command::new(program)
+        .arg(dir.as_os_str())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("could not open {}: {e}", dir.display()))
+}
+
+async fn wiki_get(app: &AppHandle, path: &str) -> Result<(u16, String), String> {
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{}{path}", jarvis_base(app)))
+        .headers(jarvis_headers(app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(app))
+            } else {
+                format!("unable to reach the wiki builder: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    Ok((status, response.text().await.unwrap_or_default()))
+}
+
+/// Reads one of the wiki routes' answers. A JSON object on success is the
+/// answer; a refusal the backend explained (`"state": "refused"`, with its
+/// sentence in `error`) is an answer too, for the page to show as it is.
+/// Everything else becomes a sentence.
+pub(crate) fn wiki_answer(
+    status: u16,
+    body: &str,
+    path: &str,
+) -> Result<serde_json::Value, String> {
+    let parsed = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .filter(|v| v.is_object());
+    if let Some(v) = parsed.as_ref() {
+        if (200..300).contains(&status) || v.get("state").is_some() {
+            return Ok(v.clone());
+        }
+    }
+    if status == 404 && path == "/api/wiki/ingest" && parsed.is_some() {
+        return Err(
+            "Jarvis no longer knows this job - it may have restarted. Nothing \
+                    is written without an approval card; look in the wiki folder to see."
+                .to_string(),
+        );
+    }
+    if status == 404 {
+        return Err(
+            "this PC's Jarvis has no wiki builder yet - copy the new backend \
+                    files in (run apply-patches.ps1)"
+                .to_string(),
+        );
+    }
+    if (200..300).contains(&status) {
+        return Err("the server's answer about the wiki could not be read".to_string());
+    }
+    Err(server_sentence(status, path, body))
+}
+
+/// The folder [`wiki_open_folder`] may open, from `GET /api/wiki`'s answer.
+pub(crate) fn wiki_folder_to_open(
+    answer: &serde_json::Value,
+) -> Result<std::path::PathBuf, String> {
+    let folder = answer
+        .get("folder")
+        .and_then(|f| f.as_str())
+        .filter(|f| !f.trim().is_empty())
+        .ok_or_else(|| {
+            "the wiki folder is not set up yet - make a \"Jarvis Wiki\" folder in your vault"
+                .to_string()
+        })?;
+    let dir = std::path::PathBuf::from(folder);
+    if !dir.is_absolute() || dir.file_name() != Some(std::ffi::OsStr::new(WIKI_FOLDER_NAME)) {
+        return Err(format!(
+            "the backend named {folder}, which is not a \"{WIKI_FOLDER_NAME}\" folder, so it \
+             is not opened"
+        ));
+    }
+    if !dir.is_dir() {
+        return Err(format!("{} is not a folder on this PC", dir.display()));
+    }
+    Ok(dir)
+}
+
+/// Is the Jarvis address this PC (127.x, ::1 or localhost)?
+pub(crate) fn base_is_loopback(base: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(base) else {
+        return false;
+    };
+    match url.host_str() {
+        Some(h) if h.eq_ignore_ascii_case("localhost") => true,
+        Some(h) => h
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<std::net::IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false),
+        None => false,
+    }
+}
+
+#[cfg(test)]
+mod wiki_tests {
+    use super::{base_is_loopback, wiki_answer, wiki_folder_to_open};
+
+    /// The backend's real answers, written by `tools/gen_wiki_cases.py` from
+    /// `jarvis_wiki` itself; `backend/test_wiki.py` fails when it is stale.
+    const FIXTURE: &str = include_str!("../../tests/fixtures/wiki-cases.json");
+
+    fn case(name: &str) -> (u16, String, String) {
+        let all: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture parses");
+        let c = &all["cases"][name];
+        (
+            c["status"].as_u64().expect("status") as u16,
+            c["body"].to_string(),
+            name.to_string(),
+        )
+    }
+
+    #[test]
+    fn the_real_answers_are_read() {
+        let (status, body, _) = case("status_ready");
+        let v = wiki_answer(status, &body, "/api/wiki").expect("an answer");
+        assert_eq!(v["available"], serde_json::json!(true));
+        assert!(v["sources"].as_array().is_some_and(|s| s.len() == 5));
+        let (status, body, _) = case("ingest_started");
+        assert_eq!(status, 202);
+        let v = wiki_answer(status, &body, "/api/wiki/ingest").expect("a job");
+        assert_eq!(v["state"], serde_json::json!("reading"));
+    }
+
+    /// A refusal the backend explained reaches the page as it is.
+    #[test]
+    fn an_explained_refusal_is_an_answer() {
+        for name in [
+            "ingest_in_wiki",
+            "ingest_busy",
+            "ingest_off",
+            "ingest_too_big",
+        ] {
+            let (status, body, _) = case(name);
+            let v = wiki_answer(status, &body, "/api/wiki/ingest").expect(name);
+            assert_eq!(v["state"], serde_json::json!("refused"), "{name}");
+            assert!(v["error"].as_str().is_some_and(|e| !e.is_empty()), "{name}");
+        }
+    }
+
+    #[test]
+    fn an_older_backend_and_a_lost_job_say_so() {
+        let err = wiki_answer(404, "", "/api/wiki").expect_err("no route");
+        assert!(err.contains("apply-patches"), "{err}");
+        let (status, body, _) = case("job_unknown");
+        let err = wiki_answer(status, &body, "/api/wiki/ingest").expect_err("lost");
+        assert!(err.contains("no longer knows"), "{err}");
+    }
+
+    #[test]
+    fn only_a_real_jarvis_wiki_folder_is_opened() {
+        let dir = std::env::temp_dir().join(format!("jarvis-wiki-open-{}", std::process::id()));
+        let wiki = dir.join("Jarvis Wiki");
+        std::fs::create_dir_all(&wiki).expect("temp folder");
+        let ok = wiki_folder_to_open(&serde_json::json!({ "folder": wiki.to_string_lossy() }));
+        assert_eq!(ok.as_deref(), Ok(wiki.as_path()));
+        let other = wiki_folder_to_open(&serde_json::json!({ "folder": dir.to_string_lossy() }));
+        assert!(other.is_err());
+        assert!(wiki_folder_to_open(&serde_json::json!({ "folder": "Jarvis Wiki" })).is_err());
+        assert!(wiki_folder_to_open(&serde_json::json!({ "folder": null })).is_err());
+        // The fixture's folder is a made-up path, not a folder on this PC.
+        let (_, body, _) = case("status_ready");
+        let v: serde_json::Value = serde_json::from_str(&body).expect("json");
+        assert!(wiki_folder_to_open(&v).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_folder_opens_only_for_a_backend_on_this_pc() {
+        assert!(base_is_loopback("http://127.0.0.1:4719"));
+        assert!(base_is_loopback("http://localhost:4719"));
+        assert!(base_is_loopback("http://[::1]:4719"));
+        assert!(!base_is_loopback("http://100.64.1.2:4719"));
+        assert!(!base_is_loopback("http://desktop.tailnet.ts.net:4719"));
+        assert!(!base_is_loopback("not a url"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The big model, slow - backend/big-model.patch, backend/jarvis_big_model.py,
+// docs/BIG-MODEL.md, JARVIS-API.md section 14
+// ---------------------------------------------------------------------------
+
+/// What was found and the three switches: `GET` and `POST`.
+pub(crate) const BIG_MODEL_PATH: &str = "/api/big-model";
+/// The deep questions and their answers, newest first.
+pub(crate) const DEEP_PATH: &str = "/api/deep";
+/// Queue one deep question.
+pub(crate) const DEEP_ASK_PATH: &str = "/api/deep/ask";
+
+/// The longest question the backend takes, in characters (Unicode code
+/// points, as Python's `len` counts them): `jarvis_big_model.MAX_QUESTION_CHARS`,
+/// which `GET /api/deep` reports as `limits.question_chars`. A test holds the
+/// two together against the real fixture.
+pub(crate) const DEEP_QUESTION_CHARS: usize = 4000;
+
+/// The only switch names `POST /api/big-model` knows, in its own words:
+/// the main switch, then one per background job.
+pub(crate) const BIG_MODEL_SWITCHES: [&str; 3] = ["master", "wiki", "deep_questions"];
+
+/// What a backend without `jarvis_big_model.py` (or without the patch at all)
+/// is told to do about it. The page shows this sentence; it never sees a
+/// status code or a body.
+pub(crate) const BIG_MODEL_UPDATE: &str = "This PC's Jarvis does not have the big model part yet. \
+     Update the backend by running apply-patches.ps1, then open this again.";
+
+/// [`get_big_model`]'s reading of the server's answer, on its own so it can
+/// be tested against `tests/fixtures/big-model-cases.json` (the real
+/// `status()` output).
+///
+/// * 200 with `detected` and `switches` - `status()` itself, passed on as is.
+/// * 404, or 503 `{"available": false}` - `{"available": false, "why":
+///   "<update the backend>"}`, so the page says what to do rather than error.
+/// * anything else - the backend's own sentence, or a plain line.
+///
+/// The "module missing", refusal and unreachable readings are the second
+/// card's ([`second_card_missing`], [`second_card_refusal`],
+/// [`second_card_unreachable`]): the same backend shapes, the same words.
+pub(crate) fn big_model_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| {
+                v.get("detected").is_some_and(|d| d.is_object())
+                    && v.get("switches").is_some_and(|s| s.is_array())
+            })
+            .ok_or_else(|| {
+                "Jarvis answered, but not in a way this app can read. \
+                 Update the backend by running apply-patches.ps1."
+                    .to_string()
+            });
+    }
+    if second_card_missing(status, body) {
+        return Ok(serde_json::json!({ "available": false, "why": BIG_MODEL_UPDATE }));
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// [`set_big_model`]'s reading of the server's answer. 200 is the backend's
+/// `{"ok", "enabled", "pending", "message"}` as is: `pending: true` means an
+/// approval card is up and NOTHING is on yet. Every refusal (409 a card
+/// already waits, 400 the main switch is off, 503 not possible here) is the
+/// backend's own sentence.
+pub(crate) fn big_model_change_answer(
+    status: u16,
+    body: &str,
+) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| "Jarvis answered, but not in a way this app can read.".to_string());
+    }
+    if second_card_missing(status, body) {
+        return Err(BIG_MODEL_UPDATE.to_string());
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// One of [`BIG_MODEL_SWITCHES`], exactly, or a refusal. Nothing else is
+/// ever sent.
+pub(crate) fn big_model_switch(name: &str) -> Result<&'static str, String> {
+    BIG_MODEL_SWITCHES
+        .iter()
+        .find(|s| **s == name)
+        .copied()
+        .ok_or_else(|| "That is not one of the big model's switches.".to_string())
+}
+
+/// [`get_deep`]'s reading of the server's answer: `deep_status()` (an object
+/// with `available` and a `jobs` list) passed on as is; an older backend is
+/// `{"available": false, "why": "<update the backend>"}`, with no `jobs`.
+pub(crate) fn deep_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| {
+                v.get("available").is_some_and(|a| a.is_boolean())
+                    && v.get("jobs").is_some_and(|j| j.is_array())
+            })
+            .ok_or_else(|| {
+                "Jarvis answered, but not in a way this app can read. \
+                 Update the backend by running apply-patches.ps1."
+                    .to_string()
+            });
+    }
+    if second_card_missing(status, body) {
+        return Ok(serde_json::json!({ "available": false, "why": BIG_MODEL_UPDATE }));
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// [`ask_deep`]'s reading of the server's answer. The 202 job, and every
+/// refusal the backend explained (`{"ok": false, "state": "refused",
+/// "error"}` - empty, too long, three already waiting, not available), are
+/// answers for the page to show as they are, like the wiki's. An older
+/// backend is the update sentence; anything else a plain line.
+pub(crate) fn deep_ask_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    let parsed = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .filter(|v| v.is_object());
+    if let Some(v) = parsed.as_ref() {
+        let refused = v.get("state").and_then(|s| s.as_str()) == Some("refused");
+        if (200..300).contains(&status) || refused {
+            return Ok(v.clone());
+        }
+    }
+    if second_card_missing(status, body) {
+        return Err(BIG_MODEL_UPDATE.to_string());
+    }
+    if (200..300).contains(&status) {
+        return Err("Jarvis answered, but not in a way this app can read.".to_string());
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// The question as the backend will count it: trimmed, Windows line ends
+/// made plain (`ask` does both), then at most [`DEEP_QUESTION_CHARS`]
+/// characters. Refused here, with a sentence, rather than sent to be refused.
+pub(crate) fn deep_question(text: &str) -> Result<String, String> {
+    let q = text.trim().replace("\r\n", "\n");
+    if q.is_empty() {
+        return Err("Type a question first.".to_string());
+    }
+    let n = q.chars().count();
+    if n > DEEP_QUESTION_CHARS {
+        return Err(format!(
+            "The question is {} characters long; at most {} can be asked. Shorten it and \
+             ask again.",
+            thousands(n),
+            thousands(DEEP_QUESTION_CHARS)
+        ));
+    }
+    Ok(q)
+}
+
+/// `4000` as `4,000`, the way the backend writes its own limit.
+fn thousands(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// What the big model could do on this PC, and which of its switches are on:
+/// `GET /api/big-model` (`jarvis_big_model.status()`). Starts nothing.
+///
+/// Settings window only (permissions/surfaces.toml, `settings-surface`). The
+/// answer names folders, drives, memory and disk; it never carries the key
+/// colibri is started with (only where it is kept) and never a token. The
+/// token goes out in `X-Jarvis-Token` through [`jarvis_headers`], with
+/// `X-Jarvis-Client: hud`, the same as every other call to Jarvis, and is
+/// never logged or put in an error.
+#[tauri::command]
+pub async fn get_big_model(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}{BIG_MODEL_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    big_model_answer(status, &body)
+}
+
+/// One big-model switch on or off: `POST /api/big-model` with
+/// `{"switch", "enabled"}`, built here from the two typed arguments.
+///
+/// This approves nothing. ON only raises one approval card on the PC and the
+/// phone (action `big_model_enable`, tier `ask`), and the answer says
+/// `pending: true` until the owner decides it there. ON is held while the
+/// event stream is stale - rule 4, the same one-direction hold as
+/// [`resume_task`] and waking from a power mode: that card should be
+/// answered by someone looking at a live queue. OFF always goes through,
+/// because it only stops things. Settings window only, like
+/// [`get_big_model`].
+#[tauri::command]
+pub async fn set_big_model(
+    app: AppHandle,
+    switch: String,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    let switch = big_model_switch(&switch)?;
+    if enabled && app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be turned on until \
+             it does. Turning things off still works."
+                .to_string(),
+        );
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{BIG_MODEL_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "switch": switch, "enabled": enabled }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    big_model_change_answer(status, &body)
+}
+
+/// The deep questions and their answers, newest first: `GET /api/deep`
+/// (`jarvis_big_model.deep_status()`). Reads only; starts nothing.
+///
+/// The Brain window only (`brain-deep`). The answers are the owner's own
+/// questions and answers, kept on the PC; the page renders them as text.
+#[tauri::command]
+pub async fn get_deep(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}{DEEP_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    let answer = deep_answer(status, &body)?;
+    // The questions and answers are the owner's own words, like the memory
+    // lists and chat history: hidden with them (bug audit 2026-09-26,
+    // Gemini finding checked; the phone does the same).
+    Ok(if crate::lock::private_hidden(&app) {
+        redact_deep(answer)
+    } else {
+        answer
+    })
+}
+
+/// A deep-questions list with every question and answer taken out, for
+/// while "Hide memory lists and chat history" hides them. States, times and
+/// speeds stay (they say nothing about the owner), and so does `why` - the
+/// backend's own sentence for a refusal or a failure.
+pub(crate) fn redact_deep(mut answer: serde_json::Value) -> serde_json::Value {
+    let mut count = 0usize;
+    if let Some(obj) = answer.as_object_mut() {
+        if let Some(serde_json::Value::Array(jobs)) = obj.get_mut("jobs") {
+            for job in jobs.iter_mut() {
+                if let Some(o) = job.as_object_mut() {
+                    count += 1;
+                    o.insert("question".into(), serde_json::json!(""));
+                    o.insert("answer".into(), serde_json::json!(""));
+                    o.insert("hidden".into(), serde_json::json!(true));
+                }
+            }
+        }
+        obj.insert("hidden".into(), serde_json::json!(true));
+        obj.insert("hidden_count".into(), serde_json::json!(count));
+    }
+    answer
+}
+
+/// "Ask slowly": `POST /api/deep/ask` with `{"question"}`, built here from
+/// the typed text after [`deep_question`] has trimmed and capped it.
+///
+/// There is no approval card per question (JARVIS-API.md section 14): the
+/// switch was approved, and a question acts on nothing - no tools, no memory
+/// writes, no web - and nothing leaves the PC. It is still held while the
+/// event stream is stale, as that section asks (rule 4). The answer is the
+/// queued job (`state: "queued"`) or the backend's explained refusal.
+#[tauri::command]
+pub async fn ask_deep(app: AppHandle, question: String) -> Result<serde_json::Value, String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be asked until it does."
+                .to_string(),
+        );
+    }
+    let question = deep_question(&question)?;
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{DEEP_ASK_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "question": question }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    deep_ask_answer(status, &body)
+}
+
+#[cfg(test)]
+mod big_model_tests {
+    use super::{
+        big_model_answer, big_model_change_answer, big_model_switch, deep_answer, deep_ask_answer,
+        deep_question, thousands, BIG_MODEL_SWITCHES, BIG_MODEL_UPDATE, DEEP_QUESTION_CHARS,
+    };
+
+    /// The backend's real answers, one per case, made by
+    /// `tools/gen_big_model_cases.py` from `jarvis_big_model` itself - never
+    /// hand-written here.
+    const CASES: &str = include_str!("../../tests/fixtures/big-model-cases.json");
+
+    fn cases() -> serde_json::Value {
+        serde_json::from_str(CASES).expect("big-model-cases.json is JSON")
+    }
+
+    fn named(prefix: &str) -> Vec<(String, serde_json::Value)> {
+        cases()["cases"]
+            .as_object()
+            .expect("cases")
+            .iter()
+            .filter(|(k, _)| k.starts_with(prefix))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn every_real_status_is_passed_on_unchanged() {
+        let all = named("status_");
+        assert!(all.len() >= 10, "fewer status cases than the fixture had");
+        for (name, status) in all {
+            let got = big_model_answer(200, &status.to_string())
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(got, status, "{name}");
+        }
+    }
+
+    #[test]
+    fn every_real_deep_status_is_passed_on_unchanged() {
+        let all = named("deep_");
+        assert!(all.len() >= 6, "fewer deep cases than the fixture had");
+        for (name, status) in all {
+            let got =
+                deep_answer(200, &status.to_string()).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(got, status, "{name}");
+        }
+        // status() is not deep_status(), and the other way round.
+        let off = cases()["cases"]["status_ready_off"].to_string();
+        assert!(deep_answer(200, &off).is_err());
+        let deep = cases()["cases"]["deep_done"].to_string();
+        assert!(big_model_answer(200, &deep).is_err());
+    }
+
+    #[test]
+    fn the_question_cap_is_the_backends() {
+        for (name, status) in named("deep_") {
+            assert_eq!(
+                status["limits"]["question_chars"].as_u64(),
+                Some(DEEP_QUESTION_CHARS as u64),
+                "{name}"
+            );
+        }
+        // The backend's own sentence for one too many names the same number.
+        let over = cases()["cases"]["ask_too_long_400"]["body"]["error"]
+            .as_str()
+            .expect("error")
+            .to_string();
+        assert!(over.contains(&thousands(DEEP_QUESTION_CHARS)), "{over}");
+        assert!(over.contains(&thousands(DEEP_QUESTION_CHARS + 1)), "{over}");
+    }
+
+    #[test]
+    fn a_question_is_trimmed_and_capped_before_it_is_sent() {
+        assert_eq!(
+            deep_question("  Why is the sky blue?\r\n").as_deref(),
+            Ok("Why is the sky blue?")
+        );
+        assert_eq!(deep_question("a\r\nb").as_deref(), Ok("a\nb"));
+        assert!(deep_question("").is_err());
+        assert!(deep_question(" \n\t ").is_err());
+        let most = "é".repeat(DEEP_QUESTION_CHARS);
+        assert_eq!(deep_question(&most).as_deref(), Ok(most.as_str()));
+        let over = format!("{most}x");
+        let said = deep_question(&over).unwrap_err();
+        assert!(said.contains("4,001") && said.contains("4,000"), "{said}");
+        // Counted in characters, as Python's len() counts them, not bytes.
+        assert!(most.len() > DEEP_QUESTION_CHARS);
+        assert_eq!(thousands(0), "0");
+        assert_eq!(thousands(999), "999");
+        assert_eq!(thousands(1000), "1,000");
+        assert_eq!(thousands(1234567), "1,234,567");
+    }
+
+    #[test]
+    fn only_the_three_switch_names_are_sent() {
+        assert_eq!(BIG_MODEL_SWITCHES, ["master", "wiki", "deep_questions"]);
+        for (name, status) in named("status_") {
+            for sw in status["switches"].as_array().expect("switches") {
+                let id = sw["id"].as_str().expect("id");
+                assert_eq!(big_model_switch(id), Ok(id), "{name}");
+            }
+        }
+        assert_eq!(big_model_switch("master"), Ok("master"));
+        for bad in [
+            "",
+            "Master",
+            "vision",
+            "deep_questions ",
+            "master; x",
+            "../x",
+        ] {
+            assert!(big_model_switch(bad).is_err(), "{bad:?} was accepted");
+        }
+    }
+
+    #[test]
+    fn the_switch_answers_are_read() {
+        let c = cases();
+        let pending = &c["cases"]["post_master_on_pending"];
+        let got = big_model_change_answer(
+            pending["status"].as_u64().unwrap() as u16,
+            &pending["body"].to_string(),
+        )
+        .unwrap();
+        assert_eq!(got["pending"], true);
+        assert_eq!(
+            got["enabled"], false,
+            "ON is not on until the card is approved"
+        );
+        let off = &c["cases"]["post_master_off"];
+        let got = big_model_change_answer(200, &off["body"].to_string()).unwrap();
+        assert_eq!(got["pending"], false);
+        assert_eq!(got["message"], "The big model is off.");
+        let again = &c["cases"]["post_master_on_again_409"];
+        let said = big_model_change_answer(409, &again["body"].to_string()).unwrap_err();
+        assert_eq!(
+            said,
+            "A card to turn on the big model is already waiting - approve or deny that one"
+        );
+    }
+
+    #[test]
+    fn an_ask_and_its_refusals_are_answers_the_page_shows() {
+        let c = cases();
+        let ok = &c["cases"]["ask_accepted"];
+        assert_eq!(ok["status"], 202);
+        let got = deep_ask_answer(202, &ok["body"].to_string()).unwrap();
+        assert_eq!(got["state"], "queued");
+        for name in ["ask_empty_400", "ask_refused_off", "ask_too_long_400"] {
+            let case = &c["cases"][name];
+            let code = case["status"].as_u64().unwrap() as u16;
+            let got = deep_ask_answer(code, &case["body"].to_string())
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(got["state"], "refused", "{name}");
+            assert_eq!(got["error"], case["body"]["error"], "{name}");
+        }
+    }
+
+    #[test]
+    fn an_older_backend_is_told_to_update_not_shown_an_error() {
+        let missing = r#"{"available": false, "error": "ModuleNotFoundError: No module named 'jarvis_big_model'"}"#;
+        for (code, body) in [(404, ""), (404, "<html>Not Found</html>"), (503, missing)] {
+            for got in [big_model_answer(code, body), deep_answer(code, body)] {
+                let got = got.expect("not an error");
+                assert_eq!(got["available"], false, "{code}");
+                assert_eq!(got["why"], BIG_MODEL_UPDATE);
+                assert!(!got.to_string().contains("ModuleNotFoundError"));
+            }
+            assert_eq!(
+                big_model_change_answer(code, body).unwrap_err(),
+                BIG_MODEL_UPDATE
+            );
+            assert_eq!(deep_ask_answer(code, body).unwrap_err(), BIG_MODEL_UPDATE);
+        }
+        assert!(BIG_MODEL_UPDATE.contains("apply-patches.ps1"));
+        // A real 503 refusal is the backend's sentence, not "update".
+        let off = &cases()["cases"]["ask_refused_off"]["body"];
+        assert_eq!(
+            deep_ask_answer(503, &off.to_string()).unwrap()["error"],
+            "The big-model switch is off."
+        );
+        let no = r#"{"error": "The big model cannot be turned on: Python 3 was not found."}"#;
+        let said = big_model_change_answer(503, no).unwrap_err();
+        assert!(said.starts_with("The big model cannot be turned on"));
+    }
+
+    #[test]
+    fn nothing_unreadable_is_passed_on_as_is() {
+        for code in [200, 202] {
+            assert!(big_model_answer(code, r#"{"ok": true}"#).is_err());
+            assert!(deep_answer(code, r#"{"ok": true}"#).is_err());
+            assert!(deep_ask_answer(code, "not json").is_err());
+            assert!(big_model_change_answer(code, "[1]").is_err());
+        }
+        let odd = big_model_answer(500, "<html>boom</html>").unwrap_err();
+        assert!(!odd.contains("<html>") && odd.contains("500"), "{odd}");
+        let odd = deep_ask_answer(500, "<html>boom</html>").unwrap_err();
+        assert!(!odd.contains("<html>") && odd.contains("500"), "{odd}");
+    }
 }
 
 #[cfg(test)]
 mod capture_tests {
-    use super::{assistant_reply, validate_bind_address, validate_external_url};
+    use super::{server_sentence, validate_bind_address, validate_external_url};
 
+    /// The capture routes' refusal wording reaches the person, not raw JSON.
     #[test]
-    fn reads_the_non_streaming_openai_shape() {
-        let body = r#"{"choices":[{"message":{"role":"assistant","content":" Added to today's journal. "}}]}"#;
-        assert_eq!(assistant_reply(body), "Added to today's journal.");
-    }
-
-    #[test]
-    fn reads_the_streaming_and_flattened_shapes() {
+    fn a_task_route_error_is_read_out_of_its_json() {
         assert_eq!(
-            assistant_reply(r#"{"choices":[{"delta":{"content":"ok"}}]}"#),
-            "ok"
+            server_sentence(
+                409,
+                "/api/task/stop",
+                r#"{"ok":false,"error":"nothing is running or paused"}"#
+            ),
+            "Nothing is running or paused"
         );
-        assert_eq!(assistant_reply(r#"{"response":"filed"}"#), "filed");
-    }
-
-    #[test]
-    fn an_unrecognised_shape_yields_nothing_rather_than_raw_json() {
-        // The caller puts this in front of a person. A slice of JSON in a
-        // 320px flash is worse than no sentence at all.
-        assert_eq!(assistant_reply(r#"{"weird":{"nested":1}}"#), "");
-        assert_eq!(assistant_reply("not json at all"), "");
+        // CONTROL: no `error` field - the raw body is still shown.
+        assert!(server_sentence(500, "/x", "boom").contains("HTTP 500"));
     }
 
     /// The trick this exists for: the visible text, the apparent host and the
@@ -1561,12 +4702,57 @@ mod capture_tests {
         assert!(validate_bind_address("").is_ok());
     }
 
-    /// The one input this exists to stop: the wildcard would turn a
-    /// same-tailnet feature into a same-network one.
+    /// The shared table: `jarvis-desktop/tests/bind-address-cases.json`.
+    /// The backend's `test_bind_wildcard.py` binds a real socket to every
+    /// `every_interface` entry to prove the OS really reads it as 0.0.0.0, so
+    /// this list is checked against the operating system, not against itself.
+    fn bind_cases(key: &str) -> Vec<String> {
+        let table: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/bind-address-cases.json"))
+                .expect("bind-address-cases.json is valid JSON");
+        table[key]
+            .as_array()
+            .unwrap_or_else(|| panic!("bind-address-cases.json has no {key} list"))
+            .iter()
+            .map(|v| v.as_str().expect("every case is a string").to_string())
+            .collect()
+    }
+
+    /// The one input this exists to stop, in every spelling the OS accepts:
+    /// the wildcard would turn a same-tailnet feature into a same-network one.
     #[test]
-    fn the_wildcard_addresses_are_refused() {
-        assert!(validate_bind_address("0.0.0.0").is_err());
-        assert!(validate_bind_address("::").is_err());
+    fn every_spelling_of_the_wildcard_is_refused_as_the_wildcard() {
+        let cases = bind_cases("every_interface");
+        assert!(
+            cases.iter().any(|c| c == "0"),
+            "the table lost the short forms"
+        );
+        for case in cases {
+            let err = validate_bind_address(&case)
+                .expect_err(&format!("{case:?} binds every interface and was accepted"));
+            assert!(err.contains("every network interface"), "{case:?}: {err}");
+        }
+    }
+
+    /// Non-canonical numbers, home-network and public addresses, and
+    /// anything that is not a bare host.
+    #[test]
+    fn everything_else_the_table_refuses_is_refused() {
+        for case in bind_cases("refused") {
+            assert!(
+                validate_bind_address(&case).is_err(),
+                "{case:?} should have been refused"
+            );
+        }
+    }
+
+    /// CONTROL: the ordinary cases still save, or this is just a deny-all.
+    #[test]
+    fn the_tables_good_addresses_are_accepted() {
+        for case in bind_cases("accepted") {
+            let got = validate_bind_address(&case);
+            assert!(got.is_ok(), "{case:?} should have been accepted: {got:?}");
+        }
     }
 
     #[test]
@@ -1921,4 +5107,842 @@ pub fn quit_app(app: AppHandle) {
         let _ = hud.destroy();
     }
     app.exit(0);
+}
+
+#[cfg(test)]
+mod health_tests {
+    use super::{summarise_health, ServiceStatus};
+
+    fn svc(id: &'static str, name: &'static str, online: bool, optional: bool) -> ServiceStatus {
+        ServiceStatus {
+            id,
+            name,
+            url: String::new(),
+            online,
+            http_status: None,
+            latency_ms: 0,
+            detail: String::new(),
+            payload: None,
+            optional,
+        }
+    }
+
+    /// The everyday state: no cloud lane, so nothing on :4000. That is not
+    /// "2/3 online - offline: LiteLLM".
+    #[test]
+    fn litellm_not_running_is_not_an_outage() {
+        let (online, total, summary) = summarise_health(&[
+            svc("jarvis", "Jarvis Core", true, false),
+            svc("ollama", "Ollama", true, false),
+            svc("litellm", "LiteLLM", false, true),
+        ]);
+        assert_eq!((online, total), (2, 2));
+        assert!(summary.starts_with("All 2 services online."), "{summary}");
+        assert!(!summary.contains("offline"), "{summary}");
+        assert!(summary.contains("LiteLLM is not running"), "{summary}");
+    }
+
+    /// When it does run, it counts like anything else.
+    #[test]
+    fn litellm_running_is_counted() {
+        let (online, total, _) = summarise_health(&[
+            svc("jarvis", "Jarvis Core", true, false),
+            svc("ollama", "Ollama", true, false),
+            svc("litellm", "LiteLLM", true, true),
+        ]);
+        assert_eq!((online, total), (3, 3));
+    }
+
+    /// CONTROL: a required service being down is still reported as down.
+    #[test]
+    fn ollama_down_is_still_an_outage() {
+        let (online, total, summary) = summarise_health(&[
+            svc("jarvis", "Jarvis Core", true, false),
+            svc("ollama", "Ollama", false, false),
+            svc("litellm", "LiteLLM", false, true),
+        ]);
+        assert_eq!((online, total), (1, 2));
+        assert!(summary.contains("offline: Ollama"), "{summary}");
+    }
+}
+
+#[cfg(test)]
+mod token_tests {
+    use super::{passes_as_hud_token, pick_backend_token, pick_token, TokenSource};
+
+    fn s(v: &str) -> Option<String> {
+        Some(v.to_string())
+    }
+
+    /// What `backend_token` hands back: the backend's own token and where
+    /// it was found.
+    fn file(v: &str) -> Option<(String, TokenSource)> {
+        Some((v.to_string(), TokenSource::BackendFile))
+    }
+    fn backend_cm(v: &str) -> Option<(String, TokenSource)> {
+        Some((v.to_string(), TokenSource::BackendCredentialManager))
+    }
+
+    /// The lockout: "Clear token" saved "", and "" was taken as the token.
+    #[test]
+    fn an_empty_saved_token_falls_through_to_the_backend_file() {
+        let got = pick_token(s(""), None, None, || file("from-file"));
+        assert_eq!(
+            got,
+            Some(("from-file".to_string(), TokenSource::BackendFile))
+        );
+        let got = pick_token(s("   "), s(""), None, || file("from-file"));
+        assert_eq!(
+            got,
+            Some(("from-file".to_string(), TokenSource::BackendFile))
+        );
+    }
+
+    #[test]
+    fn an_empty_saved_token_falls_through_to_the_environment() {
+        let got = pick_token(s(""), None, s("from-env"), || panic!("not reached"));
+        assert_eq!(
+            got,
+            Some(("from-env".to_string(), TokenSource::Environment))
+        );
+    }
+
+    #[test]
+    fn a_typed_token_wins_and_credential_manager_is_where_it_normally_lives() {
+        let got = pick_token(None, s("typed"), s("env"), || file("file"));
+        assert_eq!(
+            got,
+            Some(("typed".to_string(), TokenSource::CredentialManager))
+        );
+    }
+
+    /// The backend's own token is reported by where it was found, so
+    /// Settings can say "kept in Credential Manager" or "still a plain file".
+    #[test]
+    fn the_backends_own_token_keeps_its_source() {
+        let got = pick_token(None, None, None, || backend_cm("made-by-backend"));
+        assert_eq!(
+            got,
+            Some((
+                "made-by-backend".to_string(),
+                TokenSource::BackendCredentialManager
+            ))
+        );
+        assert_eq!(
+            TokenSource::BackendCredentialManager.as_str(),
+            "backend-credential-manager"
+        );
+    }
+
+    /// The settings-file copy exists only when an older version left it and
+    /// Credential Manager refused the move, so it is what was typed last.
+    #[test]
+    fn a_settings_file_copy_beats_an_older_credential_manager_one() {
+        let got = pick_token(s("newer"), s("older"), None, || None);
+        assert_eq!(got, Some(("newer".to_string(), TokenSource::SettingsFile)));
+    }
+
+    #[test]
+    fn nothing_anywhere_is_none_not_an_empty_token() {
+        assert_eq!(pick_token(s(""), s(""), s(""), || file("")), None);
+        assert_eq!(pick_token(s(""), s(""), s(""), || backend_cm("  ")), None);
+        assert_eq!(pick_token(None, None, None, || None), None);
+    }
+
+    #[test]
+    fn values_are_trimmed() {
+        let got = pick_token(None, None, None, || file("  tok\n"));
+        assert_eq!(got.map(|(t, _)| t), s("tok"));
+    }
+
+    /// CONN-3: the backend's own order (jarvis_token_store.resolve) - the
+    /// old file wins, because it exists only when an older backend wrote it
+    /// after the move into Credential Manager.
+    #[test]
+    fn the_backends_old_file_beats_its_credential_manager_copy() {
+        let got = pick_backend_token(s("from-file"), || s("from-cm"));
+        assert_eq!(
+            got,
+            Some(("from-file".to_string(), TokenSource::BackendFile))
+        );
+    }
+
+    #[test]
+    fn with_no_old_file_the_backends_credential_manager_copy_is_used() {
+        for none in [None, s(""), s("  \n")] {
+            let got = pick_backend_token(none, || s(" from-cm "));
+            assert_eq!(
+                got,
+                Some(("from-cm".to_string(), TokenSource::BackendCredentialManager))
+            );
+        }
+        assert_eq!(pick_backend_token(None, || None), None);
+        assert_eq!(pick_backend_token(s(""), || s("")), None);
+    }
+
+    #[test]
+    fn credential_manager_is_not_even_read_when_the_old_file_has_a_token() {
+        let got = pick_backend_token(s("from-file"), || panic!("not reached"));
+        assert_eq!(got.map(|(t, _)| t), s("from-file"));
+    }
+
+    /// CONN-7: the order set_api_settings writes in. A model of the two
+    /// places a typed token can be - the settings file on disk and
+    /// Credential Manager - and of the next start's migration, which moves a
+    /// plain copy it finds on disk into Credential Manager.
+    mod write_order {
+        use super::super::save_file_then_token;
+        use std::cell::RefCell;
+
+        #[derive(Clone, Debug, PartialEq)]
+        struct World {
+            /// The plain `token` key in the settings file ON DISK.
+            file: Option<&'static str>,
+            credential_manager: Option<&'static str>,
+        }
+
+        /// migrate_plain_token at the next start, as plan_migration does it.
+        fn next_start(mut w: World) -> World {
+            if let Some(plain) = w.file.take() {
+                w.credential_manager = Some(plain);
+            }
+            w
+        }
+
+        /// set_api_settings(token = new) against `w`, with the file save and
+        /// the Credential Manager write each allowed to fail.
+        fn set_token(
+            w: World,
+            new: &'static str,
+            save_ok: bool,
+            cm_ok: bool,
+        ) -> (World, Result<(), String>, Vec<&'static str>) {
+            let disk = RefCell::new(w.file);
+            let cm = RefCell::new(w.credential_manager);
+            let calls = RefCell::new(Vec::new());
+            let before = w.file;
+            let result = save_file_then_token(
+                || {
+                    calls.borrow_mut().push("save file");
+                    if save_ok {
+                        *disk.borrow_mut() = None; // saved without the token
+                        Ok(())
+                    } else {
+                        Err("disk full".to_string())
+                    }
+                },
+                || {
+                    calls.borrow_mut().push("credential manager");
+                    if cm_ok {
+                        *cm.borrow_mut() = Some(new);
+                        Ok(())
+                    } else {
+                        Err("refused".to_string())
+                    }
+                },
+                || {
+                    calls.borrow_mut().push("roll back file");
+                    *disk.borrow_mut() = before;
+                },
+                || calls.borrow_mut().push("restore memory"),
+            );
+            let world = World {
+                file: disk.into_inner(),
+                credential_manager: cm.into_inner(),
+            };
+            (world, result, calls.into_inner())
+        }
+
+        /// The bug: an old plain copy on disk, the new token saved to
+        /// Credential Manager, then the file save fails - and the next
+        /// start put the OLD token back. Now the file goes first, so a
+        /// failed save leaves Credential Manager untouched.
+        #[test]
+        fn a_failed_file_save_never_lets_the_old_token_come_back() {
+            let start = World {
+                file: Some("old"),
+                credential_manager: Some("old"),
+            };
+            let (w, result, calls) = set_token(start.clone(), "new", false, true);
+            assert!(result.unwrap_err().contains("Nothing was changed"));
+            assert_eq!(calls, ["save file", "restore memory"]);
+            assert_eq!(w, start, "Credential Manager was written before the file");
+            // Either way round, what the app reads after a restart is one
+            // consistent token, never a new one overwritten by an old one.
+            assert_eq!(next_start(w).credential_manager, Some("old"));
+        }
+
+        #[test]
+        fn a_refused_token_rolls_the_file_back() {
+            let start = World {
+                file: Some("old"),
+                credential_manager: None,
+            };
+            let (w, result, calls) = set_token(start.clone(), "new", true, false);
+            assert!(result.unwrap_err().contains("refused"));
+            assert_eq!(calls, ["save file", "credential manager", "roll back file"]);
+            assert_eq!(w, start, "a refused token left a half-saved change behind");
+        }
+
+        #[test]
+        fn a_saved_token_survives_the_next_start() {
+            let start = World {
+                file: Some("old"),
+                credential_manager: Some("old"),
+            };
+            let (w, result, calls) = set_token(start, "new", true, true);
+            assert!(result.is_ok());
+            assert_eq!(calls, ["save file", "credential manager"]);
+            assert_eq!(w.file, None, "the plain copy is still on disk");
+            assert_eq!(next_start(w).credential_manager, Some("new"));
+        }
+    }
+
+    /// CONN-3: only a token set on purpose is handed to a backend this app
+    /// starts. The backend's own token, read back, never is.
+    #[test]
+    fn only_a_deliberately_set_token_is_passed_as_hud_token() {
+        assert!(passes_as_hud_token(TokenSource::CredentialManager));
+        assert!(passes_as_hud_token(TokenSource::SettingsFile));
+        assert!(passes_as_hud_token(TokenSource::Environment));
+        assert!(!passes_as_hud_token(TokenSource::BackendCredentialManager));
+        assert!(!passes_as_hud_token(TokenSource::BackendFile));
+    }
+}
+
+#[cfg(test)]
+mod onboarding_tests {
+    use super::{walkthrough_is_current, ONBOARDING_VERSION};
+    use serde_json::json;
+
+    /// The owner sees the walkthrough again once after it changes: nothing
+    /// stored, an older version, or a value of the wrong kind all mean
+    /// "show it"; this version or a newer one means "seen".
+    #[test]
+    fn only_the_current_walkthrough_counts_as_seen() {
+        assert_eq!(ONBOARDING_VERSION, 2);
+        assert!(!walkthrough_is_current(None));
+        assert!(!walkthrough_is_current(Some(&json!(1))));
+        assert!(walkthrough_is_current(Some(&json!(2))));
+        assert!(walkthrough_is_current(Some(&json!(3))));
+        // The old yes/no marker, or a damaged value, is not a version.
+        assert!(!walkthrough_is_current(Some(&json!(true))));
+        assert!(!walkthrough_is_current(Some(&json!("2"))));
+        assert!(!walkthrough_is_current(Some(&json!(-1))));
+    }
+}
+
+#[cfg(test)]
+mod theme_tests {
+    use super::{effective_theme, normalise_theme, THEMES};
+
+    /// The phone dropped Ember and sends anyone who had it to Reactor; so
+    /// does the desktop. An unknown or missing value lands there too.
+    #[test]
+    fn ember_and_unknown_themes_land_on_reactor() {
+        assert!(!THEMES.contains(&"ember"));
+        assert_eq!(normalise_theme(Some("ember")), "deep-space");
+        assert_eq!(normalise_theme(Some("nonsense")), "deep-space");
+        assert_eq!(normalise_theme(None), "deep-space");
+        assert_eq!(normalise_theme(Some("paper")), "paper");
+        assert_eq!(normalise_theme(Some("high-contrast")), "high-contrast");
+    }
+
+    /// Light Windows is Daylight, dark Windows is the remembered dark theme,
+    /// and an unreadable Windows mode keeps the theme picked by hand.
+    #[test]
+    fn following_the_system_picks_daylight_or_the_dark_theme() {
+        assert_eq!(
+            effective_theme("high-contrast", true, "high-contrast", Some(true)),
+            "paper"
+        );
+        assert_eq!(
+            effective_theme("paper", true, "high-contrast", Some(false)),
+            "high-contrast"
+        );
+        assert_eq!(
+            effective_theme("high-contrast", true, "deep-space", None),
+            "high-contrast"
+        );
+        assert_eq!(
+            effective_theme("deep-space", false, "deep-space", Some(true)),
+            "deep-space"
+        );
+    }
+}
+
+#[cfg(test)]
+mod turn_tests {
+    use super::turn_id_from_route;
+
+    /// Only a real 32-character lower-case hex id gets through; a backend
+    /// without feedback.patch sends none and the page shows no mark.
+    #[test]
+    fn a_turn_id_is_read_only_when_it_is_a_real_one() {
+        let good = "0123456789abcdef0123456789abcdef";
+        assert_eq!(
+            turn_id_from_route(&format!(r#"{{"lane":"qwen3:8b","turn_id":"{good}"}}"#)).as_deref(),
+            Some(good)
+        );
+        assert_eq!(turn_id_from_route(r#"{"lane":"qwen3:8b"}"#), None);
+        assert_eq!(turn_id_from_route(r#"{"turn_id":"not-hex"}"#), None);
+        assert_eq!(turn_id_from_route(r#"{"turn_id":["a","b"]}"#), None);
+        assert_eq!(turn_id_from_route("not json"), None);
+    }
+
+    /// The fixture `backend/test_chat_stream_contract.py` writes by RUNNING
+    /// the producer: X-Jarvis-Route built from the real router's decision
+    /// plus the fields the patches add, and bodies from the real relay.
+    const CASES: &str = include_str!("../../tests/fixtures/chat-stream-cases.json");
+
+    fn cases() -> serde_json::Value {
+        serde_json::from_str(CASES).expect("chat-stream-cases.json is JSON")
+    }
+
+    /// The route line carries lane, where and gate - and never the reason
+    /// text or the memory ids. An older backend has no `where`; the page
+    /// then reads the gate (only "escalate" is a cloud lane).
+    #[test]
+    fn the_route_line_is_built_from_the_real_header() {
+        let doc = cases();
+        let routes = doc["route_headers"].as_array().expect("route_headers");
+        assert!(!routes.is_empty());
+        for case in routes {
+            let header = case["header"].as_str().unwrap();
+            let expect = &case["expect"];
+            let line = super::route_line_from_header(header).expect("a route line");
+            let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(got["lane"], expect["lane"], "{}", case["name"]);
+            let where_ = got["where"].as_str().unwrap_or_else(|| {
+                if got["gate"] == "escalate" {
+                    "cloud"
+                } else {
+                    "local"
+                }
+            });
+            assert_eq!(
+                where_,
+                expect["where"].as_str().unwrap(),
+                "{}",
+                case["name"]
+            );
+            assert!(got.get("reason").is_none() && got.get("injected_ids").is_none());
+            assert_eq!(
+                turn_id_from_route(header).as_deref(),
+                expect["turn_id"].as_str(),
+                "{}",
+                case["name"]
+            );
+        }
+    }
+
+    /// The private-answer rule needs the gate and the count of remembered
+    /// facts: both pass on, from the real headers, and a count that is not a
+    /// whole number does not.
+    #[test]
+    fn the_route_line_carries_the_gate_and_the_count_of_facts() {
+        let doc = cases();
+        for case in doc["route_headers"].as_array().expect("route_headers") {
+            let header = case["header"].as_str().unwrap();
+            let real: serde_json::Value = serde_json::from_str(header).unwrap();
+            let line = super::route_line_from_header(header).expect("a route line");
+            let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(got["gate"], real["gate"], "{}", case["name"]);
+            assert_eq!(
+                got["injected_facts"], real["injected_facts"],
+                "{}",
+                case["name"]
+            );
+        }
+        let odd = super::route_line_from_header(r#"{"lane": "x", "injected_facts": "2"}"#).unwrap();
+        assert!(!odd.contains("injected_facts"), "{odd}");
+    }
+
+    /// Decision 13: the count of SENSITIVE facts that went in passes on as a
+    /// whole number, next to the count of all of them - and a count that is
+    /// not one is left out (which the page reads as "may be sensitive").
+    #[test]
+    fn the_route_line_carries_the_count_of_sensitive_facts() {
+        let line = super::route_line_from_header(
+            r#"{"lane": "x", "gate": "offer", "injected_facts": 3, "injected_sensitive": 1}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["injected_facts"], 3);
+        assert_eq!(got["injected_sensitive"], 1);
+        let none = super::route_line_from_header(
+            r#"{"lane": "x", "injected_facts": 2, "injected_sensitive": 0}"#,
+        )
+        .unwrap();
+        let none: serde_json::Value = serde_json::from_str(&none).unwrap();
+        assert_eq!(none["injected_sensitive"], 0);
+        for odd in [r#""1""#, "-1", "1.5", "true", "null"] {
+            let header =
+                format!(r#"{{"lane": "x", "injected_facts": 2, "injected_sensitive": {odd}}}"#);
+            let line = super::route_line_from_header(&header).unwrap();
+            assert!(!line.contains("injected_sensitive"), "{odd}: {line}");
+        }
+    }
+
+    /// Temporary chat and "Used in this answer" (2026-09-25): the two marks
+    /// pass on as booleans, and the facts an answer used as ids alone -
+    /// "mem:<id>" as a number, each once, in order - never "fact:<n>",
+    /// never a word, never the raw `injected_ids`.
+    #[test]
+    fn the_route_line_carries_temporary_and_the_ids_of_the_facts_used() {
+        let line = super::route_line_from_header(
+            r#"{"lane": "x", "gate": "offer", "injected_facts": 4,
+                "injected_ids": ["mem:12", "fact:3", "mem:7", "mem:12", "mem:0", "mem:-2",
+                                 "mem:1e3", "mem:٣", 5],
+                "temporary": false, "remember_off": true}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["memory_ids"], serde_json::json!([12, 7]));
+        assert_eq!(got["temporary"], false);
+        assert_eq!(got["remember_off"], true);
+        assert!(got.get("injected_ids").is_none());
+        let t = super::route_line_from_header(
+            r#"{"lane": "x", "temporary": true, "injected_facts": 0, "injected_ids": []}"#,
+        )
+        .unwrap();
+        let t: serde_json::Value = serde_json::from_str(&t).unwrap();
+        assert_eq!(t["temporary"], true);
+        assert!(t.get("memory_ids").is_none(), "no ids, no list: {t}");
+        let odd = super::route_line_from_header(r#"{"lane": "x", "temporary": "yes"}"#).unwrap();
+        assert!(!odd.contains("temporary"), "{odd}");
+        let many: Vec<String> = (1..=150).map(|i| format!("mem:{i}")).collect();
+        let header = serde_json::json!({ "lane": "x", "injected_ids": many }).to_string();
+        let capped: serde_json::Value =
+            serde_json::from_str(&super::route_line_from_header(&header).unwrap()).unwrap();
+        assert_eq!(
+            capped["memory_ids"].as_array().unwrap().len(),
+            crate::brain::used::USED_MAX
+        );
+    }
+
+    /// Only a server that says it has a temporary chat gets one.
+    #[test]
+    fn a_temporary_chat_needs_the_capability() {
+        use super::temporary_chat_in_version as has;
+        assert!(has(200, r#"{"capabilities": {"temporary_chat": true}}"#));
+        for (status, body) in [
+            (200, r#"{"capabilities": {"temporary_chat": false}}"#),
+            (200, r#"{"capabilities": {"memory": true}}"#),
+            (200, r#"{"capabilities": {"temporary_chat": "false"}}"#),
+            (200, r#"{"api": 1}"#),
+            (200, "not json"),
+            (503, r#"{"capabilities": {"temporary_chat": true}}"#),
+        ] {
+            assert!(!has(status, body), "{status} {body}");
+        }
+        assert!(super::TEMPORARY_UNAVAILABLE.contains("isn't available"));
+    }
+
+    /// A turn the second graphics card answered. `chat-stream-cases.json` has
+    /// no such header yet (its producer, test_chat_stream_contract.py, does
+    /// not build one), so this starts from its REAL local header and makes
+    /// exactly the two changes second-card.patch makes to `route_header`:
+    /// `lane` becomes the model really answering and `second_card` the
+    /// feature (`route_header["lane"] = _lane2.model`,
+    /// `route_header["second_card"] = _lane2.feature`); `where` stays.
+    #[test]
+    fn the_route_line_carries_second_card_when_the_second_card_answered() {
+        let doc = cases();
+        let local = doc["route_headers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["expect"]["where"] == "local")
+            .expect("a local header");
+        let mut header: serde_json::Value =
+            serde_json::from_str(local["header"].as_str().unwrap()).unwrap();
+        assert!(
+            header.get("second_card").is_none(),
+            "an ordinary turn has no second_card"
+        );
+        let plain = super::route_line_from_header(&header.to_string()).unwrap();
+        assert!(!plain.contains("second_card"));
+        for (model, feature) in [("qwen3:14b", "long_context"), ("qwen2.5vl:7b", "vision")] {
+            header["lane"] = serde_json::json!(model);
+            header["second_card"] = serde_json::json!(feature);
+            let line = super::route_line_from_header(&header.to_string()).unwrap();
+            let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(got["lane"], model);
+            assert_eq!(got["where"], "local");
+            assert_eq!(got["second_card"], feature);
+            assert!(got.get("reason").is_none() && got.get("injected_ids").is_none());
+        }
+        // Not a string: not passed on.
+        header["second_card"] = serde_json::json!(true);
+        let line = super::route_line_from_header(&header.to_string()).unwrap();
+        assert!(!line.contains("second_card"));
+    }
+
+    /// A failed /api/chat shows the server's sentence, not its JSON.
+    #[test]
+    fn a_failed_turn_shows_the_servers_sentence() {
+        use super::error_text_from_body;
+        assert_eq!(
+            error_text_from_body(
+                r#"{"error": "The local model is not running.", "route": {"lane": "x"}}"#
+            )
+            .as_deref(),
+            Some("The local model is not running.")
+        );
+        assert_eq!(
+            error_text_from_body(
+                r#"{"error": {"message": "model not found", "type": "not_found_error"}}"#
+            )
+            .as_deref(),
+            Some("model not found")
+        );
+        assert_eq!(error_text_from_body("<html>502</html>"), None);
+        assert_eq!(error_text_from_body(r#"{"error": ""}"#), None);
+    }
+
+    /// Chat history (JARVIS-API.md section 18): a well-formed id and a known
+    /// device go on at the top level; anything else is left out, never sent.
+    #[test]
+    fn chat_history_fields_go_on_only_when_well_formed() {
+        use super::chat_extras;
+        let id = "3f2c9a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f";
+        let both = chat_extras(Some(id), Some("desktop"));
+        assert_eq!(both["conversation_id"], id);
+        assert_eq!(both["device"], "desktop");
+        assert_eq!(chat_extras(None, Some("hud"))["device"], "hud");
+        for bad in [
+            "short",
+            "has space in it",
+            "slash/es/aren't/ok",
+            &"x".repeat(65),
+        ] {
+            assert!(
+                chat_extras(Some(bad), None).is_empty(),
+                "{bad:?} was passed on"
+            );
+        }
+        // Phone is the phone's to say; nothing else is a device at all.
+        for bad in ["phone", "Desktop", "", "desktop "] {
+            assert!(chat_extras(None, Some(bad)).is_empty(), "{bad:?}");
+        }
+        assert!(chat_extras(None, None).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod deep_hidden_tests {
+    use super::redact_deep;
+
+    #[test]
+    fn hidden_deep_questions_keep_their_state_and_lose_their_words() {
+        let out = redact_deep(serde_json::json!({
+            "available": true,
+            "jobs": [
+                {"id": "d1", "question": "Is my rash serious?", "state": "done",
+                 "answer": "It may be...", "seconds": 90},
+                {"id": "d2", "question": "Plan my budget", "state": "failed",
+                 "why": "The big model stopped."}
+            ]
+        }));
+        let text = out.to_string();
+        for private in ["rash", "It may be", "budget"] {
+            assert!(!text.contains(private), "{private} is still in {text}");
+        }
+        assert_eq!(out["hidden"], true);
+        assert_eq!(out["hidden_count"], 2);
+        assert_eq!(out["jobs"][0]["state"], "done");
+        assert_eq!(out["jobs"][0]["seconds"], 90);
+        assert_eq!(out["jobs"][1]["why"], "The big model stopped.");
+    }
+}
+
+#[cfg(test)]
+mod stop_everything_tests {
+    use super::*;
+
+    #[test]
+    fn the_pcs_own_sentence_follows_stopped_speaking() {
+        let said = stop_everything_words(Ok(serde_json::json!({
+            "ok": true,
+            "message": "Stopped everything. The paused task was forgotten."
+        })));
+        assert_eq!(
+            said,
+            "Stopped speaking. Stopped everything. The paused task was forgotten."
+        );
+    }
+
+    #[test]
+    fn an_older_backend_is_told_apart_from_a_dead_link() {
+        let old = stop_everything_words(Err(
+            "this Jarvis backend has no `/api/stop_all` route - apply the backend patches \
+             (task-control.patch) to turn it on"
+                .to_string(),
+        ));
+        assert!(old.contains("stop-all.patch"), "{old}");
+        assert!(old.starts_with("Stopped speaking."), "{old}");
+        let down = stop_everything_words(Err(crate::plain_errors::unreachable_words(true, false)));
+        assert_eq!(
+            down,
+            format!(
+                "Stopped speaking. Nothing else could be stopped. {}",
+                crate::plain_errors::unreachable_words(true, false)
+            )
+        );
+        assert!(!down.contains("127.0.0.1"), "{down}");
+        let refused = stop_everything_words(Err("jarvis's address is refused".to_string()));
+        assert!(
+            refused.ends_with("Nothing else could be stopped. Jarvis's address is refused."),
+            "{refused}"
+        );
+    }
+
+    #[test]
+    fn a_reply_without_words_still_says_something() {
+        let said = stop_everything_words(Ok(serde_json::json!({"ok": true})));
+        assert!(said.starts_with("Stopped speaking. "), "{said}");
+        assert!(said.len() > "Stopped speaking. ".len());
+    }
+}
+
+#[cfg(test)]
+mod own_network_tests {
+    use super::{
+        base_from, own_network_host, own_network_message, own_network_problem, validate_base,
+        DEFAULT_BASE, OWN_NETWORK_MESSAGE,
+    };
+
+    #[test]
+    fn a_refused_address_means_nothing_is_used_not_this_pc() {
+        assert_eq!(base_from(Some("https://abc123.ngrok-free.app".into())), "");
+        assert_eq!(base_from(Some("http://203.0.113.9:4719".into())), "");
+        assert_eq!(
+            base_from(Some("http://192.168.1.20:4719".into())),
+            "http://192.168.1.20:4719"
+        );
+        assert_eq!(base_from(None), DEFAULT_BASE);
+        // An empty base cannot be dialled: the URL is refused while it is
+        // built, before anything touches the network.
+        assert!(reqwest::Url::parse(&format!(
+            "{}/api/version",
+            base_from(Some("https://abc123.ngrok-free.app".into()))
+        ))
+        .is_err());
+    }
+
+    /// The backend's real verdicts, written by `tools/gen_own_network_cases.py`
+    /// from `backend/jarvis_local_http.py`; `backend/test_own_network_cases.py`
+    /// fails when it is stale. The phone's OwnNetworkTest reads the same file.
+    const FIXTURE: &str = include_str!("../../tests/fixtures/own-network-cases.json");
+
+    fn cases() -> serde_json::Value {
+        serde_json::from_str(FIXTURE).expect("fixture parses")
+    }
+
+    fn rows(all: &serde_json::Value, list: &str) -> Vec<(String, bool)> {
+        all[list]
+            .as_array()
+            .expect("a list")
+            .iter()
+            .map(|c| {
+                let text = c["host"].as_str().or_else(|| c["url"].as_str());
+                (
+                    text.expect("host or url").to_string(),
+                    c["own"].as_bool().expect("own"),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_words_are_the_shared_ones() {
+        assert_eq!(cases()["message"].as_str(), Some(OWN_NETWORK_MESSAGE));
+        assert_eq!(
+            cases()["message_unshown"].as_str(),
+            Some(own_network_message("http://me:pw@evil.com").as_str())
+        );
+    }
+
+    /// Every host, exactly as the backend's `_own_network` judges it.
+    #[test]
+    fn every_host_is_judged_as_the_backend_judges_it() {
+        let all = cases();
+        let hosts = rows(&all, "hosts");
+        assert!(hosts.len() > 40, "the table lost its hosts");
+        for (host, own) in hosts {
+            assert_eq!(own_network_host(&host), own, "{host:?}");
+        }
+    }
+
+    /// Every whole address the way the owner types it: the same verdict,
+    /// and a refusal in exactly the shared words.
+    #[test]
+    fn every_origin_is_judged_the_same_and_a_refusal_says_why() {
+        let all = cases();
+        let message = all["message"].as_str().expect("message");
+        for (url, own) in rows(&all, "origins") {
+            let got = validate_base(&url);
+            if own {
+                assert_eq!(got, Ok(()), "{url}");
+            } else {
+                assert_eq!(got, Err(message.replace("{address}", &url)), "{url}");
+            }
+        }
+    }
+
+    /// Odd shapes: nothing the backend refuses gets through. This app may
+    /// refuse more (a path, a bad port), because it checks the shape too.
+    #[test]
+    fn nothing_the_backend_refuses_is_accepted() {
+        for (url, own) in rows(&cases(), "tricky") {
+            if !own {
+                assert!(validate_base(&url).is_err(), "{url} was accepted");
+            }
+        }
+    }
+
+    /// The tunnels CLAUDE.md names, and https:// to the open internet: it is
+    /// about where the key goes, not whether the line is scrambled.
+    #[test]
+    fn public_tunnels_are_refused_even_over_https() {
+        for url in [
+            "https://abc123.ngrok-free.app",
+            "https://my-jarvis.trycloudflare.com",
+            "https://jarvis.example.com",
+        ] {
+            let why = own_network_problem(url).expect(url);
+            assert!(why.contains("not on your own networks"), "{why}");
+            assert!(why.contains(url), "{why}");
+        }
+    }
+
+    /// A user name or password written into an address is never repeated
+    /// back in the message.
+    #[test]
+    fn a_password_in_the_address_is_not_echoed() {
+        let said = own_network_message("http://me:hunter2@evil.com:4719");
+        assert!(!said.contains("hunter2"), "{said}");
+        assert!(
+            said.starts_with("Jarvis's address is not on your own networks"),
+            "{said}"
+        );
+    }
+
+    /// CONTROL: empty still means "use the default, this PC".
+    #[test]
+    fn empty_still_means_this_pc() {
+        assert_eq!(validate_base(""), Ok(()));
+        assert_eq!(validate_base(super::DEFAULT_BASE), Ok(()));
+    }
+
+    /// CONTROL: the shape errors still come first, in their own words.
+    #[test]
+    fn the_shape_is_still_checked_first() {
+        assert_eq!(
+            validate_base("http://me@127.0.0.1:4719"),
+            Err("the base URL must not carry credentials".to_string())
+        );
+        assert!(validate_base("ftp://127.0.0.1").is_err());
+    }
 }

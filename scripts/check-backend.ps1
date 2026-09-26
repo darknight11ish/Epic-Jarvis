@@ -23,8 +23,10 @@
   The folder holding jarvis_hud.py.
 
 .EXAMPLE
-  .\scripts\check-backend.ps1
-  .\scripts\check-backend.ps1 -BackendPath "D:\jarvis"
+  From the folder this repository is cloned into:
+
+  powershell -ExecutionPolicy Bypass -File .\scripts\check-backend.ps1
+  powershell -ExecutionPolicy Bypass -File .\scripts\check-backend.ps1 -BackendPath "D:\jarvis"
 #>
 
 [CmdletBinding()]
@@ -83,20 +85,50 @@ foreach ($f in $files) {
     }
 }
 
-$have    = @()
-$missing = @()
+
+# Which of them this repository ships whole? apply-patches.ps1 copies those in
+# itself, so a backend without them is not incomplete - it is just not
+# updated yet. This script used to call them MISSING and say "do not run
+# apply-patches.ps1 yet", about the very files apply-patches.ps1 puts there.
+# Read from backend\_where.py's SHIPPED, which a test keeps equal to the
+# script's own list.
+$shippedHere = @{}
+$wherePy = Join-Path (Join-Path (Split-Path -Parent $PSScriptRoot) 'backend') '_where.py'
+if (Test-Path -LiteralPath $wherePy) {
+    $whereText = [IO.File]::ReadAllText($wherePy)
+    $at = $whereText.IndexOf('SHIPPED = (')
+    if ($at -ge 0) {
+        $end = $whereText.IndexOf("`n)", $at)
+        if ($end -lt 0) { $end = $whereText.Length }
+        $block = $whereText.Substring($at, $end - $at)
+        foreach ($mm in [regex]::Matches($block, '"(?:rebuilt/)?(jarvis_\w+)\.py"')) {
+            $shippedHere[$mm.Groups[1].Value] = $true
+        }
+    }
+}
+
+$have     = @()
+$missing  = @()
+$comingIn = @()
 foreach ($m in ($needed.Keys | Sort-Object)) {
     if (Test-Path -LiteralPath (Join-Path $BackendPath "$m.py")) { $have += $m }
+    elseif ($shippedHere.ContainsKey($m)) { $comingIn += $m }
     else { $missing += $m }
 }
 
 Say ""
 Say "Backend : $BackendPath"
-Say "Modules : $($needed.Count) needed, $($have.Count) present, $($missing.Count) missing"
+Say "Modules : $($needed.Count) needed, $($have.Count) present, $($comingIn.Count) to be copied in by apply-patches.ps1, $($missing.Count) missing"
 Say ""
 
 foreach ($m in $have) {
     Write-Host ("  ok       {0}" -f $m) -ForegroundColor Green
+}
+if ($comingIn.Count -gt 0) {
+    Say ""
+    foreach ($m in $comingIn) {
+        Write-Host ("  not yet  {0,-22} this repository ships it; apply-patches.ps1 copies it in" -f $m) -ForegroundColor Cyan
+    }
 }
 if ($missing.Count -gt 0) {
     Say ""
@@ -112,16 +144,17 @@ if ($missing.Count -gt 0) {
 
 Say ""
 if ($missing.Count -eq 0) {
-    Write-Host "  Every module something imports is present." -ForegroundColor Green
+    Write-Host "  Nothing is missing that only your PC can have." -ForegroundColor Green
     Say ""
     Say "  That is not the same as the backend working - a file could still be" Cyan
-    Say "  an empty stub - but nothing is absent. Next:" Cyan
-    Say "      .\scripts\apply-patches.ps1" Cyan
+    Say "  an empty stub - but nothing is absent. Next (one line, from the folder" Cyan
+    Say "  this repository is cloned into):" Cyan
+    Say "      powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath `"$BackendPath`"" Cyan
     Say ""
     exit 0
 }
 
-Write-Host "  $($missing.Count) module(s) are not in that folder." -ForegroundColor Yellow
+Write-Host "  $($missing.Count) module(s) are not in that folder, and this repository does not have them either." -ForegroundColor Yellow
 Say ""
 Say "  Find the one at the top of that list first. Until it is there, Python" Cyan
 Say "  stops at the first import and cannot tell you whether the rest work." Cyan

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-memory-saved-unseen"
+description = "Enables the brain_memory_saved_unseen command without any pre-configured scope."
+commands.allow = ["brain_memory_saved_unseen"]
+
+[[permission]]
+identifier = "deny-brain-memory-saved-unseen"
+description = "Denies the brain_memory_saved_unseen command without any pre-configured scope."
+commands.deny = ["brain_memory_saved_unseen"]

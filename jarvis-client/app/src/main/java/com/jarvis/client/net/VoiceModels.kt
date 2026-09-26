@@ -17,12 +17,18 @@ data class VoiceStatus(
      * Present and false only when the module failed to load on the desktop.
      *
      * Defaulting this to `true` looks like it contradicts "the defaults are the
-     * refusing ones" two lines up, and it does not: `jarvis_speech.status()`
-     * **omits this key entirely** when the module is healthy — the real payload
-     * is `{listening, stt, tts, audio_in, gate}` and nothing else. Defaulting
-     * it to false would make `canPushToTalk` false on every good response and
-     * hide the microphone button permanently. The refusal is carried by
-     * `listening.pushToTalk`, which does default to false.
+     * refusing ones" two lines up, and it does not: a desktop older than
+     * 2026-09-23 **omits this key** when the module is healthy (the one in
+     * this repository's `backend/jarvis_speech.py` now sends `true`).
+     * Defaulting it to false would make `canPushToTalk` false on every good
+     * response from those and hide the microphone button permanently. The
+     * refusal is carried by `listening.pushToTalk`, which does default to
+     * false.
+     *
+     * Until 2026-09-23 `jarvis_speech.status()` sent none of the nested keys
+     * below - only flat ones - so `listening.pushToTalk` was always missing
+     * and the talk button never appeared. It now sends both shapes, and
+     * `backend/test_voice_contract.py` checks them against this file.
      */
     val available: Boolean = true,
     val error: String? = null,
@@ -30,7 +36,42 @@ data class VoiceStatus(
     val stt: VoiceEngine = VoiceEngine(),
     val tts: VoiceEngine = VoiceEngine(),
     @SerialName("audio_in") val audioIn: VoiceAudioIn = VoiceAudioIn(),
+    /**
+     * The owner-voice check: whether Jarvis knows the owner's voice yet, and
+     * with which check. Read by "Train my voice" on the Checks screen. The
+     * defaults say "not trained" - the refusing answer.
+     */
+    val gate: VoiceGate = VoiceGate(),
+    /**
+     * "Hey Jarvis" on the desktop: the switch (turned on only by approving a
+     * card), a card waiting, and whether the PC itself can hear the phrase.
+     * Defaults say "off, no card". Read by the Checks screen's wake-word card
+     * and by the phone's own listener (its threshold).
+     */
+    val wake: VoiceWake = VoiceWake(),
+    /**
+     * Smart Turn ("finished, or only paused?"): the owner's switch and the
+     * bar, from the PC so both listeners follow one setting. The phone runs
+     * its own copy of the model; [VoiceTurn.available] is only about the PC's.
+     * Defaults: on, at the model's own 0.5 - a PC from before 2026-09-24
+     * does not send this, and the phone's copy works without it.
+     */
+    val turn: VoiceTurn = VoiceTurn(),
+    /**
+     * The voice flow (docs/JARVIS-API.md section 17): whether the PC can
+     * judge an interruption by talking, and its "One moment." clip. A PC
+     * without `jarvis_voice_flow.py` sends no `flow` at all; the defaults
+     * then allow nothing - and a barge-in clip must never go to such a PC,
+     * which would treat it as push-to-talk and transcribe it.
+     */
+    val flow: FlowStatus = FlowStatus(),
 ) {
+    /** May a clip heard over a reply be sent as `source=barge_in`? Only when the PC says so. */
+    val bargeInUsable: Boolean get() = flow.bargeInUsable
+
+    /** Does the PC hand out a "One moment." clip right now? */
+    val momentUsable: Boolean get() = flow.momentUsable
+
     /**
      * Whether to show a microphone button.
      *
@@ -57,6 +98,15 @@ data class VoiceStatus(
      * said no such thing.
      */
     val sttMissing: Boolean get() = available && stt.status.isNotBlank() && !stt.available
+
+    /**
+     * A voice card is waiting for the owner: the one that turns "hey Jarvis"
+     * on, or a voice training. Neither has an event of its own, so while
+     * this is true the runtime re-reads the status when any approval is
+     * decided - otherwise "Waiting…" stayed on screen after the card was
+     * answered, until something else happened to ask again.
+     */
+    val cardWaiting: Boolean get() = listening.wakeWordPending || wake.pending || gate.training.pending
 }
 
 /**
@@ -99,8 +149,288 @@ enum class WakeWord {
 @Serializable
 data class VoiceListening(
     @SerialName("push_to_talk") val pushToTalk: Boolean = false,
+    /**
+     * Why [pushToTalk] is false, in the desktop's own plain words - "Jarvis
+     * has not learned your voice yet", "the PC has no speech-to-text set up".
+     * Blank when it is true. Shown on the Checks screen's voice card, so a
+     * missing talk button has a reason somewhere.
+     */
+    @SerialName("push_to_talk_why") val pushToTalkWhy: String = "",
     @SerialName("wake_word") val wakeWord: Boolean = false,
     @SerialName("wake_word_why") val wakeWordWhy: String = "",
+    /**
+     * A card to turn the wake word ON is waiting for the owner. Asking for it
+     * does not turn it on; approving the card does. False on a desktop from
+     * before 2026-09-23.
+     */
+    @SerialName("wake_word_pending") val wakeWordPending: Boolean = false,
+)
+
+/** `/api/voice/status` -> `wake`. See [VoiceStatus.wake]. */
+@Serializable
+data class VoiceWake(
+    val enabled: Boolean = false,
+    val pending: Boolean = false,
+    /** openWakeWord's model name, "hey_jarvis". */
+    val phrase: String = "hey_jarvis",
+    /** The spotter's bar, 0..1. The phone uses the desktop's so one number means one thing. */
+    val threshold: Double = 0.5,
+    /** After "hey Jarvis." on its own, how long the desktop waits for the next sentence. */
+    @SerialName("awake_seconds") val awakeSeconds: Double = 8.0,
+    /** Whether the PC can hear "hey Jarvis" in a clip (it checks every one the phone sends). */
+    val spotter: VoiceSpotter = VoiceSpotter(),
+)
+
+/** `/api/voice/status` -> `turn`. See [VoiceStatus.turn]. */
+@Serializable
+data class VoiceTurn(
+    /** `[voice] turn_enabled` on the PC. False: the old fixed one-second pause. */
+    val enabled: Boolean = true,
+    /** Whether the PC has the model (the desktop app asks it; the phone has its own). */
+    val available: Boolean = false,
+    /** "Finished" at or above this probability. */
+    val threshold: Double = 0.5,
+    /** Quiet this long after speech, and the model is asked. */
+    @SerialName("ask_after_ms") val askAfterMs: Int = 200,
+    /** The longest pause kept inside a sentence the model called unfinished. */
+    @SerialName("max_pause_ms") val maxPauseMs: Int = 2000,
+    val why: String = "",
+)
+
+/** `/api/voice/status` -> `flow` (section 17). See [VoiceStatus.flow]. */
+@Serializable
+data class FlowStatus(
+    /** False: jarvis_voice_flow.py is missing on the PC, and nothing below is on. */
+    val available: Boolean = false,
+    @SerialName("barge_in") val bargeIn: FlowBargeIn = FlowBargeIn(),
+    val moment: FlowMoment = FlowMoment(),
+    /**
+     * This PC keeps listening after Jarvis asks a question aloud (section 17,
+     * part 6): the phone records the reply without waiting for "hey Jarvis"
+     * only when this is true.
+     */
+    @SerialName("after_question") val afterQuestion: Boolean = false,
+    /**
+     * This PC reads `interrupted` on a chat question and keeps it on the PC
+     * (section 17, part 7): the phone sends it only when this is true, so an
+     * older PC never passes the field on.
+     */
+    @SerialName("cut_off") val cutOff: Boolean = false,
+) {
+    /** May a clip heard over a reply be sent as `source=barge_in`? Only when the PC says so. */
+    val bargeInUsable: Boolean get() = available && bargeIn.enabled && bargeIn.available
+
+    /** Does the PC hand out a "One moment." clip right now? */
+    val momentUsable: Boolean get() = available && moment.enabled && moment.ready && moment.key.isNotEmpty()
+}
+
+/** `flow.barge_in`: may the owner interrupt Jarvis by talking? */
+@Serializable
+data class FlowBargeIn(
+    /** `[voice] barge_in_enabled` on the PC. */
+    val enabled: Boolean = false,
+    /** The PC can tell the owner's voice now (switched on, a voice print, a voice-ID model, not broad mode). */
+    val available: Boolean = false,
+    /** Why not, in the PC's words ("" when available). */
+    val why: String = "",
+)
+
+/** `flow.moment`: the "One moment." clip. */
+@Serializable
+data class FlowMoment(
+    /** `[voice] one_moment_enabled` on the PC. */
+    val enabled: Boolean = false,
+    /** Changes whenever the clip would sound different: fetch it again then. */
+    val key: String = "",
+    /** The clip for [key] is made; `GET /api/voice/moment` answers at once. */
+    val ready: Boolean = false,
+)
+
+@Serializable
+data class VoiceSpotter(
+    val available: Boolean = false,
+    val engine: String = "",
+    /** Why [available] is false, in the desktop's words. */
+    val why: String = "",
+)
+
+/**
+ * The owner-voice check on the desktop (`jarvis_voice.status()`, nested under
+ * `gate` by `jarvis_speech.status()`).
+ *
+ * `backend/test_voice_contract.py` reads this file and fails if the desktop
+ * stops sending any field here, so a rename on either side is caught there
+ * rather than showing up as a card that quietly says "not trained".
+ */
+@Serializable
+data class VoiceGate(
+    /** "owner": only the trained voice is obeyed. "broad": anyone is. */
+    val mode: String = "owner",
+    val enabled: Boolean = false,
+    /** Whether a voice print exists. False means every voice is refused in owner mode. */
+    val enrolled: Boolean = false,
+    /** How many clips the voice print was made from. */
+    val samples: Int = 0,
+    val threshold: Double = 0.0,
+    /** "spectral-v1" (the basic check), "ecapa", or "sherpa-onnx:…". Shown, never branched on. */
+    val embedder: String = "",
+    /**
+     * True when a real speaker model is installed on the PC. False means the
+     * basic check, which cannot reliably tell two people apart.
+     */
+    @SerialName("speaker_model") val speakerModel: Boolean = false,
+    /**
+     * The voice print was made with a different check than the one installed
+     * now, so it will be refused until the owner trains again. Happens once,
+     * the day the better model is installed.
+     */
+    @SerialName("needs_retraining") val needsRetraining: Boolean = false,
+    val note: String = "",
+    val training: VoiceTrainingState = VoiceTrainingState(),
+    /**
+     * One voice print per microphone (since 2026-09-24): the phone's, the
+     * PC's, and "general" - the single print every training before then
+     * made. A clip is checked against its own microphone's print first.
+     * All untrained on a PC that does not send this.
+     */
+    val prints: VoicePrints = VoicePrints(),
+)
+
+/** `gate.prints`. See [VoiceGate.prints]. */
+@Serializable
+data class VoicePrints(
+    val phone: VoicePrint = VoicePrint(),
+    val desktop: VoicePrint = VoicePrint(),
+    /** The old single print (owner.json). Replaced the next time the phone trains. */
+    val general: VoicePrint = VoicePrint(),
+)
+
+@Serializable
+data class VoicePrint(
+    val trained: Boolean = false,
+    val samples: Int = 0,
+    /** How close a voice must be to pass, 0..1. */
+    val threshold: Double = 0.0,
+    val created: Double = 0.0,
+    @SerialName("needs_retraining") val needsRetraining: Boolean = false,
+)
+
+/** "Train my voice" on the desktop side: whether a card is waiting, and how the last one ended. */
+@Serializable
+data class VoiceTrainingState(
+    /** False when the desktop does not have voice training installed at all. */
+    val available: Boolean = false,
+    /** A training card is waiting for the owner's answer. */
+    val pending: Boolean = false,
+    /** How many clips the waiting card is about. Present only while [pending]. */
+    val clips: Int = 0,
+    /** Seconds until the waiting card expires. Present only while [pending]. */
+    @SerialName("expires_in") val expiresIn: Int = 0,
+    /** How the last training ended, since the desktop started. Null if none has. */
+    val last: VoiceTrainingLast? = null,
+    /** Why [available] is false. */
+    val why: String = "",
+    /**
+     * The PC understands the "someone else" check and the threshold card
+     * (`mode: calibrate` / `mode: threshold`, 2026-09-24). **The phone must
+     * not send either without this**: an older PC reads any body with
+     * clips in it as a training, and would raise a card to replace the
+     * owner's voice with the other person's.
+     */
+    val calibrate: Boolean = false,
+)
+
+@Serializable
+data class VoiceTrainingLast(
+    /** "enrolled", "denied", "timed_out", "refused" or "failed". */
+    val outcome: String = "",
+    val at: Double = 0.0,
+    val samples: Int = 0,
+    val reason: String = "",
+    /**
+     * The "hey Jarvis" check built from the same clips, in the PC's words:
+     * "built from 4 "hey Jarvis" sentences" or "not built: ...". Blank from
+     * a PC older than 2026-09-24, or for an outcome that trained nothing.
+     */
+    @SerialName("wake_check") val wakeCheck: String = "",
+    /** "threshold_set" outcomes: the new bar. */
+    val threshold: Double = 0.0,
+)
+
+/**
+ * The answer to `POST /api/voice/enroll`. A 202 carries `ok`/`pending`; a
+ * refusal (400 bad clip, 409 already waiting or wrong tier, 503 not
+ * installed) carries `error`, a sentence meant for the owner.
+ */
+/**
+ * The body of `POST /api/voice/enroll`: `{"clips": ["<base64 WAV>", ...]}`.
+ *
+ * JSON with base64 rather than one raw WAV like `/api/voice/utterance`,
+ * because this carries several clips and each needs its own boundary; the
+ * desktop names a bad one by its number ("clip 3 is too short"). Built by
+ * hand rather than through a serializer: base64 never contains a character
+ * JSON needs escaped, so there is nothing to get wrong, and a multi-megabyte
+ * string is not copied through a JSON tree on the way.
+ *
+ * java.util.Base64 rather than android.util.Base64, so the unit test runs on
+ * a plain JVM; it has been on Android since API 26 and minSdk is 33.
+ */
+fun enrollRequestBody(clips: List<ByteArray>, mic: String? = null, mode: String? = null): String {
+    val enc = java.util.Base64.getEncoder()
+    // `mode` and `mic` are fixed words from this app (never user text), so
+    // they need no escaping either. Absent, the PC reads "enrol" and "no
+    // microphone named" - which is what a PC older than 2026-09-24 does anyway.
+    val head = buildString {
+        append("{")
+        if (mode != null) append("\"mode\":\"").append(mode).append("\",")
+        if (mic != null) append("\"mic\":\"").append(mic).append("\",")
+        append("\"clips\":[")
+    }
+    return clips.joinToString(prefix = head, postfix = "]}", separator = ",") {
+        "\"" + enc.encodeToString(it) + "\""
+    }
+}
+
+/** `{"mode": "threshold", "mic": ..., "threshold": 0.52}` - asks for a card; changes nothing itself. */
+fun thresholdRequestBody(value: Double, mic: String): String =
+    "{\"mode\":\"threshold\",\"mic\":\"$mic\",\"threshold\":" +
+        String.format(java.util.Locale.US, "%.2f", value) + "}"
+
+/**
+ * The PC's answer to the "someone else" check (`mode: calibrate`): how
+ * each of the other person's clips scored against the owner's print, how
+ * the owner's own training clips scored, and - only when the two are
+ * clearly apart - a stricter bar to propose. Nothing changed on the PC.
+ */
+@Serializable
+data class VoiceCalibration(
+    val ok: Boolean = false,
+    /** One per clip; null where a clip was too short to score. */
+    val scores: List<Double?> = emptyList(),
+    /** The bar in use now. */
+    val threshold: Double = 0.0,
+    /** The owner's own lowest training score. */
+    @SerialName("owner_low") val ownerLow: Double = 0.0,
+    /** The other person's highest score. */
+    @SerialName("others_high") val othersHigh: Double = 0.0,
+    /** True when every one of the owner's clips beat every one of theirs. */
+    val separated: Boolean = false,
+    /** The bar to propose, or null when there is no safe one. */
+    val suggested: Double? = null,
+    /** The PC's own plain sentence about the result. */
+    val message: String = "",
+    val error: String = "",
+)
+
+@Serializable
+data class VoiceTrainingReply(
+    val ok: Boolean = false,
+    val pending: Boolean = false,
+    val clips: Int = 0,
+    val seconds: Double = 0.0,
+    val message: String = "",
+    val error: String = "",
+    @SerialName("expires_in") val expiresIn: Int = 0,
 )
 
 @Serializable
@@ -152,6 +482,59 @@ data class Heard(
     val reason: String = "",
     val seconds: Float = 0f,
     val engine: String = "",
+    /**
+     * False when the desktop could not do this at all (no speech engine; for
+     * a wake-word clip, the wake word switched off or its model missing).
+     * Defaults to true, like the desktop's own `voice.rs`, so an older desktop
+     * that omits it is not read as broken.
+     */
+    val available: Boolean = true,
+    /** `source=wake_word` only: "hey Jarvis" was heard in the clip, from the owner. */
+    @SerialName("wake_heard") val wakeHeard: Boolean = false,
+    /** The clip was "hey Jarvis" and nothing else: send the next sentence. */
+    val awake: Boolean = false,
+    @SerialName("awake_seconds") val awakeSeconds: Float = 0f,
+    /**
+     * May an answer drawn from email, the calendar, notes or memory be READ
+     * ALOUD for this request? True only when the owner chose "voice check is
+     * enough" (and the check is very strict). False - and missing, from a PC
+     * older than 2026-09-24 - means the phone reads such an answer aloud
+     * only when nothing says it is private (voice/PrivateAloud.kt).
+     */
+    @SerialName("private_aloud") val privateAloud: Boolean = false,
+    /**
+     * The words asked about something private (email, calendar, notes; and
+     * memory only while the owner keeps memory answers on screen). A hint.
+     */
+    @SerialName("question_private") val questionPrivate: Boolean = false,
+    /**
+     * May an answer that uses what Jarvis REMEMBERS be read aloud, when
+     * nothing else about it is private? True by default on the PC (the
+     * owner's choice, 2026-09-24); false with "keep them on screen" - and
+     * false when missing, from an older PC.
+     */
+    @SerialName("memory_aloud") val memoryAloud: Boolean = false,
+    /**
+     * May an answer that uses a SENSITIVE saved fact (health, money,
+     * passwords, other people's private details) be read aloud? True only when the owner chose
+     * "Read aloud" for those (`sensitive_memory: sensitive_aloud`) AND a real
+     * voice check passed. False - and missing, from a PC older than the
+     * owner's decision of 2026-09-24 - keeps such answers on screen, even
+     * when [privateAloud] or [memoryAloud] is true (voice/PrivateAloud.kt).
+     */
+    @SerialName("sensitive_aloud") val sensitiveAloud: Boolean = false,
+    /**
+     * The clip had less speech than a command needs, so the PC would not
+     * act on it (since 2026-09-24; false from an older PC). [reason] is the
+     * PC's own "say a little more" sentence, and it is shown as it is.
+     *
+     * For "hey Jarvis, <command>" the PC sends this with `ok`, `owner` and
+     * `wake_heard` all true and no text - it WAS the owner saying the phrase,
+     * only the command after it was too short to check. Read as a
+     * transcript, that empty text used to say "Nothing came back to send."
+     * instead of what went wrong. See [outcome] and `WakeRules.verdict`.
+     */
+    @SerialName("too_short") val tooShort: Boolean = false,
 ) {
     enum class Outcome {
         /** Verified, transcribed. Feed [text] to the chat. */
@@ -177,6 +560,10 @@ data class Heard(
 
     val outcome: Outcome
         get() = when {
+            // Before TRANSCRIBED: a too-short "hey Jarvis, <command>" comes
+            // back with ok and owner true and nothing to send.
+            tooShort -> Outcome.REFUSED
+
             ok && owner -> Outcome.TRANSCRIBED
 
             // owner:true with ok:false can only mean the gate recognised him
@@ -204,6 +591,11 @@ data class Heard(
         // The server's own words: "too short to identify a voice (0.09s)",
         // "silence", "need 16000Hz". All of them are safe to show and all of
         // them tell the owner something they can act on.
-        Outcome.REFUSED -> reason.ifBlank { "Didn't catch that." }
+        Outcome.REFUSED -> reason.ifBlank { if (tooShort) TOO_SHORT else "Didn't catch that." }
+    }
+
+    companion object {
+        /** Only when the PC said "too short" and gave no sentence of its own; the desktop's words. */
+        const val TOO_SHORT = "That was too short to be sure it was you. Say a little more."
     }
 }

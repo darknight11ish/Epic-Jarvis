@@ -1,11 +1,12 @@
 /**
- * Tests the quickbar's markdown renderer.
+ * Tests the markdown renderer the quickbar and the Brain's deep questions
+ * share (src/markdown.js).
  *
- * There is no bundler and no test framework here, and `main.js` has top-level
- * side effects that need a DOM — so the renderer is sliced out of the real file
- * by its section boundaries and evaluated on its own. Slicing rather than
- * copying is deliberate: a copy would drift, and the bug this file exists to
- * prevent was invisible precisely because nothing executed the parser.
+ * It used to be sliced out of main.js by its section banners, because main.js
+ * has top-level side effects that need a DOM. It now lives in its own module
+ * with no side effects, so this imports the real file: still no copy, which is
+ * the point - a copy would drift, and the bug this file exists to prevent was
+ * invisible precisely because nothing executed the parser.
  *
  * The bug: the opening-fence regex accepted only a bare `[\w+-]` language, but
  * the paragraph branch excludes every line starting with a fence. A line that
@@ -19,25 +20,15 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { renderMarkdown } from "../src/markdown.js";
 
+// main.js must use this module, not grow its own renderer back.
 const here = dirname(fileURLToPath(import.meta.url));
-const source = readFileSync(join(here, "..", "src", "main.js"), "utf8");
-
-const start = source.indexOf("function escapeHtml");
-// Cut back to the start of the next section's banner comment, not to the text
-// inside it, or the slice ends mid-comment and will not parse.
-const nextSection = source.indexOf("   Card rendering and native window sizing");
-const end = nextSection < 0 ? -1 : source.lastIndexOf("/* ===", nextSection);
-if (start < 0 || end < 0 || end <= start) {
-  console.error(
-    "Could not slice the markdown section out of main.js. The section banners " +
-      "moved; fix the markers in this file rather than deleting the test."
-  );
+const mainSource = readFileSync(join(here, "..", "src", "main.js"), "utf8");
+if (!mainSource.includes('from "./markdown.js"') || /function renderMarkdown\(/.test(mainSource)) {
+  console.error("main.js no longer imports its renderer from markdown.js.");
   process.exit(2);
 }
-const { renderMarkdown } = new Function(
-  source.slice(start, end) + "\nreturn { renderMarkdown };"
-)();
 
 let failures = 0;
 const check = (name, condition, detail) => {

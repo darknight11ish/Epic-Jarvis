@@ -1,0 +1,630 @@
+[
+ {
+  "type": "function",
+  "function": {
+   "name": "calculator",
+   "description": "Evaluate a plain arithmetic expression.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "expression": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "expression"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "memory_search",
+   "description": "Search the facts Jarvis has learned about the owner. For the owner's own notes, use notes_search. For the public web, use web_search.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string"
+     },
+     "k": {
+      "type": "integer",
+      "description": "how many facts, default 5"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "file_read",
+   "description": "Read a local text file.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "shell_exec",
+   "description": "Run one shell command on this machine and return its output.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "command": {
+      "type": "string"
+     },
+     "timeout_seconds": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "command"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "control_computer",
+   "description": "Click or type in another Windows program by naming its on-screen controls. A control that cannot be found is reported, not guessed.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "goal": {
+      "type": "string"
+     },
+     "window": {
+      "type": "string",
+      "description": "the exact window title"
+     },
+     "requests": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "control": {
+         "type": "string"
+        },
+        "action": {
+         "type": "string",
+         "enum": [
+          "click",
+          "type",
+          "select",
+          "read"
+         ]
+        },
+        "value": {
+         "type": "string"
+        },
+        "why": {
+         "type": "string"
+        },
+        "irreversible": {
+         "type": "boolean"
+        },
+        "leaves_machine": {
+         "type": "boolean"
+        }
+       }
+      }
+     }
+    },
+    "required": [
+     "goal",
+     "window",
+     "requests"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "control_phone",
+   "description": "Tap, swipe, type, press a key or take a screenshot on the owner's paired Android phone.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device": {
+      "type": "string"
+     },
+     "goal": {
+      "type": "string"
+     },
+     "requests": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "action": {
+         "type": "string",
+         "enum": [
+          "tap",
+          "swipe",
+          "key",
+          "text",
+          "screenshot"
+         ]
+        },
+        "x": {
+         "type": "integer"
+        },
+        "y": {
+         "type": "integer"
+        },
+        "x1": {
+         "type": "integer"
+        },
+        "y1": {
+         "type": "integer"
+        },
+        "x2": {
+         "type": "integer"
+        },
+        "y2": {
+         "type": "integer"
+        },
+        "key": {
+         "type": "string"
+        },
+        "value": {
+         "type": "string"
+        },
+        "why": {
+         "type": "string"
+        },
+        "irreversible": {
+         "type": "boolean"
+        },
+        "leaves_machine": {
+         "type": "boolean"
+        }
+       }
+      }
+     }
+    },
+    "required": [
+     "device",
+     "goal",
+     "requests"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_search",
+   "description": "Check GitHub for an existing library for a coding idea, graded by maintenance and licence. For a general web search, use web_search.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "idea": {
+      "type": "string"
+     },
+     "capabilities": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "idea"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "web_search",
+   "description": "Search the public web for current or outside information. Returns up to 5 results: title, link, snippet. Use a few plain search words; never put private details in them. For what Jarvis knows about the owner, use memory_search. For the owner's own notes, use notes_search. To grade GitHub libraries for a coding idea, use github_search.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "the search words, short"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "calendar_read",
+   "description": "Read the owner's calendar events for the next N days. Read-only. For messages, use email_check.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "days_ahead": {
+      "type": "integer",
+      "description": "default 7, max 90"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "email_check",
+   "description": "Read recent inbox messages: sender, subject, date, preview. Read-only. For appointments and events, use calendar_read. To send, use send_email.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "limit": {
+      "type": "integer",
+      "description": "default 10, max 25"
+     },
+     "unread_only": {
+      "type": "boolean",
+      "description": "default true"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "send_email",
+   "description": "Send one plain-text email from the owner's account. The owner sees all of it on an approval card first; nothing is sent without their yes. No attachments. To read the inbox, use email_check.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "email addresses, e.g. [\"alex@example.com\"]"
+     },
+     "cc": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "subject": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string",
+      "description": "the whole email, as it will be sent"
+     }
+    },
+    "required": [
+     "to",
+     "subject",
+     "body"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "notes_search",
+   "description": "Search the owner's own notes (Obsidian or Joplin). Read-only. For facts Jarvis remembers about the owner, use memory_search. For the public web, use web_search.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer",
+      "description": "default 10, max 20"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "my_files",
+   "description": "Find and read the owner's own files, only in folders they listed on the PC. find: file names with these words. search: words inside notes and text files. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV) and its list of parts. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "find",
+       "search",
+       "read"
+      ]
+     },
+     "words": {
+      "type": "string",
+      "description": "a few words; for read, picks the part"
+     },
+     "path": {
+      "type": "string",
+      "description": "read: the full path find gave"
+     },
+     "part": {
+      "type": "integer",
+      "description": "read: which part, from its list"
+     }
+    },
+    "required": [
+     "action"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "home_read",
+   "description": "Read the state of named Home Assistant entities. Read-only. To change something, use home_control.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "entity_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "e.g. [\"light.kitchen\"], max 20"
+     }
+    },
+    "required": [
+     "entity_ids"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "home_control",
+   "description": "Call a Home Assistant service on one entity, or up to 10 in entity_ids, e.g. lights off or unlock a door. Locks, alarms, doors, covers: one per call. Changes something real. To only check a state, use home_read.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "domain": {
+      "type": "string",
+      "description": "e.g. \"light\""
+     },
+     "service": {
+      "type": "string",
+      "description": "e.g. \"turn_on\""
+     },
+     "entity_id": {
+      "type": "string"
+     },
+     "entity_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "data": {
+      "type": "object",
+      "description": "e.g. {\"brightness\": 200}"
+     }
+    },
+    "required": [
+     "domain",
+     "service"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "append_logseq_journal",
+   "description": "Add one entry to today's Logseq journal page. Only adds.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "in the owner's words"
+     }
+    },
+    "required": [
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "append_obsidian_daily",
+   "description": "Add one entry to today's Obsidian daily note. Only adds. For a separate note with its own title, use create_joplin_note.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "in the owner's words"
+     }
+    },
+    "required": [
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "create_joplin_note",
+   "description": "Create one new note in Joplin. Never edits a note or makes a notebook. To add to today's daily note, use append_obsidian_daily.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "notebook": {
+      "type": "string",
+      "description": "an existing notebook's exact name (optional)"
+     }
+    },
+    "required": [
+     "title",
+     "body"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "set_timer",
+   "description": "Start a countdown timer on this PC.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "minutes": {
+      "type": "number",
+      "description": "how long, in minutes (0.5 = 30 seconds)"
+     },
+     "label": {
+      "type": "string",
+      "description": "optional short name, e.g. pasta"
+     }
+    },
+    "required": [
+     "minutes"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "set_reminder",
+   "description": "Set a reminder or alarm on this PC, once or repeating. `when` is plain English, e.g. \"tomorrow at 6pm\" or \"in 20 minutes\".",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "what to remind the owner of, in their words"
+     },
+     "when": {
+      "type": "string"
+     },
+     "alarm": {
+      "type": "boolean",
+      "description": "true for a wake-up alarm"
+     },
+     "repeat": {
+      "type": "object",
+      "description": "only for something that repeats",
+      "properties": {
+       "every": {
+        "type": "string",
+        "enum": [
+         "day",
+         "weekday",
+         "week",
+         "hours"
+        ]
+       },
+       "at": {
+        "type": "string",
+        "description": "HH:MM, 24-hour"
+       },
+       "days": {
+        "type": "array",
+        "items": {
+         "type": "integer"
+        },
+        "description": "0 = Monday ... 6 = Sunday"
+       },
+       "hours": {
+        "type": "integer"
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "todo_add",
+   "description": "Add one item to the owner's to-do list on this PC.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "todo_done",
+   "description": "Mark one item on the owner's to-do list as done.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "item": {
+      "type": "string",
+      "description": "the item's words, or enough of them"
+     }
+    },
+    "required": [
+     "item"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "coming_up",
+   "description": "List the owner's timers, alarms, reminders and to-do list on this PC.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ }
+]

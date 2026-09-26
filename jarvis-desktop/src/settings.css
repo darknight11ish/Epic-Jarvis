@@ -117,6 +117,13 @@ input:focus, textarea:focus {
   border-color: var(--cyan);
 }
 
+/* The same ring the theme picker and every button get. A 1px border changing
+   colour was the only sign of focus in these boxes, and it is easy to miss. */
+input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .toggle {
   display: flex;
   align-items: center;
@@ -149,8 +156,8 @@ input:focus, textarea:focus {
 .btn:hover:not(:disabled) { background: rgb(var(--accent-rgb) / 0.2); }
 .btn:disabled {
   opacity: 1;
-  background: var(--surface-raised);
-  border-color: var(--hairline);
+  background: var(--surface-1);
+  border-color: var(--border);
   color: var(--text-faint);
   box-shadow: none;
   cursor: default;
@@ -182,6 +189,177 @@ input:focus, textarea:focus {
 }
 
 .link[data-connected="true"] .dot { background: var(--ok); }
+
+/* Connected but stale, or still connecting: amber, and a different shape, so
+   it is never the hue alone that says "not live". */
+.link[data-tone="warn"] .dot {
+  background: var(--warn);
+  border-radius: 1px;
+}
+
+.link-words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.link[data-tone="warn"] #link-text { color: var(--text); }
+.link[data-tone="bad"] #link-text { color: var(--bad-text); }
+
+/* "Technical detail": the raw words, one tap away and never in the way. */
+.tech {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tech summary {
+  cursor: pointer;
+  color: var(--accent-text);
+}
+
+.tech > span {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.state[data-tone="ok"] { color: var(--ok-text); }
+
+/* Appearance: "On this computer" and "Shared with your phone". */
+.subhead {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.card h2 + .subhead { margin-top: 8px; }
+
+.toggle-detail {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.theme-list {
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+
+.theme-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-top: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.theme-row:has(input:checked) {
+  border-color: var(--line);
+  background: var(--accent-faint);
+}
+
+.theme-row:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.theme-row input { accent-color: var(--cyan); margin: 0; }
+
+.swatch {
+  width: 26px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+}
+
+.swatch[data-swatch="deep-space"] {
+  background: linear-gradient(90deg, var(--swatch-reactor-ground) 60%, var(--swatch-reactor-ink) 60%);
+}
+
+.swatch[data-swatch="paper"] {
+  background: linear-gradient(90deg, var(--swatch-daylight-ground) 60%, var(--swatch-daylight-ink) 60%);
+}
+
+.swatch[data-swatch="high-contrast"] {
+  background: linear-gradient(90deg, var(--swatch-contrast-ground) 60%, var(--swatch-contrast-ink) 60%);
+}
+
+.theme-text { display: flex; flex-direction: column; min-width: 0; }
+.theme-name { font-size: 12.5px; color: var(--text); }
+.theme-blurb { font-size: 11.5px; color: var(--text-muted); }
+
+/* A second, non-colour sign of which row is chosen. */
+.theme-check { visibility: hidden; color: var(--accent-text); }
+.theme-row:has(input:checked) .theme-check { visibility: visible; }
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.choice {
+  padding: 5px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.choice:hover { border-color: var(--line); }
+
+.choice[aria-pressed="true"] {
+  border-color: var(--cyan);
+  background: var(--accent-faint);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.choice:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* A closed section: "Face on this computer" and "More options". Closed every
+   visit, like the phone's. */
+.more {
+  margin: 4px 0 14px;
+}
+
+.more > summary {
+  cursor: pointer;
+  padding: 8px 0;
+  list-style-position: inside;
+}
+
+.more > summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.more-title { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.more-detail { display: block; font-size: 11.5px; color: var(--text-muted); }
+
+.more-options > summary {
+  padding: 12px 18px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--bg-raised);
+}
 
 .state {
   margin: 12px 0 0;
@@ -254,7 +432,7 @@ select:focus-visible {
   align-items: start;
   gap: 6px 14px;
   padding: 10px 0;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--border);
 }
 
 .hotkey:first-child {
@@ -281,9 +459,9 @@ select:focus-visible {
   grid-column: 2;
   min-width: 190px;
   padding: 7px 10px;
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control, 6px);
-  background: var(--surface-raised);
+  background: var(--surface-1);
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--text);
@@ -434,3 +612,273 @@ select:focus-visible {
 }
 
 .about-fact a:hover { text-decoration: underline; }
+
+/* "What this backend supports": capability names as small labels that wrap,
+   the phone's chips. The "not on this backend" ones are quieter. */
+#caps-state[data-tone="bad"] { color: var(--bad-text); }
+
+.caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 12px;
+  padding: 0;
+}
+
+.caps li {
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.caps[data-muted="true"] li {
+  border-color: var(--line-soft);
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Second graphics card. Built from the same pieces as the rest of the page:
+   `.toggle` rows for the switches, `.note` words, `.status` results. A switch
+   that cannot be turned on yet stays on screen, disabled, with its reason
+   in words beside it - never greyed out with nothing said.
+   -------------------------------------------------------------------------- */
+
+#sc-state[data-tone="bad"] { color: var(--bad-text); }
+
+.sc-cards {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.sc-gpu {
+  display: flex;
+  flex-direction: column;
+  padding: 7px 10px;
+  margin-top: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+
+.sc-gpu[data-role="second"] { border-color: var(--line); }
+
+.sc-gpu-name { font-size: 12.5px; color: var(--text); }
+.sc-gpu-role { font-size: 11.5px; color: var(--text-muted); }
+
+.sc-blocked {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.sc-switch {
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.sc-switch:first-child { border-top: none; padding-top: 0; }
+
+.sc-switch .toggle { margin-bottom: 4px; align-items: flex-start; }
+.sc-switch .toggle input { margin-top: 2px; flex: none; }
+
+/* A switch that cannot be turned on yet says why in the line under it, and
+   its name stays at full contrast so it can still be read. */
+.sc-switch .toggle:has(input:disabled) { cursor: default; }
+
+.sc-lines { padding-left: 23px; }
+
+.sc-lines p {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.sc-lines .sc-why { color: var(--text); }
+.sc-lines .sc-waiting { color: var(--accent-text); font-weight: 600; }
+
+.sc-line {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.sc-line[data-tone="ok"] { color: var(--ok-text); }
+.sc-line[data-tone="bad"] { color: var(--bad-text); }
+.sc-line[data-tone="warn"] {
+  padding-left: 8px;
+  border-left: 3px solid var(--warn);
+}
+
+.sc-command { flex-wrap: nowrap; }
+.sc-command input { flex: 1; min-width: 0; }
+.sc-command .btn.small { margin-left: 0; flex: none; }
+
+/* --------------------------------------------------------------------------
+   Hardware and models. The second graphics card's pieces again (`.sc-gpu`,
+   `.sc-line`), plus one box per setup, the memory bars as text blocks, and
+   the numbered steps. A bar over the card and a step that waits get the
+   same edges and colours as everywhere else on the page.
+   -------------------------------------------------------------------------- */
+
+#hw-state[data-tone="bad"] { color: var(--bad-text); }
+
+.hw-preset {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+
+.hw-preset-name { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--text); }
+.hw-rec { color: var(--accent-text); }
+.hw-chosen { color: var(--ok-text); }
+
+.hw-bar {
+  margin: 2px 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.hw-blocks { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text); }
+.hw-bar[data-tone="bad"] .hw-blocks { color: var(--bad-text); }
+
+.hw-off-title { margin: 8px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--text); }
+.hw-off, .hw-details { margin: 0 0 8px; padding-left: 18px; font-size: 11.5px; color: var(--text-muted); }
+
+.hw-steps { margin: 0 0 10px; padding-left: 20px; }
+.hw-step { padding: 6px 0; border-top: 1px solid var(--line-soft); }
+.hw-step:first-child { border-top: none; }
+.hw-step-title { margin: 0 0 2px; font-size: 12.5px; color: var(--text); }
+.hw-step[data-state="later"] .hw-step-title { color: var(--text-muted); }
+.hw-step[data-state="waiting"] .sc-line { color: var(--accent-text); font-weight: 600; }
+
+.hw-modelfile {
+  margin: 4px 0;
+  padding: 8px;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------------------
+   Big model (slow). The second graphics card's pieces, reused: `.sc-gpu`
+   list entries for what was found, `.sc-switch` rows, `.sc-line` words. A
+   model's `note` (for example a giant model on a SATA drive) is a warning,
+   so it gets the warning edge.
+   -------------------------------------------------------------------------- */
+
+#bm-state[data-tone="bad"] { color: var(--bad-text); }
+
+#big-model .sc-gpu[data-state="missing"] { border-left: 3px solid var(--warn); }
+
+#big-model .sc-gpu .bm-warn {
+  margin-top: 3px;
+  padding-left: 8px;
+  border-left: 3px solid var(--warn);
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------------------
+   Voice. The second graphics card's pieces again: `.sc-gpu` entries for each
+   microphone's voice print, `.sc-line` words. A print that needs training
+   gets the warning edge.
+   -------------------------------------------------------------------------- */
+
+#voice-state[data-tone="bad"] { color: var(--bad-text); }
+
+#voice .sc-gpu[data-tone="warn"] { border-left: 3px solid var(--warn); }
+#voices .sc-gpu[data-tone="warn"] { border-left: 3px solid var(--warn); }
+#cv-state[data-tone="bad"] { color: var(--bad-text); }
+
+/* Training, the guided test and adding a voice: the sentence to read is the
+   biggest thing in the box, so it can be read from a normal sitting
+   distance. */
+.vt-box { margin: 0 0 14px; }
+.vt-box .row { flex-wrap: wrap; }
+.vt-sentence {
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.vt-head { margin: 0 0 4px; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.vt-count { margin: 0; font-size: 11.5px; color: var(--text-muted); }
+.vt-meter { margin: 4px 0 10px; }
+.vt-review { list-style: none; margin: 0 0 10px; padding: 0; }
+.vt-review li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--text);
+}
+.vt-review li:first-child { border-top: none; }
+.vt-review .vt-words { flex: 1; min-width: 0; }
+.vt-review .vt-len { font-size: 11px; color: var(--text-muted); }
+.vt-review li[data-tone="warn"] .vt-len { color: var(--bad-text); }
+.vt-choice-detail { margin: -2px 0 8px; }
+.choice:disabled { cursor: default; opacity: 0.55; }
+.cv-voice { flex-direction: row; align-items: center; gap: 8px; }
+.cv-voice label { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; }
+.cv-voice input { accent-color: var(--cyan); margin: 0; flex: none; }
+.cv-voice .cv-text { display: flex; flex-direction: column; min-width: 0; }
+#voices textarea, #voices input[type="text"] { width: 100%; }
+#voice .sc-gpu[data-tone="ok"] .sc-gpu-role { color: var(--ok-text); }
+
+/* Morning briefing (briefing-settings.js): the set-up form. */
+.br-form {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0 12px;
+}
+.br-form legend { font-size: 12px; color: var(--text-muted); padding: 0 4px; }
+.br-form input[type="time"] { font: inherit; margin-left: 8px; }
+
+/* "Open the card" (card-link.js): one line while an approval card waits. */
+.card-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border: 1px solid rgb(var(--warn-rgb) / 0.55);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--warn-faint);
+}
+.card-link[hidden] { display: none; }
+.card-link-kicker { font-weight: 700; color: var(--warn); }
+.card-link-title { flex: 1 1 14em; min-width: 0; overflow-wrap: anywhere; }
+.card-link-more { opacity: 0.8; }
+.card-link-more[hidden] { display: none; }
+.card-link-said:empty { display: none; }
+/* Settings is one long page: the line stays in view while it scrolls, so a
+   card raised by a button far down the page is still one click away. */
+.page > .card-link {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  background: linear-gradient(var(--warn-faint), var(--warn-faint)), var(--bg);
+}

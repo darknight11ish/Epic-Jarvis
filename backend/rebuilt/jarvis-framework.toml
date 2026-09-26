@@ -21,8 +21,12 @@ commercial = false          # this build is not a commercial product
 # ------------------------------------------------------------------------
 [privacy]
 # Matching any of these keeps a turn local, no matter the complexity score.
-# Kept in sync with the _PRIVATE regex in jarvis_router.py by hand for now —
-# if you edit one, edit the other.
+# jarvis_router.py reads this list on every turn and adds it to its own
+# built-in words, so a word added here takes effect without editing any code
+# (and without a restart). An underscore matches a space or a hyphen too:
+# "files_on_disk" catches "files on disk". The router also has a built-in list
+# of its own (_PRIVATE_TERMS) covering most of these; this list only adds to
+# it, never takes away.
 never_leaves_device = [
     "email", "inbox", "calendar",
     "password", "api_key", "token", "secret", "credential",
@@ -44,7 +48,11 @@ allow_free_tier_models_for_research = true
 # ------------------------------------------------------------------------
 # auto = just do it | notify = do it, tell you after | ask = wait for yes,
 # every time | never = refuse; changing this requires editing this file,
-# not asking in conversation.
+# not asking in conversation. The one exception (the owner's decision of
+# 2026-09-26): the apps' "What asks first" page may set seven lines of
+# [autonomy.tiers] to "ask" (from either app, at once), and set them back
+# (on the PC only, one approval card plus Windows Hello). It changes that
+# one line and keeps every other character of this file, comments included.
 [autonomy]
 # Enforcement now EXISTS: jarvis_gate.py reads the tiers below, queues an
 # "ask" action, and blocks the tool call until a human answers in the HUD (or
@@ -73,8 +81,33 @@ approval_timeout_seconds = 180
 [autonomy.tiers]
 web_research              = "auto"
 read_calendar             = "auto"
+# The five tools of backend/README.md "What each one needs in jarvis_gate.py
+# and jarvis-framework.toml" (2026-09-26: they were missing here, and a
+# missing line means "ask" - every calendar, email, notes or home READ raised
+# a card, the morning briefing left calendar and email out, and "tell me
+# when" refused to be set up). Reads stay on the owner's own accounts and
+# change nothing; turning a device on or off still asks.
+calendar_read             = "auto"
+email_read                = "auto"
+notes_search              = "auto"
+home_read                 = "auto"
+home_control              = "ask"
+# Reading files: the file_read tool, and since 2026-09-26 the my_files tool
+# too (finding, searching and reading files ONLY in "Folders Jarvis may look
+# in", which is empty until you add a folder on the PC with an approval
+# card). "ask" gives a card for every look.
 read_files_readonly       = "auto"
-draft_email               = "auto"
+# Saving an email draft (not built yet; I53, "saving drafts to your Drafts
+# folder"). A draft goes up to the mail provider's servers, so it asks
+# until the owner answers the drafts question (docs/FEASIBILITY-AUDIT-
+# 2026-09-26.md, question 1). It is on the never-loosened list
+# (jarvis_asks_first.HARD_LIMITS): no app can make it "auto".
+draft_email               = "ask"
+# Sending one email (jarvis_email_send.py, the owner's decision of
+# 2026-09-25): ONE approval card per email, showing who it goes to, the
+# subject and every word. Must stay "ask": anything else and every email is
+# refused, never sent unasked; "never" switches sending off. The model is
+# offered the tool only once "send_email" is in [tools].enabled.
 send_email                = "ask"
 edit_calendar_event       = "ask"
 delete_calendar_event     = "ask"
@@ -83,6 +116,14 @@ run_shell_on_host         = "ask"
 spend_money               = "ask"
 control_computer          = "ask"
 change_own_config         = "ask"
+# Loosening one line of this table from the desktop's "What asks first" page
+# (the owner's decision of 2026-09-26): one card, approved on this PC only,
+# with Windows Hello. Only calendar_read, email_read, notes_search,
+# home_read, append_obsidian_daily, append_logseq_journal and
+# create_joplin_note can be loosened that way. Must stay "ask": anything
+# else and loosening from the app is refused. Making a line stricter from
+# either app ("ask") needs no card.
+loosen_what_asks_first    = "ask"
 modify_own_code           = "ask"        # additional gate — see [self_modification]
 post_to_external_service  = "never"
 open_public_tunnel        = "never"      # see [security].allow_public_tunnel
@@ -106,6 +147,21 @@ create_logseq_page        = "auto"
 edit_logseq_page          = "ask"
 delete_logseq_page        = "never"
 
+# Obsidian's daily note (#obs), same reasoning as the Logseq journal: it only
+# ever ADDS to the end of today's note, a file on this PC, so it is saved
+# straight away (owner decision, 2026-09-24). Change it to "ask" to get a
+# card every time.
+append_obsidian_daily     = "auto"
+
+# ...except after outside text (owner decision, 2026-09-24, after the safety
+# research). In a turn where Jarvis has read an email, a web page, a file or
+# other tool output - or the conversation already had, or your message was
+# pasted, shared or from the clipboard - a note Jarvis wants to write to
+# Obsidian, Logseq or Joplin is asked under this name instead, and waits for
+# your yes. Must stay "ask": anything else and the note is refused rather
+# than written unasked. A file without this line asks too (unknown_action_tier).
+write_notes_after_outside_text = "ask"
+
 # --- Models: three separate decisions, deliberately not bundled --------
 # Reading public catalogues says nothing about you (see the privacy note in
 # jarvis_models.py) so it is free. A download spends bandwidth and disk. A
@@ -117,6 +173,37 @@ browse_model_catalog      = "auto"
 download_model            = "ask"
 switch_model              = "ask"
 rollback_model            = "auto"
+# Making a tuned copy of a model you already downloaded (jarvis-chat,
+# jarvis-long, jarvis-vision), for one of the three setups in Settings,
+# Hardware and models (docs/HARDWARE-PROFILES.md). Ollama makes it on this
+# PC; nothing downloads. Must stay "ask": anything else and it refuses. A
+# file without this line asks too (unknown_action_tier).
+models_create             = "ask"
+
+# --- Timers, alarms and reminders (jarvis_schedule.py) ------------------
+# A timer, an alarm or a reminder that goes off ONCE needs no card - the
+# owner's decision, 2026-09-25 - so it has no line here. Since 2026-09-26
+# (the approvals audit) a plain REPEATING alarm or reminder ("every weekday
+# at 7") and the standby schedule need no card either, and do not read this
+# line. What still repeats through ONE card, which lists the next three
+# times: the morning briefing and "tell me when" (they read your email or
+# calendar). Must stay "ask": anything else and those are refused, not set
+# up. A file without this line asks too (unknown_action_tier).
+schedule_repeat           = "ask"
+
+# --- Web search (jarvis_search.py, the owner's decisions of 2026-09-25) -----
+# A search straight from your own question, in a conversation where Jarvis
+# has read nothing from outside, runs WITHOUT a card and does not read this
+# line. After Jarvis has read email, files, notes, saved memories or other
+# outside text - or with "Ask before every web search" on - the search is a
+# card showing its exact words, asked under this name. Must stay "ask":
+# anything else and such a search is refused rather than sent unasked.
+# "never" switches web search off altogether. A file without this line asks
+# too (unknown_action_tier).
+search_the_web            = "ask"
+# Turning "Ask before every web search" OFF is one card (turning it on is
+# immediate). Must stay "ask": anything else and the setting stays on.
+stop_asking_before_every_web_search       = "ask"
 
 # --- Power: turning the assistant down, at two depths --------------------
 # Putting Jarvis into quiet/standby, or waking it, is the safe direction
@@ -124,6 +211,69 @@ rollback_model            = "auto"
 # that put it under on their OWN (quiet hours, the idle timer) is a config
 # change and waits - see change_own_config above.
 power_manage              = "auto"
+
+# --- The second graphics card -------------------------------------------
+# Turning on any second-card switch (the desktop's Settings, or the phone's
+# Mind screen) is one approval card. It starts a second copy of Ollama on this PC, reachable from this PC
+# only (127.0.0.1), on the second card. Turning a switch OFF never asks. Must
+# stay "ask": anything else and the switch refuses to turn on at all.
+second_card_enable        = "ask"
+# "Browser control" has its own line: turning it on also lets Jarvis offer its
+# browser tool, which works real web pages on the internet (each plan of
+# steps it would take there is its own approval card). Must stay "ask", the
+# same as above. A toml without this line treats it as an unknown action
+# ([autonomy] unknown_action_tier, never more than "ask").
+second_card_browser_enable = "ask"
+
+# --- The wiki builder (Brain window or phone: "Add to wiki") -------------
+# Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in
+# that Jarvis Wiki folder, on this PC, using the model on the second card -
+# or the big model instead, if you switched the big model on for the wiki.
+# Nothing leaves this PC, and the earlier copy of any page it changes is
+# kept in Jarvis Wiki/.versions. "ask" shows you the card (every page it
+# would write) first. Must stay "ask": since the security audit (L1)
+# jarvis_wiki.py writes pages only on a person's yes, so "notify" or "auto"
+# refuses every "Add to wiki" rather than writing without asking (this
+# comment used to say you may lower it - that stopped being true then).
+# "never" turns "Add to wiki" off.
+wiki_update               = "ask"
+
+# --- The big model (slow), with colibri (docs/BIG-MODEL.md) --------------
+# Turning on a big-model switch (the desktop's Settings, or the phone's
+# Mind screen) is one approval card. It lets Jarvis start colibri on this PC when a background job needs
+# it, reachable from this PC only (127.0.0.1). Turning a switch OFF never
+# asks. Must stay "ask": anything else and the switch refuses to turn on.
+big_model_enable          = "ask"
+# Turning background learning ON (Brain window or phone Mind). One card;
+# turning it off never asks. It must stay "ask": jarvis_learning_switch.py
+# refuses any other tier rather than let this line become your yes.
+learning_enable           = "ask"
+# Turning chat history back ON after it was turned off (Brain window or
+# phone). It is on by default: your chats, voice included, kept on this PC,
+# encrypted. One card; turning it off never asks. It must stay "ask":
+# jarvis_chat_log.py refuses any other tier rather than let this line
+# become your yes.
+history_enable            = "ask"
+# Automatic learning (docs/JARVIS-API.md section 19). It is ON by default:
+# facts from what you type or say to Jarvis are saved without a card each,
+# and listed in both apps with Forget. Turning it back ON after it was
+# turned off is one card; so is "Also remember sensitive topics
+# automatically" (off by default). Turning either off never asks. Both must
+# stay "ask": jarvis_auto_learn.py refuses any other tier rather than let a
+# line here become your yes.
+learning_auto_enable      = "ask"
+learning_sensitive_enable = "ask"
+
+# --- Custom voices (docs/JARVIS-API.md section 15) -----------------------
+# Adding a voice (a recording of someone reading a sentence, kept on this
+# PC) is one approval card, and switching Jarvis to speak in one is
+# another. Switching back to the built-in voice, or deleting a voice, never
+# asks. Must stay "ask": anything else and both refuse to go ahead.
+custom_voice              = "ask"
+# The better voice: F5-TTS on the second graphics card, started only when
+# Jarvis speaks in a custom voice. Turning it on is one card; off never
+# asks. Must stay "ask", the same as above.
+better_voice_enable       = "ask"
 
 
 # ------------------------------------------------------------------------
@@ -170,10 +320,16 @@ max_tokens = 2048
 bind_address = "127.0.0.1"
 allow_public_tunnel = false                # `jarvis tunnel` permanently forbidden
 remote_access_method = "tailscale_serve_only"
-sandbox_web_research = true
-sandbox_code_execution = true
-sandbox_file_work = true
-sandbox_email_calendar = true
+# NOT IMPLEMENTED - there is no sandbox (security audit L8, 2026-09-25).
+# Four `sandbox_*` settings stood here, all `true`: sandbox_web_research,
+# sandbox_code_execution, sandbox_file_work and sandbox_email_calendar.
+# Nothing ever read them. An approved shell command and a file read run
+# directly on this PC, as you; what protects you is the approval card, the
+# tier table in [autonomy], and (since the same audit) a shell command no
+# longer inheriting Jarvis's passwords and tokens. A setting that looks like
+# protection and gives none is worse than no setting (ARCHITECTURE.md,
+# invariant 6), so they were taken out. If your own copy of this file still
+# has them, they do nothing there either; you can delete them.
 computer_control_containerized = false     # not possible on Windows (WSL2 has no desktop)
 computer_control_always_on = false         # host-side, started on demand only
 
@@ -321,6 +477,16 @@ auto_index_rag = true
 recent_journal_days_indexed = 14
 max_rag_chars_per_file = 2000
 
+[notes.obsidian]
+# The vault folder: the one that has a ".obsidian" folder inside it, e.g.
+# 'C:\Users\you\Documents\MyVault' (single quotes, so the backslashes are
+# kept as they are). Leave empty for no Obsidian. JARVIS_OBSIDIAN_VAULT, if
+# set, wins. Read as plain files on this PC - no Obsidian plugin, no API key.
+# #obs adds to today's daily note (Obsidian's Daily notes core plugin
+# decides its folder and name); Jarvis's notes search reads the .md files.
+# Neither ever creates a vault, and nothing from it goes to a cloud model.
+vault_directory = ""
+
 
 # ------------------------------------------------------------------------
 # 8. MEMORY
@@ -360,12 +526,23 @@ auto_accept = false
 setup_complete = false
 review_queue_max = 200
 
+[memory.entities]
+# "Who is my sister?" (memory wave 3, 2026-09-25): every saved fact is
+# linked to the people and things it names by fixed rules, with no model,
+# always. model_pass = true ALSO asks this PC's local model, once per
+# learning pass, to name who and what the saved facts mention
+# (jarvis_entities.py) - only a model on this PC, and only names that are in
+# a fact word for word are kept. OFF because nobody has measured whether it
+# helps yet. JARVIS_ENTITY_MODEL=1 in the environment does the same.
+model_pass = false
+
 [memory.sleep_time]
-# Letta/MemGPT-style: while you are not talking, use the idle GPU to
-# re-read memory, merge duplicates, retire contradicted facts, and
-# rewrite the summary of you. OFF by default, on purpose: 8B-class models
-# are unreliable at editing structured data about themselves, so this is
-# a prototype until you have watched it work.
+# The idea (Letta/MemGPT-style): while you are not talking, use the idle
+# GPU to re-read memory and SUGGEST tidying it - merging repeats, pointing
+# out facts that contradict each other. Suggest only: any version of this
+# that is ever built may raise review cards, one fact per card, and must
+# never retire or change a stored fact by itself. Nothing in memory is
+# retired or changed without your yes on that one fact.
 #
 # NONE OF THIS EXISTS YET, REGARDLESS OF THE FLAG ABOVE. The line that used
 # to stand here - "the deterministic parts (duplicate merge, contradiction
@@ -376,8 +553,9 @@ review_queue_max = 200
 # the feature, once a day, and says so in its own status() as
 # "implemented": false. There is no "either way" to run in yet.
 enabled = false
-# While disabled, a once-a-day card in the HUD explains what it would do,
-# the upside and the risk, and offers to turn it on. Set remind = false
+# While disabled, a once-a-day card in the Brain window's Memory tab (and
+# on the phone's Mind screen) says it is not built yet and offers to
+# record that you want it. Turning it on runs nothing. Set remind = false
 # to stop being asked.
 remind = true
 remind_hour_local = 9
@@ -399,6 +577,90 @@ idle_minutes_required = 30
 # "capability": the biggest model the pair can hold, generation bounded
 #          by the slower card (a P100 is Pascal: ~2-3x slower per token).
 prefer = "speed"
+# Which card everyday chat runs on. Empty: the card a monitor is plugged
+# into, else nvidia-smi's first card. To choose by hand, put the card's id
+# here - run `nvidia-smi -L` in a terminal and copy the part that starts
+# "GPU-". A number (0, 1) works too, but numbers can change; the id cannot.
+primary_gpu = ""
+
+# ------------------------------------------------------------------------
+# 9b. THE SECOND GRAPHICS CARD (docs/SECOND-CARD.md)
+# ------------------------------------------------------------------------
+# HOW the second card is used, not WHETHER: the on/off switches are not in
+# this file. They are set from the desktop's Settings or the phone's Mind
+# screen, each one through an approval card, and kept in second-card.json next to this file.
+# Everything is off until then, and nothing can be turned on until Jarvis
+# sees a capable second card (Turing or newer, 10 GB or more).
+[second_card]
+# The second copy of Ollama listens on 127.0.0.1 (this PC only - that part
+# cannot be changed) on this port. Not 11434: that is the everyday Ollama.
+port = 11435
+# How long a model stays loaded on the second card after its last use.
+keep_alive = "30m"
+# "auto" leaves it to Ollama, which is what docs/MODEL-TOPOLOGY.md says to
+# do. "on" forces it. "off" is refused (the second card then does not
+# start, and says why): its compact q8_0 conversation memory needs flash
+# attention, and llama.cpp will not load a model that way with it off
+# (docs/HARDWARE-PROFILES.md, section 2.2).
+flash_attention = "auto"
+
+# ------------------------------------------------------------------------
+# 9c. THE BIG MODEL, SLOW (docs/BIG-MODEL.md)
+# ------------------------------------------------------------------------
+# A very large model run by colibri, for background jobs only: the wiki
+# builder and deep questions. Never chat, voice or approvals. HOW it runs,
+# not WHETHER: the switches are set from the desktop's Settings or the
+# phone's Mind screen, each through an approval card, and kept in big-model.json next to this
+# file. Everything is off until then.
+#
+# Windows folders go in SINGLE quotes ('D:\models\x'): in double quotes a
+# backslash means something else and the file would not be read.
+[big_model]
+# The folder you unpacked colibri's Windows release into - the one that
+# holds coli.cmd. Empty: look for coli.cmd on PATH.
+coli_path = ''
+# colibri listens on 127.0.0.1 (this PC only - that part cannot be changed)
+# on this port. Not 11434 or 11435: those are the two Ollamas.
+port = 8765
+# colibri is started when a job needs it and stopped this many minutes
+# after the last one. The medium model holds about 24 GB of memory while
+# it runs, so it is not left running.
+idle_minutes = 10
+# How much text (in tokens) the model is given room for.
+ctx = 16384
+# "off": colibri never touches a graphics card (the default). "on": it may
+# use the SECOND card only - never the main one - and only when Jarvis sees
+# a capable second card whose own features are not running. The prebuilt
+# Windows release has no graphics-card support for RTX 20 cards: see
+# docs/BIG-MODEL.md, "The graphics card" before setting this.
+cuda = "off"
+# Which model each job uses, by its id below. Empty: the wiki uses the
+# first "medium" model and deep questions the first "giant" one.
+wiki_model = ""
+deep_model = ""
+# Giant models: how much memory colibri may plan to use (GB, at least 16).
+giant_ram_gb = 16
+# How long a deep question's answer may be (tokens), and how long Jarvis
+# waits for a model to load and for an answer (minutes).
+deep_max_tokens = 2048
+load_minutes = 20
+answer_minutes = 60
+
+# The models, one [[big_model.models]] block each. Remove the # in front of
+# a block's lines once that model is downloaded, and put its real folder in
+# `dir`. `kind` is "medium" (needs about 24 GB of memory) or "giant".
+#
+# [[big_model.models]]
+# id = "qwen36"
+# name = "Qwen3.6-35B-A3B"
+# dir = 'D:\models\qwen36_i4_gs64'
+# kind = "medium"
+#
+# [[big_model.models]]
+# id = "dsv4-flash"
+# name = "DeepSeek V4 Flash"
+# dir = 'E:\models\DeepSeek-V4-Flash'
+# kind = "giant"
 
 # ------------------------------------------------------------------------
 # 10. INITIATIVE - acting without being asked
@@ -408,14 +670,19 @@ prefer = "speed"
 [initiative]
 enabled = true
 heartbeat_minutes = 30
-# HEARTBEAT.md in the config directory lists the checks in plain words;
-# it is created with sensible defaults the first time the engine runs.
-watch_folders = []                 # e.g. ["~/Downloads", "C:/Jarvis/inbox"]
-calendar_folder = ""               # a folder of .ics files (vdirsyncer/Radicale)
-calendar_lead_minutes = 10
-# Mail needs JARVIS_IMAP_HOST / _USER / _PASSWORD in the environment.
-# Subjects and senders only; bodies are never fetched by the watcher.
-mail_enabled = false
+# NOT BUILT YET (checked 2026-09-23). The engine runs and its timer ticks,
+# but it has NO checks: the original check list was lost and the rebuilt
+# jarvis_initiative.py deliberately does not invent unattended ones. Nothing
+# reads the four settings below, and no HEARTBEAT.md is created. This file
+# used to say "HEARTBEAT.md ... is created with sensible defaults the first
+# time the engine runs" - that was not true. So the apps' "What Jarvis
+# noticed" list stays empty, and the phone now says why.
+watch_folders = []                 # not read yet
+calendar_folder = ""               # not read yet
+calendar_lead_minutes = 10         # not read yet
+# (Planned: mail would need JARVIS_IMAP_HOST / _USER / _PASSWORD, and only
+# subjects and senders would be read.)
+mail_enabled = false               # not read yet
 
 # ------------------------------------------------------------------------
 # 11. MODEL STEWARD - finding, judging and adopting local models
@@ -517,8 +784,10 @@ full_reread_drift = 0.35
 # Mail, calendar, browser history and documents. The one rule: reading any
 # of them pins the conversation to the local model (belt: the result is
 # stamped; braces: the gate's timed taint flag is latched), so personal data
-# reaches a cloud lane by no path. Jarvis never touches your Google or
-# iCloud account - the calendar is a LOCAL CalDAV server's .ics files.
+# reaches a cloud lane by no path. Jarvis never signs in to your Google or
+# iCloud account - the calendar here is a LOCAL CalDAV server's .ics files.
+# (Separately, the calendar_read tool can read a Google calendar through its
+# private link, when you set one: backend/README.md, "Google Calendar".)
 [connectors]
 enabled = true
 
@@ -542,6 +811,24 @@ enabled = true
 # about it leaves the machine. Falls back to a plain PDF text pull if
 # Docling is not installed.
 
+# Plug-in programs (MCP) - jarvis_mcp.py; backend/README.md, "Smarter tools,
+# part 2". Off until you list a program AND set enabled = true. Programs on
+# this PC only (stdio - no web addresses), installed once (never npx/uvx),
+# read-only tools only, and every tool use asks you. Starting a program asks
+# when it is new or has changed. The model reaches these tools only by
+# asking for "plugins" (jarvis_agent's more_tools). To see a program's
+# tools and the pin lines to copy in:
+#   py -3 jarvis_mcp.py inspect jarvis-framework.toml <name>
+# Shape of one entry (full paths; a key only as "credman:<entry name>"):
+#   [mcp.servers.repo]
+#   command = 'C:\Program Files\Python312\python.exe'
+#   args = ['-m', 'mcp_server_git', '--repository', 'C:\Users\you\code\project']
+#   [mcp.servers.repo.tools."git_status"]
+#   pin = "sha256:..."
+#   read_only = true      # only once you have checked it only reads
+[mcp]
+enabled = false
+
 # ------------------------------------------------------------------------
 # 14. VOICE - who may talk to Jarvis, and how it wakes
 # ------------------------------------------------------------------------
@@ -563,10 +850,18 @@ enabled = true
 mode = "owner"
 wake_phrase = "hey_jarvis"
 wake_threshold = 0.5
-# Cosine-similarity bar for accepting a voice as yours. Enrolment lowers it
-# automatically if your own sample clips are loosely clustered, so a strict
-# value here cannot lock you out.
+# Similarity bar for accepting a voice as yours, on the small voice-ID model.
+# Since 2026-09-24 nothing lowers it below that model's own measured floor
+# (training used to lower it to fit your loosest recording - one noisy clip
+# could make Jarvis accept almost anyone). Each model has its own measured
+# bars in jarvis_voice.py (MODEL_BARS); this can only make them stricter.
 threshold = 0.35
+# How strict ("very_strict", the default, or "balanced") and whether private
+# answers may be read aloud are NOT set here: they live in
+# voice\voice-settings.json, and are changed from the apps - tightening at
+# once, loosening only through an approval card. Very strict needs a second,
+# stronger voice-ID model beside the first:
+# speaker_model_strong = "C:/path/to/strong.onnx"   # default: voice-models/speaker/strong.onnx
 awake_timeout_s = 8            # a wake with no speech goes back to sleep
 
 # --- The PHONE's ears -----------------------------------------------------
@@ -591,10 +886,34 @@ wake_word_enabled = false
 # check. CPU by default: the local model already holds most of the card, and
 # a push-to-talk clip is transcribed after the fact rather than streamed, so
 # spending VRAM to finish a two-second clip sooner is the wrong trade here.
-# Set JARVIS_STT_DEVICE=cuda to override. "none" disables transcription and
-# says so rather than returning empty text.
-stt_engine = "faster-whisper"
-stt_model = "small.en"
+#
+# sherpa-onnx is the only engine Jarvis has code for. This line used to say
+# "faster-whisper" (with stt_model = "small.en"), which no code in Jarvis
+# ever spoke - so push-to-talk could never be transcribed. The model is
+# found by its files in <this folder>/voice-models/stt; backend/README.md,
+# "Voice: install the models", has the one-line download for each.
+stt_engine = "sherpa-onnx"
+# sherpa_stt_kind = "nemo_transducer"   # or "sense_voice"; normally guessed from the files
+# stt_threads = 2                       # CPU threads for speech-to-text
+# tts_speaker_id = 0                    # Kokoro voice: 0 = American female; 9 = British male (bm_george)
+# vad_enabled = true                    # Silero VAD trims silence and drops clips with no speech
+#
+# Custom voices (jarvis_voices.py). All optional; these are the defaults.
+# custom_voice_margin = 0.10            # refuse a voice scoring within this of YOUR voice print's bar
+# custom_voice_max_rtf = 1.5            # slower than this (seconds per second of speech), 3 times running: built-in voice for 10 minutes
+# zipvoice_threads = 4                  # processor threads for ZipVoice
+# zipvoice_steps = 4                    # more is slower and a little smoother
+# zipvoice_dir = ''                     # default: <this folder>\voice-models\zipvoice
+# f5_dir = ''                           # default: <this folder>\voice-models\f5-tts (the better voice)
+# f5_python = ''                        # a Python with PyTorch + f5-tts; default: the one running Jarvis
+# f5_idle_minutes = 10                  # the better voice stops after this long with nothing to say
+# f5_steps = 32                         # F5-TTS's steps per sentence
+#
+# The voice flow (jarvis_voice_flow.py, 2026-09-24). All on unless set false
+# here; the apps cannot change these, only use them or not.
+# barge_in_enabled = true               # while Jarvis talks, YOUR voice (or "stop") stops it - never the TV, never its own voice; never transcribed
+# one_moment_enabled = true             # make a short "One moment." clip, in the voice in use, for the apps to play while you wait
+# warm_engines = true                   # load the voice engines in the background before your first spoken turn needs them
 
 
 # ------------------------------------------------------------------------
@@ -617,9 +936,12 @@ stt_model = "small.en"
 # window ends rather than snapping back a moment later.
 [power]
 enabled = true
-# What "auto after idle" and "quiet hours" drop TO. "quiet" or "standby".
-schedule_mode = "quiet"
-idle_mode = "quiet"
+# What "auto after idle" and "quiet hours" were meant to drop TO. NOT READ
+# (checked 2026-09-23): in the rebuilt jarvis_power.py quiet hours always
+# mean Quiet, and the idle check (should_standby) always means Standby,
+# whatever these two say.
+schedule_mode = "quiet"            # not read
+idle_mode = "quiet"                # not read
 
 # Scheduled quiet hours. Local time, and a window may cross midnight.
 schedule_enabled = false

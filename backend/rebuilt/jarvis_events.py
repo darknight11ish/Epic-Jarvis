@@ -76,6 +76,10 @@ RETRY_MS = 3000
 #: The API version reported by hello(). JARVIS-API.md section 2: "api": 1.
 API_VERSION = 1
 
+#: When this process started, near enough: jarvis_hud.py imports this module
+#: at boot. Sent in /api/version as "started" (see hello()).
+_STARTED = time.time()
+
 
 # --------------------------------------------------------------------------
 #   An event
@@ -736,8 +740,50 @@ def _capability_probe() -> dict:
         "power": has("jarvis_power"),
         "voice": has("jarvis_voice"),
         "persona": has("jarvis_style"),
+        # GET/POST /api/appearance (appearance.patch). The phone only syncs
+        # its face when this is true, and it was never sent - so a face
+        # chosen on one device never reached the other. Not an import:
+        # appearance.patch adds functions to jarvis_hud itself, so this asks
+        # the running server whether it has them.
+        "appearance": _hud_has("_appearance_view"),
+        # A temporary chat (`"temporary": true` on /api/chat): no memory
+        # used, nothing learned, nothing kept (temporary-chat.patch, the
+        # owner's decision of 2026-09-25). Asked of the running server, like
+        # appearance: both apps refuse to offer it - rather than send the
+        # flag to a PC that would ignore it - unless this is true.
+        "temporary_chat": _hud_has("_temporary_chat"),
+        # "backend" when POST /api/approve on this PC asks Windows Hello
+        # itself for a risky approval from this PC (owner-check.patch,
+        # jarvis_owner_check.py; docs/APPROVAL-GAP-DESIGN.md step 1). The
+        # desktop then does not ask as well, so the owner is asked once. A
+        # string, not true, so a later kind of check can say what it is.
+        # False on an older backend: the desktop keeps asking itself.
+        "owner_check": _owner_check(),
+        # "Stop everything" (stop-all.patch, jarvis_stop_all.py; the owner's
+        # decision of 2026-09-25): true once POST /api/stop_all is answered
+        # by the running server. Asked of the module that wrapped the
+        # handler, like owner_check. Both apps still try the route when it
+        # is false - stopping is never hidden - and say plainly if the PC
+        # cannot do it yet.
+        "stop_all": _stop_all(),
         "connectors": {},
     }
+
+    # The power mode, not just "the module is there". The desktop reads
+    # capabilities.power.mode at connect time (stream.rs prime_from_version),
+    # and a bare `true` left it on "active" through quiet hours until the
+    # mode next changed. jarvis_power.status() is the same dict /api/status
+    # is built from: mode (with quiet hours applied), why, since. A non-empty
+    # object still reads as "available" on the phone (ApiModels.kt
+    # asCapabilityFlag).
+    if caps["power"]:
+        try:
+            import jarvis_power
+            st = jarvis_power.status()
+            if isinstance(st, dict) and st:
+                caps["power"] = st
+        except Exception:
+            pass
 
     # Voice is the one the doc singles out: "false until the models are
     # downloaded", so importable is not the same as available. Ask the module
@@ -751,6 +797,38 @@ def _capability_probe() -> dict:
         except Exception:
             caps["voice"] = False
     return caps
+
+
+def _owner_check():
+    """ "backend" once jarvis_owner_check has wrapped the running server's
+    POST handler (owner-check.patch), else False. Asked of the module that
+    did the wrapping, not of a file on disk: importable is not installed."""
+    try:
+        import jarvis_owner_check
+        return "backend" if jarvis_owner_check.armed() else False
+    except Exception:
+        return False
+
+
+def _stop_all() -> bool:
+    """True once jarvis_stop_all has wrapped the running server's POST
+    handler (stop-all.patch). Importable is not installed."""
+    try:
+        import jarvis_stop_all
+        return bool(jarvis_stop_all.armed())
+    except Exception:
+        return False
+
+
+def _hud_has(name: str) -> bool:
+    """Does the running server define `name`? jarvis_hud.py normally runs as
+    __main__; under a test or an importer it is `jarvis_hud`."""
+    import sys
+    for modname in ("__main__", "jarvis_hud"):
+        mod = sys.modules.get(modname)
+        if mod is not None and callable(getattr(mod, name, None)):
+            return True
+    return False
 
 
 def hello(client: str = "") -> dict:
@@ -778,6 +856,18 @@ def hello(client: str = "") -> dict:
             "ring": RING,
             "latest": BUS.latest,
         },
+        # What Jarvis is doing right now. docs/JARVIS-API.md says /api/version
+        # "also carries activity", and the desktop reads it from here at
+        # connect time - but it was never sent, so a client connecting
+        # mid-turn showed "idle". The state word only; `detail` stays on the
+        # activity event and /api/status, like every other doorbell field.
+        "activity": str(_ACTIVITY.get("state") or "idle"),
+        # When this server process started (epoch seconds) - roughly when
+        # this module was first imported, which jarvis_hud.py does at boot.
+        # selftest.py --preflight compares it with each shipped module's
+        # file time: a module changed after the start may not be the code
+        # the running server uses until Jarvis is restarted.
+        "started": _STARTED,
         "capabilities": _capability_probe(),
     }
 

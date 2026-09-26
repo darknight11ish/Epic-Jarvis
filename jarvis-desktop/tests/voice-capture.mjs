@@ -113,6 +113,28 @@ await check("a voice turn's reply is spoken; a typed turn's reply is not", async
     `a TYPED reply was spoken anyway: ${JSON.stringify(afterTyped)}`);
 });
 
+await check("the HUD's mic (voice-summon) focuses #mic and says how, but records nothing", async () => {
+  const page = await quickbar({ heard: K.HEARD_OWNER });
+  await page.evaluate(() => window.__emit("voice-summon", null));
+  await page.waitForTimeout(150);
+  const out = await page.evaluate(() => ({
+    focused: document.activeElement && document.activeElement.id,
+    placeholder: document.getElementById("prompt").getAttribute("placeholder"),
+  }));
+  const voice = await calls(page);
+  // And the hold still works from there, the ordinary way.
+  await page.keyboard.down(" ");
+  await page.waitForTimeout(100);
+  await page.keyboard.up(" ");
+  await page.waitForTimeout(250);
+  const afterHold = await calls(page);
+  await page.close();
+  assert.equal(out.focused, "mic");
+  assert.match(out.placeholder, /Hold the mic/);
+  assert.deepEqual(voice, [], `summoning opened the microphone: ${JSON.stringify(voice)}`);
+  assert.deepEqual(afterHold.slice(0, 2), ["start", "stop"], JSON.stringify(afterHold));
+});
+
 await check("CONTROL: no page error from any of the above", async () => {
   const page = await quickbar({ heard: K.HEARD_OWNER });
   await holdAndRelease(page);

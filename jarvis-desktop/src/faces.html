@@ -114,7 +114,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 <div class="wrap">
 <header>
   <div class="lbl">20 faces · 50 colours · 12 patterns · one spec, two renderers</div>
-  <h1>Jarvis Reactor Kit</h1>
+  <h1>Choose Jarvis's face</h1>
   <p class="lede">Every face below is driven by <b>one shared palette and one pattern vocabulary</b>, bound to what Jarvis is doing. Android is Compose and the desktop is a webview, so they cannot share drawing code — what they share is the <b>data</b> at the bottom of this page. Pick a state, pick how it should look, and every face follows.</p>
 </header>
 
@@ -141,15 +141,16 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
     <div class="chips" id="fps"></div>
     <span class="lbl" style="margin-left:10px">All speeds</span>
     <div class="sp" style="max-width:200px"><input type="range" id="allspeed" min="0" max="100" value="50" aria-label="All speeds"><span class="v" id="allspeed-v">1.00×</span></div>
-    <button class="chip" id="randomise">randomise</button>
-    <button class="chip" id="reset">reset all</button>
-    <button class="chip" id="save">save</button>
+    <button class="chip" id="randomise">Randomise</button>
+    <button class="chip" id="reset">Reset all</button>
+    <button class="chip" id="save">Save</button>
     <span class="mono" id="save-state" style="margin-left:10px;color:var(--dim)">—</span>
   </div>
   <div class="row" style="padding-top:0">
     <span class="mono" style="color:var(--dimmer);font-size:11px">
       Colours and patterns apply here — the tray icon follows them. A chosen
-      FACE applies on the phone: nothing on this desktop draws one yet.
+      face is worn by the widget's open panel and the HUD window on this PC,
+      and by the phone.
     </span>
     <span class="mono" id="scheme-read"></span>
     <span class="spacer"></span>
@@ -166,9 +167,9 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
     <span class="mono" id="solo-read">—</span>
     <span class="spacer"></span>
     <div class="sp" style="max-width:210px"><input type="range" id="solo-speed" min="0" max="100" value="50" aria-label="Speed"><span class="v" id="solo-speed-v">1.00×</span></div>
-    <button class="chip" id="solo-cycle" aria-pressed="false">cycle states</button>
-    <button class="chip" id="solo-use">use this face</button>
-    <button class="chip" id="solo-close">close</button>
+    <button class="chip" id="solo-cycle" aria-pressed="false">Cycle states</button>
+    <button class="chip" id="solo-use">Use this face</button>
+    <button class="chip" id="solo-close">Close</button>
   </div>
   <div class="solo-stage"><canvas id="solo-canvas"></canvas></div>
 </div>
@@ -5016,8 +5017,18 @@ async function bootDisplay() {
   document.body.appendChild(canvas);
 
   const params = new URLSearchParams(location.search);
+  // `&feed=parent`: this frame is inside the HUD, which drives it by
+  // postMessage rather than letting it ask the shell. Two reasons it cannot
+  // ask: the HUD window is granted no app commands (capabilities/hud.json),
+  // and capabilities are per window, frames included - so `get_appearance`
+  // and `get_link_state` would only be refused, each refusal a console
+  // error. And Tauri delivers events by evaluating a script in the window's
+  // top-level page, so a frame's own `listen()` never hears one. The HUD's
+  // own state machine is the authority on what the face shows, so the label
+  // under it and the face can never disagree.
+  const FROM_PARENT = params.get("feed") === "parent";
   let faceId = params.get("face");
-  if (!faceId && IS_TAURI) {
+  if (!faceId && IS_TAURI && !FROM_PARENT) {
     try {
       const loaded = await TAURI.core.invoke("get_appearance");
       mergeBindings(loaded);
@@ -5026,24 +5037,174 @@ async function bootDisplay() {
   }
   if (!faceId || !FACE[faceId]) faceId = SPEC.faces[0].id;
 
+  // The same quality the editor's solo view settles on, so the Widget's face
+  // is exactly as sharp as the reactor kit's solo view rather than a notch
+  // below it. Two things had held it back:
+  //
+  //  - Q starts on the "medium" tier, and only budget() ever raises it - on
+  //    any machine with headroom it climbs to "high" within a few seconds.
+  //    Display mode runs its own tick below and never calls budget(), so it
+  //    stayed on medium for good. Medium's `gpu` is 0.80: the three shader
+  //    faces (nucleus, membrane, tokamak) ray-marched 80% of the Widget's
+  //    device pixels and were stretched up to fill it - soft edges, and the
+  //    single biggest clarity gap against the kit.
+  //  - detail was 1.6 where solo uses 1.9, so every CPU face drew coarser
+  //    geometry than the same face in the kit.
+  //
+  // Fixed at "high", not adaptive, because this surface is tiny: the Widget
+  // frame is 120 CSS px, a few hundred device pixels a side, and the budget
+  // governor exists for twenty full-size tiles at once. "high" and not "max"
+  // because high is as far as budget() itself ever climbs on its own - this
+  // copies what the kit actually does, rather than going past it.
+  Q.ss = TIERS.high.ss; Q.detail = TIERS.high.detail; Q.gpu = TIERS.high.gpu; Q.post = TIERS.high.post;
+  QNAME = "high";
+
   const surface = makeSurface(THEME[faceId], canvas, null);
   surface.seed = 7;
   surface.ss = 2;                              // full pixel density, always
-  surface.detail = Math.max(1.6, Q.detail);
+  surface.detail = Math.max(1.9, Q.detail);    // the full detail budget, as openSolo()
 
   const fit = () => sizeSurface(surface);
   window.addEventListener("resize", fit);
   fit();
 
+  // ---- This computer's face settings --------------------------------------
+  // Settings → Appearance → "Face on this computer" (face-tuning.js): the
+  // phone's face editor controls, for the desktop's own face. The defaults -
+  // High, Auto frame rate, 1x, Auto adjust on - draw exactly what this frame
+  // drew before the setting existed. Read without `await`: in the HUD the
+  // message listener below has to be registered before this function's first
+  // await, and a face that starts on the defaults for one frame is harmless.
+  let TUNE = { quality: "high", frameRate: "auto", speed: 1, autoAdjust: true };
+  let tier = "high";          // what is being drawn now (Auto may lower it)
+  let hz = 60, stride = 1, baseStride = 1;
+  const gaps = [];
+  let costAvg = 0, lastStep = 0;
+  function useTier(name) {
+    const t = TIERS[name] || TIERS.high;
+    tier = TIERS[name] ? name : "high";
+    Q.ss = t.ss; Q.detail = t.detail; Q.gpu = t.gpu; Q.post = t.post; QNAME = tier;
+    // High and Max keep the kit's solo floor and full pixel density - what
+    // this frame always drew. Low and Medium deliberately do not: with the
+    // floor they would cost the same as High and save nothing (FaceBudget.kt).
+    surface.ss = tier === "low" ? 1 : tier === "medium" ? 1.5 : 2;
+    surface.detail = tier === "high" || tier === "max" ? Math.max(1.9, t.detail) : t.detail;
+    document.documentElement.setAttribute("data-face-quality", tier);
+    fit();
+  }
+  function applyTune(next) {
+    TUNE = next;
+    // Slow-down only; face-tuning.js clamps too, this is the second lock.
+    surface.speed = Math.min(1, Math.max(0.25, Number(TUNE.speed) || 1));
+    document.documentElement.setAttribute("data-face-speed", String(surface.speed));
+    baseStride = TUNE.autoAdjust ? 1 : strideForRate(TUNE.frameRate);
+    stride = baseStride;
+    useTier(TUNE.autoAdjust ? "high" : TUNE.quality);
+  }
+  // The kit's divisor rule (face-tuning.js strideFor), inlined so the pacing
+  // does not wait on the module.
+  function strideForRate(rate) {
+    const want = rate === "60" ? 60 : rate === "120" ? 120 : hz;
+    return Math.max(1, Math.round(hz / Math.min(want, hz)));
+  }
+  import("./face-tuning.js").then((m) => {
+    applyTune(m.loadFaceTuning());
+    // A change made in Settings, which is another window on the same origin.
+    window.addEventListener("storage", (event) => {
+      if (event.key === m.FACE_TUNING_KEY) applyTune(m.loadFaceTuning());
+    });
+  }).catch(() => { /* keep the defaults */ });
+  // Auto adjust: the editor's budget() rule for one surface. Over budget,
+  // step the quality down, then the frame rate; comfortably under, step back
+  // up - to High at most, as far as budget() itself ever climbs. At most one
+  // change every two seconds, because each quality change resizes the canvas.
+  function govern(cost, now) {
+    if (!TUNE.autoAdjust) return;
+    costAvg = costAvg * 0.9 + cost * 0.1;
+    if (now - lastStep < 2000) return;
+    const order = ["low", "medium", "high"];
+    const i = Math.max(0, order.indexOf(tier));
+    const budgetMs = 1000 / (hz / stride);
+    if (costAvg > budgetMs * 1.45) {
+      if (i > 0) useTier(order[i - 1]);
+      else if (hz / (stride + 1) >= 30) stride++;
+      else return;
+    } else if (costAvg < budgetMs * 0.55 && i < 2) {
+      useTier(order[i + 1]);
+    } else if (costAvg < budgetMs * 0.33 && stride > baseStride) {
+      stride--;
+    } else {
+      return;
+    }
+    lastStep = now;
+  }
+
+  // Under the OS "reduce motion" setting the editor paces itself to CALM_HZ
+  // (see applyTarget); this loop used to run at the display's full rate
+  // regardless, in the Widget and the HUD alike. Same rule as the editor:
+  // draw less often, never faster, and hand the skipped time to the next
+  // draw so the face keeps its speed and moves in fewer, larger steps.
+  // Read on every frame, so toggling the setting applies without a reload.
   let last = performance.now();
+  let owed = 0, lastDraw = -Infinity, vsync = 0;
   function tick(now) {
-    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    const gap = now - last;
+    owed += Math.max(0, gap / 1000);
     last = now;
-    stepAmp(dt);
-    drawSurface(surface, dt, LIVE_STATE);
+    // Learn the display's rate from the first second of frames, as the
+    // editor's probe does, so a 60 or 120 target lands on whole vsyncs.
+    if (gaps.length < 60) {
+      gaps.push(gap);
+      if (gaps.length === 60) {
+        hz = hzFrom(gaps) || 60;
+        baseStride = TUNE.autoAdjust ? 1 : strideForRate(TUNE.frameRate);
+        stride = Math.max(stride, baseStride);
+      }
+    }
+    vsync++;
+    const paced = stride <= 1 || vsync % stride === 0;
+    if (paced && (!CALM.matches || now - lastDraw >= 1000 / CALM_HZ)) {
+      const dt = Math.min(0.1, owed);   // the same 0.1s cap as before
+      owed = 0;
+      lastDraw = now;
+      const t0 = performance.now();
+      stepAmp(dt);
+      drawSurface(surface, dt, LIVE_STATE);
+      govern(performance.now() - t0, now);
+    }
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
+
+  if (FROM_PARENT) {
+    // Registered before this function's first `await`, so it is listening
+    // before the frame's load event - which is when the HUD first posts.
+    const known = new Set(SPEC.states.map(st => st.id));
+    window.addEventListener("message", (event) => {
+      // Only the page that embeds this frame, on this origin.
+      if (event.source !== window.parent || event.origin !== location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== "jarvis-hud-face") return;
+      // A state id this build of the spec does not know is ignored, not
+      // guessed at: the face keeps showing the last state it was told.
+      if (typeof data.state === "string" && known.has(data.state)) LIVE_STATE = data.state;
+      if (data.appearance && typeof data.appearance === "object") {
+        try {
+          mergeBindings(data.appearance);
+          const next = data.appearance.face;
+          if (typeof next === "string" && next !== faceId && FACE[next]) {
+            faceId = next;
+            surface.theme = THEME[faceId];
+            surface.f = FACE[faceId];
+            fit();
+          }
+        } catch (error) { console.error("[faces] could not apply the HUD's appearance", error); }
+      }
+    });
+    // Marks the frame as driven, for tests/hud.mjs and anyone debugging.
+    document.documentElement.setAttribute("data-hud-face", "ready");
+    return;   // no jarvis-link and no appearance-changed: see FROM_PARENT
+  }
 
   // The same broadcast Brain and the Widget's own status bar already
   // subscribe to (see jarvis-link.js's module note: Rust fans one event
@@ -5137,7 +5298,7 @@ function syncFaceChoice() {
   const b = $("solo-use");
   if (!b) return;
   const chosen = SOLO_ON_SCREEN && SOLO_ON_SCREEN === SOLO_FACE;
-  b.textContent = chosen ? "✓ in use" : "use this face";
+  b.textContent = chosen ? "✓ In use" : "Use this face";
   b.setAttribute("aria-pressed", String(Boolean(chosen)));
 }
 

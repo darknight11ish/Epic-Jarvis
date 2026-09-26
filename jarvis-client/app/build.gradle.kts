@@ -4,6 +4,70 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+/**
+ * The commit this build is made from: CI's GITHUB_SHA, else `git rev-parse`,
+ * else "unknown". Through `providers`, so the configuration cache
+ * (gradle.properties) knows what it depends on. Only ever hex or "unknown",
+ * because it is pasted into generated Java as a string.
+ */
+fun gitSha(): String {
+    val fromCi = providers.environmentVariable("GITHUB_SHA").orNull?.trim().orEmpty()
+    val sha = fromCi.ifEmpty {
+        runCatching {
+            providers.exec {
+                commandLine("git", "rev-parse", "HEAD")
+                isIgnoreExitValue = true
+            }.standardOutput.asText.get().trim()
+        }.getOrDefault("")
+    }
+    return if (Regex("^[0-9a-f]{7,40}$").matches(sha)) sha else "unknown"
+}
+
+/**
+ * Android's version number for this build: CI's run number for this
+ * workflow, which only goes up, or 1 for a build made anywhere else.
+ *
+ * It used to be pinned at 1, so ANY build installed over any other and kept
+ * the app's data - including an older one, or a debuggable one (security
+ * audit L3). Android refuses to install a lower number over a higher one
+ * (`adb install -r` says INSTALL_FAILED_VERSION_DOWNGRADE), so with the run
+ * number an older build can no longer replace a newer one. A re-run of the
+ * same workflow run keeps its number, which Android accepts as equal.
+ */
+fun buildVersionCode(): Int =
+    providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.trim()
+        ?.toIntOrNull()?.takeIf { it in 1..2_100_000_000 } ?: 1
+
+/**
+ * The version people see (Android's app info, and About in the app): the one
+ * version number Jarvis shares across the desktop, the phone and the backend,
+ * read from the VERSION file at the top of the repository (0.2.0), with the
+ * last part replaced by this build's number on CI - the same shape as the
+ * desktop installer's version (desktop-release.yml). So a CI build reads
+ * "0.2.57", and a build made anywhere else reads what VERSION says. Through
+ * `providers`, so the configuration cache knows it depends on the file.
+ */
+fun buildVersionName(): String {
+    val base = providers.fileContents(layout.projectDirectory.file("../../VERSION"))
+        .asText.orNull?.trim().orEmpty()
+    val parts = base.split(".")
+    if (parts.size != 3 || parts.any { it.toIntOrNull() == null }) {
+        throw GradleException(
+            "VERSION at the top of the repository must be major.minor.patch, not '$base'")
+    }
+    val run = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.trim()
+        ?.toIntOrNull()?.takeIf { it in 1..2_100_000_000 }
+    return if (run != null) "${parts[0]}.${parts[1]}.$run" else base
+}
+
+/** When [gitSha]'s commit was made, in seconds since 1970, or 0 when git cannot say. */
+fun gitCommitTime(): Long = runCatching {
+    providers.exec {
+        commandLine("git", "log", "-1", "--format=%ct", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().toLong()
+}.getOrDefault(0L)
+
 android {
     namespace = "com.jarvis.client"
     compileSdk = 36
@@ -14,21 +78,42 @@ android {
         // taking 30 would mean a GLES fallback branch carried forever.
         minSdk = 33
         targetSdk = 36
-        versionCode = 1
-        // Not "step0" any more. The number is cosmetic — versionCode is
-        // pinned at 1 so any build installs over any other — but a version
-        // string naming a step this app passed long ago is one more thing
-        // quietly asserting something untrue.
-        versionName = "0.1"
+        versionCode = buildVersionCode()
+        // Cosmetic - versionCode above is what Android compares - but it is
+        // the number the owner reads in About and quotes in a bug report, so
+        // it is the shared version (buildVersionName), not a fixed "0.1".
+        versionName = buildVersionName()
 
         // There was no instrumentation runner, so there was nowhere to put a
         // test that actually starts the app. That is the gap that let a crash
         // in onCreate ship green: the suite compiled the APK and ran unit
         // tests, and never once launched it.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The only native code in the app is ONNX Runtime (the "hey Jarvis"
+        // spotter). Two of its four ABIs: arm64 for the phone, x86_64 for the
+        // CI emulator that starts the release APK. 32-bit ARM and x86 would
+        // add ~13 MB for devices this app will never be installed on
+        // (minSdk 33 phones are 64-bit).
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+
+        // Which commit this build is, for "a newer version is available"
+        // (net/UpdateCheck.kt): the phone compares it with the name of the
+        // APK on the client-latest release, jarvis-client-<first 7>.apk
+        // (.github/workflows/jarvis-client.yml). CI's own GITHUB_SHA first -
+        // it is the commit that release step names - and git otherwise.
+        // "unknown" if neither answers, and the phone then says it cannot
+        // compare rather than guessing.
+        buildConfigField("String", "GIT_SHA", "\"${gitSha()}\"")
+        // When that commit was made, in seconds. A release published before
+        // it is older than this build, not newer. 0 when unknown.
+        buildConfigField("long", "GIT_COMMIT_TIME", "${gitCommitTime()}L")
     }
 
-    // The shared debug key, committed at the repository root. Without it AGP mints
+    // The shared debug key, at keystore/debug.keystore - written there by CI from
+    // the DEBUG_KEYSTORE_B64 secret, never committed (keystore/README.md). Without it AGP mints
     // ~/.android/debug.keystore per machine, and a CI runner is a fresh machine
     // every run - so each build was signed with a different certificate and
     // `adb install -r` over the previous one failed with
@@ -38,7 +123,8 @@ android {
     //
     // Guarded on existence rather than assumed: a checkout of this module alone,
     // without the repository around it, falls back to AGP's generated key and still
-    // builds.
+    // builds. EXCEPT a release build in CI: see verifyReleaseSigningKey below,
+    // which stops it rather than let it quietly sign with a throwaway key.
     signingConfigs {
         getByName("debug") {
             val shared = rootProject.file("../keystore/debug.keystore")
@@ -79,26 +165,26 @@ android {
             // already made — which would leave a reader thinking the shipped
             // APK is debuggable when it is not.)
             //
-            // Signed with the same committed debug key, so `adb install -r`
-            // over an existing install still works: the certificate is what
-            // has to match, not the build type.
+            // Signed with the same shared debug key as the debug build, so
+            // `adb install -r` over an existing install still works: the
+            // certificate is what has to match, not the build type.
             //
             // THE TRIPWIRE ON THAT KEY, recorded here because this is where
-            // someone will be standing when it matters: `keystore/debug.keystore`
-            // is committed to this repository. Android decides whether an APK
-            // may replace an installed app by CERTIFICATE, and a same-signature
-            // update inherits the existing data directory and the Keystore
-            // alias — so anyone holding this key can build an app the phone
-            // accepts as an update to this one and simply ask the Keystore to
-            // decrypt the pairing token. No root, no `run-as`.
+            // someone will be standing when it matters. Android decides
+            // whether an APK may replace an installed app by CERTIFICATE, and
+            // a same-signature update inherits the existing data directory and
+            // the Keystore alias - so anyone holding this key can build an app
+            // the phone accepts as an update to this one and simply ask the
+            // Keystore to decrypt the pairing token. No root, no `run-as`.
             //
-            // That is survivable today only because the repository is PRIVATE.
-            // It is a one-way door: making the repo public exposes the key
-            // retroactively and for every commit in history, and no later
-            // rotation can un-publish it. So — rotate this key BEFORE the repo
-            // is ever made public or shared, never after. Rotating costs one
-            // uninstall/reinstall on the phone and re-pairing, because the new
-            // certificate will not match the installed one.
+            // That door was open once: the first shared key WAS committed
+            // here, in a repository that was public. It was replaced on
+            // 2026-09-19 and removed from history. The key now lives only in
+            // the DEBUG_KEYSTORE_B64 repository secret, and CI writes it to
+            // keystore/debug.keystore for the build (see keystore/README.md).
+            // Never commit it again. The replacement cost one uninstall and a
+            // re-pair on the phone, because the new certificate did not match
+            // the installed one - which is what any future rotation costs too.
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("debug")
@@ -129,8 +215,58 @@ android {
     }
 
     packaging {
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        // Two libraries each carry these licence copies at the same path, and
+        // an APK holds only one file per path. They used to be EXCLUDED,
+        // which left the APK with no copy at all; now the first one is kept.
+        // The full notices (every library, with the Apache text) are in
+        // assets/licenses/NOTICES.txt, shown under FAQ -> About.
+        resources { pickFirsts += "/META-INF/{AL2.0,LGPL2.1}" }
+        // Compressed in the APK and unpacked at install, rather than stored
+        // uncompressed: ONNX Runtime's library is ~15 MB per ABI raw and
+        // ~7 MB compressed, and a sideloaded APK's download size is the one
+        // the owner waits for. Its .so files are 16 KB page-aligned
+        // (checked), so either way loads on Android 15's 16 KB devices.
+        jniLibs { useLegacyPackaging = true }
     }
+}
+
+// A RELEASE build in CI without the shared key fails, instead of quietly
+// signing with a key this machine just made (security audit H1). That quiet
+// fallback is exactly what happened: from 19 Sep 2026 the smoke job rebuilt
+// the release APK on a machine with no key restored, and every published
+// build carried a different throwaway certificate, so none would install
+// over the one before it without an uninstall that wipes the pairing.
+//
+// Only release, only CI. Debug builds (the unit tests, the emulator tests)
+// still fall back to a generated key, because nothing signed that way is
+// published, and a local release build outside CI still works for anyone
+// building the module on its own. GitHub Actions sets CI=true on every run.
+//
+// Checked when the task RUNS, not while Gradle reads this file, so an
+// `assembleDebug` in a job without the key is not stopped by it. The values
+// are captured as a File and a Provider, which the configuration cache
+// (gradle.properties) can store.
+val releaseKeyFile = rootProject.file("../keystore/debug.keystore")
+val onCi = providers.environmentVariable("CI")
+val verifyReleaseSigningKey = tasks.register("verifyReleaseSigningKey") {
+    val keyFile = releaseKeyFile
+    val ci = onCi
+    doLast {
+        if (ci.orNull.equals("true", ignoreCase = true) && !keyFile.exists()) {
+            throw GradleException(
+                "The shared signing key is missing at ${keyFile.path}, and this is a " +
+                    "release build in CI. Stopping on purpose: without it the build tools " +
+                    "would sign with a throwaway key, and the phone would refuse to install " +
+                    "the APK over the copy it already has. Restore the key from the " +
+                    "DEBUG_KEYSTORE_B64 secret first (see keystore/README.md).",
+            )
+        }
+    }
+}
+// configureEach, not named(): AGP registers preReleaseBuild later than this
+// line runs, and configureEach also reaches tasks registered afterwards.
+tasks.configureEach {
+    if (name == "preReleaseBuild") dependsOn(verifyReleaseSigningKey)
 }
 
 dependencies {
@@ -209,6 +345,17 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okio:okio:3.6.0")
+
+    // Runs the "hey Jarvis" spotter (voice/OrtWakeModels.kt) on the phone.
+    // Microsoft's official build, from Maven Central. PINNED to 1.22.0 and
+    // not to be bumped without unzipping the new AAR first: 1.30.0's
+    // AndroidManifest adds INTERNET, ACCESS_NETWORK_STATE and a
+    // TelemetryInitializer content provider that starts at app launch, with
+    // an HTTP client under ai.onnxruntime.telemetry - a phone-home this app
+    // must not carry. 1.22.0, 1.24.3, 1.26.0 and 1.28.0 have none of it
+    // (checked 2026-09-23); 1.22.0 is also the smallest (6.5 MB arm64).
+    // Its AAR ships no R8 rules; proguard-rules.pro keeps ai.onnxruntime.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
 
     testImplementation("junit:junit:4.13.2")
 

@@ -10,8 +10,11 @@ Run before and after the token refactor; the second number is the deliverable.
 import re, sys, pathlib
 
 FILES = ["style.css", "widget.css", "settings.css", "brain.css", "theme.css"]
-SRC = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else
-                   "/home/user/Epic-Jarvis/jarvis-desktop/src")
+# Beside this script (jarvis-desktop/scripts/ -> jarvis-desktop/src), unless a
+# folder is given. It used to default to one machine's absolute path, so on CI
+# every file printed "(missing)" and the check passed having checked nothing.
+SRC = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-")
+                   else pathlib.Path(__file__).resolve().parent.parent / "src")
 # Where defining a literal is legitimate.
 DEFINING = re.compile(r'(?::root\b|\[data-theme[^\]]*\])[^{]*\{')
 # `\b` alone treats `-` as a boundary, so an ID selector like `#face-frame`
@@ -84,10 +87,15 @@ def blocks(src):
     return out
 
 total = 0
+missing = 0
 for name in FILES:
     path = SRC / name
     if not path.exists():
-        print(f"{name:<14} (missing)"); continue
+        # A file this check cannot read is a failure, not a pass: silence
+        # here is exactly how it once checked nothing at all.
+        print(f"{name:<14} MISSING - looked for {path}")
+        missing += 1
+        continue
     src = strip_comments(path.read_text())
     spans = blocks(src)
     hits = []
@@ -99,4 +107,6 @@ for name in FILES:
     if "-v" in sys.argv:
         for line, colour in hits: print(f"     {name}:{line}  {colour}")
 print(f"{'TOTAL':<14} {total:>3}")
-sys.exit(1 if total else 0)
+if missing:
+    print(f"{missing} file(s) could not be read, so this check did not run on them.")
+sys.exit(1 if total or missing else 0)

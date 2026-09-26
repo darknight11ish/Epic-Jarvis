@@ -77,10 +77,17 @@ pub async fn refresh(app: &AppHandle, base: &str) {
 /// scanner exists to catch.
 #[tauri::command]
 pub async fn get_digest(app: AppHandle) -> Result<serde_json::Value, String> {
+    commands::require_base_allowed(&app)?;
     let base = commands::jarvis_base(&app);
-    get_json(&app, &base, "/api/digest")
-        .await
-        .ok_or_else(|| format!("could not read the digest from {base}"))
+    match get_json_status(&app, &base, "/api/digest").await {
+        Ok(body) => Ok(body),
+        // A 404 or 503 means this backend has no digest at all - a fact about
+        // the machine, not a failure worth a Retry. The quickbar already says
+        // "not available on this backend" for `available: false`; this used
+        // to arrive as the same error a dropped connection does.
+        Err(Some(404)) | Err(Some(503)) => Ok(serde_json::json!({ "available": false })),
+        Err(_) => Err(format!("Could not read the brief from {base}.")),
+    }
 }
 
 /// Marks digest rows read. **Marking read is not approving anything in them**
@@ -140,13 +147,27 @@ pub async fn set_attention_muted(app: AppHandle, muted: bool) -> Result<serde_js
 /// `{"error": "..."}` into a struct full of defaults — which for this module
 /// means a confident "nothing is waiting" over a queue that was never read.
 async fn get_json(app: &AppHandle, base: &str, path: &str) -> Option<serde_json::Value> {
+    get_json_status(app, base, path).await.ok()
+}
+
+/// [`get_json`], keeping the HTTP status of a refusal (`None` when there was
+/// no answer at all), so a caller can tell "this route does not exist here"
+/// from "the read failed".
+async fn get_json_status(
+    app: &AppHandle,
+    base: &str,
+    path: &str,
+) -> Result<serde_json::Value, Option<u16>> {
     let client = reqwest::Client::builder()
         .connect_timeout(TIMEOUT)
         .timeout(TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
-        .ok()?;
-    let headers = commands::jarvis_headers(app).ok()?;
+        .map_err(|_| None)?;
+    let headers = commands::jarvis_headers(app).map_err(|_| None)?;
     let response = match client
         .get(format!("{base}{path}"))
         .headers(headers)
@@ -156,19 +177,19 @@ async fn get_json(app: &AppHandle, base: &str, path: &str) -> Option<serde_json:
         Ok(response) => response,
         Err(err) => {
             eprintln!("[jarvis] {path} unavailable: {err}");
-            return None;
+            return Err(None);
         }
     };
     let status = response.status();
     if !status.is_success() {
         eprintln!("[jarvis] {path} answered HTTP {}", status.as_u16());
-        return None;
+        return Err(Some(status.as_u16()));
     }
     match response.json().await {
-        Ok(body) => Some(body),
+        Ok(body) => Ok(body),
         Err(err) => {
             eprintln!("[jarvis] {path} returned something unreadable: {err}");
-            None
+            Err(None)
         }
     }
 }
@@ -188,6 +209,9 @@ async fn post_json(
         .connect_timeout(TIMEOUT)
         .timeout(TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("could not build an HTTP client: {e}"))?;
     let headers = commands::jarvis_headers(app)?;

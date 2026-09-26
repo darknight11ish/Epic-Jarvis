@@ -4,7 +4,13 @@ import androidx.compose.ui.graphics.Color
 import com.jarvis.client.face.Palette
 
 /**
- * The six themes.
+ * The three themes: one dark, one light, one for maximum legibility.
+ *
+ * There were six. Void, Graphite and Ember Dusk were cut at the owner's
+ * request because on a phone they read as the same near-black - which they
+ * nearly had to be, since the face needs a dark ground (Chrome.well) and
+ * every dark theme's surfaces sat within a few shades of it. A phone that
+ * saved one of them lands on Reactor through [byId].
  *
  * Every colour below was measured, not picked: each text tier clears its target
  * against the WORST of the three surfaces, not merely the darkest, and the
@@ -49,102 +55,7 @@ object Themes {
         okMark = Palette.VERDANT_4,
         warnMark = Palette.AMBER_4,
         badMark = Palette.ROSE_4,
-    )
-
-    /**
-     * True black. On an OLED panel those pixels are genuinely off — less power,
-     * and the edge of the app disappears into the bezel.
-     *
-     * This is the theme where `dim_rule`'s "blend toward the background, never
-     * multiply toward zero" earns its keep: a multiply would land banked around
-     * 0.002 relative luminance, which many OLED panels quantise to black, and a
-     * banked face that renders as nothing is a notification that did not happen.
-     */
-    val VOID = Chrome(
-        id = "void",
-        label = "Void",
-        blurb = "True black. Saves power on an OLED screen and hides the app's edges.",
-        dark = true,
-        surface0 = Color(0xFF000000),
-        surface1 = Color(0xFF070A0F),
-        surface2 = Color(0xFF0D131B),
-        well = Color(0xFF000000),
-        textHi = Color(0xFFE6EEF7),   // 15.93:1 worst
-        textMid = Color(0xFF93A6BA),  // 7.46:1 worst
-        textLo = Color(0xFF6C8093),   // 4.57:1 worst
-        hairline = Color(0xFF16202B),
-        hairlineStrong = Color(0xFF26384A),
-        hairlineFocus = Color(0xFF4B7088), // 3.53:1 worst
-        okInk = Palette.VERDANT_4,
-        warnInk = Palette.AMBER_4,
-        badInk = Palette.ROSE_4,
-        okMark = Palette.VERDANT_4,
-        warnMark = Palette.AMBER_4,
-        badMark = Palette.ROSE_4,
-    )
-
-    /**
-     * Lifted neutral ground, no hue in the chrome at all, and a well DARKER
-     * than the surfaces — so the reactor reads as a light source sitting in a
-     * recess rather than a sticker on a panel.
-     *
-     * Its restraint is in the glow budget too, not only the tokens: postScale
-     * 0.5 halves the bloom.
-     */
-    val GRAPHITE = Chrome(
-        id = "graphite",
-        label = "Graphite",
-        blurb = "Restrained. No colour in the chrome, and a quieter glow.",
-        dark = true,
-        surface0 = Color(0xFF101317),
-        surface1 = Color(0xFF171B21),
-        surface2 = Color(0xFF1E242B),
-        well = Color(0xFF0B0D10),
-        textHi = Color(0xFFE8ECF1),   // 13.18:1 worst
-        textMid = Color(0xFFA3ADB9),  // 6.88:1 worst
-        textLo = Color(0xFF848F9C),   // 4.76:1 worst
-        hairline = Color(0xFF2B323A),
-        hairlineStrong = Color(0xFF3D4650),
-        hairlineFocus = Color(0xFF69747F), // 3.28:1 worst
-        okInk = Palette.VERDANT_4,
-        warnInk = Palette.AMBER_4,
-        badInk = Palette.ROSE_4,
-        okMark = Palette.VERDANT_4,
-        warnMark = Palette.AMBER_4,
-        badMark = Palette.ROSE_4,
-        postScale = 0.5f,
-    )
-
-    /**
-     * Warm dark, low blue, for the evening.
-     *
-     * This is the theme that proves the architecture: it changes the ground's
-     * hue and touches not one state colour. The chrome goes warm; the face
-     * stays exactly as bound. The trio stays at step 4 — cool greens on a warm
-     * ground is a contrast, not a clash, and dropping it to reduce blue light
-     * would cost separation the warm chrome has already delivered.
-     */
-    val EMBER_DUSK = Chrome(
-        id = "ember_dusk",
-        label = "Ember Dusk",
-        blurb = "Warm and low-blue, for the evening. The face is unchanged.",
-        dark = true,
-        surface0 = Color(0xFF0B0805),
-        surface1 = Color(0xFF140F0A),
-        surface2 = Color(0xFF1D150E),
-        well = Color(0xFF0B0805),
-        textHi = Color(0xFFF2E9DD),   // 14.99:1 worst
-        textMid = Color(0xFFB5A794),  // 7.65:1 worst
-        textLo = Color(0xFF8F8172),   // 4.76:1 worst
-        hairline = Color(0xFF2E2318),
-        hairlineStrong = Color(0xFF46341F),
-        hairlineFocus = Color(0xFF806A50), // 3.51:1 worst
-        okInk = Palette.VERDANT_4,
-        warnInk = Palette.AMBER_4,
-        badInk = Palette.ROSE_4,
-        okMark = Palette.VERDANT_4,
-        warnMark = Palette.AMBER_4,
-        badMark = Palette.ROSE_4,
+        cloudInk = Palette.VIOLET_4, // 6.04:1 worst, 5.03:1 in a Pill
     )
 
     /**
@@ -188,6 +99,10 @@ object Themes {
         okMark = Palette.VERDANT_2,
         warnMark = Palette.AMBER_2,
         badMark = Palette.ROSE_2,
+        // Step 2 for the Cloud label. Violet-4, which most dark themes use,
+        // is 2.52:1 here and 2.25:1 inside a Pill. Step 2 is still plainly
+        // violet, where step 1 reads as near-black.
+        cloudInk = Palette.VIOLET_2, // 8.66:1 worst, 6.90:1 in a Pill
     )
 
     /**
@@ -218,9 +133,10 @@ object Themes {
         okMark = Palette.VERDANT_4,
         warnMark = Palette.AMBER_4,
         badMark = Palette.ROSE_4,
+        cloudInk = Palette.VIOLET_4, // 6.67:1 worst, 5.75:1 in a Pill
     )
 
-    val ALL: List<Chrome> = listOf(REACTOR, VOID, GRAPHITE, EMBER_DUSK, DAYLIGHT, CONTRAST)
+    val ALL: List<Chrome> = listOf(REACTOR, DAYLIGHT, CONTRAST)
 
     val DEFAULT: Chrome = REACTOR
 

@@ -1,0 +1,80 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -611,6 +611,38 @@
+         pass
+ 
+ 
++# owner-check.patch (docs/APPROVAL-GAP-DESIGN.md step 1, the owner's decision
++# of 2026-09-25). An "approved" row counts only when THIS running backend
++# accepted the approval through its own POST /api/approve - after Windows
++# Hello, for a risky card from this PC - and stamped it there
++# (jarvis_owner_check.py). The stamp's secret is made fresh at every start
++# and lives only in this process's memory. So "approved" written straight
++# into approvals.db by another program has no stamp, and is refused.
++def _approval_stamped(rid, action) -> bool:
++    """True, once, when this process stamped the approval of `rid`. Fails
++    closed: without jarvis_owner_check.py nothing is stamped, so nothing
++    that waits here is approved - apply-patches.ps1 copies it in."""
++    try:
++        import jarvis_owner_check
++        return bool(jarvis_owner_check.take_stamp(rid, action))
++    except Exception:
++        return False
++
++
++def _unstamped_approval(rid, tier, action, row):
++    """The Verdict for an "approved" row this process never stamped. Refused,
++    not denied: no person said no, and a denial would propose a rule."""
++    try:
++        by = row["decided_by"]
++    except Exception:
++        by = None
++    _audit("gate.unstamped_approval", {"id": rid, "action": action, "by": by})
++    return Verdict(False, tier, action,
++                   "it was marked approved, but not through Jarvis's own approval "
++                   "check (POST /api/approve on this PC), so it was refused", rid,
++                   outcome="refused")
++
++
+ @dataclass
+ class Verdict:
+     allowed: bool
+@@ -950,4 +982,8 @@
+             if row["state"] == "approved":
++                # owner-check.patch: only an approval this process stamped.
++                # Deny needs no stamp - refusing is always the safe direction.
++                if not _approval_stamped(rid, action):
++                    return _unstamped_approval(rid, tier, action, row)
+                 _audit("gate.approved", {"id": rid, "action": action,
+                                          "by": row["decided_by"]})
+                 return Verdict(True, tier, action, "approved by a human", rid,
+@@ -980,4 +1016,6 @@
+                 if row and row["state"] == "approved":
++                    if not _approval_stamped(rid, action):
++                        return _unstamped_approval(rid, tier, action, row)
+                     _audit("gate.approved", {"id": rid, "action": action,
+                                              "by": row["decided_by"], "late": True})
+                     return Verdict(True, tier, action, "approved by a human", rid,
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2408,6 +2408,20 @@
+     _refuse_every_interface(bind)
+     if _SCRUBBING_LOG:
+         print("  log        passwords, keys and the token are kept out of this log")
++    # owner-check.patch (docs/APPROVAL-GAP-DESIGN.md step 1): POST
++    # /api/approve now asks Windows Hello itself for a risky card approved
++    # from this PC, and stamps every approval it accepts; the gate believes
++    # no "approved" without that stamp. Wrapped round Handler here, before
++    # anything listens, so both sockets (this one and loopback's) have it.
++    # Without jarvis_owner_check.py nothing is stamped, so every approval is
++    # refused (the gate fails closed) - and the banner says so.
++    try:
++        import jarvis_owner_check
++        print(jarvis_owner_check.install(Handler, origin_ok=_origin_ok,
++                                         token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  approvals  NOT CHECKED ({type(exc).__name__}) - every approval is refused")
++        print("             until jarvis_owner_check.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

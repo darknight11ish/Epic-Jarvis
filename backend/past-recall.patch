@@ -1,0 +1,25 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2788,5 +2788,21 @@
+                 try:
+-                    hits = jarvis_memory.store().search(query, k=MEMORY_K)
++                    # past-recall.patch: a question about the past ("where
++                    # did I live before?", "what did I believe in June?")
++                    # also gets up to three RETIRED facts that match, each
++                    # ending "(no longer true since <date>)". Facts are
++                    # retired, never deleted, and until now a chat only ever
++                    # saw the current ones. Any other question gets exactly
++                    # the search it always got. jarvis_past.py decides, with
++                    # a fixed word check and a fixed date parser - no model
++                    # call. Without that file: the old search, unchanged.
++                    try:
++                        import jarvis_past as _past
++                    except Exception:
++                        _past = None
++                    if _past is not None:
++                        hits = _past.recall(jarvis_memory.store(), query, k=MEMORY_K)
++                    else:
++                        hits = jarvis_memory.store().search(query, k=MEMORY_K)
+                     if hits:
+                         # `created` comes along now: _dated_fact needs it, and
+                         # dropping it here was why the first version of that

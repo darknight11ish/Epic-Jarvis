@@ -19,7 +19,7 @@
         // Validated here and not only in applyTheme: a stale or hand-edited
         // value would otherwise paint an unmatched [data-theme] and then flip
         // 80ms later, which is the flash this exists to prevent.
-        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+        if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
           document.documentElement.setAttribute("data-theme", t);
         }
       } catch (e) {
@@ -58,10 +58,17 @@
             </button>
           </li>
           <li>
+            <button class="rail-item" role="tab" id="tab-history" data-goto="history"
+                    aria-selected="false" aria-controls="view-history" tabindex="-1">
+              <span class="rail-glyph" aria-hidden="true">◷</span>
+              <span class="rail-label">History</span>
+            </button>
+          </li>
+          <li>
             <button class="rail-item" role="tab" id="tab-faculties" data-goto="faculties"
                     aria-selected="false" aria-controls="view-faculties" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">◆</span>
-              <span class="rail-label">Faculties</span>
+              <span class="rail-label">Model</span>
             </button>
           </li>
           <li>
@@ -120,10 +127,9 @@
           <label class="rail-theme">
             <span class="sr-only">Theme</span>
             <select id="theme-picker">
-              <option value="deep-space">Deep space</option>
-              <option value="ember">Ember</option>
-              <option value="paper">Paper</option>
-              <option value="high-contrast">High contrast</option>
+              <option value="deep-space">Reactor</option>
+              <option value="paper">Daylight</option>
+              <option value="high-contrast">High Contrast</option>
             </select>
           </label>
         </div>
@@ -138,13 +144,31 @@
           <div class="topbar-right">
             <!-- Live link state. The same struct the tray and the quickbar
                  read; this window subscribes, it does not poll. -->
-            <span class="link-pill" id="link-pill" data-connected="false">
+            <span class="link-pill" id="link-pill" data-connected="false" data-tone="warn">
               <i aria-hidden="true"></i>
-              <span id="link-text">connecting…</span>
+              <span id="link-text">Connecting…</span>
             </span>
+            <!-- Only while the link is down: asks the stream to reconnect now
+                 rather than wait out its backoff, as the quickbar's does. -->
+            <button class="btn ghost" type="button" id="reconnect-link" hidden>Reconnect</button>
             <button class="btn ghost" type="button" id="refresh">Refresh</button>
           </div>
         </header>
+        <!-- "Open the card" (card-link.js): shown while an approval card waits -
+             one raised by a button in this window, or anywhere else. Its button
+             opens the Jarvis bar on the card; it decides nothing. -->
+        <div class="card-link" id="card-link" hidden></div>
+
+        <!-- How old what is on screen is. The panes are read when they open
+             and on a few events, so "live" over a pane read an hour ago was
+             a claim about the link, not about the numbers under it. -->
+        <p class="freshness" id="freshness" role="status">Reading…</p>
+
+        <!-- The rush latch, on every view. It used to be read only when
+             Advanced > Trust was opened, and to vanish when its check
+             failed. It never offers to clear anything: a latch expires on
+             its own, and Retry only reads again. -->
+        <div class="rush-strip" id="rush-strip" hidden role="status"></div>
 
         <!-- One banner for the whole window: a read that failed says so here
              rather than each pane inventing its own empty state. -->
@@ -224,17 +248,22 @@
                 </span>
               </h2>
               <!--
-                Every frame off the one event stream, in order. The API lists
-                discrete step events (memory lookup / tool call / model call)
-                as not yet built, so this shows what the bus actually carries
-                and says so, rather than implying a reasoning trace it cannot
-                see.
+                Every frame off the one event stream, in order, including the
+                `step` events jarvis_agent.py publishes while it answers:
+                asking the model, each tool starting, finishing or being
+                refused, and writing the answer. Tool NAMES only - never what
+                a tool read, and never the model's own reasoning, which can
+                quote email or files and would reach the phone's lock screen
+                through the same stream.
               -->
               <ol class="trace" id="trace" aria-live="polite" aria-relevant="additions"></ol>
-              <p class="note trace-note">
-                Frames from the event stream, newest last. Per-step reasoning
-                (memory lookup, tool call, model call) is not on the bus yet —
-                when the backend publishes it, it appears here.
+              <p class="note trace-note" id="trace-note">
+                What Jarvis is doing, newest last: asking the model, each tool
+                it uses and whether it worked, then writing the answer. Tools
+                show here only when they are switched on (<code>[tools]
+                enabled</code> in the config). The model's own step-by-step
+                thinking is not shown: it can quote your email or files, and
+                this stream also reaches your phone.
               </p>
             </div>
           </div>
@@ -276,11 +305,41 @@
               <h2>Learning</h2>
               <p class="note">
                 After a conversation goes quiet, Jarvis reads back what
-                <em>you</em> typed — never its own replies, never anything a
-                tool returned — and proposes facts worth keeping. Nothing below
-                enters memory until you say so, one at a time.
+                <em>you</em> typed or said — never its own replies, never
+                anything a tool returned — and picks out facts worth keeping.
+                With “Learn automatically” on, facts in your own words are
+                saved straight away and listed under “Saved automatically”,
+                where you can forget any of them. Everything else waits below
+                for your yes, one at a time.
               </p>
               <div id="memory-learning"></div>
+              <!-- Automatic learning (auto-learn.js): its two switches. -->
+              <div id="memory-auto"></div>
+            </div>
+            <div class="card card-wide" id="memory-auto-card">
+              <h2>Saved automatically</h2>
+              <!-- auto-learn.js HISTORY_NOTE, word for word. -->
+              <p class="note" id="memory-auto-note">Deleting a conversation from History does not forget facts learned from it - use Forget here.</p>
+              <!-- "Jarvis remembered 2 things" on a memory_saved event: a
+                   quiet line, never a pop-up. -->
+              <div id="memory-saved-line" role="status"></div>
+              <div id="memory-auto-list"></div>
+            </div>
+            <div class="card card-wide" id="memory-profile-card">
+              <!-- "Always keep in mind" (memory-profile.js): PROFILE_TITLE and
+                   PROFILE_DETAIL, word for word. Right under "Saved automatically",
+                   where the phone puts it too. -->
+              <h2>Always keep in mind</h2>
+              <p class="note" id="memory-profile-note">Jarvis reads these with every question, word for word. Keep it short.</p>
+              <div id="memory-profile"></div>
+            </div>
+            <!-- "About <name>" (memory-entities.js): the facts Jarvis has linked
+                 to one person or thing, word for word, opened from a name under a
+                 fact. Hidden until one is opened. No summary. -->
+            <div class="card card-wide" id="memory-about-card" hidden>
+              <h2 id="memory-about-title">About</h2>
+              <p class="note" id="memory-about-note">The facts Jarvis has linked to this name, word for word. Nothing here is written by the model.</p>
+              <div id="memory-about"></div>
             </div>
             <div class="card card-wide">
               <h2>Waiting for you</h2>
@@ -289,12 +348,82 @@
             <div class="card card-wide">
               <h2>What Jarvis knows about you</h2>
               <p class="note">
-                Retired facts are shown, greyed. Nothing here is deleted:
-                forgetting stops a fact being recalled and leaves it in the
-                history, so "this used to be true" stays answerable. That also
-                means forgetting cannot be undone.
+                Retired facts are shown, greyed. Forgetting stops a fact being
+                recalled and leaves it in the history, so "this used to be
+                true" stays answerable. That also means forgetting cannot be
+                undone. “Erase the words” goes further: the fact's words are
+                wiped from your PC for good, and only its dates stay - on a
+                forgotten fact too.
               </p>
+              <!-- Filters the list already loaded (ease-of-use audit #7); asks
+                   the PC nothing. Outside #memory-facts so a repaint keeps it. -->
+              <input class="field search memory-facts-filter" id="memory-facts-filter" type="search"
+                     placeholder="Filter this list…" spellcheck="false" autocomplete="off"
+                     aria-label="Filter what Jarvis knows about you" />
               <div id="memory-facts"></div>
+            </div>
+            <!-- The wiki builder (backend/wiki.patch; wiki.js). -->
+            <div class="card card-wide" id="wiki-card">
+              <h2>Wiki</h2>
+              <p class="note">
+                Put .md or .txt files in your vault's <code>Jarvis Wiki/Sources</code>
+                folder, and the model on the second graphics card (or the big
+                model, if you have switched it on for the wiki) turns each one
+                into linked pages in <code>Jarvis Wiki/Pages</code>. Each one asks
+                you first, on one approval card. Nothing leaves this PC.
+              </p>
+              <div id="wiki"></div>
+            </div>
+            <!-- Deep questions (backend/big-model.patch; deep.js). The box
+                 stays put across repaints so typing is never lost; only the
+                 line above it and the list below are redrawn. -->
+            <div class="card card-wide" id="deep-card">
+              <h2>Deep questions</h2>
+              <p class="note">
+                Ask one question you want a careful answer to. The big model
+                answers it in the background on this PC, with no tools, no
+                internet and no memory of your other conversations. It is
+                slow: expect minutes, not seconds. Nothing leaves this PC. The
+                answer stays here for you to read until Jarvis stops or
+                restarts; it is never written to disk.
+              </p>
+              <p class="deep-state" id="deep-state" role="status">Reading…</p>
+              <div class="deep-ask" id="deep-ask" hidden>
+                <label class="deep-label" for="deep-question">Your question</label>
+                <textarea class="field deep-question" id="deep-question" rows="3"
+                          maxlength="4000" spellcheck="true"
+                          aria-describedby="deep-count deep-said"></textarea>
+                <div class="row-actions deep-ask-row" id="deep-ask-row">
+                  <span class="deep-count" id="deep-count"></span>
+                </div>
+                <p class="deep-said" id="deep-said" role="status"></p>
+              </div>
+              <div id="deep-jobs"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── History ────────────────────────────────────────────────── -->
+        <!-- Chat history on the PC (JARVIS-API.md section 18). brain.js
+             draws both cards from GET /api/history, read through its own
+             commands (brain/history.rs), not brain_read; history-view.js
+             has the words and the transcript. -->
+        <section class="view view-panes" id="view-history" role="tabpanel"
+                 aria-labelledby="tab-history" hidden>
+          <div class="panes">
+            <div class="card card-wide">
+              <h2>Chat history</h2>
+              <div id="history-settings"></div>
+            </div>
+            <div class="card card-wide">
+              <h2>Conversations</h2>
+              <p class="note">
+                Newest first. Opening one only reads it. Deleting one removes
+                it from this PC and cannot be undone. There is no "delete
+                everything": delete them one at a time, or choose above how
+                long they are kept.
+              </p>
+              <div id="history-list"></div>
             </div>
           </div>
         </section>
@@ -303,8 +432,66 @@
         <section class="view view-panes" id="view-work" role="tabpanel"
                  aria-labelledby="tab-work" hidden>
           <div class="panes">
+            <div class="card card-wide" id="focus-card">
+              <h2>Focus session</h2>
+              <p class="note">A timer plus Quiet. On the PC, Jarvis watches which app or site is in front and says so when you drift - out loud, on the PC only. It keeps counts, never what it saw, and nothing leaves the PC. Off unless you start it.</p>
+              <div id="focus"></div>
+              <form id="focus-form" class="todo-form focus-form" autocomplete="off" hidden>
+                <label class="standby-time">Minutes
+                  <input id="focus-minutes" class="field" type="number" min="1" max="240" value="25" required>
+                </label>
+                <input id="focus-on" class="field todo-text" type="text" maxlength="60"
+                       placeholder="On what (optional)" aria-label="What the session is on (optional)">
+                <button id="focus-start" class="btn small" type="submit">Start</button>
+              </form>
+              <p class="note">Or say "focus for 30 minutes". While one runs: "lock on this", "snooze", "I'm doing research", "I need a minute", "pause", "how am I doing?".</p>
+              <div id="focus-report"></div>
+            </div>
+            <div class="card card-wide" id="coming-up-card">
+              <h2>Coming up</h2>
+              <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. A repeating reminder or alarm is set up at once, with no card; a repeating briefing or "tell me when" waits for your yes on an approval card.</p>
+              <div id="went-off-part" hidden>
+                <h3 class="subhead">Just went off</h3>
+                <p class="note">In the last hour. Snooze sets it to go off again in 10 minutes - a repeating one keeps its usual times.</p>
+                <div id="went-off"></div>
+              </div>
+              <div id="coming-up"></div>
+              <h3 class="subhead">Tell me when</h3>
+              <p class="note" id="tellme-hint">Say or type "tell me when an email from Alex arrives" or "tell me when the washing machine finishes" - add "urgently" to make it ring until you look. Setting one up asks once with an approval card; when it happens, Jarvis only tells you.</p>
+              <h3 class="subhead">To-do list</h3>
+              <div id="todo-list"></div>
+              <form id="todo-form" class="todo-form" autocomplete="off">
+                <input id="todo-text" class="field todo-text" type="text" maxlength="300"
+                       placeholder="Add to the to-do list" aria-label="Add to the to-do list">
+                <button id="todo-add" class="btn small" type="submit">Add</button>
+              </form>
+              <div id="named-lists"></div>
+              <p class="note" id="lists-note">To start another list, say or type "add milk to the shopping list".</p>
+              <h3 class="subhead">Standby schedule</h3>
+              <p class="note" id="standby-detail">Jarvis goes on standby at night and wakes in the morning - but it wakes only if the schedule put it on standby: if you chose Standby yourself, it stays on until you choose Active. Standby unloads its models and frees the graphics card; waking loads the chat model again, so the first answer is quick. Timers and reminders still go off. Setting it up needs no approval card, and Delete turns it off at once.</p>
+              <p class="note" id="standby-is-set" hidden>Your standby schedule is in the list above. Pause skips it and Delete turns it off. Neither wakes Jarvis - choose Active for that.</p>
+              <form id="standby-form" class="todo-form standby-form" autocomplete="off">
+                <label class="standby-time">Standby at
+                  <input id="standby-start" class="field" type="time" value="01:00" required>
+                </label>
+                <label class="standby-time">Wake at
+                  <input id="standby-end" class="field" type="time" value="07:00" required>
+                </label>
+                <button id="standby-add" class="btn small" type="submit">Set up</button>
+              </form>
+            </div>
+            <div class="card card-wide" id="briefing-card">
+              <h2>Morning briefing</h2>
+              <p class="note">A short list of your day, put together on your PC without the AI model. It only reads: it changes nothing and approves nothing.</p>
+              <div id="briefing"></div>
+              <div class="row">
+                <button id="briefing-now" class="btn small" type="button">Brief me now</button>
+                <button id="briefing-missed" class="btn small" type="button">What did I miss?</button>
+              </div>
+              <p class="note">When it arrives each morning is in Settings, under Morning briefing.</p>
+            </div>
             <div class="card card-wide">
-              <h2>Long Fuse jobs</h2>
+              <h2>Background jobs</h2>
               <p class="note">
                 Each job's capability set was frozen when it was created and
                 cannot grow. A finished job never makes a sound — it adds a

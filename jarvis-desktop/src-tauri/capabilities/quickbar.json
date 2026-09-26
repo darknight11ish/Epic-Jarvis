@@ -6,7 +6,12 @@
     "quickbar"
   ],
   "permissions": [
-    "core:default",
+    "core:app:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:path:default",
+    "core:webview:default",
+    "core:window:default",
     "core:window:allow-start-dragging",
     "core:webview:allow-set-webview-zoom",
     "core:webview:allow-internal-toggle-devtools",
@@ -14,6 +19,7 @@
     "approvals",
     "task-control",
     "quickbar-surface",
+    "memory-used",
     "attention-surface",
     "voice"
   ]

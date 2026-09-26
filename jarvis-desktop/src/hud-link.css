@@ -1,0 +1,55 @@
+/* Loaded into the HUD by src-tauri/src/hud_bootstrap.js (section 5), never by
+   the page itself: jarvis_hud.html is vendored byte-identical from the backend
+   and not ours to edit.
+
+   Approvals are not answered in the HUD (apps security audit M2): they are
+   answered in the Jarvis bar or the widget, where Windows Hello and the
+   stale-link check apply. The page's own Approve and Deny are hidden, and
+   the card says where to go instead. The bootstrap also refuses the click
+   and the request. No colours of its own - it only inherits - so the HUD's
+   palette stays the HUD's. */
+
+#approvals .appr .btns button {
+  display: none;
+}
+
+#approvals .appr .btns::after {
+  content: "Answer this in the Jarvis bar or the widget.";
+  align-self: center;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* The right/wrong mark under a HUD answer (hud_bootstrap.js section 6).
+   Inherits the HUD's own colours. */
+.jarvis-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  opacity: 0.85;
+}
+
+.jarvis-mark button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 1px 8px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.jarvis-mark button[aria-pressed="true"] {
+  opacity: 1;
+  font-weight: 700;
+}
+
+/* The live link line under the brand. */
+#jarvis-link-line[data-tone="warn"],
+#jarvis-link-line[data-tone="bad"] {
+  opacity: 1;
+  font-weight: 600;
+}

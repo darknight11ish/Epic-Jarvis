@@ -1,0 +1,18 @@
+--- a/jarvis_agent.py
++++ b/jarvis_agent.py
+@@ -775,6 +775,15 @@
+                     if announce:
+                         announce(f"Using {name}...")
+                     kwargs = {"announce": announce} if tool.needs_announce else {}
++                    # A tool that must know WHO decided - not just that it may
++                    # proceed - gets the gate's own verdict. `allowed` is True
++                    # on tier auto and notify with nobody asked
++                    # (docs/ARCHITECTURE.md section 3), so a skill that runs
++                    # code checks tier and outcome itself; see
++                    # jarvis_skill_tools.run(). Opt-in per tool, so every
++                    # existing tool's execute() signature is unchanged.
++                    if getattr(tool, "needs_verdict", False):
++                        kwargs["verdict"] = verdict
+                     try:
+                         result = tool.execute(args, state, **kwargs)
+                     except Exception as exc:

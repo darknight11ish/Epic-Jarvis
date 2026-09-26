@@ -28,9 +28,11 @@
 //! not have one — the backend is `jarvis_hud.py`, a script. Declaring
 //! `externalBin` for a file that does not exist fails `tauri build` outright,
 //! which would break packaging (step 7) to describe a binary nobody has built
-//! yet. So supervision runs a configured program instead: `python` and the
-//! script by default, or the frozen executable once one exists, by pointing
-//! the same setting at it.
+//! yet. So supervision runs a configured program instead: the full path to
+//! the real `python.exe` and the script (never bare `python`, which on a
+//! fresh Windows is the Store shortcut - docs/INSTALL.md 1.1 and 2.5), or the
+//! frozen executable once one exists, by pointing the same setting at it.
+//! Nothing is configured until the owner sets it.
 //!
 //! It also avoids `tauri-plugin-shell` entirely, which matters beyond
 //! convenience: adding it to reach `sidecar()` would put `shell:allow-execute`
@@ -84,20 +86,11 @@ const STARTUP_WAIT: Duration = Duration::from_secs(25);
 /// Timeout for the port probe and the shutdown request.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1_500);
 
-/// The origin the desktop's own webviews load from, which the backend has to
-/// be told about or every request from the HUD page is refused as
-/// cross-origin.
-///
-/// `jarvis_hud.py` builds its allowlist from its own configuration and merges
-/// `JARVIS_HUD_ORIGINS`, comma-separated. A bundled Tauri page is served from
-/// `http://tauri.localhost`, which is not a loopback URL the server could ever
-/// have guessed.
-const WEBVIEW_ORIGIN: &str = "http://tauri.localhost";
-
 /// What to run, and where.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BackendConfig {
-    /// The program. `python`, `pythonw.exe`, or a frozen backend executable.
+    /// The program: the full path to `python.exe` or `pythonw.exe`, or a
+    /// frozen backend executable.
     #[serde(default)]
     pub program: String,
     /// Its arguments — normally the path to `jarvis_hud.py`.
@@ -313,6 +306,9 @@ pub async fn backend_reachable(app: &AppHandle, base: &str) -> bool {
         .connect_timeout(PROBE_TIMEOUT)
         .timeout(PROBE_TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
     else {
         return false;
@@ -351,6 +347,13 @@ fn port_of(base: &str) -> Option<u16> {
 pub async fn ensure_backend(app: &AppHandle) -> Result<String, String> {
     if !read_supervise(app) {
         return Ok("Supervision is off; Jarvis Desktop will not start a backend.".to_string());
+    }
+    // A refused address is saved: nothing is started in its place either
+    // (CLAUDE.md, 2026-09-26 - no quiet fallback to this PC).
+    if let Some(problem) = commands::base_problem(app) {
+        return Ok(format!(
+            "Jarvis Desktop will not start a backend. {problem}"
+        ));
     }
 
     // One start or stop at a time. Held across every await below, so the
@@ -437,27 +440,29 @@ fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, Str
         command.env("JARVIS_HUD_PORT", port.to_string());
     }
 
-    // Without this every request from the bundled HUD page is refused as
-    // cross-origin: the page's origin is http://tauri.localhost, and the
-    // server's allowlist is built from its own bind address. Appended rather
-    // than assigned, so a value the user already set is not silently dropped.
-    let origins = match std::env::var("JARVIS_HUD_ORIGINS") {
-        Ok(existing) if !existing.trim().is_empty() => {
-            if existing.split(',').any(|o| o.trim() == WEBVIEW_ORIGIN) {
-                existing
-            } else {
-                format!("{existing},{WEBVIEW_ORIGIN}")
-            }
-        }
-        _ => WEBVIEW_ORIGIN.to_string(),
-    };
-    command.env("JARVIS_HUD_ORIGINS", origins);
+    // `JARVIS_HUD_ORIGINS` is no longer set to http://tauri.localhost here
+    // (apps security audit M2, 2026-09-25). It was there so the bundled HUD
+    // page could call the backend straight from the webview. It no longer
+    // does: its requests are made by Rust (hud_proxy.rs), which sends no
+    // Origin, like every other window's. Allowing the webview's origin would
+    // only let a script in a page reach the backend without going through
+    // Rust - with no token at all, on a backend that has none configured.
+    // A value the owner set themselves is inherited untouched.
 
     // Only when we have one. Passing an empty HUD_TOKEN would *clear* a token
     // the user had set in the environment, quietly turning a token-gated
     // backend into an open one.
-    if let Some(token) = commands::jarvis_token_for(app) {
-        command.env("HUD_TOKEN", token);
+    //
+    // And only one set on purpose - typed into Settings, or from the
+    // environment (`passes_as_hud_token`). The backend's OWN token, which
+    // this app merely read back from Credential Manager or the old file, is
+    // never passed: HUD_TOKEN overrides the backend's own choice, so handing
+    // it back pinned the backend to whatever copy this app read, a stale one
+    // included, instead of the token the backend resolves for itself.
+    if let Some((token, source)) = commands::jarvis_token_with_source(app) {
+        if commands::passes_as_hud_token(source) {
+            command.env("HUD_TOKEN", token);
+        }
     }
 
     // Off by default: with no bind address configured, the backend binds
@@ -468,8 +473,22 @@ fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, Str
     // backend to listen anywhere but loopback" (docs/INSTALL.md §3.2) meant
     // a backend this app started was unreachable from the phone no matter
     // what was set on the phone's side.
+    //
+    // Checked again here, not only when Settings saves it: a value saved by
+    // an older build, which refused only the exact strings "0.0.0.0" and
+    // "::", could be "0" or "0x0" - both of which bind every interface.
+    // Such a value is dropped (the backend stays loopback-only) and the
+    // reason is logged; the address itself is not secret.
     if let Some(bind) = commands::supervised_bind_address(app) {
-        command.env("JARVIS_HUD_BIND", bind);
+        match commands::validate_bind_address(&bind) {
+            Ok(()) => {
+                command.env("JARVIS_HUD_BIND", bind);
+            }
+            Err(why) => logfile::log(&format!(
+                "[jarvis] not passing the saved bind address {bind:?} to the backend: {why}. \
+                 It stays on this computer only until Settings holds a valid address."
+            )),
+        }
     }
 
     // The whole reason the backend's failures were invisible. A release build
@@ -628,6 +647,9 @@ async fn request_shutdown(app: &AppHandle) -> Result<(), String> {
         .connect_timeout(PROBE_TIMEOUT)
         .timeout(ASK_TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| e.to_string())?;
     let headers = commands::jarvis_headers(app)?;

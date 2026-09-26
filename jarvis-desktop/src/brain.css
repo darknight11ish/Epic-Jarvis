@@ -267,6 +267,52 @@ body {
   color: var(--text);
 }
 
+/* Connected but stale, or connecting: amber, with a square dot, so "not
+   live" never rests on hue alone. Offline keeps the red round dot above. */
+.link-pill[data-tone="warn"] {
+  border-color: var(--warn);
+  color: var(--text);
+}
+
+.link-pill[data-tone="warn"] i {
+  background: var(--warn);
+  border-radius: 1px;
+}
+
+/* How old the numbers on screen are. */
+.freshness {
+  margin: 6px 18px 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.freshness[data-tone="warn"] { color: var(--text); }
+
+/* The rush latch, on every view. Red when one is set, amber when the check
+   could not be made - never silently absent. */
+.rush-strip {
+  margin: 10px 18px 0;
+  padding: 8px 12px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-left-width: 2px;
+  border-left-color: var(--bad);
+  border-radius: var(--radius-control);
+  background: var(--bad-faint);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.rush-strip[data-tone="warn"] {
+  border-left-color: var(--warn);
+  background: var(--warn-faint);
+}
+
+.rush-quote { font-style: italic; }
+.rush-age { color: var(--text-muted); }
+
+.banner-item { display: block; }
+.banner-item + .banner-item { margin-top: 4px; }
+
 .banner {
   margin: 10px 18px 0;
   padding: 8px 12px;
@@ -302,6 +348,13 @@ body {
 .search {
   width: 220px;
   flex: none;
+}
+
+/* "What Jarvis knows about you": filters the loaded list (brain.js renderFacts). */
+.memory-facts-filter {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 8px;
 }
 
 .field {
@@ -659,6 +712,52 @@ body {
   padding: 6px 0;
 }
 
+/* Models: how fast answers have been, and "Install a model" (brain.js). */
+.model-speed {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.model-install {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: var(--stroke-hair) solid var(--border-strong);
+}
+
+.model-install .row-actions {
+  padding-top: 8px;
+}
+
+.model-install .field {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A review card whose text reads like a planted instruction. */
+.row-warning {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--bad);
+  background: var(--bad-faint);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.row-warning-why {
+  display: block;
+  color: var(--text-muted);
+}
+
+/* A read that failed, as opposed to a module this backend does not have:
+   amber and with a Retry, where "Not on this backend." stays grey. */
+.empty.failed {
+  color: var(--text);
+  border-left: 2px solid var(--warn);
+  padding-left: 8px;
+}
+
 /* ---- Buttons ------------------------------------------------------------ */
 
 .btn {
@@ -724,8 +823,8 @@ body {
    it is dim. `tests/disabled.mjs` measures all four themes. */
 .btn:disabled {
   opacity: 1;
-  background: var(--surface-raised);
-  border-color: var(--hairline);
+  background: var(--surface-1);
+  border-color: var(--border);
   color: var(--text-faint);
   box-shadow: none;
   cursor: default;
@@ -1018,3 +1117,476 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- Wiki (backend/wiki.patch; wiki.js) --------------------------------- */
+
+.wiki-state {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wiki-state[data-ready="true"] {
+  color: var(--ok);
+}
+
+.wiki-job {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--border-accent);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.wiki-job[data-tone="ok"] {
+  border-left-color: var(--ok);
+}
+
+.wiki-job[data-tone="bad"] {
+  border-left-color: var(--bad);
+}
+
+.wiki-foot {
+  margin-top: 10px;
+}
+
+.wiki-sub {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.wiki-recent {
+  margin: 0 0 10px;
+  padding-left: 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* ---- Deep questions (backend/big-model.patch; deep.js) ------------------ */
+
+.deep-state {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.deep-state[data-ready="true"] {
+  color: var(--ok);
+}
+
+.deep-ask {
+  margin: 0 0 10px;
+}
+
+/* "Coming up" on the Work tab (coming-up.js): the to-do list's heading and
+   its one-line Add. A countdown keeps its width as the seconds change. */
+.card .subhead {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.todo-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.todo-form .todo-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.countdown {
+  font-variant-numeric: tabular-nums;
+}
+
+.standby-form {
+  flex-wrap: wrap;
+}
+
+/* Focus session (focus.js): the countdown, tinted while the owner is off
+   target - the same warn colour the widget's countdown uses. */
+.focus-form {
+  flex-wrap: wrap;
+}
+
+.focus-form #focus-minutes {
+  width: 5em;
+}
+
+.focus-now {
+  padding: 8px 10px;
+  border-left: 2px solid var(--ok);
+  border-radius: 4px;
+}
+
+.focus-now[data-tone="drift"] {
+  border-left-color: var(--warn);
+  background: var(--warn-faint);
+}
+
+.focus-now[data-tone="paused"],
+.focus-now[data-tone="settling"] {
+  border-left-color: var(--border);
+}
+
+.focus-clock {
+  display: block;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.focus-report-title[data-state="ok"] {
+  color: var(--ok);
+}
+
+.standby-time {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.deep-label {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.deep-question {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.deep-ask-row {
+  align-items: center;
+  padding-top: 8px;
+  white-space: normal;
+  flex-wrap: wrap;
+}
+
+.deep-count {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.deep-said {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.deep-said:empty {
+  display: none;
+}
+
+.deep-said[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.deep-said[data-tone="bad"] {
+  padding-left: 8px;
+  border-left: 2px solid var(--bad);
+}
+
+.deep-answer {
+  margin-top: 6px;
+}
+
+.deep-answer summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+/* The answer is the model's own text, rendered by markdown.js. */
+.deep-answer-body {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.deep-answer-body > :first-child {
+  margin-top: 0;
+}
+
+.deep-answer-body > :last-child {
+  margin-bottom: 0;
+}
+
+.deep-answer-body p,
+.deep-answer-body ul,
+.deep-answer-body ol,
+.deep-answer-body blockquote {
+  margin: 0 0 8px;
+}
+
+.deep-answer-body h1,
+.deep-answer-body h2,
+.deep-answer-body h3,
+.deep-answer-body h4 {
+  margin: 10px 0 6px;
+  font-size: 12.5px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+}
+
+.deep-answer-body pre {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-control);
+}
+
+.deep-answer-body code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.deep-answer-body blockquote {
+  padding-left: 8px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.deep-answer-body table {
+  border-collapse: collapse;
+  margin: 0 0 8px;
+}
+
+.deep-answer-body th,
+.deep-answer-body td {
+  padding: 3px 6px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  text-align: left;
+}
+
+/* ---- History (chat history on the PC; history-view.js) ------------------ */
+
+.history-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.history-switch input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.history-switch input:disabled + .history-switch-label {
+  color: var(--text-muted);
+}
+
+.history-switch-detail {
+  margin: 4px 0 10px 24px;
+}
+
+/* "Waiting for your approval" - the learning switch's own line. */
+.history-waiting {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+/* Why nothing new is being kept: said plainly, in the warning colour's
+   border and the text's own colour, so it reads in greyscale too. */
+.history-why-not {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--warn);
+  background: var(--warn-faint);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.history-keep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.history-marks {
+  display: flex;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+/* A mark is a word first: "voice", "read outside text". */
+.history-mark {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  padding: 0 6px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  color: var(--text-muted);
+}
+
+.history-mark-taint {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.history-more {
+  padding-top: 8px;
+}
+
+/* ---- Automatic learning (auto-learn.js): the History switch's look ----- */
+
+#memory-auto {
+  margin-top: 12px;
+}
+
+#memory-auto:empty {
+  margin-top: 0;
+}
+
+/* "Jarvis remembered 2 things": a quiet line, never a pop-up. */
+#memory-saved-line:not(:empty) {
+  margin-bottom: 8px;
+}
+
+/* ...which opens the facts themselves (2026-09-25), with Forget on each. */
+.memory-saved-facts {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent-dim);
+}
+.memory-saved-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+#memory-auto-list:focus {
+  outline: none;
+}
+
+/* "About: Priya, Lisbon" under a fact (memory-entities.js): the names are
+   small buttons that open "About <name>", on one wrapping line. */
+.entity-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.about-line {
+  margin: 0 0 6px;
+}
+
+/* One conversation, read-only, under its row. The text is the owner's and
+   the model's words, set as text (history-view.js), wrapped as written. */
+.history-transcript {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+}
+
+.history-taint-note {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.history-turns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-turn-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+
+.history-who {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.history-turn[data-role="assistant"] .history-who {
+  color: var(--accent);
+}
+
+.history-when,
+.history-from {
+  color: var(--text-faint);
+}
+
+.history-from {
+  font-style: italic;
+}
+
+.history-text {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A question whose answer the PC did not keep (history-view.js NOT_KEPT_LINE). */
+.history-not-kept {
+  margin: 2px 0 0;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-faint);
+}
+
+/* "Open the card" (card-link.js): one line while an approval card waits. */
+.card-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border: 1px solid rgb(var(--warn-rgb) / 0.55);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--warn-faint);
+}
+.card-link[hidden] { display: none; }
+.card-link-kicker { font-weight: 700; color: var(--warn); }
+.card-link-title { flex: 1 1 14em; min-width: 0; overflow-wrap: anywhere; }
+.card-link-more { opacity: 0.8; }
+.card-link-more[hidden] { display: none; }
+.card-link-said:empty { display: none; }
+/* In the Brain it sits under the top bar, lined up with its padding. */
+.main > .card-link { margin: 0 18px 10px; }

@@ -18,7 +18,7 @@
     <script>
       try {
         var t = localStorage.getItem("jarvis.theme");
-        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+        if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
           document.documentElement.setAttribute("data-theme", t);
         }
       } catch (e) {
@@ -32,50 +32,99 @@
     <!--
       Jarvis Desktop — settings.
 
-      Deliberately the only place in this app that writes anything, and it writes
-      exactly two things: where the backend is, and whether Jarvis Desktop may
-      start one. Build order step 5 adds the read-only panes — models, memory,
-      config, skills — as sections alongside these.
+      The only window here that can change where Jarvis is and whether this
+      app may start it. One long page of cards, Connection first. Only the face tuning is
+      folded away; there is no "More options" section (the creativity
+      audit, 2026-09-25, found this comment promising one).
     -->
     <main class="page">
       <header class="page-head">
         <h1>Jarvis Desktop</h1>
         <p class="sub" id="version">settings</p>
       </header>
+      <!-- "Open the card" (card-link.js): shown while an approval card waits -
+           one raised by a button in this window, or anywhere else. Its button
+           opens the Jarvis bar on the card; it decides nothing. -->
+      <div class="card-link" id="card-link" hidden></div>
 
       <section class="card">
         <h2>Connection</h2>
         <p class="note">
-          Where the backend is. The token is held here and injected into the HUD at
-          load; it is never written to that page's storage and never shown again
-          once saved.
+          Where Jarvis is running. A token you type here is kept in Windows
+          Credential Manager (where Windows keeps saved passwords), not in a
+          plain file.
         </p>
 
         <label class="field">
-          <span class="label">Base URL</span>
+          <span class="label">Jarvis's address on this computer</span>
           <input id="base" type="text" spellcheck="false" autocomplete="off"
                  placeholder="http://127.0.0.1:4719" />
         </label>
+        <p class="note" id="base-note">
+          Only an address on your own networks is accepted: this PC, your
+          home network, Tailscale or NordVPN Meshnet. An address on the open
+          internet, a public tunnel such as ngrok or Cloudflare included, is
+          refused, so your token is never sent there.
+        </p>
 
         <label class="field">
           <span class="label">Token <span class="hint" id="token-state">not set</span></span>
           <input id="token" type="password" spellcheck="false" autocomplete="off"
                  placeholder="leave blank to keep the current one" />
         </label>
+        <p class="note">
+          Jarvis makes its own token the first time it runs and keeps it in
+          Windows Credential Manager too, as
+          <code>Jarvis Backend/pairing token</code>. This app reads it from
+          there, so you only need to paste one here if you changed it.
+          <strong>Clear token</strong> forgets one you typed here and goes
+          back to Jarvis's own.
+        </p>
+
+        <div class="field" id="pairing">
+          <span class="label">Your phone needs the same token</span>
+          <div class="row">
+            <button class="btn ghost" id="reveal-token" type="button">Show the token for my phone</button>
+          </div>
+          <div class="row" id="pairing-shown" hidden>
+            <input id="pairing-token" type="text" readonly spellcheck="false" autocomplete="off"
+                   aria-label="The token to type into the phone" />
+            <button class="btn ghost small" id="hide-token" type="button">Hide</button>
+          </div>
+          <p class="note">
+            Type it into the phone's <strong>Token</strong> box. It hides
+            itself after a minute. There is no Copy button on purpose: Windows
+            keeps what you copy in its clipboard history, and can send it to
+            your other devices with cloud clipboard, where the token would
+            stay long after this. Anyone who has it can use Jarvis, so do not
+            send it to yourself in a chat app or an email either.
+          </p>
+        </div>
 
         <label class="field">
-          <span class="label">Let my phone reach this over Tailscale</span>
+          <span class="label">Let my phone reach this (Tailscale or NordVPN Meshnet)</span>
           <input id="bind-address" type="text" spellcheck="false" autocomplete="off"
                  placeholder="leave blank to keep this on this machine only" />
         </label>
         <p class="note">
-          Only fill this in if you use Tailscale and want your phone to talk to
-          Jarvis too. Type this computer's own Tailscale address here — it looks
-          like <code>100.x.x.x</code>, and you can find it in the Tailscale app.
-          Leave it blank and nothing changes: Jarvis stays reachable from this
-          computer alone, which is the default and the safe choice. This never
-          opens Jarvis to the whole internet, or even to your home Wi-Fi — only
-          to devices on your own Tailscale network.
+          Only fill this in if you use Tailscale or NordVPN Meshnet and want
+          your phone to talk to Jarvis too. Type this computer's own address
+          on that private network here — it looks like
+          <code>100.x.x.x</code>, and the Tailscale or NordVPN app shows it.
+          Leave it blank and nothing changes: Jarvis stays reachable from
+          this computer alone, which is the default and the safe choice. This
+          never opens Jarvis to the whole internet, or even to your home
+          Wi-Fi — only to your own devices on that private network.
+          <strong>It works only when this app starts Jarvis for you</strong>
+          (Settings, More options, "Let Jarvis Desktop start and stop
+          Jarvis"): that is how the address reaches Jarvis. A Jarvis you start
+          yourself in PowerShell does not read it.
+        </p>
+        <p class="note" id="phone-address-note">
+          <strong>On the phone, type this computer's name, not the number.</strong>
+          That is the Tailscale name ending in <code>.ts.net</code>, or the
+          Meshnet name ending in <code>.nord</code> (for example
+          <code>marioirelan11-alps.nord</code>), followed by <code>:4719</code>.
         </p>
 
         <div class="row">
@@ -84,43 +133,139 @@
           <span class="status" id="connection-status" role="status"></span>
         </div>
 
-        <div class="link" id="link-state" data-connected="false">
+        <!-- Always on screen: whether the event stream is live is what decides
+             whether anything can be approved, so it never moves into a
+             closed section. -->
+        <div class="link" id="link-state" data-connected="false" data-tone="warn">
           <span class="dot"></span>
-          <span id="link-text">checking the event stream…</span>
+          <span class="link-words">
+            <span id="link-text">Connecting to Jarvis…</span>
+            <details class="tech" id="link-tech" hidden>
+              <summary>Technical detail</summary>
+              <span id="link-detail"></span>
+            </details>
+          </span>
           <button class="btn ghost small" id="reconnect" type="button">Reconnect</button>
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="appearance-card">
         <h2>Appearance</h2>
+
+        <h3 class="subhead">On this computer</h3>
         <p class="note">
-          The theme applies to every window at once — the spotlight, the
-          widget, the Brain and this one. High contrast is held to a stricter
-          standard than the others: every text pair in it clears 7:1 against
-          both a dark and a light desktop, which matters because these windows
-          are transparent and the wallpaper behind them is not ours to choose.
+          Changes every Jarvis window on this computer at once. The HUD always
+          stays dark. Your phone picks its own theme.
         </p>
-        <label class="row">
-          <span class="label">Theme</span>
-          <select id="theme">
-            <option value="deep-space">Deep space — near-black, cool</option>
-            <option value="ember">Ember — near-black, warm</option>
-            <option value="paper">Paper — light, opaque</option>
-            <option value="high-contrast">High contrast — AAA</option>
-          </select>
+
+        <label class="toggle">
+          <input id="follow-system" type="checkbox" />
+          <span>
+            Match Windows light or dark mode
+            <span class="toggle-detail" id="follow-system-detail">
+              Daylight when Windows is light, your dark theme when it is dark.
+              A switch waits until Jarvis is idle, never mid-approval.
+            </span>
+          </span>
         </label>
+
+        <fieldset class="theme-list" id="theme-list">
+          <legend class="label" id="theme-legend">Theme</legend>
+          <!-- Rows, built from THEME_INFO in jarvis-link.js so the names and
+               the one-line descriptions are the phone's own. Radios, because a
+               screen reader then says which is chosen without any extra
+               wiring. -->
+        </fieldset>
+
+        <div class="field">
+          <span class="label" id="text-size-label">Text size</span>
+          <div class="choices" id="text-size" role="group" aria-labelledby="text-size-label"></div>
+          <p class="note" id="text-size-note">
+            Or press Ctrl and + or − in any Jarvis window. Ctrl and 0 goes back
+            to 100%.
+          </p>
+        </div>
+
+        <!-- The face on THIS computer: the widget's and the HUD's. Closed
+             every visit, like the phone's Face editor. Per computer and never
+             sent to the phone - what one machine's graphics card can draw
+             says nothing about another's. -->
+        <details class="more" id="face-tuning">
+          <summary>
+            <span class="more-title">Face on this computer</span>
+            <span class="more-detail">Quality, frame rate and speed.</span>
+          </summary>
+          <p class="note">
+            For the face in the widget and the HUD on this computer only. The
+            phone has its own.
+          </p>
+
+          <label class="toggle">
+            <input id="face-auto" type="checkbox" />
+            <span>
+              Auto adjust
+              <span class="toggle-detail">
+                Picks quality and frame rate for this computer, and steps down
+                if the face runs slow.
+              </span>
+            </span>
+          </label>
+
+          <div class="field">
+            <span class="label" id="face-quality-label">Quality</span>
+            <div class="choices" id="face-quality" role="group" aria-labelledby="face-quality-label"></div>
+            <p class="note" id="face-quality-note">High matches the reactor kit. Low is easiest on the graphics card.</p>
+          </div>
+
+          <div class="field">
+            <span class="label" id="face-fps-label">Frame rate</span>
+            <div class="choices" id="face-fps" role="group" aria-labelledby="face-fps-label"></div>
+            <p class="note">How many times a second the face is drawn. Auto uses the screen's own rate.</p>
+          </div>
+
+          <div class="field">
+            <span class="label" id="face-speed-label">All speeds</span>
+            <div class="choices" id="face-speed" role="group" aria-labelledby="face-speed-label"></div>
+            <p class="note">How fast the face moves. It never goes above 1×.</p>
+          </div>
+          <span class="status" id="face-status" role="status"></span>
+        </details>
+
+        <h3 class="subhead">Shared with your phone</h3>
+        <p class="note">
+          The face and the state colours — which face Jarvis wears, and the
+          colour and pattern for each thing it can be doing — are shared with
+          your phone. A change made there shows up here too. Nothing else on
+          this page leaves this computer.
+        </p>
+        <p class="state" id="appearance-shared">Checking whether they are shared…</p>
+        <div class="row">
+          <button class="btn" id="open-faces" type="button">Open Faces</button>
+          <span class="status" id="faces-status" role="status"></span>
+        </div>
       </section>
 
       <section class="card">
         <h2>Updates</h2>
-        <p class="note">
-          Jarvis Desktop can look at its GitHub releases and tell you when a
-          newer build exists. It will not install one. Checking sends a single
-          request carrying nothing but the request itself — no identifier, no
-          telemetry, no account — and installing is the button below, pressed
-          by you. An update replaces the program, which is the largest single
-          change anything here can make to this machine, and nothing in Jarvis
-          does that on a timer.
+        <!-- Which of these two shows depends on this build, not on a guess:
+             settings.js paintUpdate() reads `supported`, which is true only
+             when tauri.conf.json carries the update key (update.rs
+             configured()). Until then the first one is the truth. -->
+        <p class="note" id="update-intro-off">
+          Not set up yet. Checking for updates needs a signing key, and this
+          copy of Jarvis Desktop was built without one, so Check now stays
+          off. The steps to turn it on are in the desktop app's README,
+          under "Turning on updates". Once it is set up, Jarvis Desktop
+          checks its download page on GitHub and tells you when a newer
+          version exists. It will never install one by itself: installing
+          is the button below, pressed by you.
+        </p>
+        <p class="note" id="update-intro-on" hidden>
+          Jarvis Desktop checks its download page on GitHub and tells you
+          when a newer version exists. It will never install one by itself:
+          installing is the button below, pressed by you. Every download is
+          checked against this copy's signing key before it runs, and
+          checking sends one request with nothing about you in it.
         </p>
 
         <label class="row">
@@ -150,17 +295,16 @@
       <section class="card">
         <h2>Shortcuts</h2>
         <p class="note">
-          Global accelerators: they work whatever window has focus, which also
-          means only one application on the machine can hold each combination.
-          If one shows as <em>in use</em>, something else claimed it first —
-          <code>Alt+Space</code> in particular is taken by PowerToys Run and,
-          on recent Windows 11 builds, by the Copilot app. Everything here is
-          also reachable from the tray icon, always.
+          Keyboard shortcuts that work in any program. Only one program can
+          hold each one, so if a shortcut says <em>in use</em>, another
+          program took it first — <code>Alt+Space</code> is often taken by
+          PowerToys Run or the Copilot app. Pick a different one and press
+          Save shortcuts. The Jarvis bar, the widget and Stop everything are
+          also in the tray menu.
         </p>
         <p class="note">
-          Every shortcut needs a modifier. A bare key bound globally would
-          swallow that key everywhere on the machine, including in the box you
-          would use to change it back.
+          Each shortcut needs Ctrl, Alt, Shift or Win. A single key on its own
+          would stop working everywhere else on the computer.
         </p>
 
         <div id="hotkey-rows"></div>
@@ -172,77 +316,734 @@
         </div>
       </section>
 
-      <section class="card">
-        <h2>Backend</h2>
+      <!-- ── Security ──────────────────────────────────────────────────────
+           Windows Hello (src-tauri/src/lock.rs; the words are in
+           security-settings.js). Stored by the app where no window can write
+           it: this page asks set_security_settings, which asks Windows Hello
+           before anything is loosened. Tightening is instant. The phone has
+           its own fingerprint settings for itself. -->
+      <section class="card" id="security">
+        <h2>Security</h2>
         <p class="note">
-          Off by default, and it stays off unless you switch it on here. With it on,
-          Jarvis Desktop starts the backend when it launches — unless something is
-          already listening, in which case it attaches to that instead of running a
-          second one against the same approval queue. Quitting asks the backend to
-          stop, so the model comes off the GPU, and terminates the process tree only
-          if asking did not work. A backend you started yourself is never adopted
-          and never stopped.
+          Windows Hello is how Windows checks it is you: your Windows PIN, a
+          fingerprint or your face - whatever this PC has. These settings are
+          for this PC only; your phone has its own fingerprint settings.
+          Turning something on happens at once. Turning something off, or
+          making it wait longer, asks Windows Hello first.
         </p>
+        <p class="state" id="sec-hello" role="status">Checking Windows Hello on this PC…</p>
 
         <label class="toggle">
-          <input id="supervise" type="checkbox" />
-          <span>Let Jarvis Desktop start and stop the backend</span>
+          <input id="sec-app-lock" type="checkbox" />
+          <span>
+            App lock
+            <span class="toggle-detail" id="sec-app-lock-detail"></span>
+          </span>
         </label>
 
-        <label class="field">
-          <span class="label">Program</span>
-          <input id="program" type="text" spellcheck="false" autocomplete="off"
-                 placeholder="python" />
-        </label>
-
-        <label class="field">
-          <span class="label">Arguments <span class="hint">one per line</span></span>
-          <textarea id="args" rows="2" spellcheck="false"
-                    placeholder="C:\jarvis\jarvis_hud.py"></textarea>
-        </label>
-
-        <label class="field">
-          <span class="label">Working directory <span class="hint">optional</span></span>
-          <input id="cwd" type="text" spellcheck="false" autocomplete="off"
-                 placeholder="defaults to the folder holding the script" />
-        </label>
-
-        <div class="row">
-          <button class="btn" id="save-backend" type="button">Save backend</button>
-          <button class="btn ghost" id="start-backend" type="button">Start</button>
-          <button class="btn ghost" id="stop-backend" type="button">Stop</button>
-          <span class="status" id="backend-status" role="status"></span>
+        <div class="field">
+          <span class="label" id="sec-relock-label">Lock again after</span>
+          <div class="choices" id="sec-relock" role="group" aria-labelledby="sec-relock-label"></div>
+          <p class="note" id="sec-relock-note"></p>
         </div>
 
-        <p class="state" id="backend-state">—</p>
+        <div class="field">
+          <span class="label" id="sec-approvals-label">Windows Hello for approvals</span>
+          <div class="choices" id="sec-approvals" role="group" aria-labelledby="sec-approvals-label"></div>
+          <p class="note" id="sec-approvals-note"></p>
+        </div>
+
+        <label class="toggle">
+          <input id="sec-private" type="checkbox" />
+          <span>
+            Windows Hello for memory lists and chat history
+            <span class="toggle-detail" id="sec-private-detail"></span>
+          </span>
+        </label>
+
+        <span class="status" id="sec-status" role="status"></span>
       </section>
 
-      <section class="card">
-        <h2>Startup and logs</h2>
+      <!-- ── Voice ─────────────────────────────────────────────────────────
+           Read from GET /api/voice/status (settings.js, voice part; the
+           words are in voice-settings.js and voice-training.js). The same
+           facts the phone shows on Platform checks, under "Your voice" and
+           the wake word, and the phone's "Train my voice" for THIS PC's
+           microphone (voice-panel.js; the recordings are held by the app,
+           voice_training.rs, never by this page). -->
+      <section class="card" id="voice">
+        <h2>Voice</h2>
         <p class="note">
-          Jarvis writes what it is doing to a file. If the backend refuses to start,
-          the reason is in <code>backend.log</code> — before this existed there was
-          nowhere for it to go, because a released Windows app has no console.
-          Both files are plain text and <strong>nothing in them is hidden or
-          scrambled</strong>, so read one before you send it to anybody.
+          What Jarvis on this PC says about listening to you: whether it
+          knows your voice, how strict it is, and what it can hear. You can
+          teach it your voice here, through this PC's microphone, or on your
+          phone for the phone's microphone.
         </p>
 
-        <label class="toggle">
-          <input id="autostart" type="checkbox" />
-          <span>Start Jarvis when Windows starts</span>
-        </label>
-        <p class="note" id="autostart-note">
-          Jarvis will be running after a restart. It does not promise to be
-          <em>first</em> — other startup programs are racing it for the
-          <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and whoever asks first wins.
-        </p>
+        <p class="state" id="voice-state" role="status">Asking Jarvis about voice…</p>
 
-        <div class="row">
-          <button class="btn ghost" id="open-logs" type="button">Open the log folder</button>
-          <span class="status" id="logs-status" role="status"></span>
+        <div id="voice-body" hidden>
+          <h3 class="subhead">Your voice</h3>
+          <p class="sc-line" id="voice-summary"></p>
+          <ul class="sc-cards" id="voice-prints"></ul>
+          <p class="sc-line" id="voice-check"></p>
+          <p class="sc-line" id="voice-last" hidden></p>
+          <p class="sc-line" id="voice-talk"></p>
+          <p class="sc-line" id="vt-model" hidden>
+            <span id="vt-model-text"></span>
+            <a id="vt-model-link" href="#" data-external="true" hidden></a>
+          </p>
+          <p class="sc-line" id="vt-note" hidden></p>
+
+          <h3 class="subhead">Train my voice on this PC</h3>
+          <div class="vt-box" id="vt-train"></div>
+
+          <div id="vt-settings" hidden>
+            <h3 class="subhead">How strict</h3>
+            <div class="choices" id="vt-strictness" role="group" aria-label="How strict the voice check is"></div>
+            <p class="note" id="vt-strictness-note"></p>
+            <h3 class="subhead">Private answers asked by voice</h3>
+            <div class="choices" id="vt-privacy" role="group" aria-label="Private answers asked by voice"></div>
+            <p class="note" id="vt-privacy-note"></p>
+            <div id="vt-memory-box" hidden>
+              <h3 class="subhead">Answers that use what Jarvis remembers</h3>
+              <div class="choices" id="vt-memory" role="group" aria-label="Answers that use what Jarvis remembers, asked by voice"></div>
+              <p class="note" id="vt-memory-note"></p>
+            </div>
+            <div id="vt-sensitive-box" hidden>
+              <h3 class="subhead">Answers that use sensitive saved facts</h3>
+              <div class="choices" id="vt-sensitive" role="group" aria-label="Answers that use sensitive saved facts, asked by voice"></div>
+              <p class="note" id="vt-sensitive-note"></p>
+            </div>
+            <div id="vt-handsfree-box" hidden>
+              <h3 class="subhead">Hands-free ("Hey Jarvis")</h3>
+              <div class="choices" id="vt-handsfree" role="group" aria-label="Hands-free: how far a question started with Hey Jarvis is trusted"></div>
+              <p class="note" id="vt-handsfree-note"></p>
+            </div>
+            <p class="sc-line" id="vt-setting-waiting" data-tone="warn" hidden></p>
+            <p class="note">
+              Making it stricter happens at once. Making it looser shows you
+              an approval card first, and nothing changes until you approve it.
+            </p>
+            <span class="status" id="vt-setting-status" role="status"></span>
+          </div>
+
+          <h3 class="subhead">How often Jarvis asks you to repeat</h3>
+          <ul class="sc-cards" id="vt-repeat"></ul>
+          <p class="note" id="vt-repeat-note" hidden></p>
+          <div class="vt-box" id="vt-test"></div>
+
+          <!-- The "someone else" check (JARVIS-API.md section 16): another
+               person's sentences, scored on the PC and thrown away; a
+               stricter bar it suggests is ONE approval card. -->
+          <h3 class="subhead" id="vt-others-head" hidden>Check it with someone else</h3>
+          <div class="vt-box" id="vt-others" hidden></div>
+
+          <h3 class="subhead">"Hey Jarvis"</h3>
+          <p class="sc-line" id="voice-wake"></p>
+          <div class="row">
+            <button class="btn" id="voice-wake-off" type="button" hidden>Turn the wake word off</button>
+            <button class="btn" id="voice-wake-on" type="button" hidden>Turn on "hey Jarvis"</button>
+            <span class="status" id="voice-wake-status" role="status"></span>
+          </div>
+          <p class="note" id="voice-wake-on-note" hidden>
+            This raises an approval card. Nothing changes until you approve
+            it, and then nothing listens until you switch listening on in the
+            Jarvis bar or on your phone. Turning it off happens at once.
+          </p>
+          <p class="sc-line" id="voice-verifier" hidden></p>
+          <p class="sc-line" id="voice-stop-word" hidden></p>
+          <p class="sc-line" id="voice-turn" hidden></p>
         </div>
 
-        <p class="state" id="logs-state">—</p>
+        <!-- A setting of this PC's, not the server's, so it works whether
+             or not Jarvis answered above (barge-in.js; the phone has its
+             own switch for its own microphone). -->
+        <h3 class="subhead">Interrupting Jarvis</h3>
+        <label class="toggle">
+          <input id="voice-barge-in" type="checkbox" />
+          <span>
+            Interrupt Jarvis while it talks
+            <span class="toggle-detail" id="voice-barge-in-detail"></span>
+          </span>
+        </label>
+        <p class="note">
+          This PC only; your phone has its own switch. It matters only while
+          this PC is listening for "hey Jarvis".
+        </p>
+
+        <!-- Also this PC's own (voice-flow.js); the phone has the same
+             switch for itself. The PC's own [voice] one_moment_enabled can
+             still turn the clip off for every app. The "I heard you" sound
+             is this PC's own too, made here, with nothing on the PC. -->
+        <h3 class="subhead">While you wait</h3>
+        <label class="toggle">
+          <input id="voice-one-moment" type="checkbox" />
+          <span>
+            Say "One moment" if I'm kept waiting
+            <span class="toggle-detail" id="voice-one-moment-detail"></span>
+          </span>
+        </label>
+        <label class="toggle">
+          <input id="voice-heard-sound" type="checkbox" />
+          <span>
+            Play a short sound when I finish speaking
+            <span class="toggle-detail" id="voice-heard-sound-detail"></span>
+          </span>
+        </label>
+      </section>
+
+      <!-- ── Jarvis's voice ────────────────────────────────────────────────
+           Custom voices: GET /api/voice/voices and its four POSTs
+           (voice-panel.js; the words are in custom-voices.js). Adding a
+           voice and switching to one each raise ONE approval card; going
+           back to the built-in voice and deleting a voice happen at once.
+           A recording made here is the sentence shown, read aloud - this
+           app turns no speech into text. -->
+      <section class="card" id="voices">
+        <h2>Jarvis's voice</h2>
+        <p class="note">
+          Jarvis can speak in a voice you recorded, instead of its built-in
+          one. Adding a voice and switching to one each show you an approval
+          card first. Going back to the built-in voice, and deleting a voice,
+          happen at once. Everything stays on your PC.
+        </p>
+        <p class="state" id="cv-state" role="status">Asking Jarvis about its voices…</p>
+
+        <div id="cv-body" hidden>
+          <p class="sc-line" id="cv-speaking"></p>
+          <p class="sc-line" id="cv-fallback" data-tone="warn" hidden></p>
+          <p class="sc-line" id="cv-pending" data-tone="warn" hidden></p>
+          <p class="sc-line" id="cv-last" hidden></p>
+
+          <!-- How fast every voice speaks: the PC's `speed` block, choices
+               and words its own (custom-voices.js speedView). No card
+               either way; held on a stale link (voice_training.rs
+               set_voice_speed). The phone's Voices screen has the same. -->
+          <div id="cv-speed" hidden>
+            <h3 class="subhead" id="cv-speed-title">How fast Jarvis speaks</h3>
+            <p class="note" id="cv-speed-detail"></p>
+            <fieldset class="theme-list" id="cv-speed-list">
+              <legend class="label">Speed</legend>
+              <div id="cv-speed-choices"></div>
+            </fieldset>
+            <p class="note" id="cv-speed-note" hidden></p>
+            <div class="row">
+              <span class="status" id="cv-speed-status" role="status"></span>
+            </div>
+          </div>
+
+          <h3 class="subhead">Voices</h3>
+          <ul class="sc-cards" id="cv-list"></ul>
+          <div class="row">
+            <span class="status" id="cv-status" role="status"></span>
+          </div>
+          <p class="note" id="cv-status-detail" hidden></p>
+
+          <h3 class="subhead">Add a voice</h3>
+          <p class="note" id="cv-consent"></p>
+          <div class="field">
+            <label class="label" for="cv-name">Name</label>
+            <input id="cv-name" type="text" maxlength="40" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="choices" id="cv-way" role="group" aria-label="How to add the voice">
+            <button class="choice" type="button" data-value="record" aria-pressed="true">Record a sentence</button>
+            <button class="choice" type="button" data-value="file" aria-pressed="false">Choose a WAV file</button>
+          </div>
+          <div id="cv-record">
+            <p class="note">Have the person read this sentence aloud, exactly as it is written:</p>
+            <p class="vt-sentence" id="cv-sentence"></p>
+            <div class="row">
+              <button class="btn ghost" id="cv-another" type="button">Another sentence</button>
+              <button class="btn" id="cv-rec" type="button">Record</button>
+              <span class="status" id="cv-rec-status" role="status"></span>
+            </div>
+            <div class="progress-track vt-meter" id="cv-meter" hidden><div class="progress-fill" id="cv-meter-fill"></div></div>
+          </div>
+          <div id="cv-file-box" hidden>
+            <div class="field">
+              <label class="label" for="cv-file">The recording (a WAV file, 3 to 10 seconds of one person speaking)</label>
+              <input id="cv-file" type="file" accept=".wav,audio/wav,audio/x-wav" />
+            </div>
+            <div class="field">
+              <label class="label" for="cv-words">Type exactly what is said in it</label>
+              <textarea id="cv-words" rows="3" maxlength="300" spellcheck="true"></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <button class="btn" id="cv-add" type="button">Add this voice</button>
+            <span class="status" id="cv-add-status" role="status"></span>
+          </div>
+          <p class="note" id="cv-add-detail" hidden></p>
+
+          <h3 class="subhead">The better voice</h3>
+          <div id="cv-better" hidden>
+            <label class="toggle">
+              <input id="cv-better-switch" type="checkbox" />
+              <span>
+                Make custom voices on the second graphics card
+                <span class="toggle-detail">A more natural copy of the voice. Turning it on shows you an approval card first; turning it off happens at once.</span>
+              </span>
+            </label>
+            <div class="sc-lines" id="cv-better-lines"></div>
+            <span class="status" id="cv-better-status" role="status"></span>
+          </div>
+          <p class="sc-line" id="cv-better-why" hidden></p>
+
+          <h3 class="subhead">How long speaking took</h3>
+          <ul class="sc-cards" id="cv-timings"></ul>
+          <p class="note" id="cv-timings-none">Nothing has been said since Jarvis last started.</p>
+        </div>
+      </section>
+
+      <!-- ── Hardware and models ──────────────────────────────────────────
+           Read from GET /api/hardware (hardware-panel.js). The graphics
+           cards, what runs on them now, and three setups. Nothing changes
+           until the owner picks one; picking one lists its steps, and each
+           step is ONE button that raises that step's own approval card.
+           docs/HARDWARE-PROFILES.md is the design. -->
+      <!-- ── How Jarvis talks ─────────────────────────────────────────────
+           Warm and brief (the default), or plain (manner-settings.js;
+           src-tauri/src/plain_errors.rs get_manner, set_manner; backend
+           jarvis_manner.py). Wording only - never what Jarvis does, asks or
+           remembers - so neither choice raises an approval card. Held on a
+           stale link like every change sent to the PC. The phone's Mind has
+           the same, in the same words. -->
+      <section class="card" id="manner">
+        <h2>How Jarvis talks</h2>
+        <p class="note" id="mn-detail">Changes only how Jarvis words its answers. It never changes what Jarvis does, what it asks you, or what it remembers.</p>
+        <p class="state" id="mn-state" role="status">Asking Jarvis…</p>
+        <div id="mn-body" hidden>
+          <fieldset class="theme-list" id="mn-list">
+            <legend class="label">Answers</legend>
+            <div id="mn-choices"></div>
+          </fieldset>
+          <p class="note" id="mn-spoken"></p>
+          <div class="row">
+            <span class="status" id="mn-status" role="status"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Morning briefing ─────────────────────────────────────────────
+           When the briefing arrives, and what it includes (briefing-settings.js;
+           brain/briefing.rs get_briefing_setup, set_briefing, stop_briefing).
+           It repeats, so setting one up raises the scheduler's ONE approval
+           card listing the next three times; stopping one is immediate. The
+           briefing itself is read in the Brain (Work tab), never here.
+           "Show who new emails are from" (set_briefing_senders): off at once,
+           on through ONE approval card on the PC, held on a stale link. -->
+      <section class="card" id="briefing-settings">
+        <h2>Morning briefing</h2>
+        <p class="note">Choose when your briefing arrives. It repeats, so Jarvis asks you once with an approval card that lists the next three times; nothing is set up until you approve the card. Stopping it is immediate. You can also say "brief me every weekday at 7", or "brief me now" at any time.</p>
+
+        <p class="state" id="br-state" role="status">Checking your briefing…</p>
+
+        <div id="br-body" hidden>
+          <h3 class="subhead">When it arrives</h3>
+          <ul class="sc-cards" id="br-setups"></ul>
+
+          <fieldset class="br-form" id="br-form">
+            <legend>Set up a briefing</legend>
+            <div class="row">
+              <label for="br-time">Time</label>
+              <input id="br-time" type="time" value="07:00" step="60" required>
+            </div>
+            <div class="choices" id="br-every" role="group" aria-label="How often"></div>
+            <div class="choices" id="br-days" role="group" aria-label="Which days" hidden></div>
+            <div class="row">
+              <button class="btn" id="br-set" type="button">Set up</button>
+              <span class="status" id="br-status" role="status"></span>
+            </div>
+          </fieldset>
+
+          <h3 class="subhead">What it includes</h3>
+          <ul class="sc-cards" id="br-reads"></ul>
+          <label class="toggle" id="br-senders-row">
+            <input id="br-senders" type="checkbox" />
+            <span>
+              Show who new emails are from
+              <span class="toggle-detail">The briefing lists who your newest unread emails are from (up to 5), next to how many there are. Off: the number only. Turning it on shows you an approval card first; turning it off happens at once.</span>
+            </span>
+          </label>
+          <div class="sc-lines" id="br-senders-lines"></div>
+          <span class="status" id="br-senders-status" role="status"></span>
+          <p class="note" id="br-spoken"></p>
+          <p class="note">The notification says only "Jarvis: your morning briefing is ready." The briefing itself is in the Brain, on the Work tab.</p>
+        </div>
+      </section>
+
+      <section class="card" id="hardware">
+        <h2>Hardware and models</h2>
+        <p class="note">
+          Jarvis works out three setups for the graphics cards in this
+          computer: the fastest answers, the smartest answers, or the most
+          features. Nothing changes until you pick one. Picking one shows
+          its steps, and each step asks you with its own approval card, in
+          order. Every number is calculated, not measured, until you press
+          Measure.
+        </p>
+
+        <p class="state" id="hw-state" role="status">Checking your graphics cards…</p>
+
+        <div id="hw-body" hidden>
+          <h3 class="subhead">Your cards</h3>
+          <p class="note" id="hw-found"></p>
+          <ul class="sc-cards" id="hw-cards"></ul>
+
+          <h3 class="subhead">Now running</h3>
+          <p class="sc-line" id="hw-now"></p>
+          <div id="hw-now-bar"></div>
+
+          <h3 class="subhead">Three choices</h3>
+          <div id="hw-presets"></div>
+
+          <div id="hw-steps" hidden>
+            <h3 class="subhead" id="hw-steps-title">Steps</h3>
+            <ol class="hw-steps" id="hw-step-list"></ol>
+            <div class="row">
+              <button class="btn ghost small" id="hw-stop" type="button">Stop using this setup</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="status" id="hw-status" role="status"></span>
+          </div>
+
+          <div id="hw-command-box" hidden>
+            <h3 class="subhead">The one command</h3>
+            <p class="note">
+              Ollama reads a few settings only when it starts. This one line
+              saves them for your Windows user; nothing is written to a file.
+              To run it: press Copy, open PowerShell from the Start menu,
+              paste it in and press Enter. Then quit Ollama (right-click its
+              icon by the clock, then Quit Ollama) and start it again from
+              the Start menu.
+            </p>
+            <div class="row sc-command">
+              <input id="hw-command" type="text" readonly spellcheck="false" autocomplete="off"
+                     aria-label="The one PowerShell command for this setup" />
+              <button class="btn ghost small" id="hw-command-copy" type="button">Copy</button>
+            </div>
+            <p class="note">To put the settings back the way they were:</p>
+            <div class="row sc-command">
+              <input id="hw-undo" type="text" readonly spellcheck="false" autocomplete="off"
+                     aria-label="The PowerShell command that undoes it" />
+              <button class="btn ghost small" id="hw-undo-copy" type="button">Copy</button>
+            </div>
+            <p class="note">To see what is set now (it only prints):</p>
+            <div class="row sc-command">
+              <input id="hw-check" type="text" readonly spellcheck="false" autocomplete="off"
+                     aria-label="The PowerShell command that shows the settings" />
+              <button class="btn ghost small" id="hw-check-copy" type="button">Copy</button>
+            </div>
+            <p class="sc-line" id="hw-restart"></p>
+            <span class="status" id="hw-copy-status" role="status"></span>
+          </div>
+
+          <h3 class="subhead">Measure</h3>
+          <p class="note">
+            Runs one short question through each model of the setup on this
+            PC, and checks that all of it is on the graphics card. It loads
+            each model once; with one card, the picture model pushes chat off
+            the card until your next message.
+          </p>
+          <div class="row">
+            <button class="btn ghost small" id="hw-measure" type="button">Measure</button>
+          </div>
+          <p class="sc-line" id="hw-measured"></p>
+
+          <details class="more">
+            <summary><span class="more-title">Details</span>
+              <span class="more-detail">Every number, with its arithmetic.</span></summary>
+            <ul class="hw-details" id="hw-details-list"></ul>
+            <p class="note">To test later, not in any setup yet:</p>
+            <ul class="hw-details" id="hw-test-later"></ul>
+          </details>
+
+          <p class="note">
+            The extra features on a second graphics card (longer
+            conversations, pictures, learning, browser control, the wiki)
+            keep their own switches, in the next section.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Second graphics card ─────────────────────────────────────────
+           Read from GET /api/second-card (settings.js, second-card part).
+           Every switch is OFF until the owner turns it on, and can only be
+           turned on once Jarvis sees a capable second card. Turning one ON
+           raises an approval card and changes nothing by itself; turning
+           one OFF happens at once. docs/SECOND-CARD.md is the owner's guide. -->
+      <section class="card" id="second-card">
+        <h2>Second graphics card</h2>
+        <p class="note">
+          With a second graphics card in this computer, Jarvis can use it for
+          longer conversations, pictures and more, and everyday chat stays
+          fast on your main card. Everything here is off until you turn it
+          on. Turning something on shows you an approval card first;
+          turning something off happens at once. Nothing here sends anything
+          off this computer.
+        </p>
+
+        <p class="state" id="sc-state" role="status">Checking your graphics cards…</p>
+
+        <div id="sc-body" hidden>
+          <h3 class="subhead">What Jarvis found</h3>
+          <p class="note" id="sc-found"></p>
+          <ul class="sc-cards" id="sc-cards"></ul>
+
+          <h3 class="subhead">Switches</h3>
+          <p class="sc-blocked" id="sc-blocked" hidden></p>
+          <div class="sc-switches" id="sc-switches"></div>
+          <div class="row">
+            <span class="status" id="sc-status" role="status"></span>
+          </div>
+
+          <h3 class="subhead">The second copy of Ollama</h3>
+          <p class="note">
+            Ollama is the program that runs the models. While a switch here
+            is on, Jarvis runs a second copy of it that uses only the second
+            card and that only this computer can reach.
+          </p>
+          <p class="sc-line" id="sc-lane"></p>
+
+          <h3 class="subhead">Keep everyday chat on the main card</h3>
+          <p class="sc-line" id="sc-pinned"></p>
+          <div id="sc-pin" hidden>
+            <p class="note">
+              Run this once. It sets one Windows setting for your user
+              account, so your everyday Ollama only uses the main card and
+              leaves the second one free. Nothing is written to any file.
+              To run it: press Copy, open PowerShell from the Start menu,
+              paste it in and press Enter. Then quit Ollama (right-click its
+              icon by the clock) and start it again.
+            </p>
+            <div class="row sc-command">
+              <input id="sc-pin-command" type="text" readonly spellcheck="false" autocomplete="off"
+                     aria-label="The PowerShell command that keeps everyday Ollama on the main card" />
+              <button class="btn ghost small" id="sc-pin-copy" type="button">Copy</button>
+            </div>
+            <span class="status" id="sc-pin-status" role="status"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Big model (slow) ─────────────────────────────────────────────
+           Read from GET /api/big-model (settings.js, big-model part). colibri
+           runs a model much bigger than a graphics card holds, on the
+           processor and the SSD, for background jobs only: the wiki builder
+           and deep questions. Never chat, voice or approvals. Every switch is
+           OFF until the owner turns it on, and can only be turned on once
+           Jarvis has found everything it needs (`detected.capable`). Turning
+           one ON raises an approval card and changes nothing by itself;
+           turning one OFF happens at once. docs/BIG-MODEL.md is the guide. -->
+      <section class="card" id="big-model">
+        <h2>Big model (slow)</h2>
+        <p class="note">
+          A much bigger model than your graphics card can hold, for jobs
+          nobody is waiting on: the wiki builder, and "deep questions" (one
+          question answered carefully in the background). A free program
+          called colibri runs it on this computer's processor and SSD. It is
+          slow: expect minutes per answer, not seconds. It is never used for
+          chat, voice or approvals. Everything here is off until you turn it
+          on. Turning something on shows you an approval card first; turning
+          something off happens at once. Nothing here sends anything off this
+          computer.
+        </p>
+        <p class="sc-line" data-tone="warn" id="bm-unverified-note">
+          None of colibri's speed claims have been checked on this PC. The
+          speeds on colibri's own pages come from other people's computers.
+        </p>
+
+        <p class="state" id="bm-state" role="status">Checking for the big model…</p>
+
+        <div id="bm-body" hidden>
+          <h3 class="subhead">What Jarvis found</h3>
+          <p class="note" id="bm-found"></p>
+          <ul class="sc-cards" id="bm-parts"></ul>
+
+          <h3 class="subhead">Models</h3>
+          <ul class="sc-cards" id="bm-models"></ul>
+
+          <h3 class="subhead">Switches</h3>
+          <p class="sc-blocked" id="bm-blocked" hidden></p>
+          <div class="sc-switches" id="bm-switches"></div>
+          <div class="row">
+            <span class="status" id="bm-status" role="status"></span>
+          </div>
+
+          <h3 class="subhead">The engine (colibri)</h3>
+          <p class="note">
+            colibri only runs while a job needs it. It listens on this
+            computer only - not your network, not the internet - and only
+            answers Jarvis.
+          </p>
+          <p class="sc-line" id="bm-engine"></p>
+          <p class="sc-line" id="bm-address"></p>
+
+          <h3 class="subhead">Graphics card</h3>
+          <p class="sc-line" id="bm-cuda"></p>
+
+          <h3 class="subhead">The key colibri is started with</h3>
+          <p class="sc-line" id="bm-key"></p>
+
+          <h3 class="subhead">How fast it really is on this PC</h3>
+          <ul class="sc-cards" id="bm-measured"></ul>
+          <p class="sc-line" data-tone="warn" id="bm-unverified"></p>
+        </div>
+      </section>
+
+      <!-- ── Web search ───────────────────────────────────────────────────
+           The owner's decisions of 2026-09-25 (web-search-settings.js;
+           web_search.rs get_web_search, set_web_search, test_web_search,
+           save_search_key, forget_search_key). Five providers with the PC's
+           own "why use this one" lines; ONE change per tap; "Ask before
+           every web search" off raises an approval card on the PC. Changes
+           and the test are greyed on a stale link. The Exa, Tavily and Brave keys
+           go straight into Credential Manager on this PC - the phone has no
+           key box at all. -->
+      <section class="card" id="web-search">
+        <h2>Web search</h2>
+        <p class="note">Choose where Jarvis searches the web. Only the search words are sent, to the search you choose, and never quietly to another one: if it is not working, Jarvis says so and offers to switch.</p>
+
+        <p class="state" id="ws-state" role="status">Checking web search…</p>
+
+        <div id="ws-body" hidden>
+          <fieldset class="theme-list" id="ws-provider-list">
+            <legend class="label">Search with</legend>
+            <div id="ws-providers"></div>
+          </fieldset>
+          <p class="sc-line" id="ws-why"></p>
+          <p class="note" id="ws-default-why"></p>
+          <h3 class="subhead" id="ws-left-out-title">Left out</h3>
+          <ul class="sc-cards" id="ws-left-out"></ul>
+
+          <h3 class="subhead">When a search asks first</h3>
+          <label class="toggle">
+            <input id="ws-ask" type="checkbox" />
+            <span>
+              <span id="ws-ask-label">Ask before every web search</span>
+              <span class="toggle-detail" id="ws-ask-detail"></span>
+            </span>
+          </label>
+          <p class="sc-line" id="ws-ask-status" role="status"></p>
+
+          <h3 class="subhead">Test</h3>
+          <div class="row">
+            <button class="btn" id="ws-test" type="button">Test search</button>
+            <span class="status" id="ws-test-status" role="status"></span>
+          </div>
+          <p class="note" id="ws-test-note"></p>
+
+          <h3 class="subhead">SearXNG</h3>
+          <label class="label" id="ws-address-label" for="ws-address">SearXNG address</label>
+          <div class="row sc-command">
+            <input id="ws-address" type="text" spellcheck="false" autocomplete="off" />
+            <button class="btn small" id="ws-address-save" type="button">Save address</button>
+          </div>
+          <p class="note" id="ws-address-note"></p>
+          <p class="note">Setting SearXNG up (Docker, and switching on its JSON output) is in backend/README.md, "Web search".</p>
+
+          <h3 class="subhead">Keys</h3>
+          <p class="note" id="ws-key-entry"></p>
+          <div id="ws-keys"></div>
+
+          <div class="row">
+            <span class="status" id="ws-status" role="status"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── What asks first ────────────────────────────────────────────────
+           The owner's decisions of 2026-09-26, after the approvals audit
+           (asks-first-settings.js; asks_first.rs get_asks_first,
+           set_asks_first, set_lights_without_card; backend
+           jarvis_asks_first.py). Every action and whether it asks first, in
+           the PC's words. "Ask me first" on the short safe list: on is at
+           once and never held; off is one approval card that needs Windows
+           Hello, on the PC only, held on a stale link. "Lights, plugs and
+           fans without a card": on is one card, off at once. The phone's
+           Mind shows the same page, with stricter switches only. -->
+      <section class="card" id="asks-first">
+        <h2>What asks first</h2>
+        <p class="note">Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. "Ask me first" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.</p>
+        <p class="state" id="af-state" role="status">Asking Jarvis…</p>
+        <div id="af-body" hidden>
+          <div id="af-groups"></div>
+          <span class="status" id="af-status" role="status"></span>
+        </div>
+      </section>
+
+      <!-- ── Folders Jarvis may look in ────────────────────────────────────
+           The owner's decisions of 2026-09-26: asking about PDFs and Word
+           files, and bringing in a Notion export (folders-settings.js;
+           folders.rs get_folders, add_folder, remove_folder, import_notion;
+           backend jarvis_documents.py). ONE list, empty by default. Adding
+           is the Windows folder picker, then one approval card on the PC,
+           held on a stale link; removing is at once. The phone shows the
+           same list with Remove only - adding is the PC's. -->
+      <section class="card" id="folders">
+        <h2>Folders Jarvis may look in</h2>
+        <p class="note" id="fo-detail"></p>
+        <p class="state" id="fo-state" role="status">Asking Jarvis…</p>
+        <div id="fo-body" hidden>
+          <ul class="sc-cards" id="fo-list"></ul>
+          <p class="note" id="fo-empty" hidden></p>
+          <div class="row">
+            <button class="btn small" id="fo-add" type="button">Add a folder…</button>
+          </div>
+          <p class="note" id="fo-add-why" hidden></p>
+          <p class="sc-line" id="fo-docs"></p>
+          <h3 class="subhead" id="fo-notion-title">Bring in a Notion export</h3>
+          <p class="note" id="fo-notion-detail"></p>
+          <div class="row">
+            <label for="fo-notion-into">Into</label>
+            <select id="fo-notion-into"></select>
+            <button class="btn small" id="fo-notion-pick" type="button">Choose the .zip…</button>
+          </div>
+          <span class="status" id="fo-status" role="status"></span>
+        </div>
+      </section>
+
+      <!-- ── What Jarvis can reach ─────────────────────────────────────────
+           The Muse audit, 2026-09-25 (reach-settings.js; reach.rs get_reach;
+           backend jarvis_reach.py). Every way Jarvis can reach something
+           outside itself, whether each is on, where it goes (a host only)
+           and whether it asks first - written by the PC from its settings,
+           never by the AI model. Read only: nothing here changes anything,
+           so nothing is held on a stale link. The phone's Mind shows the
+           same list in the same words. -->
+      <section class="card" id="reach">
+        <h2>What Jarvis can reach</h2>
+        <p class="note">Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.</p>
+
+        <p class="state" id="reach-state" role="status">Asking Jarvis…</p>
+
+        <div id="reach-body" hidden>
+          <ul class="sc-cards" id="reach-rows"></ul>
+          <h3 class="subhead" id="reach-tools-title">Tools the AI model is offered</h3>
+          <ul class="caps" id="reach-tools" aria-labelledby="reach-tools-title"></ul>
+          <p class="note" id="reach-tools-none" hidden></p>
+          <p class="note" id="reach-rest"></p>
+          <div class="row">
+            <button class="btn small" id="reach-refresh" type="button">Refresh</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Sending email ─────────────────────────────────────────────────
+           The owner's decision of 2026-09-25, after the Muse audit
+           (email-sending-settings.js; email_sending.rs get_email_sending).
+           One line in the PC's own words: whether sending is set up, from
+           which address, through which server - never the password. There
+           is nothing to change here: the account is the one email reading
+           uses, set on the PC, and each email is its own approval card.
+           The phone shows the same line (Mind, Sending email). -->
+      <section class="card" id="email-sending">
+        <h2 id="es-title">Sending email</h2>
+        <p class="note" id="es-note"></p>
+        <p class="state" id="es-state" role="status">Checking whether Jarvis can send email…</p>
+        <p class="sc-line" id="es-said" hidden></p>
       </section>
 
       <section class="card">
@@ -257,12 +1058,32 @@
           <details class="faq-item">
             <summary class="faq-q">Does anything I say to Jarvis leave this computer?</summary>
             <p class="faq-a">
-              No, not on its own. Jarvis answers using a language model that
-              runs on this machine. It only reaches the internet for
-              something specific, and only after it explains what it needs
-              and you say yes — there is no standing permission to go
-              online, and this program never opens a public tunnel to
-              itself.
+              Only along a few named routes. Jarvis answers using a
+              language model that runs on this machine. It reaches the
+              internet for a web search, and for your own calendar, email
+              and Home Assistant once you have set them up on this PC. A
+              search that comes straight from your own question goes
+              without asking; after Jarvis has read an email, a file or
+              other outside text, or when the search words would repeat
+              something private, it shows you the exact words and waits
+              for your yes. Sending an email, or a question to a cloud
+              model, always asks first. "What Jarvis can reach" (above)
+              lists which routes are on right now, and this program never
+              opens a public tunnel to itself.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Where do I approve or deny what Jarvis wants to do?</summary>
+            <p class="faq-a">
+              On a card. When Jarvis wants to do something that is not
+              completely safe, it stops, and a card waits for you
+              <span class="approve-where">in the Jarvis bar, on the widget, or on your phone's Home screen</span>
+              (<kbd>Alt</kbd>+<kbd>Space</kbd> opens the Jarvis bar). For
+              anything important Windows also shows a notification. Press Approve or Deny on the card; the
+              notification can only Deny. Nothing runs until you decide, one
+              thing at a time. An email Jarvis wants to send is approved in
+              the Jarvis bar, where you can read all of it first.
             </p>
           </details>
 
@@ -291,33 +1112,46 @@
           <details class="faq-item">
             <summary class="faq-q">Can my phone talk to Jarvis?</summary>
             <p class="faq-a">
-              Yes, over Tailscale — a private network between only the
-              devices you own, never the open internet. Turn it on above,
-              in Connection, under "Let my phone reach this over
-              Tailscale," by typing this computer's own Tailscale address.
-              Leave that box blank and nothing changes: Jarvis stays
-              reachable from this computer alone.
+              Yes, over Tailscale or NordVPN Meshnet — a private network
+              between only the devices you own, never the open internet.
+              Turn it on above, in Connection, under "Let my phone reach
+              this", by typing this computer's own address on that network
+              (the <code>100.x.x.x</code> number). Then, on the phone, type
+              this computer's <em>name</em>, not the number: the Tailscale
+              name ending in <code>.ts.net</code>, or the Meshnet name ending
+              in <code>.nord</code> (like
+              <code>marioirelan11-alps.nord</code>), followed by
+              <code>:4719</code>. The phone also needs the token: press
+              <strong>Show the token for my phone</strong> above.
+              Leave the box blank and nothing changes: Jarvis stays reachable
+              from this computer alone.
             </p>
           </details>
 
           <details class="faq-item">
-            <summary class="faq-q">Why does the microphone button do nothing?</summary>
+            <summary class="faq-q">How does talking to Jarvis work?</summary>
             <p class="faq-a">
-              Windows dictation and browser speech recognition both send
-              your voice to a company's servers to turn it into text, which
-              breaks the rule that nothing private leaves this machine — so
-              this program switches that off rather than use it. An
-              offline replacement that never leaves the computer is being
-              built; until it is finished, dictation stays off rather than
-              quietly sending your voice somewhere you did not ask it to
-              go.
+              Hold the microphone button in the Jarvis bar and speak, then
+              let go to send. With the button selected, holding Space or
+              Enter works too. The microphone button in the big HUD window
+              opens the Jarvis bar with its microphone ready, so both lead to
+              the same place. The recording is made on this computer and
+              goes only to Jarvis on this computer — never to Microsoft,
+              Google or anyone else. Listening for "hey Jarvis", the button
+              next to the microphone, is off until you turn it on; the first
+              time, it shows you an approval card instead of listening. While
+              it is on, what the microphone hears goes only to Jarvis on this
+              computer, which ignores anything that does not start with
+              "hey Jarvis". Windows dictation
+              is not used, because it sends your voice to a company's
+              servers to turn it into text.
             </p>
           </details>
 
           <details class="faq-item">
             <summary class="faq-q">Jarvis suddenly got slow. What happened?</summary>
             <p class="faq-a">
-              Open the Brain window → Models. If the language model has
+              Open the Brain window → Model → Models. If the language model has
               fallen off the graphics card onto the processor instead,
               there is a yellow line at the top of that list saying so,
               with the percentage. That is almost always the cause — a
@@ -335,17 +1169,27 @@
               answers you instantly. Standby also unloads the model from
               the graphics card — the real drop in power use — at the cost
               of a slower first answer (five to fifteen seconds) after you
-              wake it back up.
+              wake it back up. To switch, right-click the Jarvis icon in the
+              taskbar corner and choose Change power mode, or use the
+              buttons on the phone's Brain screen. This needs the backend's
+              power-mode patch; without it, you are told so. Waking from
+              Standby loads the model again straight away, so the first
+              answer after waking is quick. To go on Standby every night
+              and wake every morning, set up a Standby schedule in the
+              Brain, Work tab, under Coming up (the phone has it under
+              Coming up on its Brain screen); it is set up at once, with no
+              approval card, and deleting it is instant.
             </p>
           </details>
 
           <details class="faq-item">
             <summary class="faq-q">Will Jarvis update itself without asking?</summary>
             <p class="faq-a">
-              No. It can check whether a newer version exists and tell you
-              about it, above under Updates, but it never installs one on
-              its own. Installing is always the Install button, pressed by
-              you.
+              No. <span id="faq-update-off">Update checks are not set up yet
+              for this copy (see Updates above), and even once they are,
+              Jarvis</span><span id="faq-update-on" hidden>Jarvis</span> only
+              tells you a newer version exists. It never installs one on its
+              own. Installing is always the Install button, pressed by you.
             </p>
           </details>
 
@@ -363,16 +1207,155 @@
           <details class="faq-item">
             <summary class="faq-q">Is my pairing token safe?</summary>
             <p class="faq-a">
-              It is stored on this computer only, it is never shown again
-              once you save it here, and this page never sends it anywhere
-              except the backend address you configured above. It is
-              stored as plain text on disk, not scrambled, so treat this
-              computer's own user account the way you would treat any
-              other place a password lives.
+              It is kept in Windows Credential Manager, the part of Windows
+              that holds saved passwords - not in a plain-text file. This app
+              sends it only to the Jarvis address set above, and never writes
+              it to its logs. <strong>Show the token for my phone</strong>
+              shows it for a minute so you can type it into the phone; there
+              is no Copy button, because anything copied stays in Windows'
+              clipboard history. Anyone signed in to this computer as you can
+              read it, the same as your other saved passwords, so keep your
+              Windows account password-protected. One exception: if the
+              Token line above says Jarvis's own token is still in its old
+              plain-text file, run apply-patches.ps1 to update the backend,
+              which moves it into Credential Manager.
+            </p>
+          </details>
+
+          <!-- The one answer the "run apply-patches.ps1" messages point to
+               (ease-of-use audit 2026-09-27, #8e). The phone's FAQ says the
+               same. -->
+          <details class="faq-item">
+            <summary class="faq-q">How do I update Jarvis?</summary>
+            <p class="faq-a">
+              Three parts, in this order. Jarvis on this PC: stop it, then in
+              PowerShell, in your copy of the Jarvis files, get the newest
+              files (<code>git pull</code>) and run
+              <code>apply-patches.ps1</code> again - it keeps your settings
+              file, backs up what it replaces and saves a log of the run in
+              <code>_jarvis-logs</code> in your Jarvis folder - then start
+              Jarvis again. This app: build and install it again (there is no
+              automatic update yet). The phone app: install the newest file
+              from the release page over the old one; it stays paired.
+              docs/INSTALL.md, "Updating everything", has each step as one
+              line to copy.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">I lost my phone. What do I do?</summary>
+            <p class="faq-a">
+              Whoever has it unlocked could use Jarvis with the pairing key
+              it holds. First take the phone off your private network
+              (Tailscale's admin page, Machines, the phone, Remove - or remove
+              it from your NordVPN Meshnet), so it cannot reach this PC at
+              all. Then make a new pairing key, which stops the old one
+              working: docs/INSTALL.md, "If you lose your phone", has the
+              steps. Your other devices then pair again with the new key.
             </p>
           </details>
         </div>
       </section>
+
+      <!-- ── More options ──────────────────────────────────────────────────
+           Closed every visit, the phone's pattern. Nothing here is needed
+           day to day, and none of it hides whether Jarvis is connected -
+           that line stays in Connection above. -->
+      <details class="more more-options" id="more-options">
+        <summary>
+          <span class="more-title">More options</span>
+          <span class="more-detail">Letting this app start Jarvis, starting with Windows, and the log files.</span>
+        </summary>
+
+        <section class="card" id="start-jarvis">
+          <h2>Starting Jarvis for you</h2>
+          <p class="note">
+            Off unless you turn it on here. With it on, this app starts Jarvis
+            when it opens — unless Jarvis is already running, in which case
+            it uses that one instead of starting a second. Quitting asks
+            Jarvis to stop, so the model leaves the graphics card, and forces
+            it to close only if asking did not work. A Jarvis you started
+            yourself is never taken over and never stopped.
+          </p>
+
+          <label class="toggle">
+            <input id="supervise" type="checkbox" />
+            <span>Let Jarvis Desktop start and stop Jarvis</span>
+          </label>
+
+          <label class="field">
+            <span class="label">Program</span>
+            <input id="program" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="C:\Users\you\AppData\Local\Programs\Python\Python312\python.exe" />
+          </label>
+          <p class="note" id="program-hint">
+            The full path to the real <code>python.exe</code>, not the word
+            <code>python</code> on its own: on a fresh Windows that is a
+            Microsoft Store shortcut, not Python. To find the path, run this
+            in PowerShell:
+            <code>py -3 -c "import sys; print(sys.executable)"</code>
+          </p>
+
+          <label class="field">
+            <span class="label">Arguments <span class="hint">one per line</span></span>
+            <textarea id="args" rows="2" spellcheck="false"
+                      placeholder="C:\jarvis\jarvis_hud.py"></textarea>
+          </label>
+
+          <label class="field">
+            <span class="label">Working folder <span class="hint">optional</span></span>
+            <input id="cwd" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="defaults to the folder holding the script" />
+          </label>
+
+          <div class="row">
+            <button class="btn" id="save-backend" type="button">Save</button>
+            <button class="btn ghost" id="start-backend" type="button">Start</button>
+            <button class="btn ghost" id="stop-backend" type="button">Stop</button>
+            <span class="status" id="backend-status" role="status"></span>
+          </div>
+
+          <p class="state" id="backend-state">—</p>
+          <details class="tech" id="backend-tech" hidden>
+            <summary>Technical detail</summary>
+            <span id="backend-detail"></span>
+          </details>
+        </section>
+
+        <section class="card">
+          <h2>Startup and logs</h2>
+          <p class="note">
+            Jarvis Desktop writes what it is doing to
+            <code>jarvis-desktop.log</code>. When this app starts Jarvis for
+            you (above), Jarvis's own output goes to <code>backend.log</code>
+            beside it, with the reason if Jarvis refuses to start; a Jarvis
+            you start yourself in PowerShell prints to that window instead,
+            and there is no <code>backend.log</code>. Jarvis takes passwords,
+            keys and the pairing key out of what it writes there, but a list
+            of patterns never catches everything, and both files are plain
+            text - so read one before you send it to anybody.
+          </p>
+
+          <label class="toggle">
+            <input id="autostart" type="checkbox" />
+            <span>Start Jarvis Desktop when Windows starts</span>
+          </label>
+          <p class="note" id="autostart-note">
+            This starts this app, not Jarvis itself. Jarvis starts with it only
+            if "Let Jarvis Desktop start and stop Jarvis" (above) is on. It
+            does not promise to be <em>first</em> — other startup programs are
+            racing it for the <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and
+            whoever asks first wins.
+          </p>
+
+          <div class="row">
+            <button class="btn ghost" id="open-logs" type="button">Open the log folder</button>
+            <span class="status" id="logs-status" role="status"></span>
+          </div>
+
+          <p class="state" id="logs-state">—</p>
+        </section>
+      </details>
 
       <!-- ── About ─────────────────────────────────────────────────────────
            Identity, not instructions - the FAQ above already answers "how
@@ -389,8 +1372,9 @@
           runs here rather than in a data centre somewhere else. Nothing
           private leaves this machine on its own, there is no public tunnel
           into this program, there are no API keys built into it, and there
-          is no "approve everything" control anywhere in it — every action
-          Jarvis wants to take stops and asks first, one action at a time.
+          is no "approve everything" control anywhere in it — anything
+          risky Jarvis wants to do asks first, one action at a time, and
+          "What asks first" lists exactly what asks and what does not.
         </p>
         <dl class="about-facts">
           <div class="about-fact">
@@ -398,19 +1382,64 @@
             <dd id="about-version">—</dd>
           </div>
           <div class="about-fact">
-            <dt>License</dt>
-            <dd>MIT — see LICENSE in the source</dd>
+            <dt>Made by</dt>
+            <dd>darknight11ish</dd>
+          </div>
+          <div class="about-fact">
+            <dt>Licence</dt>
+            <dd>MIT, with third-party parts under their own licences (LICENSE)</dd>
           </div>
           <div class="about-fact">
             <dt>Source</dt>
             <dd>
               <a
-                href="https://github.com/darknight111/Epic-Jarvis"
+                href="https://github.com/darknight11ish/Epic-Jarvis"
                 data-external="true"
-              >github.com/darknight111/Epic-Jarvis</a>
+              >github.com/darknight11ish/Epic-Jarvis</a>
+            </dd>
+          </div>
+          <div class="about-fact">
+            <dt>Notices</dt>
+            <dd>
+              <a
+                href="https://github.com/darknight11ish/Epic-Jarvis/blob/main/THIRD-PARTY-NOTICES.txt"
+                data-external="true"
+              >Read the third-party notices</a>
+              <span>(a copy, THIRD-PARTY-NOTICES.txt, is
+              installed with Jarvis Desktop)</span>
             </dd>
           </div>
         </dl>
+
+      </section>
+
+      <section class="card" id="backend-supports">
+      <!-- What the Jarvis server says it has: GET /api/version's
+           capabilities, by name (settings.js, "This backend supports"). The
+           same list the phone shows under "This backend". -->
+      <h2 id="caps-heading">What this backend supports</h2>
+      <p class="note">
+        The parts the Jarvis server this app talks to says it has, by the
+        names it uses for them. Your phone lists the same names, so the
+        two can be compared.
+      </p>
+      <p class="state" id="caps-state" role="status">Asking Jarvis…</p>
+      <div id="caps-body" hidden>
+        <dl class="about-facts">
+          <div class="about-fact" id="caps-server-row">
+            <dt>Server</dt>
+            <dd id="caps-server">—</dd>
+          </div>
+          <div class="about-fact">
+            <dt>API</dt>
+            <dd id="caps-api">—</dd>
+          </div>
+        </dl>
+        <ul class="caps" id="caps-on" aria-labelledby="caps-heading"></ul>
+        <p class="note" id="caps-none" hidden>None reported.</p>
+        <h3 class="subhead" id="caps-off-heading" hidden>Not on this backend</h3>
+        <ul class="caps" id="caps-off" data-muted="true" aria-labelledby="caps-off-heading" hidden></ul>
+      </div>
       </section>
 
       <footer class="page-foot">
@@ -419,5 +1448,13 @@
     </main>
 
     <script type="module" src="settings.js"></script>
+    <script type="module" src="hardware-panel.js"></script>
+    <script type="module" src="briefing-settings.js"></script>
+    <script type="module" src="web-search-settings.js"></script>
+    <script type="module" src="reach-settings.js"></script>
+    <script type="module" src="asks-first-settings.js"></script>
+    <script type="module" src="email-sending-settings.js"></script>
+    <script type="module" src="folders-settings.js"></script>
+    <script type="module" src="manner-settings.js"></script>
   </body>
 </html>

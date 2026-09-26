@@ -1,0 +1,61 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1543,6 +1543,25 @@
+             try:
+                 import jarvis_search
+                 code, out = jarvis_search.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote a setting.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
++        if path == "/api/email/sending":
++            # email-send.patch - sending email (jarvis_email_send.py, the
++            # owner's decision of 2026-09-25): whether it is set up, from
++            # which address, through which server and how encrypted, and the
++            # one line both apps' Settings show. Whether a password is set -
++            # yes or no, never the password. Reads the settings only; sends
++            # nothing and connects to nothing.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_email_send
++                code, out = jarvis_email_send.handle_get()
+                 return self._send(code, out)
+             except Exception as exc:
+                 # The exception's NAME only: its message could quote a setting.
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -147,6 +147,7 @@
+     "schedule_repeat",        # jarvis_schedule.py acts only on tier "ask" (schedule.patch)
+     "search_the_web",         # jarvis_agent.py: this card asks about ONE search's words (web-search.patch)
+     "stop_asking_before_every_web_search",    # jarvis_search.py acts only on tier "ask" (web-search.patch)
++    "send_email",             # jarvis_agent.py / jarvis_email_send.py: ONE card per email, sent only on tier "ask" (email-send.patch)
+     "write_notes_after_outside_text",  # jarvis_agent.py: a note after outside text asks every time
+     "power_manage",           # shipped "auto": a card means the owner chose "ask"
+     "append_obsidian_daily",  # shipped "auto": the same
+@@ -601,6 +602,12 @@
+     # sends nothing; searches straight from the owner's own question then run
+     # without a card again.
+     "stop_asking_before_every_web_search": ("yes", "local", "stops asking before every web search - a search straight from your own question runs without a card again, and a search after Jarvis has read email, files, notes or other outside text, one whose words repeat a saved fact, and one after a sensitive saved fact was used still ask; nothing is sent by this change"),
++    # email-send.patch (jarvis_email_send.py, jarvis_agent.py; the owner's
++    # decision of 2026-09-25). ONE email, from the owner's own account, to
++    # exactly the people on the card - who, the subject and every word are
++    # on the card, never here: this line is what a lock screen may show.
++    # It leaves the machine and cannot be taken back, so the notice is heavy.
++    "send_email": ("no", "outbound", "sends the email shown on the card from your own account, to exactly the people it lists; once sent it cannot be taken back"),
+     # schedule.patch (jarvis_schedule.py). Setting up something that repeats
+     # ("every weekday at 7", a standby schedule): it acts only on this PC,
+     # and deleting it is immediate. Without this line the action would be
+@@ -636,6 +643,9 @@
+     "append_logseq_journal": "append_logseq_journal",
+     "create_joplin_note": "create_joplin_note",
+     "append_obsidian_daily": "append_obsidian_daily",
++    # email-send.patch: jarvis_agent.py's send_email tool, under the action
++    # name jarvis-framework.toml gives a tier ("ask", and it must stay so).
++    "send_email": "send_email",
+     # model steward: looking is free, downloading and switching are not, and
+     # they are separate decisions. Reverting is the one that must never wait.
+     "model_list": "auto", "model_recommend": "auto",

@@ -1,0 +1,81 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -659,5 +659,24 @@
+ 
+ 
+ def _activity(state: str, detail: str = "") -> None:
++    """task-control.patch: what the clients are told Jarvis is doing.
++
++    A chat turn ends by reporting "idle". If the plan it ran was PAUSED,
++    that is not true - a paused task is waiting for Resume or Stop - and
++    both clients show their Resume button only when the SERVER says
++    "paused" (docs/AUTONOMY-PROPOSALS.md 3d: a client must never decide
++    that for itself). So jarvis_task_control gets the first word, and
++    everything else goes to the original function, renamed below.
++    Without jarvis_task_control.py this changes nothing.
++    """
++    try:
++        import jarvis_task_control
++        state, detail = jarvis_task_control.effective_activity(state, detail)
++    except Exception:
++        pass
++    return _activity_as_told(state, detail)
++
++
++def _activity_as_told(state: str, detail: str = "") -> None:
+     """Announce what Jarvis is doing, if the event bus is importable.
+ 
+@@ -1856,6 +1875,20 @@
+                 return self._send(503, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
+ 
++        if path == "/api/task":
++            # task-control.patch - what is running and what is paused: ids,
++            # tool names and step counts, never the text of a note.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_task_control
++                return self._send(200, jarvis_task_control.status())
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++
+         if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
+                     "/api/compute", "/api/memory/facts", "/api/memory/export"):
+             if not _origin_ok(self):
+@@ -2146,6 +2179,32 @@
+                 return self._send(code, {"error": out.get("reason", "refused")})
+             return self._send(code, out)
+ 
++        if route in ("/api/task/pause", "/api/task/resume", "/api/task/stop",
++                     "/api/task/note") or (route.startswith("/api/pending/")
++                                           and route.endswith("/amend")):
++            # task-control.patch - Pause, Resume, Stop and a note for what
++            # runs next (docs/AUTONOMY-PROPOSALS.md 3d), and a note on ONE
++            # waiting approval card (3b). The rules are in
++            # jarvis_task_control.handle_post(); this only checks who is
++            # asking. None of these approves anything - Resume RAISES a card.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_task_control
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            host = str((getattr(self, "client_address", None) or ("",))[0])
++            by = "this PC" if host in ("127.0.0.1", "::1") else "another device"
++            code, out = jarvis_task_control.handle_post(route, body, by=by)
++            return self._send(code, out)
++
+         if route in ("/api/memory/forget", "/api/memory/edit",
+                      "/api/memory/learning", "/api/memory/sleep_time",
+                      "/api/memory/keep_both"):

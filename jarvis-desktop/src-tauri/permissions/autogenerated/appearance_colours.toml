@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-appearance-colours"
+description = "Enables the appearance_colours command without any pre-configured scope."
+commands.allow = ["appearance_colours"]
+
+[[permission]]
+identifier = "deny-appearance-colours"
+description = "Denies the appearance_colours command without any pre-configured scope."
+commands.deny = ["appearance_colours"]

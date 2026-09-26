@@ -89,27 +89,40 @@ await check("saving a normal address reports success, not an error tone", async 
 
 /* ── The one value this exists to stop ───────────────────────────────────── */
 
-await check("a wildcard address is refused, and the page says so", async () => {
+for (const spelling of ["0.0.0.0", "0"]) await check(`a wildcard address (${spelling}) is refused, and the page says so`, async () => {
   // The exact failure this whole feature exists to prevent: a value that
   // would open the backend to the whole network being saved without a word.
   const page = await open({
-    bindAddressRefuses: ["0.0.0.0"],
+    bindAddressRefuses: [spelling],
     bindAddressRefusalMessage:
-      "refusing to bind every network interface (0.0.0.0) — set the machine's own Tailscale address instead",
+      "refusing to bind every network interface (0.0.0.0) — set this computer's own Tailscale or NordVPN Meshnet address instead",
   });
-  await page.locator("#bind-address").fill("0.0.0.0");
+  await page.locator("#bind-address").fill(spelling);
   await page.locator("#save-connection").click();
   await page.waitForTimeout(250);
   const status = await page.locator("#connection-status").innerText();
   const tone = await page.locator("#connection-status").getAttribute("data-tone");
   const calls = await page.evaluate(() => window.__calls);
   await page.close();
-  assert.match(status, /0\.0\.0\.0/, `did not explain the refusal: "${status}"`);
+  assert.match(status, /every network interface/, `did not explain the refusal: "${status}"`);
   assert.equal(tone, "bad", "a refused address was reported in the success tone");
   // The stub only ever records the attempted call; it never applies it when
   // it throws. Confirm the app did not treat the throw as a success.
-  const saved = calls.find((c) => c[0] === "__savedApiSettings" && c[1].bindAddress === "0.0.0.0");
+  const saved = calls.find((c) => c[0] === "__savedApiSettings" && c[1].bindAddress === spelling);
   assert.ok(saved, "the attempt was never made");
+});
+
+await check("an address an older version saved, and this one refuses, is flagged in red", async () => {
+  // sidecar.rs does not start the backend with it; the field must not look
+  // like it works when it is being ignored.
+  const page = await open({ apiSettings: { bindAddress: "0",
+    bindAddressProblem: "refusing to bind every network interface (0.0.0.0)" } });
+  await page.waitForTimeout(250);
+  const status = await page.locator("#connection-status").innerText();
+  const tone = await page.locator("#connection-status").getAttribute("data-tone");
+  await page.close();
+  assert.match(status, /not being used/, `the problem was not shown: "${status}"`);
+  assert.equal(tone, "bad");
 });
 
 /* ── Explaining itself ───────────────────────────────────────────────────── */
@@ -129,10 +142,43 @@ await check("the note explains this is Tailscale-only, never the whole network",
 await check("CONTROL: Rust refuses the wildcard before it is persisted", async () => {
   const rust = read("src-tauri/src/commands.rs");
   assert.match(rust, /fn validate_bind_address/, "no validate_bind_address function");
-  assert.match(rust, /addr == "0\.0\.0\.0" \|\| addr == "::"/,
-    "the wildcard addresses are not checked");
-  assert.match(rust, /validate_bind_address\(&bind_address\)\?;\s*\n\s*store\.set/,
+  // Everything refusable is checked before ANYTHING is written - so a refused
+  // address cannot leave a half-saved token (or base) behind either.
+  const set = rust.slice(rust.indexOf("pub fn set_api_settings"));
+  const body = set.slice(0, set.indexOf("\n}\n"));
+  const check = body.indexOf("validate_bind_address(");
+  const firstWrite = body.search(/store\.(set|delete)\(|token_store::(write|delete)\(/);
+  assert.ok(check > -1 && firstWrite > -1 && check < firstWrite,
     "validation does not happen before the write");
+  // It used to compare against the exact strings "0.0.0.0" and "::" only,
+  // and "0", "0x0" and "000.000.000.000" bind every interface too.
+  assert.doesNotMatch(rust, /addr == "0\.0\.0\.0"/,
+    "back to an exact-string check, which the short spellings walk past");
+  assert.match(rust, /fn binds_every_interface/, "no lenient-parser wildcard check");
+});
+
+await check("CONTROL: the shared case table covers the short wildcard spellings", async () => {
+  // One table, three readers: the Rust unit tests (include_str!), the
+  // backend's test_bind_wildcard.py (which binds a real socket to each
+  // every_interface entry, so the table is checked against the OS), and this.
+  const table = JSON.parse(read("tests/bind-address-cases.json"));
+  for (const spelling of ["0.0.0.0", "0", "0x0", "0.0", "000.000.000.000", "::"]) {
+    assert.ok(table.every_interface.includes(spelling), `the table lost ${spelling}`);
+  }
+  assert.ok(table.refused.includes("100.64.012.3"), "a leading-zero (octal) form is not refused");
+  assert.ok(table.refused.includes("192.168.1.20"), "a home-network address is not refused");
+  assert.ok(table.accepted.includes("100.64.12.3"), "a real Tailscale address is not accepted");
+  const rust = read("src-tauri/src/commands.rs");
+  assert.match(rust, /include_str!\("\.\.\/\.\.\/tests\/bind-address-cases\.json"\)/,
+    "the Rust tests do not read the shared table");
+  const py = readFileSync(join(HERE, "..", "..", "backend", "test_bind_wildcard.py"), "utf8");
+  assert.match(py, /bind-address-cases\.json/, "the backend test does not read the shared table");
+});
+
+await check("CONTROL: a saved value is checked again before the backend is started with it", async () => {
+  const sidecar = read("src-tauri/src/sidecar.rs");
+  assert.match(sidecar, /validate_bind_address\(&bind\)[\s\S]{0,120}JARVIS_HUD_BIND/,
+    "sidecar passes the stored bind address without re-checking it");
 });
 
 await check("CONTROL: a supervised backend is actually told to bind there", async () => {

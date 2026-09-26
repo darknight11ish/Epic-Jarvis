@@ -1,0 +1,102 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1979,6 +1979,29 @@
+                 return self._send(503, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
+ 
++        if path == "/api/voice/voices":
++            # voices.patch - custom voices (jarvis_voices.py): the voices kept
++            # on this PC, which one Jarvis speaks in and with which engine,
++            # why the built-in voice is used instead if it is, the better
++            # voice on the second card, a waiting card, and how long the last
++            # few sentences took to make. Loads no model, starts nothing.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_voices
++            except ImportError:
++                return self._send(503, {
++                    "available": False,
++                    "error": "custom voices are not installed on this PC",
++                    "reason": "copy backend\\jarvis_voices.py into the backend "
++                              "folder (apply-patches.ps1 does this)"})
++            try:
++                return self._send(200, jarvis_voices.status())
++            except Exception as exc:
++                return self._send(500, {"available": False, "error": type(exc).__name__})
++
+         if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
+                     "/api/compute", "/api/memory/facts", "/api/memory/export"):
+             if not _origin_ok(self):
+@@ -2414,6 +2437,49 @@
+                 code, out = jarvis_big_model.handle_deep_post(body)
+             return self._send(code, out)
+ 
++        if route in ("/api/voice/voices/create", "/api/voice/voices/active",
++                     "/api/voice/voices/delete", "/api/voice/voices/better"):
++            # voices.patch - custom voices (jarvis_voices.py).
++            #   create {"name", "clip": "<base64 WAV>", "transcript"} and
++            #   active {"voice": "<id>"} each raise ONE approval card
++            #   (custom_voice, tier "ask") and change nothing until it is
++            #   approved: 202 {"ok": true, "pending": true, ...}. A voice
++            #   that sounds like the owner's is refused: 409 with
++            #   "refused": "owner_voice".
++            #   active {"voice": "builtin"} and delete {"voice": "<id>"} are
++            #   immediate: they only take a voice away.
++            #   better {"enabled": true|false}: the better voice (F5-TTS) on
++            #   the second card - ON one card (better_voice_enable), OFF at
++            #   once.
++            # The recording never leaves this PC and is never logged: an
++            # error here names the exception, never its message.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                raw = _read_body(self)
++            except Exception as exc:
++                return self._send(400, {"error": "could not read the request "
++                                                 f"({type(exc).__name__})"})
++            try:
++                body = json.loads(raw or b"{}")
++            except ValueError:
++                return self._send(400, {"error": "the request is not JSON"})
++            try:
++                import jarvis_voices
++            except ImportError:
++                return self._send(503, {
++                    "available": False,
++                    "error": "custom voices are not installed on this PC",
++                    "reason": "copy backend\\jarvis_voices.py into the backend "
++                              "folder (apply-patches.ps1 does this)"})
++            try:
++                code, out = jarvis_voices.handle_post(route, body)
++            except Exception as exc:
++                return self._send(500, {"error": type(exc).__name__})
++            return self._send(code, out)
++
+         if route in ("/api/memory/forget", "/api/memory/edit",
+                      "/api/memory/learning", "/api/memory/sleep_time",
+                      "/api/memory/keep_both"):
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -335,6 +335,17 @@
+     # the action would be read as "unknown", and the notice would say it
+     # might leave the machine.
+     "big_model_enable": ("yes", "local", "lets Jarvis start colibri on this PC for background jobs, reachable from this PC only (127.0.0.1); it keeps running while any big-model job switch is on, and stops when the last one, or the main switch, is turned off"),
++    # voices.patch (jarvis_voices.py). Adding a custom voice keeps a
++    # recording on THIS PC, and switching Jarvis to one makes it speak in
++    # that voice; nothing is sent anywhere, and switching back or deleting
++    # the voice never asks. Without these lines the actions would be read as
++    # "unknown", and the notice would say they might leave the machine.
++    "custom_voice": ("yes", "local", "keeps a voice recording on this PC, or makes Jarvis speak in a voice kept there; nothing is sent anywhere, and switching back to the built-in voice or deleting the voice is immediate"),
++    # The better voice: F5-TTS on the second graphics card, in its own
++    # program that Jarvis talks to through pipes (no port), only while it
++    # speaks in a custom voice; it stops when idle, in standby, and when
++    # the switch is turned off.
++    "better_voice_enable": ("yes", "local", "lets Jarvis start F5-TTS on the second graphics card on this PC when it speaks in a custom voice, reachable by no network; it stops after idle minutes, in standby, and when the switch is turned off"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",

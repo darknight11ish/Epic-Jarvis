@@ -46,30 +46,35 @@ const JARVIS_CLIENT_HEADER = "hud";
 const CLIPBOARD_PREVIEW = 90;
 
 /**
- * Quick-capture prefixes. Typing one at the head of the prompt pre-routes the
- * turn to a note store and shows a chip; the prefix itself is stripped before
- * the text is sent.
+ * Quick-capture prefixes. Typing one at the head of the prompt files the rest
+ * as a note (see `fileFromBar`) instead of asking Jarvis anything, and shows a
+ * chip while typing; the prefix itself is not part of the note.
  */
 const NOTE_PREFIXES = {
   "#log": { target: "logseq", label: "Logseq Journal" },
   "#logseq": { target: "logseq", label: "Logseq Journal" },
   "#journal": { target: "logseq", label: "Logseq Journal" },
-  "#joplin": { target: "joplin", label: "Joplin Vault" },
-  "#vault": { target: "joplin", label: "Joplin Vault" },
+  "#joplin": { target: "joplin", label: "Joplin Note" },
+  "#jop": { target: "joplin", label: "Joplin Note" },
+  // "#vault" meant Joplin until 2026-09-24; the owner moved it to Obsidian,
+  // whose own word it is.
+  "#vault": { target: "obsidian", label: "Obsidian Daily Note" },
+  "#obs": { target: "obsidian", label: "Obsidian Daily Note" },
+  "#obsidian": { target: "obsidian", label: "Obsidian Daily Note" },
+  "#daily": { target: "obsidian", label: "Obsidian Daily Note" },
 };
 
-/**
- * Routing instruction sent as a system turn alongside `note_target`, so a
- * server that reads either mechanism lands in the same place.
+/** What Alt+Shift+N (and the widget's buttons) type in for each target. */
+const ARM_PREFIX = { logseq: "#log ", joplin: "#joplin ", obsidian: "#obs " };
+
+/*
+ * There used to be a NOTE_INSTRUCTIONS table here: a system turn asking the
+ * model to call `append_logseq_journal` / `create_joplin_note`. Neither tool
+ * existed, so no note was ever filed. A prefixed prompt now goes straight to
+ * `/api/notes/capture` (backend note-capture.patch) - the owner's own words,
+ * no model, through the approval gate - and the card says how it ended.
+ * Searching notes is a question for Jarvis in chat (its notes_search tool).
  */
-const NOTE_INSTRUCTIONS = {
-  logseq:
-    "Route this turn to the Logseq daily journal via append_logseq_journal. " +
-    "Capture it verbatim unless asked to summarise.",
-  joplin:
-    "Route this turn to the Joplin personal vault via create_joplin_note, " +
-    "or search_joplin when the user is asking a question rather than filing one.",
-};
 
 /**
  * Smallest gap between native window resizes, in milliseconds. Each resize is a
@@ -94,11 +99,15 @@ import {
   fetchDigest,
   injectTaskNote,
   markDigestSeen,
+  onEvent,
   onLink,
   onQueue,
   pauseTask,
+  reconnect as reconnectLink,
   resumeTask,
+  linkWords,
   riskLine,
+  expiryWords,
   setMuted,
   stopTask,
   followTheme,
@@ -106,6 +115,60 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode } from "./voice.js";
+import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
+import {
+  createCutOff,
+  createInterruptFlow,
+  createMomentFlow,
+  flowFromStatus,
+  HEARD_SOUND,
+  heardSoundSamples,
+  isToolStart,
+  loadHeard,
+  loadMoment,
+  PAUSE,
+  RESUME,
+  STOP,
+  WAIT_MAX_MS,
+} from "./voice-flow.js";
+import {
+  createToolWatch,
+  mayReadAloud,
+  privacyFromHeard,
+  PRIVATE_LINE,
+  TOOL_WORDS,
+  toolRanBetween,
+  toolsKnownBetween,
+} from "./private-speech.js";
+// The renderer the answer card and the approval preview use - see markdown.js.
+import { escapeHtml, renderMarkdown } from "./markdown.js";
+import { approvalPlainText, isEmailCard } from "./email-sending.js";
+import {
+  fromChatFailure,
+  fromStreamError,
+  SETTINGS_PLACE_KEY,
+  shown,
+  STATUSES,
+  WHERE_KINDS,
+} from "./plain-errors.js";
+import {
+  boxTagAfter,
+  commitExchange,
+  historyMessages,
+  newConversationId,
+  sentProvenance,
+  userMessage,
+} from "./chat-history.js";
+import { fileNote, loadTargets, notSetUp, noTargetsLine, targetName } from "./note-capture.js";
+// Where a spoken answer is cut into pieces - the same rule as the phone.
+import { nextSpeechPiece } from "./speech-pieces.js";
+// Temporary chat and "Used in this answer" (2026-09-25) - answer-memory.js.
+import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
+// One card on every screen, and what a spoken question hears about a card
+// (the creativity audit, 2026-09-25) - card-words.js.
+import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
+// A timer said aloud while hands-free listening is on (2026-09-25).
+import { aloudFor } from "./coming-up.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -164,6 +227,20 @@ const dom = {
   routeSep: $("route-sep"),
   offline: $("offline"),
   offlineText: $("offline-text"),
+  micLabel: $("mic-label"),
+  answerMark: $("answer-mark"),
+  markRight: $("mark-right"),
+  markWrong: $("mark-wrong"),
+  answerMarkNote: $("answer-mark-note"),
+  temporary: $("temporary"),
+  temporaryStrip: $("temporary-strip"),
+  temporaryLine: $("temporary-line"),
+  temporaryRefused: $("temporary-refused"),
+  answerUsed: $("answer-used"),
+  answerUsedLine: $("answer-used-line"),
+  answerUsedList: $("answer-used-list"),
+  answerMemoryNote: $("answer-memory-note"),
+  approvalOptionsWhy: $("approval-options-why"),
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
   mic: $("mic"),
@@ -219,15 +296,27 @@ const dom = {
   clipboardChip: $("attachment-clipboard"),
   clipboardMeta: $("clipboard-meta"),
   clipboardRemove: $("clipboard-remove"),
+  pictureNotice: $("picture-notice"),
+  pictureNoticeText: $("picture-notice-text"),
+  pictureTextOnly: $("picture-text-only"),
+  pictureAnyway: $("picture-anyway"),
+  pictureKeep: $("picture-keep"),
 
   card: $("card"),
   cardStatusText: $("card-status-text"),
   cardStat: $("card-stat"),
+  // A failed answer's fix button and "Details" (plain-errors.js).
+  problem: $("answer-problem"),
+  problemAction: $("problem-action"),
+  problemWhere: $("problem-where"),
+  problemDetails: $("problem-details"),
+  problemDetailsText: $("problem-details-text"),
   cardBody: $("card-body"),
   answer: $("answer"),
   cursor: $("cursor"),
   copy: $("copy"),
   stop: $("stop"),
+  newConversation: $("new-conversation"),
   services: $("services"),
 
   previousAnswer: $("previous-answer"),
@@ -254,6 +343,56 @@ const state = {
   buffer: "",
   /** Prompt currently in flight, kept for the retry path. */
   inFlight: null,
+  /**
+   * The conversation so far: finished `{ question, answer }` pairs, oldest
+   * first, trimmed to fit the model (chat-history.js). Sent ahead of every
+   * new question so a follow-up is understood. This window's memory only,
+   * never written to disk; cleared by "New conversation" and by Esc.
+   */
+  conversation: [],
+  /**
+   * The id every request of this conversation carries as `conversation_id`
+   * (JARVIS-API.md section 18), so the PC's History keeps one entry per
+   * conversation. A new one at start, on "New conversation" and on Esc -
+   * wherever `conversation` above is emptied (closeCard).
+   */
+  conversationId: newConversationId(),
+  /**
+   * Where the words now in the box came from: "typed", "clipboard" (the
+   * clipboard hotkey's prefill, until it is edited) or "pasted" (a paste or
+   * drop since the box was last empty). Moved only by `boxTagAfter`
+   * (chat-history.js), which holds every rule.
+   */
+  boxTag: "typed",
+  /** The tag the turn now streaming was sent with, kept with it into
+   *  `conversation` when it finishes, so it is sent again with that turn. */
+  turnProvenance: null,
+  /** The question of the turn now streaming, exactly as sent, until it
+   *  finishes. Null when nothing is in flight or the turn was abandoned. */
+  turnQuestion: null,
+  /** The turn's reply came as `data:` lines (SSE), and whether one of them
+   *  said it had finished. SSE that stops without saying so was cut off,
+   *  and is not added to the conversation. */
+  turnFramed: false,
+  turnEnded: false,
+  /** The answer stopped at the length limit (`finish_reason: "length"`). It
+   *  is shown, and kept, with a note saying it was cut short. */
+  turnCutShort: false,
+  /** This turn's Local/Cloud badge came from the server's X-Jarvis-Route
+   *  header, so nothing in the stream may overwrite it with a guess. */
+  routeFromHeader: false,
+  /** The private-answer rule (private-speech.js), for a voice turn: what the
+   *  utterance reply said (`privateAloud`, `questionPrivate`,
+   *  `memoryAloud`, `sensitiveAloud`), the route line (`gate`,
+   *  `injected_facts`, `injected_sensitive`), whether `: jarvis-status` said a
+   *  tool ran, the tool counters when the question was sent (`toolStart`,
+   *  a `toolWatch` snapshot), and whether "It's on your screen." was said
+   *  already. */
+  voicePrivacy: null,
+  turnRoute: null,
+  toolRan: false,
+  toolStart: null,
+  privateLineSaid: false,
   /** Cancels whichever transport is streaming; null when idle. */
   abort: null,
   startedAt: 0,
@@ -263,8 +402,17 @@ const state = {
   capture: null,
   /** Pending clipboard context. */
   clipboard: null,
-  /** `null`, `"logseq"` or `"joplin"` — set by a prompt prefix. */
+  /** The owner chose "Send it anyway" for the attached picture, once. */
+  pictureCleared: false,
+  /** The words held back while the picture notice asks what to do. */
+  pictureHeld: null,
+  /** ...and where they came from, put back on the box with them. */
+  pictureHeldTag: "typed",
+  /** `null`, `"logseq"`, `"joplin"` or `"obsidian"` — set by a prompt prefix. */
   noteTarget: null,
+  /** Which note apps the PC is set up for (note-capture.js `readTargets`).
+   *  Unknown until the PC answers - and unknown shows none, never all. */
+  noteTargets: { known: false, why: "not checked yet" },
   /** The approval gate awaiting a decision, if any. */
   approval: null,
   /** True while a decision is in flight, so a double tap cannot send twice. */
@@ -316,18 +464,72 @@ const state = {
    * anything.
    */
   promptHistory: [],
+  /** The tag each prompt in `promptHistory` was sent with, by its text, so a
+   *  pasted prompt recalled with Up is sent as pasted again - not as typed. */
+  promptTags: new Map(),
   /** Index into `promptHistory` while browsing it; `null` when not browsing. */
   historyIndex: null,
   /** What was in the composer before Up was first pressed, restored on Down
    *  past the newest entry — so browsing history never eats a draft. */
   historyDraft: "",
+  /** ...and the draft's tag, restored with it. */
+  historyDraftTag: "typed",
   /** The prompt behind the answer currently in `state.buffer`, kept after the
    *  turn finishes so a later turn can label it in the scrollback strip. */
   lastPrompt: "",
+  lastAsked: "typed",
   /** The previous turn's `{ prompt, buffer }`, once a new one starts — one
    *  level of scrollback, shown folded in the card until dismissed. */
   previousAnswer: null,
 };
+
+/**
+ * Temporary chat (the owner's decision, 2026-09-25): the toggle and the
+ * marker strip. Turning it on or off starts a new conversation, so nothing
+ * said in one kind of chat is re-sent in the other. On only when the PC
+ * says it can hold one (commands.rs temporary_chat_available; stream_chat
+ * checks again before each temporary question).
+ */
+const temporaryChat = createTemporaryToggle({
+  button: dom.temporary,
+  strip: dom.temporaryStrip,
+  line: dom.temporaryLine,
+  refused: dom.temporaryRefused,
+  root: dom.shell,
+  check: () => (IS_TAURI ? invokeStrict("temporary_chat_available") : Promise.resolve(false)),
+  restart: () => {
+    state.turnQuestion = null;
+    state.conversation = [];
+    closeCard();
+    focusInput();
+  },
+  busy: () => Boolean(state.inFlight || state.abort),
+  announce,
+  onChange: () => syncWindowHeight(),
+});
+
+/**
+ * "Used 2 memories" under the answer, and the temporary-chat notes. The
+ * words of the facts are read from the PC only when the line is opened;
+ * Forget and Erase are ONE fact each, asked about first, held on a stale
+ * link (answer-memory.js).
+ */
+const answerMemory = createAnswerMemory({
+  box: dom.answerUsed,
+  lineButton: dom.answerUsedLine,
+  list: dom.answerUsedList,
+  note: dom.answerMemoryNote,
+  invoke: (command, args) => invokeStrict(command, args),
+  isStale: () => Boolean(currentLink().stale),
+  confirm: (question) => window.confirm(question),
+  announce,
+  onChange: () => syncWindowHeight(),
+});
+
+/** Tools that ran (`step` events) and drops of the event stream, for the
+ *  private-answer rule - fed below, where this window subscribes to the
+ *  link (private-speech.js `createToolWatch`). */
+const toolWatch = createToolWatch();
 
 /** How many prompts `state.promptHistory` keeps. Older ones fall off the front. */
 const PROMPT_HISTORY_LIMIT = 50;
@@ -336,309 +538,6 @@ const PROMPT_HISTORY_LIMIT = 50;
 function setPhase(phase) {
   state.phase = phase;
   dom.root.dataset.state = phase;
-}
-
-/* ==========================================================================
-   Markdown
-   --------------------------------------------------------------------------
-   A compact, dependency-free renderer. The content security policy forbids
-   remote scripts, and a streaming card only needs the commonmark subset a chat
-   model actually emits. Everything is HTML-escaped before any markup is
-   introduced, so model output can never inject nodes.
-   ========================================================================== */
-
-function escapeHtml(text) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-/** Inline spans: code, bold, italic, strikethrough, links. */
-function renderInline(text) {
-  let out = escapeHtml(text);
-
-  // Placeholders carry a per-call nonce. A fixed `@@JARVISCODE0@@` was
-  // predictable, so model output containing that literal string was
-  // substituted with an unrelated code span — or with `<code>undefined</code>`
-  // when the index did not exist. Not an escape, but not what the model wrote.
-  const nonce = Math.random().toString(36).slice(2, 10);
-
-  // Inline code is lifted out first so its contents survive the emphasis
-  // passes untouched, then restored at the end.
-  const codeSpans = [];
-  out = out.replace(/`([^`\n]+)`/g, (_match, code) => {
-    codeSpans.push(code);
-    return `@@C${nonce}${codeSpans.length - 1}@@`;
-  });
-
-  // URLs are lifted out for the same reason, and for a sharper one: `__` and
-  // `*` inside a URL used to be rewritten as emphasis BEFORE linkification saw
-  // them, so `https://x.com/a__b__c` yielded href="https://x.com/a" — a
-  // different but perfectly valid URL. That href is what `open_external_url`
-  // hands to the OS shell, so a link could point somewhere the text did not
-  // say. Stashing the destination first makes the emphasis passes blind to it.
-  const urls = [];
-  const stash = (url) => {
-    urls.push(url);
-    return `@@U${nonce}${urls.length - 1}@@`;
-  };
-  out = out
-    .replace(
-      /(\[[^\]]*\]\()(https?:\/\/[^\s)]+)(\))/g,
-      (_match, open, url, close) => open + stash(url) + close
-    )
-    .replace(
-      /(^|[\s(])(https?:\/\/[^\s<)]+)/g,
-      (_match, lead, url) => lead + stash(url)
-    );
-
-  // Strong runs first and non-greedily, so `**bold *italic* tail**` keeps its
-  // inner emphasis instead of failing to match on the nested asterisks. The
-  // italic pass then only sees the leftover single delimiters. `(?!\s)` keeps
-  // arithmetic like `a * b * c` from turning into emphasis.
-  out = out
-    .replace(/\*\*\*([\s\S]+?)\*\*\*/g, "<strong><em>$1</em></strong>")
-    .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
-    // `__` needs word boundaries or it eats identifiers: `user__name__id` used
-    // to render as `user<strong>name</strong>id`.
-    .replace(/(^|[^\w])__([\s\S]+?)__(?!\w)/g, "$1<strong>$2</strong>")
-    .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*/g, "$1<em>$2</em>")
-    .replace(/~~([\s\S]+?)~~/g, "<s>$1</s>");
-
-  // Only http(s) links are linkified; anything else stays plain text so model
-  // output can never produce a `javascript:` or `file:` href.
-  const urlPattern = new RegExp(`@@U${nonce}(\\d+)@@`, "g");
-  out = out
-    .replace(
-      new RegExp(`\\[([^\\]]+)\\]\\(@@U${nonce}(\\d+)@@\\)`, "g"),
-      (_match, label, index) =>
-        `<a href="${urls[Number(index)]}" data-external="true">${label}</a>`
-    )
-    .replace(urlPattern, (_match, index) => {
-      const url = urls[Number(index)];
-      return `<a href="${url}" data-external="true">${url}</a>`;
-    });
-
-  out = out.replace(
-    new RegExp(`@@C${nonce}(\\d+)@@`, "g"),
-    (_match, index) => `<code>${codeSpans[Number(index)]}</code>`
-  );
-
-  return out;
-}
-
-
-/** Block-level renderer: fences, headings, lists, quotes, rules, tables. */
-function renderMarkdown(source) {
-  const lines = source.replace(/\r\n/g, "\n").split("\n");
-  const html = [];
-
-  let index = 0;
-  // Every branch below must consume at least one line. This is the guarantee
-  // that it does, rather than a promise that it does: an iteration that
-  // consumes nothing is an infinite loop, and `renderMarkdown` runs on every
-  // streamed token in a frameless always-on-top window. If a future edit ever
-  // reintroduces a line that matches no branch, it is rendered as text and the
-  // parser moves on.
-  let previous = -1;
-  while (index < lines.length) {
-    if (index === previous) {
-      html.push(`<p>${renderInline(lines[index].trim())}</p>`);
-      index += 1;
-      continue;
-    }
-    previous = index;
-
-    const line = lines[index];
-
-    // Fenced code - also handles the unterminated fence of a live stream.
-    //
-    // The opening fence accepts ANY info string, and three OR MORE markers of
-    // either kind. It used to demand a bare `[\w+-]*` language and exactly
-    // three backticks, which meant "```c#", "``` js", "````", "~~~" and
-    // '```js title="a.js"' matched neither this branch nor the paragraph
-    // branch below - whose guard excludes every line starting with a fence.
-    // `index` then never advanced and the loop spun for ever, freezing a
-    // window that has no titlebar and no taskbar entry. A model writing a C#
-    // snippet was enough to trigger it, on every streamed token.
-    const fence = line.match(/^\s*(`{3,}|~{3,})\s*([^`]*)$/);
-    if (fence) {
-      // Only the first word of the info string is the language; CommonMark
-      // lets the rest be anything and highlighters ignore it.
-      const info = (fence[2].trim().split(/\s+/)[0] || "").replace(
-        /[^\w+#.-]/g,
-        ""
-      );
-      const language = info ? ` class="language-${escapeHtml(info)}"` : "";
-      // A fence closes only on the same marker, at least as long. Otherwise
-      // "````" inside a ``` block would end it early.
-      const marker = fence[1][0];
-      const closer = new RegExp(`^\\s*${marker}{${fence[1].length},}\\s*$`);
-      const body = [];
-      index += 1;
-      while (index < lines.length && !closer.test(lines[index])) {
-        body.push(lines[index]);
-        index += 1;
-      }
-      index += 1; // consume the closing fence, if it has arrived
-      html.push(
-        `<pre><code${language}>${escapeHtml(body.join("\n"))}</code></pre>`
-      );
-      continue;
-    }
-
-    // Blank line.
-    if (!line.trim()) {
-      index += 1;
-      continue;
-    }
-
-    // Horizontal rule.
-    if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
-      html.push("<hr />");
-      index += 1;
-      continue;
-    }
-
-    // Heading.
-    const heading = line.match(/^\s*(#{1,4})\s+(.*)$/);
-    if (heading) {
-      const level = heading[1].length;
-      html.push(`<h${level}>${renderInline(heading[2].trim())}</h${level}>`);
-      index += 1;
-      continue;
-    }
-
-    // Blockquote.
-    if (/^\s*>\s?/.test(line)) {
-      const body = [];
-      while (index < lines.length && /^\s*>\s?/.test(lines[index])) {
-        body.push(lines[index].replace(/^\s*>\s?/, ""));
-        index += 1;
-      }
-      html.push(`<blockquote>${renderMarkdown(body.join("\n"))}</blockquote>`);
-      continue;
-    }
-
-    // Table: a header row followed by a delimiter row.
-    const nextLine = lines[index + 1] || "";
-    if (line.includes("|") && /^\s*\|?[\s:-]*-[\s:|-]*\|?\s*$/.test(nextLine)) {
-      const cells = (row) =>
-        row
-          .trim()
-          .replace(/^\||\|$/g, "")
-          .split("|")
-          .map((cell) => cell.trim());
-
-      const head = cells(line);
-      index += 2;
-      const body = [];
-      while (
-        index < lines.length &&
-        lines[index].includes("|") &&
-        lines[index].trim()
-      ) {
-        body.push(cells(lines[index]));
-        index += 1;
-      }
-
-      const headHtml = head
-        .map((cell) => `<th>${renderInline(cell)}</th>`)
-        .join("");
-      const bodyHtml = body
-        .map(
-          (row) =>
-            `<tr>${row.map((cell) => `<td>${renderInline(cell)}</td>`).join("")}</tr>`
-        )
-        .join("");
-
-      html.push(
-        `<table><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`
-      );
-      continue;
-    }
-
-    // Lists. Indentation-aware: an item owns every following line indented
-    // past its marker, so nested lists, multi-paragraph items and fenced code
-    // inside an item all survive by recursing through this same parser.
-    const marker = line.match(/^(\s*)([-*+]|\d+[.)])\s+/);
-    if (marker) {
-      const baseIndent = marker[1].length;
-      const ordered = /\d/.test(marker[2]);
-      const items = [];
-
-      while (index < lines.length) {
-        const item = lines[index].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
-        // A marker at a different indent belongs to an enclosing or nested
-        // list; a different kind starts a separate list.
-        if (!item || item[1].length !== baseIndent) break;
-        if (/\d/.test(item[2]) !== ordered) break;
-
-        const head = item[3];
-        const rest = [];
-        index += 1;
-
-        while (index < lines.length) {
-          const next = lines[index];
-          if (!next.trim()) {
-            // A blank line only stays inside the item when indented content
-            // follows it; otherwise the list has ended.
-            const after = lines[index + 1] || "";
-            const afterIndent = after.match(/^(\s*)/)[1].length;
-            if (!after.trim() || afterIndent <= baseIndent) break;
-            rest.push("");
-            index += 1;
-            continue;
-          }
-          if (next.match(/^(\s*)/)[1].length <= baseIndent) break;
-          rest.push(next);
-          index += 1;
-        }
-
-        // Dedent continuation lines by their own common indent so nested
-        // fences keep their original relative shape.
-        const indents = rest
-          .filter((l) => l.trim())
-          .map((l) => l.match(/^(\s*)/)[1].length);
-        const strip = indents.length ? Math.min(...indents) : 0;
-        items.push([head, ...rest.map((l) => l.slice(strip))]);
-      }
-
-      const tag = ordered ? "ol" : "ul";
-      const itemsHtml = items
-        .map((buffer) => {
-          // A one-line item stays inline so plain lists are not padded with
-          // paragraph margins; anything richer goes back through the block
-          // parser, with its leading paragraph unwrapped.
-          if (buffer.length === 1) return `<li>${renderInline(buffer[0])}</li>`;
-          const body = renderMarkdown(buffer.join("\n")).replace(
-            /^<p>([\s\S]*?)<\/p>/,
-            "$1"
-          );
-          return `<li>${body}</li>`;
-        })
-        .join("");
-      html.push(`<${tag}>${itemsHtml}</${tag}>`);
-      continue;
-    }
-
-    // Paragraph - greedily absorb the following plain lines.
-    const paragraph = [];
-    while (
-      index < lines.length &&
-      lines[index].trim() &&
-      !/^\s*(#{1,4}\s|>|`{3,}|~{3,}|[-*+]\s|\d+[.)]\s)/.test(lines[index])
-    ) {
-      paragraph.push(lines[index].trim());
-      index += 1;
-    }
-    html.push(`<p>${renderInline(paragraph.join(" "))}</p>`);
-  }
-
-  return html.join("");
 }
 
 /* ==========================================================================
@@ -825,15 +724,29 @@ function closeCard() {
   dom.card.hidden = true;
   dom.answer.innerHTML = "";
   dom.cardStat.textContent = "";
+  paintProblem(null, "");
   dom.cursor.hidden = true;
   state.buffer = "";
   state.lastPrompt = "";
   state.previousAnswer = null;
+  // The conversation goes with the card it was shown in: Esc, which ends
+  // up here, has always meant "done with this", and a question asked next
+  // time the window opens should not silently follow on from one that is no
+  // longer on screen. Hiding on focus loss does not come here.
+  state.conversation = [];
+  // A conversation forgotten here is a finished one on the PC too: the next
+  // question starts a new entry in History (JARVIS-API.md section 18).
+  state.conversationId = newConversationId();
+  state.turnQuestion = null;
+  state.turnProvenance = null;
   paintedBlocks = 0;
   spokenUpTo = 0;
   stopSpeaking();
   setPhase("idle");
   renderPreviousAnswer();
+  syncNewConversation();
+  answerMemory.clear();
+  temporaryChat.paint(true);
   paint({ immediate: true });
 }
 
@@ -861,11 +774,78 @@ function truncateForSummary(text, max = 80) {
 
 /** Renders a failure inside the card instead of silently doing nothing. */
 function showError(message) {
+  showProblem(shown("pc_said", message), "", "Error");
+}
+
+/**
+ * A failure in plain words (plain-errors.js): what happened, what to do,
+ * ONE button for it, and the technical detail - scrubbed - behind
+ * "Details" for a bug report. The same words as the phone's.
+ */
+function showProblem(problem, details = problem.details || "", status = "Not answered") {
   setPhase("error");
-  openCard("Error");
+  openCard(status);
   dom.cursor.hidden = true;
-  state.buffer = `**Jarvis could not answer.**\n\n${message}`;
+  state.buffer = problem.kind === "pc_said"
+    ? `**Jarvis could not answer.**\n\n${problem.says}`
+    : `**${problem.says}**\n\n${problem.fix}`;
+  paintProblem(problem, details);
   paint({ immediate: true });
+}
+
+/** The fix button and "Details" under a failed answer; hidden otherwise. */
+function paintProblem(problem, details) {
+  if (!dom.problem) return;
+  const action = problem && problem.button ? problem.action : "none";
+  dom.problem.hidden = !problem || (action === "none" && !details);
+  if (dom.problemAction) {
+    dom.problemAction.hidden = action === "none";
+    dom.problemAction.textContent = problem ? problem.button : "";
+    dom.problemAction.dataset.action = action;
+  }
+  if (dom.problemWhere) {
+    const place = problem ? WHERE_KINDS[problem.kind] || "" : "";
+    dom.problemWhere.hidden = !place;
+    dom.problemWhere.dataset.place = place;
+    if (place) dom.problem.hidden = false;
+  }
+  if (dom.problemDetails) {
+    dom.problemDetails.hidden = !details;
+    dom.problemDetails.open = false;
+  }
+  if (dom.problemDetailsText) dom.problemDetailsText.textContent = details || "";
+}
+
+/** What an error's fix button does (the contract file's actions). */
+function runProblemAction(action) {
+  if (action === "retry") {
+    const again = state.lastPrompt;
+    if (again) send(again, state.lastAsked || "typed");
+  } else if (action === "reconnect") {
+    reconnectLink();
+  } else if (action === "connection") {
+    invoke("open_fix_place", { place: "settings" });
+  } else if (action === "models") {
+    invoke("open_fix_place", { place: "brain" });
+  }
+}
+
+if (dom.problemAction) {
+  dom.problemAction.addEventListener("click", () =>
+    runProblemAction(dom.problemAction.dataset.action || "none"));
+}
+
+/** "Show me where": Settings, at the place the fix names (plain-errors.js). */
+if (dom.problemWhere) {
+  dom.problemWhere.addEventListener("click", () => {
+    const place = dom.problemWhere.dataset.place || "";
+    try {
+      localStorage.setItem(SETTINGS_PLACE_KEY, JSON.stringify({ place, at: Date.now() }));
+    } catch {
+      /* no storage: Settings opens at the top, and the fix's words say where */
+    }
+    invoke("open_fix_place", { place: "settings" });
+  });
 }
 
 /* ==========================================================================
@@ -921,6 +901,49 @@ function routeFromPayload(payload) {
   };
 }
 
+/**
+ * The badge from the server's own word, `X-Jarvis-Route`, which says which
+ * lane answered and - since chat-stream.patch - `where`: "local" or "cloud".
+ *
+ * The badge used to be guessed from each chunk's `model` string, which an
+ * Ollama chunk always carries and which says nothing about where it ran - so
+ * a cloud answer would have been labelled Local. An older backend with no
+ * `where` is read by its gate: only "escalate" sends a turn to a cloud lane.
+ */
+function routeFromHeader(route) {
+  if (!route || typeof route !== "object") return null;
+  const where =
+    route.where === "cloud" || route.where === "local"
+      ? route.where
+      : route.gate === "escalate"
+        ? "cloud"
+        : "local";
+  const cloud = where === "cloud";
+  const lane = typeof route.lane === "string" && route.lane ? route.lane : null;
+  // second-card.patch: on a turn the second graphics card answered, `lane`
+  // is the model really answering and `second_card` says why ("long_context"
+  // or "vision"). It is still this PC, so still Local - the badge says which
+  // card, in words, rather than a second badge.
+  const second = typeof route.second_card === "string" && route.second_card;
+  return {
+    tier: cloud ? "cloud" : "local",
+    label: cloud ? "Cloud" : "Local",
+    model: lane && second ? `${lane} on the second graphics card` : lane,
+  };
+}
+
+function applyHeaderRoute(route) {
+  // Kept whole for the private-answer rule (gate, injected_facts) - the
+  // route line carries nothing else (commands.rs route_line_from_header).
+  state.turnRoute = route && typeof route === "object" ? route : null;
+  // The facts this answer used (ids only) and the temporary-chat marks.
+  answerMemory.route(state.turnRoute);
+  const next = routeFromHeader(route);
+  if (!next) return;
+  state.routeFromHeader = true;
+  applyRoute(next);
+}
+
 /** Paints the three health dots in the card footer. */
 function applyHealth(report) {
   if (!report || !Array.isArray(report.services)) return;
@@ -929,12 +952,16 @@ function applyHealth(report) {
     const dot = dom.services.querySelector(`[data-service="${service.id}"]`);
     if (!dot) continue;
     dot.dataset.online = String(Boolean(service.online));
+    // LiteLLM (the cloud lane's proxy) is optional: not running is normal
+    // with no cloud model set up, so its dot is drawn quiet, not red.
+    dot.dataset.optional = String(Boolean(service.optional));
     dot.title = `${service.name}: ${service.detail}`;
     // Shape and hue are for the eye; this is the same fact for a screen
     // reader, which was previously told only the service's name.
     dot.setAttribute(
       "aria-label",
-      `${service.name}: ${service.online ? "online" : "not answering"}`
+      `${service.name}: ${service.online ? "online" : service.optional
+        ? "not running, only needed for a cloud model" : "not answering"}`
     );
   }
 
@@ -946,7 +973,7 @@ function applyHealth(report) {
       model: null,
       why: core.detail
         ? `Jarvis is not answering: ${core.detail}`
-        : "Jarvis is not answering on 127.0.0.1:4719.",
+        : `Jarvis is not answering at ${currentLink().base || "the address set in Settings"}.`,
     });
   } else if (state.route.tier === "offline") {
     applyRoute(DEFAULT_ROUTE);
@@ -972,6 +999,7 @@ async function refreshHealth() {
    ========================================================================== */
 
 function syncAttachments() {
+  if (!state.capture) hidePictureNotice();
   dom.captureChip.hidden = !state.capture;
   dom.clipboardChip.hidden = !state.clipboard;
   dom.attachments.hidden = !state.capture && !state.clipboard;
@@ -979,6 +1007,8 @@ function syncAttachments() {
 }
 
 function attachCapture(payload) {
+  hidePictureNotice();
+  state.pictureCleared = false;
   state.capture = payload.dataUri;
   dom.captureThumb.src = payload.dataUri;
   dom.captureMeta.textContent = `${payload.width}x${payload.height} · ${Math.round(
@@ -998,6 +1028,109 @@ function attachClipboard(text) {
 }
 
 /* ==========================================================================
+   A picture, and a model that may not see it
+   --------------------------------------------------------------------------
+   A screen capture goes to the LOCAL model and nowhere else: the backend
+   keeps any turn with a picture on this machine (jarvis_router.choose, gate
+   "image"), because a screenshot can show an email, a file or a password.
+   The local model today reads text only, and sent a picture it answers as if
+   there were none. So before sending, ask Ollama (vision.rs) and, unless the
+   answer is a clear yes, say so and let the owner choose. Nothing is sent
+   while the notice is up; the words go back into the box so none are lost.
+   ========================================================================== */
+
+async function pictureCanBeSeen() {
+  let check = null;
+  try {
+    check = await invokeStrict("local_model_vision");
+  } catch (error) {
+    check = { vision: null, model: null, reason: String((error && error.message) || error) };
+  }
+  if (check && check.vision === true) return { ok: true, check };
+  // The PC reads the WORDS in the picture itself when the model cannot see
+  // it, and sends them marked as outside text (backend jarvis_ocr.py, the
+  // owner's decision of 2026-09-26): nothing to ask, the picture just goes.
+  if (check && check.readsText === true) return { ok: true, check };
+  return { ok: false, check: check || { vision: null, model: null, reason: "" } };
+}
+
+function pictureNoticeWords(check) {
+  const model = check.model ? ` (${check.model})` : "";
+  if (check.vision === false) {
+    return (
+      `Your current model${model} can't see pictures, so it would answer as if ` +
+      `the picture were not there. A picture model such as qwen2.5vl can be ` +
+      `installed later - it needs more graphics memory; your planned second ` +
+      `graphics card would help (once it is in, turn on Pictures in Settings, ` +
+      `under Second graphics card). The picture is never sent to an online model ` +
+      `instead. Send your words without it?`
+    );
+  }
+  return (
+    `Jarvis could not check whether your current model${model} can see pictures` +
+    (check.reason ? ` (${check.reason.replace(/[.\s]+$/, "")})` : "") +
+    `. If it can't, it will answer as if the picture were not there. The ` +
+    `picture is never sent to an online model instead.`
+  );
+}
+
+function showPictureNotice(message, check, provenance) {
+  state.pictureHeld = message;
+  state.pictureHeldTag = provenance || "typed";
+  // The box was cleared on submit; put the words back so nothing is lost -
+  // with where they came from, so a pasted question stays pasted.
+  if (!dom.prompt.value.trim()) {
+    dom.prompt.value = message;
+    state.boxTag = state.pictureHeldTag;
+    autoGrowPrompt();
+  }
+  dom.pictureNoticeText.textContent = pictureNoticeWords(check);
+  // "Send it anyway" only when the answer is "could not tell". A clear no
+  // gets no such button: sending a picture to a model known to be blind to
+  // it only produces an answer that ignores it.
+  dom.pictureAnyway.hidden = check.vision === false;
+  dom.pictureNotice.hidden = false;
+  syncWindowHeight();
+  announce(dom.pictureNoticeText.textContent, "assertive");
+  dom.pictureTextOnly.focus();
+}
+
+function hidePictureNotice() {
+  state.pictureHeld = null;
+  if (dom.pictureNotice) dom.pictureNotice.hidden = true;
+}
+
+/** Takes the held words back out of the box and sends them. */
+function sendHeldWords() {
+  const typed = dom.prompt.value.trim();
+  const words = typed || state.pictureHeld || "";
+  const tag = typed ? state.boxTag : state.pictureHeldTag;
+  hidePictureNotice();
+  if (!words) return;
+  pushPromptHistory(words, tag);
+  dom.prompt.value = "";
+  state.boxTag = boxTagAfter(state.boxTag, "clear");
+  autoGrowPrompt();
+  send(words, tag);
+}
+
+dom.pictureTextOnly.addEventListener("click", () => {
+  state.capture = null;
+  dom.captureThumb.removeAttribute("src");
+  syncAttachments();
+  sendHeldWords();
+});
+dom.pictureAnyway.addEventListener("click", () => {
+  state.pictureCleared = true;
+  sendHeldWords();
+});
+dom.pictureKeep.addEventListener("click", () => {
+  hidePictureNotice();
+  syncWindowHeight();
+  focusInput({ selectAll: false });
+});
+
+/* ==========================================================================
    Quick capture — note prefixes
    ========================================================================== */
 
@@ -1013,6 +1146,16 @@ function parseNotePrefix(text) {
   return { ...spec, body: text.slice(match[0].length) };
 }
 
+/** True only when the PC said this target is set up. */
+function targetReady(target) {
+  return state.noteTargets.known && state.noteTargets.targets.includes(target);
+}
+
+/** True when the PC said, for certain, that this target is NOT set up. */
+function targetMissing(target) {
+  return state.noteTargets.known && !state.noteTargets.targets.includes(target);
+}
+
 /** Mirrors the prefix in the chip beside the reactor as the user types. */
 function syncNoteChip() {
   const { target, label } = parseNotePrefix(dom.prompt.value);
@@ -1020,9 +1163,33 @@ function syncNoteChip() {
   dom.noteChip.hidden = !target;
   if (target) {
     dom.noteChip.dataset.target = target;
-    dom.noteChipLabel.textContent = label;
+    const missing = targetMissing(target);
+    dom.noteChip.dataset.unset = String(missing);
+    dom.noteChipLabel.textContent = missing ? `${label} — not set up` : label;
   }
   syncWindowHeight();
+}
+
+/**
+ * The help list shows a prefix only for a note app the PC is set up for,
+ * and one line saying why when it shows none.
+ */
+function syncNotePrimer() {
+  for (const row of document.querySelectorAll("[data-note-target]")) {
+    row.hidden = !targetReady(row.dataset.noteTarget);
+  }
+  const line = document.getElementById("note-targets-line");
+  if (!line) return;
+  const none = !state.noteTargets.known || state.noteTargets.targets.length === 0;
+  line.hidden = !none;
+  if (none) line.lastElementChild.textContent = noTargetsLine(state.noteTargets);
+}
+
+/** Asks the PC which note apps are set up, then repaints what depends on it. */
+async function refreshNoteTargets() {
+  state.noteTargets = await loadTargets(invokeStrict);
+  syncNotePrimer();
+  syncNoteChip();
 }
 
 /* ==========================================================================
@@ -1138,6 +1305,12 @@ function renderOptions(approval) {
   const multiple = options.length > 1;
   dom.approvalOptions.hidden = !multiple;
   dom.approvalApprove.hidden = multiple;
+  if (dom.approvalOptionsWhy) {
+    dom.approvalOptionsWhy.hidden = !multiple;
+    dom.approvalOptionsWhy.textContent = multiple
+      ? `Jarvis offered ${options.length} ways to do this. The desktop can't yet tell it which one you picked, so approving is off here. Deny still works.`
+      : "";
+  }
   if (!multiple) return;
   for (const option of options) {
     const btn = document.createElement("button");
@@ -1145,7 +1318,7 @@ function renderOptions(approval) {
     btn.className = "approval-option";
     btn.dataset.optionId = option.id;
     btn.disabled = true;
-    btn.title = "This desktop can't tell the server which option was picked yet — see docs/JARVIS-API.md §8. Deny still works.";
+    btn.title = "Approving one option is not possible from the desktop yet. Deny still works.";
     const label = document.createElement("span");
     label.className = "opt-label";
     label.textContent = option.label; // textContent: model-authored text.
@@ -1185,8 +1358,8 @@ function openApproval(approval) {
   // What the role used to imply, said explicitly and with the part that
   // actually matters — what getting it wrong costs.
   announce(
-    `Approval required: ${approval.action}. ${riskLine(approval.risk)}. ` +
-      "Approve and Deny are in the gate; Escape puts it aside.",
+    `${CARD_KICKER}: ${cardTitle(approval)}. ${riskLine(approval.risk)}. ` +
+      "Deny and Approve are in the gate; Escape puts it aside.",
     "assertive"
   );
 
@@ -1207,7 +1380,9 @@ function refreshApproval(approval) {
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
 
-  dom.approvalAction.textContent = approval.action;
+  // The PC's own words for it (notice.title, card-words.js), never the code
+  // name: "Jarvis wants to switch to a different AI model", not `switch_model`.
+  dom.approvalAction.textContent = cardTitle(approval);
   const target = approval.detail && typeof approval.detail === "object"
     ? approval.detail.target || approval.detail.note_target || approval.detail.to
     : null;
@@ -1216,8 +1391,20 @@ function refreshApproval(approval) {
 
   renderRaised(approval.raised);
 
-  dom.approvalPreview.innerHTML = renderMarkdown(approvalPreview(approval));
-  decorateDiff(dom.approvalPreview);
+  if (isEmailCard(approval)) {
+    // An email is shown exactly as it will be sent - never as Markdown,
+    // which would turn `[words](link)` into "words" and hide where the link
+    // goes, or eat a line's `**`. textContent in a <pre>: every character
+    // and line break, nothing interpreted (the owner's decision of
+    // 2026-09-25: the card shows the recipients, the subject and every word).
+    const pre = document.createElement("pre");
+    pre.className = "approval-verbatim";
+    pre.textContent = approvalPlainText(approval);
+    dom.approvalPreview.replaceChildren(pre);
+  } else {
+    dom.approvalPreview.innerHTML = renderMarkdown(approvalPreview(approval));
+    decorateDiff(dom.approvalPreview);
+  }
   renderOptions(approval);
   // ONLY on a different card. The old comment here said this was "safe
   // unconditionally" and it was not: the queue subscription calls
@@ -1357,6 +1544,7 @@ function renderDigest() {
   dom.digest.replaceChildren();
 
   if (!brief || brief.unavailable) {
+    delete dom.attentionNote.dataset.tone;
     dom.attentionNote.textContent = brief
       ? "The digest is not available on this backend."
       : "Reading the brief…";
@@ -1365,11 +1553,25 @@ function renderDigest() {
     return;
   }
   if (brief.error) {
-    dom.attentionNote.textContent = brief.error;
+    // Amber, and with a way to try again: a failed read used to be plain
+    // text with nothing to do about it short of closing the panel.
+    dom.attentionNote.textContent = `${brief.error} `;
+    dom.attentionNote.dataset.tone = "warn";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "text-button";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      state.digest = null;
+      renderDigest();
+      loadDigest();
+    });
+    dom.attentionNote.append(retry);
     dom.digestSeen.hidden = true;
     syncWindowHeight();
     return;
   }
+  delete dom.attentionNote.dataset.tone;
 
   const items = Array.isArray(brief.items) ? brief.items : [];
   for (const item of items) {
@@ -1573,10 +1775,10 @@ function renderRaised(raised) {
  */
 function parkApproval() {
   if (!state.approval) return;
-  const action = state.approval.action;
+  const title = cardTitle(state.approval);
   state.parked.add(state.approval.id);
   closeApproval();
-  announce(`Put aside: ${action}. It is still waiting; nothing was decided.`);
+  announce(`Put aside: ${title}. It is still waiting; nothing was decided.`);
   syncParkedBar();
   focusInput({ selectAll: false });
 }
@@ -1637,16 +1839,28 @@ function closeApproval() {
 function syncApprovalButtons() {
   const link = currentLink();
   const blocked = link.stale || state.deciding;
-  dom.approvalApprove.disabled = blocked;
+  // A card whose request was cut off on its way here cannot be approved: what
+  // is on screen is not all of what would run. Deny stays - refusing
+  // something unread costs a retry, approving it is the thing to prevent.
+  dom.approvalApprove.disabled = blocked || Boolean(state.approval && state.approval.cutOff);
   dom.approvalDeny.disabled = blocked;
+  paintApprovalClock();
   // Not `= blocked`: the option buttons `renderOptions` builds are already
   // permanently disabled (see its own comment on why), and setting this to
   // `blocked` would re-enable them the moment the stream stopped being
   // stale.
   if (blocked) for (const opt of dom.approvalOptions.children) opt.disabled = true;
   if (link.stale && state.approval) {
+    // "Offline" was wrong when the stream is connected and only the queue
+    // could not be read; linkWords says which it is.
     dom.approvalHint.textContent =
-      "Offline — the approval queue cannot be confirmed, so nothing can be answered from here.";
+      `${linkWords(link).short} — the approval queue cannot be confirmed, so nothing can be answered from here.`;
+    state.hintIsStale = true;
+  } else if (state.hintIsStale && state.approval && !state.deciding) {
+    // Back to the risk line once the link catches up: it used to keep saying
+    // the queue could not be confirmed after it had been.
+    state.hintIsStale = false;
+    dom.approvalHint.textContent = `${riskLine(state.approval.risk)} · Esc puts it aside`;
   }
   // The note is a separate action from deciding (see `state.noteBusy`'s own
   // comment) but it still needs the stream live to mean anything, and it
@@ -1658,6 +1872,30 @@ function syncApprovalButtons() {
   dom.approvalNoteInput.disabled = noteBlocked;
   dom.approvalNoteSend.disabled = noteBlocked;
 }
+
+/**
+ * The line under the risk line: "Nothing runs until you decide", plus how
+ * long the card has left (the gate refuses it by itself at the deadline -
+ * approval-expiry.patch), or why Approve is off for a cut-off request.
+ * Re-painted every second by the ticker below, and only this line: it is not
+ * a live region, so the countdown is never read out.
+ */
+function paintApprovalClock() {
+  const line = document.querySelector("#approval .approval-reassure");
+  if (!line) return;
+  const approval = state.approval;
+  const parts = ["Nothing runs until you decide."];
+  if (approval && approval.cutOff) {
+    parts.push("This request was cut off before it reached this card, so it cannot be approved here - deny it and ask Jarvis for a shorter plan.");
+  }
+  const clock = approval ? expiryWords(approval.expiresAt) : "";
+  if (clock) parts.push(clock);
+  const text = parts.join(" ");
+  if (line.textContent !== text) line.textContent = text;
+}
+setInterval(() => {
+  if (state.approval && !dom.approval.hidden) paintApprovalClock();
+}, 1000);
 
 /**
  * Sends the decision and reports the outcome in the answer card.
@@ -1684,9 +1922,10 @@ async function decideApproval(approved, optionId = null) {
 
   try {
     await decideOnBackend(approval.id, approved, optionId);
+    // The card's own title (card-words.js), not the code name.
     state.buffer += `${state.buffer.trim() ? "\n\n" : ""}> ${
       approved ? "Approved" : "Denied"
-    } \`${approval.action}\` from the desktop spotlight.`;
+    } in the Jarvis bar: ${cardTitle(approval)}.`;
     openCard(approved ? "Approved" : "Denied");
     paint({ immediate: true });
   } catch (error) {
@@ -1699,6 +1938,9 @@ async function decideApproval(approved, optionId = null) {
     const handled = /409|already/i.test(message);
     dom.approvalHint.textContent = handled
       ? "Already handled somewhere else."
+      // "Nothing was approved. Windows Hello is not set up ..." (lock/rules.rs
+      // not_approved_words) already says what happened and what to do.
+      : /^Nothing was approved\./.test(message) ? message
       : `${message} — nothing was decided. Try again.`;
     // Release the latch. It exists to stop a SECOND decision racing a
     // successful first one; a decision that never reached the server is not a
@@ -1754,10 +1996,7 @@ async function sendNote() {
   try {
     await amendOnBackend(id, note);
     dom.approvalNoteInput.value = "";
-    noteToFeed(
-      "Sent — waiting for a new proposal. Jarvis will read this note and " +
-        "propose again for the same request; nothing has been approved or denied."
-    );
+    noteToFeed("Note kept with this card. Nothing was approved or denied, and the card is unchanged. Jarvis reads your note together with your answer - to have it plan differently, deny the card.");
   } catch (error) {
     noteToFeed(String((error && error.message) || error));
   } finally {
@@ -1796,10 +2035,10 @@ function syncTaskControls() {
 
 /**
  * Sends a pause, resume, or stop request for whatever Jarvis is running
- * right now. DRAFT: `pause_task`/`resume_task`/`stop_task` may not exist as
- * Rust commands yet — same situation `amend_approval` was in before it got
- * one — so a rejected invoke surfaces its real error rather than pretending
- * the task's state changed.
+ * right now, through `backend/task-control.patch`'s routes. A rejected
+ * invoke (no route on this backend, nothing running, a stale link for
+ * Resume) surfaces its real error rather than pretending the task's state
+ * changed.
  *
  * Deliberately does not touch `state.taskActivity` on success. An invoke
  * that resolves only means the IPC round trip completed, not that Jarvis
@@ -1821,13 +2060,11 @@ async function sendTaskAction(kind) {
       );
     } else if (kind === "resume") {
       await resumeTask();
-      noteToFeed(
-        "Resume requested — sent. This button will only say Pause again " +
-          "once Jarvis itself reports it has actually resumed."
-      );
+      // Resume only ASKS (task-control.patch) - see widget.js.
+      noteToFeed("Resume sent. Nothing runs yet: Jarvis shows an approval card listing the steps that are left, and continues only if you approve it.");
     } else {
       await stopTask();
-      noteToFeed("Stop requested — sent. The desktop has no way to confirm it actually did.");
+      noteToFeed("Stop sent. Jarvis stops before its next step; steps already done stay done.");
     }
   } catch (error) {
     noteToFeed(String((error && error.message) || error));
@@ -1853,8 +2090,8 @@ async function sendTaskNote() {
     await injectTaskNote(note);
     dom.taskNoteInput.value = "";
     noteToFeed(
-      "Sent — applies to what Jarvis does next. This does not change the " +
-        "step already running, and the desktop has no way to confirm Jarvis read it."
+      "Sent — applies to what Jarvis does next. Jarvis reads it when the " +
+        "current step finishes; it changes no step you already approved."
     );
   } catch (error) {
     noteToFeed(String((error && error.message) || error));
@@ -1920,17 +2157,27 @@ function consumeLine(rawLine) {
   let line = rawLine.trim();
   if (!line) return false;
 
-  // SSE comment / heartbeat.
-  if (line.startsWith(":")) return false;
+  // SSE comment / heartbeat. One kind says what the PC is waiting on
+  // (chat-stream.patch): `: jarvis-status approval` while an approval card
+  // waits - so the card says so instead of sitting on "Thinking…".
+  if (line.startsWith(":")) {
+    const status = /^:\s*jarvis-status\s+(\w+)/.exec(line);
+    if (status) showWaitStatus(status[1]);
+    return false;
+  }
 
   // SSE fields other than `data:` carry nothing we render.
   if (/^(event|id|retry):/i.test(line)) return false;
 
   if (line.toLowerCase().startsWith("data:")) {
     line = line.slice(5).trim();
+    state.turnFramed = true;
   }
 
-  if (line === "[DONE]") return true;
+  if (line === "[DONE]") {
+    state.turnEnded = true;
+    return true;
+  }
 
   let chunk;
   try {
@@ -1943,16 +2190,67 @@ function consumeLine(rawLine) {
   }
 
   if (chunk.error) {
-    showError(String((chunk.error && chunk.error.message) || chunk.error));
+    // The PC's own failure (jarvis_agent's plain sentence, with a `code`):
+    // the shared plain words and a fix button, the sentence behind Details.
+    showProblem(fromStreamError(chunk.error));
     return true;
   }
 
-  const route = routeFromPayload(chunk);
-  if (route) applyRoute(route);
+  // A guess from the chunk only when the server has not said: every Ollama
+  // chunk names a model, and that says nothing about where it ran.
+  if (!state.routeFromHeader) {
+    const route = routeFromPayload(chunk);
+    if (route) applyRoute(route);
+  }
 
   appendDelta(deltaFromChunk(chunk));
 
-  return isTerminal(chunk);
+  const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : null;
+  if (choice && choice.finish_reason === "length") state.turnCutShort = true;
+
+  const ended = isTerminal(chunk);
+  if (ended) state.turnEnded = true;
+  return ended;
+}
+
+/** What `: jarvis-status <word>` means, for the card's status line - the
+ *  shared words (plain-errors.js). "loading" is the PC saying the model is
+ *  not in memory yet (after standby): the first words take longer. */
+const WAIT_STATUS = {
+  approval: STATUSES.approval,
+  working: STATUSES.working,
+  thinking: STATUSES.thinking,
+  loading: STATUSES.loading,
+  // How the card ended (jarvis_agent.CARD_OUTCOME_WORDS): the wait is over,
+  // and the answer is on its way.
+  approved: STATUSES.thinking,
+  denied: STATUSES.thinking,
+  timed_out: STATUSES.thinking,
+};
+
+function showWaitStatus(word) {
+  // A spoken question waiting on a card hears so, and then how it ended
+  // (card-words.js). Fixed lines, never the card's words - and never an
+  // invitation to answer by voice: only a tap on the card decides.
+  const cardLine = state.voiceTurn ? cardVoice.onStatus(word) : null;
+  if (cardLine) sayCardLine(cardLine);
+  // A tool ran (or waited on its card) while this answer was written: the
+  // rest of a voice answer is not read aloud unless the owner allowed it.
+  if (TOOL_WORDS.includes(word) && !state.toolRan) {
+    state.toolRan = true;
+    if (!speakableNow()) {
+      dropAnswerSpeech();
+      // Not straight after "there's a card on your screen": the fixed
+      // private line comes when the answer's words do (enqueueSpeech).
+      if (state.voiceTurn && !cardLine) sayPrivateLineOnce();
+    }
+  }
+  const text = WAIT_STATUS[word];
+  if (!text || state.phase !== "streaming" || dom.card.hidden) return;
+  if (dom.cardStatusText.textContent === text) return;
+  dom.cardStatusText.textContent = text;
+  if (word === "approval") announce("Waiting for your approval.");
+  if (word === "loading") announce(STATUSES.loading);
 }
 
 /** Appends text to the buffer and schedules a repaint. */
@@ -1964,7 +2262,7 @@ function appendDelta(text) {
   // on screen for a handful of milliseconds and the card claimed to be
   // streaming through the whole cold start of a local model, which is the one
   // stretch a person actually wants explained.
-  if (!state.chunks) dom.cardStatusText.textContent = "Streaming";
+  if (!state.chunks) dom.cardStatusText.textContent = STATUSES.answering;
   state.buffer += text;
   state.chunks += 1;
   updateStat();
@@ -1972,9 +2270,11 @@ function appendDelta(text) {
   checkForSpeakableSentence();
 }
 
+/** The card's corner used to count the pieces received and the seconds -
+ *  developer information. It says nothing now; the status line says what
+ *  is going on. */
 function updateStat() {
-  const seconds = (performance.now() - state.startedAt) / 1000;
-  dom.cardStat.textContent = `${state.chunks} chunks · ${seconds.toFixed(1)}s`;
+  dom.cardStat.textContent = "";
 }
 
 /** Cancels the stream in flight, if there is one. */
@@ -1998,7 +2298,23 @@ async function streamViaBackend(payload) {
   let settled = false;
 
   channel.onmessage = (line) => {
-    if (settled || typeof line !== "string") return;
+    if (typeof line !== "string") return;
+    // The answer's id, sent by stream_chat ahead of the answer itself - not
+    // part of it, so it never reaches consumeLine.
+    if (line.startsWith(TURN_LINE_PREFIX)) {
+      state.turnId = line.slice(TURN_LINE_PREFIX.length);
+      return;
+    }
+    // Which lane answered, from X-Jarvis-Route - the same kind of line.
+    if (line.startsWith(ROUTE_LINE_PREFIX)) {
+      try {
+        applyHeaderRoute(JSON.parse(line.slice(ROUTE_LINE_PREFIX.length)));
+      } catch {
+        /* not a route - ignore it rather than show it */
+      }
+      return;
+    }
+    if (settled) return;
     // `consumeLine` returns true on the stream's own terminator, and on an
     // approval gate — both mean stop reading.
     if (consumeLine(line)) {
@@ -2031,7 +2347,8 @@ async function streamViaBackend(payload) {
   } catch (error) {
     if (settled) return;
     settled = true;
-    showError(String((error && error.message) || error));
+    // stream_chat's tagged facts (plain_errors.rs) -> the plain words.
+    showProblem(fromChatFailure(error));
     finishStream("error");
     refreshHealth();
   }
@@ -2059,6 +2376,9 @@ async function streamViaFetch(payload) {
         has_image: payload.hasImage,
         stream: true,
         auto: payload.auto,
+        conversation_id: payload.conversationId,
+        device: payload.device,
+        ...(payload.temporary ? { temporary: true } : {}),
       }),
       signal: controller.signal,
     });
@@ -2073,6 +2393,13 @@ async function streamViaFetch(payload) {
       throw new Error(
         `the server answered HTTP ${response.status} ${response.statusText}${hint}`
       );
+    }
+
+    try {
+      const header = response.headers.get("X-Jarvis-Route");
+      if (header) applyHeaderRoute(JSON.parse(header));
+    } catch {
+      /* no usable route header - the badge keeps its guess */
     }
 
     if (!response.body) {
@@ -2113,20 +2440,90 @@ async function streamViaFetch(payload) {
       finishStream("done", "Stopped");
       return;
     }
-    const hint =
+    showProblem(
       error instanceof TypeError
-        ? `Could not reach the Jarvis server at ${JARVIS_SERVER}. Is it running?`
-        : String((error && error.message) || error);
-    showError(hint);
+        ? { ...shown("jarvis_not_running"), details: `fetch ${JARVIS_SERVER}: ${error.message}` }
+        : fromChatFailure(error)
+    );
     finishStream("error");
     refreshHealth();
   }
 }
 
-/** Sends the prompt and streams the answer into the card. */
-async function send(promptText) {
+/**
+ * Files a `#log` / `#joplin` / `#obs` note (and Alt+Shift+N, which arms the
+ * first note app the PC is set up for).
+ *
+ * No chat turn and no model: the owner's own words go to the backend, which
+ * writes them through the approval gate. The card shows the backend's answer
+ * - "Filed in Logseq, journals/…", "Waiting for your approval…", or why it
+ * was not filed - and never claims more than that answer says.
+ */
+async function fileFromBar(target, text) {
+  const place = targetName(target);
+  if (state.approval) closeApproval();
+  state.turnId = null;
+  paintAnswerMark();
+  setPhase("done");
+  openCard(`Filing in ${place}…`);
+  state.buffer = "";
+  paint({ immediate: true });
+  // The PC said this app is not set up: say so, and send nothing. (When the
+  // PC could not be asked, the note is sent, and the PC's own answer - it
+  // refuses an app that is not set up, saying why - is what is shown.)
+  if (targetMissing(target)) {
+    dom.cardStatusText.textContent = "Not filed";
+    state.buffer = notSetUp(target);
+    paint({ immediate: true });
+    announce(state.buffer);
+    return;
+  }
+  if (!text) {
+    dom.cardStatusText.textContent = "Nothing filed";
+    state.buffer = `Nothing to file — type the note after the prefix.`;
+    paint({ immediate: true });
+    return;
+  }
+  state.inFlight = text;
+  try {
+    await fileNote(invokeStrict, target, text, (said) => {
+      // The field is free again once the first answer is in.
+      state.inFlight = null;
+      dom.cardStatusText.textContent = !said.final
+        ? "Waiting for approval"
+        : said.tone === "ok"
+          ? "Filed"
+          : "Not filed";
+      state.buffer = said.text;
+      paint({ immediate: true });
+      announce(said.text);
+    });
+  } catch (error) {
+    showError(`The note was not filed. ${String((error && error.message) || error)}`);
+  } finally {
+    state.inFlight = null;
+    commitWindowHeight();
+  }
+}
+
+/**
+ * Sends the prompt and streams the answer into the card.
+ *
+ * `provenance` is where the words came from - "typed", "voice",
+ * "clipboard" or "pasted" (chat-history.js) - and rides on the user message
+ * (JARVIS-API.md section 18). Anything else is sent as no tag, which the PC
+ * treats as not the owner's own words.
+ */
+async function send(promptText, provenance = "typed") {
   const message = promptText.trim();
   if (!message) return;
+  // A note prefix files the rest instead of asking anything - see fileFromBar.
+  const prefixed = parseNotePrefix(message);
+  if (prefixed.target) {
+    if (state.abort || state.inFlight) return;
+    await fileFromBar(prefixed.target, prefixed.body.trim());
+    return;
+  }
   // Guard on the live stream handle, not on the phase. The phase is moved to
   // `approval` and then `done` by the approval flow while the stream is still
   // open, so a phase check let a second `stream_chat` start alongside the
@@ -2138,6 +2535,19 @@ async function send(promptText) {
   // `finishStream`, which is the single funnel every ending passes through.
   if (state.abort || state.inFlight) return;
   state.inFlight = message;
+
+  // A picture goes only to a model that can see it - see "A picture, and a
+  // model that may not see it" above. A "no" leaves everything as it was.
+  if (state.capture && !state.pictureCleared) {
+    const { ok, check } = await pictureCanBeSeen();
+    if (!ok) {
+      state.inFlight = null;
+      showPictureNotice(message, check, provenance);
+      return;
+    }
+  }
+  state.pictureCleared = false;
+  hidePictureNotice();
 
   // An answered gate belongs to the turn that is ending, not the next one.
   if (state.approval) closeApproval();
@@ -2152,10 +2562,52 @@ async function send(promptText) {
       : null;
   renderPreviousAnswer();
   state.lastPrompt = message;
+  // How it was asked, as given - so "Try again" under a failed answer sends
+  // the same words with the same tag (a pasted question stays pasted).
+  state.lastAsked = provenance;
 
   state.buffer = "";
   state.chunks = 0;
+  // A new question: the last failure's fix button and Details go with it.
+  paintProblem(null, "");
+  // A new answer, so no id and no mark until the server gives it one.
+  state.turnId = null;
+  state.turnMark = "none";
+  paintAnswerMark();
   spokenUpTo = 0;
+  // "Stop" silences one turn, not every turn after it: a new question is
+  // allowed to be answered out loud again. Cleared only past the guard
+  // above, so a push-to-talk barge-in whose send() was refused because the
+  // old answer is still streaming leaves that old answer muted.
+  speechMuted = false;
+  // A new question supersedes whatever of the last answer was still
+  // waiting to be said: its queued sentences, and a clip already made
+  // ahead for it, are dropped (a clip playing right now finishes). Kept,
+  // they would be checked against THIS question's privacy - its route, its
+  // tools - not their own.
+  speechQueue = [];
+  aheadClip = null;
+  // Interrupting by talking starts again with this answer (its own three
+  // seconds of grace), and "One moment." may be said once for it - only
+  // when it was asked out loud (voice-flow.js).
+  interrupt.replyEnded();
+  endPause();
+  lastPlayedText = null;
+  if (state.voiceTurn) {
+    momentFlow.turnStarted();
+    refreshVoiceFlow();
+  } else {
+    momentFlow.turnEnded();
+  }
+  // Nothing is known yet about whether this answer is private.
+  state.turnRoute = null;
+  state.toolRan = false;
+  state.privateLineSaid = false;
+  cardVoice.reset();
+  // Where the tool counters stood when the question was sent: a `step`
+  // event after this, or a drop in the event stream, keeps the rest of a
+  // voice answer on screen (private-speech.js).
+  state.toolStart = toolWatch.snapshot();
   // A new answer starts from no blocks, or the first paragraph of the second
   // reply never gets its entrance.
   paintedBlocks = 0;
@@ -2173,12 +2625,8 @@ async function send(promptText) {
   // Stay open while the answer streams, even if focus wanders.
   await setPinned(true, { silent: true });
 
-  // A `#log` / `#joplin` prefix pre-routes the turn: the prefix is stripped
-  // from the text and restated as a system turn. There used to be a
-  // `note_target` field alongside it — the server has never read one, so the
-  // system turn was always the only mechanism doing any work.
-  const { target: noteTarget, body } = parseNotePrefix(message);
-  const text = noteTarget ? body.trim() : message;
+  // Prefixed notes never get here (see the top of this function).
+  const text = message;
 
   // A capture rides INSIDE the user message, not as a sibling `images` array.
   // The server forwards `messages` verbatim to /v1/chat/completions and reads
@@ -2191,19 +2639,59 @@ async function send(promptText) {
       ]
     : text;
 
-  // Clipboard context rides as a system turn; the server validates an
-  // OpenAI-shaped `messages` array and routes on `has_image`.
+  // Clipboard context rides as its own USER turn, tagged "clipboard", just
+  // before the question - the same shape as the phone's Share
+  // (JARVIS-API.md section 18.1). It used to be a system turn, and the PC's
+  // outside-text rules only read user turns, so copied text slipped past the
+  // "note writes after outside text ask first" rule (security audit M1). The
+  // server validates an OpenAI-shaped `messages` array and routes on
+  // `has_image`.
+  //
+  // The conversation so far goes FIRST, then this turn's clipboard block,
+  // then the question. Ollama reuses what it has already read only up to
+  // the first thing that changed, so the earlier turns - identical from one
+  // request to the next - must lead, and the per-turn clipboard block must
+  // come after them. (It is a user turn now, so it no longer puts a system
+  // message at position 0 on a first turn, which made Ollama drop the
+  // Modelfile's own SYSTEM prompt - memory-prefix.patch quotes the line.)
+  //
+  // Screenshots are not kept in the conversation - only the words.
+  state.turnQuestion = text;
+  // Words sent with a picture are a picture's caption; the picture itself is
+  // never kept in the conversation, only the words and this tag.
+  state.turnProvenance = sentProvenance(provenance, Boolean(state.capture));
+  state.turnFramed = false;
+  state.turnEnded = false;
+  state.turnCutShort = false;
+  state.routeFromHeader = false;
+  // A mark that failed on the last answer (a 503 from a busy database, say)
+  // is tried again on this one: an answer that carries an id proves the
+  // backend keeps them. It used to stay hidden until the app restarted.
+  state.markUnavailable = false;
+  syncNewConversation();
   const payload = {
     messages: [
-      ...(noteTarget ? [{ role: "system", content: NOTE_INSTRUCTIONS[noteTarget] }] : []),
+      ...historyMessages(state.conversation),
       ...(state.clipboard
-        ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
+        ? [userMessage(`Context:\n${state.clipboard}`, "clipboard")]
         : []),
-      { role: "user", content },
+      withCutOff(userMessage(content, state.turnProvenance)),
     ],
     hasImage: Boolean(state.capture),
     auto: true,
+    // JARVIS-API.md section 18. Informational for the PC's History list;
+    // stream_chat (commands.rs) passes on only a well-formed id and a
+    // device it knows.
+    conversationId: state.conversationId,
+    device: "desktop",
+    // A temporary chat (section 18.1): no memory used, nothing learned,
+    // nothing kept. stream_chat sends it only to a PC that has one.
+    temporary: temporaryChat.on,
   };
+  // What this answer used, and what the PC said about a temporary one,
+  // start from nothing (answer-memory.js).
+  answerMemory.begin(temporaryChat.on);
+  temporaryChat.paint(false);
 
   if (IS_TAURI) {
     await streamViaBackend(payload);
@@ -2213,16 +2701,110 @@ async function send(promptText) {
 }
 
 /** Common teardown for every way a stream can end. */
+/* ==========================================================================
+   Right or wrong: the mark on one answer (feedback.patch)
+   --------------------------------------------------------------------------
+   Items 1 and 8 of docs/LEARNING-RESEARCH-2026-09-23.md. The server gives
+   each answer an id (`turn_id` in X-Jarvis-Route); a mark on it counts,
+   for each remembered fact used in that answer, whether it helped or hurt.
+   A mark changes no memory. Enough "wrong" answers built on one fact raise a
+   single "stop using this fact?" card in the Brain's review queue, which
+   still needs its own decision.
+
+   Shown only on a finished answer that has an id, for that answer alone.
+   Pressing the mark that is already on takes it back. A backend without the
+   patch sends no id (nothing shows); one with the id but without the route
+   answers "not available", and the control hides itself again.
+   ========================================================================== */
+
+/** stream_chat's marker for the one line that is the answer's id. */
+const TURN_LINE_PREFIX = "\u001fjarvis-turn:";
+/** ...and for the one that is X-Jarvis-Route's lane, where and gate. */
+const ROUTE_LINE_PREFIX = "\u001fjarvis-route:";
+
+function paintAnswerMark() {
+  if (!dom.answerMark) return;
+  const show = Boolean(state.turnId) && state.phase === "done" && !state.markUnavailable;
+  dom.answerMark.hidden = !show;
+  if (!show) return;
+  dom.markRight.setAttribute("aria-pressed", String(state.turnMark === "right"));
+  dom.markWrong.setAttribute("aria-pressed", String(state.turnMark === "wrong"));
+}
+
+async function sendMark(mark) {
+  const turnId = state.turnId;
+  if (!turnId || state.markBusy) return;
+  // Pressing the mark that is already on takes it back.
+  const next = state.turnMark === mark ? "none" : mark;
+  state.markBusy = true;
+  dom.markRight.disabled = true;
+  dom.markWrong.disabled = true;
+  try {
+    const out = await invokeStrict("mark_answer", { turnId, mark: next });
+    if (turnId !== state.turnId) return; // a new answer has started
+    if (out && out.available === false) {
+      // This backend cannot take marks: hide the control, quietly.
+      state.markUnavailable = true;
+    } else {
+      state.turnMark = next;
+      dom.answerMarkNote.textContent =
+        next === "none" ? "Mark taken back." : "Thanks — noted for this answer.";
+    }
+  } catch (error) {
+    dom.answerMarkNote.textContent = "Could not send the mark.";
+    console.error("[jarvis] mark failed:", error);
+  } finally {
+    state.markBusy = false;
+    dom.markRight.disabled = false;
+    dom.markWrong.disabled = false;
+    paintAnswerMark();
+  }
+}
+
+if (dom.markRight) dom.markRight.addEventListener("click", () => sendMark("right"));
+if (dom.markWrong) dom.markWrong.addEventListener("click", () => sendMark("wrong"));
+
 function finishStream(phase, statusText) {
   state.abort = null;
   state.inFlight = null;
   dom.cursor.hidden = true;
   dom.stop.hidden = true;
 
+  // Into the conversation only when the answer really finished: not an
+  // error, not Stopped (statusText), not empty, and not SSE that stopped
+  // without its end marker. Read BEFORE the empty-answer placeholder below
+  // is written into the buffer - that placeholder is not something Jarvis
+  // said.
+  const question = state.turnQuestion;
+  state.turnQuestion = null;
+  if (
+    question &&
+    phase !== "error" &&
+    !statusText &&
+    state.buffer.trim() &&
+    !(state.turnFramed && !state.turnEnded)
+  ) {
+    state.conversation = commitExchange(
+      state.conversation,
+      question,
+      state.buffer,
+      state.turnProvenance
+    );
+  }
+
+  // Stopped at the length limit: kept (it is what Jarvis said), but the
+  // card says it is not the whole answer, instead of looking finished.
+  const cutShort = state.turnCutShort && phase !== "error" && !statusText;
+  state.turnCutShort = false;
+  if (cutShort && state.buffer.trim()) {
+    state.buffer += "\n\n_(Answer cut short: it reached the length limit. Ask \"go on\" for the rest.)_";
+  }
+
   if (phase !== "error") {
     setPhase("done");
     dom.cardStatusText.textContent =
-      statusText || (state.buffer.trim() ? "Complete" : "No content returned");
+      statusText ||
+      (state.buffer.trim() ? (cutShort ? "Cut short" : "Complete") : "No content returned");
     if (!state.buffer.trim()) {
       state.buffer = "_The server closed the stream without sending content._";
     }
@@ -2230,6 +2812,10 @@ function finishStream(phase, statusText) {
 
   updateStat();
   paint({ immediate: true });
+  paintAnswerMark();
+  // "Used 2 memories" on an answer that came back, and whether a temporary
+  // one was confirmed (answer-memory.js).
+  answerMemory.finish(phase !== "error");
 
   // Once, at the end. The answer element carries no live region any more —
   // announcing a growing buffer per repaint is what left a screen reader
@@ -2262,13 +2848,45 @@ function finishStream(phase, statusText) {
   // leaves behind.
   const wasVoiceTurn = state.voiceTurn;
   state.voiceTurn = false;
-  if (wasVoiceTurn && phase !== "error") {
+  // No tool can start for this answer any more: no "One moment." after it.
+  momentFlow.turnEnded();
+  if (wasVoiceTurn && phase !== "error" && !speechMuted) {
     const remainder = state.buffer.slice(spokenUpTo).trim();
     if (remainder) enqueueSpeech(remainder);
   }
 
+  syncNewConversation();
+
   // Release the pin so clicking away dismisses the bar again.
   setPinned(false, { silent: true });
+}
+
+/**
+ * "New conversation" shows once there is a conversation to forget, and not
+ * while an answer is arriving (Stop is the control for that).
+ */
+function syncNewConversation() {
+  if (!dom.newConversation) return;
+  const n = state.conversation.length;
+  dom.newConversation.hidden = n === 0 || Boolean(state.inFlight);
+  dom.newConversation.title =
+    n === 1
+      ? "Your next question follows on from the last one. Start afresh instead."
+      : `Your next question follows on from the last ${n}. Start afresh instead.`;
+}
+
+/**
+ * Forgets the conversation and clears the card, leaving the window open for
+ * a fresh question. Only this window's copy exists to forget; what Jarvis
+ * has learned is kept on the backend and is not touched.
+ */
+function newConversation() {
+  abortStream();
+  state.turnQuestion = null;
+  state.conversation = [];
+  closeCard();
+  announce("New conversation. Your next question starts fresh.");
+  focusInput();
 }
 
 /* ==========================================================================
@@ -2285,9 +2903,13 @@ async function startPushToTalk() {
   if (micRecording || state.autoListening) return;
   // Barge-in: holding the mic to talk again is as clear a signal as this
   // app gets that whatever Jarvis was saying is done mattering right now.
+  noteCutOff();
   stopSpeaking();
   micRecording = true;
   dom.mic.setAttribute("aria-pressed", "true");
+  // While the owner talks: what the PC allows now, and its "One moment."
+  // clip, so both are here before the answer needs them.
+  refreshVoiceFlow();
   try {
     await invokeStrict("start_voice_capture");
   } catch (error) {
@@ -2301,10 +2923,19 @@ async function stopPushToTalk() {
   if (!micRecording) return;
   micRecording = false;
   dom.mic.setAttribute("aria-pressed", "false");
+  // The owner's turn is over: a small "I heard you" (voice-flow.js).
+  playHeardSound();
   try {
     const heard = await invokeStrict("stop_voice_capture");
     if (!heard.available) {
       announce(heard.reason || "Speech recognition is not available here.", "assertive");
+      return;
+    }
+    if (heard.tooShort) {
+      // Refused before the voice check (docs/JARVIS-API.md section 16): the
+      // PC's own sentence says how much more to say. Not "that did not
+      // sound like you" - it was never checked.
+      announce(heard.reason || "That was too short to be sure it was you. Say a little more.", "assertive");
       return;
     }
     if (!heard.isOwner) {
@@ -2320,7 +2951,10 @@ async function stopPushToTalk() {
       return;
     }
     state.voiceTurn = true;
-    send(text);
+    state.voicePrivacy = privacyFromHeard(heard);
+    // The PC's own speech route wrote these words (stop_voice_capture), so
+    // they go as "voice"; the PC checks that against what it transcribed.
+    send(text, "voice");
   } catch (error) {
     announce(String((error && error.message) || error), "assertive");
   }
@@ -2350,6 +2984,53 @@ let spokenUpTo = 0;
 let speechQueue = [];
 let speaking = false;
 let currentAudio = null;
+/** Set by "stop" (`stopSpeaking`) for the rest of the turn it landed in, and
+ *  cleared only by the next `send()`. Without it, "stop" silenced only the
+ *  sentence playing at that moment: the stream was still open, so the next
+ *  complete sentence - and the tail in `finishStream` - queued itself again
+ *  a moment later and Jarvis carried on talking. */
+let speechMuted = false;
+/** Bumped by every `stopSpeaking`. A `speak_reply` that was already on its
+ *  way to the backend when "stop" landed comes back with an older number,
+ *  and its clip is dropped instead of played. */
+let speechGeneration = 0;
+/** Settles the "wait for this clip to end" promise of whatever is playing,
+ *  so a clip cut off by "stop" does not leave that wait pending forever. */
+let finishCurrentClip = null;
+/** True while a clip is actually playing (not while its sound is still
+ *  being made). Only then is the next sentence's sound asked for. */
+let clipPlaying = false;
+/** The next sentence, its sound already asked of the backend while the
+ *  current clip plays - `{ text, generation, request }`, or null. One
+ *  ahead, never more, so the PC makes one sentence's sound at a time.
+ *  Dropped by "stop", by a new question, and when the answer turns out to
+ *  be private; checked again right before it is played either way. */
+let aheadClip = null;
+
+/** Interrupting by talking and "One moment." (voice-flow.js): the rules,
+ *  and what the PC allows (`get_voice_flow`, the `flow` block of
+ *  /api/voice/status - nothing, until it says). */
+const interrupt = createInterruptFlow();
+const momentFlow = createMomentFlow();
+/** Where the owner last cut a spoken answer off, for the next question. */
+const cutOff = createCutOff();
+/** The sentence playing now, and the last one that started - for `cutOff`. */
+let playingText = null;
+let lastPlayedText = null;
+let voiceFlow = flowFromStatus(null);
+/** The "One moment." clip, `{key, uri}`, fetched again when the PC's key
+ *  changes (another voice). */
+let momentClip = null;
+/** The reply is paused while the PC checks whether the owner is talking. */
+let speechPaused = false;
+/** Clips waiting to start until the pause ends. */
+let pauseWaiters = [];
+/** Carries on after `WAIT_MAX_MS` with no answer from the PC. */
+let pauseTimer = null;
+/** "One moment." while it plays, and the promise of its end. */
+let momentAudio = null;
+let momentDone = null;
+let finishMoment = null;
 
 /** A rough pass at making streamed markdown speakable. Not a renderer - just
  *  enough that "**bold**" is not read aloud as "asterisk asterisk bold
@@ -2366,87 +3047,528 @@ function stripMarkdownForSpeech(text) {
     .trim();
 }
 
-/** Looks for one or more complete sentences that have arrived since
- *  `spokenUpTo` and queues each to be spoken. A "complete" sentence needs
- *  end punctuation FOLLOWED BY whitespace - punctuation alone is not
- *  enough, because the stream may simply not have produced the next
- *  character yet, and speaking a sentence the model was about to keep
- *  extending would need it un-said a moment later. Not fooled-proof
- *  against "Dr." or "3.14" - a real sentence splitter is more machinery
- *  than a queue that is, worst case, a little choppier warrants. */
+/** Looks for one or more complete pieces that have arrived since
+ *  `spokenUpTo` and queues each to be spoken (speech-pieces.js). A piece
+ *  is a sentence - end punctuation FOLLOWED BY whitespace, because the
+ *  stream may simply not have produced the next character yet, and
+ *  speaking a sentence the model was about to keep extending would need it
+ *  un-said a moment later. The FIRST piece of an answer (nothing cut yet,
+ *  `spokenUpTo` 0) may end sooner, at its first comma once the phrase is
+ *  long enough, so Jarvis starts talking sooner. Not fool-proof against
+ *  "Dr." or "3.14" - a real sentence splitter is more machinery than a
+ *  queue that is, worst case, a little choppier warrants. */
 function checkForSpeakableSentence() {
-  if (!state.voiceTurn) return;
+  if (!state.voiceTurn || speechMuted) return;
   for (;;) {
-    const unspoken = state.buffer.slice(spokenUpTo);
-    const match = unspoken.match(/^([\s\S]*?[.!?])\s+/);
-    if (!match) return;
-    spokenUpTo += match[0].length;
-    enqueueSpeech(match[1]);
+    const cut = nextSpeechPiece(state.buffer.slice(spokenUpTo), spokenUpTo === 0);
+    if (!cut) return;
+    spokenUpTo += cut.consumed;
+    enqueueSpeech(cut.piece);
   }
 }
 
 function enqueueSpeech(text) {
+  if (speechMuted) return;
   const clean = stripMarkdownForSpeech(text);
   if (!clean) return;
+  if (!speakableNow()) {
+    sayPrivateLineOnce();
+    return;
+  }
   speechQueue.push(clean);
   drainSpeechQueue();
 }
 
-/** Speaks whatever is queued, one clip at a time, through the backend's
- *  TTS. Best effort throughout: a missing voice is logged, not shown as an
- *  error banner over a perfectly good answer already on screen. */
-async function drainSpeechQueue() {
-  if (speaking) return;
-  const next = speechQueue.shift();
+/** The owner's private-answer rule for this voice turn (private-speech.js):
+ *  may what it says be read aloud? */
+function speakableNow() {
+  const now = toolWatch.snapshot();
+  return mayReadAloud({
+    ...(state.voicePrivacy || {}),
+    route: state.turnRoute,
+    toolRan: state.toolRan || toolRanBetween(state.toolStart, now),
+    toolsKnown: toolsKnownBetween(state.toolStart, now),
+  });
+}
+
+/** Something may have made the voice answer being read private - a tool
+ *  ran, or the event stream stopped being able to say. What is queued is
+ *  dropped and the fixed line said instead, once. */
+function recheckSpeech() {
+  // Nothing queued and no voice answer still arriving: nothing to hold back.
+  if (!speechQueue.length && !aheadClip && !state.voiceTurn) return;
+  if (speakableNow()) return;
+  dropAnswerSpeech();
+  sayPrivateLineOnce();
+}
+
+/** Drops what is queued of the answer, and a clip already being made for
+ *  it ahead of time - but never a fixed line, which may already be
+ *  queued or made (`privateLineSaid` is set when it is queued, so dropping
+ *  it here would mean it is never said at all). */
+function dropAnswerSpeech() {
+  speechQueue = speechQueue.filter(isFixedLine);
+  if (aheadClip && !isFixedLine(aheadClip.text)) aheadClip = null;
+}
+
+/** A line Jarvis says in its own fixed words - "It's on your screen." or a
+ *  card line - never the answer's: always safe to say, whatever the answer. */
+function isFixedLine(text) {
+  return text === PRIVATE_LINE || isCardLine(text);
+}
+
+/** Which card line this spoken question has said (card-words.js). */
+const cardVoice = createCardVoice();
+
+/** Says one card line ("I need your OK for that..."), in the answer's
+ *  queue so it never talks over a sentence already playing. */
+function sayCardLine(line) {
+  if (speechMuted) return;
+  speechQueue.push(line);
+  drainSpeechQueue();
+}
+
+/** Instead of a private answer, one fixed line - once per answer. */
+function sayPrivateLineOnce() {
+  if (state.privateLineSaid || speechMuted) return;
+  state.privateLineSaid = true;
+  speechQueue.push(PRIVATE_LINE);
+  drainSpeechQueue();
+}
+
+/** The next queued line to ask a sound for, or undefined. Checked here, as
+ *  its sound is asked for: a tool may have run since it was queued - then
+ *  the rest of the answer is dropped and the fixed line comes instead. */
+function takeNextLine() {
+  for (;;) {
+    const next = speechQueue.shift();
+    if (next === undefined || isFixedLine(next) || speakableNow()) return next;
+    dropAnswerSpeech();
+    if (!state.privateLineSaid) {
+      state.privateLineSaid = true;
+      return PRIVATE_LINE;
+    }
+    // Already said or queued: a queued fixed line survived the drop above.
+  }
+}
+
+/** Asks the backend for one line's sound. Never rejects: a missing voice
+ *  is logged, and the line is skipped, not shown as an error banner over a
+ *  perfectly good answer already on screen. */
+function requestClip(text) {
+  const request = invokeStrict("speak_reply", { text }).catch((error) => {
+    console.info("[quickbar] spoken reply unavailable:", error);
+    return null;
+  });
+  return { text, generation: speechGeneration, request };
+}
+
+/** One ahead: while a clip plays, the next line's sound is asked for, so
+ *  it is ready the moment this one ends instead of after a silence as long
+ *  as the backend takes to make it. Only while a clip is PLAYING, and only
+ *  one - never a second request while one is already on its way. */
+function prefetchNextClip() {
+  if (!clipPlaying || aheadClip || speechMuted) return;
+  const next = takeNextLine();
   if (next === undefined) return;
+  aheadClip = requestClip(next);
+}
+
+/** Speaks whatever is queued, one clip at a time, through the backend's
+ *  TTS, asking for the next clip's sound while the current one plays. */
+async function drainSpeechQueue() {
+  if (speaking) {
+    // A line queued while a clip plays: its sound is made now.
+    prefetchNextClip();
+    return;
+  }
+  if (speechMuted) {
+    speechQueue = [];
+    aheadClip = null;
+    return;
+  }
   speaking = true;
+  const generation = speechGeneration;
   try {
-    const dataUri = await invokeStrict("speak_reply", { text: next });
-    currentAudio = new Audio(dataUri);
-    await currentAudio.play();
+    for (;;) {
+      let clip = aheadClip;
+      aheadClip = null;
+      if (!clip || clip.generation !== generation) {
+        const next = takeNextLine();
+        if (next === undefined) return;
+        clip = requestClip(next);
+      }
+      const dataUri = await clip.request;
+      // "Stop" may have landed while the backend was making this clip. If it
+      // did, the clip is dropped here - playing it now would be exactly the
+      // sentence the owner just asked Jarvis to stop saying.
+      if (generation !== speechGeneration || speechMuted) return;
+      // Checked again right before it is played, not only when its sound
+      // was asked for: a tool may have run, or the event stream dropped,
+      // while the sound was being made. Then this clip is dropped unplayed
+      // and the fixed line said instead, once.
+      if (!isFixedLine(clip.text) && !speakableNow()) {
+        dropAnswerSpeech();
+        if (!state.privateLineSaid) {
+          state.privateLineSaid = true;
+          speechQueue.push(PRIVATE_LINE);
+        }
+        continue;
+      }
+      if (!dataUri) continue;
+      await playClip(dataUri, generation, clip.text);
+      if (generation !== speechGeneration) return;
+    }
+  } finally {
+    // A drain that "stop" overtook leaves the bookkeeping alone: stopSpeaking
+    // already reset it, and a newer drain may own it by now.
+    if (generation === speechGeneration) {
+      currentAudio = null;
+      finishCurrentClip = null;
+      clipPlaying = false;
+      speaking = false;
+    }
+  }
+}
+
+/** Plays one clip to its end (or until "stop"), asking for the next
+ *  line's sound as it starts. */
+async function playClip(dataUri, generation, text = "") {
+  // The reply is about to make a sound: "One moment." is not started after
+  // this, and one already playing is let finish first (it is under a
+  // second) - never over the reply.
+  momentFlow.replyStarted();
+  if (momentAudio && momentDone) await momentDone;
+  // Paused while the PC checks whether the owner is talking: this clip
+  // waits, and is dropped if the answer was "stop".
+  if (speechPaused) await new Promise((resolve) => pauseWaiters.push(resolve));
+  if (generation !== speechGeneration) return;
+  const audio = new Audio(dataUri);
+  currentAudio = audio;
+  clipPlaying = true;
+  // "It's on your screen." is not a sentence of the answer.
+  const own = text && !isFixedLine(text) ? text : null;
+  playingText = own;
+  if (own) lastPlayedText = own;
+  try {
+    try {
+      await audio.play();
+    } catch (error) {
+      // Paused (an interruption being checked) before it could begin: it
+      // starts when the pause ends - resumeSpeaking plays `currentAudio` -
+      // instead of being skipped.
+      if (!(speechPaused && currentAudio === audio)) throw error;
+    }
+    interrupt.replyStarted(performance.now());
+    prefetchNextClip();
     await new Promise((resolve) => {
-      if (!currentAudio) return resolve();
-      currentAudio.onended = resolve;
-      currentAudio.onerror = resolve;
+      if (currentAudio !== audio) return resolve();
+      finishCurrentClip = resolve;
+      audio.onended = resolve;
+      audio.onerror = resolve;
     });
   } catch (error) {
     console.info("[quickbar] spoken reply unavailable:", error);
   } finally {
-    currentAudio = null;
-    speaking = false;
-    drainSpeechQueue();
+    if (playingText === own) playingText = null;
+    if (generation === speechGeneration) {
+      clipPlaying = false;
+      currentAudio = null;
+      finishCurrentClip = null;
+    }
   }
 }
 
-/** Barge-in: discards anything still queued and stops whatever is playing
- *  right now, immediately - called the moment the owner starts talking
- *  again, on either listening mode. */
+/** Barge-in: discards anything still queued, stops whatever is playing right
+ *  now, drops a clip still being made, and keeps the rest of this reply
+ *  quiet even though it is still streaming in - called the moment the owner
+ *  starts talking again, on either listening mode, and when the card
+ *  closes. The next `send()` lets Jarvis speak again. */
 function stopSpeaking() {
+  stopFocusCallout();
+  speechMuted = true;
+  speechGeneration += 1;
+  interrupt.replyEnded();
+  momentFlow.stopped();
+  stopMoment();
+  endPause();
   speechQueue = [];
+  // A clip made ahead is dropped with the rest (its generation is old now,
+  // so it would not be played anyway).
+  aheadClip = null;
+  clipPlaying = false;
   if (currentAudio) {
     currentAudio.onended = null;
     currentAudio.onerror = null;
     currentAudio.pause();
     currentAudio = null;
   }
+  if (finishCurrentClip) {
+    const finish = finishCurrentClip;
+    finishCurrentClip = null;
+    finish();
+  }
   speaking = false;
 }
 
-/** Automatic listening's own barge-in hook: the VAD just heard speech
- *  start, well before the utterance it belongs to is anywhere close to
- *  finished. Push-to-talk gets the same treatment directly in
- *  `startPushToTalk`, since holding the button is itself the signal there. */
-listen("voice-speech-started", stopSpeaking);
+/* ── Focus session callouts ────────────────────────────────────────────────
+   One line of a focus session ("YouTube can wait."), sent by Rust as SOUND
+   (brain/focus.rs play_callout fetches it from this PC's backend - the words
+   never reach this window). Played on its own element, never through the
+   answer's queue, and never over Jarvis talking: a line that arrives while
+   an answer is being spoken is dropped - the next drift says it again.
+   "Stop" (stopSpeaking) silences it too. It opens no microphone.
 
-/** Turns automatic (voice-activity-detected) listening on or off.
- *  Mutually exclusive with push-to-talk - `start_automatic_listening`
- *  itself refuses if a push-to-talk recording is in progress, and
- *  `startPushToTalk` above refuses while this is on. */
+   "Stop everything" silences one that is playing (stopSpeaking), and one
+   still on its way is dropped: Rust drops a sound that was being made when
+   the stop came (focus.rs play_callout), and this page ignores any callout
+   for a few seconds after a stop, in case one was already in flight. */
+let focusAudio = null;
+let focusStoppedAt = 0;
+const FOCUS_STOP_QUIET_MS = 5000;
+
+function stopFocusCallout() {
+  if (!focusAudio) return;
+  focusAudio.onended = null;
+  focusAudio.pause();
+  focusAudio = null;
+}
+
+function playFocusCallout(payload) {
+  const uri = payload && typeof payload.uri === "string" ? payload.uri : "";
+  if (!uri.startsWith("data:audio/wav;base64,")) return;
+  if (jarvisTalking() || focusAudio) return;
+  if (focusStoppedAt && Date.now() - focusStoppedAt < FOCUS_STOP_QUIET_MS) return;
+  const audio = new Audio(uri);
+  focusAudio = audio;
+  audio.onended = () => {
+    if (focusAudio === audio) focusAudio = null;
+  };
+  audio.play().catch((error) => {
+    console.info("[quickbar] focus callout could not play:", error);
+    if (focusAudio === audio) focusAudio = null;
+  });
+}
+
+listen("focus-callout", (event) => playFocusCallout(event.payload));
+
+/** Whether Jarvis is talking: a clip is being made or played, or more are
+ *  queued behind it. */
+function jarvisTalking() {
+  return speaking || speechQueue.length > 0 || aheadClip !== null;
+}
+
+/* -- Interrupting by talking: pause first, decide second (voice-flow.js) -- */
+
+/** Pauses the reply where it is, until the PC answers or `WAIT_MAX_MS`. */
+function pauseSpeaking() {
+  speechPaused = true;
+  if (currentAudio) currentAudio.pause();
+  clearTimeout(pauseTimer);
+  pauseTimer = setTimeout(() => actOnInterrupt(interrupt.tick(performance.now())), WAIT_MAX_MS);
+}
+
+/** Lets clips waiting on the pause go (they check "stop" themselves). */
+function endPause() {
+  speechPaused = false;
+  clearTimeout(pauseTimer);
+  pauseTimer = null;
+  const waiting = pauseWaiters;
+  pauseWaiters = [];
+  waiting.forEach((resolve) => resolve());
+}
+
+/** Carries on from where the reply paused. */
+function resumeSpeaking() {
+  if (!speechPaused) return;
+  const audio = currentAudio;
+  endPause();
+  if (audio) audio.play().catch(() => {});
+}
+
+function actOnInterrupt(action) {
+  if (action === PAUSE) pauseSpeaking();
+  else if (action === RESUME) resumeSpeaking();
+  // The owner's voice (or "stop"): silenced for good, a sentence made
+  // ahead dropped with it - and nothing else. It is not a command.
+  else if (action === STOP) {
+    noteCutOff();
+    stopSpeaking();
+  }
+}
+
+/** The owner is cutting the spoken answer off: the sentence they heard last
+ *  goes with the next question (voice-flow.js `createCutOff`), so the PC
+ *  can tell its model the answer stopped there. Only while it is talking. */
+function noteCutOff() {
+  // Only to a PC that keeps it on the PC (`flow.cut_off`): an older one
+  // could pass an unknown field on with the question.
+  if (!jarvisTalking() || speechMuted || !voiceFlow.cutOff) return;
+  cutOff.cut(playingText || lastPlayedText, performance.now());
+}
+
+/** The newest user message, with where the last answer was cut off when the
+ *  owner cut it off in the last two minutes - once (JARVIS-API section 17,
+ *  6). The PC takes the field off before any model or the relay sees it. */
+function withCutOff(message) {
+  const said = cutOff.take(performance.now());
+  return said ? { ...message, interrupted: said } : message;
+}
+
+/** What the PC allows now (`flow` of /api/voice/status), and the "One
+ *  moment." clip when its key changed. Never throws; an older PC allows
+ *  nothing. */
+async function refreshVoiceFlow() {
+  let flow = null;
+  try {
+    flow = await invokeStrict("get_voice_flow");
+  } catch {
+    flow = null;
+  }
+  voiceFlow = flowFromStatus(flow ? { flow } : null);
+  if (!voiceFlow.momentReady || !voiceFlow.momentKey) return;
+  if (momentClip && momentClip.key === voiceFlow.momentKey) return;
+  try {
+    const uri = await invokeStrict("get_voice_moment");
+    if (typeof uri === "string" && uri) momentClip = { key: voiceFlow.momentKey, uri };
+  } catch (error) {
+    console.info("[quickbar] no One moment clip:", error);
+  }
+}
+
+/** Half a second of speech while listening (voice.rs): pause the reply,
+ *  and have the PC say whether it was the owner. Only while Jarvis talks,
+ *  with the owner's switch on, a PC that can tell the owner's voice, and a
+ *  live link (rule 4); the first three seconds of a reply are ignored. */
+listen("voice-barge-onset", (event) => {
+  const id = event && event.payload ? Number(event.payload.id) : NaN;
+  if (!Number.isFinite(id)) return;
+  const allowed = loadBargeIn() && voiceFlow.bargeIn && jarvisTalking() && !speechMuted &&
+    toolWatch.snapshot().live;
+  if (interrupt.onset(performance.now(), id, allowed) !== PAUSE) return;
+  pauseSpeaking();
+  invoke("judge_barge_in", { id });
+});
+
+/** The PC's answer: stop for good (the owner, or "stop"), or carry on. */
+listen("voice-barge-verdict", (event) => {
+  const v = (event && event.payload) || {};
+  // The PC cannot tell the owner's voice now: no more checks until its
+  // status says otherwise.
+  if (v.available === false) voiceFlow = { ...voiceFlow, bargeIn: false };
+  actOnInterrupt(interrupt.verdict(Number(v.id), v.stop === true));
+});
+
+/* -- "One moment." when a tool starts (voice-flow.js) -- */
+
+function maybeSayOneMoment(data) {
+  if (!isToolStart(data) || !state.voiceTurn || speechMuted) return;
+  if (!momentFlow.toolStarted(loadMoment() && voiceFlow.moment, Boolean(momentClip))) return;
+  const audio = new Audio(momentClip.uri);
+  momentAudio = audio;
+  momentDone = new Promise((resolve) => {
+    let bound = null;
+    const end = () => {
+      clearTimeout(bound);
+      if (momentAudio === audio) momentAudio = null;
+      if (finishMoment === end) finishMoment = null;
+      resolve();
+    };
+    finishMoment = end;
+    audio.onended = end;
+    audio.onerror = end;
+    // Never holds the reply for long, whatever the audio does.
+    bound = setTimeout(end, 3000);
+    audio.play().catch(end);
+  });
+}
+
+function stopMoment() {
+  if (momentAudio) {
+    momentAudio.onended = null;
+    momentAudio.onerror = null;
+    momentAudio.pause();
+  }
+  if (finishMoment) finishMoment();
+  momentAudio = null;
+}
+
+/* -- "I heard you": a tiny sound when the owner's turn is cut -- */
+
+let heardContext = null;
+function playHeardSound() {
+  // Settings -> Voice, "Play a short sound when I finish speaking"
+  // (voice-flow.js): read each time, so a change in Settings counts at once.
+  if (!loadHeard()) return;
+  try {
+    const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!Ctx) return;
+    heardContext = heardContext || new Ctx();
+    const samples = heardSoundSamples();
+    const buffer = heardContext.createBuffer(1, samples.length, HEARD_SOUND.rate);
+    const channel = buffer.getChannelData(0);
+    samples.forEach((v, i) => {
+      channel[i] = v / 32768;
+    });
+    const source = heardContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(heardContext.destination);
+    if (heardContext.state === "suspended") heardContext.resume().catch(() => {});
+    source.start();
+  } catch (error) {
+    console.info("[quickbar] no I-heard-you sound:", error);
+  }
+}
+
+/** "Hey Jarvis" listening's barge-in hook: Rust sends this when a clip
+ *  that held the wake word, or the word "stop", comes back, so either cuts
+ *  off a reply still being spoken (other sounds in the room do not).
+ *  Push-to-talk gets the same treatment directly in `startPushToTalk`, since
+ *  holding the button is itself the signal there.
+ *
+ *  Settings -> Voice, "Interrupt Jarvis while it talks" (barge-in.js): with
+ *  it off, this is ignored while Jarvis is talking - the reply plays to the
+ *  end, or until Esc closes the bar. */
+listen("voice-speech-started", () => {
+  if (ignoreWhileTalking(loadBargeIn(), jarvisTalking())) return;
+  noteCutOff();
+  stopSpeaking();
+});
+
+/** The HUD's mic button (voice.rs `summon_push_to_talk`): the quickbar is
+ *  already on screen by the time this arrives. Focus the mic and say how to
+ *  use it, in words a sighted owner sees too (the placeholder) and not only
+ *  the screen-reader announcement. Starts NO recording - holding the mic
+ *  (or Space/Enter on it) is still the only thing that does. */
+const PROMPT_PLACEHOLDER = dom.prompt ? dom.prompt.getAttribute("placeholder") : null;
+function restorePromptPlaceholder() {
+  if (!dom.prompt) return;
+  if (PROMPT_PLACEHOLDER === null) dom.prompt.removeAttribute("placeholder");
+  else dom.prompt.setAttribute("placeholder", PROMPT_PLACEHOLDER);
+}
+listen("voice-summon", () => {
+  const how = state.autoListening
+    ? "Listening for \"hey Jarvis\" - say it, then speak."
+    : "Hold the mic button, or hold Space while it is selected, then speak and let go.";
+  if (dom.prompt && !state.autoListening) {
+    dom.prompt.setAttribute("placeholder", how);
+    dom.prompt.addEventListener("input", restorePromptPlaceholder, { once: true });
+    setTimeout(restorePromptPlaceholder, 15000);
+  }
+  dom.mic.focus();
+  announce(how);
+});
+
+/** Turns "hey Jarvis" listening on or off (the command keeps its old name,
+ *  `start_automatic_listening`). Mutually exclusive with push-to-talk.
+ *  Turning it on when the PC's wake word is off does not open the
+ *  microphone: it asks for the approval card, and the refusal text says so. */
 async function setAutoListening(enabled) {
   if (enabled === state.autoListening) return;
   if (enabled) {
+    let info = null;
     try {
-      await invokeStrict("start_automatic_listening");
+      info = await invokeStrict("start_automatic_listening");
     } catch (error) {
       announce(String((error && error.message) || error), "assertive");
       return;
@@ -2454,20 +3576,64 @@ async function setAutoListening(enabled) {
     state.autoListening = true;
     dom.voiceAuto.setAttribute("aria-pressed", "true");
     dom.mic.dataset.auto = "true";
-    dom.mic.title = "Listening automatically";
-    announce("Listening automatically.");
+    dom.mic.title = 'Listening for "hey Jarvis"';
+    // The name a screen reader reads, not only the tooltip: "Hold to talk"
+    // on a button that no longer responds to being held was wrong.
+    if (dom.micLabel) {
+      dom.micLabel.textContent =
+        'Listening for "hey Jarvis" - turn it off with the button next to this';
+    }
+    // `echoCancelling` (voice.rs ListenInfo): the microphone goes through
+    // Windows' echo cancelling, so "stop" or "hey Jarvis" is heard over
+    // Jarvis's own voice. An older build returns nothing - the plain line.
+    // `microphone`: which one, by Windows' own name for it - both paths
+    // open the default microphone, and a PC with a headset and a webcam
+    // has more than one.
+    announce(listeningLine(info));
+    refreshVoiceFlow();
   } else {
     state.autoListening = false;
     dom.voiceAuto.setAttribute("aria-pressed", "false");
     delete dom.mic.dataset.auto;
     dom.mic.title = "Hold to talk to Jarvis";
+    if (dom.micLabel) {
+      dom.micLabel.textContent =
+        "Hold to talk to Jarvis - hold Space or Enter, speak, then let go";
+    }
     await invoke("stop_automatic_listening");
   }
 }
 
-/** One utterance the automatic listener cut and sent on its own - there is
- *  no command call waiting on this the way `stop_voice_capture` returns
- *  push-to-talk's result directly, so it arrives as an event instead. */
+/** What the listener says it is hearing through, in one line. */
+function listeningLine(info) {
+  const mic = info && typeof info.microphone === "string" && info.microphone.trim()
+    ? ` on ${info.microphone.trim()}`
+    : "";
+  // "Interrupt Jarvis while it talks" is off in Settings: say so, rather
+  // than promise a "stop" that will be ignored.
+  if (!loadBargeIn()) {
+    return `Listening for "hey Jarvis"${mic}. While Jarvis talks, what it hears is ignored (Settings, Voice).`;
+  }
+  return info && info.echoCancelling
+    ? `Listening for "hey Jarvis"${mic}. Say "stop" to interrupt Jarvis while it talks.`
+    : `Listening for "hey Jarvis"${mic}.`;
+}
+
+/** The listener changed how it hears while still on (voice.rs
+ *  VOICE_LISTENING): the echo-cancelled microphone stopped and it carries
+ *  on through the ordinary one. Said, so the owner is not left expecting
+ *  "stop" to work over Jarvis's voice when it no longer can. */
+listen("voice-listening", (event) => {
+  const info = event && event.payload;
+  if (!info || !state.autoListening) return;
+  announce(info.note ? `${info.note} ${listeningLine(info)}` : listeningLine(info));
+});
+
+/** One "hey Jarvis" utterance the listener cut and sent on its own - there
+ *  is no command call waiting on this the way `stop_voice_capture` returns
+ *  push-to-talk's result directly, so it arrives as an event instead. Only
+ *  clips that held the wake word (or a broken engine) arrive here; the rest
+ *  are dropped in Rust without a word. */
 listen("voice-heard", (event) => {
   const heard = event && event.payload;
   if (!heard) return;
@@ -2477,17 +3643,37 @@ listen("voice-heard", (event) => {
     // its own kind of noise, so it is said once and the mode turns itself
     // off rather than keep trying against an engine that is not there.
     announce(
-      heard.reason || "Speech recognition is not available here. Automatic listening turned off.",
+      heard.reason || 'Speech recognition is not available here. Listening for "hey Jarvis" turned off.',
       "assertive"
     );
     setAutoListening(false);
     return;
   }
+  // "Interrupt Jarvis while it talks" is off: nothing heard over a reply
+  // is acted on, a new question included (barge-in.js).
+  if (ignoreWhileTalking(loadBargeIn(), jarvisTalking())) return;
+  // "Hey Jarvis" was heard from the owner, but the command after it was
+  // too short to check: said, with the PC's own words. A short clip WITHOUT
+  // the phrase could be anyone in the room, so it stays silent.
+  if (heard.tooShort && heard.wakeHeard) {
+    announce(heard.reason || "That was too short to be sure it was you. Say a little more.");
+    return;
+  }
   if (!heard.isOwner) return; // ambient speech that is not the owner - ignored, not announced
+  // "Hey Jarvis" from the owner: the turn was cut and taken - a small "I
+  // heard you". Here, not when the listener cuts: that happens for every
+  // sound in the room, and only the PC knows which were addressed to Jarvis.
+  if (heard.wakeHeard) playHeardSound();
+  if (heard.awake) {
+    // "Hey Jarvis." on its own: the PC is listening for the next sentence.
+    announce("Listening.");
+    return;
+  }
   const text = String(heard.text || "").trim();
   if (!text) return;
   state.voiceTurn = true;
-  send(text);
+  state.voicePrivacy = privacyFromHeard(heard);
+  send(text, "voice");
 });
 
 /* ==========================================================================
@@ -2510,6 +3696,7 @@ async function dismiss() {
   abortStream();
   closeApproval();
   dom.prompt.value = "";
+  state.boxTag = boxTagAfter(state.boxTag, "clear");
   autoGrowPrompt();
   syncNoteChip();
   state.capture = null;
@@ -2554,24 +3741,32 @@ function submitCurrentPrompt() {
   // must go through, and it refuses anything carrying `raised`.
   const value = dom.prompt.value;
   if (!value.trim()) return;
-  pushPromptHistory(value.trim());
+  const tag = state.boxTag;
+  pushPromptHistory(value.trim(), tag);
   dom.prompt.value = "";
+  state.boxTag = boxTagAfter(tag, "clear");
   autoGrowPrompt();
-  send(value);
+  send(value, tag);
 }
 
 /* ==========================================================================
    Prompt history (Up / Down recall)
    ========================================================================== */
 
-/** Records a submitted prompt, skipping an immediate repeat. */
-function pushPromptHistory(text) {
+/** Records a submitted prompt, skipping an immediate repeat, and the tag it
+ *  was sent with (the newest wins for a prompt sent twice). */
+function pushPromptHistory(text, tag = "typed") {
   state.historyIndex = null;
   state.historyDraft = "";
-  const { promptHistory } = state;
+  state.historyDraftTag = "typed";
+  const { promptHistory, promptTags } = state;
+  promptTags.set(text, tag);
   if (promptHistory[promptHistory.length - 1] === text) return;
   promptHistory.push(text);
-  if (promptHistory.length > PROMPT_HISTORY_LIMIT) promptHistory.shift();
+  if (promptHistory.length > PROMPT_HISTORY_LIMIT) {
+    const gone = promptHistory.shift();
+    if (!promptHistory.includes(gone)) promptTags.delete(gone);
+  }
 }
 
 /**
@@ -2590,6 +3785,7 @@ function recallHistory(direction) {
   if (state.historyIndex === null) {
     if (direction > 0) return false; // nothing newer than "not browsing"
     state.historyDraft = dom.prompt.value;
+    state.historyDraftTag = state.boxTag;
     state.historyIndex = promptHistory.length - 1;
   } else {
     const next = state.historyIndex + direction;
@@ -2597,6 +3793,7 @@ function recallHistory(direction) {
     if (next >= promptHistory.length) {
       state.historyIndex = null;
       dom.prompt.value = state.historyDraft;
+      state.boxTag = state.historyDraftTag;
       autoGrowPrompt();
       placeCaretForRecall(direction);
       return true;
@@ -2605,6 +3802,8 @@ function recallHistory(direction) {
   }
 
   dom.prompt.value = promptHistory[state.historyIndex];
+  // A recalled prompt is sent with the tag it was first sent with.
+  state.boxTag = state.promptTags.get(dom.prompt.value) || "typed";
   autoGrowPrompt();
   placeCaretForRecall(direction);
   return true;
@@ -2626,14 +3825,31 @@ function placeCaretForRecall(direction) {
    Event wiring
    ========================================================================== */
 
-dom.prompt.addEventListener("input", () => {
+dom.prompt.addEventListener("input", (event) => {
   // A real keystroke, as opposed to `recallHistory` assigning `.value`
   // directly (which fires no `input` event) — so typing anything always
   // breaks out of history browsing, the same way a shell's would.
   state.historyIndex = null;
+  // Where the words came from (JARVIS-API.md section 18). A paste or a drop
+  // is tagged by its own event below, which fires first; any other edit
+  // makes a voice transcript the owner's own typing (a clipboard snippet
+  // stays "clipboard", like pasted text), and an emptied box starts again
+  // as typed.
+  const type = (event && event.inputType) || "";
+  if (type !== "insertFromPaste" && type !== "insertFromDrop") {
+    state.boxTag = boxTagAfter(state.boxTag, "edit", dom.prompt.value);
+  }
   autoGrowPrompt();
   syncNoteChip();
 });
+
+// Pasted or dropped text is not the owner's own words, whatever is typed
+// around it, until the box is empty again (chat-history.js boxTagAfter).
+for (const kind of ["paste", "drop"]) {
+  dom.prompt.addEventListener(kind, () => {
+    state.boxTag = boxTagAfter(state.boxTag, "paste");
+  });
+}
 
 dom.prompt.addEventListener("keydown", (event) => {
   // Enter sends; Shift+Enter inserts a newline.
@@ -2696,6 +3912,9 @@ document.addEventListener("keydown", (event) => {
 });
 
 dom.stop.addEventListener("click", abortStream);
+
+if (dom.newConversation) dom.newConversation.addEventListener("click", newConversation);
+if (dom.temporary) dom.temporary.addEventListener("click", () => temporaryChat.toggle());
 
 dom.copy.addEventListener("click", async () => {
   const text = state.buffer.trim();
@@ -2798,13 +4017,24 @@ listen("focus-input", () => {
   refreshHealth();
 });
 
+// "Stop everything" (the hotkey, Alt+Shift+X by default): silence first,
+// before the PC is even asked - commands.rs `stop_everything_now` sends this
+// and then calls POST /api/stop_all itself, and says in a notification what
+// was stopped. The answer on screen stays as far as it got.
+listen("stop-everything", () => {
+  focusStoppedAt = Date.now();
+  stopSpeaking();
+});
+
 listen("clipboard-inject", (event) => {
   const text = String(event.payload || "");
   if (!text.trim()) return;
   attachClipboard(text);
   // A short snippet is more useful in the box; a long one becomes context.
+  // In the box it is tagged "clipboard" until the owner edits it.
   if (text.length <= 200 && !dom.prompt.value.trim()) {
     dom.prompt.value = text;
+    state.boxTag = boxTagAfter(state.boxTag, "clipboard");
     autoGrowPrompt();
   }
   focusInput({ selectAll: false });
@@ -2822,8 +4052,12 @@ listen("screen-captured", (event) => {
 });
 
 listen("quick-note-summon", (event) => {
-  const target = String(event.payload || "logseq");
-  const prefix = target === "joplin" ? "#joplin " : "#log ";
+  const asked = String(event.payload || "logseq");
+  // Alt+Shift+N always asks for Logseq; if the PC is not set up for that,
+  // arm the first note app it is set up for instead.
+  const ready = state.noteTargets.known ? state.noteTargets.targets : [];
+  const target = ready.includes(asked) || !ready.length ? asked : ready[0];
+  const prefix = ARM_PREFIX[target] || ARM_PREFIX.logseq;
   // Keep whatever the user had already typed; just arm the destination.
   const existing = dom.prompt.value.trim();
   const { target: current, body } = parseNotePrefix(dom.prompt.value);
@@ -2868,6 +4102,10 @@ listen("pin-changed", (event) => {
 
 applyRoute(DEFAULT_ROUTE);
 syncNoteChip();
+syncNotePrimer();
+refreshNoteTargets();
+// Asked again each time the bar comes up, so a vault set up since shows.
+window.addEventListener("focus", () => refreshNoteTargets());
 autoGrowPrompt();
 syncWindowHeight();
 refreshHealth();
@@ -2883,6 +4121,40 @@ followZoom(() => syncWindowHeight());
 syncPrimerKeys();
 syncTaskControls();
 startVoice(dom.root);
+// Subscribed before the link starts, so the first state it reports counts.
+onLink((link) => {
+  toolWatch.link(link);
+  recheckSpeech();
+  // Forget and Erase under "Used in this answer" are held on a stale link.
+  answerMemory.linkChanged();
+});
+onEvent((frame) => {
+  toolWatch.event(frame);
+  if (frame && frame.kind === "step") {
+    recheckSpeech();
+    maybeSayOneMoment(frame.data);
+  }
+  // A timer going off, said aloud while "Hey Jarvis" listening is on - the
+  // owner's "say timers aloud when voice is on" (2026-09-25). The toast
+  // shows as well (Rust). Generic words only: the room may not be private.
+  const aloud = aloudFor(frame, state.autoListening);
+  if (aloud) sayAside(aloud);
+});
+
+/** One fixed line, said on its own - not part of any answer, so none of an
+ *  answer's queue or privacy rules apply to it, and it never stops one. */
+async function sayAside(line) {
+  try {
+    const uri = await invokeStrict("speak_reply", { text: line });
+    if (uri) await new Audio(uri).play();
+  } catch (error) {
+    console.info("[quickbar] could not say it aloud:", error);
+  }
+}
+listen("jarvis-resync", () => {
+  toolWatch.resync();
+  recheckSpeech();
+});
 startLink();
 
 let lastConnected = null;
@@ -2901,17 +4173,27 @@ onLink((link) => {
       ? `Jarvis: event stream live${link.activity === "idle" ? "" : ` · ${link.activity}`}`
       : `Jarvis: ${link.error || "no event stream"}`;
   }
-  // The offline bar, and the one thing there is to do about it.
+  // The offline bar, and the one thing there is to do about it. Also shown
+  // while connected but stale - the stream is up and the queue could not be
+  // read, so nothing can be approved - which used to show no words at all
+  // while Approve and Deny quietly went grey. The words are the shared ones
+  // (linkWords); before the first hello it says "Connecting…" rather than
+  // naming an address that failed, because nothing has failed yet.
+  const words = linkWords(link);
   const wasOffline = !dom.offline.hidden;
-  dom.offline.hidden = link.connected;
-  if (!link.connected) {
-    dom.offlineText.textContent = link.error
-      ? `Jarvis is not answering: ${String(link.error).split(/(?<=[.!?])\s/)[0]}`
-      : "Jarvis is not answering on 127.0.0.1:4719.";
+  dom.offline.hidden = words.canAct;
+  if (!words.canAct) {
+    dom.offlineText.textContent = words.text;
+    dom.offline.dataset.tone = words.tone;
     // Once, on the transition. A live region that repeated this on every
     // reconnect attempt would talk over everything else in the window.
     if (!wasOffline) announce(dom.offlineText.textContent, "assertive");
   }
+  // The model and lane in the route chip are last known while stale; the
+  // phone drops the same extras.
+  const showModel = !link.stale && Boolean(dom.routeModel.textContent);
+  dom.routeModel.hidden = !showModel;
+  dom.routeSep.hidden = !showModel;
   syncWindowHeight();
 
   if (!link.connected && state.route.tier !== "offline") {
@@ -2923,7 +4205,7 @@ onLink((link) => {
       model: null,
       why: link.error
         ? `No event stream: ${link.error}`
-        : "No event stream. Jarvis is not answering on 127.0.0.1:4719.",
+        : `No event stream yet. Connecting to ${link.base || "the address set in Settings"}.`,
     });
   } else if (link.connected && state.route.tier === "offline") {
     applyRoute(DEFAULT_ROUTE);
@@ -3035,9 +4317,13 @@ dom.attentionClose.addEventListener("click", () => {
 // The tray's approvals row opens the gate here rather than in the HUD: this is
 // the surface that renders the risk line and the `raised` block.
 if (IS_TAURI) {
-  TAURI.event.listen("show-approval", () => {
+  TAURI.event.listen("show-approval", (event) => {
     const queue = currentQueue();
-    const next = queue.items[0];
+    // "Open the card" names the card its window showed (card-link.js); the
+    // tray and the widget name none. A card no longer waiting falls back to
+    // the first one that is.
+    const wanted = event && typeof event.payload === "string" ? event.payload : null;
+    const next = (wanted && queue.items.find((item) => item.id === wanted)) || queue.items[0];
     if (!next) return;
     state.parked.delete(next.id);
     openApproval(next);

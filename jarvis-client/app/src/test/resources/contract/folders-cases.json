@@ -1,0 +1,313 @@
+{
+ "add_from_phone": {
+  "body": {
+   "error": "Folders are added on the PC only (Settings, Folders Jarvis may look in), with an approval card.",
+   "ok": false,
+   "pc_only": true
+  },
+  "status": 403
+ },
+ "cases": {
+  "damaged": {
+   "available": true,
+   "can_add": false,
+   "detail": "Jarvis can find your files by name, search inside your notes and text files, and read PDF, Word, Excel and PowerPoint files - only in the folders listed here. None are listed at first. Adding a folder is done on the PC and takes an approval card; removing one is instant, from either app. What Jarvis reads there is outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.",
+   "documents": {
+    "ready": true,
+    "said": "PDF, Word, Excel and PowerPoint files can be read."
+   },
+   "empty": "No folders yet, so Jarvis does not look in any of your files.",
+   "folders": [],
+   "last": null,
+   "max": 20,
+   "notion": {
+    "can_import": false,
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
+    "title": "Bring in a Notion export"
+   },
+   "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
+   "remove_label": "Remove",
+   "title": "Folders Jarvis may look in",
+   "waiting": null,
+   "waiting_words": "",
+   "why": "the list of folders is damaged, so Jarvis looks in none of them - add them again on the PC"
+  },
+  "empty_pc": {
+   "available": true,
+   "can_add": true,
+   "detail": "Jarvis can find your files by name, search inside your notes and text files, and read PDF, Word, Excel and PowerPoint files - only in the folders listed here. None are listed at first. Adding a folder is done on the PC and takes an approval card; removing one is instant, from either app. What Jarvis reads there is outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.",
+   "documents": {
+    "ready": true,
+    "said": "PDF, Word, Excel and PowerPoint files can be read."
+   },
+   "empty": "No folders yet, so Jarvis does not look in any of your files.",
+   "folders": [],
+   "last": null,
+   "max": 20,
+   "notion": {
+    "can_import": true,
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
+    "title": "Bring in a Notion export"
+   },
+   "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
+   "remove_label": "Remove",
+   "title": "Folders Jarvis may look in",
+   "waiting": null,
+   "waiting_words": "",
+   "why": ""
+  },
+  "empty_phone": {
+   "available": true,
+   "can_add": false,
+   "detail": "Jarvis can find your files by name, search inside your notes and text files, and read PDF, Word, Excel and PowerPoint files - only in the folders listed here. None are listed at first. Adding a folder is done on the PC and takes an approval card; removing one is instant, from either app. What Jarvis reads there is outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.",
+   "documents": {
+    "ready": true,
+    "said": "PDF, Word, Excel and PowerPoint files can be read."
+   },
+   "empty": "No folders yet, so Jarvis does not look in any of your files.",
+   "folders": [],
+   "last": null,
+   "max": 20,
+   "notion": {
+    "can_import": false,
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
+    "title": "Bring in a Notion export"
+   },
+   "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
+   "remove_label": "Remove",
+   "title": "Folders Jarvis may look in",
+   "waiting": null,
+   "waiting_words": "",
+   "why": ""
+  },
+  "last_added": {
+   "available": true,
+   "can_add": true,
+   "detail": "Jarvis can find your files by name, search inside your notes and text files, and read PDF, Word, Excel and PowerPoint files - only in the folders listed here. None are listed at first. Adding a folder is done on the PC and takes an approval card; removing one is instant, from either app. What Jarvis reads there is outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.",
+   "documents": {
+    "ready": true,
+    "said": "PDF, Word, Excel and PowerPoint files can be read."
+   },
+   "empty": "No folders yet, so Jarvis does not look in any of your files.",
+   "folders": [
+    {
+     "added": 1790000000.0,
+     "exists": false,
+     "name": "Documents",
+     "path": "C:\\Users\\owner\\Documents"
+    }
+   ],
+   "last": {
+    "at": 1790000000.0,
+    "message": "Added. Jarvis can look in that folder when you ask.",
+    "outcome": "added",
+    "why": ""
+   },
+   "max": 20,
+   "notion": {
+    "can_import": true,
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
+    "title": "Bring in a Notion export"
+   },
+   "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
+   "remove_label": "Remove",
+   "title": "Folders Jarvis may look in",
+   "waiting": null,
+   "waiting_words": "",
+   "why": ""
+  },
+  "last_denied": {
+   "available": true,
+   "can_add": true,
+   "detail": "Jarvis can find your files by name, search inside your notes and text files, and read PDF, Word, Excel and PowerPoint files - only in the folders listed here. None are listed at first. Adding a folder is done on the PC and takes an approval card; removing one is instant, from either app. What Jarvis reads there is outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.",
+   "documents": {
+    "ready": true,
+    "said": "PDF, Word, Excel and PowerPoint files can be read."
+   },
+   "empty": "No folders yet, so Jarvis does not look in any of your files.",
+   "folders": [],
+   "last": {
+    "at": 1790000000.0,
+    "message": "You said no, so that folder was not added.",
+    "outcome": "denied",
+    "why": ""
+   },
+   "max": 20,
+   "notion": {
+    "can_import": true,
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
+    "title": "Bring in a Notion export"
+   },
+   "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
+   "remove_label": "Remove",
+   "title": "Folders Jarvis may look in",
+   "waiting": null,
+   "waiting_words": "",
+   "why": ""
+  },
+  "no_converter": {
+   "available": true,
+   "can_add": true,
+   "detail": "Jarvis can find your files by name, search inside your notes and text files, and read PDF, Word, Excel and PowerPoint files - only in the folders listed here. None are listed at first. Adding a folder is done on the PC and takes an approval card; removing one is instant, from either app. What Jarvis reads there is outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.",
+   "documents": {
+    "ready": false,
+    "said": "Reading PDF, Word, Excel and PowerPoint files is off: MarkItDown is not installed on the PC. Notes and text files can still be read."
+   },
+   "empty": "No folders yet, so Jarvis does not look in any of your files.",
+   "folders": [
+    {
+     "added": 1790000000.0,
+     "exists": false,
+     "name": "Documents",
+     "path": "C:\\Users\\owner\\Documents"
+    },
+    {
+     "added": 1790000000.0,
+     "exists": false,
+     "name": "Notion",
+     "path": "C:\\Users\\owner\\Notes\\Notion"
+    }
+   ],
+   "last": null,
+   "max": 20,
+   "notion": {
+    "can_import": true,
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
+    "title": "Bring in a Notion export"
+   },
+   "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
+   "remove_label": "Remove",
+   "title": "Folders Jarvis may look in",
+   "waiting": null,
+   "waiting_words": "",
+   "why": ""
+  },
+  "two_folders_pc": {
+   "available": true,
+   "can_add": true,
+   "detail": "Jarvis can find your files by name, search inside your notes and text files, and read PDF, Word, Excel and PowerPoint files - only in the folders listed here. None are listed at first. Adding a folder is done on the PC and takes an approval card; removing one is instant, from either app. What Jarvis reads there is outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.",
+   "documents": {
+    "ready": true,
+    "said": "PDF, Word, Excel and PowerPoint files can be read."
+   },
+   "empty": "No folders yet, so Jarvis does not look in any of your files.",
+   "folders": [
+    {
+     "added": 1790000000.0,
+     "exists": false,
+     "name": "Documents",
+     "path": "C:\\Users\\owner\\Documents"
+    },
+    {
+     "added": 1790000000.0,
+     "exists": false,
+     "name": "Notion",
+     "path": "C:\\Users\\owner\\Notes\\Notion"
+    }
+   ],
+   "last": null,
+   "max": 20,
+   "notion": {
+    "can_import": true,
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
+    "title": "Bring in a Notion export"
+   },
+   "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
+   "remove_label": "Remove",
+   "title": "Folders Jarvis may look in",
+   "waiting": null,
+   "waiting_words": "",
+   "why": ""
+  },
+  "two_folders_phone": {
+   "available": true,
+   "can_add": false,
+   "detail": "Jarvis can find your files by name, search inside your notes and text files, and read PDF, Word, Excel and PowerPoint files - only in the folders listed here. None are listed at first. Adding a folder is done on the PC and takes an approval card; removing one is instant, from either app. What Jarvis reads there is outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.",
+   "documents": {
+    "ready": true,
+    "said": "PDF, Word, Excel and PowerPoint files can be read."
+   },
+   "empty": "No folders yet, so Jarvis does not look in any of your files.",
+   "folders": [
+    {
+     "added": 1790000000.0,
+     "exists": false,
+     "name": "Documents",
+     "path": "C:\\Users\\owner\\Documents"
+    },
+    {
+     "added": 1790000000.0,
+     "exists": false,
+     "name": "Notion",
+     "path": "C:\\Users\\owner\\Notes\\Notion"
+    }
+   ],
+   "last": null,
+   "max": 20,
+   "notion": {
+    "can_import": false,
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
+    "title": "Bring in a Notion export"
+   },
+   "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
+   "remove_label": "Remove",
+   "title": "Folders Jarvis may look in",
+   "waiting": null,
+   "waiting_words": "",
+   "why": ""
+  },
+  "waiting": {
+   "available": true,
+   "can_add": true,
+   "detail": "Jarvis can find your files by name, search inside your notes and text files, and read PDF, Word, Excel and PowerPoint files - only in the folders listed here. None are listed at first. Adding a folder is done on the PC and takes an approval card; removing one is instant, from either app. What Jarvis reads there is outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.",
+   "documents": {
+    "ready": true,
+    "said": "PDF, Word, Excel and PowerPoint files can be read."
+   },
+   "empty": "No folders yet, so Jarvis does not look in any of your files.",
+   "folders": [
+    {
+     "added": 1790000000.0,
+     "exists": false,
+     "name": "Documents",
+     "path": "C:\\Users\\owner\\Documents"
+    }
+   ],
+   "last": null,
+   "max": 20,
+   "notion": {
+    "can_import": true,
+    "detail": "In Notion: Settings, Export all workspace content, as Markdown & CSV. Then pick the .zip it made and a folder from the list: Jarvis unzips it into a new folder there and never runs anything from it. If that folder is synced by OneDrive or a similar app, that app uploads the new files, as it does anything you put there.",
+    "title": "Bring in a Notion export"
+   },
+   "phone_add": "Folders are added on the PC: Settings, Folders Jarvis may look in.",
+   "remove_label": "Remove",
+   "title": "Folders Jarvis may look in",
+   "waiting": {
+    "path": "C:\\Users\\owner\\Notes\\Notion"
+   },
+   "waiting_words": "Waiting for your yes on the approval card.",
+   "why": ""
+  }
+ },
+ "example_card": "Let Jarvis look in this folder?\n\nFolder: C:\\Users\\owner\\Documents\n\nFrom now on, when you ask, Jarvis can find files in this folder and the folders inside it by name, search inside its notes and text files, and read its PDF, Word, Excel and PowerPoint files - with the AI model on this PC. It reads only when you ask, one part of one file at a time. It never changes, moves or deletes anything there, and nothing is copied or sent anywhere.\n\nPlaces that hold keys, saved passwords or browser data stay closed even inside this folder, and so do hidden folders.\n\nWhat Jarvis reads there counts as outside text: it is never saved as a fact about you, and a note Jarvis writes after reading it asks you first.\n\nRemoving the folder from the list is instant, from either app.\n\nIf you did not just do this, say no.\n\nIf you say no: nothing changes.",
+ "import_from_phone": {
+  "body": {
+   "error": "A Notion export is brought in on the PC only (Settings, Folders Jarvis may look in).",
+   "ok": false,
+   "pc_only": true
+  },
+  "status": 403
+ },
+ "limits": {
+  "folders": 20,
+  "part_tokens": 1200,
+  "parts_per_turn": 2
+ },
+ "missing": {
+  "body": {
+   "error": "not found"
+  },
+  "status": 404
+ }
+}

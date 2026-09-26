@@ -10,7 +10,7 @@
 <script>
   try {
     var t = localStorage.getItem("jarvis.theme");
-    if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+    if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
       document.documentElement.setAttribute("data-theme", t);
     }
   } catch (e) { /* private mode, cleared site data — the default theme is correct */ }
@@ -82,8 +82,10 @@
   .demo .dot {
     width: 10px; height: 10px; border-radius: 50%; flex: none;
   }
-  .demo .dot.thinking { background: #ffb648; box-shadow: 0 0 8px #ffb648; }
-  .demo .dot.waiting { background: #ff6a6a; box-shadow: 0 0 8px #ff6a6a; }
+  /* The tray's real colours (theme.css --state-*, from jarvis-visual-spec.json):
+     violet while thinking, amber ONLY when something waits on you. */
+  .demo .dot.thinking { background: var(--state-thinking); box-shadow: 0 0 8px var(--state-thinking); }
+  .demo .dot.waiting { background: var(--state-approval); box-shadow: 0 0 8px var(--state-approval); }
   .demo .dot.resting { background: var(--accent); box-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.6); }
   .foot {
     display: flex;
@@ -135,7 +137,7 @@
       </p>
       <div class="demo"><span class="dot resting"></span> Resting — nothing to do right now</div>
       <div class="demo"><span class="dot thinking"></span> Thinking, or in the middle of answering you</div>
-      <div class="demo"><span class="dot waiting"></span> Waiting on you for something below</div>
+      <div class="demo"><span class="dot waiting"></span> Waiting on you to approve or deny something</div>
       <p>
         Click it any time to open Jarvis's other windows, or to quit.
       </p>
@@ -147,7 +149,11 @@
       <p>
         If Jarvis wants to do something it isn't sure is safe — like sending
         a message, or changing a file — it <strong>stops and shows you a
-        card first</strong>. Nothing like that happens without you saying yes.
+        card first</strong>. The card waits for you
+        <span class="approve-where">in the Jarvis bar, on the widget, or on your phone's Home screen</span>
+        (<kbd>Alt</kbd>+<kbd>Space</kbd> opens the Jarvis bar), with two
+        buttons: <strong>Approve</strong> and <strong>Deny</strong>. Nothing
+        like that happens without you saying yes.
       </p>
       <p>
         You can always say no, and nothing bad happens if you do. There is
@@ -158,16 +164,17 @@
 
     <section class="screen" id="screen-3" data-n="3" hidden>
       <p class="eyebrow">3 of 3 — memory</p>
-      <h1>Jarvis only remembers what you approve</h1>
+      <h1>Jarvis learns from what you tell it</h1>
       <p>
-        When Jarvis notices something worth remembering — a fact about you,
-        something you asked it to keep in mind — it doesn't save it right
-        away. It puts it on a short list <strong>for you to look at first</strong>,
-        and only remembers it once you say it's okay.
+        Jarvis saves facts about you and your projects from
+        <strong>your own words</strong> — what you type or say to it. Never
+        from emails, web pages, documents or files.
       </p>
       <p>
-        You can see everything Jarvis has learned, and remove any of it,
-        whenever you want — in the Brain window, under Memory.
+        <strong>Every fact it saves is listed, with a Forget button</strong>,
+        in the Brain window, under Memory. Health, money, passwords and
+        other people's private details are different: those wait for your
+        yes first. You can turn automatic learning off there too.
       </p>
     </section>
 

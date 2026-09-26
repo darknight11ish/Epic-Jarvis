@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-stop-briefing"
+description = "Enables the stop_briefing command without any pre-configured scope."
+commands.allow = ["stop_briefing"]
+
+[[permission]]
+identifier = "deny-stop-briefing"
+description = "Denies the stop_briefing command without any pre-configured scope."
+commands.deny = ["stop_briefing"]

@@ -6,7 +6,8 @@
 //!
 //! ```text
 //! Jarvis — thinking                        (status, disabled)
-//! Power: quiet · set by hand · read-only   (status, disabled)
+//! Power: quiet · set by hand              (status, disabled)
+//! Change power mode ▸ Active / Quiet / Standby
 //! ─────────────────────────────
 //! 2 approvals waiting                      (opens the queue)
 //! 3 things waiting to be told · standby    (opens the brief)
@@ -32,22 +33,18 @@
 //! rows lead their group because a hotkey printed beside a row is the only way
 //! most people ever learn it exists.
 //!
-//! ## The power switch that is not here
+//! ## The power switch
 //!
-//! §6 asks for "a Quiet/Standby/Active switch" in the minimum menu. There is no
-//! route to build it on. `jarvis_hud.py`'s `do_POST` serves `/api/shutdown`,
-//! `/api/models/{install,switch,rollback}`, `/api/skills/decide`,
-//! `/api/memory/decide`, `/api/approve`, `/api/deny` and `/api/chat` — and
-//! nothing else. `jarvis_power` has `set_mode`, but the HTTP server does not
-//! expose it, and `GET /api/version` reports the mode read-only inside
-//! `capabilities.power`.
-//!
-//! This used to be a whole disabled row reading "Active · Quiet · Standby — the
-//! server exposes no route yet". That is a true sentence and a bad menu item:
-//! it spent a line, every single open, telling the owner about something that
-//! does not exist. The same fact now rides on the `Power:` row as
-//! `· read-only`, next to the value it qualifies. It becomes three live items
-//! the day the server grows the route.
+//! §6 asks for "a Quiet/Standby/Active switch" in the minimum menu. For a long
+//! time there was no route to build it on, and the `Power:` row said
+//! `· read-only`. `backend/power-mode.patch` adds `POST /api/power`, so the
+//! row is now followed by a "Change power mode" submenu with the three modes.
+//! The server sends the change through its approval gate as `power_manage`
+//! (the owner's toml says `auto`: the safe direction either way), and the
+//! `Power:` row changes only when the server's own `power` event says so -
+//! never on the click. Waking (Active) is held while the link is stale, like
+//! any other action; going quieter is not. A backend without the patch
+//! answers 404, and the tray says so in a notification.
 //!
 //! ## Colour
 //!
@@ -60,7 +57,7 @@ use std::sync::Mutex;
 
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager,
 };
@@ -96,6 +93,10 @@ const ID_STATUS_POWER: &str = "status-power";
 const ID_APPROVALS: &str = "approvals";
 const ID_WAITING: &str = "waiting";
 const ID_MUTE: &str = "mute";
+const ID_STOP_EVERYTHING: &str = "stop-everything";
+const ID_POWER_ACTIVE: &str = "power-active";
+const ID_POWER_QUIET: &str = "power-quiet";
+const ID_POWER_STANDBY: &str = "power-standby";
 const ID_BACKEND: &str = "backend";
 const ID_SHOW_HUD: &str = "show-hud";
 const ID_SHOW_BRAIN: &str = "show-brain";
@@ -170,6 +171,36 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         false,
         None::<&str>,
     )?;
+    // backend/power-mode.patch. One item per mode; the server decides, and
+    // the Power row above follows its event, not these clicks.
+    let power_modes = Submenu::with_items(
+        app,
+        "Change power mode",
+        true,
+        &[
+            &MenuItem::with_id(
+                app,
+                ID_POWER_ACTIVE,
+                "Active — answers, and may speak first",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app,
+                ID_POWER_QUIET,
+                "Quiet — answers, starts nothing itself",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app,
+                ID_POWER_STANDBY,
+                "Standby — frees the graphics card",
+                true,
+                None::<&str>,
+            )?,
+        ],
+    )?;
     let approvals = MenuItem::with_id(
         app,
         ID_APPROVALS,
@@ -195,6 +226,17 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let mute = MenuItem::with_id(app, ID_MUTE, mute_label(&link), true, None::<&str>)?;
+    // "Stop everything" (continuity audit 2026-09-26): the same as the
+    // hotkey (`commands::stop_everything_now`), for a mouse, or when another
+    // program holds the key. Never greyed: not by a stale link, App lock or
+    // a waiting card - it only makes Jarvis stop.
+    let stop_everything = MenuItem::with_id(
+        app,
+        ID_STOP_EVERYTHING,
+        "Stop everything",
+        true,
+        accel(app, "stop_everything").as_deref(),
+    )?;
 
     // One row that is status and action at once: it says what the backend is
     // and, when there is something to do about it, does it.
@@ -213,7 +255,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let toggle_spotlight = MenuItem::with_id(
         app,
         ID_TOGGLE_SPOTLIGHT,
-        "Show or hide Spotlight",
+        "Show or hide the Jarvis bar",
         true,
         // Read, not hardcoded. The tray is the fallback surface for exactly
         // the case where a hotkey was refused or rebound, so a tray that
@@ -247,7 +289,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         false,
         None::<&str>,
     )?;
-    let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings…", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings and help…", true, None::<&str>)?;
     let status_check = MenuItem::with_id(
         app,
         ID_STATUS_CHECK,
@@ -264,6 +306,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             // not offer.
             &activity,
             &power,
+            &power_modes,
             &PredefinedMenuItem::separator(app)?,
             // What is waiting on you, and your control over being interrupted.
             // `mute` belongs here rather than among the machinery: it is the
@@ -271,6 +314,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &approvals,
             &waiting,
             &mute,
+            &stop_everything,
             &PredefinedMenuItem::separator(app)?,
             // Windows, everyday ones first — the two with hotkeys are the two
             // reached most often, and a hotkey printed beside a row is how the
@@ -767,6 +811,13 @@ fn activity_label(link: &LinkState) -> String {
             None => "Jarvis — connecting…".to_string(),
         };
     }
+    // Connected but stale: the stream is up and `/api/pending` could not be
+    // read, so the activity below is last known, not current. The phone says
+    // "Stale — reconnecting" in amber for exactly this; the tray used to say
+    // "idle" as though nothing were wrong.
+    if link.stale {
+        return "Jarvis — stale, reconnecting".to_string();
+    }
     match link.activity.as_str() {
         "idle" => "Jarvis — idle".to_string(),
         other => format!("Jarvis — {other}"),
@@ -781,18 +832,22 @@ fn power_label(link: &LinkState) -> String {
         Some("override") => " · set by hand",
         Some("schedule") => " · quiet hours",
         Some("idle") => " · idle timer",
+        Some("standby_schedule") => " · standby schedule",
         _ => "",
     };
-    // "read-only" replaces what used to be a whole disabled row beneath this
-    // one, naming three modes the server has no route to set. Saying it here
-    // costs no line in a menu the owner opens dozens of times a day, and it
-    // disappears the moment the row becomes settable.
-    format!("Power: {}{by} · read-only", link.power)
+    // The "· read-only" that used to end this row is gone: the submenu
+    // below it sets the mode now (backend/power-mode.patch).
+    format!("Power: {}{by}", link.power)
 }
 
 fn approvals_label(link: &LinkState) -> String {
     match link.approvals {
-        0 if link.stale => "Approvals: unknown while offline".to_string(),
+        0 if link.stale && !link.connected => "Approvals: unknown while offline".to_string(),
+        // "offline" was the wrong word here: the stream is connected, it is
+        // the queue that could not be confirmed.
+        0 if link.stale => "Approvals: unknown until the link catches up".to_string(),
+        1 if link.stale => "1 approval waiting (last known)".to_string(),
+        n if link.stale => format!("{n} approvals waiting (last known)"),
         0 => "No approvals waiting".to_string(),
         1 => "1 approval waiting".to_string(),
         n => format!("{n} approvals waiting"),
@@ -872,7 +927,9 @@ fn backend_row(app: &AppHandle) -> (String, bool) {
 
 fn tooltip(app: &AppHandle, link: &LinkState) -> String {
     let mut parts = vec![activity_label(link)];
-    if link.connected {
+    // Not while stale: power, approvals and the brief would be last-known
+    // facts presented as current ones - the phone drops the same extras.
+    if link.connected && !link.stale {
         parts.push(power_label(link));
         if link.approvals > 0 {
             parts.push(approvals_label(link));
@@ -1019,11 +1076,18 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_APPROVALS => {
             if let Err(err) = windows::show_quickbar(app) {
                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
-                commands::notify(app, "Jarvis", &format!("Quickbar unavailable: {err}"));
+                commands::notify(
+                    app,
+                    "Jarvis",
+                    &format!("The Jarvis bar could not open: {err}"),
+                );
                 return;
             }
             crate::emit_quickbar(app, events::SHOW_APPROVAL, ());
         }
+
+        // Speech first, then the PC; a notification says what was stopped.
+        ID_STOP_EVERYTHING => commands::stop_everything_now(app),
 
         ID_SHOW_HUD => {
             if let Err(err) = windows::show_hud(app) {
@@ -1065,7 +1129,11 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_WAITING => {
             if let Err(err) = windows::show_quickbar(app) {
                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
-                commands::notify(app, "Jarvis", &format!("Quickbar unavailable: {err}"));
+                commands::notify(
+                    app,
+                    "Jarvis",
+                    &format!("The Jarvis bar could not open: {err}"),
+                );
                 return;
             }
             crate::emit_quickbar(app, events::SHOW_DIGEST, ());
@@ -1086,6 +1154,24 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 if let Err(err) = crate::attention::set_attention_muted(app.clone(), !muted).await {
                     eprintln!("[jarvis] tray: mute failed: {err}");
                     commands::notify(&app, "Jarvis", &first_sentence(&err));
+                }
+            });
+        }
+
+        ID_POWER_ACTIVE | ID_POWER_QUIET | ID_POWER_STANDBY => {
+            let mode = match event.id().as_ref() {
+                ID_POWER_ACTIVE => "active",
+                ID_POWER_QUIET => "quiet",
+                _ => "standby",
+            };
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                match commands::set_power_mode(&app, mode).await {
+                    Ok(message) => commands::notify(&app, "Jarvis", &first_sentence(&message)),
+                    Err(err) => {
+                        eprintln!("[jarvis] tray: power mode failed: {err}");
+                        commands::notify(&app, "Jarvis", &first_sentence(&err));
+                    }
                 }
             });
         }
@@ -1445,15 +1531,27 @@ mod tests {
         assert!(activity_label(&down).starts_with("Jarvis — offline: could not reach"));
         assert!(activity_label(&down).chars().count() < 90);
 
+        // Connected, but the queue could not be confirmed: not "idle", and
+        // not "offline" either, and any count is marked as last known.
+        let mut stale = link();
+        stale.stale = true;
+        assert_eq!(activity_label(&stale), "Jarvis — stale, reconnecting");
+        assert_eq!(
+            approvals_label(&stale),
+            "Approvals: unknown until the link catches up"
+        );
+        stale.approvals = 2;
+        assert_eq!(approvals_label(&stale), "2 approvals waiting (last known)");
+
         let mut quiet = link();
         quiet.power = "quiet".into();
         quiet.power_set_by = Some("override".into());
-        // `· read-only` replaced a whole disabled row that said the same
-        // thing. It is part of the label now, not decoration.
-        assert_eq!(
-            power_label(&quiet),
-            "Power: quiet · set by hand · read-only"
-        );
+        // No `· read-only` any more: the "Change power mode" submenu sets it
+        // (backend/power-mode.patch). Who set it is still said.
+        assert_eq!(power_label(&quiet), "Power: quiet · set by hand");
+        quiet.power = "standby".into();
+        quiet.power_set_by = Some("standby_schedule".into());
+        assert_eq!(power_label(&quiet), "Power: standby · standby schedule");
 
         // The mute row names its end date in both directions, because the API
         // has no mute without one.

@@ -5,6 +5,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- "Also on my phone" (2026-09-26): the owner's tap hands an alarm to the
+         phone's own Clock app (AlarmClock.ACTION_SET_ALARM), which needs this
+         install-time permission. The Clock app shows its own screen and the
+         owner saves it there; this app sets no alarm of its own, and asks
+         for no exact-alarm permission. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
     <!-- §3.1(2). specialUse is uncapped; dataSync is not. See strings.xml. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -16,10 +23,21 @@
 
     <!-- Push-to-talk. Requested at the moment the microphone is first held,
          never at launch: a permission dialog on first run, before the app has
-         shown what it is for, is the one most people refuse. Capture only ever
-         happens with the app in the foreground and the button held, so no
-         microphone foreground-service type is needed or asked for. -->
+         shown what it is for, is the one most people refuse. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- "Hey Jarvis" on this phone (WakeWordService). Listening with the
+         screen off or the app in the background needs a foreground service
+         of type microphone, and on Android 14+ this permission with it.
+         Only ever started from the app's own Checks screen, never at boot;
+         Android shows the microphone indicator for as long as it runs. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- "Interrupt Jarvis while it talks" (Speaker.beginVoiceCall): the reply
+         plays in voice-call mode so Android's echo canceller can take it back
+         out of the microphone. Switching the audio mode and the call's output
+         device needs this. A normal permission (granted at install, no
+         dialog) that allows changing the phone's audio settings; the app
+         uses it only here, and puts the mode back when Jarvis stops. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- The service returns START_STICKY, and a sticky restart happens with the app
          in the background - which is not on the FGS background-start exemption list,
@@ -40,6 +58,7 @@
     <application
         android:name=".JarvisApp"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
@@ -60,14 +79,26 @@
 
             <!-- "Share" from another app - a web page's selected text, a
                  note, an address - lands here as plain text and is folded
-                 into the composer draft, never sent on its own. Text only:
-                 this app has no use for a shared image or file, and offering
-                 to accept one would be a share-sheet entry that silently
-                 does nothing. -->
+                 into the composer draft, never sent on its own. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
+            </intent-filter>
+
+            <!-- One photo shared from another app (Gallery, the camera, a
+                 screenshot). Attached to the next question under the Photo
+                 button's own rule - only while the PC says Pictures on the
+                 second graphics card works, and shrunk to the same limits
+                 (ChatPicture, PictureEncoder). When Pictures is off the share
+                 still opens Jarvis, and Home says in words why the photo was
+                 not attached: it is never silently dropped. Never sent on its
+                 own - the owner types the question and taps Send. One image
+                 only: SEND, not SEND_MULTIPLE. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
             </intent-filter>
 
             <!-- Makes this app a candidate for the older, plain-intent style
@@ -86,8 +117,10 @@
 
         <!-- The newer path: RoleManager.ROLE_ASSISTANT, which some launchers
              offer the assist gesture to exclusively rather than to anything
-             with a plain ACTION_ASSIST intent-filter. This app still has no
-             listening of its own - JarvisRecognitionServiceStub recognises
+             with a plain ACTION_ASSIST intent-filter. The assistant role adds
+             no listening of its own (the only always-on listening is
+             WakeWordService, switched on separately, and it spots one phrase
+             and recognises no words) - JarvisRecognitionServiceStub recognises
              nothing and JarvisVoiceInteractionSession does nothing but open
              MainActivity - so "rule: no client-side speech-to-text" still
              holds exactly as it did with the plain intent-filter alone.
@@ -139,10 +172,14 @@
                 android:resource="@xml/recognition_service" />
         </service>
 
-        <!-- Not a power tile: the API has no endpoint that sets power mode, and a
-             tile that appeared to switch Jarvis to Quiet and silently did nothing
-             would be worse than no tile. This one carries the link's real state
-             and mutes spoken interruptions, which /api/attention/mute supports. -->
+        <!-- Not a power tile. The desktop CAN set power mode now (POST /api/power,
+             power-mode.patch; the phone's Mind screen has the buttons), but the
+             answer is often not "done": waking is held on a stale link, and the
+             desktop decides through its approval gate (power_manage). A tile has
+             nowhere to say that, and a tile that appeared to switch Jarvis to
+             Quiet and silently did not would be worse than no tile. This one
+             carries the link's real state and mutes spoken interruptions, which
+             /api/attention/mute supports. -->
         <service
             android:name=".service.LinkTileService"
             android:exported="true"
@@ -177,6 +214,14 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="@string/fgs_special_use_reason" />
         </service>
+        <!-- Its own service and its own type, not "specialUse|microphone" on
+             the link: the event stream must keep running when listening is
+             switched off, and listening must be stoppable on its own
+             (docs/WAKE-WORD.md §4 step 1). -->
+        <service
+            android:name=".service.WakeWordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!-- exported="true" is what every app-widget provider needs - the
              launcher itself is what sends APPWIDGET_UPDATE, from outside this

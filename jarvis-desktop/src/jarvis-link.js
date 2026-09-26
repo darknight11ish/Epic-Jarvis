@@ -15,6 +15,8 @@
  * @module jarvis-link
  */
 
+import { fallbackTitle } from "./card-words.js";
+
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 
@@ -144,22 +146,29 @@ function normaliseAttention(raw) {
  */
 export function normaliseApproval(row) {
   if (!row || typeof row !== "object") return null;
-  const id = row.id === undefined || row.id === null ? "" : String(row.id);
+  const id = row.id === undefined || row.id === null ? "" : String(row.id).trim();
   if (!id) return null;
 
   let detail = null;
+  // True when `detail` arrived as text that no longer parses AND is as long
+  // as the gate's cut: the request was cut off before it reached this card,
+  // so what is on screen is not the whole of what would run. Approve is then
+  // refused on every surface (ARCHITECTURE §3: every command, in FULL).
+  let cutOff = false;
   if (typeof row.detail === "string" && row.detail.trim()) {
     try {
       detail = JSON.parse(row.detail);
     } catch (error) {
       detail = row.detail;
+      cutOff = row.detail.length >= GATE_DETAIL_LIMIT;
     }
   } else if (row.detail && typeof row.detail === "object") {
     detail = row.detail;
   }
 
   const risk = row.risk && typeof row.risk === "object" ? row.risk : null;
-  const raised = row.raised && typeof row.raised === "object" ? row.raised : null;
+  const raised = raisedOf(row.raised);
+  const notice = row.notice && typeof row.notice === "object" ? row.notice : null;
   // docs/AUTONOMY-PROPOSALS.md §3a. Zero or one entry means "behaves exactly
   // as today" - callers check `.length > 1`, never truthiness alone, so an
   // absent `options` and a one-item `options` render identically.
@@ -176,6 +185,23 @@ export function normaliseApproval(row) {
 
   return {
     id,
+    cutOff,
+    expiresAt: expiryOf(row),
+    // The gate's own words for this item (jarvis_gate.notice_for): built from
+    // the action name and its risk table, never from the payload.
+    notice: notice
+      ? {
+          title: String(notice.title || ""),
+          body: String(notice.body || ""),
+          weight: String(notice.weight || "heavy"),
+        }
+      : null,
+    // What every surface shows as the card's title (card-words.js): the
+    // notice's, else the PC's own fallback built from the action's name.
+    // Never from `prompt` or `detail`.
+    title: notice && typeof notice.title === "string" && notice.title.trim()
+      ? notice.title.trim()
+      : fallbackTitle(row.action),
     action: String(row.action || "run an action"),
     tier: String(row.tier || ""),
     prompt: typeof row.prompt === "string" ? row.prompt : "",
@@ -206,8 +232,10 @@ export function normaliseApproval(row) {
           code: String(raised.code || "rushed"),
           // The chip. Already carries "(4th time today)" when the source has
           // tripped this more than once — `jarvis_content_risk.chip_from`
-          // builds the ordinal, so nothing here counts anything.
-          text: String(raised.text || ""),
+          // builds the ordinal, so nothing here counts anything. A raise that
+          // arrived without one (a bare `true`, or an object with no `text`)
+          // still gets a sentence: an empty chip reads as nothing at all.
+          text: String(raised.text || "Tier raised — something Jarvis read tried to rush you"),
           // The attacker's words. Shown in quotation marks, inline, because
           // showing them is the entire point.
           quote: String(raised.quote || ""),
@@ -222,6 +250,68 @@ export function normaliseApproval(row) {
         }
       : null,
   };
+}
+
+/** jarvis_gate stores `detail` as `json.dumps(detail)[:4000]`. */
+const GATE_DETAIL_LIMIT = 4000;
+/** Longer than this is a wrong unit, not a gate timeout (the shipped one is 180 s). */
+const MAX_EXPIRES_IN_SECONDS = 24 * 3600;
+
+/**
+ * `raised`, in every shape the backend has used: an object, `true` (the
+ * doorbell's boolean), or the JSON text of an object (how a database column
+ * holds it). Anything truthy that is not a readable object becomes an empty
+ * raise, never "not raised": the raise is what takes an item out of every
+ * quick gesture, so an unreadable one must fail toward caution. This used to
+ * accept an object only, so `true` quietly counted as not raised.
+ */
+function raisedOf(value) {
+  if (value === null || value === undefined || value === false || value === 0) return null;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text || /^(false|null|0)$/i.test(text)) return null;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    } catch (error) {
+      // Not JSON. Never shown as text: it may be the very words that tried
+      // to rush the reader, and those belong in `quote`, in quotation marks.
+    }
+    return {};
+  }
+  if (Array.isArray(value)) return value.length ? {} : null;
+  if (typeof value === "object") return value;
+  return value ? {} : null;
+}
+
+/**
+ * When the gate stops waiting for this card, in this machine's milliseconds,
+ * or null when nobody said. `expires_at_ms` is stamped by stream.rs at the
+ * moment of the read; `expires_in` (seconds left, approval-expiry.patch) is
+ * the fallback for a row that did not come through it.
+ */
+function expiryOf(row) {
+  const at = Number(row.expires_at_ms);
+  if (row.expires_at_ms !== undefined && row.expires_at_ms !== null && Number.isFinite(at)) return at;
+  const left = row.expires_in;
+  if (typeof left === "number" && Number.isFinite(left) && left >= 0 && left <= MAX_EXPIRES_IN_SECONDS) {
+    return Date.now() + left * 1000;
+  }
+  return null;
+}
+
+/**
+ * How long a card has left, in words: "2:13 left", or "expired", or "" when
+ * nobody said. The gate refuses the card by itself at the deadline, so this
+ * is the difference between a decision and a card that silently vanishes.
+ */
+export function expiryWords(expiresAt, now = Date.now()) {
+  if (expiresAt === null || expiresAt === undefined || !Number.isFinite(expiresAt)) return "";
+  const left = Math.ceil((expiresAt - now) / 1000);
+  if (left <= 0) return "Expired: Jarvis stopped waiting and refused it by itself.";
+  const m = Math.floor(left / 60);
+  const sec = String(left % 60).padStart(2, "0");
+  return `${m}:${sec} left to decide, then Jarvis refuses it by itself.`;
 }
 
 /**
@@ -246,9 +336,73 @@ export function quickActionable(approval) {
   return approval.risk.swipeOk === true;
 }
 
+/**
+ * Where an approval card can be answered, in the one sentence-part every
+ * desktop surface uses (F3, audit 3). It used to be "the Jarvis bar" here,
+ * "the Jarvis bar and the widget" there, and never the phone - where the
+ * same card waits on the Home screen. voice.rs has the same words for its
+ * two wake-word sentences; tests/faq.mjs holds the two together.
+ */
+export const APPROVE_WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";
+
 /** The link as last reported. */
 export function currentLink() {
   return link;
+}
+
+/**
+ * The one sentence every window uses to say what state the link is in.
+ *
+ * Four states, the phone's (HomeScreen's link line) plus the one before the
+ * first answer:
+ *
+ * - not connected, with a reason: **Offline**, red, and the first sentence of
+ *   the reason - which stream.rs now writes in plain words first.
+ * - not connected, no reason yet: **Connecting…**. Before the first hello
+ *   nothing has failed; the quickbar used to say "Jarvis is not answering on
+ *   127.0.0.1:4719" here, naming an address that may not even be the one set.
+ * - connected but stale: **Stale - reconnecting**, amber. The stream is up
+ *   and `/api/pending` could not be read, so nothing can be approved; the
+ *   quickbar and widget used to show no words at all for this, only two grey
+ *   buttons.
+ * - otherwise **Linked**.
+ *
+ * `canAct` is rule 4 in one boolean: false whenever the queue cannot be
+ * confirmed live. `short` is for a pill or a tray-sized slot.
+ */
+export function linkWords(state = link) {
+  const s = state || {};
+  if (!s.connected) {
+    if (s.error) {
+      const first = String(s.error).trim().split(/(?<=[.!?])\s/)[0].replace(/[.;]$/, "");
+      return {
+        tone: "bad",
+        short: "Offline",
+        // stream.rs now starts its reasons with a plain sentence that names
+        // Jarvis ("Jarvis is not running at ..."); an older or raw reason
+        // gets the words around it.
+        text: /^Jarvis\b/.test(first)
+          ? `Offline — ${first}. Approving is blocked until it reconnects.`
+          : `Offline — Jarvis is not answering: ${first}. Approving is blocked until it reconnects.`,
+        canAct: false,
+      };
+    }
+    return {
+      tone: "warn",
+      short: "Connecting…",
+      text: "Connecting to Jarvis… Approving is blocked until it connects.",
+      canAct: false,
+    };
+  }
+  if (s.stale !== false) {
+    return {
+      tone: "warn",
+      short: "Catching up…",
+      text: "Catching up… Nothing can be approved until it has.",
+      canAct: false,
+    };
+  }
+  return { tone: "ok", short: "Connected", text: "Connected", canAct: true };
 }
 
 /** The interruption budget as last reported. */
@@ -406,18 +560,28 @@ export async function decide(id, approved, optionId = null) {
 }
 
 /**
+ * Opens the Jarvis bar on a waiting card ("Open the card", card-link.js).
+ * DECIDES NOTHING: the bar is where Deny and Approve are, and it sits
+ * behind App lock, so Windows Hello is asked first when the lock is on.
+ * `id` names the card to show; without one (or once it is gone) the bar
+ * shows the first card waiting.
+ */
+export async function openCardInBar(id = null) {
+  if (!IS_TAURI) throw new Error("no desktop app to open the Jarvis bar in");
+  const args = id === null || id === undefined ? {} : { id: String(id) };
+  return TAURI.core.invoke("open_approval_in_quickbar", args);
+}
+
+/**
  * Sends a note before the first decision - docs/AUTONOMY-PROPOSALS.md §3b.
  *
  * This is NOT a decision and approves nothing - `amend_approval` is a
- * distinct, unconfirmed route from `decide_approval` on purpose, so a
- * backend that has not implemented it yet fails this call rather than
- * silently approving or denying anything. The expected result is a NEW
- * proposal for the same id, delivered the normal way through
- * `approvals-changed` - this function only sends the note; it does not wait
- * for or apply the new plan itself.
+ * distinct route from `decide_approval` on purpose, so a backend that has not
+ * implemented it fails this call rather than approving or denying anything.
  *
- * Route name and shape are marked DRAFT in the design doc - confirm against
- * the real `jarvis_hud.py` before this is load-bearing.
+ * Served by `backend/task-control.patch`. The server keeps the note WITH the
+ * card - the card itself does not change - and hands it to the model
+ * together with the owner's answer, whichever answer that is.
  */
 export async function amend(id, note) {
   if (!IS_TAURI) throw new Error("no desktop backend to send the note to");
@@ -440,12 +604,11 @@ export async function amend(id, note) {
  * stopping "whatever Jarvis is doing right now" needs its own signal to the
  * server, not a local abort that only this window can see the effect of.
  *
- * DRAFT, same standing as `amend()` above: `jarvis_gate.py`/`jarvis_hud.py`
- * are not in this repository, so `pause_task`/`resume_task`/`stop_task`/
- * `inject_task_note` are not routes confirmed to exist yet. Calling any of
- * these against a backend that has not added them fails honestly (the
- * command errors, same as any other Tauri call to an unimplemented route)
- * rather than silently doing nothing.
+ * Served by `backend/task-control.patch` (see backend/README.md). A backend
+ * without that patch answers 404, and the command says so rather than
+ * silently doing nothing. Resume does not carry on by itself: the server
+ * raises an approval card listing the steps left, and runs them only if
+ * that card is approved.
  *
  * None of the four takes a task id: this project's own chat state already
  * treats "the current turn" as singular (`cancel_chat` takes none either),
@@ -459,6 +622,16 @@ export async function pauseTask() {
 
 export async function resumeTask() {
   if (!IS_TAURI) throw new Error("no desktop backend to send that to");
+  // The one task control that makes something GO again, so it is held to
+  // rule 4 like a decision: not on a stream that cannot be confirmed live.
+  // (It only raises an approval card - but that card should be answered by
+  // someone looking at a live queue.) Pause, Stop and notes are not gated:
+  // the moment you most want Stop is the moment the link is misbehaving.
+  if (link.stale) {
+    throw new Error(
+      "the event stream is offline, so resuming is held until it reconnects - Stop still works"
+    );
+  }
   return TAURI.core.invoke("resume_task");
 }
 
@@ -480,8 +653,47 @@ export function reconnect() {
   });
 }
 
-/** Every theme `theme.css` defines, in the order the picker lists them. */
-export const THEMES = ["deep-space", "ember", "paper", "high-contrast"];
+/**
+ * Every theme `theme.css` defines, in the order the picker lists them.
+ *
+ * The phone's three (`Themes.kt`'s `ALL`), under the phone's names - the ids
+ * are the desktop's old ones so a saved choice keeps working. Ember was a
+ * fourth and is gone, as it went on the phone; see `normaliseTheme`.
+ */
+export const THEMES = ["deep-space", "paper", "high-contrast"];
+
+/**
+ * What the pickers say about each theme. Names and one-line descriptions are
+ * the phone's own (Themes.kt `label` / `blurb`), so the two apps read the
+ * same. `dark` decides which way the accent walks and which themes can be
+ * "the theme for dark mode".
+ */
+export const THEME_INFO = {
+  "deep-space": {
+    label: "Reactor",
+    blurb: "The default. Cool near-black, built around the reactor's own light.",
+    dark: true,
+  },
+  paper: {
+    label: "Daylight",
+    blurb: "Light chrome for reading outdoors. The reactor keeps its dark well.",
+    dark: false,
+  },
+  "high-contrast": {
+    label: "High Contrast",
+    blurb: "Maximum legibility. Flat surfaces, strong borders, two text weights.",
+    dark: true,
+  },
+};
+
+/**
+ * A stored theme id as this build reads it. Ember, removed to match the
+ * phone, and anything else this build does not ship is Reactor - the phone's
+ * `Themes.byId` does the same. commands.rs `normalise_theme` is the Rust twin.
+ */
+export function normaliseTheme(name) {
+  return THEMES.includes(name) ? name : THEMES[0];
+}
 
 /**
  * Applies a theme to this window and remembers it for the next paint.
@@ -493,13 +705,16 @@ export const THEMES = ["deep-space", "ember", "paper", "high-contrast"];
  * high-contrast because they need it, the surface they use most ignored them.
  */
 export function applyTheme(name) {
-  const theme = THEMES.includes(name) ? name : THEMES[0];
+  const theme = normaliseTheme(name);
   document.documentElement.setAttribute("data-theme", theme);
   try {
     localStorage.setItem("jarvis.theme", theme);
   } catch (error) {
     /* the store is the source of truth; this is only the anti-flash cache */
   }
+  // The accent is worked out against this theme's own surfaces, so it has to
+  // be worked out again for the new one.
+  paintAppearance();
   return theme;
 }
 
@@ -507,7 +722,8 @@ export function applyTheme(name) {
  * Subscribes this window to the theme, and reads the current one once.
  *
  * Safe to call from any surface. The inline bootstrap in each page has already
- * painted from localStorage, so this only corrects a disagreement.
+ * painted from localStorage, so this only corrects a disagreement. Also
+ * subscribes the window to the owner's state colours - see followAppearance.
  */
 export function followTheme(onChange) {
   if (!IS_TAURI) return;
@@ -522,6 +738,210 @@ export function followTheme(onChange) {
       if (onChange) onChange(theme);
     })
     .catch((error) => console.error("[jarvis] could not read the theme:", error));
+  followAppearance();
+}
+
+/* ==========================================================================
+   The owner's state colours in the chrome
+   --------------------------------------------------------------------------
+   The phone derives its accent from the idle state's bound colour
+   (Chrome.kt `accentFor`), so re-rolling idle to violet turns the caret, the
+   focus ring and the selected tab violet. Chrome.kt says the desktop does the
+   same; until now it did not - `--accent` and every `--state-*` were fixed per
+   theme, and only the tray icon followed the bindings. This is the port.
+
+   Only states the owner has bound are applied (appearance_colours returns
+   nothing for the rest), so an untouched install keeps the colours theme.css
+   measured. `--state-standby` is never overridden: theme.css declares it as a
+   deliberate divergence from the spec, for contrast.
+   ========================================================================== */
+
+/** WCAG relative luminance of `[r, g, b]` (0-255). */
+function luminance([r, g, b]) {
+  const lin = (c) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** WCAG contrast ratio, 1..21. */
+export function contrast(a, b) {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** `#rrggbb` to `[r, g, b]`, or null. */
+export function hexRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** `rgb(...)`/`rgba(...)`/`#hex` to `[r, g, b, a]`, or null. */
+function parseColour(text) {
+  const hex = hexRgb(text);
+  if (hex) return [...hex, 1];
+  const m = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)/i.exec(
+    String(text || "")
+  );
+  if (!m) return null;
+  let a = m[4] === undefined ? 1 : parseFloat(m[4]);
+  if (String(m[4] || "").endsWith("%")) a /= 100;
+  return [Number(m[1]), Number(m[2]), Number(m[3]), a];
+}
+
+/** A translucent surface as it lands over a solid backdrop. */
+function over([r, g, b, a], [br, bg, bb]) {
+  return [r * a + br * (1 - a), g * a + bg * (1 - a), b * a + bb * (1 - a)];
+}
+
+/**
+ * Walks a colour along its own palette family until it is legible.
+ *
+ * `grounds` are the surface as it composites over black AND over white,
+ * because these windows are transparent (theme.css's contrast rule): a colour
+ * has to clear `floor` against both. Dark themes walk toward the pale end,
+ * light ones toward the deep end, exactly as Chrome.kt `accentFor` does, and
+ * the walk never leaves the family - the hue is what the owner chose. A
+ * colour outside the palette is nudged toward white or black instead.
+ * Pure, so tests/theme-follow.mjs can check it without a browser.
+ */
+export function legibleColour(entry, grounds, { dark = true, floor = 4.5 } = {}) {
+  const worst = (rgb) => Math.min(...grounds.map((g) => contrast(rgb, g)));
+  const ramp = Array.isArray(entry && entry.ramp) ? entry.ramp.map(hexRgb).filter(Boolean) : [];
+  const own = hexRgb(entry && entry.hex);
+  if (ramp.length && Number.isInteger(entry.step)) {
+    const start = Math.max(0, Math.min(ramp.length - 1, entry.step));
+    const up = [];
+    const down = [];
+    for (let i = start; i < ramp.length; i += 1) up.push(i);
+    for (let i = start - 1; i >= 0; i -= 1) down.push(i);
+    const order = dark ? [...up, ...down] : [start, ...down, ...up.slice(1)];
+    for (const i of order) {
+      if (worst(ramp[i]) >= floor) return { rgb: ramp[i], index: i, ramp };
+    }
+    let best = start;
+    for (let i = 0; i < ramp.length; i += 1) if (worst(ramp[i]) > worst(ramp[best])) best = i;
+    return { rgb: ramp[best], index: best, ramp };
+  }
+  if (!own) return null;
+  const toward = dark ? [255, 255, 255] : [0, 0, 0];
+  let out = own;
+  for (let k = 0; k <= 1.0001; k += 0.05) {
+    out = own.map((c, i) => Math.round(c + (toward[i] - c) * k));
+    if (worst(out) >= floor) break;
+  }
+  return { rgb: out, index: null, ramp: [] };
+}
+
+const css = ([r, g, b]) => `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+const cssA = ([r, g, b], a) => `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
+
+/**
+ * The custom properties the owner's colours set on this window, given the
+ * theme's surfaces. Pure: `colours` is appearance_colours' answer.
+ */
+export function appearanceProperties(colours, { grounds, dark = true, strict = false, textOnAccent = [] }) {
+  const props = {};
+  if (!colours || typeof colours !== "object") return props;
+  for (const [state, entry] of Object.entries(colours)) {
+    // The one declared divergence in theme.css - see its note.
+    if (state === "standby") continue;
+    // A status dot is non-text: 3:1, the same floor theme.css holds them to.
+    const dot = legibleColour(entry, grounds, { dark, floor: 3 });
+    if (dot) props[`--state-${state}`] = css(dot.rgb);
+  }
+  const idle = colours.idle;
+  if (idle) {
+    // High Contrast holds every text pair to 7:1, the others to 4.5:1.
+    const accent = legibleColour(idle, grounds, { dark, floor: strict ? 7 : 4.5 });
+    if (accent) {
+      const a = accent.rgb;
+      // One step further from the surface than the accent itself, for text.
+      let bright = a;
+      if (accent.ramp.length && accent.index !== null) {
+        const next = dark ? accent.index + 1 : accent.index - 1;
+        if (next >= 0 && next < accent.ramp.length) bright = accent.ramp[next];
+      }
+      props["--accent"] = css(a);
+      props["--accent-rgb"] = `${Math.round(a[0])} ${Math.round(a[1])} ${Math.round(a[2])}`;
+      props["--accent-bright"] = css(bright);
+      props["--accent-text"] = css(bright);
+      props["--accent-dim"] = cssA(a, 0.32);
+      props["--accent-faint"] = cssA(a, dark ? 0.12 : 0.1);
+      props["--border-accent"] = cssA(a, 0.34);
+      props["--edge-active"] = cssA(a, 0.65);
+      props["--focus-ring"] = css(bright);
+      props["--glow-accent"] = `0 0 0 1px ${cssA(a, 0.32)}, 0 0 22px ${cssA(a, 0.18)}`;
+      // Whichever reads best ON the accent: the theme's own ink, or plain
+      // near-black / white.
+      const inks = [...textOnAccent, [4, 7, 12], [255, 255, 255]];
+      let ink = inks[0];
+      for (const c of inks) if (contrast(c, a) > contrast(ink, a)) ink = c;
+      props["--text-on-accent"] = css(ink);
+    }
+  }
+  return props;
+}
+
+let appearanceColours = null;
+let appearanceProps = [];
+let appearanceFollowed = false;
+
+/** Re-applies the last colours read, against the theme now showing. */
+function paintAppearance() {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  // Back to the theme's own values first, so what theme.css says for THIS
+  // theme is what gets measured.
+  for (const name of appearanceProps) root.style.removeProperty(name);
+  appearanceProps = [];
+  if (!appearanceColours || !Object.keys(appearanceColours).length) return;
+  const style = getComputedStyle(root);
+  const surface = parseColour(style.getPropertyValue("--surface-1")) || [10, 17, 25, 1];
+  const theme = root.getAttribute("data-theme") || THEMES[0];
+  const info = THEME_INFO[theme] || THEME_INFO[THEMES[0]];
+  const ink = parseColour(style.getPropertyValue("--text-on-accent"));
+  const props = appearanceProperties(appearanceColours, {
+    grounds: [over(surface, [0, 0, 0]), over(surface, [255, 255, 255])],
+    dark: info.dark,
+    strict: theme === "high-contrast",
+    textOnAccent: ink ? [ink.slice(0, 3)] : [],
+  });
+  for (const [name, value] of Object.entries(props)) {
+    root.style.setProperty(name, value);
+    appearanceProps.push(name);
+  }
+}
+
+function readAppearanceColours() {
+  if (!IS_TAURI) return;
+  TAURI.core
+    .invoke("appearance_colours")
+    .then((colours) => {
+      appearanceColours = colours && typeof colours === "object" ? colours : null;
+      paintAppearance();
+    })
+    .catch(() => {
+      /* an older shell without the command: keep the theme's own colours */
+    });
+}
+
+/**
+ * Makes this window's accent and state dots follow the owner's state colours,
+ * and keeps them following. Called by followTheme, so every window that
+ * follows the theme follows these too. Reads from memory
+ * (`appearance_colours`), never the network, so it is safe to re-read on every
+ * `appearance-changed`.
+ */
+export function followAppearance() {
+  if (!IS_TAURI || appearanceFollowed) return;
+  appearanceFollowed = true;
+  TAURI.event.listen("appearance-changed", () => readAppearanceColours());
+  readAppearanceColours();
 }
 
 /* ==========================================================================
@@ -529,7 +949,7 @@ export function followTheme(onChange) {
    ========================================================================== */
 
 /** The steps Ctrl+= and Ctrl+- walk, and the one Ctrl+0 returns to. */
-const ZOOM_STEPS = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
+export const ZOOM_STEPS = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
 const ZOOM_KEY = "jarvis.zoom";
 
 function storedZoom() {
@@ -593,6 +1013,16 @@ export function followZoom(onChange) {
     if (onChange) requestAnimationFrame(() => requestAnimationFrame(() => onChange(zoom)));
   };
   apply(storedZoom());
+
+  // Settings' Text size buttons write the same key from another window. The
+  // `storage` event fires in every OTHER same-origin document when that
+  // happens, which is exactly the set of windows that need to follow - the
+  // one that wrote it has already applied it. (A browser-standard event; not
+  // yet seen on the owner's machine, so the key is also re-read on load.)
+  window.addEventListener("storage", (event) => {
+    if (event.key !== ZOOM_KEY) return;
+    apply(storedZoom());
+  });
 
   window.addEventListener("keydown", (event) => {
     if (!event.ctrlKey || event.altKey || event.metaKey) return;

@@ -132,6 +132,8 @@ stays authoritative, because owner verification is a security control and
 barge-in is a comfort. Barge-in degrades to headphones-only, detected via
 `AudioManager`. But it is your call and your file.
 
+*Since then (2026-09-24):* phone barge-in is no longer headphones-only. While Jarvis is speaking, the "hey Jarvis" listener (`WakeWordService.kt`, `listenWhileAnswering`) records on `VOICE_COMMUNICATION` with Android's echo canceller switched on, and the reply is played on the voice-call path the canceller works with. It is on by default only on phones that have an echo canceller (`BargeIn.enabled` in `StopWord.kt`). The talk button and "Train my voice" still record on `VOICE_RECOGNITION`. Not yet measured on a real phone: the voice print was trained on `VOICE_RECOGNITION` clips, so a sentence recorded on the call path may score lower in the PC's voice check (a refusal, never a false pass).
+
 Desktop barge-in is unaffected — it goes through Silero VAD via sherpa-onnx,
 0.33% of one core, no AEC problem because the desktop can reference the
 playback buffer directly.

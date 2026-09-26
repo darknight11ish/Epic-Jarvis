@@ -1,5 +1,14 @@
 """WebSocket endpoint for the Jarvis Mobile Android client.
 
+LEGACY - NOT USED BY JARVIS. Nothing in Jarvis imports or starts this file.
+It serves the WebSocket protocol of the older `jarvis-android` app, which
+the real backend never spoke (the top-level CLAUDE.md, "What this project
+is"); `jarvis-client` talks to the backend over docs/JARVIS-API.md instead.
+It is kept for reference, not deleted - that is the owner's call. Do not
+wire it into anything. If it is ever run: bind it to 127.0.0.1 and ALWAYS
+pass `auth_token` - with no token, anything that can reach the port can
+connect and answer approval requests (security audit L6, 2026-09-25).
+
 Drop-in for a desktop server already built on ``http.server``. No third-party
 dependencies: ``BaseHTTPRequestHandler`` cannot speak WebSocket, so this hijacks
 the connection after the 101 response and implements RFC 6455 framing directly.
@@ -12,7 +21,7 @@ Wire up in your handler's ``do_GET``::
 
     ENDPOINT = MobileEndpoint(
         verifier=ApprovalVerifier(secret=os.environ["JARVIS_SHARED_SECRET"]),
-        auth_token=os.environ.get("JARVIS_AUTH_TOKEN"),
+        auth_token=os.environ["JARVIS_AUTH_TOKEN"],     # required, never optional
     )
 
     class Handler(BaseHTTPRequestHandler):
@@ -24,7 +33,8 @@ Wire up in your handler's ``do_GET``::
                 return
             ...
 
-Serve it from ``ThreadingHTTPServer``; each phone occupies one thread.
+Serve it from ``ThreadingHTTPServer`` bound to ``127.0.0.1`` (never
+``0.0.0.0``); each phone occupies one thread.
 """
 
 from __future__ import annotations

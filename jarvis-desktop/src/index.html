@@ -18,7 +18,7 @@
     <script>
       try {
         var t = localStorage.getItem("jarvis.theme");
-        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+        if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
           document.documentElement.setAttribute("data-theme", t);
         }
       } catch (e) {
@@ -130,26 +130,49 @@
                 d="M4 7.25a.75.75 0 0 0-1.5 0 5.5 5.5 0 0 0 4.75 5.451V14.5H6a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5H8.75v-1.799A5.5 5.5 0 0 0 13.5 7.25a.75.75 0 0 0-1.5 0 4 4 0 0 1-8 0Z"
               />
             </svg>
-            <span class="sr-only">Hold to talk to Jarvis</span>
+            <!-- The button's name. main.js setAutoListening rewrites it, so a
+                 screen reader is not told to hold a button that no longer
+                 responds to being held. -->
+            <span class="sr-only" id="mic-label">Hold to talk to Jarvis - hold Space or Enter, speak, then let go</span>
           </button>
 
-          <!-- Switches #mic between push-to-talk and automatic listening.
-               Off by default: automatic listening has never run against a
-               real microphone, and push-to-talk is the control anyone
-               already understands the first time they see it. -->
+          <!-- Switches #mic between push-to-talk and listening for "hey
+               Jarvis". Off by default. The first time, turning it on asks
+               for the approval card instead of opening the microphone (the
+               PC's wake word is off until you approve it). It has never run
+               against a real microphone. -->
           <button
             id="voice-auto"
             class="icon-button"
             type="button"
             aria-pressed="false"
-            title="Listen automatically, without holding the mic button"
+            title='Listen for "hey Jarvis" instead of holding the mic button'
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path
                 d="M2 8a6 6 0 1 1 12 0A6 6 0 0 1 2 8Zm6-4.25A4.25 4.25 0 1 0 8 12.25 4.25 4.25 0 0 0 8 3.75ZM8 6.5A1.5 1.5 0 1 1 8 9.5 1.5 1.5 0 0 1 8 6.5Z"
               />
             </svg>
-            <span class="sr-only">Toggle automatic listening</span>
+            <span class="sr-only">Toggle listening for "hey Jarvis"</span>
+          </button>
+
+          <!-- Temporary chat (the owner's decision, 2026-09-25): while it is
+               pressed, Jarvis uses and learns nothing from memory and the PC
+               keeps nothing of the chat. Turning it on or off starts a new
+               conversation. answer-memory.js. -->
+          <button
+            id="temporary"
+            class="icon-button"
+            type="button"
+            aria-pressed="false"
+            title="Start a temporary chat: Jarvis won't use or learn from your memory, and it isn't kept"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M8 1.75c-2.9 0-5 2.2-5 5.1v6.9l1.7-1.2 1.6 1.2L8 12.5l1.7 1.25 1.6-1.2 1.7 1.2V6.85c0-2.9-2.1-5.1-5-5.1Z" />
+              <circle cx="6.1" cy="6.8" r="0.9" />
+              <circle cx="9.9" cy="6.8" r="0.9" />
+            </svg>
+            <span class="sr-only">Temporary chat</span>
           </button>
 
           <button
@@ -174,6 +197,14 @@
            never grow past the window's 720px clamp and hide the Approve and
            Deny buttons below the cut. -->
       <div class="stack" id="stack">
+        <!-- The marker for a whole temporary chat, and its one line while
+             the chat is still empty (answer-memory.js). -->
+        <div class="temporary-strip" id="temporary-strip" role="status" hidden>
+          <strong class="temporary-label" id="temporary-label">Temporary chat</strong>
+          <span class="temporary-line" id="temporary-line"></span>
+          <span class="temporary-refused" id="temporary-refused" hidden></span>
+        </div>
+
         <div class="attachments" id="attachments" hidden>
           <div class="attachment" id="attachment-capture" hidden>
             <img id="capture-thumb" alt="Desktop capture attached to the next prompt" />
@@ -187,6 +218,19 @@
               </svg>
               <span class="sr-only">Remove capture</span>
             </button>
+          </div>
+
+          <!-- Shown instead of sending, when the local model cannot see (or
+               could not be checked to see) the attached picture. main.js,
+               "A picture, and a model that may not see it". -->
+          <div class="picture-notice" id="picture-notice" role="group"
+               aria-labelledby="picture-notice-text" hidden>
+            <p class="picture-notice-text" id="picture-notice-text"></p>
+            <div class="picture-notice-actions">
+              <button class="text-button" type="button" id="picture-text-only">Send without the picture</button>
+              <button class="text-button" type="button" id="picture-anyway" hidden>Send it anyway</button>
+              <button class="text-button" type="button" id="picture-keep">Not now</button>
+            </div>
           </div>
 
           <div class="attachment attachment-text" id="attachment-clipboard" hidden>
@@ -254,7 +298,7 @@
           <ul class="primer-list">
             <li>
               <span class="primer-keys" data-hotkey="toggle_quickbar"><kbd>Alt</kbd>+<kbd>Space</kbd></span>
-              <span>Summon or dismiss this bar, from anywhere</span>
+              <span>Show or hide the Jarvis bar, from anywhere</span>
             </li>
             <li>
               <span class="primer-keys" data-hotkey="capture_screen"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></span>
@@ -266,19 +310,34 @@
             </li>
             <li>
               <span class="primer-keys" data-hotkey="quick_note"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span>
-              <span>Summon the bar ready to file a Logseq journal note</span>
+              <span>Open the Jarvis bar ready to file a note (Logseq, or the first note app that is set up)</span>
             </li>
             <li>
               <span class="primer-keys" data-hotkey="toggle_widget"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></span>
               <span>Show or hide the desktop widget</span>
             </li>
             <li>
-              <span class="primer-keys"><code>#log</code></span>
-              <span>File the answer in the Logseq daily journal</span>
+              <span class="primer-keys" data-hotkey="stop_everything"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></span>
+              <span>Stop everything: Jarvis stops talking and stops anything it is doing, at once</span>
             </li>
-            <li>
+            <!-- Only the note apps the PC says are set up are shown (main.js
+                 syncNotePrimer). Until it answers, none are - and the last
+                 row says why. -->
+            <li data-note-target="logseq" hidden>
+              <span class="primer-keys"><code>#log</code></span>
+              <span>File what you type in today's Logseq journal</span>
+            </li>
+            <li data-note-target="joplin" hidden>
               <span class="primer-keys"><code>#joplin</code></span>
-              <span>File it in the Joplin vault, or search it</span>
+              <span>File what you type as a new Joplin note</span>
+            </li>
+            <li data-note-target="obsidian" hidden>
+              <span class="primer-keys"><code>#obs</code></span>
+              <span>File what you type in today's Obsidian daily note</span>
+            </li>
+            <li id="note-targets-line">
+              <span class="primer-keys"><code>#</code></span>
+              <span>Checking which note apps are set up on your PC…</span>
             </li>
             <li>
               <span class="primer-keys"><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd></span>
@@ -298,9 +357,9 @@
                memory injection pins a turn local and latches it, and a cloud
                turn drops every role but the user's own words. -->
           <p class="primer-foot">
-            Nothing runs without you. Every action Jarvis wants to take stops
-            here first. Anything private stays on the local model — watch the
-            route badge, which says where each answer came from.
+            Anything risky waits here for your yes first. Anything private
+            stays on the local model — the small Local or Cloud label says
+            where each answer came from.
           </p>
         </section>
 
@@ -309,7 +368,10 @@
              the way out, on the one surface that is visible before anything has
              ever been typed — which also means a first run against a backend
              that is not up says so, instead of showing an empty box. -->
-        <div class="offline" id="offline" hidden>
+        <!-- Also shown while connected but stale: nothing can be approved in
+             either, and stale used to show no words at all. `data-tone` is
+             red for offline, amber for stale or connecting. -->
+        <div class="offline" id="offline" data-tone="bad" hidden>
           <span id="offline-text">Jarvis is not answering.</span>
           <span class="offline-actions">
             <button class="text-button" type="button" id="offline-retry">Reconnect</button>
@@ -417,8 +479,10 @@
               </svg>
             </span>
             <div class="approval-title">
-              <span class="approval-kicker" id="approval-kicker">Jarvis wants to</span>
-              <strong id="approval-action">run an action</strong>
+              <!-- One card on every screen (card-words.js): the label, then
+                   the PC's own title for it - never the code name. -->
+              <span class="approval-kicker" id="approval-kicker">Needs your OK</span>
+              <strong id="approval-action">Jarvis is asking for your approval</strong>
             </div>
             <!-- Which of how many. Answering one and having the next appear
                  instantly under the cursor, with no sense of how many are left,
@@ -460,6 +524,9 @@
             role="group"
             aria-label="Choose which version to approve"
           ></div>
+          <!-- Why Approve is missing, in words on the card. It used to be only
+               a tooltip on disabled buttons, which the keyboard cannot reach. -->
+          <p class="approval-options-why" id="approval-options-why" hidden></p>
 
           <!-- A note before the first decision - §3b. Submitting sends it
                back for a NEW proposal; it never edits the one on screen. -->
@@ -488,7 +555,13 @@
                  overlay must not be wired to a decision. Esc now puts the gate
                  aside and the hint says so. Enter still works on whichever
                  button has focus, which is simply what a button does. -->
-            <span class="approval-hint" id="approval-hint">Nothing runs until you decide.</span>
+            <!-- Two lines: the risk line (rewritten for every card) and the
+                 promise, which the risk line used to overwrite, so it never
+                 actually showed. -->
+            <span class="approval-hints">
+              <span class="approval-hint" id="approval-hint"></span>
+              <span class="approval-reassure">Nothing runs until you decide.</span>
+            </span>
             <button class="approval-button approval-deny" type="button" id="approval-deny"
                   aria-describedby="approval-hint">
               Deny
@@ -508,8 +581,13 @@
               <span id="card-status-text">Thinking…</span>
             </span>
             <div class="card-actions">
-              <span class="card-stat" id="card-stat" title="Tokens received / elapsed"></span>
+              <span class="card-stat" id="card-stat"></span>
               <button class="text-button" type="button" id="copy" title="Copy the answer">Copy</button>
+              <!-- Follow-ups carry the conversation so far (chat-history.js),
+                   so there is a plain way to start again without it. Shown
+                   only once there is one, and not while an answer is
+                   arriving. Esc clears it too, with the card. -->
+              <button class="text-button" type="button" id="new-conversation" hidden>New conversation</button>
               <button class="text-button" type="button" id="stop" title="Stop generating" hidden>Stop</button>
             </div>
           </header>
@@ -536,6 +614,43 @@
             -->
             <article class="markdown" id="answer"></article>
             <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
+            <!-- A failed answer: ONE fix button, and the technical detail for a
+                 bug report behind "Details" - scrubbed of tokens, keys,
+                 passwords, email addresses and the Windows user name first
+                 (plain-errors.js; the phone shows the same words). -->
+            <div class="answer-problem" id="answer-problem" hidden>
+              <button class="text-button" type="button" id="problem-action" hidden></button>
+              <!-- "Jarvis isn't running" only (ease-of-use audit #2): opens
+                   Settings at "Starting Jarvis for you", More options open. -->
+              <button class="text-button" type="button" id="problem-where" hidden>Show me where</button>
+              <details class="problem-details" id="problem-details" hidden>
+                <summary>Details</summary>
+                <pre class="problem-details-text" id="problem-details-text"></pre>
+              </details>
+            </div>
+            <!-- The right/wrong mark on THIS answer (feedback.patch). Shown
+                 only when the server gave the answer an id; a backend
+                 without the patch gives none, and a missing route hides it
+                 again. One answer, one mark - there is no "mark all". -->
+            <div class="answer-mark" id="answer-mark" role="group"
+                 aria-labelledby="answer-mark-q" hidden>
+              <span class="answer-mark-q" id="answer-mark-q">Was this answer right?</span>
+              <button class="text-button" type="button" id="mark-right" aria-pressed="false">Right</button>
+              <button class="text-button" type="button" id="mark-wrong" aria-pressed="false">Wrong</button>
+              <span class="answer-mark-note" id="answer-mark-note" role="status"></span>
+            </div>
+            <!-- Temporary chat: what the PC said about this answer - a
+                 "Remember:" that was not acted on, or a PC that did not
+                 confirm the chat was temporary (answer-memory.js). -->
+            <p class="answer-memory-note" id="answer-memory-note" role="status" hidden></p>
+            <!-- "Used 2 memories": the facts this answer used, by id from
+                 X-Jarvis-Route; opened, their words are read from the PC,
+                 each with Forget and Erase (answer-memory.js). -->
+            <div class="answer-used" id="answer-used" hidden>
+              <button class="text-button answer-used-line" type="button" id="answer-used-line"
+                      aria-expanded="false" aria-controls="answer-used-list"></button>
+              <div class="answer-used-list" id="answer-used-list" hidden></div>
+            </div>
           </div>
 
           <footer class="card-foot">

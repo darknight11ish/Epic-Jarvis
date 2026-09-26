@@ -2,7 +2,16 @@
  *
  * `jarvis_hud.html` is vendored byte-identical from the backend folder, so it
  * is the browser's page first and the desktop's second. This script is how the
- * desktop shell adapts it without forking it. It does two things.
+ * desktop shell adapts it without forking it.
+ *
+ * THE PAGE HOLDS NO PAIRING TOKEN (apps security audit M2, 2026-09-25). It
+ * used to be given one, here and on every page load, so any script running in
+ * the page could read it and call the whole API - `POST /api/approve`
+ * included, past Windows Hello and the stale check. Now section 1 sets the
+ * page's token to empty, and section 2c sends every request the page makes to
+ * Jarvis through Rust (src-tauri/src/hud_proxy.rs), which adds the token
+ * itself and allows only the page's own reads, its chat, and the right/wrong
+ * mark. Approve and Deny are not answered in this window at all (section 5).
  *
  * ------------------------------------------------------------------------
  * 1. Configure JARVIS before the page's first fetch
@@ -18,12 +27,11 @@
  * "a copy in this page's localStorage would be a second, staler source of the
  * token that outlives the shell's own storage".
  *
- * This comment used to say "the OS keystore". It is not in a keystore. It is
- * a bare JSON string in tauri-plugin-store's file under %APPDATA%, which the
- * uninstaller leaves behind. Saying otherwise made the storage look stronger
- * than it is to the next person reading this, which is the only audience a
- * comment has. Moving it to DPAPI is worth doing; claiming it already moved
- * was not.
+ * Where the shell holds the token, precisely: a token typed into Settings is
+ * in Windows Credential Manager, which is DPAPI-encrypted to the Windows user
+ * (token_store.rs). A token nobody typed is the backend's own, which the
+ * backend keeps in Credential Manager too (token-store.patch). It is never in
+ * this page: the base is configured here, and the token is set to empty.
  *
  * So instead: intercept the assignment. The page does
  *
@@ -50,13 +58,12 @@
  *
  * A side effect worth naming: the page's `streamUrl()` puts the token in the
  * query string, because EventSource cannot set a header. Under the shim no
- * request is made at all, so on the desktop the token never reaches a URL.
+ * request is made at all - and the page has no token to put there anyway.
  */
 (function () {
   "use strict";
 
   var BASE = __JARVIS_BASE__;
-  var TOKEN = __JARVIS_TOKEN__;
 
   /* ---------------------------------------------------------------- *
    * 1. JARVIS configuration
@@ -68,9 +75,10 @@
       // Clear anything an earlier browser session against this same origin
       // left behind, so a stale token cannot shadow the real one.
       if (typeof api.forget === "function") api.forget();
-      // The third argument is persist=false: the shell re-injects on every
-      // load and the keystore is the single source.
-      api.set(BASE, TOKEN, false);
+      // An EMPTY token, on purpose (apps security audit M2): the page's
+      // requests go through Rust, which adds the token (section 2c). The
+      // third argument is persist=false, so nothing is left in localStorage.
+      api.set(BASE, "", false);
       console.info("[jarvis] shell configured the HUD for " + (BASE || "same origin"));
     } catch (err) {
       console.error("[jarvis] shell configuration failed", err);
@@ -222,10 +230,60 @@
     });
   }
 
+  /* What the link is doing, in the words every other window uses
+   * (jarvis-link.js linkWords). The page's own #brand-sub is written once,
+   * at boot, from an Ollama probe, and then never changes - so the HUD said
+   * "online" for as long as it was open, whatever the stream did. The page
+   * is vendored and not ours to edit, and its boot() may write #brand-sub
+   * after this runs, so the link gets its own line directly under it rather
+   * than fighting over that one: the Ollama hint stays, and this is live. */
+  var lastLink = null;
+
+  function linkLine(link) {
+    var l = link || {};
+    if (!l.connected) {
+      if (!l.error) return "connecting…";
+      var first = String(l.error).trim().split(/[.!?]\s/)[0];
+      return "offline · " + first;
+    }
+    if (l.stale !== false) return "stale — reconnecting";
+    return "linked · local first";
+  }
+
+  function paintLink() {
+    var link = lastLink;
+    var root = document.documentElement;
+    if (root) {
+      // Kept for the stylesheet (hud-link.css): the link line's colour.
+      // Approve and Deny are removed here whatever the link does (section 5).
+      if (linkStale) root.classList.add("jarvis-stale");
+      else root.classList.remove("jarvis-stale");
+    }
+    var sub = document.getElementById("brand-sub");
+    if (!sub || !sub.parentNode) return;
+    var line = document.getElementById("jarvis-link-line");
+    if (!line) {
+      line = document.createElement("div");
+      line.id = "jarvis-link-line";
+      line.className = "sub";
+      line.setAttribute("role", "status");
+      sub.parentNode.insertBefore(line, sub.nextSibling);
+    }
+    line.textContent = linkLine(link);
+    line.setAttribute("data-tone", !link || !link.connected ? "bad" : linkStale ? "warn" : "ok");
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", paintLink, { once: true });
+  }
+
   function linkChanged(link) {
     // Read before the early return below, so a payload that only flips
     // `stale` (not `connected`) still updates the gate in section 4.
     linkStale = !!(link && link.stale);
+    lastLink = link || null;
+    // Every call, not only when `connected` flips: stale comes and goes
+    // while connected stays true.
+    paintLink();
     var up = !!(link && link.connected);
     if (up === linkUp) return;
     linkUp = up;
@@ -237,27 +295,40 @@
 
   /* The feed.
    *
-   * Rust pushes into this by evaluating a call to it in this webview, rather
-   * than the page subscribing over Tauri's IPC — because it cannot. This page
-   * carries its own Content-Security-Policy meta tag, and its `connect-src`
-   * lists the backend's loopback origins and nothing else. Tauri's IPC on
-   * Windows is a fetch to http://ipc.localhost, so every `invoke` and every
-   * `listen` from this page is blocked by that policy before it leaves the
-   * webview. An eval from the host is not a fetch and is not subject to it.
-   *
-   * (That is worth fixing in the page itself — adding `ipc: http://ipc.localhost`
-   * to its connect-src costs nothing in a browser, where neither is reachable,
-   * and it is what any future button in this page that needs the shell will
-   * require. Until then, nothing here depends on IPC.)
+   * Rust pushes into this by evaluating a call to it in this webview. This
+   * comment used to say that was because Tauri's IPC cannot work from this
+   * page, whose own Content-Security-Policy does not list
+   * http://ipc.localhost. That was wrong (apps security audit M2): when that
+   * fetch is refused, Tauri falls back to `window.ipc.postMessage`, which no
+   * CSP governs, so `invoke` works here - the mic button (2d) and every
+   * request in 2c use it. What limits this page is capabilities/hud.json.
+   * The feed stays: it hands the shell's one event stream to the
+   * EventSource shim above without a second subscription.
    */
   window.__jarvisFeed = function (channel, payload) {
     try {
       if (channel === "event") deliver(payload);
       else if (channel === "link") linkChanged(payload);
+      else if (channel === "appearance") appearanceChanged(payload);
     } catch (err) {
       console.error("[jarvis] feed failed", err);
     }
   };
+
+  /* The owner's appearance document - which face, which colours - for the
+   * page's reactor, which is the kit face (faces.html in display mode) in
+   * an iframe. Pushed for the same reason as everything else in this feed:
+   * this window has no app commands (capabilities/hud.json), so it cannot
+   * ask for it. Cosmetic only; it approves nothing and carries no secret.
+   *
+   * Kept on `window` as well as announced, because the push can land before
+   * the page's own script has subscribed, and a page that missed it would
+   * wear the default face until the owner next saved. */
+  function appearanceChanged(doc) {
+    if (!doc || typeof doc !== "object") return;
+    window.__jarvisAppearance = doc;
+    window.dispatchEvent(new CustomEvent("jarvis-appearance", { detail: doc }));
+  }
 
   window.EventSource = ShellEventSource;
   console.info("[jarvis] EventSource is served by the shell's single stream");
@@ -293,7 +364,11 @@
    * copy of that file from the backend needs no re-patching — the same
    * reasoning as the fonts below.
    *
-   * When the local pipeline lands, this block is what to delete.
+   * The local pipeline has landed - on the quickbar, not here (voice.rs:
+   * the microphone is recorded by the app and sent only to the Jarvis
+   * server on this machine). Section 2d below points this page's mic
+   * button at it. This block stays: the page must never reach for the
+   * browser recogniser again, whatever the next copy of it does.
    * ---------------------------------------------------------------- */
   try {
     delete window.SpeechRecognition;
@@ -305,65 +380,498 @@
   window.webkitSpeechRecognition = undefined;
   console.info(
     "[jarvis] Web Speech recognition is disabled: it uploads microphone " +
-      "audio from outside the CSP. Dictation waits on the local pipeline."
+      "audio from outside the CSP. The mic button opens the quickbar's " +
+      "local push-to-talk instead."
   );
 
   /* ---------------------------------------------------------------- *
-   * 2c. Approve/deny: route to the real backend, gated on the link
+   * 2d. The mic button: the quickbar's push-to-talk, not a dead button
    *
-   * jarvis_hud.html's apprDecide() is the one decision path in the file
-   * that does not go through the page's own jfetch() helper - it calls
-   * bare fetch("/api/approve" | "/api/deny", ...) with a relative URL and
-   * no JARVIS.headers(). Two consequences, both confirmed against that
-   * exact line rather than assumed:
+   * With the recogniser gone (2b) the page's mic button did nothing at
+   * all, while its tooltip still said "Hold to talk". The real, local
+   * push-to-talk lives in the quickbar (voice.rs): the app records the
+   * microphone itself and sends the clip only to the Jarvis server on
+   * this machine, which checks it is the owner's voice before turning it
+   * into words.
    *
-   *   1. A relative fetch resolves against this webview's own origin,
-   *      http://tauri.localhost - not JARVIS.url()'s backend base. Nothing
-   *      proxies tauri.localhost to the backend, so today this request
-   *      never reaches Jarvis at all on the desktop build, and it carries
-   *      no X-Jarvis-Token either: the one unauthenticated call in the
-   *      page.
-   *   2. Even reaching the backend, nothing here checks whether the
-   *      shell's event stream is stale first - the exact gate
-   *      decide_approval (commands.rs) enforces for the Quickbar and the
-   *      Widget, quoting DESKTOP-BUILD's checklist: "disable approve/deny
-   *      while the stream is stale, because answering a queue you cannot
-   *      confirm is live is how you approve something twice."
+   * This page is not given the recording commands (capabilities/hud.json).
+   * It gets one command, `summon_push_to_talk`, which shows the quickbar
+   * with its mic button focused. It records nothing: the owner then holds
+   * that mic (or Space/Enter on it) to talk, the same as always.
    *
-   * Fixed the same way as window.JARVIS and window.EventSource above:
-   * intercepted here, not in jarvis_hud.html, so the next vendored drop
-   * of that file needs no re-patching. This does not reach into Tauri's
-   * IPC - the HUD's CSP and its empty capability grant (see hud.json)
-   * both stay exactly as they are; this only stops the page's own fetch
-   * from leaving through the wrong door.
+   * A capture-phase listener takes the click before the page's own
+   * handler, which would only call the refused recogniser. The page's
+   * Space-bar shortcut is left alone: summoning a window on a key that is
+   * still held down would land the rest of the press in the quickbar.
+   * ---------------------------------------------------------------- */
+  var MIC_TITLE =
+    "Talk to Jarvis: opens the quickbar - hold its mic button to speak. " +
+    "Your voice stays on this computer.";
+
+  function hudMicNote(text) {
+    if (typeof window.addMessage === "function") {
+      try {
+        window.addMessage("system", text);
+        return;
+      } catch (err) {
+        /* fall through to the console */
+      }
+    }
+    console.warn("[jarvis] " + text);
+  }
+
+  function summonPushToTalk() {
+    var tauri = window.__TAURI__;
+    var invoke = tauri && tauri.core && tauri.core.invoke;
+    if (typeof invoke !== "function") {
+      hudMicNote(
+        "The mic works in the quickbar. Open it with its shortcut " +
+          "(Alt+Space unless you changed it) and hold the mic button."
+      );
+      return Promise.resolve(false);
+    }
+    return Promise.resolve()
+      .then(function () {
+        return invoke("summon_push_to_talk");
+      })
+      .then(function () {
+        return true;
+      })
+      .catch(function (err) {
+        hudMicNote(
+          "Could not open the quickbar's push-to-talk: " +
+            String((err && err.message) || err) +
+            ". Open the quickbar with its shortcut and hold the mic button."
+        );
+        return false;
+      });
+  }
+  window.__jarvisSummonPushToTalk = summonPushToTalk;
+
+  function wireHudMic() {
+    var mic = document.getElementById("mic");
+    if (mic) {
+      mic.title = MIC_TITLE;
+      mic.setAttribute("aria-label", MIC_TITLE);
+      mic.setAttribute("aria-pressed", "false");
+      mic.dataset.jarvisMic = "quickbar";
+    }
+    // The readout under "listening" said "unsupported", which was true of
+    // the browser recogniser and is not true of Jarvis.
+    var readout = document.getElementById("r-stt");
+    if (readout) readout.textContent = "in quickbar";
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireHudMic, { once: true });
+  } else {
+    wireHudMic();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 2e. Spoken replies: this computer's voices only
+   *
+   * The page reads every answer aloud with the browser's speech
+   * synthesis, picking a British voice by name and falling back to ANY
+   * en-GB voice. In WebView2 that list includes Microsoft's "Online
+   * (Natural)" voices, which send the text to Microsoft to be spoken - so
+   * an answer quoting an email or a file could leave the machine as
+   * speech-to-be. Each voice says which kind it is (`localService`), so
+   * the page is shown only the local ones, and an utterance that would
+   * use anything else is given a local voice or not spoken at all.
+   * ---------------------------------------------------------------- */
+  (function localVoicesOnly() {
+    var synth = window.speechSynthesis;
+    if (!synth || typeof synth.getVoices !== "function" || typeof synth.speak !== "function") return;
+    var allVoices = synth.getVoices.bind(synth);
+    var realSpeak = synth.speak.bind(synth);
+    function localVoices() {
+      return (allVoices() || []).filter(function (v) {
+        return v && v.localService === true;
+      });
+    }
+    try {
+      synth.getVoices = localVoices;
+      synth.speak = function (utterance) {
+        if (!utterance) return undefined;
+        if (utterance.voice && utterance.voice.localService !== true) utterance.voice = null;
+        if (!utterance.voice) {
+          var mine = localVoices();
+          var english = mine.filter(function (v) {
+            return /^en/i.test(v.lang || "");
+          });
+          var pick = english[0] || mine[0];
+          if (!pick) {
+            // No voice on this computer (or none loaded yet): silence, not
+            // the browser's choice, which could be an online one.
+            console.info("[jarvis] no local voice available, so this reply is not spoken");
+            return undefined;
+          }
+          utterance.voice = pick;
+        }
+        return realSpeak(utterance);
+      };
+    } catch (err) {
+      console.warn("[jarvis] could not limit speech to local voices", err);
+    }
+  })();
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      var target = event.target;
+      if (!target || !target.closest || !target.closest("#mic")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      summonPushToTalk();
+    },
+    true
+  );
+
+  /* ---------------------------------------------------------------- *
+   * 2c. Every request to Jarvis goes through Rust, which holds the token
+   *
+   * (apps security audit M2.) The page has no token (section 1), so a
+   * request it made itself would be refused. This replaces `window.fetch`
+   * for anything under /api/ and hands it to src-tauri/src/hud_proxy.rs:
+   *
+   *   - a GET goes to `hud_get`, which allows only the page's own reads
+   *     (/api/status, /graph, /pending, /initiative, /memory/pending and
+   *     /retrieve?q=) and refuses every other path before sending anything;
+   *   - POST /api/chat goes to `hud_chat`, streamed back over a channel and
+   *     rebuilt into a streaming Response, so the page reads the answer as
+   *     it always has. Its AbortController still stops it (`hud_chat_cancel`).
+   *   - /api/approve and /api/deny are refused here, stale link or not:
+   *     approvals are answered in the Jarvis bar or the widget, through
+   *     decide_approval, with Windows Hello and the stale check (section 5).
+   *   - memory writes are refused (the Brain decides memory);
+   *   - anything else under /api/ is refused.
+   *
+   * Everything that is not under /api/ (fonts, the stylesheet) is fetched
+   * as before. Outside the desktop (no __TAURI__) the page is not changed.
    * ---------------------------------------------------------------- */
   var realFetch = window.fetch ? window.fetch.bind(window) : null;
-  if (realFetch) {
-    window.fetch = function (input, init) {
-      var path = typeof input === "string" ? input : "";
-      if (path === "/api/approve" || path === "/api/deny") {
-        if (linkStale) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                ok: false,
-                error:
-                  "the event stream is stale, so the approval queue cannot " +
-                  "be confirmed live - nothing can be answered until it reconnects",
-              }),
-              { status: 200, headers: { "Content-Type": "application/json" } }
-            )
-          );
-        }
-        var jarvis = window.JARVIS;
-        if (jarvis && typeof jarvis.url === "function") {
-          var merged = Object.assign({}, init);
-          merged.headers = jarvis.headers(init && init.headers);
-          return realFetch(jarvis.url(path), merged);
+  var tauriCore = window.__TAURI__ && window.__TAURI__.core;
+  var shellInvoke =
+    tauriCore && typeof tauriCore.invoke === "function" ? tauriCore.invoke.bind(tauriCore) : null;
+  var ShellChannel = tauriCore && tauriCore.Channel;
+  // Memory is decided in the Brain window, and only there: its cards warn
+  // about text that reads like a slipped-in instruction, offer "Both are
+  // true", say "would replace" only when something really is replaced, and
+  // refuse while the link is stale. This page's own copy of those cards had
+  // none of that. The page no longer draws them (jarvis_hud.html), and a
+  // later copy of the page that brings them back still cannot send one:
+  // every memory write from this page is refused here, stale link or not.
+  // Reads (/api/memory/pending, /status, /facts) pass untouched. The
+  // "Always keep in mind" route (/api/memory/profile) is refused whole -
+  // its POST pins a fact, and this page never reads the list.
+  var MEMORY_WRITE =
+    /\/api\/memory\/(decide|keep_both|forget|erase|edit|learning|sleep_time|profile)(\?|$)/;
+  var APPROVAL = /^\/api\/(approve|deny)(\?|$)/;
+
+  function jsonReply(status, body) {
+    return Promise.resolve(
+      new Response(JSON.stringify(body), {
+        status: status,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+  }
+
+  /* The /api/... path and query of a request, or null for anything else. */
+  function apiPath(target) {
+    var url;
+    try {
+      url = new URL(String(target), window.location.href);
+    } catch (err) {
+      return null;
+    }
+    if (url.pathname.indexOf("/api/") !== 0) return null;
+    return url.pathname + url.search;
+  }
+
+  function abortReason(signal) {
+    return signal && signal.reason !== undefined
+      ? signal.reason
+      : new DOMException("The operation was aborted.", "AbortError");
+  }
+
+  function replyHeaders(contentType, route) {
+    var headers = new Headers();
+    if (contentType) headers.set("Content-Type", contentType);
+    if (route) {
+      try {
+        headers.set("X-Jarvis-Route", route);
+      } catch (err) {
+        /* not a valid header value: the page shows no route, as before */
+      }
+    }
+    return headers;
+  }
+
+  function okStatus(status) {
+    return status >= 200 && status <= 599 ? status : 502;
+  }
+
+  function shellGet(path) {
+    return shellInvoke("hud_get", { path: path }).then(
+      function (reply) {
+        var status = okStatus(reply && reply.status);
+        var empty = status === 204 || status === 205 || status === 304;
+        return new Response(empty ? null : String((reply && reply.body) || ""), {
+          status: status,
+          headers: replyHeaders(reply && reply.contentType, reply && reply.route),
+        });
+      },
+      function (err) {
+        // A fetch that could not reach the server rejects with a TypeError.
+        throw new TypeError(String((err && err.message) || err));
+      }
+    );
+  }
+
+  function shellChat(init) {
+    var body = null;
+    try {
+      body = JSON.parse(init && typeof init.body === "string" ? init.body : "null");
+    } catch (err) {
+      body = null;
+    }
+    var signal = init && init.signal;
+    return new Promise(function (resolve, reject) {
+      if (signal && signal.aborted) {
+        reject(abortReason(signal));
+        return;
+      }
+      var controller = null;
+      var stream = new ReadableStream({
+        start: function (c) {
+          controller = c;
+        },
+      });
+      var encoder = new TextEncoder();
+      var headed = false;
+      var over = false;
+      function finish() {
+        if (over) return;
+        over = true;
+        if (signal) signal.removeEventListener("abort", onAbort);
+      }
+      function fail(err) {
+        if (over) return;
+        finish();
+        if (!headed) reject(err);
+        else {
+          try {
+            controller.error(err);
+          } catch (e) {
+            /* already closed */
+          }
         }
       }
-      return realFetch(input, init);
+      function onAbort() {
+        shellInvoke("hud_chat_cancel").catch(function () {});
+        fail(abortReason(signal));
+      }
+      if (signal) signal.addEventListener("abort", onAbort, { once: true });
+      var channel = new ShellChannel();
+      channel.onmessage = function (raw) {
+        if (over) return;
+        var frame = null;
+        try {
+          frame = JSON.parse(raw);
+        } catch (err) {
+          frame = null;
+        }
+        if (!frame) return;
+        if (frame.kind === "head" && !headed) {
+          headed = true;
+          resolve(
+            new Response(stream, {
+              status: okStatus(frame.status),
+              headers: replyHeaders(frame.contentType, frame.route),
+            })
+          );
+        } else if (frame.kind === "data" && headed) {
+          controller.enqueue(encoder.encode(String(frame.text || "")));
+        } else if (frame.kind === "end" && headed) {
+          finish();
+          controller.close();
+        }
+      };
+      shellInvoke("hud_chat", { body: body, onEvent: channel }).then(
+        function () {
+          if (over) return;
+          if (!headed) {
+            fail(new TypeError("the Jarvis server sent no answer"));
+            return;
+          }
+          // The reply can arrive before the channel's last frames: give
+          // them a moment, then close whatever has come.
+          setTimeout(function () {
+            if (over) return;
+            finish();
+            controller.close();
+          }, 1500);
+        },
+        function (err) {
+          fail(new TypeError(String((err && err.message) || err)));
+        }
+      );
+    });
+  }
+
+  if (realFetch && shellInvoke && ShellChannel) {
+    window.fetch = function (input, init) {
+      var isRequest = typeof Request !== "undefined" && input instanceof Request;
+      var target = isRequest ? input.url : input;
+      var path = apiPath(target);
+      if (path === null) return realFetch(input, init);
+      var method = String((init && init.method) || (isRequest && input.method) || "GET").toUpperCase();
+      if (MEMORY_WRITE.test(path)) {
+        return jsonReply(403, {
+          ok: false,
+          error:
+            "memory is decided in the Brain window's Memory tab, not here - " +
+            "nothing was sent",
+        });
+      }
+      if (APPROVAL.test(path)) {
+        return jsonReply(403, {
+          ok: false,
+          error:
+            "approvals are answered in the Jarvis bar or the widget, not in this " +
+            "window - nothing was sent",
+        });
+      }
+      if (method === "GET" && !isRequest) return shellGet(path);
+      if (method === "POST" && path === "/api/chat" && !isRequest) {
+        return shellChat(init).then(function (res) {
+          // The answer's id rides in X-Jarvis-Route as `turn_id`
+          // (feedback.patch); section 6 puts a right/wrong mark on the
+          // answer it belongs to. Read-only: the response goes to the page
+          // untouched.
+          try {
+            var raw = res.headers.get("X-Jarvis-Route");
+            var route = raw ? JSON.parse(raw) : null;
+            var id = route && route.turn_id;
+            if (typeof id === "string" && /^[0-9a-f]{32}$/.test(id)) expectAnswer(id);
+          } catch (err) {
+            /* no id: no mark */
+          }
+          return res;
+        });
+      }
+      return jsonReply(403, {
+        ok: false,
+        error: "the HUD window cannot send that - nothing was sent",
+      });
     };
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 6. Right or wrong: the mark on one answer (feedback.patch)
+   *
+   * Under the answer the id belongs to - the next "jarvis" message the page
+   * adds to #log - two small buttons. One answer, one mark; pressing the
+   * one already on takes it back. Sent through Rust's `mark_answer` - the same
+   * command the Jarvis bar uses, which checks the id and the mark and adds
+   * the token (the page has none). A backend without the route answers
+   * 404/503, `mark_answer` says `available: false`, and the buttons remove
+   * themselves, quietly. A mark changes no memory; it only counts.
+   * ---------------------------------------------------------------- */
+  var awaitingTurn = null;
+
+  function expectAnswer(turnId) {
+    awaitingTurn = turnId;
+    var log = document.getElementById("log");
+    if (!log || typeof MutationObserver === "undefined") return;
+    var watch = new MutationObserver(function (records) {
+      for (var i = 0; i < records.length; i++) {
+        var added = records[i].addedNodes;
+        for (var j = 0; j < added.length; j++) {
+          var node = added[j];
+          if (node.nodeType === 1 && node.classList.contains("msg") && node.classList.contains("jarvis")) {
+            watch.disconnect();
+            if (awaitingTurn === turnId) attachMark(node, turnId);
+            return;
+          }
+        }
+      }
+    });
+    watch.observe(log, { childList: true });
+    // An answer that never arrives (an error) must not leave this watching.
+    setTimeout(function () { watch.disconnect(); }, 120000);
+  }
+
+  function attachMark(msg, turnId) {
+    var row = document.createElement("div");
+    row.className = "jarvis-mark";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", "Was this answer right?");
+    var q = document.createElement("span");
+    q.textContent = "Was this answer right?";
+    var right = document.createElement("button");
+    right.type = "button";
+    right.textContent = "Right";
+    var wrong = document.createElement("button");
+    wrong.type = "button";
+    wrong.textContent = "Wrong";
+    var current = "none";
+    function paint() {
+      right.setAttribute("aria-pressed", String(current === "right"));
+      wrong.setAttribute("aria-pressed", String(current === "wrong"));
+    }
+    function send(mark) {
+      var next = current === mark ? "none" : mark;
+      if (!shellInvoke) return;
+      right.disabled = wrong.disabled = true;
+      shellInvoke("mark_answer", { turnId: turnId, mark: next })
+        .then(function (reply) {
+          if (reply && reply.available === false) {
+            row.remove();
+            return;
+          }
+          current = next;
+        })
+        .catch(function () { /* leave it as it was */ })
+        .then(function () {
+          right.disabled = wrong.disabled = false;
+          paint();
+        });
+    }
+    right.addEventListener("click", function () { send("right"); });
+    wrong.addEventListener("click", function () { send("wrong"); });
+    paint();
+    row.appendChild(q);
+    row.appendChild(right);
+    row.appendChild(wrong);
+    msg.appendChild(row);
+    // Only on an answer that FINISHED. A streamed answer's message is added
+    // empty and filled as it arrives, so the mark used to appear at once -
+    // and stayed on an answer that was then cut off and labelled
+    // "[interrupted]", inviting a right/wrong verdict on half a reply. The
+    // page sets data-state="done" when the answer ends properly and
+    // "interrupted" when it does not; until then the row is hidden.
+    function settle() {
+      var st = msg.dataset ? msg.dataset.state : "";
+      if (st === "done") {
+        row.hidden = false;
+        return true;
+      }
+      if (st === "interrupted") {
+        row.remove();
+        return true;
+      }
+      row.hidden = true;
+      return false;
+    }
+    if (!settle() && typeof MutationObserver !== "undefined") {
+      var until = new MutationObserver(function () {
+        if (settle()) until.disconnect();
+      });
+      until.observe(msg, { attributes: true, attributeFilter: ["data-state"] });
+    }
   }
 
   /* ---------------------------------------------------------------- *
@@ -391,6 +899,48 @@
   }
   if (document.head) localFonts();
   else document.addEventListener("DOMContentLoaded", localFonts, { once: true });
+
+  /* ---------------------------------------------------------------- *
+   * 5. The approval cards: shown here, answered elsewhere
+   *
+   * (apps security audit M2, 2026-09-25.) The page draws each waiting
+   * approval with its own Approve and Deny. On the desktop they are
+   * removed: approvals are answered in the Jarvis bar or the widget, where
+   * `decide_approval` asks Windows Hello and refuses on a stale link. The
+   * page's own buttons posted to a relative /api/approve that never reached
+   * Jarvis, and a later "fix" pointing them at the backend would have been
+   * an approval path with neither check.
+   *
+   * Three layers, none of which decides anything: the stylesheet
+   * (hud-link.css, a file, so neither CSP objects) hides the buttons and
+   * says where to answer; a capture-phase listener stops any click on them
+   * before the page's own handler runs; and the fetch shim (2c) refuses
+   * /api/approve and /api/deny. The card itself - what is being asked,
+   * and how long is left - stays, so the owner sees it here too.
+   * ---------------------------------------------------------------- */
+  function staleSheet() {
+    if (document.getElementById("jarvis-hud-link-css")) return;
+    var link = document.createElement("link");
+    link.id = "jarvis-hud-link-css";
+    link.rel = "stylesheet";
+    link.href = "hud-link.css";
+    (document.head || document.documentElement).appendChild(link);
+  }
+  if (document.head) staleSheet();
+  else document.addEventListener("DOMContentLoaded", staleSheet, { once: true });
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+      if (!target.closest("#approvals .appr .btns button")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    },
+    true
+  );
 
   /* ---------------------------------------------------------------- *
    * 4. Relabel the "Brain" tab to "Galaxy"

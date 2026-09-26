@@ -2,8 +2,12 @@
 
 Three things are proven, not just the happy path: a denied tool never
 executes, an unclassified/ungated tool fails CLOSED rather than running
-anyway, and the final answer is streamed byte-for-byte from whatever the
-model actually said - never synthesised here.
+anyway, and the answer the app receives is exactly the words the model
+wrote - streamed as they arrive, asked for once, never synthesised here.
+
+The model's side of every streamed turn below is Ollama's REAL
+/v1/chat/completions body, built by _ollama_wire.py from Ollama's own source
+- not an invented `{"done":true}`.
 
     python3 test_agent.py
 """
@@ -13,7 +17,27 @@ import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# On a real install (JARVIS_BACKEND set), the backend's own copy must be
+# there and be this one - see _where.require_shipped.
+from _where import require_shipped  # noqa: E402
+require_shipped("jarvis_agent.py")
 import jarvis_agent as AG
+# The owner's manner line (jarvis_manner.py) has its own suite, test_manner.py;
+# this one checks the rest of the request word for word, so it is left out here.
+AG._manner_now = lambda: None
+import _ollama_wire as W  # noqa: E402
+
+# Every turn in this file would otherwise reach the default end-of-turn
+# recorder, which writes to the real audit log and may raise a real skill
+# card on the owner's machine. Captured here instead, for every test.
+RECORDED = []
+AG._record_chain = RECORDED.append
+# Likewise the default step sink (the event bus, for Brain -> Live): the real
+# one is kept for the one test that checks it, and every other turn lands
+# here instead of on whatever jarvis_events this process can import.
+REAL_PUBLISH_STEP = AG._publish_step
+PUBLISHED_STEPS = []
+AG._publish_step = PUBLISHED_STEPS.append
 
 FAILED, PASSED = [], []
 
@@ -28,15 +52,23 @@ class NoRealIO:
 
     def __enter__(self):
         self.real_post, self.real_stream = AG._post, AG._open_stream
+        self.real_get = AG._get_json
         def boom_post(*a, **k):
             raise AssertionError("a real HTTP POST ran")
         def boom_stream(*a, **k):
             raise AssertionError("a real streaming request ran")
-        AG._post, AG._open_stream = boom_post, boom_stream
+        def no_lookup(*a, **k):
+            # The context-length lookup (/api/ps, /api/show). Failing here is
+            # the "Ollama cannot say" case: the conservative default is used.
+            raise OSError("no network in this test")
+        AG._post, AG._open_stream, AG._get_json = boom_post, boom_stream, no_lookup
+        AG._CTX_CACHE.clear()
+        AG._TOOLS_CACHE.clear()
         return self
 
     def __exit__(self, *a):
         AG._post, AG._open_stream = self.real_post, self.real_stream
+        AG._get_json = self.real_get
         return False
 
 
@@ -69,6 +101,49 @@ def deny(*_a, **_k):
     return _No()
 
 
+def _events(resp):
+    """A scripted whole response, as the events Ollama would stream for it."""
+    msg = ((resp.get("choices") or [{}])[0].get("message")) or {}
+    ev = []
+    text = msg.get("content") or ""
+    if len(text) > 1:
+        half = len(text) // 2
+        ev += [("content", text[:half]), ("content", text[half:])]
+    elif text:
+        ev.append(("content", text))
+    calls = msg.get("tool_calls") or []
+    if calls:
+        ev.append(("tool_calls", [{"id": c.get("id"), "name": c["function"]["name"],
+                                   "arguments": c["function"].get("arguments")}
+                                  for c in calls]))
+    ev.append(("done", "stop"))
+    return ev
+
+
+def scripted_stream(responses, legacy=False):
+    """Like scripted_post, but each round is streamed: the opener hands back
+    Ollama's real SSE body for the next scripted response."""
+    calls = []
+    it = iter(responses)
+    def opener(url, payload):
+        calls.append(payload)
+        return W.FakeResponse(W.stream(_events(next(it)), legacy=legacy))
+    return opener, calls
+
+
+def answer_text(streamed) -> str:
+    """The words an app would show, read out of what the turn wrote."""
+    text = []
+    for line in b"".join(streamed).split(b"\n"):
+        line = line.strip()
+        if not line.startswith(b"data:") or line[5:].strip() == b"[DONE]":
+            continue
+        obj = json.loads(line[5:])
+        delta = obj["choices"][0].get("delta") or {}
+        text.append(delta.get("content") or "")
+    return "".join(text)
+
+
 def scripted_post(responses):
     """Returns a `post` that answers each call with the next scripted
     response, and records every payload it was given."""
@@ -81,30 +156,30 @@ def scripted_post(responses):
 
 
 def t_no_tool_call_streams_straight_through():
-    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
-    post, calls = scripted_post(responses)
+    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi there"}}]}]
+    opener, calls = scripted_stream(responses)
     streamed = []
-    stream_payloads = []
-    def open_stream(url, payload):
-        stream_payloads.append(payload)
-        return FakeStream([b'{"done":true}\n'])
     with NoRealIO():
         AG.run_local_turn(
-            [{"role": "user", "content": "hello"}], "qwen3:8b", ollama_url="http://x",
-            stream_out=streamed.append, post=post, gate_check=allow,
-            open_stream=open_stream)
-    check("exactly one non-streaming round trip when no tool is requested",
-          len(calls) == 1, repr(calls))
-    check("the final bytes came from the injected stream, not fabricated",
-          streamed == [b'{"done":true}\n'], repr(streamed))
-    # The bug this guards against: the loop already decided (in the round
-    # above) that this turn needs no tool. Offering `tools` again on the
-    # final streaming call lets a nondeterministic model change its mind and
-    # request a tool a second time, whose raw tool_call delta JSON would
-    # then stream to the client unexecuted and ungated - nothing here reads
-    # tool_calls out of a streamed response.
-    check("the final streaming call does not offer tools",
-          "tools" not in stream_payloads[0], repr(stream_payloads[0]))
+            [{"role": "user", "content": "hello"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
+            stream_out=streamed.append, gate_check=allow, open_stream=opener)
+    # The bug this guards against: every turn with tools on used to be
+    # generated TWICE - once whole and unseen to look for tool calls, then
+    # thrown away and generated again as a stream. Silence, then a different
+    # answer. A round that asks for no tool now IS the answer.
+    check("exactly ONE request when no tool is requested - the answer is not asked for twice",
+          len(calls) == 1, repr(len(calls)))
+    check("that one request streams", bool(calls) and calls[0]["stream"] is True, repr(calls))
+    check("the words the app gets are the model's own",
+          answer_text(streamed) == "hi there", repr(streamed))
+    blob = b"".join(streamed)
+    check("the answer ends the way Ollama ends one: a finish_reason, then [DONE]",
+          blob.rstrip().endswith(b"data: [DONE]") and b'"finish_reason":"stop"' in blob,
+          repr(blob[-200:]))
+    check("thinking is switched off on the request (reasoning_effort none)",
+          bool(calls) and calls[0].get("reasoning_effort") == "none", repr(calls))
+    check("an answer length is always set, the same for every window",
+          bool(calls) and calls[0].get("max_tokens") == AG.DEFAULT_MAX_TOKENS, repr(calls))
 
 
 def t_a_denied_tool_never_executes():
@@ -122,7 +197,7 @@ def t_a_denied_tool_never_executes():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "delete everything"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=deny,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("a denied tool call never runs the real tool", executed == [], repr(executed))
@@ -146,7 +221,7 @@ def t_an_approved_tool_actually_runs_and_feeds_back_the_result():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "what is 2+2"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=allow,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("two rounds: the tool call, then the answer using its result", len(calls) == 2)
@@ -176,7 +251,7 @@ def t_arguments_already_a_dict_does_not_crash_the_loop():
         post, calls = scripted_post(responses)
         with NoRealIO():
             AG.run_local_turn(
-                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://x",
+                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
                 stream_out=lambda b: None, post=post, gate_check=allow,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("a dict-shaped arguments value is used directly, not crashed on",
@@ -202,12 +277,15 @@ def t_arguments_as_a_json_scalar_does_not_crash_the_loop():
         post, calls = scripted_post(responses)
         with NoRealIO():
             AG.run_local_turn(
-                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://x",
+                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
                 stream_out=lambda b: None, post=post, gate_check=allow,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
-        check("a bare JSON scalar is treated as empty args, not crashed on",
-              '"value": {}' in calls[1]["messages"][-1]["content"],
-              repr(calls[1]["messages"][-1]))
+        # Since 2026-09-24 it is not turned into {} either (that is how a
+        # shell_exec card with an EMPTY command reached the owner): the
+        # model is told the arguments must be an object, and nothing runs.
+        said = calls[1]["messages"][-1]["content"]
+        check("a bare JSON scalar is refused back to the model, not run with {}",
+              "must be one JSON object" in said and '"value"' not in said, said)
     finally:
         AG.TOOLS["calculator"].execute = real
 
@@ -222,7 +300,7 @@ def t_an_unknown_tool_name_is_refused_not_guessed():
     post, calls = scripted_post(responses)
     with NoRealIO():
         AG.run_local_turn(
-            [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://x",
+            [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
             stream_out=lambda b: None, post=post, gate_check=allow,
             open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
     tool_msg = calls[1]["messages"][-1]
@@ -312,9 +390,223 @@ def t_every_tool_resolves_to_a_real_jarvis_gate_action():
     except Exception:
         return check("SKIP - jarvis_gate not importable in this environment", True)
     for tname, tool in AG.TOOLS.items():
+        if tname == "web_search":
+            # Put to the gate under its own action (jarvis_search.ACTION_SEARCH,
+            # "search_the_web", which web-search.patch gives words in _RISK), never
+            # through action_for_tool - see jarvis_agent._web_search_call.
+            continue
         lookup = tool.gate_lookup_name({}) if tool.gate_lookup_name else tname
         check(f"jarvis_gate._TOOL_ACTIONS has an entry for {tname}'s lookup name {lookup!r}",
               lookup in jarvis_gate._TOOL_ACTIONS, lookup)
+
+
+class _GateVerdict:
+    """The shape jarvis_gate.Verdict has after gate-outcome.patch: allowed,
+    tier, action, reason, request_id, outcome - built here the way check()
+    builds it for each tier (auto -> outcome "auto", notify -> "notify",
+    ask -> "approved"/"denied")."""
+    def __init__(self, allowed, tier, action, reason, outcome):
+        self.allowed, self.tier, self.action = allowed, tier, action
+        self.reason, self.outcome, self.request_id = reason, outcome, None
+
+
+def _shipped_tiers():
+    """Each tool's tier under the SHIPPED config, resolved the way the gate
+    resolves it: tool lookup name -> _TOOL_ACTIONS (as the patches add it) ->
+    [autonomy.tiers] in rebuilt/jarvis-framework.toml -> unknown_action_tier.
+    Read from the real files, not restated here."""
+    import re
+    import tomllib
+    here = Path(__file__).resolve().parent
+    cfg = tomllib.loads((here / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8"))
+    tiers = cfg["autonomy"]["tiers"]
+    unknown = cfg["autonomy"].get("unknown_action_tier", "ask")
+    mapping = {}
+    for patch in sorted(here.glob("*.patch")):
+        for m in re.finditer(r'"(jarvis_\w+?_run(?:_authenticated)?)":\s*"(\w+)"',
+                             patch.read_text(encoding="utf-8")):
+            mapping[m.group(1)] = m.group(2)
+    out = {}
+    for tname, tool in AG.TOOLS.items():
+        lookup = tool.gate_lookup_name({}) if tool.gate_lookup_name else tname
+        action = mapping.get(lookup, lookup)
+        out[tname] = (action, tiers.get(action, unknown))
+    return out
+
+
+def t_github_search_resolves_to_an_auto_tier_in_the_shipped_config():
+    """The finding this guards: github_search -> jarvis_research_run ->
+    web_research, which the shipped toml sets to "auto". If this ever stops
+    being true the test below still holds; this one just pins the fact that
+    made the code check necessary."""
+    tiers = _shipped_tiers()
+    action, tier = tiers["github_search"]
+    check("github_search resolves to web_research", action == "web_research", action)
+    check("web_research is 'auto' in the shipped config", tier == "auto", tier)
+
+
+def _valid_args(tname):
+    """The smallest arguments TOOLS[tname]'s own schema accepts. Tests about
+    the gate must not be refused earlier, for their arguments: since
+    2026-09-24 a call is checked against its schema before prepare() and the
+    gate (jarvis_agent.check_call), and `{}` for a tool with required fields
+    is now told what is missing instead of reaching a card."""
+    sample = {"string": "x", "integer": 1, "number": 1, "boolean": False, "object": {}}
+    def build(schema):
+        if schema.get("type") == "array":
+            item = schema.get("items") or {}
+            return [build(item)] if item.get("type") else ["x"]
+        if schema.get("type") == "object" and "properties" in schema:
+            return {k: build(schema["properties"][k]) for k in schema.get("required") or []}
+        if "enum" in schema:
+            return schema["enum"][0]
+        return sample.get(schema.get("type"), "x")
+    return build(AG.TOOLS[tname].parameters)
+
+
+def t_every_outbound_tool_is_refused_unless_a_person_approved():
+    """ARCHITECTURE §3: `allowed` is not "a human decided". For every tool in
+    NEEDS_A_PERSON, a verdict the gate would give at tier auto or notify
+    (allowed=True, nobody asked) must not run it; only an approved `ask`
+    does. Run for the tier each tool has in the shipped config AND for
+    auto/notify regardless, so an owner who lowers a tier is covered too."""
+    tiers = _shipped_tiers()
+    for tname in sorted(AG.NEEDS_A_PERSON):
+        action, shipped = tiers[tname]
+        cases = [("auto", True, "auto", False), ("notify", True, "notify", False),
+                 ("ask", True, "approved", True), ("ask", False, "denied", False),
+                 # A pre-gate-outcome gate: no `outcome` at all.
+                 ("auto", True, None, False), ("ask", True, None, True)]
+        if shipped in ("auto", "notify"):
+            cases.insert(0, (shipped, True, shipped, False))
+        for tier, allowed, outcome, should_run in cases:
+            executed = []
+            tool = AG.TOOLS[tname]
+            real_prepare, real_execute = tool.prepare, tool.execute
+            tool.prepare = lambda args: (None, "plan")
+            tool.execute = lambda args, state, **kw: executed.append(1) or {"ok": True}
+            v = _GateVerdict(allowed, tier, action, f"tier is {tier}", outcome)
+            if outcome is None:
+                del v.outcome
+            responses = [
+                {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                    {"id": "1", "function": {"name": tname,
+                     "arguments": json.dumps(_valid_args(tname))}}]}}]},
+                {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
+            ]
+            post, calls = scripted_post(responses)
+            try:
+                with NoRealIO():
+                    AG.run_local_turn(
+                        [{"role": "user", "content": "go"}], "m", ollama_url="http://127.0.0.1:11434",
+                        stream_out=lambda b: None, post=post,
+                        gate_check=lambda *a, v=v: v,
+                        open_stream=lambda u, p: FakeStream([b""]),
+                        record_chain=lambda s: None)
+            finally:
+                tool.prepare, tool.execute = real_prepare, real_execute
+            label = (f"{tname} ({action}, shipped tier {shipped}) at tier {tier}, "
+                     f"outcome {outcome}: {'runs' if should_run else 'refused'}")
+            check(label, bool(executed) == should_run, repr(executed))
+            if not should_run and allowed:
+                said = calls[1]["messages"][-1]["content"]
+                check(f"{tname} at {tier}: the model is told why, and which line to change",
+                      "without asking anyone" in said and action in said, said)
+
+
+def _one_call_turn(tname, plan_text, gate):
+    """One turn asking for `tname`, whose prepare() returns `plan_text`.
+    Returns (executed, gate_calls, what the model was told)."""
+    executed, gate_calls = [], []
+    tool = AG.TOOLS[tname]
+    real_prepare, real_execute = tool.prepare, tool.execute
+    tool.prepare = lambda args: (None, plan_text)
+    tool.execute = lambda args, state, **kw: executed.append(1) or {"ok": True}
+    def watching(action, detail, prompt):
+        gate_calls.append(detail)
+        return gate(action, detail, prompt)
+    post, calls = scripted_post([
+        {"choices": [{"message": {"role": "assistant", "tool_calls": [
+            {"id": "1", "function": {"name": tname,
+             "arguments": json.dumps(_valid_args(tname))}}]}}]},
+        {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
+    ])
+    try:
+        with NoRealIO():
+            AG.run_local_turn([{"role": "user", "content": "go"}], "m", ollama_url="http://127.0.0.1:11434",
+                              stream_out=lambda b: None, post=post, gate_check=watching,
+                              open_stream=lambda u, p: FakeStream([b""]),
+                              record_chain=lambda s: None,
+                              # Typed by the owner: an untagged message is
+                              # outside text (security audit M1).
+                              request={"messages": [{"role": "user", "content": "go",
+                                                     "provenance": "typed"}]})
+    finally:
+        tool.prepare, tool.execute = real_prepare, real_execute
+    return executed, gate_calls, calls[1]["messages"][-1]["content"]
+
+
+def t_a_plan_too_long_for_its_card_is_refused_before_anyone_is_asked():
+    """The gate keeps `json.dumps(detail)[:4000]`. A longer plan used to reach
+    the card cut off mid-step with a live Approve button."""
+    approve = lambda *a: _GateVerdict(True, "ask", "control_computer", "ok", "approved")
+    long_plan = "  1. click \"Send\"\n     why: x\n" * 200
+    executed, gate_calls, said = _one_call_turn("control_computer", long_plan, approve)
+    check("a too-long plan raises no card", gate_calls == [], repr(len(gate_calls)))
+    check("and does not run", executed == [])
+    check("and the model is told to make it shorter", "too long" in said, said)
+    executed, gate_calls, _ = _one_call_turn("control_computer", "  1. click \"Send\"", approve)
+    check("a plan that fits is asked about and, approved, runs",
+          len(gate_calls) == 1 and executed == [1])
+    # Exactly at the edge: the gate's own cut is at 4000 characters of JSON.
+    edge = "x" * (AG._GATE_DETAIL_LIMIT - len(json.dumps({"text": ""})))
+    check("a plan whose JSON is exactly 4000 characters is refused",
+          AG._card_would_be_cut("control_computer", "control_computer", edge))
+    check("one character shorter is not",
+          not AG._card_would_be_cut("control_computer", "control_computer", edge[:-1]))
+
+
+def t_a_long_note_at_auto_is_not_refused_for_its_length():
+    """Owner decision 2026-09-23: notes save straight away at the config's
+    tier. At auto no card is shown, so there is nothing to cut off."""
+    real = AG._tier_of
+    AG._tier_of = lambda action: "auto"
+    try:
+        auto = lambda *a: _GateVerdict(True, "auto", "append_logseq_journal", "auto", "auto")
+        executed, gate_calls, _ = _one_call_turn("append_logseq_journal", "n" * 5000, auto)
+        check("a long note at tier auto still reaches the gate and runs",
+              len(gate_calls) == 1 and executed == [1])
+    finally:
+        AG._tier_of = real
+
+
+def t_every_outbound_gate_action_is_covered():
+    """Any tool whose gate action the risk table calls "outbound" (as the
+    patches write it) must be in NEEDS_A_PERSON - so adding such a tool
+    without it fails here, not on the owner's machine."""
+    import re
+    here = Path(__file__).resolve().parent
+    outbound = set()
+    for patch in here.glob("*.patch"):
+        outbound |= set(re.findall(r'"(\w+)":\s*\("\w+",\s*"outbound"',
+                                   patch.read_text(encoding="utf-8")))
+    check("the patches name some outbound actions", {"run_shell_on_host",
+          "control_computer", "control_phone"} <= outbound, repr(outbound))
+    # research_authenticated is github_search with a token; web_research is
+    # its tokenless twin (egress per ARCHITECTURE §4).
+    outbound |= {"web_research", "control_browser"}
+    tiers = _shipped_tiers()
+    for tname, (action, _tier) in tiers.items():
+        if tname == "web_search":
+            # The one outbound tool that is NOT in NEEDS_A_PERSON, on purpose
+            # (the owner's decision of 2026-09-25): a search straight from the
+            # owner's own question needs no card. Whenever it DOES ask, it
+            # runs only on a person's yes - test_web_search.py proves that.
+            check("web_search is handled by its own path, not the generic one",
+                  "_web_search_call(args" in Path(AG.__file__).read_text(encoding="utf-8"))
+            continue
+        if action in outbound:
+            check(f"{tname} ({action}) is in NEEDS_A_PERSON", tname in AG.NEEDS_A_PERSON)
 
 
 def t_calculator_cannot_reach_names_or_calls():
@@ -347,7 +639,7 @@ def t_enabled_tools_actually_restricts_what_the_model_is_offered_and_can_call():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "run a command"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=allow, enabled_tools={"calculator"},
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         offered = [t["function"]["name"] for t in seen_bodies[0]["tools"]]
@@ -369,11 +661,12 @@ def t_empty_enabled_tools_offers_nothing():
         return {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
     with NoRealIO():
         AG.run_local_turn(
-            [{"role": "user", "content": "hi"}], "qwen3:8b", ollama_url="http://x",
+            [{"role": "user", "content": "hi"}], "qwen3:8b", ollama_url="http://127.0.0.1:11434",
             stream_out=lambda b: None, post=post, gate_check=allow,
             enabled_tools=set(),
             open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
-    check("an empty enabled set offers no tools at all", seen_bodies[0]["tools"] == [])
+    check("an empty enabled set offers no tools at all",
+          not seen_bodies[0].get("tools"), repr(seen_bodies[0]))
 
 
 def t_max_rounds_stops_an_infinite_tool_loop():
@@ -387,7 +680,7 @@ def t_max_rounds_stops_an_infinite_tool_loop():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "loop forever"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None,
                 post=always_wants_a_tool, gate_check=allow, max_rounds=3,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("run_local_turn returns rather than looping forever", True)
@@ -419,7 +712,7 @@ def t_a_prepare_time_failure_is_a_tool_result_not_a_dead_turn():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "what is 2+2"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=allow,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("the turn survived a prepare-time raise", len(calls) == 2, repr(len(calls)))
@@ -458,7 +751,7 @@ def t_a_prepare_time_failure_never_executes_the_tool():
         with NoRealIO():
             AG.run_local_turn(
                 [{"role": "user", "content": "x"}], "qwen3:8b",
-                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
                 gate_check=watching_gate,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("CONTROL: the tool never executed", ran == [], repr(ran))
@@ -467,6 +760,376 @@ def t_a_prepare_time_failure_never_executes_the_tool():
     finally:
         AG.TOOLS["calculator"].prepare = real_prepare
         AG.TOOLS["calculator"].execute = real_execute
+
+
+def _two_tool_turn(gate_check, recorder=None, stream_fail=False, on_step=None):
+    """calculator then shell_exec, in one round. Returns (steps recorded,
+    payloads sent to the model)."""
+    real_calc = AG.TOOLS["calculator"].execute
+    real_shell = AG.TOOLS["shell_exec"].execute
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True, "value": 4}
+    AG.TOOLS["shell_exec"].execute = lambda args, state, **kw: {"ok": True, "stdout": "SECRET-OUTPUT"}
+    got = []
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator",
+                 "arguments": json.dumps({"expression": "2+2 MY-PRIVATE-ARG"})}},
+                {"id": "2", "function": {"name": "shell_exec",
+                 "arguments": json.dumps({"command": "type C:\\diary.txt"})}},
+                {"id": "3", "function": {"name": "made_up_tool", "arguments": "{}"}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "done"}}]},
+        ]
+        real_opener, calls = scripted_stream(responses)
+
+        def opener(url, payload):
+            if stream_fail and len(calls) >= 1:
+                calls.append(payload)
+                raise ConnectionError("Ollama went away")
+            return real_opener(url, payload)
+        with NoRealIO():
+            try:
+                AG.run_local_turn(
+                    [{"role": "user", "content": "PLEASE-DO-NOT-LOG-ME"}], "qwen3:8b",
+                    ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None,
+                    gate_check=gate_check, open_stream=opener,
+                    record_chain=recorder if recorder is not None else got.append,
+                    on_step=on_step)
+            except ConnectionError:
+                pass
+        return got, calls
+    finally:
+        AG.TOOLS["calculator"].execute = real_calc
+        AG.TOOLS["shell_exec"].execute = real_shell
+
+
+def t_a_tool_turn_records_its_chain_by_tool_name_only():
+    """Item 7's record: which tools one turn used, in order, and whether each
+    ran - so repeated chains can be counted. Nothing else."""
+    def calc_only(action, detail, prompt):
+        class V:
+            allowed = "shell" not in prompt
+            outcome = "auto" if allowed else "denied"
+            reason = "x"
+            tier = "auto" if allowed else "ask"
+        return V()
+    got, _ = _two_tool_turn(calc_only)
+    check("one record for the turn", len(got) == 1, repr(got))
+    steps = got[0] if got else []
+    check("both real tools recorded, in order; the invented one is not",
+          [s["tool"] for s in steps] == ["calculator", "shell_exec"], repr(steps))
+    check("the tool that ran without asking is recorded as ran, with the gate's outcome",
+          steps and steps[0] == {"tool": "calculator", "ran": True, "ok": True,
+                                 "outcome": "auto"}, repr(steps))
+    check("the denied tool is recorded as NOT ran",
+          len(steps) > 1 and steps[1]["ran"] is False and steps[1]["outcome"] == "denied",
+          repr(steps))
+    blob = json.dumps(got)
+    for secret in ("PLEASE-DO-NOT-LOG-ME", "MY-PRIVATE-ARG", "diary", "SECRET-OUTPUT"):
+        check(f"no conversation text reaches the record ({secret})", secret not in blob, blob)
+
+
+def _calc_only(action, detail, prompt):
+    class V:
+        allowed = "shell" not in prompt
+        outcome = "auto" if allowed else "denied"
+        reason = "x"
+    return V()
+
+
+def t_steps_say_what_happened_in_order():
+    """Brain -> Live: each step of the turn, as it happens. calculator runs,
+    shell_exec is refused by the gate, the model invents a third tool."""
+    steps = []
+    _two_tool_turn(_calc_only, recorder=lambda _s: None, on_step=steps.append)
+    got = [(s["phase"], s.get("tool"), s.get("ok"), s.get("round")) for s in steps]
+    want = [
+        ("model", None, None, 1),
+        ("tool_started", "calculator", None, None),
+        ("tool_finished", "calculator", True, None),
+        ("tool_refused", "shell_exec", None, None),
+        ("tool_refused", "unknown", None, None),
+        ("model", None, None, 2),
+        ("answer", None, None, None),
+    ]
+    check("the steps are model, tool started/finished/refused, model, answer",
+          got == want, repr(got))
+
+
+def t_a_step_carries_no_text_ever():
+    """The bus reaches a phone's lock screen. A step may carry only names
+    from our own table - no arguments, no results, no model text, and not
+    the model's own spelling of a tool it made up."""
+    steps = []
+    _two_tool_turn(allow, recorder=lambda _s: None, on_step=steps.append)
+    blob = json.dumps(steps)
+    for secret in ("PLEASE-DO-NOT-LOG-ME", "MY-PRIVATE-ARG", "diary", "SECRET-OUTPUT",
+                   "made_up_tool", "done"):
+        check(f"no conversation text reaches a step ({secret})", secret not in blob, blob)
+    allowed_keys = {"phase", "tool", "ok", "round"}
+    check("every step uses only the allowlisted fields",
+          all(set(s) <= allowed_keys for s in steps), blob)
+    check("every tool named in a step is one of ours",
+          all(s.get("tool") in (None, "unknown") or s["tool"] in AG.TOOLS for s in steps), blob)
+    # The allowlist itself, not just this turn: a phase or tool outside it
+    # is reduced, never passed through.
+    odd = AG._step_event("<think>my bank pin is 1234</think>", "rm -rf /", ok="yes", round_no="x")
+    check("an unknown phase or tool is reduced to 'unknown', and a bad round dropped",
+          odd == {"phase": "unknown", "tool": "unknown", "ok": True}, repr(odd))
+
+
+def t_a_step_sink_that_raises_never_breaks_the_turn():
+    def boom(_step):
+        raise RuntimeError("bus down")
+    streamed = []
+    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
+    post, _ = scripted_post(responses)
+    with NoRealIO():
+        AG.run_local_turn([{"role": "user", "content": "hi"}], "qwen3:8b",
+                          ollama_url="http://127.0.0.1:11434", stream_out=streamed.append, post=post,
+                          gate_check=allow, on_step=boom,
+                          open_stream=lambda u, p: FakeStream([b"hi"]))
+    check("the answer still streams when the step sink raises",
+          answer_text(streamed) == "hi", repr(streamed))
+
+
+def t_the_default_step_sink_is_the_event_bus():
+    """No on_step passed: the module's own _publish_step gets every step, and
+    that publishes kind "step" on jarvis_events.BUS (a stand-in module here,
+    so this proves the call, not the owner's bus)."""
+    before = len(PUBLISHED_STEPS)
+    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
+    post, _ = scripted_post(responses)
+    with NoRealIO():
+        AG.run_local_turn([{"role": "user", "content": "hi"}], "qwen3:8b",
+                          ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
+                          gate_check=allow, open_stream=lambda u, p: FakeStream([b"x"]))
+    new = [s["phase"] for s in PUBLISHED_STEPS[before:]]
+    check("the default sink received the turn's steps", new == ["model", "answer"], repr(new))
+
+    import types
+    published = []
+    fake = types.ModuleType("jarvis_events")
+    fake.BUS = types.SimpleNamespace(publish=lambda kind, data: published.append((kind, data)))
+    keep = sys.modules.get("jarvis_events")
+    sys.modules["jarvis_events"] = fake
+    try:
+        REAL_PUBLISH_STEP({"phase": "answer"})
+    finally:
+        if keep is None:
+            sys.modules.pop("jarvis_events", None)
+        else:
+            sys.modules["jarvis_events"] = keep
+    check("the real sink publishes kind 'step' on jarvis_events.BUS",
+          published == [("step", {"phase": "answer"})], repr(published))
+
+
+def t_a_turn_with_no_tool_records_nothing():
+    got = []
+    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
+    post, _ = scripted_post(responses)
+    with NoRealIO():
+        AG.run_local_turn([{"role": "user", "content": "hi"}], "qwen3:8b",
+                          ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
+                          gate_check=allow, record_chain=got.append,
+                          open_stream=lambda u, p: FakeStream([b"x"]))
+    check("a plain answer writes no chain record", got == [], repr(got))
+
+
+def t_the_recorder_failing_never_breaks_the_turn():
+    def boom(_steps):
+        raise RuntimeError("disk full")
+    streamed = []
+    real = AG.TOOLS["calculator"].execute
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True, "value": 4}
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator",
+                 "arguments": json.dumps({"expression": "2+2"})}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "4"}}]},
+        ]
+        post, _ = scripted_post(responses)
+        with NoRealIO():
+            AG.run_local_turn([{"role": "user", "content": "2+2"}], "qwen3:8b",
+                              ollama_url="http://127.0.0.1:11434", stream_out=streamed.append, post=post,
+                              gate_check=allow, record_chain=boom,
+                              open_stream=lambda u, p: FakeStream([b"four"]))
+        check("the answer still streams when the recorder raises",
+              answer_text(streamed) == "4", repr(streamed))
+    finally:
+        AG.TOOLS["calculator"].execute = real
+
+
+def t_the_chain_is_recorded_even_if_the_answer_fails_to_stream():
+    """The tools RAN. Losing the client afterwards does not undo that."""
+    got, _ = _two_tool_turn(allow, stream_fail=True)
+    check("recorded despite the stream failing", len(got) == 1, repr(got))
+    check("a gate with no outcome field is recorded as 'unknown', not guessed",
+          got and got[0][0]["outcome"] == "unknown", repr(got))
+
+
+def t_the_default_recorder_is_used_when_none_is_passed():
+    """No record_chain passed: the module's own _record_chain gets the turn.
+    (Stubbed at the top of this file, so nothing real is written.)"""
+    before = len(RECORDED)
+    real = AG.TOOLS["calculator"].execute
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True}
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator",
+                 "arguments": json.dumps({"expression": "1+1"})}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
+        ]
+        post, _ = scripted_post(responses)
+        with NoRealIO():
+            AG.run_local_turn([{"role": "user", "content": "x"}], "qwen3:8b",
+                              ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None, post=post,
+                              gate_check=allow,
+                              open_stream=lambda u, p: FakeStream([b"x"]))
+    finally:
+        AG.TOOLS["calculator"].execute = real
+    check("the module-level recorder received the turn",
+          len(RECORDED) == before + 1, f"{before} -> {len(RECORDED)}")
+
+
+def t_a_second_card_turn_carries_the_jarvis_system_block():
+    # T4: second-card turns (long context, pictures) went to library models
+    # with no Jarvis SYSTEM block, so the invariants were never said there.
+    import re
+    mf = (Path(__file__).resolve().parent / "jarvis-primary.Modelfile").read_text(encoding="utf-8")
+    m = re.search(r'^SYSTEM """(.*?)"""', mf, re.S | re.M)
+    check("LANE_SYSTEM is the Modelfile's SYSTEM block, exactly",
+          m is not None and AG.LANE_SYSTEM == m.group(1), "they differ: copy the block again")
+
+    def run(lane_choice):
+        sent = []
+
+        def opener(url, body):
+            sent.append((url, body))
+            return W.FakeResponse(W.stream([("content", "ok"), ("done", "stop")]))
+        msgs = [{"role": "system", "content": "recalled facts"},
+                {"role": "user", "content": "hello"}]
+        AG.run_local_turn(msgs, "jarvis-primary", ollama_url="http://127.0.0.1:11434",
+                          stream_out=lambda b: None, open_stream=opener, enabled_tools=None,
+                          context_length=16384, on_step=lambda s: None,
+                          record_chain=lambda s: None, keepalive_seconds=60, status_delay=60,
+                          lane_choice=lane_choice)
+        return sent[0][1]["messages"], msgs
+    for feature, model in (("long_context", "qwen3:8b"), ("vision", "qwen2.5vl:7b")):
+        lane = AG.LaneChoice("http://127.0.0.1:11435", model, 32768, feature, "test")
+        got, msgs = run(lane)
+        check(f"a {feature} turn on the second card starts with the Jarvis SYSTEM block",
+              got[0] == {"role": "system", "content": AG.LANE_SYSTEM} and got[1:] == msgs,
+              got[:2])
+    got, msgs = run(None)
+    # memory-prefix.patch puts the recalled facts just before the newest
+    # question - on a conversation's FIRST question that is position 0, and
+    # Ollama then drops the Modelfile's SYSTEM block. The rules go first.
+    check("main card: recalled facts first (a first question) - the Jarvis rules go in front",
+          got[0] == {"role": "system", "content": AG.LANE_SYSTEM} and got[1:] == msgs,
+          got[:2])
+    check("keep_rules_first: a turn that starts with a user message is unchanged "
+          "(Ollama adds the Modelfile's block itself)",
+          AG.keep_rules_first([{"role": "user", "content": "hi"}])
+          == [{"role": "user", "content": "hi"}])
+    check("keep_rules_first: already first, not added twice",
+          AG.keep_rules_first([{"role": "system", "content": AG.LANE_SYSTEM},
+                               {"role": "system", "content": "facts"}])[1]
+          == {"role": "system", "content": "facts"})
+
+
+def t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note():
+    # The two other ways a system message ends up at position 0, each through
+    # the whole turn, so they fail if keep_rules_first() ever stops running
+    # last in one_round.
+    def first_request(msgs, ctx):
+        sent = []
+
+        def opener(url, body):
+            sent.append(body)
+            return W.FakeResponse(W.stream([("content", "ok"), ("done", "stop")]))
+        AG.run_local_turn(msgs, "jarvis-primary", ollama_url="http://127.0.0.1:11434",
+                          stream_out=lambda b: None, open_stream=opener, enabled_tools=set(),
+                          context_length=ctx, on_step=lambda s: None,
+                          record_chain=lambda s: None, keepalive_seconds=60, status_delay=60,
+                          lane_choice=None)
+        return sent[0]["messages"]
+
+    rules = {"role": "system", "content": AG.LANE_SYSTEM}
+
+    # Trimming. fit_messages drops earlier user and assistant turns but never a
+    # system message, so on a long conversation the recalled facts - or any
+    # system note - can be left first once the turns before them are gone.
+    recalled = {"role": "system", "content": "Things you know about the user: recalled facts"}
+    long = [{"role": "user", "content": "earlier question " + "x" * 6000},
+            {"role": "assistant", "content": "earlier answer " + "y" * 6000},
+            recalled,
+            {"role": "user", "content": "the new question"}]
+    got = first_request(long, 2048)
+    check("trimming really happened (else this test measures nothing)",
+          long[0] not in got and long[1] not in got, [m["role"] for m in got])
+    check("trimmed until the recalled facts would be first - the Jarvis rules go in front",
+          got[:1] == [rules] and got[1:] == [recalled, long[-1]],
+          [str(m.get("content"))[:30] for m in got])
+
+    # An app's own system message, which on a first question is position 0.
+    # (The desktop used to send clipboard text this way; since 2026-09-25 it
+    # sends a user message tagged "clipboard". Any app's system message is
+    # still covered.)
+    # The owner's decision, 2026-09-25: the rules still go first.
+    clip = [{"role": "system", "content": "Context:\nsome copied text"},
+            {"role": "user", "content": "what does this say"}]
+    got = first_request(clip, 16384)
+    check("an app's own leading system message gets the Jarvis rules in front of it",
+          got == [rules] + clip, [str(m.get("content"))[:30] for m in got])
+
+    # A conversation that already starts with a user turn is sent unchanged:
+    # Ollama adds the Modelfile's SYSTEM block itself.
+    plain = [{"role": "user", "content": "hello"}]
+    check("a first question with nothing recalled is sent as it is",
+          first_request(plain, 16384) == plain)
+
+
+def t_a_model_that_cannot_use_tools_is_offered_none_and_told_plainly():
+    import io
+    import urllib.error
+
+    def turn(caps):
+        responses = [{"choices": [{"message": {"role": "assistant", "content": "ok"}}]}]
+        opener, calls = scripted_stream(responses)
+        said = []
+        with NoRealIO():
+            AG._get_json = lambda url, payload=None, timeout=4.0: (
+                {"models": []} if url.endswith("/api/ps") else {"capabilities": caps})
+            AG.run_local_turn(
+                [{"role": "user", "content": "hello"}], "tiny:1b",
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None,
+                gate_check=allow, open_stream=opener, announce=said.append)
+        return calls, said
+
+    calls, said = turn(["completion", "tools"])
+    check("CONTROL: a model Ollama says can use tools is offered them",
+          bool(calls) and calls[0].get("tools"), repr(calls[0].keys() if calls else calls))
+    check("CONTROL: ... and nothing is announced", AG.NO_TOOLS_NOTE not in said, said)
+    calls, said = turn(["completion"])
+    check("a model Ollama says cannot use tools is offered none (no HTTP 400)",
+          bool(calls) and not calls[0].get("tools"), repr(calls))
+    check("... and Jarvis says so in plain words", said == [AG.NO_TOOLS_NOTE], said)
+    calls, said = turn(None)
+    check("an Ollama that does not say keeps today's behaviour (tools offered)",
+          bool(calls) and calls[0].get("tools"), repr(calls))
+
+    body = json.dumps({"error": {"message": 'registry.ollama.ai/library/tiny:1b does not support tools'}})
+    exc = urllib.error.HTTPError("http://o/v1/chat/completions", 400, "Bad Request", {},
+                                 io.BytesIO(body.encode()))
+    msg = AG.plain_error(exc, "tiny:1b")
+    check("the 400 'does not support tools' says the model cannot use tools, not 'restart Ollama'",
+          "cannot use tools" in msg and "Switch to a model" in msg
+          and "will not help" in msg, msg)
+    check("... and is not mistaken for 'model not installed' by the apps' error codes",
+          AG.error_code(msg) is None, AG.error_code(msg))
 
 
 if __name__ == "__main__":
@@ -479,12 +1142,29 @@ if __name__ == "__main__":
                t_file_read_rejects_reserved_windows_device_names,
                t_tool_content_never_slices_a_json_string_mid_structure,
                t_every_tool_resolves_to_a_real_jarvis_gate_action,
+               t_github_search_resolves_to_an_auto_tier_in_the_shipped_config,
+               t_every_outbound_tool_is_refused_unless_a_person_approved,
+               t_every_outbound_gate_action_is_covered,
+               t_a_plan_too_long_for_its_card_is_refused_before_anyone_is_asked,
+               t_a_long_note_at_auto_is_not_refused_for_its_length,
                t_calculator_cannot_reach_names_or_calls,
                t_enabled_tools_actually_restricts_what_the_model_is_offered_and_can_call,
                t_empty_enabled_tools_offers_nothing,
                t_max_rounds_stops_an_infinite_tool_loop,
                t_a_prepare_time_failure_is_a_tool_result_not_a_dead_turn,
-               t_a_prepare_time_failure_never_executes_the_tool):
+               t_a_prepare_time_failure_never_executes_the_tool,
+               t_a_tool_turn_records_its_chain_by_tool_name_only,
+               t_a_turn_with_no_tool_records_nothing,
+               t_the_recorder_failing_never_breaks_the_turn,
+               t_the_chain_is_recorded_even_if_the_answer_fails_to_stream,
+               t_the_default_recorder_is_used_when_none_is_passed,
+               t_steps_say_what_happened_in_order,
+               t_a_step_carries_no_text_ever,
+               t_a_step_sink_that_raises_never_breaks_the_turn,
+               t_the_default_step_sink_is_the_event_bus,
+               t_a_second_card_turn_carries_the_jarvis_system_block,
+               t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note,
+               t_a_model_that_cannot_use_tools_is_offered_none_and_told_plainly):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

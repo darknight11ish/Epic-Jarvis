@@ -1,0 +1,50 @@
+# Python packages the Jarvis backend uses beyond the standard library.
+#
+# scripts\apply-patches.ps1 installs these for you. By hand, from the folder
+# this repository is cloned into (one line):
+#
+#     py -3 -m pip install -r backend\requirements.txt
+#
+# The backend STARTS without any of them - every one is imported inside a
+# `try` - but what each one carries is switched off until it is installed,
+# and nothing on screen says so. Next to each: what it is for, and the
+# module that imports it.
+#
+# backend\test_shipped_modules.py fails if a shipped module or patch imports a
+# package that is neither listed here nor named in the "not installed" list at
+# the bottom.
+
+numpy                                  # voice: reading and checking recorded audio (jarvis_speech.py, rebuilt jarvis_voice.py)
+sherpa-onnx>=1.12.26                   # voice: speech-to-text on the PC, the better "is it your voice" check, and the custom voices (jarvis_speech.py, rebuilt jarvis_voice.py, jarvis_voices.py). 1.12.26 is the oldest on PyPI with Pocket TTS, the bake-off's candidate voice (checked: its library names OfflineTtsPocketModelConfig and reference_audio); tested with 1.13.8.
+sherpa-onnx-core                       # sherpa-onnx's own native library. sherpa-onnx installs it anyway on Windows and Linux; it is named here because not every sherpa-onnx download says so, and the hash-locked list (requirements.lock) must hold it.
+onnxruntime                            # voice: the "hey Jarvis" wake-word spotter (jarvis_wakeword.py) and Smart Turn, "finished or only paused?" (jarvis_turn.py). The voice MODEL files are a separate download: backend\README.md, "Voice that works".
+fastembed                              # memory: finding facts by MEANING, not only by matching words, and the re-ranker that puts the best-matching facts first (rebuilt jarvis_memory.py). Downloads its two models (about 70 MB and 80 MB) the first time they are needed; a fastembed too old to have re-rankers just leaves the re-ranker off.
+sqlite-vec                             # memory: the search index fastembed's numbers are kept in (rebuilt jarvis_memory.py)
+uiautomation; sys_platform == "win32"  # the "control_computer" tool: reading and clicking other apps' windows (jarvis_ui_control.py). Windows only.
+tomli; python_version < "3.11"         # reading jarvis-framework.toml on Python 3.10 or older; 3.11 and newer have it built in (rebuilt jarvis_framework.py)
+ddgs>=9.16.0                           # web search, only when you choose DuckDuckGo (jarvis_search.py). MIT; brings primp (MIT), lxml and click (BSD-3). Used with its DuckDuckGo engine ONLY, never its "auto" mix of other engines. SearXNG, Exa, Tavily and Brave need no package (Exa is called directly, without its exa-py library).
+cryptography                           # chat history: encrypting every kept chat on this PC (jarvis_chat_log.py). Without it NOTHING is kept - never a plain-text copy.
+markitdown[pdf,docx,xlsx,pptx]==0.1.8  # reading PDF, Word, Excel and PowerPoint files in "Folders Jarvis may look in" (jarvis_documents.py, run as a separate program with no passwords in its environment). MIT. The DOCUMENT parts only - never [all], [audio-transcription] or [youtube-transcription]: the audio part sends sound to Google and the YouTube part fetches from YouTube (rule 1); backend\test_documents.py fails if this line ever names them. Pinned: 0.1.8 is young. It brings pdfminer.six 20251230 or newer (newer than the fix for crafted PDFs, CVE-2025-64512), pdfplumber, mammoth, python-pptx, openpyxl, pandas and magika. The markitdown-0.1.8-py3-none-any.whl on PyPI has sha256 de7375a50578a39bcbbf13b48c67d99033d988e0ae8ad25af46ed432dbe4cbab (checked 2026-09-26); not a --hash line, because one --hash makes pip demand a hash for every package in this file.
+tzdata; sys_platform == "win32"        # calendar: time-zone data, so an event stored in another time zone shows at the right hour (jarvis_calendar.py). Windows has none built in.
+
+# NOT installed by the script - large, or for something that is off by default:
+#
+#   playwright   the "browser_control" tool (jarvis_browser_control.py), which
+#                stays OFF until [tools].enabled in jarvis-framework.toml names
+#                it. Also needs a browser downloaded. One line:
+#                    py -3 -m pip install playwright; py -3 -m playwright install chromium
+#   speechbrain  an older, much heavier voice check (rebuilt jarvis_voice.py),
+#   torch        used only if sherpa-onnx's speaker model is not set up. The
+#                sherpa-onnx route above does the same job without PyTorch;
+#                backend\README.md "Install the better voice check" has it.
+#                torch (the CUDA build) is also what the better voice runs on.
+#   f5-tts       the better voice for custom voices, on the SECOND graphics
+#                card (jarvis_f5_worker.py), which stays OFF until you turn
+#                it on and approve its card. About 3 GB with PyTorch; the
+#                model is for non-commercial use. backend\README.md, "The
+#                better voice", has the install. Custom voices work without
+#                it, on the processor (sherpa-onnx, above).
+#   soundfile    only for building the "other voices" bank from LibriSpeech's
+#                FLAC files on this PC (`py -3 jarvis_voice.py --build-cohort
+#                <folder>`, rebuilt jarvis_voice.py). Nothing else reads FLAC;
+#                backend\README.md "The stricter voice check" has the line.

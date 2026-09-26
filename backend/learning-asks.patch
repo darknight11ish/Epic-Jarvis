@@ -1,0 +1,20 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1674,7 +1674,16 @@
+             if route == "/api/memory/learning":
+                 if not isinstance(body.get("enabled"), bool):
+                     return self._send(400, {"error": 'need {"enabled": true|false}'})
+-                return self._send(200, set_learning(body["enabled"]))
++                # Turning learning ON raises an approval card first; OFF is
++                # immediate (jarvis_learning_switch.py, learning-asks.patch).
++                try:
++                    import jarvis_learning_switch
++                except Exception:
++                    return self._send(503, {"error": "jarvis_learning_switch.py is not "
++                                                     "installed, so learning cannot be "
++                                                     "switched from here"})
++                code, out = jarvis_learning_switch.request(body["enabled"], set_learning)
++                return self._send(code, out)
+ 
+             if route == "/api/memory/sleep_time":
+                 # The daily card's own two backend-facing actions - "enable"

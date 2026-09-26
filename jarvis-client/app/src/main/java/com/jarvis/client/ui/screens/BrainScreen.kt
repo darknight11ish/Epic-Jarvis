@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,26 +15,39 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.Activity
 import com.jarvis.client.BrainSnapshot
 import com.jarvis.client.LinkState
+import com.jarvis.client.ModelRequest
+import com.jarvis.client.SectionRead
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.JobRecord
+import com.jarvis.client.net.MemoryCardKind
+import com.jarvis.client.net.MemoryCardView
+import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ModelsInfo
+import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.ui.BackButton
 import com.jarvis.client.ui.parts.Affirm
 import com.jarvis.client.ui.parts.Field
 import com.jarvis.client.ui.parts.Freshness
@@ -45,10 +60,14 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Refuse
 import com.jarvis.client.ui.parts.Rule
+import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
-import com.jarvis.client.ui.theme.LocalAccent
+import com.jarvis.client.ui.parts.ageText
+import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -91,12 +110,20 @@ fun BrainScreen(
     memoryDecideBusyId: Long?,
     onDecideMemory: (id: Long, accept: Boolean) -> Unit,
     /**
-     * The daily "tidy memory overnight?" card, or null to show none.
+     * "Both are true" on a correction card - keep the new fact and the old
+     * one. Only ever offered where the card's own `keep_both_ok` says so;
+     * shares [memoryDecideBusyId] with Keep/Discard, so one card gets one
+     * answer.
+     */
+    onKeepBothMemory: (id: Long) -> Unit = {},
+    /**
+     * The daily overnight-tidy card ("not built yet"), or null to show none.
      *
      * Passed in already decided rather than read fresh from `brain.memory`
-     * every recomposition: the server marks itself as having offered the
-     * moment `/api/memory/pending` is polled at all, not when the owner
-     * acts on it, so a second read - which any OTHER write on this screen
+     * every recomposition: the server marks the day's offer as made the
+     * moment a read that asks for it (`sleep_offer=1`, see
+     * MemoryCards.PENDING_PATH) arrives, not when the owner acts on it, so
+     * a second read - which any OTHER write on this screen
      * triggers via its own refresh - comes back with the offer already
      * gone. The caller holds the sticky, once-seen copy; this composable
      * only ever renders what it is handed.
@@ -134,28 +161,155 @@ fun BrainScreen(
     memoryAsOfBusy: Boolean = false,
     onQueryMemoryAsOf: (epochSeconds: Long) -> Unit = {},
     modifier: Modifier = Modifier,
+    /**
+     * Opens Home with the approval card a model switch or install raised -
+     * the id when it is known, null to open Home without scrolling to one.
+     * Only ever navigates: nothing is approved from this screen. Null (the
+     * default) draws the "waiting for your approval" line without the link,
+     * rather than a link that does nothing.
+     */
+    onOpenApprovals: ((cardId: String?) -> Unit)? = null,
+    /**
+     * Switch power mode - "active", "quiet" or "standby"
+     * ([com.jarvis.client.JarvisRuntime.setPower]). Null hides the buttons.
+     */
+    onSetPower: ((mode: String) -> Unit)? = null,
+    /**
+     * `GET /api/second-card`, as last read ([com.jarvis.client.JarvisRuntime.secondCard]).
+     * The plate is always drawn: an older backend or a missing module is
+     * said in words there, not hidden.
+     */
+    secondCard: SecondCard.Read = SecondCard.Read.NotAsked,
+    /** The second-card switch whose request is in flight, or null. */
+    secondCardBusy: String? = null,
+    /** What the last second-card request came back with, or null. */
+    secondCardNotice: String? = null,
+    /**
+     * One second-card switch on (raises an approval card) or off (at once) -
+     * [com.jarvis.client.JarvisRuntime.setSecondCard]. `"master"` is the main switch.
+     */
+    onSetSecondCard: (feature: String, enabled: Boolean) -> Unit = { _, _ -> },
+    onRecheckSecondCard: () -> Unit = {},
+    /**
+     * Re-read the board every this many milliseconds while the screen is
+     * open and the link is up. 0, the default, is off - the battery reasoning
+     * in [com.jarvis.client.JarvisRuntime.refreshBrain] still holds, and the
+     * age on the freshness line is always shown either way.
+     */
+    autoRefreshMs: Long = 0L,
+    /**
+     * "Hide memory lists and chat history" (Security) is on and not yet shown: the memory
+     * review list, "Saved automatically", "What did I believe on this
+     * date?", the wiki's list and the deep questions are replaced by [HiddenSection] until
+     * [onShowPrivate] is confirmed; Coming up, the briefing and a focus session's "On:" line
+     * hide their words in place.
+     */
+    privateHidden: Boolean = false,
+    /** Asks for the fingerprint or PIN, then shows them. */
+    onShowPrivate: () -> Unit = {},
+    /** True while that check is up. */
+    showPrivateBusy: Boolean = false,
+    /**
+     * Opens History - chat history kept on the PC (HistoryScreen.kt,
+     * docs/JARVIS-API.md section 18). Null draws no way in.
+     */
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
-    Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
-        TopBar("State of mind", onBack) { Quiet("Refresh", onClick = onRefresh) }
+    // The same test ModelsPlate always had, now shared by every control on this
+    // screen that writes anything. The runtime refuses these again on the way
+    // out (decideMemory, setSleepTime); this is the visible half of rule 4,
+    // and it was missing from Keep/Discard and the sleep offer - the only
+    // buttons on this screen that looked live on a dead link.
+    val canAct = link == LinkState.CONNECTED && !stale
+    // Retry is a READ, so it is not gated on the link the way acting is. Null
+    // while a read is already out: the button then says "Retrying…" rather
+    // than stacking a second read on the first.
+    val retry = if (brain.refreshing) null else onRefresh
 
+    if (autoRefreshMs > 0L && link == LinkState.CONNECTED) {
+        val refreshNow by rememberUpdatedState(onRefresh)
+        val busyNow by rememberUpdatedState(brain.refreshing)
+        LaunchedEffect(autoRefreshMs) {
+            while (true) {
+                delay(autoRefreshMs)
+                if (!busyNow) refreshNow()
+            }
+        }
+    }
+
+    Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
+        // Titled "Brain", the word on Home's button that opens it and the
+        // PC's name for the same place (the owner's decision of 2026-09-26:
+        // "Mind" became "Brain" to match the desktop). The old subtitle,
+        // "State of mind", was dropped in the ease-of-use audit's wording
+        // pass (2026-09-27): one name for one place.
+        TopBar("Brain", onBack) {
+            Quiet(
+                if (brain.refreshing) "Refreshing…" else "Refresh",
+                enabled = !brain.refreshing,
+                onClick = onRefresh,
+            )
+        }
+
+        // Held so "Jarvis remembered N things" can bring "Saved
+        // automatically" into view: it is the item right after the plate
+        // that line is on, and that plate is on screen when it is tapped.
+        val listState = rememberLazyListState()
+        val listScope = rememberCoroutineScope()
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // 1. The rush latch, first, because it changes how everything below
             // should be read. Outside text that tried to raise the tier is the
             // one thing on this screen that is adversarial by construction.
-            rushOf(brain.contentRisk)?.let { rush ->
-                item(key = "rush") { RushBanner(rush) }
+            //
+            // It must never simply vanish. It used to be drawn only when the
+            // last read found one, so a read that timed out drew nothing at
+            // all - under a line that said "Live." - which says "nothing is
+            // raising the tier" when the phone does not know. A failed check
+            // now keeps the last latch it saw, with its age, and says in
+            // amber that it could not check.
+            val rush = rushOf(brain.contentRisk)
+            val riskFailed = brain.contentRiskRead as? SectionRead.Failed
+            if (rush != null || riskFailed != null) {
+                item(key = "rush") {
+                    Column(Modifier.fillMaxWidth()) {
+                        if (rush != null) {
+                            RushBanner(
+                                rush,
+                                // Aged only when it might be out of date. A
+                                // latch from a read that just worked is now.
+                                lastSeenAtMs = if (riskFailed != null) brain.contentRiskAtMs else null,
+                            )
+                        }
+                        if (riskFailed != null) {
+                            if (rush != null) Gap(8)
+                            RushCheckFailed(
+                                reason = riskFailed.reason,
+                                lastCheckedAtMs = brain.contentRiskAtMs,
+                                sawLatch = rush != null,
+                                onRetry = retry,
+                            )
+                        }
+                    }
+                }
             }
 
             // 2. Whether any of this can be trusted at all. A stale board is
             // worse than no board: every number below is last-known, and on a
             // screen full of numbers that distinction has to lead.
             item(key = "freshness") {
-                Freshness(link, stale, brain.fetchedAtMs)
+                Freshness(
+                    link,
+                    stale,
+                    brain.fetchedAtMs,
+                    readWhat = "Board",
+                    refreshing = brain.refreshing,
+                )
             }
 
             if (notice != null) {
@@ -167,6 +321,26 @@ fun BrainScreen(
                     Plate {
                         Field("Activity", activity.name.lowercase().replaceFirstChar { it.uppercase() })
                         Field("Power", power.replaceFirstChar { it.uppercase() })
+                        if (onSetPower != null) {
+                            // backend/power-mode.patch. The field above changes
+                            // when the desktop reports it, not on the tap.
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                for (mode in listOf("active", "quiet", "standby")) {
+                                    Quiet(
+                                        mode.replaceFirstChar { it.uppercase() },
+                                        enabled = !power.equals(mode, ignoreCase = true),
+                                        onClick = { onSetPower(mode) },
+                                    )
+                                }
+                            }
+                            Text(
+                                "Quiet still answers but starts nothing itself. Standby frees " +
+                                    "the graphics card; the next answer takes 5-15 seconds. " +
+                                    "To go on standby every night, see Standby schedule under Coming up.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textLo,
+                            )
+                        }
                         val lane = status?.lane?.lowercase()
                         Field(
                             "Route",
@@ -178,7 +352,7 @@ fun BrainScreen(
                                 else -> lane
                             },
                             valueColor = when (lane) {
-                                "cloud" -> com.jarvis.client.face.Palette.VIOLET_4
+                                "cloud" -> chrome.cloudInk
                                 "local" -> chrome.okInk
                                 "offline" -> chrome.badInk
                                 else -> null
@@ -188,7 +362,15 @@ fun BrainScreen(
                         if (status?.held == true) {
                             Gap(4)
                             Text(
-                                "Something is held — a message inside its send window.",
+                                // `held` comes from the owner's jarvis_hud.py, whose
+                                // source is not in this repository; what exactly sets
+                                // it is not documented anywhere here. So this says
+                                // what is known and points where a held message would
+                                // be, rather than naming a cause (docs/JARVIS-API.md,
+                                // the /api/status row).
+                                "Jarvis reports something held back. If it is a message " +
+                                    "waiting in its send window, the Inbox's undo shelf lists " +
+                                    "it and Stop sending is there.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = chrome.warnInk,
                             )
@@ -197,19 +379,153 @@ fun BrainScreen(
                 }
             }
 
+            // The tool loop's steps, live (StepsPlate.kt) - the desktop's
+            // Brain → Live. Reads JarvisRuntime directly.
+            item(key = "steps") { StepsSection() }
+
+            // "Coming up" (the owner's decisions of 2026-09-25): timers,
+            // alarms, reminders and the to-do list, each with its own
+            // buttons (ComingUpPlate.kt) - the desktop's Brain -> Work ->
+            // Coming up. It reads and acts through JarvisRuntime directly.
+            item(key = "coming-up") {
+                ComingUpSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
+            // "Focus session" (the owner's decision of 2026-09-25): start and
+            // stop one, the countdown, the counts and the report card
+            // (FocusPlate.kt) - the desktop's Brain -> Work -> Focus session.
+            // Watching what is in front happens on the PC only.
+            item(key = "focus") {
+                FocusSection(canAct = canAct, privateHidden = privateHidden)
+            }
+
+            // "Morning briefing" (the owner's decisions of 2026-09-25): the
+            // latest one, "Brief me now", and when it arrives
+            // (BriefingPlate.kt) - the desktop's Brain -> Work and Settings.
+            item(key = "briefing") {
+                BriefingSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
+            // "Web search" (the owner's decisions of 2026-09-25): the four
+            // providers with the PC's "why" lines, "Ask before every web
+            // search", the SearXNG address and Test search
+            // (WebSearchPlate.kt) - the desktop's Settings -> Web search.
+            // No key box: keys are typed on the PC only.
+            item(key = "web-search") {
+                WebSearchSection(canAct = canAct)
+            }
+
+            // "What asks first" (the owner's decisions of 2026-09-26): every
+            // action and whether it asks first, in the PC's words, with "Ask
+            // me first" switches that only make things stricter here - the
+            // desktop's Settings -> What asks first, where loosening lives
+            // (AsksFirstPlate.kt) - and "Lights, plugs and fans without a
+            // card" (ON one card, held on a stale link; OFF at once).
+            item(key = "asks-first") {
+                AsksFirstSection(canAct = canAct)
+            }
+
+            // "What Jarvis can reach" (the Muse audit, 2026-09-25): every way
+            // Jarvis can reach something outside itself, whether each is on,
+            // where it goes and whether it asks first - written by the PC
+            // from its settings, never by the model (ReachPlate.kt) - the
+            // desktop's Settings -> What Jarvis can reach. A read: nothing
+            // to hold on a stale link.
+            item(key = "reach") {
+                ReachSection()
+            }
+
+            // "Sending email" (the owner's decision of 2026-09-25): whether
+            // Jarvis can send email, from which address and through which
+            // server, in the PC's words (EmailSendingPlate.kt) - the desktop's
+            // Settings -> Sending email. Each email is its own approval card.
+            item(key = "email-sending") {
+                EmailSendingSection()
+            }
+
+            // "Folders Jarvis may look in" (the owner's decisions of
+            // 2026-09-26): the folders on the PC Jarvis may find, search and
+            // read files in, in the PC's words, with Remove at once
+            // (FoldersPlate.kt) - the desktop's Settings -> Folders Jarvis may
+            // look in. Adding a folder and the Notion import are the PC's.
+            item(key = "folders") {
+                FoldersSection()
+            }
+
+            // "How Jarvis talks" (the owner's decision of 2026-09-25): warm
+            // and brief, or plain, with the PC's words (MannerPlate.kt) - the
+            // desktop's Settings -> How Jarvis talks. No card either way.
+            item(key = "manner") {
+                MannerSection(canAct = canAct)
+            }
+
             if (models != null) {
                 item(key = "models") {
                     Section("Model") {
                         ModelsPlate(
                             models = models,
                             busy = modelBusy,
-                            canAct = link == LinkState.CONNECTED && !stale,
+                            canAct = canAct,
                             onSwitch = onSwitchModel,
                             onRollback = onRollbackModel,
                             onInstall = onInstallModel,
+                            request = brain.modelRequest,
+                            onOpenApprovals = onOpenApprovals,
                         )
                     }
                 }
+            }
+
+            // backend/hardware.patch (docs/HARDWARE-PROFILES.md 4.6, "Phone"):
+            // the cards and the three setups, above the second card's own
+            // switches. Reads and acts through JarvisRuntime directly
+            // (HardwarePlate.kt), so this is its only line.
+            item(key = "hardware") {
+                HardwareSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
+            }
+
+            // backend/second-card.patch. Right under Model, because a feature
+            // whose model is missing is installed with the box above.
+            item(key = "second-card") {
+                Section("Second graphics card") {
+                    SecondCardPlate(
+                        read = secondCard,
+                        busy = secondCardBusy,
+                        notice = secondCardNotice,
+                        canAct = canAct,
+                        onSet = onSetSecondCard,
+                        onRecheck = onRecheckSecondCard,
+                        onOpenApprovals = onOpenApprovals,
+                    )
+                }
+            }
+
+            // backend/big-model.patch - next to the second card: the other
+            // way to run a model the main card cannot. Both plates read and
+            // act through JarvisRuntime directly (BigModelPlate.kt), so these
+            // are their only lines.
+            item(key = "big-model") {
+                BigModelSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
+            }
+            // The questions and answers are the owner's own words: hidden with
+            // the memory lists and chat history, like the wiki (the desktop's
+            // get_deep takes them out in Rust the same way).
+            if (privateHidden) {
+                item(key = "deep-questions-hidden") {
+                    HiddenSection("Deep questions", busy = showPrivateBusy, onShow = onShowPrivate)
+                }
+            } else {
+                item(key = "deep-questions") { DeepQuestionsSection(canAct = canAct) }
             }
 
             item(key = "attention") {
@@ -229,9 +545,67 @@ fun BrainScreen(
             // 4. The endpoints whose shape the contract does not fix. Rendered
             // from whatever actually came back — see JarvisApi.probe.
             item(key = "compute") {
-                Probed("Compute", brain.compute, "GPU and VRAM plan")
+                Probed("Compute", brain.compute, "GPU and VRAM plan", brain.computeRead, retry)
             }
-            item(key = "memory") {
+            // How much Jarvis remembers, and whether it is learning - the
+            // desktop's Memory pane numbers, read-only (MemoryCountsPlate.kt).
+            item(key = "memory-counts") {
+                MemoryCountsSection(
+                    canAct = canAct,
+                    onOpenAutoList = {
+                        val here = listState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.key == "memory-counts" }?.index
+                        if (here != null) listScope.launch { listState.animateScrollToItem(here + 1) }
+                    },
+                    // "Jarvis remembered N things" opens those facts: a memory
+                    // list, hidden like the others.
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+            // What Jarvis saved without a card (automatic learning,
+            // docs/JARVIS-API.md section 19), each with a Forget. Right after
+            // the plate its switches are on - the line above scrolls to it.
+            // Hidden like the other memory lists (AutoLearnPlate.kt).
+            item(key = "memory-auto") {
+                SavedAutomaticallySection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+            // "Always keep in mind" (the owner's decision, 2026-09-24): the
+            // facts Jarvis reads with every question, pinned from the list
+            // just above, each with an Unpin (ProfilePlate.kt). Right after
+            // that list, not before it: the line in "memory-counts" scrolls
+            // to the item after itself, which must stay "Saved automatically".
+            item(key = "memory-profile") {
+                AlwaysKeepInMindSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+            // Chat history on the PC: its own screen (HistoryScreen.kt), next
+            // to Memory, as the desktop puts it in the Brain window.
+            if (onOpenHistory != null) {
+                item(key = "history") {
+                    HistoryEntrySection(
+                        onOpen = onOpenHistory,
+                        privateHidden = privateHidden,
+                        showPrivateBusy = showPrivateBusy,
+                        onShowPrivate = onShowPrivate,
+                    )
+                }
+            }
+            if (privateHidden) {
+                item(key = "memory-hidden") {
+                    HiddenSection("Memory awaiting review", busy = showPrivateBusy, onShow = onShowPrivate)
+                }
+            } else item(key = "memory") {
                 // The QUEUE, not the corpus. /api/graph is desktop-only by the
                 // contract's own instruction, and a memory graph is not a thing
                 // to read on a phone; what belongs here is the short list of
@@ -240,16 +614,34 @@ fun BrainScreen(
                 // one-at-a-time way the desktop's own Memory tab does.
                 MemoryQueue(
                     data = brain.memory,
+                    read = brain.memoryRead,
+                    onRetry = retry,
+                    canAct = canAct,
                     busyId = memoryDecideBusyId,
                     onKeep = { id -> onDecideMemory(id, true) },
                     onDiscard = { id -> onDecideMemory(id, false) },
+                    onKeepBoth = onKeepBothMemory,
                     sleepOffer = sleepOffer,
                     sleepOfferBusy = sleepOfferBusy,
                     onSleepTimeAction = onSleepTimeAction,
                     onDismissSleepOffer = onDismissSleepOffer,
                 )
             }
-            item(key = "memory-as-of") {
+            // backend/wiki.patch - its own plate, reading and acting through
+            // JarvisRuntime directly (WikiPlate.kt), so this is its only line.
+            if (privateHidden) {
+                item(key = "wiki-hidden") { HiddenSection("Wiki", busy = showPrivateBusy, onShow = onShowPrivate) }
+            } else {
+                item(key = "wiki") { WikiSection(canAct = canAct) }
+            }
+            // The GitHub watch list (WatchPlate.kt) - it reads and acts
+            // through JarvisRuntime directly, so this is its only line.
+            item(key = "watch") { WatchSection(canAct = canAct) }
+            if (privateHidden) {
+                item(key = "memory-as-of-hidden") {
+                    HiddenSection("What did I believe on this date?", busy = showPrivateBusy, onShow = onShowPrivate)
+                }
+            } else item(key = "memory-as-of") {
                 Section("What did I believe on this date?") {
                     MemoryAsOfPlate(
                         busy = memoryAsOfBusy,
@@ -259,13 +651,30 @@ fun BrainScreen(
                 }
             }
             item(key = "initiative") {
-                Probed("Findings", brain.initiative, "What Jarvis noticed on its own")
+                Probed(
+                    "Findings",
+                    brain.initiative,
+                    "What Jarvis noticed on its own",
+                    brain.initiativeRead,
+                    retry,
+                    emptyNote = remember(brain.initiative) { initiativeNote(brain.initiative) },
+                )
             }
             item(key = "ledger") {
-                Probed("Audit chain", brain.ledger, "Entry count and last verified point")
+                Probed(
+                    "Audit chain",
+                    brain.ledger,
+                    "Entry count and last verified point",
+                    brain.ledgerRead,
+                    retry,
+                )
             }
             item(key = "skills") {
-                Probed("Skills", brain.skills, "Installed, with scan verdicts")
+                // Read as the desktop reads it, with Remove (SkillsPlate.kt).
+                // An answer with no list falls back to its raw keys, as before.
+                SkillsSection(data = brain.skills) {
+                    Probed("Skills", brain.skills, "Installed, with scan verdicts", brain.skillsRead, retry)
+                }
             }
 
             item(key = "capabilities") {
@@ -300,7 +709,7 @@ fun BrainScreen(
                                 ?.let { Field("Server", it, machine = true) }
                             Field("API", version.api.toString(), machine = true)
                             Gap(6)
-                            Kicker("Capabilities")
+                            Kicker("Capabilities", Modifier.semantics { heading() })
                             Gap(6)
                             // Branch on capabilities, never on version numbers —
                             // and show the user the same list the app branches
@@ -318,7 +727,7 @@ fun BrainScreen(
                             }
                             if (off.isNotEmpty()) {
                                 Gap(10)
-                                Kicker("Not on this backend")
+                                Kicker("Not on this backend", Modifier.semantics { heading() })
                                 Gap(6)
                                 FlowChips(off, muted = true)
                             }
@@ -332,8 +741,12 @@ fun BrainScreen(
     }
 }
 
+/**
+ * @param lastSeenAtMs when this latch was last read, shown as an age. Null
+ *   when the read that found it is the latest one, so there is nothing to age.
+ */
 @Composable
-private fun RushBanner(rush: JsonObject) {
+private fun RushBanner(rush: JsonObject, lastSeenAtMs: Long? = null) {
     val chrome = LocalChrome.current
     val text = rush.str("text")
         ?: "Outside text raised the current tier."
@@ -341,10 +754,22 @@ private fun RushBanner(rush: JsonObject) {
         tone = chrome.badInk.copy(alpha = 0.10f),
         outline = chrome.badInk.copy(alpha = 0.40f),
     ) {
-        Kicker("Tier raised", color = chrome.badInk)
+        Kicker("Tier raised", Modifier.semantics { heading() }, color = chrome.badInk)
+        if (lastSeenAtMs != null && lastSeenAtMs > 0L) {
+            Gap(2)
+            val now = rememberTickingNow(lastSeenAtMs)
+            Text(
+                "Last seen ${ageText(now - lastSeenAtMs)}. It may have cleared since.",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+        }
         Gap(6)
         Text(text, style = MaterialTheme.typography.bodyLarge, color = chrome.badInk)
-        rush.str("quote")?.let {
+        // `quote` or `phrase`: jarvis_content_risk lives only on the owner's
+        // PC, the desktop read `phrase` and this read `quote`, and nothing
+        // here can say which one it sends - so both are read, on both apps.
+        (rush.str("quote") ?: rush.str("phrase"))?.let {
             Gap(8)
             // Quoted, because it is a quote — and never rendered as if Jarvis
             // said it.
@@ -365,15 +790,70 @@ private fun RushBanner(rush: JsonObject) {
 }
 
 /**
- * The installed models, with a switch that ASKS.
+ * The rush-latch check did not come back. Amber, not red: this is "the phone
+ * does not know", not "something is wrong" - but it is drawn every time, in
+ * words, because the alternative was drawing nothing, and nothing reads as
+ * "no latch".
  *
- * The owner's 2026-09-18 amendment to the standing rules: changing the local
- * model from the phone is allowed. The catalogue is not - there is no install
- * here, nothing downloads, and the list is whatever the desktop already
- * holds. `Use` raises an approval card (tier `ask` on the server), so the
- * change is decided the same way every other change is; `Roll back` is tier
- * `auto` and never waits, because returning to the previous model is the safe
- * direction.
+ * No control here touches the latch. Retry re-reads; it clears nothing.
+ */
+@Composable
+private fun RushCheckFailed(
+    reason: String,
+    lastCheckedAtMs: Long,
+    sawLatch: Boolean,
+    onRetry: (() -> Unit)?,
+) {
+    val chrome = LocalChrome.current
+    Plate(tone = chrome.warnInk.copy(alpha = 0.10f), outline = chrome.warnInk.copy(alpha = 0.35f)) {
+        Kicker("Could not check for a rush latch", Modifier.semantics { heading() }, color = chrome.warnInk)
+        Gap(6)
+        Text(reason, style = MaterialTheme.typography.bodyMedium, color = chrome.warnInk)
+        Gap(6)
+        val now = if (lastCheckedAtMs > 0L) rememberTickingNow(lastCheckedAtMs) else 0L
+        Text(
+            when {
+                sawLatch -> "The latch above is the last one seen. It may still be set."
+                lastCheckedAtMs > 0L ->
+                    "The last check that worked, ${ageText(now - lastCheckedAtMs)}, found " +
+                        "none. One may have been set since."
+                else ->
+                    "It has not been checked since the app opened, so the phone does not " +
+                        "know whether one is set."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid,
+        )
+        RetryButton(onRetry)
+    }
+}
+
+/** Re-reads the board. Null [onRetry] means a read is already out. */
+@Composable
+private fun RetryButton(onRetry: (() -> Unit)?) {
+    Quiet(
+        if (onRetry == null) "Retrying…" else "Retry",
+        enabled = onRetry != null,
+        onClick = { onRetry?.invoke() },
+    )
+}
+
+/**
+ * The installed models, with a switch and an install that both ASK.
+ *
+ * The owner's 2026-09-18 amendment to the standing rules allowed changing the
+ * local model from the phone; the 2026-09-20 one allowed installing a model
+ * by typing its name. The catalogue is still not allowed - the list is
+ * whatever the desktop already holds, and there is nothing to browse for
+ * what could be installed. `Use` and `Install` each raise an approval card
+ * (tier `ask` on the server) on Home, so the change is decided the same way
+ * every other change is, and nothing downloads or switches until it is
+ * approved. `Roll back` is tier `auto` and never waits, because returning to
+ * the previous model is the safe direction.
+ *
+ * After an ask, the plate says the card is waiting and where, with a link to
+ * it when the caller supplies one. The link only opens Home; it approves
+ * nothing.
  *
  * The cost is said on the plate rather than discovered: a swap unloads one
  * model and loads another, which the desktop's own topology doc measures at
@@ -388,12 +868,18 @@ private fun ModelsPlate(
     onSwitch: (String) -> Unit,
     onRollback: () -> Unit,
     onInstall: (String) -> Unit,
+    request: ModelRequest?,
+    onOpenApprovals: ((cardId: String?) -> Unit)?,
 ) {
     val chrome = LocalChrome.current
     var installRef by rememberSaveable { mutableStateOf("") }
     val current = models.currentRef
     val entries = models.entries
     Plate {
+        if (request != null) {
+            ApprovalWaiting(request, onOpenApprovals)
+            Gap(12)
+        }
         // Is the model actually ON the graphics card? Nothing else on the
         // phone says, and the only symptom of a spill is that everything got
         // slow - which reads as "Jarvis is slow", not "the model is on the CPU".
@@ -404,6 +890,13 @@ private fun ModelsPlate(
                 style = MaterialTheme.typography.bodyMedium,
                 color = chrome.warnInk,
             )
+            Gap(10)
+        }
+        // speed-record.patch. The backend's own sentence, and only when it
+        // says the running model got slower - never built from the numbers
+        // here, so this screen and the desktop cannot say it differently.
+        models.speed?.slowdownNote?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = chrome.warnInk)
             Gap(10)
         }
         if (entries.isEmpty()) {
@@ -452,6 +945,16 @@ private fun ModelsPlate(
                     }
                 }
             }
+            models.speed?.currentLine?.let {
+                Gap(4)
+                Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            }
+            // Old speed against new, word for word from the backend, beside
+            // the button that undoes the switch.
+            models.speed?.lastSwitchNote?.let {
+                Gap(6)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            }
             val previous = models.previous?.takeIf { it.isNotBlank() && it != current }
             if (previous != null) {
                 Gap(6)
@@ -465,7 +968,7 @@ private fun ModelsPlate(
         }
         Gap(8)
         Text(
-            "Use asks the desktop and raises a card here to approve, like any " +
+            "Use asks the desktop and raises a card on Home to approve, like any " +
                 "other change. A switch takes six to ten seconds while one model " +
                 "unloads and the next loads - fine once, not per question.",
             style = MaterialTheme.typography.bodySmall,
@@ -501,6 +1004,42 @@ private fun ModelsPlate(
                 },
             )
         }
+    }
+}
+
+/**
+ * "Waiting for your approval", after Use or Install.
+ *
+ * Use used to show "…" for a moment and then nothing, and Install set a
+ * notice that said "approve it" without saying where. The card is on Home,
+ * not on this screen, so this says so, and offers the way there.
+ */
+@Composable
+private fun ApprovalWaiting(request: ModelRequest, onOpenApprovals: ((cardId: String?) -> Unit)?) {
+    val chrome = LocalChrome.current
+    Text(
+        "Waiting for your approval",
+        style = MaterialTheme.typography.titleSmall,
+        color = chrome.warnInk,
+    )
+    Gap(2)
+    Text(
+        if (request.install) {
+            "Installing ${request.ref} is waiting for your approval. " +
+                "${com.jarvis.client.net.Approvals.WHERE} Nothing downloads until you do."
+        } else {
+            "Switching to ${request.ref} is waiting for your approval. " +
+                "${com.jarvis.client.net.Approvals.WHERE} Nothing changes until you do."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = chrome.textMid,
+    )
+    if (onOpenApprovals != null) {
+        Quiet(
+            "Open the card →",
+            color = chrome.warnInk,
+            onClick = { onOpenApprovals(request.cardId) },
+        )
     }
 }
 
@@ -578,7 +1117,7 @@ private fun JobPlate(job: JobRecord) {
     Plate {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                job.label.ifBlank { job.id },
+                job.title,
                 style = MaterialTheme.typography.titleSmall,
                 color = chrome.textHi,
                 modifier = Modifier.weight(1f),
@@ -590,7 +1129,7 @@ private fun JobPlate(job: JobRecord) {
             Gap(10)
             Meter(it)
         }
-        if (job.capabilities.isNotEmpty()) {
+        if (job.frozen.isNotEmpty()) {
             Gap(10)
             // Frozen for the job's life. A job can never gain more while it
             // runs: approving something on Tuesday is not approving it on
@@ -598,7 +1137,15 @@ private fun JobPlate(job: JobRecord) {
             // checkable rather than merely stated.
             Kicker("Approved with")
             Gap(6)
-            FlowChips(job.capabilities)
+            FlowChips(job.frozen)
+        }
+        if (job.tainted) {
+            Gap(8)
+            Text(
+                "Read private data, so it stays on the PC.",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
         }
         if (job.private) {
             Gap(8)
@@ -618,19 +1165,21 @@ private fun JobPlate(job: JobRecord) {
  * deep config UI on the phone argues just as well against importing a whole
  * calendar picker for one field that is asked for rarely.
  *
- * `YYYY-MM-DD` is parsed as LOCAL midnight, not `ZoneOffset.UTC` - this used
- * to read `atStartOfDay(ZoneOffset.UTC)`, on the reasoning that the query's
- * own name, "known at" a moment rather than a day, only needed A moment and
- * UTC was as good as any. It is not: the desktop's own `promptValidTo` in
- * `brain.js` hit this exact trap first and documents it in its own comment -
- * "A bare YYYY-MM-DD is parsed as local midnight, not Date.parse's UTC
- * midnight - west of Greenwich that shift lands the timestamp on the
- * previous calendar day". A UTC choice here is not neutral; it is wrong for
- * everyone west of Greenwich, in the specific direction of silently dropping
- * every fact learned on the typed date itself. Matching the desktop's own
- * fix - local midnight, not UTC, and not end-of-day either, which would
- * have been a second, different disagreement with the one working
- * precedent in this repo.
+ * The typed date becomes a moment by [MemoryDates.knownAt]: the LAST second
+ * of that day, in the phone's own time zone - the same rule as the desktop's
+ * "What did you know on…" (`asOfSeconds` in brain.js). This used to be local
+ * MIDNIGHT, the start of the day, with a comment saying that matched the
+ * desktop. It did not: the desktop's as-of view has always used the end of
+ * the day (midnight is what its separate "when did this stop being true"
+ * prompt uses), so the phone left out everything learned on the typed day
+ * itself. backend/test_memory_honesty.py now holds both apps to the same
+ * numbers.
+ *
+ * A date after today, before [MemoryDates.EARLIEST_YEAR] or that does not
+ * exist is refused here, because the desktop answers a moment it cannot use
+ * with TODAY's facts - which this plate would have shown as the past. The
+ * answer is also checked for the `known_at` the desktop echoes, by
+ * [com.jarvis.client.JarvisRuntime.memoryAsOf].
  */
 @Composable
 private fun MemoryAsOfPlate(
@@ -641,13 +1190,15 @@ private fun MemoryAsOfPlate(
     val chrome = LocalChrome.current
     var text by rememberSaveable { mutableStateOf("") }
     val epochSeconds = remember(text) {
-        runCatching {
-            java.time.LocalDate.parse(text)
-                .atStartOfDay(java.time.ZoneId.systemDefault())
-                .toEpochSecond()
-        }.getOrNull()
+        com.jarvis.client.net.MemoryDates.knownAt(
+            text,
+            java.time.ZoneId.systemDefault(),
+            java.time.LocalDate.now(),
+        )
     }
-    val rows = remember(result) { result?.let { flatten(it) }.orEmpty() }
+    // The facts themselves. This used to go through `flatten()`, which shows
+    // an array of objects as its length: "Facts: 2" and nothing else.
+    val answer = remember(result) { result?.let { com.jarvis.client.net.MemoryAsOf.parse(it) } }
     Plate {
         Text(
             "Read-only. Not the memory graph - one moment's worth of facts, " +
@@ -672,22 +1223,63 @@ private fun MemoryAsOfPlate(
         }
         if (text.isNotBlank() && epochSeconds == null) {
             Gap(6)
-            Text("Use the form YYYY-MM-DD.", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Text(
+                "A real date, YYYY-MM-DD, from ${com.jarvis.client.net.MemoryDates.EARLIEST_YEAR} up to today.",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
         }
         if (result != null) {
             Gap(12)
             Rule()
             Gap(10)
-            if (rows.isEmpty()) {
-                Text(
+            when {
+                answer == null -> Text(
+                    "The desktop answered, but not with a list of facts, so nothing is shown.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = chrome.warnInk,
+                )
+                answer.facts.isEmpty() -> Text(
                     "Nothing on record for that date.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = chrome.textMid,
                 )
-            } else {
-                rows.forEachIndexed { i, (label, value) ->
-                    if (i > 0) Rule()
-                    Field(label, value, machine = value.looksMachine())
+                else -> {
+                    answer.note?.let { note ->
+                        Text(
+                            note.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                        Gap(8)
+                    }
+                    answer.facts.forEachIndexed { i, fact ->
+                        if (i > 0) Rule()
+                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            // "Erase the words": the date it was erased, never
+                            // its words and never the PC's marker.
+                            val erasedAt = fact.erasedAt
+                            Text(
+                                if (erasedAt != null) {
+                                    com.jarvis.client.net.MemoryErase.erasedLine(
+                                        erasedAt,
+                                        java.time.ZoneId.systemDefault(),
+                                    )
+                                } else {
+                                    fact.text
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (erasedAt != null) chrome.textMid else chrome.textHi,
+                            )
+                            com.jarvis.client.net.MemoryAsOf.tag(fact)?.let { tag ->
+                                Gap(4)
+                                Pill(
+                                    tag,
+                                    color = if (fact.trueThen == true) chrome.okInk else chrome.textMid,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -700,9 +1292,22 @@ private fun MemoryAsOfPlate(
  * Scalars become rows, arrays become a count and their readable entries, and
  * anything nested one level deep is flattened with its parent's name. No field
  * is assumed to exist, so nothing here can be quietly wrong about a key.
+ *
+ * Four states, drawn four ways ([SectionRead]). This used to say "Not
+ * available on this backend" whenever [data] was null - which was also true
+ * before the first read came back and after a read that failed, so two times
+ * out of three it blamed the desktop for something the phone did not know.
  */
 @Composable
-private fun Probed(title: String, data: JsonObject?, blurb: String) {
+private fun Probed(
+    title: String,
+    data: JsonObject?,
+    blurb: String,
+    read: SectionRead,
+    onRetry: (() -> Unit)?,
+    /** Said above the rows (or instead of "Nothing to report."), in plain words. */
+    emptyNote: String? = null,
+) {
     val chrome = LocalChrome.current
     // The expensive part of this composable, done once per payload instead of once
     // per recomposition. `flatten` walks the object and everything nested under it
@@ -719,27 +1324,95 @@ private fun Probed(title: String, data: JsonObject?, blurb: String) {
     Section(title) {
         Plate {
             if (data == null) {
-                Text(
-                    "Not available on this backend.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = chrome.textMid,
-                )
-                Gap(4)
-                Text(blurb, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+                SectionUnread(read, blurb, onRetry)
                 return@Plate
             }
+            if (emptyNote != null) {
+                Text(emptyNote, style = MaterialTheme.typography.bodyMedium, color = chrome.textMid)
+                if (rows.isNotEmpty()) Gap(8)
+            }
             if (rows.isEmpty()) {
-                Text(
-                    "Nothing to report.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = chrome.textMid,
-                )
+                if (emptyNote == null) {
+                    Text(
+                        "Nothing to report.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = chrome.textMid,
+                    )
+                }
                 return@Plate
             }
             rows.forEachIndexed { i, (label, value) ->
                 if (i > 0) Rule()
                 Field(label, value, machine = value.looksMachine())
             }
+        }
+    }
+}
+
+/**
+ * Why Findings is empty, when it is: Jarvis has no background checks.
+ *
+ * The rebuilt `jarvis_initiative.py` runs a timer with an EMPTY check list -
+ * the original list was not recoverable, and inventing unattended checks was
+ * refused on purpose (its own docstring) - and nothing registers one. So this
+ * list was always empty, and an empty list read as "nothing happened" rather
+ * than "nothing is looking". Said whenever the server reports zero checks, or
+ * sends no findings and no check count at all; a server that reports a real
+ * check count gets its list shown as it is.
+ */
+internal fun initiativeNote(body: JsonObject?): String? {
+    if (body == null) return null
+    fun count(o: JsonObject?, key: String): Int? =
+        (o?.get(key) as? JsonPrimitive)?.content?.toIntOrNull()
+    val checks = count(body, "checks") ?: count(body["status"] as? JsonObject, "checks")
+    val items = (body["items"] as? JsonArray) ?: (body["findings"] as? JsonArray)
+    val none = checks == 0 || (checks == null && items.isNullOrEmpty())
+    return if (none) {
+        "Jarvis doesn't watch anything on its own yet. No background checks have " +
+            "been built, so nothing will appear here until one is."
+    } else {
+        null
+    }
+}
+
+/**
+ * What a section with no payload says, by why it has none: still reading,
+ * not on this backend, or could not be read (with a Retry). Shared by
+ * [Probed] and [MemoryQueue] so the three read the same on every section.
+ */
+@Composable
+private fun SectionUnread(read: SectionRead, blurb: String, onRetry: (() -> Unit)?) {
+    val chrome = LocalChrome.current
+    when (read) {
+        is SectionRead.Failed -> {
+            Text(
+                "Could not read this: ${read.reason}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.warnInk,
+            )
+            Gap(4)
+            Text(blurb, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+            RetryButton(onRetry)
+        }
+        SectionRead.Absent -> {
+            Text(
+                "Not on this backend.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textMid,
+            )
+            Gap(4)
+            Text(blurb, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+        }
+        // Read with no payload cannot happen - a read that answered carries
+        // one - so it falls in with Reading rather than inventing a fifth line.
+        SectionRead.Reading, SectionRead.Read -> {
+            Text(
+                "Reading…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textMid,
+            )
+            Gap(4)
+            Text(blurb, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
         }
     }
 }
@@ -759,9 +1432,14 @@ private fun Probed(title: String, data: JsonObject?, blurb: String) {
 @Composable
 private fun MemoryQueue(
     data: JsonObject?,
+    read: SectionRead,
+    onRetry: (() -> Unit)?,
+    /** False on a dead or stale link: every write here dims, as on ModelsPlate. */
+    canAct: Boolean,
     busyId: Long?,
     onKeep: (id: Long) -> Unit,
     onDiscard: (id: Long) -> Unit,
+    onKeepBoth: (id: Long) -> Unit,
     sleepOffer: JsonObject?,
     sleepOfferBusy: Boolean,
     onSleepTimeAction: (enabled: Boolean?, remind: Boolean?) -> Unit,
@@ -775,13 +1453,17 @@ private fun MemoryQueue(
     // hoisted above the null branch so the remember is not behind a conditional
     // return.
     val items = remember(data) {
-        (data?.get("pending") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+        (data?.get("pending") as? JsonArray).orEmpty()
+            .mapNotNull { it as? JsonObject }
+            .map { MemoryCards.from(it) }
     }
+    val setupNotes = remember(data) { MemoryCards.setupNotes(data) }
     Section("Memory awaiting review") {
         if (sleepOffer != null) {
             SleepOfferCard(
                 offer = sleepOffer,
                 busy = sleepOfferBusy,
+                canAct = canAct,
                 onEnable = { onSleepTimeAction(true, null) },
                 onNotNow = onDismissSleepOffer,
                 onStopAsking = { onSleepTimeAction(null, false) },
@@ -790,37 +1472,37 @@ private fun MemoryQueue(
         }
         Plate {
             if (data == null) {
-                Text(
-                    "Not available on this backend.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = chrome.textMid,
-                )
-                Gap(4)
-                Text("Proposed facts", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+                SectionUnread(read, "Proposed facts", onRetry)
                 return@Plate
             }
             if (items.isEmpty()) {
                 Text(
                     "Nothing is waiting. Either Jarvis has not heard anything " +
-                        "worth keeping, or learning is off.",
+                        "worth keeping, or background learning is off.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = chrome.textMid,
                 )
-                return@Plate
             }
-            items.forEachIndexed { i, item ->
+            items.forEachIndexed { i, card ->
                 if (i > 0) Rule()
-                val id = item.str("id")?.toLongOrNull()
+                val id = card.id
                 MemoryProposalRow(
-                    text = item.str("text") ?: "(no text)",
-                    source = item.str("source"),
+                    card = card,
                     busy = id != null && id == busyId,
+                    canAct = canAct,
                     // A row with no readable id can be shown but not decided -
                     // the same "say what you can, act on what you know" rule
                     // as a section with no data at all.
                     onKeep = id?.let { { onKeep(it) } },
                     onDiscard = id?.let { { onDiscard(it) } },
+                    onKeepBoth = id?.takeIf { card.bothAreTrue }?.let { { onKeepBoth(it) } },
                 )
+            }
+            // Why the last "Remember:" did not become a card, and how many
+            // repeat cards were dropped - the backend's own sentences.
+            setupNotes.forEach { note ->
+                Gap(10)
+                Text(note, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
             }
         }
     }
@@ -836,14 +1518,21 @@ private fun MemoryQueue(
 private fun SleepOfferCard(
     offer: JsonObject,
     busy: Boolean,
+    canAct: Boolean,
     onEnable: () -> Unit,
     onNotNow: () -> Unit,
     onStopAsking: () -> Unit,
 ) {
     val chrome = LocalChrome.current
+    // Enable and Stop asking are writes to the desktop, so they dim with the
+    // link. Not now stays live: it hides this card on this phone for today
+    // and tells the PC, which then keeps the offer quiet for a day, then a
+    // week, then a month (JarvisRuntime.sleepNotNow) - it only makes Jarvis
+    // quieter, so refusing it on a stale link would guard nothing.
+    val canWrite = !busy && canAct
     Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Text(
-            offer.str("title") ?: "Let Jarvis tidy its memory overnight?",
+            offer.str("title") ?: "Overnight memory tidying - not built yet",
             style = MaterialTheme.typography.titleSmall,
             color = chrome.textHi,
         )
@@ -856,76 +1545,166 @@ private fun SleepOfferCard(
             Quiet(
                 if (busy) "Enabling…" else "Enable",
                 color = chrome.okInk,
-                enabled = !busy,
+                enabled = canWrite,
                 onClick = onEnable,
             )
             Quiet("Not now", color = chrome.textMid, enabled = !busy, onClick = onNotNow)
             Quiet(
                 if (busy) "Working…" else "Stop asking",
                 color = chrome.textLo,
-                enabled = !busy,
+                enabled = canWrite,
                 onClick = onStopAsking,
             )
         }
     }
 }
 
+/**
+ * One review card. What it says and which answers it offers come from
+ * [MemoryCards.from], which the unit tests pin:
+ *
+ *  - a planted-instruction warning, in plain words, when the backend flagged
+ *    the text (a warning only - both answers still work);
+ *  - "Your own words" on a card from a "Remember:" message;
+ *  - on a correction, the old fact it would replace, and a third answer,
+ *    "Both are true", only when the backend says that answer fits;
+ *  - on a "stop using this fact?" card, buttons that say what they do -
+ *    accepting RETIRES the fact, so it must never read "Keep".
+ *
+ * Still one card, one decision. Nothing here answers more than one card.
+ */
 @Composable
 private fun MemoryProposalRow(
-    text: String,
-    source: String?,
+    card: MemoryCardView,
     busy: Boolean,
+    canAct: Boolean,
     onKeep: (() -> Unit)?,
     onDiscard: (() -> Unit)?,
+    onKeepBoth: (() -> Unit)?,
 ) {
     val chrome = LocalChrome.current
     Column {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
-        if (source != null) {
+        if (card.warnings.isNotEmpty()) {
+            Plate(outline = chrome.warnInk.copy(alpha = 0.5f)) {
+                Kicker("Check this one", color = chrome.warnInk)
+                Gap(4)
+                Text(
+                    MemoryCards.PLANTED_HEADLINE,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = chrome.warnInk,
+                )
+                card.warnings.forEach { why ->
+                    Gap(2)
+                    Text("• $why", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                }
+                Gap(4)
+                Text(
+                    MemoryCards.PLANTED_ADVICE,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid,
+                )
+            }
+            Gap(8)
+        }
+        if (card.kind == MemoryCardKind.RETIRE) {
+            Kicker(MemoryCards.RETIRE_QUESTION, color = chrome.warnInk)
+            Gap(4)
+        }
+        Text(card.fact, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        card.reason?.let {
+            Gap(4)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        card.replaces?.let {
+            Gap(4)
+            Text(
+                "Would replace: $it",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+        }
+        if (card.ownWords) {
+            Gap(4)
+            Pill("Your own words", color = chrome.textMid)
+        }
+        card.sourceLine?.let {
             Gap(2)
-            Text("from $source", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        // Automatic learning left this one for a yes, and the PC said why
+        // (docs/JARVIS-API.md section 19) - one quiet line.
+        card.autoReasonLine?.let {
+            Gap(2)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        // The PC's "it sounds older than what Jarvis knows" warning, on its
+        // own line with plain dates (the memory review's I9) - the desktop
+        // shows it the same way, under the reason.
+        card.olderNewsLine?.let {
+            Gap(2)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        if (card.checked == false) {
+            Gap(2)
+            Text(MemoryCards.NOT_CHECKED, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
         Gap(6)
         // Affirm/Refuse, not two Quiets tinted okInk/badInk - this app's own
         // rule (SHARED-LOOK.md §9) is that ok and bad are never told apart by
         // colour alone, because verdant-4/rose-4 simulate to nearly the same
         // beige for a deuteranope. Every other approve/deny pair already uses
-        // this shape (ApprovalCard's Approve/Deny); this row was the one the
-        // Sept 18 UI audit found still hadn't been moved over.
+        // this shape (ApprovalCard's Approve/Deny).
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Affirm(
-                if (busy) "Keeping…" else "Keep",
-                enabled = !busy && onKeep != null,
+                if (busy) "Sending…" else card.acceptLabel,
+                enabled = !busy && canAct && onKeep != null,
                 onClick = { onKeep?.invoke() },
             )
             Refuse(
-                if (busy) "Discarding…" else "Discard",
-                enabled = !busy && onDiscard != null,
+                if (busy) "Sending…" else card.discardLabel,
+                enabled = !busy && canAct && onDiscard != null,
                 onClick = { onDiscard?.invoke() },
             )
+        }
+        if (onKeepBoth != null) {
+            Gap(8)
+            Secondary(
+                if (busy) "Sending…" else MemoryCards.BOTH_ARE_TRUE,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy && canAct,
+                onClick = onKeepBoth,
+            )
+        }
+        card.explainer?.let {
+            Gap(6)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
     }
 }
 
+/**
+ * Chips that wrap to the width they have.
+ *
+ * This used to be fixed rows of three, on the grounds that FlowRow was still
+ * experimental. A plain Row does not wrap, so with long capability names or
+ * the phone's font size turned up the third chip was squeezed and its text
+ * broke inside the pill. FlowRow places as many as fit and starts a new line.
+ *
+ * The opt-in is kept deliberately. Whether plain FlowRow still needs it in
+ * this BOM (2026.06.00) has not been checked - there is no local Android
+ * build - and an opt-in that turns out to be unneeded costs nothing, while a
+ * missing one would fail the only compiler this project has.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FlowChips(items: Collection<String>, muted: Boolean = false) {
     val chrome = LocalChrome.current
-    // A simple wrapping run. FlowRow would do it in one line but is still
-    // experimental in this BOM, and an opt-in on a layout is not worth it.
-    // `chunked` allocates the outer list plus one inner list per row, and this is
-    // called once per capability list and once per running job — on a screen that
-    // cannot skip recomposition, so it was rebuilding those lists on every server
-    // event for chips whose text never moved. Keyed on the input collection, whose
-    // `==` is a structural compare, so the chips still re-chunk the moment the set
-    // of capabilities actually differs.
-    val rows = remember(items) { items.chunked(3) }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        rows.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                row.forEach {
-                    Pill(it, color = if (muted) chrome.textLo else chrome.textMid)
-                }
-            }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items.forEach {
+            Pill(it, color = if (muted) chrome.textLo else chrome.textMid)
         }
     }
 }
@@ -946,13 +1725,21 @@ fun TopBar(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Quiet("← Back", color = LocalAccent.current, onClick = onBack)
+        // A drawn chevron and the word, instead of a typed "←" - the same
+        // drawn language as Home's nav icons (screens-15). Shared by every
+        // sub-screen, because they all use this bar.
+        BackButton(onBack)
         Spacer(Modifier.width(4.dp))
         Column(Modifier.weight(1f)) {
+            // A heading, so TalkBack's "navigate by headings" lands on it. No
+            // screen had a single one, so a long screen like this could only
+            // be read by swiping through every row. Shared by every sub-screen
+            // that uses TopBar.
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
                 color = chrome.textHi,
+                modifier = Modifier.semantics { heading() },
             )
             if (subtitle != null) {
                 Text(

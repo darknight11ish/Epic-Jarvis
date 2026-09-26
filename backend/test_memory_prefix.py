@@ -25,7 +25,7 @@ sys.path.insert(0, str(HERE))
 # the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain
+from _where import BACKEND, REPO, missing, explain, require_shipped
 SRC = BACKEND / "jarvis_hud.py"
 
 FAILED, PASSED = [], []
@@ -115,6 +115,10 @@ def t_edges():
     out = place(list(one), dict(r))
     check("a single-turn conversation keeps the turn and gains the block",
           out == [r, one[0]], repr(out))
+    # That shape, [recalled, question], is this expression's output only. On
+    # its own it would drop the Modelfile's SYSTEM block;
+    # jarvis_agent.keep_rules_first() puts the rules back in front (see
+    # t_the_first_question_keeps_the_rules).
     check("and the block comes first when there is nothing to prefix",
           out[0] is not one[0])
 
@@ -164,13 +168,51 @@ def t_the_persona_invariants_come_back():
           out[0].get("role") != "system",
           f"messages[0] is {out[0].get('role')!r} - ollama will skip m.System")
 
-    # A client that sends its own leading system message is a different case
-    # and stays that way: it was already suppressing m.System before this
-    # change, and that is the client's decision to make, not ours.
+    # A client that sends its own leading system message: this expression
+    # leaves it where the client put it. It does not decide whether the
+    # rules go in front of it - jarvis_agent.keep_rules_first() does, and
+    # since 2026-09-25 (the owner's decision) it always does; see
+    # t_the_first_question_keeps_the_rules below.
     theirs = [{"role": "system", "content": "you are a pirate"}] + history
     out = place(list(theirs), {"role": "system", "content": "recalled"})
     check("a client's own leading system message is left where it put it",
           out[0] is theirs[0], repr(out[0]))
+
+
+def t_the_first_question_keeps_the_rules():
+    """The case the test above does not cover: the FIRST question.
+
+    With no earlier turn, "just before the question" is index 0, so this
+    expression gives [recalled, question] - a system message first, and
+    Ollama then skips the Modelfile's SYSTEM block. jarvis_agent's
+    keep_rules_first() runs last on every request to the local model and puts
+    that block (LANE_SYSTEM, the Modelfile's SYSTEM word for word) in front.
+    Checked here on the real placement feeding the real function, so either
+    side changing shape shows up.
+    """
+    require_shipped("jarvis_agent.py")
+    import jarvis_agent as AG
+    place = _ordering()
+    rules = {"role": "system", "content": AG.LANE_SYSTEM}
+    r = {"role": "system", "content": "recalled"}
+
+    q = {"role": "user", "content": "where does Mario live"}
+    out = AG.keep_rules_first(place([q], dict(r)))
+    check("a first question that recalled facts starts with the Jarvis rules",
+          out == [rules, r, q], [m.get("content", "")[:30] for m in out])
+
+    history = [{"role": "user", "content": "where does Mario live"},
+               {"role": "assistant", "content": "at 42 Elm Street"},
+               {"role": "user", "content": "and what is he allergic to"}]
+    out = AG.keep_rules_first(place(list(history), dict(r)))
+    check("a later question is left alone (Ollama adds the rules itself)",
+          out[0] == history[0] and rules not in out, repr(out[0]))
+
+    theirs = [{"role": "system", "content": "Context:\nsome copied text"}, q]
+    out = AG.keep_rules_first(place(list(theirs), dict(r)))
+    check("an app's own leading system message gets the rules in front of it",
+          out == [rules] + theirs[:1] + [r, q],
+          [m.get("content", "")[:30] for m in out])
 
 
 def t_k_is_not_a_magic_number():
@@ -188,7 +230,7 @@ def t_k_is_not_a_magic_number():
 if __name__ == "__main__":
     for fn in (t_the_prefix_survives_a_turn, t_the_facts_reach_the_question, t_edges,
                t_it_is_not_prepended_anywhere, t_the_persona_invariants_come_back,
-               t_k_is_not_a_magic_number):
+               t_the_first_question_keeps_the_rules, t_k_is_not_a_magic_number):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

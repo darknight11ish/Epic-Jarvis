@@ -140,14 +140,58 @@ body {
   color: var(--text-muted);
 }
 
+/* Connected but stale, or still connecting: amber, not red. Nothing can be
+   approved in either, but neither is "Jarvis is down". The words carry the
+   difference too (jarvis-link.js linkWords), so it is never hue alone. */
+.widget-offline[data-tone="warn"] {
+  border-left-color: var(--warn);
+  background: var(--warn-faint);
+}
+
+/* Focus session (focus.js): a countdown under the bar, tinted while the owner
+   is off target - the warn colour, as the Brain's. */
+.focus-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 6px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--ok);
+  border-radius: var(--radius-chip, 4px);
+  background: var(--surface-1);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.focus-strip[data-tone="drift"] {
+  border-left-color: var(--warn);
+  background: var(--warn-faint);
+  color: var(--text);
+}
+
+.focus-strip[data-tone="paused"],
+.focus-strip[data-tone="settling"] {
+  border-left-color: var(--border-strong);
+}
+
+.focus-strip .focus-clock {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.focus-strip .focus-word {
+  flex: 1;
+  min-width: 0;
+}
+
 /* A button that is an offer, not an emphasis: the emphatic control in this
    window is Approve, and nothing else may compete with it. */
 .btn-quiet {
   flex: none;
   padding: 3px 9px;
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-chip, 4px);
-  background: var(--surface-raised);
+  background: var(--surface-1);
   font-size: 11px;
   color: var(--text);
   cursor: pointer;
@@ -352,6 +396,26 @@ body {
   gap: 4px;
 }
 
+/* One line per graphics card, shown only with two or more (I12). */
+.gpu-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.gpu-cards li.hot {
+  color: var(--gold);
+}
+
+.gpu-cards li.critical {
+  color: var(--bad);
+}
+
 .meter-head {
   display: flex;
   align-items: baseline;
@@ -437,13 +501,19 @@ body {
   white-space: nowrap;
 }
 
-.action-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* The card's title - the PC's own words ("Jarvis wants to search the web"),
+   up to two lines, never cut to a code name. */
+.appr-title {
+  margin: 0 0 6px;
   color: var(--text);
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .appr-detail {
@@ -473,6 +543,32 @@ body {
 
 .appr-risk[data-reversible="hard"] { color: var(--gold); }
 .appr-risk[data-reversible="no"] { color: var(--bad); }
+
+/* "1 of 3". Muted: it is a count, not a warning. */
+.appr-count {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+/* Why Approve is missing for a multi-option plan, and why the two buttons are
+   grey. Words on the card, where the keyboard and a screen reader reach them. */
+.appr-options-why,
+.appr-why {
+  margin: 0 0 6px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.appr-why[data-tone="bad"] { color: var(--bad-text); }
+
+.appr-hint {
+  margin: 5px 0 0;
+  font-size: 9.5px;
+  color: var(--text-muted);
+  text-align: center;
+}
 
 
 /* Multiple-choice options - docs/AUTONOMY-PROPOSALS.md §3a. Stacked, not a
@@ -524,8 +620,8 @@ body {
 
 .appr-option:disabled {
   opacity: 1;
-  background: var(--surface-raised);
-  border-color: var(--hairline);
+  background: var(--surface-1);
+  border-color: var(--border);
   color: var(--text-faint);
   cursor: default;
 }
@@ -565,6 +661,13 @@ body {
   outline: none;
   border-color: rgb(var(--accent-rgb) / 0.45);
   box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.12);
+}
+
+/* A real focus ring for the keyboard, the same one every other control gets.
+   The 12% glow above was the only sign of focus and is nearly invisible. */
+.appr-note-input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .appr-note-input:disabled {
@@ -674,8 +777,8 @@ body {
 .btn-approve:disabled,
 .btn-deny:disabled {
   opacity: 1;
-  background: var(--surface-raised);
-  border-color: var(--hairline);
+  background: var(--surface-1);
+  border-color: var(--border);
   color: var(--text-faint);
   box-shadow: none;
   cursor: default;
@@ -689,6 +792,15 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* In place of the capture row when the PC is set up for no note app, or
+   could not be asked - it says which, rather than offering all three. */
+.note-targets-line {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
 }
 
 /* Now a <button> rather than a <div>, so the Logseq/Joplin switch is reachable
@@ -736,6 +848,11 @@ body {
   outline: none;
   border-color: rgb(var(--accent-rgb) / 0.45);
   box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.12);
+}
+
+.capture-input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .capture-input:disabled {

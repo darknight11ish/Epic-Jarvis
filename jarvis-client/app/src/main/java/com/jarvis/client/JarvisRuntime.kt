@@ -6,7 +6,12 @@ import android.util.Log
 import com.jarvis.client.data.AppearanceStore
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.data.TokenStore
+import com.jarvis.client.net.ActivityEvent
+import com.jarvis.client.net.AnswerMark
+import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.ApiError
+import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
@@ -19,8 +24,12 @@ import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.net.BigModel
+import com.jarvis.client.net.Hardware
+import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.platform.UpdateChecker
 import com.jarvis.client.widget.ApprovalWidget
 import com.jarvis.client.widget.QuickLinkWidget
 import androidx.glance.appwidget.updateAll
@@ -41,7 +50,12 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import com.jarvis.client.net.CustomVoices
+import com.jarvis.client.net.VoiceStrict
+import com.jarvis.client.voice.StrictVoice
+import com.jarvis.client.voice.VoiceRounds
 import com.jarvis.client.voice.VoiceSession
+import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -51,9 +65,16 @@ import kotlinx.serialization.json.JsonPrimitive
  *
  * Deliberately untyped. §4 documents that these routes exist and what they are
  * for, and does not document their fields — so a data class here would be
- * invented keys, and invented keys fail silently as an empty panel. Null means
- * the route was not reachable or not present, which the screen says plainly
- * rather than rendering as zero.
+ * invented keys, and invented keys fail silently as an empty panel.
+ *
+ * A null payload on its own no longer says WHY it is null. It used to be the
+ * only signal, and it meant three different things at once: not read yet, the
+ * read failed, and this backend does not have the route. The screen showed
+ * all three as "Not available on this backend", which was wrong in two cases
+ * out of three - and for `/api/content-risk` the wrong case was the dangerous
+ * one, because a timed-out read made the rush-latch banner simply vanish
+ * under a line that said "Live.". Each payload now has a [SectionRead] beside
+ * it that says which of the four it is.
  */
 data class BrainSnapshot(
     val compute: kotlinx.serialization.json.JsonObject? = null,
@@ -61,8 +82,90 @@ data class BrainSnapshot(
     val ledger: kotlinx.serialization.json.JsonObject? = null,
     val skills: kotlinx.serialization.json.JsonObject? = null,
     val initiative: kotlinx.serialization.json.JsonObject? = null,
+    /**
+     * Unlike the others, NOT cleared by a failed read: it keeps the last
+     * answer that did come back, with [contentRiskAtMs] saying how old that
+     * is. A rush latch that disappears because the check failed reads as
+     * "nothing is raising the tier", which the phone does not know.
+     */
     val contentRisk: kotlinx.serialization.json.JsonObject? = null,
+    /** When the whole board was last read. 0 means never, on this run of the app. */
     val fetchedAtMs: Long = 0L,
+    val computeRead: SectionRead = SectionRead.Reading,
+    val memoryRead: SectionRead = SectionRead.Reading,
+    val ledgerRead: SectionRead = SectionRead.Reading,
+    val skillsRead: SectionRead = SectionRead.Reading,
+    val initiativeRead: SectionRead = SectionRead.Reading,
+    val contentRiskRead: SectionRead = SectionRead.Reading,
+    /** When [contentRisk] was last read successfully. 0 means never. */
+    val contentRiskAtMs: Long = 0L,
+    /**
+     * True while a re-read is in flight, so Refresh can say "Refreshing…".
+     * Without it, a tap that brought back identical data looked exactly like
+     * a tap that did nothing.
+     */
+    val refreshing: Boolean = false,
+    /**
+     * The last model switch or install asked for from the phone, while its
+     * approval card may still be waiting. Carried here, rather than in a flow
+     * of its own, because it is shown on the same screen as the rest of this
+     * snapshot and nowhere else.
+     */
+    val modelRequest: ModelRequest? = null,
+)
+
+/**
+ * How one section's last read came back. Four states, drawn four ways:
+ * "Reading…", "Not on this backend", "Could not read this: <reason>" with a
+ * Retry, or the data itself.
+ */
+sealed interface SectionRead {
+    /** Not answered yet on this run of the app. */
+    data object Reading : SectionRead
+
+    /** The route answered. The payload sits in the matching field. */
+    data object Read : SectionRead
+
+    /**
+     * 404 or 503: the route or the subsystem behind it is not on this
+     * backend. A fact about the desktop, not a fault, so it gets no Retry.
+     */
+    data object Absent : SectionRead
+
+    /** Anything else - a timeout, a 500, a body that would not parse. */
+    data class Failed(val reason: String) : SectionRead
+}
+
+/**
+ * A model switch or install the phone asked for. Asking raises an approval
+ * card on Home (tier `ask` on the server); nothing about the model changes
+ * until that card is approved.
+ */
+data class ModelRequest(
+    /** True for an install (a download), false for a switch. */
+    val install: Boolean,
+    val ref: String,
+    /**
+     * The card this request raised, when it could be told apart from the
+     * cards already waiting; null when it could not. Only ever used to
+     * scroll Home to the card - never to decide it.
+     */
+    val cardId: String?,
+    val atMs: Long,
+)
+
+/**
+ * The Inbox's own read state. The screen used to take none, so it said
+ * "Live. Nothing waiting." before its first read had come back, and again
+ * after a read that failed.
+ */
+data class InboxRead(
+    val digest: SectionRead = SectionRead.Reading,
+    val undo: SectionRead = SectionRead.Reading,
+    val jobs: SectionRead = SectionRead.Reading,
+    /** When the last read finished. 0 means never, on this run of the app. */
+    val fetchedAtMs: Long = 0L,
+    val refreshing: Boolean = false,
 )
 
 /** Whether the event stream is up. Separate from whether Jarvis is busy. */
@@ -76,12 +179,10 @@ enum class Activity {
     IDLE, LISTENING, THINKING, SPEAKING, WORKING,
 
     /**
-     * A running task, paused - AUTONOMY-PROPOSALS.md §3d. DRAFT: no backend
-     * anywhere is confirmed to send this value yet (the design doc's own
-     * §3d says plainly that `jarvis_gate.py` does not emit it today), so
-     * this maps from the wire the moment it might, the same speculative
-     * stance the desktop's own widget already takes reading `link.activity`.
-     * Until then this arm is simply never reached.
+     * A running task, paused - AUTONOMY-PROPOSALS.md §3d. The desktop's
+     * `backend/task-control.patch` reports it once a plan has really stopped
+     * at a checkpoint with steps left, and keeps reporting it until the task
+     * is resumed or stopped. Never set by this app on its own say-so.
      */
     PAUSED,
     ERROR;
@@ -136,11 +237,25 @@ object JarvisRuntime {
 
     lateinit var settings: ClientSettings
         private set
+
+    /**
+     * The application context, for the one notification this object posts
+     * itself: a timer, an alarm or a reminder that went off on the PC
+     * ([onScheduleEvent]). The application's, never an Activity's.
+     */
+    @Volatile private var appContext: Context? = null
     lateinit var tokens: TokenStore
         private set
 
     /** Theme, face and the seven state bindings. Per device — see the class. */
     lateinit var appearance: AppearanceStore
+        private set
+
+    /**
+     * "A newer version is available": one GET to GitHub's public release
+     * page for this app, never to the PC. See [UpdateChecker].
+     */
+    lateinit var updates: UpdateChecker
         private set
 
     /**
@@ -184,6 +299,15 @@ object JarvisRuntime {
     private val _version = MutableStateFlow<VersionInfo?>(null)
     val version: StateFlow<VersionInfo?> = _version.asStateFlow()
 
+    /**
+     * The owner's right/wrong mark on the answer now on screen, keyed by that
+     * answer's id so a mark can never be shown beside a different answer.
+     * Null until the owner marks something. In memory only, like the answer
+     * itself; the desktop keeps the real record (`feedback.db`).
+     */
+    private val _answerMark = MutableStateFlow<AnswerMarkState?>(null)
+    val answerMark: StateFlow<AnswerMarkState?> = _answerMark.asStateFlow()
+
     private val _status = MutableStateFlow<StatusInfo?>(null)
     val status: StateFlow<StatusInfo?> = _status.asStateFlow()
 
@@ -201,13 +325,76 @@ object JarvisRuntime {
     val activityDetail: StateFlow<String?> = _activityDetail.asStateFlow()
 
     /**
+     * The tool loop's `step` events in words, newest last, as the desktop's
+     * Brain → Live shows them ([com.jarvis.client.net.Steps]). In memory
+     * only, at most [com.jarvis.client.net.Steps.KEEP] lines; tool names
+     * only, never what a tool read. Empty until the PC sends one - it sends
+     * them only while tools are switched on.
+     */
+    private val _steps = MutableStateFlow<List<com.jarvis.client.net.Steps.Line>>(emptyList())
+    val steps: StateFlow<List<com.jarvis.client.net.Steps.Line>> = _steps.asStateFlow()
+
+    /** Mind's Clear on the steps list. Only this phone's copy; nothing is sent. */
+    fun clearSteps() {
+        _steps.value = emptyList()
+    }
+
+    /**
      * `/api/models`, or null when this backend does not offer the capability
-     * or has not been asked yet. Switching is the one config change the owner
-     * allowed onto the phone (CLAUDE.md, 2026-09-18) - between models the
-     * desktop already has, never installing one.
+     * or has not been asked yet. Switching between models the desktop already
+     * has was allowed onto the phone on 2026-09-18, and installing a typed
+     * model name on 2026-09-20 (CLAUDE.md) - both only ever ASK, through an
+     * approval card. Browsing what could be installed is still off the phone.
      */
     private val _models = MutableStateFlow<ModelsInfo?>(null)
     val models: StateFlow<ModelsInfo?> = _models.asStateFlow()
+
+    /**
+     * `/api/second-card`: what the PC found, and the second-card switches
+     * ([com.jarvis.client.net.SecondCard]). Read on each connect, on the Mind
+     * screen, after every switch, and after an approval is decided while one
+     * of its cards was waiting. Chat reads it too: a picture is only offered
+     * while the PC says Pictures is working.
+     */
+    private val _secondCard = MutableStateFlow<SecondCard.Read>(SecondCard.Read.NotAsked)
+    val secondCard: StateFlow<SecondCard.Read> = _secondCard.asStateFlow()
+
+    /**
+     * Which note apps the desktop said are set up, as last asked
+     * ([noteTargets]) - or null before the first answer. Chat reads it to
+     * say, under the box, where a `#log` / `#obs` / `#joplin` line will be
+     * filed ([com.jarvis.client.net.NoteCapture.chip]). The send asks again.
+     */
+    private val _noteTargets = MutableStateFlow<com.jarvis.client.net.NoteCapture.Targets?>(null)
+    val noteTargetsKnown: StateFlow<com.jarvis.client.net.NoteCapture.Targets?> =
+        _noteTargets.asStateFlow()
+
+    /**
+     * `/api/big-model`: what the PC found for the big model (slow), and its
+     * switches ([BigModel]). Read on the Mind screen, after every switch,
+     * after a `deep` event (a finished question changes the measured speed)
+     * and after an approval is decided while one of its cards was waiting.
+     */
+    private val _bigModel = MutableStateFlow<BigModel.Read<BigModel.Status>>(BigModel.Read.NotAsked)
+    val bigModel: StateFlow<BigModel.Read<BigModel.Status>> = _bigModel.asStateFlow()
+
+    /**
+     * `/api/deep`: the deep questions and their answers. Read on the Mind
+     * screen, after asking, on every `deep` event (the doorbell for a
+     * finished question), and - only while one is still going - every
+     * [BigModel.DEEP_POLL_MS] while its plate is on screen.
+     */
+    private val _deep = MutableStateFlow<BigModel.Read<BigModel.Deep>>(BigModel.Read.NotAsked)
+    val deep: StateFlow<BigModel.Read<BigModel.Deep>> = _deep.asStateFlow()
+
+    /**
+     * `/api/hardware`: the PC's graphics cards and the three setups it worked
+     * out for them ([Hardware]). Read on the Mind screen, after every choice,
+     * step and measurement, and after an approval is decided while a step's
+     * card was waiting.
+     */
+    private val _hardware = MutableStateFlow<Hardware.Read>(Hardware.Read.NotAsked)
+    val hardware: StateFlow<Hardware.Read> = _hardware.asStateFlow()
 
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
@@ -236,12 +423,21 @@ object JarvisRuntime {
     private val _undo = MutableStateFlow<List<UndoEntry>>(emptyList())
     val undo: StateFlow<List<UndoEntry>> = _undo.asStateFlow()
 
+    private val _inboxRead = MutableStateFlow(InboxRead())
+
+    /** Whether each Inbox list has been read, failed, or is not on this backend. */
+    val inboxRead: StateFlow<InboxRead> = _inboxRead.asStateFlow()
+
     private val _jobs = MutableStateFlow<List<JobRecord>>(emptyList())
     val jobs: StateFlow<List<JobRecord>> = _jobs.asStateFlow()
 
     private val _brain = MutableStateFlow(BrainSnapshot())
 
-    /** What the brain screen shows. Fetched on demand, never polled. */
+    /**
+     * What the brain screen shows. Fetched on demand - when the screen opens,
+     * on Refresh or Retry - and polled only if the screen is given an
+     * auto-refresh interval, which is off unless the owner turns it on.
+     */
     val brain: StateFlow<BrainSnapshot> = _brain.asStateFlow()
 
     private val _absent = MutableStateFlow<Set<String>>(emptySet())
@@ -258,6 +454,17 @@ object JarvisRuntime {
     /** Non-null when something needs saying on screen and nowhere else will say it. */
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
+
+    private val _problem = MutableStateFlow<com.jarvis.client.net.PlainErrors.Shown?>(null)
+
+    /**
+     * The last failure put into plain words ([com.jarvis.client.net.PlainErrors]):
+     * its fix button and its scrubbed Details. It belongs to the notice on
+     * screen only while [notice] is its [com.jarvis.client.net.PlainErrors.Shown.text]
+     * - Home checks that, so a later, different notice never shows an old
+     * failure's button or Details.
+     */
+    val problem: StateFlow<com.jarvis.client.net.PlainErrors.Shown?> = _problem.asStateFlow()
 
     private val _face = MutableStateFlow(FaceState.IDLE)
 
@@ -324,22 +531,59 @@ object JarvisRuntime {
         val clientSettings = ClientSettings(app)
         val tokenStore = TokenStore(app)
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
-        val chatSession = ChatSession(jarvisApi)
-        val voiceSession = VoiceSession(app, jarvisApi, scope) { text, onDelta ->
+        // A temporary chat only on a PC that says it has one (docs/JARVIS-API.md
+        // section 18.1): read from the last handshake, when it is asked.
+        val chatSession = ChatSession(jarvisApi, canTemporary = { can(com.jarvis.client.net.TemporaryChat.CAPABILITY) })
+        // The link check is a lambda, not a value: it is read at the moment
+        // "hey Jarvis" ON is asked for, and `actionBlocker` reads the flows.
+        val voiceSession = VoiceSession(
+            app,
+            jarvisApi,
+            scope,
+            linkBlocker = { actionBlocker() },
+            // For "private answers stay on screen": tools that ran (the `step`
+            // event), and whether the stream could have told us.
+            toolWatch = {
+                com.jarvis.client.voice.PrivateAloud.Watch(
+                    runs = toolRuns,
+                    drops = streamOpens,
+                    live = _link.value == LinkState.CONNECTED && !_stale.value,
+                )
+            },
+            // "Say 'One moment' if I'm kept waiting" (Checks), read when a
+            // tool starts during a spoken question.
+            oneMoment = { clientSettings.oneMoment.value },
+            // "Play a short sound when I finish speaking" (Checks), read
+            // each time the "I heard you" sound would play.
+            heardSoundOn = { clientSettings.heardSound.value },
+            // Where the owner cut a spoken answer off: sent once, with the
+            // next question (typed or spoken), as `interrupted`.
+            onCutOff = { said -> chatSession.cutOff.cut(said, android.os.SystemClock.elapsedRealtime()) },
+        ) { text, onRoute, onStatus, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
             // cancel the spoken one and leave its own partial reply in there —
             // and Jarvis would say it aloud as the answer to the question that
             // was spoken. `onDelta` is this same call's own local callback,
             // not a subscription to that shared flow - see ChatSession.send's
-            // own doc for why that distinction is the whole point.
-            chatSession.send(text, onDelta)?.takeIf { it.isNotBlank() }
+            // own doc for why that distinction is the whole point. `onRoute`
+            // is the same kind of callback, for the answer's header.
+            // Tagged "voice": this is the transcript the PC's speech route
+            // gave back (chat history, docs/JARVIS-API.md section 18).
+            // `onStatus`: a card this spoken question waits on is said aloud,
+            // and then how it ended (voice/CardVoice.kt).
+            chatSession.send(
+                text, onDelta, onRoute = onRoute, provenance = com.jarvis.client.net.Provenance.VOICE,
+                onStatus = onStatus,
+            )?.takeIf { it.isNotBlank() }
         }
 
         settings = clientSettings
+        appContext = app
         tokens = tokenStore
         api = jarvisApi
         appearance = AppearanceStore(app)
+        updates = UpdateChecker(clientSettings)
         chat = chatSession
         voice = voiceSession
         stream = EventStream(jarvisApi)
@@ -419,27 +663,46 @@ object JarvisRuntime {
             is ApiResult.Ok -> {
                 _version.value = result.value
                 _notice.value = null
+                // A new handshake may be a different (or upgraded) server:
+                // ask it about the appearance route afresh.
+                appearanceRoute = null
             }
-            is ApiResult.Failed -> _notice.value = describe(result.error)
+            is ApiResult.Failed -> _notice.value = describe(result.error, handshake = true)
         }
         return result
     }
 
-    private fun describe(e: ApiError): String = when (e) {
-        ApiError.BadToken ->
-            "The desktop refused that token. Check it in the HUD's settings and paste it again."
-        ApiError.NotFound ->
-            "Reached something at that address, but it is not a Jarvis server."
-        ApiError.AlreadyHandled -> "Already handled elsewhere."
-        ApiError.NotAvailable ->
-            "That part of Jarvis is not running on the desktop right now."
-        is ApiError.Unreachable ->
-            "Cannot reach the desktop: ${e.detail}. Check Tailscale is up on both ends."
-        is ApiError.Server -> "The desktop answered ${e.code}."
-        is ApiError.Malformed -> "The desktop sent something this app could not read."
+    /**
+     * A failure in the plain words both apps use (PlainErrors, from
+     * tools/gen_plain_error_cases.py): what happened, then what to do - never
+     * a raw error, an exception's text or a status number. The fix button and
+     * the scrubbed technical detail are kept in [problem] for Home's notice.
+     * [handshake]: `GET /api/version`, where a 404 means "not Jarvis at all".
+     */
+    private fun describe(e: ApiError, handshake: Boolean = false): String {
+        if (e == ApiError.AlreadyHandled) return "Already handled elsewhere."
+        val shown = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
+        _problem.value = shown
+        return shown.text
     }
 
-    fun noticeFor(e: ApiError): String = describe(e)
+    /**
+     * The same plain words as [describe], for a screen that shows them itself.
+     * It does NOT touch [problem]: a screen reading a failure of its own must
+     * not take the button and Details away from the notice on Home.
+     */
+    fun noticeFor(e: ApiError): String =
+        if (e == ApiError.AlreadyHandled) "Already handled elsewhere."
+        else com.jarvis.client.net.PlainErrors.forApiError(e).text
+
+    /**
+     * A failure already put into plain words (a failed question, from
+     * ChatSession): the notice says it, and Home shows its button and Details.
+     */
+    fun setProblem(shown: com.jarvis.client.net.PlainErrors.Shown) {
+        _problem.value = shown
+        _notice.value = shown.text
+    }
 
     /**
      * Whether the backend reports a capability.
@@ -693,7 +956,17 @@ object JarvisRuntime {
         settings.lastEventId = id
     }
 
+    /**
+     * `step` events that said a tool ran, and how many times the stream has
+     * (re)opened - read by the voice loop's private-answer rule
+     * ([com.jarvis.client.voice.PrivateAloud.Watch]). Counters only.
+     */
+    @Volatile private var toolRuns = 0L
+    @Volatile private var streamOpens = 0L
+
     private suspend fun onOpen(hello: com.jarvis.client.net.HelloPayload?) {
+        // A (re)connect: step events may have been missed since the last one.
+        streamOpens += 1
         _link.value = LinkState.CONNECTED
         linkDownSince = 0L
         _linkDetail.value = null
@@ -738,7 +1011,55 @@ object JarvisRuntime {
      */
     private suspend fun onEvent(event: SseEvent) {
         when (event.kind) {
-            "approval" -> refreshPending()
+            "approval" -> {
+                refreshPending()
+                // A second-card switch waiting on a card has no event of its
+                // own (docs/JARVIS-API.md section 12: "re-read it after a
+                // card is decided"). A decided card changes the queue, and
+                // this is the doorbell for that, so the switches are asked
+                // again - only while one of them is waiting.
+                val sc = _secondCard.value
+                if (sc is SecondCard.Read.Loaded && sc.status.pending.isNotEmpty()) {
+                    recheckSecondCardAfterDecision(sc.status.pending)
+                }
+                // The big model's switches work the same way
+                // (docs/JARVIS-API.md section 14: "read GET /api/big-model
+                // again after a card is decided").
+                val bm = _bigModel.value
+                if (bm is BigModel.Read.Loaded<BigModel.Status> && bm.value.pending.isNotEmpty()) {
+                    recheckBigModelAfterDecision(bm.value.pending)
+                }
+                // A setup's step whose card was up: a decided card is the
+                // moment it is done (or refused). There is no event for it.
+                val hw = _hardware.value
+                if (hw is Hardware.Read.Loaded && hw.status.applying != null) {
+                    scope.launch { refreshHardware() }
+                }
+                // And the voice cards: "hey Jarvis" ON and a voice training.
+                // Neither has an event of its own either, so without this the
+                // Checks screen said "Waiting" over a card already decided.
+                if (voice.answered.value && voice.status.value.cardWaiting) {
+                    recheckVoiceAfterDecision()
+                }
+                // A custom-voice card (add, switch, the better voice): the PC
+                // rings `voices` when one ends, and this is the belt to that
+                // pair of braces - a PC whose event list drops `voices`
+                // would otherwise leave "Waiting" on the Voices screen.
+                val cv = customVoiceStatus()
+                if (cv != null && (cv.pending != null || cv.better.pending)) refreshCustomVoices()
+            }
+            // A custom-voice card ended, a voice was deleted, the voice went
+            // back to the built-in one, or the better voice went off
+            // (`{"what", "outcome"}` - a doorbell, never a name or words).
+            // Read again only once the Voices screen has asked.
+            "voices" -> if (customVoicesAsked) refreshCustomVoices()
+            // A deep question finished (`{"id", "state"}` only - a doorbell,
+            // never the question or the answer). The list is re-read for the
+            // answer, and the switches for the speed it measured.
+            "deep" -> {
+                refreshDeep()
+                refreshBigModel()
+            }
             "attention" -> refreshAttention()
             "activity" -> {
                 // The one field read straight off an event rather than
@@ -746,37 +1067,78 @@ object JarvisRuntime {
                 // the doorbell itself. Absent means nothing to say, so the
                 // line clears - a stale "Step 2/3" under an idle face would
                 // be worse than none.
-                _activityDetail.value = (event.data as? JsonObject)
-                    ?.get("activity_detail")?.let { it as? JsonPrimitive }?.content
-                    ?.takeIf { it.isNotBlank() }?.take(ACTIVITY_DETAIL_MAX)
+                // `value.detail`, where the bus puts it - see ActivityEvent.
+                // This read `activity_detail`, which no backend sends.
+                _activityDetail.value = ActivityEvent.detail(event.data, ACTIVITY_DETAIL_MAX)
                 refreshStatus()
             }
             "power", "persona" -> refreshStatus()
-            "finding" -> Unit // the digest covers these; nothing to show live
-            // A model download publishes progress here. The phone cannot start,
-            // cancel or retry one, so rendering a bar for it would invite a tap
-            // on a control that has to be somewhere else. The LIST is re-read,
-            // though: a switch or a rollback made on the desktop should change
-            // which model the phone's own picker marks as active.
+            // The brief covers these; the Watches plate on Mind reads its
+            // lists again, as the desktop's Brain does.
+            "finding" -> _watchTick.update { it + 1 }
+            // A model download publishes progress here. The phone CAN start
+            // one - Install, by typed name, raises a card (the owner's
+            // 2026-09-20 amendment; see installModel) - but it cannot cancel
+            // or retry one, so no progress bar is drawn: it would invite a tap
+            // on a control that has to be on the desktop. The LIST is re-read,
+            // though: an install finishing, or a switch or rollback made on
+            // the desktop, should change what the phone's own picker shows.
             "model" -> refreshModels()
             "voice" -> Unit
-            // The memory extractor runs on its own once a conversation goes
-            // quiet, so the review queue fills without anyone asking. The
-            // event deliberately carries no fact text, and there is nothing
-            // here worth showing: reviewing memory is desk work, and a count
-            // on a phone invites a batch-accept control, which is precisely
-            // the shape rule 4 forbids.
             // Announced as Signal.Open, and EventStream then falls through and
             // emits it as a generic event too - so this arrives on every
             // connect and was logging "unhandled event kind 'hello'" each
             // time. The Open carries the payload; there is nothing to do here.
             "hello" -> Unit
-            "proposal" -> Unit
+            // The memory extractor runs on its own once a conversation goes
+            // quiet (and a "Remember:" makes a card at once), so the review
+            // queue fills without anyone asking. The event carries no fact
+            // text - it is a doorbell - so the queue itself is re-read, and
+            // the Brain screen's cards (one card, one decision, each) show
+            // what arrived. This used to be ignored, with a comment saying
+            // reviewing memory was desk work; the phone has had review cards
+            // since, and they sat stale until something else refreshed them.
+            "proposal" -> refreshMemoryQueue()
+            // Facts saved WITHOUT a card (automatic learning,
+            // docs/JARVIS-API.md section 19): `{"ids": [...]}` only, never
+            // the text - a doorbell like the rest. The list on Mind reads
+            // itself again, and a quiet line counts them. Never a
+            // notification: nothing here reaches ApprovalNotifier.
+            com.jarvis.client.net.AutoLearn.EVENT -> onMemorySaved(event.data)
+            // A timer, alarm or reminder went off on the PC, or Coming up
+            // changed (`{"id", "kind", "state"}` only - a doorbell, never the
+            // words). The list on Mind reads itself again; a job that went
+            // off is read by id and shown as a notification.
+            com.jarvis.client.net.Schedule.EVENT -> onScheduleEvent(event.data, event.id)
+            // A focus session started, changed (locked on, a drift began or
+            // ended, paused...) or ended (`{"state"}` only, or a callout's
+            // number - a doorbell, never what was in front). Mind's "Focus
+            // session" reads itself again. The spoken line is the PC's
+            // alone: the phone is refused it, and does not ask.
+            "focus" -> _focusTick.update { it + 1 }
             // Face and bindings changed on another device. Each device renders
             // its own face and the server is only the sync channel, so this
             // just re-reads the shared document; nothing here redraws
             // anything directly.
             "appearance" -> refreshAppearance()
+            // One step of the tool loop - asking the model, a tool starting,
+            // finishing or refused - kept for Mind's "What Jarvis is doing".
+            // It used to fall through to "unhandled" below.
+            "step" -> {
+                // Counted for "private answers stay on screen": an answer a
+                // tool helped write is not read aloud (PrivateAloud).
+                if (com.jarvis.client.voice.PrivateAloud.isToolRun(event.data)) toolRuns += 1
+                // A tool starting during a spoken question: "One moment."
+                // (once per question, before the answer makes a sound).
+                if (com.jarvis.client.voice.VoiceFlow.isToolStart(event.data) && started) {
+                    voice.toolStarted()
+                }
+                val line = com.jarvis.client.net.Steps.Line(
+                    com.jarvis.client.net.Steps.clock(System.currentTimeMillis()),
+                    com.jarvis.client.net.Steps.text(event.data),
+                )
+                _steps.update { com.jarvis.client.net.Steps.append(it, line) }
+            }
             else -> Log.d(TAG, "unhandled event kind '${event.kind}'")
         }
     }
@@ -786,6 +1148,10 @@ object JarvisRuntime {
         refreshStatus()
         refreshPending()
         refreshAttention()
+        // One small read, so chat knows whether a picture can be offered.
+        refreshSecondCard()
+        // And one more, so chat can say where a `#log` line will be filed.
+        noteTargets()
     }
 
     suspend fun refreshStatus() {
@@ -829,15 +1195,43 @@ object JarvisRuntime {
             _notice.value = it
             return ApiResult.Failed(ApiError.Unreachable(it))
         }
+        val waitingBefore = _pending.value.map { it.id }.toSet()
         val result = api.switchModel(ref)
         when (result) {
             is ApiResult.Ok -> {
                 refreshPending()
                 refreshModels()
+                // Said on the Mind screen, where the tap was. It used to say
+                // nothing at all: the button showed "…" for a moment and then
+                // looked exactly as before, which reads as broken and invites
+                // a second tap.
+                noteModelRequest(install = false, ref = ref, waitingBefore = waitingBefore)
             }
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
         return result
+    }
+
+    /**
+     * Records a switch or install that raised a card, for the Mind screen's
+     * "Waiting for your approval" line.
+     *
+     * The POST answers with no id, so the card is found by difference: the
+     * one waiting now that was not waiting before the ask. If that is not
+     * exactly one card - the re-read failed, or something else arrived at
+     * the same moment - [ModelRequest.cardId] is null and Home is opened
+     * without scrolling to a particular card. Either way the id is only
+     * used to scroll; nothing is ever decided from here.
+     */
+    private fun noteModelRequest(install: Boolean, ref: String, waitingBefore: Set<String>) {
+        val fresh = _pending.value.filter { it.id !in waitingBefore }
+        val request = ModelRequest(
+            install = install,
+            ref = ref.trim(),
+            cardId = fresh.singleOrNull()?.id,
+            atMs = System.currentTimeMillis(),
+        )
+        _brain.update { it.copy(modelRequest = request) }
     }
 
     /** Back to the previous model. Tier `auto` on the server - never waits. */
@@ -883,12 +1277,16 @@ object JarvisRuntime {
         // typed, the same way it already disables Use/Roll back. Trimmed
         // rather than validated further: what counts as a real model name
         // is the desktop's call, not this app's to second-guess.
+        val waitingBefore = _pending.value.map { it.id }.toSet()
         val result = api.installModel(ref.trim())
         when (result) {
             is ApiResult.Ok -> {
-                _notice.value = "Install requested — approve it like any other " +
-                    "change to start the download."
                 refreshPending()
+                // In the Model plate, with a way to reach the card, rather than
+                // the shared notice it used to set. That notice said "approve
+                // it" without saying where, and the card is on Home, not on
+                // the screen the owner was looking at.
+                noteModelRequest(install = true, ref = ref, waitingBefore = waitingBefore)
             }
             // describeDraft, not describe: a 404 here almost certainly means a
             // desktop old enough to predate this route, and describe's own
@@ -903,19 +1301,706 @@ object JarvisRuntime {
         return result
     }
 
+    // ------------------------------------------------------ second card ----
+
+    /**
+     * Re-reads `/api/second-card`. A failed read replaces what was there:
+     * the plate then says it could not ask, rather than showing switches the
+     * PC may no longer agree with - and chat stops offering a picture.
+     */
+    suspend fun refreshSecondCard() {
+        _secondCard.value = SecondCard.readOf(api.secondCard())
+    }
+
+    /**
+     * Re-reads the switches after an approval was decided while one of their
+     * cards [waiting] - at once, then twice more a little later if the PC
+     * still says it waits. The PC writes the switch when its own wait for the
+     * card returns, which can land just after the event that woke this, so
+     * one read alone could leave the plate on "Waiting" over a card already
+     * answered. Stops as soon as any of those cards is no longer waiting.
+     * Launched, so the event loop is not held up.
+     */
+    private fun recheckSecondCardAfterDecision(waiting: List<String>) {
+        scope.launch {
+            for (wait in SECOND_CARD_RECHECK_MS) {
+                delay(wait)
+                refreshSecondCard()
+                val now = (_secondCard.value as? SecondCard.Read.Loaded)?.status?.pending ?: return@launch
+                if (!now.containsAll(waiting)) return@launch
+            }
+        }
+    }
+
+    /**
+     * Turns one second-card switch off, or asks for it to be turned on, then
+     * asks the PC what actually happened - the same shape as the wake word
+     * ([com.jarvis.client.voice.VoiceSession.setWakeWord]).
+     *
+     * ON raises one approval card on the PC (`second_card_enable`, tier
+     * `ask`), so a success means "a card is up", never "it is on"; the card
+     * is decided on the PC or in this phone's approval list, one at a time,
+     * like any other. OFF is immediate. Either way the reply is not trusted
+     * for the state: [refreshSecondCard] decides what the plate shows.
+     *
+     * Refused while the link is down or stale ([actionBlocker], rule 4).
+     *
+     * @param feature a feature id, or [SecondCard.MASTER] for the main switch.
+     * @return a sentence to show, or null when the plate already says it.
+     */
+    suspend fun setSecondCard(feature: String, enabled: Boolean): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setSecondCard(feature, enabled)
+        // The card should appear in this phone's approvals too.
+        if (enabled && result is ApiResult.Ok) refreshPending()
+        refreshSecondCard()
+        return SecondCard.replyLine(result)
+    }
+
+    // -------------------------------------------------------- big model ----
+
+    /**
+     * Re-reads `/api/big-model`. A failed read replaces what was there: the
+     * plate then says it could not ask, rather than showing switches the PC
+     * may no longer agree with.
+     */
+    suspend fun refreshBigModel() {
+        _bigModel.value = BigModel.readOf(api.bigModel())
+    }
+
+    /** [recheckSecondCardAfterDecision], for the big model's switches. */
+    private fun recheckBigModelAfterDecision(waiting: List<String>) {
+        scope.launch {
+            for (wait in SECOND_CARD_RECHECK_MS) {
+                delay(wait)
+                refreshBigModel()
+                val now = (_bigModel.value as? BigModel.Read.Loaded<BigModel.Status>)?.value?.pending
+                    ?: return@launch
+                if (!now.containsAll(waiting)) return@launch
+            }
+        }
+    }
+
+    /**
+     * [recheckSecondCardAfterDecision], for the voice cards (the wake word's
+     * and voice training's): re-reads `/api/voice/status` at once, then twice
+     * more a little later while it still says a card waits. The PC records
+     * the outcome when its own wait for the card returns, which can land
+     * just after the event that woke this.
+     */
+    private fun recheckVoiceAfterDecision() {
+        scope.launch {
+            for (wait in SECOND_CARD_RECHECK_MS) {
+                delay(wait)
+                voice.refreshStatus()
+                if (!voice.answered.value || !voice.status.value.cardWaiting) return@launch
+            }
+        }
+    }
+
+    /**
+     * Turns one big-model switch off, or asks for it to be turned on, then
+     * asks the PC what actually happened - the same shape as [setSecondCard].
+     *
+     * ON raises one approval card on the PC (`big_model_enable`, tier `ask`),
+     * so a success means "a card is up", never "it is on"; the card is
+     * decided on the PC or in this phone's approval list, one at a time. OFF
+     * is immediate. Either way [refreshBigModel] decides what the plate shows.
+     *
+     * Refused while the link is down or stale ([actionBlocker], rule 4).
+     *
+     * @param switch [BigModel.MASTER], [BigModel.WIKI] or [BigModel.DEEP].
+     * @return a sentence to show, or null when the plate already says it.
+     */
+    suspend fun setBigModel(switch: String, enabled: Boolean): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setBigModel(switch, enabled)
+        // The card should appear in this phone's approvals too.
+        if (enabled && result is ApiResult.Ok) refreshPending()
+        refreshBigModel()
+        // Turning the deep-questions switch changes whether a question can be asked.
+        refreshDeep()
+        return BigModel.replyLine(result)
+    }
+
+    // --------------------------------------------------------- hardware ----
+
+    /** Re-reads `/api/hardware`. Reads only; a failed read is said in words. */
+    suspend fun refreshHardware() {
+        _hardware.value = Hardware.readOf(api.hardware())
+    }
+
+    /**
+     * Chooses a setup, or forgets the choice ([preset] null). Choosing changes
+     * no model and no setting on the PC: it lists the steps. Choosing is held
+     * on a stale link ([actionBlocker], rule 4); forgetting is not - it only
+     * narrows what runs.
+     */
+    suspend fun chooseHardware(preset: String?): String {
+        if (preset != null) actionBlocker()?.let { return it }
+        val result = api.hardwarePost(Hardware.APPLY_PATH, Hardware.applyBody(preset))
+        refreshHardware()
+        return Hardware.replyLine(result)
+    }
+
+    /**
+     * Asks for ONE step of the chosen setup, by its id. The route and body are
+     * read from a fresh `GET /api/hardware` ([Hardware.stepRequest]) - never
+     * made up here - and the PC raises that step's own approval card, decided
+     * on the PC or in this phone's approvals like any other. Only the next
+     * step can be asked for; nothing is approved in bulk.
+     */
+    suspend fun hardwareStep(stepId: String): String {
+        actionBlocker()?.let { return it }
+        refreshHardware()
+        val status = (_hardware.value as? Hardware.Read.Loaded)?.status
+            ?: return Hardware.readLine(_hardware.value) ?: Hardware.UPDATE
+        return when (val ask = Hardware.stepRequest(status, stepId)) {
+            is Hardware.StepAsk.No -> ask.reason
+            is Hardware.StepAsk.Post -> {
+                val result = api.hardwarePost(ask.route, ask.body)
+                // The card should appear in this phone's approvals too.
+                if (result is ApiResult.Ok) refreshPending()
+                if (ask.route == SecondCard.PATH) refreshSecondCard()
+                refreshHardware()
+                Hardware.replyLine(result)
+            }
+        }
+    }
+
+    /** Asks the PC to measure the setup's models (it loads each once). */
+    suspend fun measureHardware(): String {
+        actionBlocker()?.let { return it }
+        val result = api.hardwarePost(Hardware.MEASURE_PATH, "{}")
+        refreshHardware()
+        return Hardware.replyLine(result)
+    }
+
+    // ------------------------------------------------------- web search ----
+    // The owner's decisions of 2026-09-25 - see [com.jarvis.client.net.WebSearch]
+    // and ui/screens/WebSearchPlate.kt. The phone chooses the provider, sets
+    // the SearXNG address, turns "Ask before every web search" on or off (off
+    // raises ONE approval card on the PC) and runs a test search. It never
+    // takes an Exa, Tavily or Brave key: those are typed on the PC only.
+
+    /** `GET /api/search`. A read: never held. */
+    suspend fun webSearch(): ApiResult<JsonObject> = api.webSearch()
+
+    // ------------------------------------------------ what Jarvis can reach ----
+    // The Muse audit, 2026-09-25 - see [com.jarvis.client.net.Reach] and
+    // ui/screens/ReachPlate.kt. Every way Jarvis can reach something outside
+    // itself, written by the PC from its settings, never by the model.
+
+    /** `GET /api/reach`. A read: never held. */
+    suspend fun reach(): ApiResult<JsonObject> = api.reach()
+
+    // ------------------------------------------------------ what asks first ----
+    // The owner's decisions of 2026-09-26 - see [com.jarvis.client.net.AsksFirst]
+    // and ui/screens/AsksFirstPlate.kt. Stricter from the phone; looser on
+    // the PC only.
+
+    /** `GET /api/asks_first`. A read: never held. */
+    suspend fun asksFirst(): ApiResult<JsonObject> = api.asksFirst()
+
+    /**
+     * "Ask me first" ON for ONE action - the desktop's `set_asks_first` with
+     * `ask: true`. Never held on a stale link: it only makes Jarvis ask more.
+     * @return the sentence to show.
+     */
+    suspend fun makeAskFirst(action: String): String {
+        val r = api.makeAskFirst(action)
+        return when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.AsksFirst.said(r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.AsksFirst.missing(r.error)) {
+                    com.jarvis.client.net.AsksFirst.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * "Lights, plugs and fans without a card" - the desktop's
+     * `set_lights_without_card`. ON is held on a stale link (rule 4) and
+     * raises ONE approval card on the PC; OFF is never held.
+     * @return the sentence to show.
+     */
+    suspend fun setLightsWithoutCard(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        val r = writeNoticingCards { api.setLightsWithoutCard(on) }
+        return when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.AsksFirst.said(r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.AsksFirst.missing(r.error)) {
+                    com.jarvis.client.net.AsksFirst.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * `GET /api/email/sending` - Mind's "Sending email" line
+     * ([com.jarvis.client.net.EmailSending], ui/screens/EmailSendingPlate.kt).
+     * A read: never held. There is nothing to change from the phone: the
+     * account is set on the PC, and each email is its own approval card.
+     */
+    suspend fun emailSending(): ApiResult<JsonObject> = api.emailSending()
+
+    /** "Folders Jarvis may look in" - `GET /api/folders` ([com.jarvis.client.net.Folders]). */
+    suspend fun folders(): ApiResult<JsonObject> = api.folders()
+
+    /**
+     * Take ONE folder off "Folders Jarvis may look in". At once, never held
+     * on a stale link: it only lets Jarvis see less (the desktop's
+     * `remove_folder`). @return the sentence to show.
+     */
+    suspend fun removeFolder(path: String): String =
+        when (val r = api.removeFolder(path)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Folders.said(r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.Folders.missing(r.error)) {
+                    com.jarvis.client.net.Folders.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+
+    /**
+     * ONE web search setting, with [body] from [com.jarvis.client.net.WebSearch]'s
+     * providerBody / addressBody / askBody. Held on a stale link ([actionBlocker],
+     * rule 4). Turning "Ask before every web search" off raises a card on the PC,
+     * which this phone's approvals show too.
+     */
+    suspend fun setWebSearch(body: String?): String {
+        actionBlocker()?.let { return it }
+        if (body == null) return "That is not something this screen can change."
+        val result = api.webSearchPost(com.jarvis.client.net.WebSearch.SETTINGS_PATH, body)
+        if (result is ApiResult.Ok) refreshPending()
+        return com.jarvis.client.net.WebSearch.replyLine(result)
+    }
+
+    /**
+     * One test search for a fixed word through the chosen provider. Held on a
+     * stale link. @return whether it worked, and the PC's sentence (with its
+     * offer to switch when it did not).
+     */
+    suspend fun testWebSearch(): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return com.jarvis.client.net.WebSearch.testLine(
+            api.webSearchPost(com.jarvis.client.net.WebSearch.TEST_PATH, "{}"),
+        )
+    }
+
+    // ----------------------------------------------------------- manner ----
+    // "How Jarvis talks" (the owner's decision of 2026-09-25) - see
+    // [com.jarvis.client.net.Manner] and ui/screens/MannerPlate.kt. Warm and
+    // brief, or plain: wording only, so no card either way.
+
+    /** `GET /api/manner`. A read: never held. */
+    suspend fun manner(): ApiResult<JsonObject> = api.manner()
+
+    /**
+     * ONE change: "warm" or "plain". No approval card either way (it changes
+     * only how answers are worded), but held on a stale link like every
+     * change sent to the PC ([actionBlocker], rule 4).
+     */
+    suspend fun setManner(manner: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.Manner.body(manner)
+            ?: return "That is not one of the two choices."
+        return com.jarvis.client.net.Manner.replyLine(api.mannerPost(body), manner)
+    }
+
+    /** Re-reads `/api/deep`. Starts nothing on the PC. */
+    suspend fun refreshDeep() {
+        _deep.value = BigModel.deepReadOf(api.deep())
+    }
+
+    /**
+     * "Ask slowly": queues one deep question on the PC. No approval card per
+     * question - the switch was approved with one, and a question acts on
+     * nothing - but it is still held on a stale or dropped link (rule 4).
+     * The list is re-read either way, so the new question shows at once.
+     */
+    suspend fun askDeep(question: String): BigModel.Asked {
+        actionBlocker()?.let { return BigModel.Asked(it, queued = false) }
+        val limit = (_deep.value as? BigModel.Read.Loaded<BigModel.Deep>)?.value?.questionChars ?: 4000
+        BigModel.askProblem(question, limit)?.let { return BigModel.Asked(it, queued = false) }
+        val asked = BigModel.askReply(api.deepAsk(question))
+        refreshDeep()
+        return asked
+    }
+
+    /**
+     * Why a picture cannot be sent right now, or null when it can: asks the
+     * PC again first, so a Pictures switch turned off since the last read
+     * stops the send rather than handing the picture to a model that cannot
+     * see it.
+     */
+    suspend fun pictureBlocker(): String? {
+        actionBlocker()?.let { return it }
+        refreshSecondCard()
+        val read = _secondCard.value
+        // A picture model sees it, or the PC reads the words in it (2026-09-26).
+        if (SecondCard.picturesTaken(read)) return null
+        val why = com.jarvis.client.net.ChatPicture.notWorkingWhy(read)
+        return "The picture was not sent: Pictures on the second graphics card is not " +
+            "working right now, and your PC cannot read the words in it" +
+            (why?.let { " ($it)" } ?: "") + "."
+    }
+
+    /**
+     * "Train my voice": sends the owner's recorded clips to the desktop.
+     *
+     * The same shape as [installModel]: a success means **an approval card
+     * was raised**, not that anything changed. The desktop learns the voice
+     * only once that card is approved (on the desktop or here, like any
+     * other card) and throws the clips away whatever the answer.
+     *
+     * Blocked while the link is down or stale ([actionBlocker]): sending
+     * raises a card, and a card raised against a stream this phone cannot
+     * confirm is live is the thing rule 4 is about. The clips are not logged
+     * and not kept here - the caller drops them once this says accepted.
+     */
+    suspend fun sendVoiceTraining(clips: List<ByteArray>): VoiceTraining.SendResult {
+        actionBlocker()?.let { return VoiceTraining.SendResult(false, it) }
+        // mic=phone: since 2026-09-24 the PC keeps one voice print per
+        // microphone, and this is the phone's.
+        return when (val result = api.enrollVoice(clips, VoiceTraining.MIC)) {
+            is ApiResult.Ok -> {
+                val accepted = VoiceTraining.accepted(result.value)
+                // The card should appear in this phone's approvals too.
+                if (accepted) refreshPending()
+                VoiceTraining.SendResult(accepted, VoiceTraining.replyLine(result.value))
+            }
+            is ApiResult.Failed -> VoiceTraining.SendResult(
+                false,
+                when (result.error) {
+                    // No such route: the PC has not had voice-enroll.patch yet.
+                    ApiError.NotFound ->
+                        "Your PC does not have voice training yet. Run the patch script on " +
+                            "the PC first (backend/README.md, \"Train my voice\")."
+                    ApiError.NotAvailable ->
+                        "Voice training is not installed on your PC yet."
+                    else -> describe(result.error)
+                },
+            )
+        }
+    }
+
+    /**
+     * The "someone else" check: another person's clips, scored on the PC
+     * against the owner's print and thrown away there. Changes nothing and
+     * raises no card, so it is not gated on the link the way a write is -
+     * but it is refused outright unless the PC says it understands it
+     * ([VoiceTraining.canCheck]): an older PC would read these clips as a
+     * training and raise a card to make the other person "the owner".
+     */
+    suspend fun checkVoiceWithSomeoneElse(clips: List<ByteArray>): VoiceTraining.CheckResult {
+        if (!VoiceTraining.canCheck(voice.status.value, voice.answered.value)) {
+            return VoiceTraining.CheckResult(
+                false,
+                "Your PC does not have this check yet. Run the patch script on the PC first.",
+            )
+        }
+        return when (val result = api.calibrateVoice(clips, VoiceTraining.MIC)) {
+            is ApiResult.Ok -> VoiceTraining.checkResult(result.value)
+            is ApiResult.Failed -> VoiceTraining.CheckResult(false, describe(result.error))
+        }
+    }
+
+    /**
+     * Asks the PC to use a stricter bar for the owner's voice on this
+     * phone's microphone. Like [sendVoiceTraining], a success means a card
+     * was raised - the bar changes only once it is approved.
+     */
+    suspend fun proposeVoiceThreshold(value: Double): VoiceTraining.SendResult {
+        actionBlocker()?.let { return VoiceTraining.SendResult(false, it) }
+        if (!VoiceTraining.canCheck(voice.status.value, voice.answered.value)) {
+            return VoiceTraining.SendResult(false, "Your PC does not have this setting yet.")
+        }
+        return when (val result = api.proposeVoiceThreshold(value, VoiceTraining.MIC)) {
+            is ApiResult.Ok -> {
+                val accepted = VoiceTraining.accepted(result.value)
+                if (accepted) refreshPending()
+                VoiceTraining.SendResult(accepted, VoiceTraining.replyLine(result.value))
+            }
+            is ApiResult.Failed -> VoiceTraining.SendResult(false, describe(result.error))
+        }
+    }
+
+    // ------------------------------- voice: rounds, the two settings, the test
+
+    private val _voiceSent = MutableStateFlow<VoiceRounds.Plan?>(null)
+
+    /**
+     * The training plan this phone last FINISHED sending - sentence numbers
+     * only, never audio - so the PC's "round 2, clip 5 was left out" can be
+     * turned back into the sentence to read again. Memory only: after a
+     * restart the phone honestly does not know, and says only how many.
+     */
+    val voiceSent: StateFlow<VoiceRounds.Plan?> = _voiceSent.asStateFlow()
+
+    /**
+     * Sends round [index] of [plan]. Every round but the last is HELD on the
+     * PC (no card, nothing changed); the last carries `finish` and raises ONE
+     * card for all of them. An older PC's single round goes the old way
+     * ([sendVoiceTraining]).
+     *
+     * Only the round that raises the card ([VoiceRounds.raisesCard]: the
+     * last round, or an older PC's one-shot) is held on a stale or dropped
+     * link ([actionBlocker], rule 4), like the desktop. The rounds before it
+     * are only held in memory on the PC - no card, nothing changed - so they
+     * always go; on a dropped link they simply fail to arrive. Nothing here
+     * is logged or kept: the caller drops the round's clips once this says
+     * accepted.
+     */
+    suspend fun sendVoiceRound(plan: VoiceRounds.Plan, index: Int, clips: List<ByteArray>): VoiceRounds.Result {
+        if (VoiceRounds.raisesCard(plan, index)) {
+            actionBlocker()?.let { return VoiceRounds.Result(false, it) }
+        }
+        if (plan.kind == VoiceRounds.Kind.SINGLE_OLD) {
+            val r = sendVoiceTraining(clips)
+            if (r.accepted) _voiceSent.value = plan
+            return VoiceRounds.Result(r.accepted, r.message, finished = r.accepted)
+        }
+        if (!voice.strict.value.rounds) {
+            return VoiceRounds.Result(false, "Your PC does not take training in rounds yet. Run the patch script on the PC first.")
+        }
+        val last = VoiceRounds.isLast(plan, index)
+        if (index > 0) {
+            // The earlier rounds must still be held: the PC drops them 15
+            // minutes after the last, and a round sent after that would
+            // start a new training with only itself in it.
+            voice.refreshStatus()
+            if (!voice.answered.value) {
+                return VoiceRounds.Result(
+                    false,
+                    "Could not ask your PC whether it still holds the earlier rounds. Try again.",
+                )
+            }
+            VoiceRounds.lostRounds(plan, index, voice.strict.value.session)?.let {
+                return VoiceRounds.Result(false, it)
+            }
+        }
+        return when (val result = api.voiceEnroll(VoiceRounds.body(plan, index, clips, VoiceTraining.MIC))) {
+            is ApiResult.Ok -> {
+                val a = result.value
+                if (a.accepted && last) {
+                    _voiceSent.value = plan
+                    // The card should appear in this phone's approvals too.
+                    refreshPending()
+                }
+                voice.refreshStatus()
+                VoiceRounds.Result(
+                    accepted = a.accepted,
+                    message = when {
+                        !a.accepted -> VoiceRounds.otherSessionLine(a)
+                            ?: VoiceRounds.sentence(a.error.ifBlank { a.message.ifBlank { "Your PC did not take that round." } })
+                        last -> VoiceRounds.finishedLine(a)
+                        else -> VoiceRounds.heldLine(a, plan, index)
+                    },
+                    finished = a.accepted && last,
+                    heldElsewhere = a.session != null,
+                )
+            }
+            is ApiResult.Failed -> VoiceRounds.Result(false, describe(result.error))
+        }
+    }
+
+    /**
+     * Cancel: every round the PC is holding is deleted. Never held back on
+     * a stale link - it only deletes (like turning the wake word OFF). If
+     * the PC cannot be reached, it deletes what it holds after 15 minutes
+     * anyway, and the line says so.
+     */
+    suspend fun cancelVoiceRounds(): String {
+        if (!voice.strict.value.rounds) return VoiceRounds.cancelledLine(null)
+        return when (val r = api.voiceEnroll(VoiceStrict.CANCEL_BODY)) {
+            is ApiResult.Ok -> {
+                voice.refreshStatus()
+                VoiceRounds.cancelledLine(r.value)
+            }
+            is ApiResult.Failed ->
+                "Cancelled on this phone. Your PC could not be reached; it deletes the rounds it " +
+                    "holds by itself after 15 minutes."
+        }
+    }
+
+    /**
+     * Very strict / balanced, and private answers. LOOSENING raises one
+     * approval card on the PC and changes nothing until it is approved, so
+     * it is held on a stale link; TIGHTENING applies at once and always goes
+     * ([StrictVoice.blocker]). The PC's answer is shown as it is, and the
+     * status read again so the screen shows what is TRUE, not what was asked.
+     */
+    suspend fun setVoiceSetting(setting: String, value: String): String {
+        StrictVoice.blocker(setting, value, voice.strict.value, actionBlocker())?.let { return it }
+        return when (val r = api.voiceEnroll(VoiceStrict.settingBody(setting, value))) {
+            is ApiResult.Ok -> {
+                if (r.value.pending) refreshPending()
+                voice.refreshStatus()
+                StrictVoice.answerLine(r.value)
+            }
+            is ApiResult.Failed -> describe(r.error)
+        }
+    }
+
+    /**
+     * The guided repeat test: the owner's own sentences, judged on the PC at
+     * both settings, then thrown away there. No card and nothing changed, so
+     * - like the "someone else" check - it is not held on a stale link. Sent
+     * in parts the PC will take (80 seconds each), and the counts added up.
+     */
+    suspend fun measureVoice(clips: List<ByteArray>, seconds: List<Float>): StrictVoice.Tested {
+        val strict = voice.strict.value
+        if (!strict.measure) return StrictVoice.Tested(false, listOf(StrictVoice.NO_TEST_ON_THIS_PC))
+        val parts = mutableListOf<com.jarvis.client.net.VoiceStrict.Measured?>()
+        for (range in StrictVoice.batches(seconds, strict.limits.measureMaxClips, strict.limits.maxTotalSeconds)) {
+            val body = com.jarvis.client.net.enrollRequestBody(
+                clips.slice(range), mic = VoiceTraining.MIC, mode = "measure",
+            )
+            when (val r = api.voiceEnroll(body)) {
+                is ApiResult.Ok -> {
+                    val a = r.value
+                    if (a.error.isNotBlank() || a.measured == null) {
+                        return StrictVoice.Tested(false, listOf(VoiceRounds.sentence(a.error.ifBlank { "Your PC could not check them." })))
+                    }
+                    parts += a.measured
+                }
+                is ApiResult.Failed -> return StrictVoice.Tested(false, listOf(describe(r.error)))
+            }
+        }
+        voice.refreshStatus()
+        val all = StrictVoice.combine(parts) ?: return StrictVoice.Tested(false, listOf("Your PC could not check them."))
+        return StrictVoice.Tested(true, StrictVoice.measureLines(all))
+    }
+
+    // --------------------------------------------------- custom voices ----
+
+    private val _customVoices = MutableStateFlow<CustomVoices.Read>(CustomVoices.Read.Loading)
+
+    /** `GET /api/voice/voices`, read when the Voices screen opens and on the `voices` event. */
+    val customVoices: StateFlow<CustomVoices.Read> = _customVoices.asStateFlow()
+
+    /** Set once the Voices screen has asked; the `voices` event only re-reads after that. */
+    @Volatile private var customVoicesAsked = false
+
+    suspend fun refreshCustomVoices() {
+        customVoicesAsked = true
+        _customVoices.value = CustomVoices.read(api.customVoices())
+    }
+
+    private fun customVoiceStatus(): CustomVoices.Status? =
+        (_customVoices.value as? CustomVoices.Read.Loaded)?.status
+
+    /**
+     * Adds a voice: a recording and exactly what is said in it - the
+     * sentence the phone showed, or the words the owner typed for a picked
+     * file. The phone never turns the recording into words. ONE card on the
+     * PC; nothing is kept until it is approved. Held on a stale link.
+     */
+    suspend fun addCustomVoice(name: String, clip: ByteArray, transcript: String): CustomVoices.Answer? {
+        CustomVoices.blocker(raisesCard = true, linkBlocker = actionBlocker(), status = customVoiceStatus())
+            ?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.CREATE_PATH, CustomVoices.createBody(name, clip, transcript))
+    }
+
+    /** Switches to a custom voice (a card; held on a stale link) or back to the built-in one (at once, always). */
+    suspend fun switchCustomVoice(id: String): CustomVoices.Answer? {
+        val card = id != CustomVoices.BUILTIN
+        CustomVoices.blocker(raisesCard = card, linkBlocker = actionBlocker(), status = customVoiceStatus())
+            ?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.ACTIVE_PATH, CustomVoices.activeBody(id))
+    }
+
+    /** Deletes a voice. At once, never held: it only takes something away. The screen asks first. */
+    suspend fun deleteCustomVoice(id: String): CustomVoices.Answer? =
+        postCustomVoice(CustomVoices.DELETE_PATH, CustomVoices.deleteBody(id))
+
+    /** The better voice: ON is a card (held on a stale link), OFF is at once (never held). */
+    suspend fun setBetterVoice(on: Boolean): CustomVoices.Answer? {
+        CustomVoices.blocker(raisesCard = on, linkBlocker = actionBlocker(), status = null)
+            ?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.BETTER_PATH, CustomVoices.betterBody(on))
+    }
+
+    /**
+     * How fast every voice on the PC speaks - one of the ids the PC offered.
+     * No card either way (it trusts nothing more), but held on a stale link
+     * like every change sent to the PC (rule 4).
+     */
+    suspend fun setVoiceSpeed(id: String): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.SPEED_PATH, CustomVoices.speedBody(id))
+    }
+
+    private val _customVoiceNote = MutableStateFlow<String?>(null)
+
+    /** The last thing a Voices request came to, in words, for the screen to show. */
+    val customVoiceNote: StateFlow<String?> = _customVoiceNote.asStateFlow()
+
+    fun clearCustomVoiceNote() { _customVoiceNote.value = null }
+
+    private suspend fun postCustomVoice(path: String, json: String): CustomVoices.Answer? =
+        when (val r = api.customVoicePost(path, json)) {
+            is ApiResult.Ok -> {
+                val a = r.value
+                _customVoiceNote.value = CustomVoices.answerLine(a)
+                if (a.pending) refreshPending()
+                refreshCustomVoices()
+                a
+            }
+            is ApiResult.Failed -> {
+                _customVoiceNote.value = when (r.error) {
+                    ApiError.NotFound -> "Your PC does not have custom voices yet. Run the patch script on the PC first."
+                    else -> describe(r.error)
+                }
+                null
+            }
+        }
+
     // -------------------------------------------------------- appearance ----
 
     /**
+     * Whether this server answers `/api/appearance`, learnt by asking it:
+     * true once it answered, false once it said 404, null until asked (and
+     * again after every handshake).
+     *
+     * Needed because the capability flag alone was never enough. The
+     * backend's `/api/version` did not list `appearance` at all (the rebuilt
+     * `jarvis_events._capability_probe` had no entry for it until
+     * 2026-09-23, and the owner's server may still be older), while
+     * `appearance.patch` had added the route - so gating on the flag meant
+     * the phone never synced its face with the desktop. Now the flag is
+     * trusted when it says yes, and when it is absent the route is tried
+     * once and a 404 is taken as "not on this server", the same thing §2's
+     * false flag means.
+     */
+    @Volatile private var appearanceRoute: Boolean? = null
+
+    private fun noteAppearanceRoute(result: ApiResult<*>) {
+        when {
+            result is ApiResult.Ok -> appearanceRoute = true
+            result is ApiResult.Failed && result.error == ApiError.NotFound -> appearanceRoute = false
+            // Anything else (unreachable, a 500) says nothing about the route.
+        }
+    }
+
+    /**
      * Pulls the shared face/bindings document - after pairing, on the
-     * `appearance` SSE event, or on demand. Gated on the capability per §2's
-     * rule for a false one: a backend without the route is simply never
-     * asked, and [AppearanceStore] keeps behaving exactly as it did before
-     * this existed. Silent on failure - the local store already has a face,
-     * and a sync miss is not worth a notice banner on every reconnect.
+     * `appearance` SSE event, or on demand. A backend known not to have the
+     * route (see [appearanceRoute]) is not asked again, and [AppearanceStore]
+     * keeps behaving exactly as it did before this existed. Silent on
+     * failure - the local store already has a face, and a sync miss is not
+     * worth a notice banner on every reconnect.
      */
     suspend fun refreshAppearance() {
-        if (!can("appearance")) return
+        if (!can("appearance") && appearanceRoute == false) return
         val result = api.getAppearance()
+        noteAppearanceRoute(result)
         if (result is ApiResult.Ok) {
             appearance.applySyncDocument(org.json.JSONObject(result.value.toString()))
         }
@@ -928,25 +2013,68 @@ object JarvisRuntime {
      * not a decision, and nothing on this screen depends on it succeeding.
      */
     suspend fun pushAppearance() {
-        if (!can("appearance")) return
+        if (!can("appearance")) {
+            // Ask first, without applying what comes back: applying it here
+            // would overwrite the change this push is about to send.
+            if (appearanceRoute == null) noteAppearanceRoute(api.getAppearance())
+            if (appearanceRoute != true) return
+        }
         api.postAppearance(appearance.toSyncDocument().toString())
     }
 
+    /**
+     * [pushAppearance] on the runtime's own scope, for a push that must not
+     * die with a screen. The Appearance screen sends the state colours once
+     * its Undo window closes, and one way it closes is the screen leaving -
+     * including a rotation, which also cancels every scope the activity's
+     * composition owns, so a push launched there could be cancelled before
+     * it was sent and leave the desktop silently out of step.
+     */
+    fun pushAppearanceDetached() {
+        scope.launch { pushAppearance() }
+    }
+
     suspend fun refreshPending() {
-        when (val r = api.pending()) {
+        when (val read = api.pendingRead()) {
             is ApiResult.Ok -> {
-                _pending.value = r.value
+                val items = read.value.items
+                _pending.value = items
+                // A row this phone could not read is still a decision waiting
+                // on the desktop. Say so, rather than show a shorter list as
+                // if it were the whole queue. The rows it COULD read stay
+                // decidable: one odd row used to fail the whole read, which
+                // left every card stuck behind "Could not re-read what is
+                // waiting" (see decodePendingRows).
+                val skipped = read.value.skipped
+                if (skipped > 0) {
+                    Log.w(TAG, "$skipped approval row(s) could not be read")
+                    _notice.value = if (skipped == 1) {
+                        "1 waiting approval could not be read on this phone. Open Jarvis on the desktop to see it."
+                    } else {
+                        "$skipped waiting approvals could not be read on this phone. Open Jarvis on the desktop to see them."
+                    }
+                }
+                // A model request whose card has been answered - approved,
+                // denied or expired - is no longer waiting, so the Mind
+                // screen stops saying it is. One whose card could not be
+                // identified is dropped by the next refreshBrain instead.
+                val waitingOn = _brain.value.modelRequest?.cardId
+                if (waitingOn != null && items.none { it.id == waitingOn }) {
+                    _brain.update { b ->
+                        if (b.modelRequest?.cardId == waitingOn) b.copy(modelRequest = null) else b
+                    }
+                }
                 _absent.value = _absent.value - "approvals"
                 // What is on screen is now what the desktop holds. This is the
                 // only thing that earns the gate the right to open.
                 refreshedSinceOpen = true
             }
-            is ApiResult.Failed ->
+            is ApiResult.Failed -> {
                 // Gating switched off on the desktop. An empty approvals list
                 // would say "nothing is waiting for you", which is true and
                 // deeply misleading: nothing CAN wait, because nothing is
                 // asking.
-                if (r.error == ApiError.NotAvailable) {
+                if (read.error == ApiError.NotAvailable) {
                     _pending.value = emptyList()
                     _absent.value = _absent.value + "approvals"
                     // Answered, just with "there is no queue here". Nothing is
@@ -960,12 +2088,13 @@ object JarvisRuntime {
                     // whole refresh into a silent no-op. A queue that could not
                     // be re-read is precisely what stale means, so say so and let
                     // the gate that already reads it do the refusing.
-                    Log.w(TAG, "could not re-read the approval queue: ${r.error}")
+                    Log.w(TAG, "could not re-read the approval queue: ${read.error}")
                     refreshedSinceOpen = false
                     _stale.value = true
                     _linkDetail.value = "Could not re-read what is waiting"
-                    _notice.value = describe(r.error)
+                    _notice.value = describe(read.error)
                 }
+            }
         }
     }
 
@@ -982,23 +2111,72 @@ object JarvisRuntime {
      * every event would undo the battery saving the single stream bought.
      */
     suspend fun refreshInbox() {
-        val missing = mutableSetOf<String>()
-        fun <T> note(key: String, result: ApiResult<T>, apply: (T) -> Unit) {
-            when (result) {
-                is ApiResult.Ok -> apply(result.value)
-                is ApiResult.Failed ->
-                    if (result.error == ApiError.NotAvailable) missing += key
+        inboxReadsInFlight.incrementAndGet()
+        _inboxRead.update { it.copy(refreshing = true) }
+        try {
+            val missing = mutableSetOf<String>()
+            // Every failure used to be dropped here except NotAvailable, so a
+            // timed-out read left the old list on screen - or, on the first
+            // read, an empty one under "Live. Nothing waiting." A failed list
+            // keeps its last contents (they are still true as of when they
+            // were read) and now says it could not be re-read.
+            fun <T> note(key: String, result: ApiResult<T>, apply: (T) -> Unit): SectionRead =
+                when (result) {
+                    is ApiResult.Ok -> {
+                        apply(result.value)
+                        SectionRead.Read
+                    }
+                    is ApiResult.Failed -> {
+                        if (result.error == ApiError.NotAvailable) missing += key
+                        readOf(result.error)
+                    }
+                }
+            val digest = note("digest", api.digest()) { _digest.value = it }
+            val undo = note("undo", api.undo()) { _undo.value = it }
+            val jobs = note("jobs", api.jobs()) { _jobs.value = it }
+            // Only this function's own three keys. It used to assign the whole set,
+            // so opening the inbox erased the "approvals" flag that refreshPending
+            // had set — and the approvals screen went from "there is no approval
+            // queue here" to an empty list with no explanation, which the comment
+            // in refreshPending calls true and deeply misleading.
+            _absent.value = _absent.value - INBOX_KEYS + missing
+            _inboxRead.update {
+                it.copy(
+                    digest = digest,
+                    undo = undo,
+                    jobs = jobs,
+                    fetchedAtMs = System.currentTimeMillis(),
+                )
             }
+        } finally {
+            // In a finally, so leaving the screen mid-read (which cancels the
+            // LaunchedEffect that started it) cannot strand "Refreshing…".
+            val left = inboxReadsInFlight.decrementAndGet()
+            _inboxRead.update { it.copy(refreshing = left > 0) }
         }
-        note("digest", api.digest()) { _digest.value = it }
-        note("undo", api.undo()) { _undo.value = it }
-        note("jobs", api.jobs()) { _jobs.value = it }
-        // Only this function's own three keys. It used to assign the whole set,
-        // so opening the inbox erased the "approvals" flag that refreshPending
-        // had set — and the approvals screen went from "there is no approval
-        // queue here" to an empty list with no explanation, which the comment
-        // in refreshPending calls true and deeply misleading.
-        _absent.value = _absent.value - INBOX_KEYS + missing
+    }
+
+    /** Overlapping refreshInbox calls, so the first to finish does not clear "refreshing" early. */
+    private val inboxReadsInFlight = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** Overlapping refreshBrain calls; same reason as [inboxReadsInFlight]. */
+    private val brainReadsInFlight = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /**
+     * 404 and 503 mean "not on this backend"; everything else is a failure
+     * worth a Retry. Worded by [describe], the same sentences every notice
+     * uses - except NotFound, whose notice wording ("not a Jarvis server")
+     * is about the address as a whole and would be wrong for one route.
+     */
+    private fun readOf(e: ApiError): SectionRead = when (e) {
+        ApiError.NotFound, ApiError.NotAvailable -> SectionRead.Absent
+        else -> SectionRead.Failed(describe(e))
+    }
+
+    /** The payload and how it came back, from one probe. */
+    private fun ApiResult<JsonObject>.asSection(): Pair<JsonObject?, SectionRead> = when (this) {
+        is ApiResult.Ok -> value to SectionRead.Read
+        is ApiResult.Failed -> null to readOf(error)
     }
 
     /**
@@ -1011,47 +2189,106 @@ object JarvisRuntime {
      * the battery saving the single stream bought, to animate numbers that are
      * not moving.
      *
-     * Each probe is independent and a 404 simply means that route is absent on
-     * this backend — the screen renders the sections it got and says nothing
-     * about the ones it did not, rather than showing an empty panel that looks
-     * broken.
+     * Each probe is independent. A 404 or 503 means that route is absent on
+     * this backend, and any other failure means the read did not work; the
+     * snapshot records which, per section ([SectionRead]), so the screen can
+     * tell "not here" from "could not read" from "still reading".
      */
     suspend fun refreshBrain() {
-        // Together, not one after another. This was nine serial round trips
-        // - and it ran again after EVERY memory decision, so keeping ten facts
-        // cost ninety requests. Each read is independent of the others, so
-        // they overlap; the screen still gets one snapshot, stamped once.
-        coroutineScope {
-            val status = async { refreshStatus() }
-            val attention = async { refreshAttention() }
-            val jobs = async { api.jobs().onOk { _jobs.value = it } }
-            val models = async { refreshModels() }
-            val compute = async { api.probe("/api/compute").orNull() }
-            val memory = async { api.probe("/api/memory/pending").orNull() }
-            val ledger = async { api.probe("/api/ledger").orNull() }
-            val skills = async { api.probe("/api/skills").orNull() }
-            val initiative = async { api.probe("/api/initiative").orNull() }
-            val contentRisk = async { api.probe("/api/content-risk").orNull() }
-            _brain.value = BrainSnapshot(
-                compute = compute.await(),
-                memory = memory.await(),
-                ledger = ledger.await(),
-                skills = skills.await(),
-                initiative = initiative.await(),
-                contentRisk = contentRisk.await(),
-                fetchedAtMs = System.currentTimeMillis(),
-            )
-            status.await()
-            attention.await()
-            jobs.await()
-            models.await()
+        brainReadsInFlight.incrementAndGet()
+        _brain.update { it.copy(refreshing = true) }
+        try {
+            // Together, not one after another. This was nine serial round trips
+            // - and it ran again after EVERY memory decision, so keeping ten facts
+            // cost ninety requests. Each read is independent of the others, so
+            // they overlap; the screen still gets one snapshot, stamped once.
+            coroutineScope {
+                val status = async { refreshStatus() }
+                val attention = async { refreshAttention() }
+                val jobs = async { api.jobs().onOk { _jobs.value = it } }
+                val models = async { refreshModels() }
+                val compute = async { api.probe("/api/compute").asSection() }
+                val memory = async { api.probe(MemoryCards.PENDING_PATH).asSection() }
+                val ledger = async { api.probe("/api/ledger").asSection() }
+                val skills = async { api.probe(com.jarvis.client.net.Skills.PATH).asSection() }
+                val initiative = async { api.probe("/api/initiative").asSection() }
+                val contentRisk = async { api.probe("/api/content-risk").asSection() }
+                val secondCardRead = async { refreshSecondCard() }
+                val bigModelRead = async { refreshBigModel() }
+                val hardwareRead = async { refreshHardware() }
+                val deepRead = async { refreshDeep() }
+                val (computeData, computeRead) = compute.await()
+                val (memoryData, memoryRead) = memory.await()
+                val (ledgerData, ledgerRead) = ledger.await()
+                val (skillsData, skillsRead) = skills.await()
+                val (initiativeData, initiativeRead) = initiative.await()
+                val (riskData, riskRead) = contentRisk.await()
+                val now = System.currentTimeMillis()
+                _brain.update { prev ->
+                    BrainSnapshot(
+                        compute = computeData,
+                        memory = memoryData,
+                        ledger = ledgerData,
+                        skills = skillsData,
+                        initiative = initiativeData,
+                        // The one section that keeps its last answer through a
+                        // failed read - see BrainSnapshot.contentRisk. Absent
+                        // clears it: a backend with no scanner has no latch.
+                        contentRisk = when (riskRead) {
+                            is SectionRead.Failed -> prev.contentRisk
+                            else -> riskData
+                        },
+                        contentRiskAtMs = when (riskRead) {
+                            SectionRead.Read -> now
+                            is SectionRead.Failed -> prev.contentRiskAtMs
+                            else -> 0L
+                        },
+                        fetchedAtMs = now,
+                        computeRead = computeRead,
+                        memoryRead = memoryRead,
+                        ledgerRead = ledgerRead,
+                        skillsRead = skillsRead,
+                        initiativeRead = initiativeRead,
+                        contentRiskRead = riskRead,
+                        refreshing = prev.refreshing,
+                        // Kept only while its card is known to still be
+                        // waiting. One whose card could not be identified
+                        // lasts until this next read of the board, and no
+                        // longer - better to drop the line than to keep
+                        // claiming a card is waiting after it was answered.
+                        // `_pending` is read here, inside the update, so a
+                        // request noted while these reads were out is checked
+                        // against the queue as it is now, not as it was.
+                        modelRequest = prev.modelRequest?.takeIf { req ->
+                            req.cardId != null && _pending.value.any { it.id == req.cardId }
+                        },
+                    )
+                }
+                status.await()
+                attention.await()
+                jobs.await()
+                models.await()
+                secondCardRead.await()
+                bigModelRead.await()
+                hardwareRead.await()
+                deepRead.await()
+            }
+        } finally {
+            val left = brainReadsInFlight.decrementAndGet()
+            _brain.update { it.copy(refreshing = left > 0) }
         }
     }
 
-    /** Just the review queue - all a memory decision can have changed. */
+    /**
+     * Just the review queue - all a memory decision can have changed.
+     *
+     * Leaves [BrainSnapshot.fetchedAtMs] alone. It used to stamp it, which
+     * made the screen claim the whole board had just been read when only
+     * this one section had.
+     */
     suspend fun refreshMemoryQueue() {
-        val memory = api.probe("/api/memory/pending").orNull()
-        _brain.update { it.copy(memory = memory, fetchedAtMs = System.currentTimeMillis()) }
+        val (memory, read) = api.probe(MemoryCards.PENDING_PATH).asSection()
+        _brain.update { it.copy(memory = memory, memoryRead = read) }
     }
 
     /**
@@ -1063,11 +2300,23 @@ object JarvisRuntime {
      */
     suspend fun memoryAsOf(epochSeconds: Long): ApiResult<JsonObject> {
         val result = api.memoryFacts(epochSeconds)
-        if (result is ApiResult.Failed) _notice.value = describe(result.error)
+        if (result is ApiResult.Failed) {
+            _notice.value = describe(result.error)
+            return result
+        }
+        // The desktop answers a moment it cannot use with TODAY's facts and
+        // no `known_at`. Shown under the typed date, that would be today's
+        // memory passed off as the past - so it is refused here instead.
+        val body = (result as ApiResult.Ok).value
+        val knownAt = (body["known_at"] as? JsonPrimitive)
+            ?.takeIf { !it.isString }?.content?.toDoubleOrNull()
+        if (knownAt == null) {
+            val why = "The desktop answered without using that date, so nothing is shown."
+            _notice.value = why
+            return ApiResult.Failed(ApiError.Malformed(why))
+        }
         return result
     }
-
-    private fun <T> ApiResult<T>.orNull(): T? = (this as? ApiResult.Ok)?.value
 
     suspend fun revert(entry: UndoEntry): ApiResult<Unit> {
         actionBlocker()?.let {
@@ -1080,6 +2329,71 @@ object JarvisRuntime {
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
         return result
+    }
+
+    /**
+     * Stops a message still inside its send window - `/api/holds/cancel`.
+     * Always the safe direction (it only stops something), so no approval
+     * card; still held while the link is stale, like every other write here.
+     * A 409 means it already went, and there is no unsend - said as that,
+     * not as "already handled elsewhere".
+     */
+    suspend fun cancelHold(entry: UndoEntry): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        val handle = entry.holdHandle
+            ?: return ApiResult.Failed(ApiError.Malformed("not a held message"))
+        val result = api.cancelHold(handle)
+        when (result) {
+            is ApiResult.Ok -> {
+                _notice.value = "Stopped before it went."
+                refreshInbox()
+            }
+            is ApiResult.Failed -> _notice.value =
+                if (result.error == ApiError.AlreadyHandled) {
+                    "That one has already gone - there is no unsend."
+                } else {
+                    describe(result.error)
+                }
+        }
+        return result
+    }
+
+    /**
+     * Switch the desktop to Active, Quiet or Standby (`backend/power-mode.patch`).
+     *
+     * Going quieter always goes through. Waking ("active") is held while the
+     * link is stale - rule 4 - because it is the direction that makes Jarvis
+     * do more. The desktop still decides through its gate (`power_manage`,
+     * "auto" in the owner's own config: the safe direction either way). The
+     * Power field changes when the desktop's `power` event says so, not here.
+     */
+    suspend fun setPower(mode: String): ApiResult<Unit> {
+        if (mode == "active") {
+            actionBlocker()?.let {
+                _notice.value = it
+                return ApiResult.Failed(ApiError.Unreachable(it))
+            }
+        }
+        return when (val result = api.setPower(mode)) {
+            is ApiResult.Ok -> {
+                val said = (result.value["message"] as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.content
+                _notice.value = said ?: "Power mode request sent."
+                refreshStatus()
+                ApiResult.Ok(Unit)
+            }
+            is ApiResult.Failed -> {
+                _notice.value = if (result.error == ApiError.NotFound) {
+                    "This desktop cannot change power mode yet - its backend needs the power-mode patch."
+                } else {
+                    describe(result.error)
+                }
+                ApiResult.Failed(result.error)
+            }
+        }
     }
 
     suspend fun cancelJob(job: JobRecord): ApiResult<Unit> {
@@ -1127,9 +2441,18 @@ object JarvisRuntime {
         return result
     }
 
-    /** Marks the brief read. Marking read is not approving anything in it. */
+    /**
+     * Marks the brief read. Marking read is not approving anything in it.
+     *
+     * A failure is reported like every other call's. It used to be dropped
+     * whole - `onOk` with no other branch - so a "Mark read" that did not
+     * reach the desktop left the brief exactly as it was, with no word why.
+     */
     suspend fun markDigestSeen() {
-        api.digestSeen().onOk { refreshInbox() }
+        when (val result = api.digestSeen()) {
+            is ApiResult.Ok -> refreshInbox()
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
     }
 
     suspend fun setMuted(muted: Boolean) {
@@ -1151,15 +2474,24 @@ object JarvisRuntime {
      * that could name jobs long finished. Neither is an approval. Both are
      * actions, and rule 4 is about actions.
      *
-     * Deliberately not applied to `markDigestSeen`, `setMuted` or
-     * `setWakeWord`: marking a brief read is idempotent and claims nothing
-     * about the brief, and mute and the wake word are settings on this device's
-     * relationship with Jarvis rather than verdicts on anything Jarvis is
-     * holding. Refusing those on a stale link would be ceremony, not safety.
+     * Deliberately not applied to `markDigestSeen` or `setMuted`: marking a
+     * brief read is idempotent and claims nothing about the brief, and mute is
+     * a setting on this device's relationship with Jarvis rather than a
+     * verdict on anything Jarvis is holding. Refusing those on a stale link
+     * would be ceremony, not safety.
+     *
+     * Turning the wake word ON is NOT in that list any more. It used to be,
+     * described as a mere setting, but it raises a `change_own_config`
+     * approval card on the desktop - a card-raising action like the second
+     * card or a model switch - so [VoiceSession.setWakeWord] holds it here
+     * too ([com.jarvis.client.voice.WakeRules.requestBlocker]). Turning it
+     * OFF still always goes: it only closes a microphone.
      */
     fun actionBlocker(): String? =
         if (_stale.value || _link.value != LinkState.CONNECTED) {
-            "Not connected to the desktop, so this cannot be delivered."
+            // The plain words both apps use for a link that is catching up
+            // (PlainErrors "link_stale"): what is happening, then what to do.
+            com.jarvis.client.net.PlainErrors.shown("link_stale").text
         } else {
             null
         }
@@ -1223,6 +2555,14 @@ object JarvisRuntime {
         // approving one at all - from this call, whatever screen, widget, or
         // future surface reaches it - would silently apply whichever plan
         // the server defaults to.
+        if (approve && item.pcOnly) {
+            // Loosening "What asks first" (the owner's decision of 2026-09-26):
+            // approved on the PC only, with Windows Hello. The PC refuses it
+            // from here too; this says so before anything is sent.
+            val msg = com.jarvis.client.net.AsksFirst.APPROVE_ON_PC
+            _notice.value = msg
+            return ApiResult.Failed(ApiError.Unreachable(msg))
+        }
         if (approve && item.needsChoice) {
             val msg = "This proposal offers ${item.options.size} options, and no " +
                 "Jarvis client can pick one yet. Deny still works."
@@ -1264,10 +2604,8 @@ object JarvisRuntime {
      * see [JarvisApi.amend] and [JarvisApi.pauseTask]'s own doc comments for
      * why a 404 means something more specific here.
      */
-    private fun describeDraft(e: ApiError): String = when (e) {
-        ApiError.NotFound -> "This desktop does not support that yet."
-        else -> describe(e)
-    }
+    private fun describeDraft(e: ApiError, amend: Boolean = false): String =
+        com.jarvis.client.net.TaskControl.failure(e, amend) ?: describe(e)
 
     /**
      * A note sent before the first decision on a proposal -
@@ -1276,26 +2614,39 @@ object JarvisRuntime {
      * Deliberately not gated on [decisionBlocker] the way [decide] is: a
      * note is never itself a verdict on anything Jarvis is holding, only a
      * message attached to one - the same reasoning that already excuses
-     * `markDigestSeen`/`setMuted`/`setWakeWord` from that gate. On success
-     * the queue is refreshed, since the expected result is this same id
-     * coming back with a different set of options.
+     * `markDigestSeen`/`setMuted` from that gate.
+     *
+     * What the desktop does with it (`backend/task-control.patch`): the note
+     * is kept WITH the card, the card itself does not change, and the model
+     * reads the note together with the owner's answer. So success says
+     * exactly that, and the queue is refreshed in case the card was answered
+     * elsewhere meanwhile.
      */
     suspend fun amendPending(id: String, note: String): ApiResult<Unit> {
         val result = api.amend(id, note)
         when (result) {
-            is ApiResult.Ok -> refreshPending()
-            is ApiResult.Failed -> _notice.value = describeDraft(result.error)
+            is ApiResult.Ok -> {
+                _notice.value = com.jarvis.client.net.TaskControl.NOTE_KEPT
+                refreshPending()
+            }
+            is ApiResult.Failed -> _notice.value = describeDraft(result.error, amend = true)
         }
         return result
     }
 
     /**
      * Pause, resume, stop, or add a note to whatever Jarvis is running -
-     * AUTONOMY-PROPOSALS.md §3d. All four are one-shot requests against a
-     * single implied task, never gated on [decisionBlocker]: sending "please
-     * pause" is safe to attempt regardless of the event stream's own
-     * staleness, the same reasoning [amendPending] gives, and none of the
-     * four is itself a verdict on anything pending.
+     * AUTONOMY-PROPOSALS.md §3d, served by the desktop's
+     * `backend/task-control.patch`. Pause, Stop and the note are never gated
+     * on [decisionBlocker]: sending "please stop" is safe to attempt
+     * regardless of the event stream's own staleness - the moment you most
+     * want Stop is the moment the link is misbehaving - and none of them is
+     * a verdict on anything pending.
+     *
+     * **Resume is the exception, and does not carry on by itself.** The
+     * desktop raises one approval card listing the steps that are left and
+     * runs them only if that card is approved; being the one control that
+     * makes work go again, it is held while the link is stale (rule 4).
      *
      * **This function must never set `_activity` to PAUSED itself.** A
      * request succeeding only means the desktop accepted the HTTP call, not
@@ -1306,12 +2657,1014 @@ object JarvisRuntime {
      */
     suspend fun pauseTask(): ApiResult<Unit> = runTaskAction { api.pauseTask() }
 
-    suspend fun resumeTask(): ApiResult<Unit> = runTaskAction { api.resumeTask() }
+    suspend fun resumeTask(): ApiResult<Unit> {
+        if (_stale.value || _link.value != LinkState.CONNECTED) {
+            val blocker = com.jarvis.client.net.TaskControl.RESUME_WHILE_STALE
+            _notice.value = blocker
+            return ApiResult.Failed(ApiError.Unreachable(blocker))
+        }
+        val result = runTaskAction { api.resumeTask() }
+        if (result is ApiResult.Ok) _notice.value = com.jarvis.client.net.TaskControl.RESUME_ASKED
+        return result
+    }
 
     suspend fun stopTask(): ApiResult<Unit> = runTaskAction { api.stopTask() }
 
+    /**
+     * "Stop everything" (the owner's decision of 2026-09-25; the desktop's
+     * Alt+Shift+X calls the same route). The phone's own speech stops first,
+     * before the PC is asked, so a dead link never keeps Jarvis talking; then
+     * `POST /api/stop_all`, and the notice says what the PC stopped, in its
+     * own words - see [com.jarvis.client.net.StopEverything].
+     *
+     * **Never gated on [decisionBlocker] or a stale link**, like Stop and
+     * Pause: stopping only ever makes Jarvis do less. It approves nothing and
+     * starts nothing, and neither does the route.
+     */
+    suspend fun stopEverything(): ApiResult<JsonObject> {
+        if (::voice.isInitialized) voice.stopSpeaking()
+        val result = api.stopEverything()
+        // A PC that could not be reached: the plain words and their button
+        // (Try again, or Check the connection settings), like every failure.
+        val problem = (result as? ApiResult.Failed)?.let {
+            com.jarvis.client.net.StopEverything.problem(it.error)
+        }
+        if (problem != null) _problem.value = problem
+        _notice.value = when (result) {
+            is ApiResult.Ok -> com.jarvis.client.net.StopEverything.describe(result.value, null)
+            is ApiResult.Failed -> com.jarvis.client.net.StopEverything.describe(null, result.error)
+        }
+        return result
+    }
+
     suspend fun injectTaskNote(note: String): ApiResult<Unit> =
         runTaskAction { api.injectTaskNote(note) }
+
+    /**
+     * Files a note in Logseq, Joplin or Obsidian through the desktop - the owner's own
+     * words, no model - and reports how it ended in the shared notice, in the
+     * desktop's own words (see [com.jarvis.client.net.NoteCapture]).
+     *
+     * Not gated on [decisionBlocker]: filing a note is not an answer to
+     * anything Jarvis is holding, and the write itself goes through the
+     * desktop's approval gate under the owner's own rules. If a card is up,
+     * this keeps asking on the runtime's own scope - so leaving the screen
+     * does not lose the answer - until it is final or [NoteCapture.GIVE_UP_MS]
+     * passes, and never says "Filed" before the desktop does.
+     */
+    suspend fun fileNote(target: String, text: String): ApiResult<Unit> {
+        val first = api.captureNote(target, text)
+        val job = when (first) {
+            is ApiResult.Failed -> {
+                _notice.value = com.jarvis.client.net.NoteCapture.failure(first.error)
+                    ?: describe(first.error)
+                return ApiResult.Failed(first.error)
+            }
+            is ApiResult.Ok -> first.value
+        }
+        val said = com.jarvis.client.net.NoteCapture.describe(job, target)
+        _notice.value = said.text
+        val id = com.jarvis.client.net.NoteCapture.jobId(job)
+        if (!said.final && id != null) {
+            scope.launch {
+                val started = SystemClock.elapsedRealtime()
+                // Survives a dropped link and a failed poll or two - see JobFollow.
+                val follow = com.jarvis.client.net.JobFollow()
+                while (true) {
+                    delay(com.jarvis.client.net.NoteCapture.POLL_MS)
+                    if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.NoteCapture.GIVE_UP_MS) {
+                        _notice.value = com.jarvis.client.net.NoteCapture.GAVE_UP
+                        break
+                    }
+                    if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
+                    val next = api.noteStatus(id)
+                    if (next is ApiResult.Failed) {
+                        if (!follow.failed()) continue
+                        _notice.value = "Lost track of the note (${describe(next.error)}). " +
+                            "Check the approval card on the desktop and your notes app."
+                        break
+                    }
+                    follow.answered()
+                    val now = com.jarvis.client.net.NoteCapture.describe(
+                        (next as ApiResult.Ok).value, target,
+                    )
+                    if (now.final) {
+                        _notice.value = now.text
+                        break
+                    }
+                }
+            }
+        }
+        return ApiResult.Ok(Unit)
+    }
+
+    /**
+     * Which note apps the desktop is set up for, asked fresh each time the
+     * quick-note plate opens. A failure is [NoteCapture.Targets.Unknown] with
+     * the reason, so the plate shows no button rather than all of them.
+     */
+    suspend fun noteTargets(): com.jarvis.client.net.NoteCapture.Targets {
+        val t = when (val r = api.noteTargets()) {
+            is ApiResult.Ok -> com.jarvis.client.net.NoteCapture.targets(r.value)
+            is ApiResult.Failed ->
+                com.jarvis.client.net.NoteCapture.targetsFailure(r.error, describe(r.error))
+        }
+        _noteTargets.value = t
+        return t
+    }
+
+    /**
+     * A chat line that starts with `#log`, `#obs`, `#joplin` (and the rest of
+     * [com.jarvis.client.net.NoteCapture.PREFIXES]) files the rest as a note
+     * instead of asking Jarvis - the desktop's quickbar does the same.
+     *
+     * Asks the desktop which note apps are set up first, then follows the
+     * desktop's own decision ([com.jarvis.client.net.NoteCapture.chatNote]):
+     * an app the PC says is not set up, or an empty note, is refused here
+     * with nothing sent. Otherwise [fileNote] sends it, and reports how it
+     * ended in the desktop's words.
+     *
+     * @return true once the note was accepted (filed, or waiting for its
+     *   card), so the caller can clear the chat box; false keeps the words.
+     */
+    suspend fun fileChatNote(p: com.jarvis.client.net.NoteCapture.Prefixed): Boolean =
+        when (val plan = com.jarvis.client.net.NoteCapture.chatNote(p, noteTargets())) {
+            is com.jarvis.client.net.NoteCapture.ChatNote.NotFiled -> {
+                _notice.value = plan.why
+                false
+            }
+            is com.jarvis.client.net.NoteCapture.ChatNote.File ->
+                fileNote(plan.target, plan.text) is ApiResult.Ok
+        }
+
+    // ------------------------------------------------------------- wiki ----
+
+    private val _wikiJob =
+        MutableStateFlow<Pair<String, com.jarvis.client.net.Wiki.Said>?>(null)
+
+    /**
+     * The document this phone last asked to add to the wiki, and how that is
+     * going, in the desktop's own words - null until something is asked.
+     */
+    val wikiJob: StateFlow<Pair<String, com.jarvis.client.net.Wiki.Said>?> =
+        _wikiJob.asStateFlow()
+
+    /** `GET /api/wiki` - see [com.jarvis.client.net.Wiki]. */
+    suspend fun wiki(): ApiResult<JsonObject> = api.wiki()
+
+    /**
+     * "Add to wiki" for one document. The desktop's model reads it, then one
+     * approval card is raised - nothing is written until it is answered.
+     *
+     * Held on a stale or dropped link ([actionBlocker], rule 4): the card it
+     * raises should be answered from a queue known to be live. Like
+     * [fileNote], the job is followed on the runtime's own scope, so leaving
+     * the screen does not lose the answer, and [wikiJob] never says "added"
+     * before the desktop does.
+     */
+    suspend fun addToWiki(source: String): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(it, final = true, done = false)
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        val job = when (val first = api.wikiIngest(source)) {
+            is ApiResult.Failed -> {
+                val text = com.jarvis.client.net.Wiki.failure(first.error) ?: describe(first.error)
+                _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(text, final = true, done = false)
+                return ApiResult.Failed(first.error)
+            }
+            is ApiResult.Ok -> first.value
+        }
+        val said = com.jarvis.client.net.Wiki.describe(job)
+        _wikiJob.value = source to said
+        val id = com.jarvis.client.net.Wiki.jobId(job)
+        if (!said.final && id != null) {
+            scope.launch {
+                val started = SystemClock.elapsedRealtime()
+                // Survives a dropped link and a failed poll or two - see JobFollow.
+                val follow = com.jarvis.client.net.JobFollow()
+                while (true) {
+                    delay(com.jarvis.client.net.Wiki.POLL_MS)
+                    if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.Wiki.GIVE_UP_MS) {
+                        _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(
+                            com.jarvis.client.net.Wiki.GAVE_UP, final = true, done = false,
+                        )
+                        break
+                    }
+                    if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
+                    val next = api.wikiJob(id)
+                    if (next is ApiResult.Failed) {
+                        if (!follow.failed()) continue
+                        _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(
+                            "Lost track of it (${describe(next.error)}). Check the approval " +
+                                "card on the desktop and the wiki folder.",
+                            final = true, done = false,
+                        )
+                        break
+                    }
+                    follow.answered()
+                    val now = com.jarvis.client.net.Wiki.describe((next as ApiResult.Ok).value)
+                    _wikiJob.value = source to now
+                    if (now.final) break
+                }
+            }
+        }
+        return ApiResult.Ok(Unit)
+    }
+
+    // ------------------------------------------------------------ watch ----
+
+    private val _watchTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one on every `finding` event, so the Watches plate on Mind
+     * reads its two lists again - the desktop's Brain re-reads the same two
+     * on that event (`brain.js`, `refreshes.finding`).
+     */
+    val watchTick: StateFlow<Int> = _watchTick.asStateFlow()
+
+    /** `GET /api/watch` - see [com.jarvis.client.net.Watch]. */
+    suspend fun watch(): ApiResult<JsonObject> = api.watch()
+
+    /** `GET /api/watch/report` - a peek; it marks nothing read. */
+    suspend fun watchReport(): ApiResult<JsonObject> = api.watchReport()
+
+    /**
+     * Watch a GitHub topic. Creating a watch is turning something ON, so it
+     * is held while the link is down or stale ([actionBlocker], rule 4). If
+     * the PC asks first, its card is answered like any other.
+     *
+     * @return whether the PC took it (added, or waiting for its card), and
+     *   the sentence to show. Not taken leaves the form filled in.
+     */
+    suspend fun addWatch(
+        name: String,
+        query: String,
+        minStars: String,
+        language: String,
+        notify: Boolean,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Watch.addBody(name, query, minStars, language, notify)
+            ?: return false to "Type a name. Min stars, if you fill it in, must be a whole number."
+        return when (val r = writeNoticingCards { api.watchAdd(body) }) {
+            is ApiResult.Ok -> (r.value !is com.jarvis.client.net.DesktopWrite.Outcome.Refused) to
+                com.jarvis.client.net.Watch.addSaid(name.trim(), r.value)
+            is ApiResult.Failed -> false to ("Not added. " +
+                (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error)))
+        }
+    }
+
+    /**
+     * Forget a topic. Never held on a stale link: it only stops something,
+     * the same rule as every OFF on this phone.
+     */
+    suspend fun removeWatch(name: String): String =
+        when (val r = writeNoticingCards { api.watchRemove(name) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.Watch.removeSaid(name, r.value)
+            is ApiResult.Failed -> "Not forgotten. " +
+                (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error))
+        }
+
+    /**
+     * "Mark these read". Not held on a stale link, like the brief's own
+     * mark-read ([markDigestSeen]) and like the desktop's: it approves and
+     * starts nothing.
+     */
+    suspend fun markWatchSeen(): String =
+        when (val r = writeNoticingCards { api.watchSeen() }) {
+            is ApiResult.Ok -> com.jarvis.client.net.Watch.seenSaid(r.value)
+            is ApiResult.Failed -> "Not marked read. " +
+                (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error))
+        }
+
+    // --------------------------------------------------- memory counts ----
+
+    /** `GET /api/memory/status` - see [com.jarvis.client.net.MemoryCounts]. Read-only. */
+    suspend fun memoryStatus(): ApiResult<JsonObject> =
+        api.probe(com.jarvis.client.net.MemoryCounts.STATUS_PATH)
+
+    /** Whether learning is on, off `GET /api/memory/facts?limit=1`. */
+    suspend fun memoryLearning(): Boolean? =
+        (api.probe(com.jarvis.client.net.MemoryCounts.LEARNING_PATH) as? ApiResult.Ok)
+            ?.value?.let { com.jarvis.client.net.MemoryCounts.learning(it) }
+
+    /**
+     * The learning switch. ON is held on a stale link (rule 4) and raises an
+     * approval card on the PC; OFF is never held - it only narrows what
+     * Jarvis does. @return the sentence to show under the switch.
+     */
+    suspend fun setLearning(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setLearning(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryCounts.learningSaid(on, r.value)
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
+    // ----------------------------------------------- automatic learning ----
+    // docs/JARVIS-API.md section 19 (2026-09-24) - see
+    // [com.jarvis.client.net.AutoLearn] and ui/screens/AutoLearnPlate.kt.
+    // The phone reads the list from the PC and keeps none of it.
+
+    private val _autoTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one on every `memory_saved` event, so Mind's "Saved
+     * automatically" list reads itself again - the event carries ids only.
+     */
+    val autoTick: StateFlow<Int> = _autoTick.asStateFlow()
+
+    private val _autoRemembered = MutableStateFlow(0)
+
+    /**
+     * How many facts the PC has saved automatically since the owner last
+     * looked, for Mind's quiet "Jarvis remembered N things" line. A count,
+     * never the words: no fact's text reaches a notification or this line.
+     */
+    val autoRemembered: StateFlow<Int> = _autoRemembered.asStateFlow()
+
+    /** The ids already counted, so an event heard twice is not counted twice. */
+    private var autoSeenIds: List<Long> = emptyList()
+
+    private val _autoRememberedIds = MutableStateFlow<List<Long>>(emptyList())
+
+    /**
+     * Which facts [autoRemembered] counts, by id - what the line opens
+     * (the owner's decision, 2026-09-25): their words are read from the PC
+     * only then ([memoryUsed]). Ids only, never the words.
+     */
+    val autoRememberedIds: StateFlow<List<Long>> = _autoRememberedIds.asStateFlow()
+
+    /** The owner opened the list: the line has said its piece. */
+    fun clearAutoRemembered() {
+        _autoRemembered.value = 0
+        _autoRememberedIds.value = emptyList()
+    }
+
+    private fun onMemorySaved(data: kotlinx.serialization.json.JsonElement?) {
+        val ids = com.jarvis.client.net.AutoLearn.savedIds(data)
+        val fresh = synchronized(this) {
+            val (added, seen) = com.jarvis.client.net.AutoLearn.fresh(autoSeenIds, ids)
+            autoSeenIds = seen
+            added
+        }
+        if (fresh.isNotEmpty()) {
+            _autoRemembered.update { it + fresh.size }
+            _autoRememberedIds.update { (it + fresh).takeLast(com.jarvis.client.net.MemoryUsed.MAX) }
+        }
+        _autoTick.update { it + 1 }
+    }
+
+    // --------------------------------- "Used in this answer" (2026-09-25) ----
+    // See [com.jarvis.client.net.MemoryUsed]: the words of the few facts an
+    // answer used, or that were just saved, read by id when the owner opens
+    // the line. Forget beside each is [forgetAutoFact] - one fact, asked
+    // first, held on a stale link.
+
+    /** `GET /api/memory/used?ids=` - a read: never held. */
+    suspend fun memoryUsed(ids: List<Long>): com.jarvis.client.net.MemoryUsed.Read =
+        when (val r = api.memoryUsed(ids)) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryUsed.parse(r.value)
+                ?.let { com.jarvis.client.net.MemoryUsed.Read.Shown(it) }
+                ?: com.jarvis.client.net.MemoryUsed.Read.Failed(
+                    "The desktop sent something this app could not read.",
+                )
+            is ApiResult.Failed -> if (com.jarvis.client.net.MemoryUsed.missing(r.error)) {
+                com.jarvis.client.net.MemoryUsed.Read.Missing
+            } else {
+                com.jarvis.client.net.MemoryUsed.Read.Failed(describe(r.error))
+            }
+        }
+
+    /**
+     * Turns a temporary chat on or off on the chat both Home and the voice
+     * loop send through ([com.jarvis.client.net.ChatSession.setTemporary]).
+     * No card and no hold: it only ever makes Jarvis stricter. ON only when
+     * the PC says it has one. @return the sentence to show, or null.
+     */
+    fun setTemporaryChat(on: Boolean): String? = chat.setTemporary(on)
+
+    /** `GET /api/memory/learning` - the two automatic-learning switches. A read: never held. */
+    suspend fun autoLearnSettings(): ApiResult<JsonObject> = api.autoLearnSettings()
+
+    /** `GET /api/memory/auto`, one page, newest first. A read: never held. */
+    suspend fun autoFacts(
+        before: Double? = null,
+        limit: Int = com.jarvis.client.net.AutoLearn.PAGE,
+    ): ApiResult<JsonObject> = api.autoFacts(before, limit)
+
+    /**
+     * "Learn automatically" or "Also remember sensitive topics
+     * automatically" - the same shape as [setLearning]. ON is held on a
+     * stale link (rule 4) and raises an approval card on the PC; OFF is never
+     * held - it only narrows what Jarvis does. @return the sentence to show.
+     */
+    suspend fun setAutoLearn(which: com.jarvis.client.net.AutoLearn.Which, on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        // OFF withdraws an ON card still waiting (the PC's own rule): approving
+        // it later changes nothing. The card stays in the queue until it is
+        // answered, so the ones up now are noted, and no longer make the
+        // switch read "waiting" ([autoWithdrawn]).
+        val up: Set<String> = if (on) emptySet() else com.jarvis.client.net.AutoLearn.cardIds(
+            _pending.value.map { it.id to it.action }, which,
+        )
+        return when (val r = writeNoticingCards { api.setAutoLearn(which, on) }) {
+            is ApiResult.Ok -> {
+                if (up.isNotEmpty() && r.value is com.jarvis.client.net.DesktopWrite.Outcome.Done) {
+                    _autoWithdrawn.update { (it + up).toList().takeLast(50).toSet() }
+                }
+                com.jarvis.client.net.AutoLearn.said(which, on, r.value)
+            }
+            is ApiResult.Failed ->
+                com.jarvis.client.net.AutoLearn.switchFailure(r.error) ?: ("Not changed. " + describe(r.error))
+        }
+    }
+
+    private val _autoWithdrawn = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * The approval cards an automatic-learning switch's OFF withdrew while
+     * they waited. Still in the queue (the PC cannot take a card back), but
+     * approving one changes nothing, so the switch does not read "waiting"
+     * for it. Ids only; kept for this run of the app.
+     */
+    val autoWithdrawn: StateFlow<Set<String>> = _autoWithdrawn.asStateFlow()
+
+    /**
+     * Forgets ONE automatically saved fact, after Mind's confirm - or, since
+     * 2026-09-25, one fact shown under "Used in this answer" or "Jarvis
+     * remembered N things" ([com.jarvis.client.net.MemoryUsed]), after the
+     * same confirm. Held on a
+     * stale link (rule 4), the same as the desktop's Forget
+     * (`brain_memory_forget` requires a live link): it cannot be undone, and
+     * it acts on a list read over a link that cannot be confirmed live. No
+     * such fact (404) counts as gone. @return whether it is gone now, and the
+     * sentence to show.
+     */
+    suspend fun forgetAutoFact(id: Long): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.forgetFact(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.AutoLearn.forgetSaid(r.value).also { (gone, _) ->
+                // A forgotten fact leaves "Always keep in mind" too.
+                if (gone) _profileTick.update { it + 1 }
+            }
+            is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
+                true to com.jarvis.client.net.AutoLearn.ALREADY_GONE
+            } else {
+                false to (com.jarvis.client.net.AutoLearn.forgetFailure(r.error) ?: ("Not forgotten. " + describe(r.error)))
+            }
+        }
+    }
+
+    /**
+     * "Erase the words" of ONE automatically saved fact, after Mind's
+     * confirm (the owner's decision, 2026-09-24): its words wiped from the
+     * PC for good, its dates kept. Held on a stale link (rule 4), exactly
+     * like [forgetAutoFact] and the desktop's `brain_memory_erase`: there is
+     * no undo at all, and the list it acts on was read over a link that
+     * cannot be confirmed live. @return whether the words are gone now (so
+     * the row leaves the list), and the sentence to show.
+     */
+    suspend fun eraseAutoFact(id: Long): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.eraseFact(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryErase.said(r.value).also { (gone, _) ->
+                // An erased fact leaves "Always keep in mind" too.
+                if (gone) _profileTick.update { it + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not erased. " + describe(r.error))
+        }
+    }
+
+    // ------------------------------------------------------- Coming up ----
+    // Timers, alarms, reminders and the to-do list (the owner's decisions of
+    // 2026-09-25) - see [com.jarvis.client.net.Schedule] and
+    // ui/screens/ComingUpPlate.kt. The PC is the clock: everything goes off
+    // there, and this phone hears of it while it is connected.
+
+    private val _scheduleTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one on every `schedule` event and after every change made
+     * from this phone, so Mind's "Coming up" reads itself again.
+     */
+    val scheduleTick: StateFlow<Int> = _scheduleTick.asStateFlow()
+
+    /** The jobs already shown as notifications, by id and when they went off. */
+    private val scheduleShown = LinkedHashSet<String>()
+
+    /** `GET /api/schedule`. A read: never held. */
+    suspend fun schedule(): ApiResult<JsonObject> = api.schedule()
+
+    /**
+     * ONE job: pause, resume, delete or done. No card - none of them can make
+     * Jarvis do more - but held on a stale link (rule 4), like every change,
+     * and the desktop's `brain_schedule_act`. @return whether it changed, and
+     * the sentence to show.
+     */
+    suspend fun scheduleAct(id: String, action: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Schedule.actBody(id, action)
+            ?: return false to "That is not something one job can do."
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ACT_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also { (changed, _) ->
+                _scheduleTick.update { n -> n + 1 }
+                // Snoozed, deleted or done here: its notification - ringing
+                // or not - goes at once (bug audit 2026-09-26, #1). The PC's
+                // `changed` event does the same, for a change made anywhere.
+                if (changed && action in setOf("snooze", "delete", "done")) {
+                    appContext?.let { ctx ->
+                        runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(ctx, id) }
+                    }
+                }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+    }
+
+    /**
+     * One new to-do item, in the owner's words - on a named list when [list]
+     * says one ("shopping"). Held on a stale link.
+     */
+    suspend fun addTodo(text: String, list: String? = null): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Schedule.todoBody(text, list)
+            ?: return false to "Type what to add first (up to ${com.jarvis.client.net.Schedule.MAX_TEXT} characters)."
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not added. " + describe(r.error))
+        }
+    }
+
+    /**
+     * Every item on ONE named list, after Coming up's "are you sure?" - the
+     * desktop's `brain_schedule_clear_list`. [count] is how many items this
+     * phone showed: the PC clears nothing when the list changed since. Never
+     * the to-do list. Held on a stale link, like every change.
+     */
+    suspend fun clearList(name: String, count: Int): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Schedule.clearListBody(name, count)
+            ?: return false to "That is not one of your lists."
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ACT_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not cleared. " + describe(r.error))
+        }
+    }
+
+    /**
+     * The standby schedule: every day from [start] to [end] ("HH:MM"). The PC
+     * sets it up at once, with no card (since 2026-09-26; the answer says the
+     * next night) - the desktop's `brain_schedule_add_standby`. Held on a stale
+     * link, like every change. @return whether the PC took it, and the
+     * sentence to show.
+     */
+    suspend fun addStandbySchedule(start: String, end: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Schedule.standbyBody(start, end)
+            ?: return false to com.jarvis.client.net.Schedule.STANDBY_BAD_TIMES
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+                _scheduleTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not set up. " + describe(r.error))
+        }
+    }
+
+    private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?, eventId: String? = null) {
+        _scheduleTick.update { it + 1 }
+        val obj = data as? JsonObject
+        if (com.jarvis.client.net.Briefing.isAbout(obj)) {
+            _briefingTick.update { it + 1 }
+            // A briefing is announced when it is READY, never when its time
+            // comes: it takes a moment to put together.
+            com.jarvis.client.net.Briefing.readyFrom(obj)?.let { onBriefingReady(it, eventId) }
+            return
+        }
+        // A job changed on the PC - snoozed, deleted or done there, by voice
+        // or in Coming up: a notification still showing for it, ringing or
+        // not, goes (bug audit 2026-09-26, #1). Never a "tell me when"
+        // match's: its job ends the moment it matched to tell only once.
+        com.jarvis.client.net.Schedule.changedFrom(obj)?.let { (id, kind) ->
+            if (com.jarvis.client.net.Schedule.cancelsOnChange(kind)) {
+                appContext?.let { ctx ->
+                    runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(ctx, id) }
+                }
+            }
+            return
+        }
+        // A "tell me when" matched: it only tells - the alert is read by id,
+        // and an urgent one rings until seen.
+        com.jarvis.client.net.Schedule.matchedFrom(obj)?.let { (id, urgent) ->
+            onTellMeMatched(id, urgent, eventId)
+            return
+        }
+        val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(obj) ?: return
+        val context = appContext ?: return
+        // Written at once, not within two seconds: if the process is killed
+        // now, a restart must not replay this event and ring it again.
+        flushResumePoint()
+        val arrived = System.currentTimeMillis()
+        scope.launch {
+            val job = when (val r = api.scheduleJob(id)) {
+                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+                is ApiResult.Failed -> null
+            }
+            // Once per job going off: a replayed event after a reconnect
+            // must not ring twice. A job that could not be read is told apart
+            // by its event, not taken for every other unreadable firing.
+            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.firedAt, eventId, arrived)
+            val fresh = synchronized(scheduleShown) {
+                if (scheduleShown.size > 500) scheduleShown.clear()
+                scheduleShown.add(key)
+            }
+            if (!fresh) return@launch
+            val security = settings.security.value
+            // A notification is outside the app: a lock that is ON counts,
+            // whether or not the lists were shown a moment ago.
+            val locked = security.appLock || security.privateLists
+            val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
+            val lockScreen = job?.lockScreen?.takeIf { it.isNotEmpty() }
+                ?: com.jarvis.client.net.Schedule.lockScreen(kind)
+            // Heard more than ten minutes after it went off (the phone was
+            // out of reach, or restarted): a silent "Missed at 07:00." notice,
+            // never an alarm ringing as if it were now (the owner, 2026-09-26).
+            val late = com.jarvis.client.net.Schedule.heardLate(job?.firedAt, arrived / 1000.0)
+            com.jarvis.client.service.ScheduleNotifier.post(
+                context, id, kind, title,
+                if (late) com.jarvis.client.net.Schedule.missedWords(job?.wentOffAt.orEmpty(), text) else text,
+                lockScreen,
+                // An alarm keeps ringing until seen (2026-09-25).
+                ring = com.jarvis.client.net.Schedule.rings(kind, urgent = false),
+                quiet = late,
+            )
+        }
+    }
+
+    /**
+     * A "tell me when" matched (backend jarvis_tellme.py): read its alert by
+     * id ("An email from Alex arrived." - made on the PC from the owner's own
+     * words) and show it; urgent rings until seen. While App lock or "Hide
+     * memory lists and chat history" is on, only the generic words. Once per
+     * match, even when a reconnect replays the event. It only tells: nothing
+     * here acts.
+     */
+    private fun onTellMeMatched(id: String, urgent: Boolean, eventId: String? = null) {
+        val context = appContext ?: return
+        val kind = com.jarvis.client.net.Schedule.TELLME
+        flushResumePoint()
+        val arrived = System.currentTimeMillis()
+        scope.launch {
+            val job = when (val r = api.scheduleJob(id)) {
+                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+                is ApiResult.Failed -> null
+            }
+            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.alertAt, eventId, arrived, "#match@")
+            val fresh = synchronized(scheduleShown) {
+                if (scheduleShown.size > 500) scheduleShown.clear()
+                scheduleShown.add(key)
+            }
+            if (!fresh) return@launch
+            val security = settings.security.value
+            val locked = security.appLock || security.privateLists
+            val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
+            com.jarvis.client.service.ScheduleNotifier.post(
+                context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_LOCK_SCREEN,
+                ring = com.jarvis.client.net.Schedule.rings(kind, urgent),
+                key = key,
+            )
+        }
+    }
+
+    // ------------------------------------------------- Focus sessions ----
+    // The owner's decision of 2026-09-25 - see [com.jarvis.client.net.Focus]
+    // and ui/screens/FocusPlate.kt. A timer plus Quiet; the PC watches which
+    // app or site is in front and speaks on the PC only. This phone starts and
+    // stops a session and shows the countdown, the counts and the report card.
+
+    private val _focusTick = MutableStateFlow(0)
+
+    /** Goes up on every `focus` event and after every change made from this phone. */
+    val focusTick: StateFlow<Int> = _focusTick.asStateFlow()
+
+    /** `GET /api/focus`. A read: never held. */
+    suspend fun focus(): ApiResult<JsonObject> = api.focus()
+
+    /**
+     * Start a session of [minutes], optionally "on" something. Held on a
+     * stale link (rule 4): it makes Jarvis watch. No approval card - the
+     * owner asked, and the PC reads only which app or site is in front and
+     * keeps only counts (docs/JARVIS-API.md section 31).
+     */
+    suspend fun focusStart(minutes: Int, on: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Focus.startBody(minutes, on)
+            ?: return false to com.jarvis.client.net.Focus.BAD_MINUTES
+        return focusPost(com.jarvis.client.net.Focus.START_PATH, body)
+    }
+
+    /**
+     * ONE thing to the running session: pause, resume, extend or stop.
+     * Resume and extend are held on a stale link; pause and stop are let
+     * through - they only make Jarvis do less.
+     */
+    suspend fun focusAct(action: String): Pair<Boolean, String> {
+        if (action in com.jarvis.client.net.Focus.HELD_WHEN_STALE) {
+            actionBlocker()?.let { return false to it }
+        }
+        val body = com.jarvis.client.net.Focus.actBody(action)
+            ?: return false to "That is not something the phone can do to a focus session."
+        return focusPost(com.jarvis.client.net.Focus.ACT_PATH, body)
+    }
+
+    private suspend fun focusPost(path: String, body: String): Pair<Boolean, String> =
+        when (val r = api.focusWrite(path, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Focus.said(r.value).also {
+                _focusTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+
+    // ------------------------------------------------ Morning briefing ----
+    // The owner's decisions of 2026-09-25 - see [com.jarvis.client.net.Briefing]
+    // and ui/screens/BriefingPlate.kt. Put together on the PC without the AI
+    // model; this phone shows it, asks for one now, and sets one up.
+
+    private val _briefingTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one on every `schedule` event about a briefing and after
+     * every change made from this phone, so Mind's "Morning briefing" reads
+     * itself again.
+     */
+    val briefingTick: StateFlow<Int> = _briefingTick.asStateFlow()
+
+    /** The briefing runs already announced, by id and when they went off. */
+    private val briefingShown = LinkedHashSet<String>()
+
+    /** `GET /api/briefing`. A read: never held. */
+    suspend fun briefing(): ApiResult<JsonObject> = api.briefing()
+
+    /**
+     * "Brief me now": one put together on the PC now. It only reads - no
+     * card, nothing changes - so, like every read, it is not held on a stale
+     * link (the desktop's `brain_briefing_now` is not either).
+     */
+    suspend fun briefingNow(): ApiResult<JsonObject> = api.briefingNow()
+
+    /**
+     * "What did I miss?" - the briefing's builder on the PC, since the owner
+     * last talked to Jarvis on either app. A read, like "Brief me now", so
+     * not held on a stale link (the desktop's `brain_briefing_now` with
+     * `missed`).
+     */
+    suspend fun briefingMissed(): ApiResult<JsonObject> = api.briefingNow(missed = true)
+
+    /**
+     * Set up ONE briefing that repeats. It approves nothing: the PC raises
+     * the scheduler's ONE approval card listing the next three times, and
+     * nothing is set up before a yes. Held on a stale link (rule 4), like the
+     * desktop's `set_briefing`. @return whether it was asked, and the
+     * sentence to show.
+     */
+    suspend fun setBriefing(every: String, at: String, days: Collection<Int>): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Briefing.setupBody(every, at, days)
+            ?: return false to (if (every == "week") "Pick at least one day and a time." else "Pick a time.")
+        return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ADD_PATH, body)) {
+            is ApiResult.Ok -> {
+                _briefingTick.update { n -> n + 1 }
+                _scheduleTick.update { n -> n + 1 }
+                val (asked, said) = com.jarvis.client.net.Schedule.said(r.value)
+                asked to (if (asked) com.jarvis.client.net.Briefing.ASKED else said)
+            }
+            is ApiResult.Failed -> false to ("Not set up. " + describe(r.error))
+        }
+    }
+
+    /**
+     * "Show who new emails are from" in the morning briefing - the desktop's
+     * `set_briefing_senders`. ON is held on a stale link (rule 4) and raises
+     * ONE approval card on the PC; OFF is never held - it only shows less.
+     * @return the sentence to show.
+     */
+    suspend fun setBriefingSenders(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        val r = writeNoticingCards { api.setBriefingSenders(on) }
+        _briefingTick.update { n -> n + 1 }
+        return when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.Briefing.sendersSaid(on, r.value)
+            is ApiResult.Failed ->
+                if (r.error == ApiError.NotFound) {
+                    com.jarvis.client.net.Briefing.SENDERS_MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /** Stop ONE briefing, at once, no card. Held on a stale link, like every change. */
+    suspend fun stopBriefing(id: String): Pair<Boolean, String> =
+        scheduleAct(id, "delete").also { _briefingTick.update { n -> n + 1 } }
+
+    private fun onBriefingReady(id: String, eventId: String? = null) {
+        val context = appContext ?: return
+        val arrived = System.currentTimeMillis()
+        scope.launch {
+            val job = when (val r = api.scheduleJob(id)) {
+                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+                is ApiResult.Failed -> null
+            }
+            // Once per run: a replayed event after a reconnect must not ring
+            // twice - and an unreadable job is told apart by its event.
+            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.firedAt, eventId, arrived)
+            val fresh = synchronized(briefingShown) {
+                if (briefingShown.size > 200) briefingShown.clear()
+                briefingShown.add(key)
+            }
+            if (!fresh) return@launch
+            // The fixed words only - on the lock screen AND inside it, whatever
+            // the privacy settings: the briefing itself is read in the app.
+            val words = com.jarvis.client.net.Briefing.LOCK_SCREEN
+            com.jarvis.client.service.ScheduleNotifier.post(
+                context, id, com.jarvis.client.net.Briefing.KIND,
+                com.jarvis.client.net.Briefing.TITLE, words, words, openBriefing = true,
+            )
+        }
+    }
+
+    /**
+     * The overnight-tidy card's "Not now" (since 2026-09-25): tell the PC,
+     * which keeps the offer quiet for a day, then a week, then a month
+     * (jarvis_backoff.py). Not held on a stale link - it only makes Jarvis
+     * quieter - and nothing is shown if it fails: the card is dismissed here
+     * either way and may simply come back tomorrow, as it did before.
+     */
+    suspend fun sleepNotNow() {
+        if (_link.value != LinkState.CONNECTED) return
+        api.setSleepTime(notNow = true)
+    }
+
+    // ------------------------------------------ "Always keep in mind" ----
+    // The owner's decision of 2026-09-24 - see
+    // [com.jarvis.client.net.MemoryProfile] and ui/screens/ProfilePlate.kt.
+
+    private val _profileTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one whenever the list may have changed from this phone - a
+     * pin, an unpin, a Forget or an erase - so Mind's "Always keep in mind"
+     * reads itself again. There is no event for it (Forget and Erase send
+     * none either): the desktop's change shows on the next read, Refresh.
+     */
+    val profileTick: StateFlow<Int> = _profileTick.asStateFlow()
+
+    private val _pinnedIds = MutableStateFlow<Set<Long>?>(null)
+
+    /**
+     * The ids on the list at the last read, or null before one (or on a PC
+     * without the list) - what "Saved automatically" reads to say Pin or
+     * Unpin. Ids only: the words stay on the PC and in the section drawing
+     * them.
+     */
+    val pinnedIds: StateFlow<Set<Long>?> = _pinnedIds.asStateFlow()
+
+    /** `GET /api/memory/profile`. A read: never held. Notes the ids ([pinnedIds]). */
+    suspend fun memoryProfile(): ApiResult<JsonObject> {
+        val r = api.memoryProfile()
+        _pinnedIds.value = when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryProfile.parse(r.value)?.ids
+            is ApiResult.Failed -> if (com.jarvis.client.net.MemoryProfile.missing(r.error)) null else _pinnedIds.value
+        }
+        return r
+    }
+
+    /**
+     * Pins (`pinned = true`) or unpins ONE fact on "Always keep in mind". No
+     * card and no confirm - the owner's own tap on a fact they can see - but
+     * held on a stale link (rule 4), exactly like [forgetAutoFact] and the
+     * desktop's `brain_memory_pin`. @return whether the list changed as
+     * asked, and the sentence to show.
+     */
+    suspend fun pinFact(id: Long, pinned: Boolean): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.pinFact(id, pinned)) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryProfile.said(r.value, pinned).also {
+                _profileTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+    }
+
+    // ---------------------------------------------------- chat history ----
+    // docs/JARVIS-API.md section 18 (2026-09-24) - see
+    // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The
+    // phone reads all of it from the PC and keeps none of it.
+
+    /** `GET /api/history`, one page, newest first. A read: never held. */
+    suspend fun history(before: Long? = null): ApiResult<JsonObject> = api.history(before)
+
+    /** `GET /api/history/conversation` - one conversation, read-only. */
+    suspend fun historyConversation(id: String): ApiResult<JsonObject> = api.historyConversation(id)
+
+    /**
+     * The chat history switch - the same shape as [setLearning]. ON is held
+     * on a stale link (rule 4) and raises an approval card on the PC; OFF is
+     * never held - it only stops something. @return the sentence to show.
+     */
+    suspend fun setHistory(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setHistory(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.enableSaid(on, r.value)
+            is ApiResult.Failed -> "Not changed. " +
+                (com.jarvis.client.net.ChatLog.failure(r.error) ?: describe(r.error))
+        }
+    }
+
+    /**
+     * "Delete conversations older than". Held on a stale link (rule 4), the
+     * same as the desktop: a shorter limit deletes at once, cannot be
+     * undone, and was chosen from a list this phone may not have seen the
+     * latest of. @return the sentence to show.
+     */
+    suspend fun setHistoryKeepDays(days: Int): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.ChatLog.keepDaysBody(days)
+            ?: return "Not changed. Pick Never, 30 days, 90 days or 1 year."
+        return when (val r = api.setHistoryKeepDays(body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.keepSaid(days, r.value)
+            is ApiResult.Failed -> "Not changed. " +
+                (com.jarvis.client.net.ChatLog.failure(r.error) ?: describe(r.error))
+        }
+    }
+
+    /**
+     * Deletes ONE conversation from the PC, after the History screen's
+     * confirm. Held on a stale link (rule 4), the same as the desktop's
+     * History and its Forget: it cannot be undone, and it acts on a list read
+     * over a link that cannot be confirmed live. One already gone counts as
+     * deleted. @return whether it is gone now, and the sentence to show.
+     */
+    suspend fun deleteHistory(id: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.deleteHistory(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.deleteSaid(r.value)
+            is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
+                true to com.jarvis.client.net.ChatLog.ALREADY_GONE
+            } else {
+                false to "Not deleted. " + describe(r.error)
+            }
+        }
+    }
+
+    // ----------------------------------------------------------- skills ----
+
+    /**
+     * Removes one skill ([com.jarvis.client.net.Skills]), after the Mind
+     * screen's own "are you sure". Not held on a stale link: it only takes
+     * something away, the same rule as every OFF here - and the desktop does
+     * not hold it either. If the PC raises a card for it, that is said.
+     * The list is read again either way.
+     *
+     * @return the sentence to show under the list.
+     */
+    suspend fun removeSkill(name: String): String {
+        val said = when (val r = writeNoticingCards { api.removeSkill(name) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.Skills.removeSaid(name, r.value)
+            is ApiResult.Failed -> "Not removed. " +
+                (com.jarvis.client.net.Skills.failure(r.error) ?: describe(r.error))
+        }
+        refreshSkills()
+        return said
+    }
+
+    /** Just the skills list - all a removal can have changed. */
+    suspend fun refreshSkills() {
+        val (skills, read) = api.probe(com.jarvis.client.net.Skills.PATH).asSection()
+        _brain.update { it.copy(skills = skills, skillsRead = read) }
+    }
+
+    /**
+     * Sends one change whose answer's shape is not written down, and counts
+     * it as waiting for a card when a new card turned up in the queue while
+     * it was out ([com.jarvis.client.net.DesktopWrite.withNewCard]) - so the
+     * phone never says "done" over a card it can see.
+     */
+    private suspend fun writeNoticingCards(
+        call: suspend () -> ApiResult<com.jarvis.client.net.DesktopWrite.Outcome>,
+    ): ApiResult<com.jarvis.client.net.DesktopWrite.Outcome> {
+        val before = _pending.value.map { it.id }.toSet()
+        val r = call()
+        if (r !is ApiResult.Ok) return r
+        refreshPending()
+        val newCard = _pending.value.any { it.id !in before }
+        return ApiResult.Ok(com.jarvis.client.net.DesktopWrite.withNewCard(r.value, newCard))
+    }
 
     private suspend fun runTaskAction(call: suspend () -> ApiResult<Unit>): ApiResult<Unit> {
         val result = call()
@@ -1345,7 +3698,109 @@ object JarvisRuntime {
     }
 
     /**
-     * Answers the daily "let Jarvis tidy its memory overnight?" card. Same
+     * "Both are true" on a correction card: keep the new fact and the old
+     * one (`memory-intake.patch`). Gated exactly like [decideMemory] - it is
+     * a decision on the same queue, so it waits for a live link.
+     *
+     * 409 means the desktop refused the third answer for this card (it has
+     * no old fact to keep); 404 that the card was already answered. Either
+     * way the card list is re-read so the screen shows the truth, and the
+     * owner is told in one plain sentence.
+     */
+    suspend fun keepBothMemory(id: Long): ApiResult<Unit> {
+        if (_stale.value || _link.value != LinkState.CONNECTED) {
+            val blocker = "Not connected to the desktop, so this decision cannot be delivered."
+            _notice.value = blocker
+            return ApiResult.Failed(ApiError.Unreachable(blocker))
+        }
+        val result = api.keepBothMemory(id)
+        when (result) {
+            is ApiResult.Ok -> refreshMemoryQueue()
+            is ApiResult.Failed -> {
+                _notice.value = when (result.error) {
+                    ApiError.AlreadyHandled ->
+                        "The desktop would not keep both for that card. Answer it with Keep or Discard."
+                    ApiError.NotFound -> "That card was already answered."
+                    else -> describe(result.error)
+                }
+                refreshMemoryQueue()
+            }
+        }
+        return result
+    }
+
+    /**
+     * Marks the answer [turnId] right or wrong - or takes the mark back when
+     * the owner taps the mark already chosen ([Feedback.nextMark]).
+     *
+     * Not an approval, and it never changes memory. It is still a write to
+     * the desktop that can end in a "stop using this fact?" card, so it
+     * follows the same rule as the other writes here: nothing is sent while
+     * the link is down or stale ([actionBlocker]).
+     *
+     * One answer at a time, and a second tap while the first is on its way
+     * is ignored rather than queued. If the desktop cannot take marks for
+     * this answer (404: it does not know the answer; 503: the feedback
+     * module is not installed), the buttons are swapped for one quiet line -
+     * no error wall.
+     */
+    fun markAnswerDetached(turnId: String, tapped: AnswerMark) {
+        // On the runtime's own scope, like [decideDetached]: a rotation must
+        // not cancel the call between the POST and the state update, which
+        // would leave the buttons greyed out as "saving" for good.
+        scope.launch { markAnswer(turnId, tapped) }
+    }
+
+    suspend fun markAnswer(turnId: String, tapped: AnswerMark): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        // Check-and-claim in one atomic step. Two quick taps each launch on
+        // the multi-threaded runtime scope, and a separate read-then-write
+        // let both through - two marks racing, and the screen free to end up
+        // showing the one the desktop did not keep.
+        var claimed = false
+        var current = AnswerMark.NONE
+        _answerMark.update { s ->
+            val mine = s?.takeIf { it.turnId == turnId }
+            if (mine?.busy == true || mine?.unavailable == true) {
+                claimed = false
+                s
+            } else {
+                claimed = true
+                current = mine?.mark ?: AnswerMark.NONE
+                AnswerMarkState(turnId, current, busy = true)
+            }
+        }
+        if (!claimed) return ApiResult.Failed(ApiError.AlreadyHandled)
+        val next = Feedback.nextMark(current, tapped)
+        val result = api.markAnswer(turnId, next)
+        _answerMark.update { s ->
+            if (s == null || s.turnId != turnId) {
+                s
+            } else {
+                when (result) {
+                    is ApiResult.Ok -> s.copy(mark = next, busy = false)
+                    is ApiResult.Failed -> when (result.error) {
+                        ApiError.NotFound, ApiError.NotAvailable ->
+                            s.copy(busy = false, unavailable = true)
+                        else -> s.copy(busy = false)
+                    }
+                }
+            }
+        }
+        if (result is ApiResult.Failed &&
+            result.error != ApiError.NotFound && result.error != ApiError.NotAvailable
+        ) {
+            _notice.value = "That mark did not reach the desktop. " + describe(result.error)
+        }
+        return result
+    }
+
+    /**
+     * Answers the daily overnight-tidy card (not built yet: "enable" only
+     * records the wish, and nothing runs). Same
      * shape as [decideMemory]: a live link is required for the same reason -
      * the desktop's own `/api/memory/sleep_time` handler is behind the same
      * connection this queue is.
@@ -1473,6 +3928,9 @@ object JarvisRuntime {
      * keep pretending to think.
      */
     private const val RECONNECT_GRACE_MS = 12_000L
+
+    /** When to re-read the second-card switches after a decision: see [recheckSecondCardAfterDecision]. */
+    private val SECOND_CARD_RECHECK_MS = longArrayOf(0L, 1_500L, 5_000L)
 
     /**
      * Past this, "reconnecting" stops being the honest word for it. Short

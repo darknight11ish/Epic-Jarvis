@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Jarvis Desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.jarvis.desktop",
   "build": {
     "frontendDist": "../src"
@@ -64,7 +64,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:11434 http://127.0.0.1:4000; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'",
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:4719 http://localhost:4719; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'",
       "freezePrototype": true,
       "assetProtocol": {
         "enable": false,
@@ -78,11 +78,11 @@
       "msi",
       "nsis"
     ],
-    "publisher": "Jarvis Labs",
-    "copyright": "Copyright (c) 2026 Jarvis Labs",
+    "publisher": "darknight11ish",
+    "copyright": "Copyright (c) 2026 darknight11ish",
     "category": "Productivity",
-    "shortDescription": "Native Windows 11 spotlight client for the Jarvis stack.",
-    "longDescription": "Jarvis Desktop is a native Windows 11 client built with Tauri v2. It pairs a Rust backend with a WebView2 frontend to deliver an Alt+Space glassmorphic quickbar, a full HUD window, desktop capture, clipboard ingestion and live health checks against the local Jarvis, Ollama and LiteLLM services.",
+    "shortDescription": "Jarvis, a private assistant that runs on your own PC.",
+    "longDescription": "Jarvis Desktop is the Windows app for Jarvis, a personal assistant whose AI model runs on your own PC: a quick bar on Alt+Space, chat, voice, approvals, and the Brain window for memory, models and settings. Nothing private leaves your PC.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -105,14 +105,15 @@
       }
     },
     "licenseFile": "../../LICENSE",
-    "resources": [
-      "../../THIRD-PARTY-NOTICES.txt"
-    ]
+    "resources": {
+      "../../THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt",
+      "../../LICENSE": "LICENSE.txt"
+    }
   },
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/darknight111/Epic-Jarvis/releases/latest/download/latest.json"
+        "https://github.com/darknight11ish/Epic-Jarvis/releases/download/desktop-latest/latest.json"
       ],
       "pubkey": "",
       "windows": {

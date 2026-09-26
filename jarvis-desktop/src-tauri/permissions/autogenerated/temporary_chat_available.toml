@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-temporary-chat-available"
+description = "Enables the temporary_chat_available command without any pre-configured scope."
+commands.allow = ["temporary_chat_available"]
+
+[[permission]]
+identifier = "deny-temporary-chat-available"
+description = "Denies the temporary_chat_available command without any pre-configured scope."
+commands.deny = ["temporary_chat_available"]

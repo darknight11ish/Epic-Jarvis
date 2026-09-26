@@ -212,6 +212,96 @@ with with_env(host="imap.example.com", user="me@example.com", password="pw"):
           repr(E._decode("=?no-such-charset?q?Bob?=")))
 
 
+# ── senders(): the From line only, with PEEK, one connection ─────────────
+# The morning briefing's "3 unread emails - From Alex, Your Bank and
+# GitHub" (the owner's decision of 2026-09-25). The real IMAP conversation
+# is run against a stand-in imaplib that records every command, so "nothing
+# is marked as read" is a fact about what was sent, not a comment.
+
+import imaplib as _imaplib
+
+
+class _FakeIMAP:
+    made = []
+
+    def __init__(self, host, port, timeout=None, ssl_context=None):
+        self.calls = [("connect", host, port, timeout)]
+        self.ssl_context = ssl_context
+        _FakeIMAP.made.append(self)
+
+    def login(self, user, password):
+        self.calls.append(("login",))
+        return "OK", [b""]
+
+    def select(self, mailbox, readonly=False):
+        self.calls.append(("select", mailbox, readonly))
+        return "OK", [b"7"]
+
+    def search(self, charset, criterion):
+        self.calls.append(("search", criterion))
+        return "OK", [b"3 5 8 9 11 12 20"]
+
+    def fetch(self, msg_id, what):
+        self.calls.append(("fetch", msg_id, what))
+        names = {b"20": b"Alex <alex@example.com>", b"12": b'"Your Bank" <a@bank.example>',
+                 b"11": b"noreply@github.com", b"9": b"Alex <alex@example.com>",
+                 b"8": b"=?UTF-8?Q?Jos=C3=A9?= <j@example.com>"}
+        head = b"From: " + names[msg_id] + b"\r\n\r\n"
+        return "OK", [(msg_id + b" (BODY[HEADER.FIELDS (FROM)] {%d}" % len(head), head), b")"]
+
+    def close(self):
+        self.calls.append(("close",))
+
+    def logout(self):
+        self.calls.append(("logout",))
+
+
+with with_env(host="imap.example.com", user="me@example.com", password="pw"):
+    p = E.plan(1)
+    check("senders() without approval reads nothing",
+          E.senders(p)["ok"] is False and _FakeIMAP.made == [])
+    real = _imaplib.IMAP4_SSL
+    _imaplib.IMAP4_SSL = _FakeIMAP
+    try:
+        out = E.senders(p, approved=True)
+    finally:
+        _imaplib.IMAP4_SSL = real
+    conn = _FakeIMAP.made[-1] if _FakeIMAP.made else None
+    calls = conn.calls if conn else []
+    check("ONE connection", len(_FakeIMAP.made) == 1, len(_FakeIMAP.made))
+    import ssl as _ssl
+    ctx = conn.ssl_context if conn else None
+    check("the mail server's certificate and name are checked (imaplib alone checks "
+          "neither)", ctx is not None and ctx.verify_mode == _ssl.CERT_REQUIRED
+          and ctx.check_hostname is True, ctx)
+    local = E.tls_context("127.0.0.1")
+    check("... except a mail program on this PC itself (a bridge's own certificate)",
+          local.verify_mode == _ssl.CERT_NONE and E.tls_context("imap.example.com").verify_mode
+          == _ssl.CERT_REQUIRED)
+    check("the mailbox is opened read-only", ("select", "INBOX", True) in calls, calls)
+    fetches = [c for c in calls if c[0] == "fetch"]
+    check("only the newest five, newest first",
+          [c[1] for c in fetches] == [b"20", b"12", b"11", b"9", b"8"], fetches)
+    check("each asks for the From line only, with PEEK (nothing marked as read)",
+          all(c[2] == "(BODY.PEEK[HEADER.FIELDS (FROM)])" for c in fetches), fetches)
+    check("nothing else is asked: no STORE, no flags, no body",
+          {c[0] for c in calls} == {"connect", "login", "select", "search", "fetch", "close",
+                                    "logout"}, calls)
+    check("the count, and the names - decoded, each once, newest first; no name: the address",
+          out.get("ok") is True and out["count"] == 7 and out["looked_at"] == 5
+          and out["senders"] == ["Alex", "Your Bank", "noreply@github.com", "José"], out)
+
+    def refused(plan_obj, newest):
+        raise _imaplib.IMAP4.error("LOGIN failed for me@example.com")
+    bad = E.senders(p, fetch=refused, approved=True)
+    check("a failure is its exception's NAME only - never the server's words",
+          bad["ok"] is False and "me@example.com" not in bad["reason"], bad)
+    check("a From line with no name shows the whole address, not just 'noreply'",
+          E.sender_name(b"From: noreply@github.com\r\n\r\n") == "noreply@github.com")
+    check("a name with a direction-override character loses it",
+          E.sender_name("=?utf-8?q?Pay=E2=80=AEnow?= <x@example.com>") == "Pay now")
+    check("an empty From line gives nothing", E.sender_name(b"From: \r\n\r\n") == "")
+
 print()
 if FAILED:
     print(f"{len(FAILED)} failed: {', '.join(FAILED)}")

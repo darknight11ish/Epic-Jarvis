@@ -5,11 +5,20 @@
  * whether Jarvis Desktop may start one. Everything the desktop will show in
  * build order step 5 — models, memory, the enforced config, skills — is
  * read-only by design, and `POST /api/config` answers 501 on purpose, so this
- * page is deliberately not the beginning of a control panel.
+ * page is deliberately not the beginning of a control panel. (The one narrow
+ * exception since 2026-09-26 is "What asks first", asks-first-settings.js:
+ * seven named tier lines through their own route and card, never
+ * /api/config.)
  *
- * The token is write-only from here. `get_api_settings` reports whether one is
- * set and never returns it, so a blank field means "keep what you have" and
- * the secret never comes back into THIS page.
+ * The token field is write-only. `get_api_settings` reports whether one is
+ * set, and where it came from, and never returns it, so a blank field means
+ * "keep what you have".
+ *
+ * One deliberate exception, on a click: "Show the token for my phone" asks
+ * `reveal_pairing_token` for it, because the phone has to be given the same
+ * token and before this the only way was to go and find a file. It is shown
+ * in a read-only box, hidden again after a minute, and never logged or
+ * stored by this page.
  *
  * Not into any page: the HUD window is the exception. `hud_bootstrap.js`
  * injects the live token so the vendored page can reach the backend, where a
@@ -21,13 +30,65 @@
 import {
   announce,
   applyTheme,
+  APPROVE_WHERE,
+  currentZoom,
   followTheme,
   followZoom,
+  linkWords,
+  onEvent,
   onLink,
+  onQueue,
   reconnect,
+  setZoom,
   start as startLink,
+  THEME_INFO,
   THEMES,
 } from "./jarvis-link.js";
+import { BARGE_IN_KEY, describeBargeIn, loadBargeIn, saveBargeIn } from "./barge-in.js";
+import { mountCardLink } from "./card-link.js";
+import {
+  describeHeard,
+  describeMoment,
+  HEARD_KEY,
+  loadHeard,
+  loadMoment,
+  MOMENT_KEY,
+  saveHeard,
+  saveMoment,
+} from "./voice-flow.js";
+import {
+  checkLine as voiceCheckLine,
+  isTrained as voiceIsTrained,
+  lastTrainingLine,
+  printLines as voicePrintLines,
+  stopWordLine,
+  summaryLine as voiceSummaryLine,
+  talkLine as voiceTalkLine,
+  turnLine as voiceTurnLine,
+  verifierLine as voiceVerifierLine,
+  wakeInfo,
+} from "./voice-settings.js";
+import { paintVoicePanel, startVoicePanel } from "./voice-panel.js";
+import {
+  APPROVAL_CHOICES,
+  appLockDetail,
+  approvalsNote,
+  helloLine,
+  needsHello,
+  normalise as normaliseSecurity,
+  privateDetail,
+  RELOCK_CHOICES,
+  relockNote,
+  savedLine,
+} from "./security-settings.js";
+import {
+  FRAME_RATES,
+  loadFaceTuning,
+  QUALITIES,
+  saveFaceTuning,
+  SPEEDS,
+} from "./face-tuning.js";
+import { PLACE_FRESH_MS, SETTINGS_PLACE_KEY, START_PLACE } from "./plain-errors.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -41,9 +102,15 @@ const dom = {
   bindAddress: $("bind-address"),
   saveConnection: $("save-connection"),
   clearToken: $("clear-token"),
+  revealToken: $("reveal-token"),
+  pairingShown: $("pairing-shown"),
+  pairingToken: $("pairing-token"),
+  hideToken: $("hide-token"),
   connectionStatus: $("connection-status"),
   linkState: $("link-state"),
   linkText: $("link-text"),
+  linkTech: $("link-tech"),
+  linkDetail: $("link-detail"),
   reconnect: $("reconnect"),
 
   supervise: $("supervise"),
@@ -55,6 +122,8 @@ const dom = {
   stopBackend: $("stop-backend"),
   backendStatus: $("backend-status"),
   backendState: $("backend-state"),
+  backendTech: $("backend-tech"),
+  backendDetail: $("backend-detail"),
 
   autostart: $("autostart"),
   autostartNote: $("autostart-note"),
@@ -70,6 +139,10 @@ const dom = {
   updateStatus: $("update-status"),
   updateProgress: $("update-progress"),
   updateProgressFill: $("update-progress-fill"),
+  updateIntroOff: $("update-intro-off"),
+  updateIntroOn: $("update-intro-on"),
+  faqUpdateOff: $("faq-update-off"),
+  faqUpdateOn: $("faq-update-on"),
   updateNotes: $("update-notes"),
   updateNotesBody: $("update-notes-body"),
 
@@ -121,13 +194,42 @@ async function act(button, target, work) {
    Connection
    ========================================================================== */
 
+/** Where the token in use came from, in words. Never the token. */
+const TOKEN_SOURCE = {
+  "credential-manager": "set here, kept in Windows Credential Manager",
+  "settings-file": "set here by an older version, still in the settings file as plain text",
+  environment: "from the JARVIS_TOKEN / HUD_TOKEN environment variable",
+  "backend-credential-manager": "Jarvis's own, kept in Windows Credential Manager",
+  "backend-file": "Jarvis's own, still in its old plain-text file - update the backend (apply-patches.ps1) to move it",
+};
+
 async function loadConnection() {
   const settings = await invoke("get_api_settings");
   dom.base.value = settings.base || "";
-  dom.tokenState.textContent = settings.hasToken ? "set" : "not set";
-  dom.clearToken.disabled = !settings.hasToken;
+  dom.tokenState.textContent = TOKEN_SOURCE[settings.tokenSource] ||
+    (settings.hasToken ? "set" : "not set");
+  // Only a token typed here can be cleared here. Clearing Jarvis's own, or
+  // one from the environment, is not something this button can do.
+  dom.clearToken.disabled =
+    !["credential-manager", "settings-file"].includes(settings.tokenSource);
   dom.bindAddress.value = settings.bindAddress || "";
   dom.storePath.textContent = settings.store || "";
+  // Saved by an older version that checked less; the backend is not started
+  // with it, so say so instead of letting the field look like it works.
+  // The same for the Jarvis address (own networks only, CLAUDE.md
+  // 2026-09-26): Rust never sends anything to a refused one, and the link
+  // stays offline saying the same sentence.
+  const problems = [];
+  if (settings.baseProblem) {
+    problems.push(`The Jarvis address above is not being used. ${settings.baseProblem} ` +
+      "Nothing is sent to it, and nothing is sent to this PC instead: until you change " +
+      "it, Jarvis does nothing over the network - no chat, no reads - and approving is " +
+      "blocked.");
+  }
+  if (settings.bindAddressProblem) {
+    problems.push(`The phone address above is not being used: ${settings.bindAddressProblem}`);
+  }
+  if (problems.length) report(dom.connectionStatus, problems.join(" "), "bad");
 }
 
 dom.saveConnection.addEventListener("click", () =>
@@ -136,7 +238,7 @@ dom.saveConnection.addEventListener("click", () =>
     const token = dom.token.value;
     // An untouched token field means "keep the current one" — passing "" would
     // clear it, which is not what leaving a field alone should ever mean.
-    await invoke("set_api_settings", {
+    const note = await invoke("set_api_settings", {
       base,
       token: token.length ? token : null,
       bindAddress: dom.bindAddress.value.trim(),
@@ -145,18 +247,57 @@ dom.saveConnection.addEventListener("click", () =>
     await loadConnection();
     // The stream is pointed at the old base until it reconnects.
     reconnect();
-    return "Saved. Reconnecting the event stream.";
+    return note ? `Saved. ${note} Reconnecting the event stream.`
+      : "Saved. Reconnecting the event stream.";
   })
 );
 
 dom.clearToken.addEventListener("click", () =>
   act(dom.clearToken, dom.connectionStatus, async () => {
     await invoke("set_api_settings", { base: null, token: "" });
+    const after = await invoke("get_api_settings");
     await loadConnection();
     reconnect();
-    return "Token cleared.";
+    // Cleared means "forget the one typed here", not "use no token": the
+    // app goes back to Jarvis's own, and says so.
+    return after.hasToken
+      ? `Token cleared. Now using ${TOKEN_SOURCE[after.tokenSource] || "the token Jarvis made"}.`
+      : "Token cleared. No other token was found, so Jarvis may refuse this app until it has one.";
   })
 );
+
+/* Showing the token for the phone. Hidden again after a minute. */
+let hideTimer = null;
+
+function hidePairingToken() {
+  clearTimeout(hideTimer);
+  dom.pairingToken.value = "";
+  dom.pairingShown.hidden = true;
+  dom.revealToken.hidden = false;
+}
+
+dom.revealToken.addEventListener("click", () =>
+  act(dom.revealToken, dom.connectionStatus, async () => {
+    const token = await invoke("reveal_pairing_token");
+    dom.pairingToken.value = token;
+    dom.pairingShown.hidden = false;
+    dom.revealToken.hidden = true;
+    // Focused so a screen reader reads it, and NOT selected: a selected
+    // token is one Ctrl+C away from Windows' clipboard history.
+    dom.pairingToken.focus();
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hidePairingToken, 60_000);
+    return "Shown below. Type it into the phone.";
+  })
+);
+
+dom.hideToken.addEventListener("click", hidePairingToken);
+
+// No Copy button for the token (CONN-6). Anything copied on Windows is kept
+// in Clipboard History, and with cloud clipboard on it is sent to the
+// owner's other devices - a secret that outlives this window by days. The
+// phone needs it typed in anyway. The second card's Copy (`pin_command`) is
+// not a secret and keeps its button.
 
 dom.reconnect.addEventListener("click", () => {
   reconnect();
@@ -199,22 +340,28 @@ async function paintBackend({ fields = false } = {}) {
     dom.stopBackend.disabled = !status.owned;
   }
 
+  // Plain words first; the process id and the address sit behind
+  // "Technical detail", the way the phone's checks do it.
+  const detail = [];
   if (status.owned) {
     const up = Number(status.uptime_seconds || 0);
-    const handedOff = status.launcher_exited
-      ? " · launcher exited, tree still supervised"
-      : "";
     dom.backendState.textContent =
-      `started by Jarvis Desktop · pid ${status.pid} · up ${formatUptime(up)}${handedOff} · ${status.base}`;
+      `Jarvis Desktop started Jarvis, and it has been running for ${formatUptime(up)}.`;
+    detail.push(`pid ${status.pid}`);
+    if (status.launcher_exited) detail.push("launcher exited, process tree still supervised");
   } else if (!status.supervise) {
     dom.backendState.textContent =
-      `supervision off · Jarvis Desktop will not start or stop anything · ${status.base}`;
+      "Jarvis Desktop is not managing Jarvis. It will not start or stop it.";
   } else if (!status.configured) {
-    dom.backendState.textContent = "supervision on, but no program is configured";
+    dom.backendState.textContent =
+      "Turned on, but no program is set, so there is nothing to start yet.";
   } else {
     dom.backendState.textContent =
-      `supervision on · not started by Jarvis Desktop · ${status.base}`;
+      "Turned on. Jarvis is not running from here right now — it was not started by Jarvis Desktop.";
   }
+  if (status.base) detail.push(status.base);
+  dom.backendTech.hidden = !detail.length;
+  dom.backendDetail.textContent = detail.join(" · ");
 }
 
 function formatUptime(seconds) {
@@ -262,39 +409,321 @@ dom.stopBackend.addEventListener("click", () =>
    listeners, so the select stays correct when the change came from the Brain.
    ========================================================================== */
 
-const themePicker = $("theme");
-if (themePicker) {
-  themePicker.addEventListener("change", async () => {
-    // Paint immediately so the control feels connected, then persist. If the
-    // write fails the fan-out below puts it back.
-    applyTheme(themePicker.value);
+/*
+ * Three rows, the phone's ThemeRow: a swatch, the phone's name for it and its
+ * one-line description. Radios rather than the old <select>, so a screen
+ * reader says which is chosen with no extra wiring, and the descriptions are
+ * on screen rather than squeezed into an option label.
+ *
+ * "Match Windows light or dark mode" is the phone's "Follow the system": with
+ * it on, Windows picks between Daylight and the dark theme chosen here, and
+ * the list becomes "Theme for dark mode" (dark themes only). Rust reads
+ * Windows' setting and holds a switch while an approval is waiting - see
+ * system_theme.rs for why the pages cannot ask for it themselves.
+ */
+const themeList = $("theme-list");
+const themeLegend = $("theme-legend");
+const followSystem = $("follow-system");
+const followDetail = $("follow-system-detail");
+const FOLLOW_DETAIL = followDetail ? followDetail.textContent.trim() : "";
+let themePrefs = null;
+
+function buildThemeRows() {
+  for (const id of THEMES) {
+    const info = THEME_INFO[id];
+    const row = document.createElement("label");
+    row.className = "theme-row";
+    // `data-choice`, not `data-theme`: theme.css keys every palette on
+    // `[data-theme="..."]`, so a row carrying that attribute would repaint
+    // itself in the theme it names.
+    row.dataset.choice = id;
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "theme";
+    radio.value = id;
+    const swatch = document.createElement("span");
+    swatch.className = "swatch";
+    swatch.dataset.swatch = id;
+    swatch.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span");
+    text.className = "theme-text";
+    const name = document.createElement("span");
+    name.className = "theme-name";
+    name.textContent = info.label;
+    const blurb = document.createElement("span");
+    blurb.className = "theme-blurb";
+    blurb.textContent = info.blurb;
+    text.append(name, blurb);
+    const check = document.createElement("span");
+    check.className = "theme-check";
+    check.setAttribute("aria-hidden", "true");
+    check.textContent = "✓";
+    row.append(radio, swatch, text, check);
+    radio.addEventListener("change", () => pickTheme(id));
+    themeList.append(row);
+  }
+}
+
+/** Ticks the row for the theme the owner chose (not what Windows forced). */
+function paintThemeRows(current) {
+  const following = Boolean(themePrefs && themePrefs.follow_system);
+  const chosen = themePrefs
+    ? following ? themePrefs.dark_theme : themePrefs.theme
+    : current;
+  themeLegend.textContent = following ? "Theme for dark mode" : "Theme";
+  for (const row of themeList.querySelectorAll(".theme-row")) {
+    const id = row.dataset.choice;
+    // Daylight is never "the theme for dark mode".
+    row.hidden = following && !THEME_INFO[id].dark;
+    row.querySelector("input").checked = id === chosen;
+  }
+  if (followSystem) followSystem.checked = following;
+  if (followDetail) {
+    followDetail.textContent =
+      following && themePrefs && themePrefs.system_light === null
+        ? "Windows' light or dark setting could not be read, so the theme below is used."
+        : FOLLOW_DETAIL;
+  }
+}
+
+async function readThemePrefs() {
+  try {
+    const prefs = await invoke("get_theme_prefs");
+    if (prefs && typeof prefs === "object") themePrefs = prefs;
+  } catch (error) {
+    /* an older shell: the rows still work from the theme alone */
+  }
+  paintThemeRows(document.documentElement.getAttribute("data-theme"));
+}
+
+async function pickTheme(id) {
+  // Paint at once when it will show, so the control feels connected; the
+  // fan-out from set_theme corrects it either way.
+  if (!themePrefs || !themePrefs.follow_system) applyTheme(id);
+  try {
+    const shown = await invoke("set_theme", { theme: id });
+    if (typeof shown === "string") applyTheme(shown);
+  } catch (error) {
+    console.error("[settings] could not save the theme:", error);
+  }
+  await readThemePrefs();
+}
+
+if (themeList) buildThemeRows();
+
+if (followSystem) {
+  followSystem.addEventListener("change", async () => {
     try {
-      await invoke("set_theme", { theme: themePicker.value });
+      const prefs = await invoke("set_theme_follow_system", { follow: followSystem.checked });
+      if (prefs && typeof prefs === "object") {
+        themePrefs = prefs;
+        applyTheme(prefs.effective);
+      }
     } catch (error) {
-      console.error("[settings] could not save the theme:", error);
+      followSystem.checked = !followSystem.checked;
+      console.error("[settings] could not save Match Windows:", error);
     }
+    paintThemeRows(document.documentElement.getAttribute("data-theme"));
   });
 }
 
 followTheme((theme) => {
-  if (themePicker) themePicker.value = theme;
+  paintThemeRows(theme);
+  readThemePrefs();
+});
+readThemePrefs();
+
+/* Text size: the phone's control, for the zoom Ctrl+= / Ctrl+- already walk.
+   Five sizes as buttons; the keyboard reaches the rest. */
+const TEXT_SIZES = [0.9, 1, 1.15, 1.3, 1.5];
+const textSize = $("text-size");
+const textSizeNote = $("text-size-note");
+const TEXT_SIZE_NOTE = textSizeNote ? textSizeNote.textContent.trim() : "";
+
+function paintTextSize() {
+  if (!textSize) return;
+  const now = currentZoom();
+  for (const b of textSize.querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String(Number(b.dataset.zoom) === now));
+  }
+  textSizeNote.textContent = TEXT_SIZES.includes(now)
+    ? TEXT_SIZE_NOTE
+    : `Now ${Math.round(now * 100)}%. ${TEXT_SIZE_NOTE}`;
+}
+
+if (textSize) {
+  for (const z of TEXT_SIZES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "choice";
+    b.dataset.zoom = String(z);
+    b.textContent = `${Math.round(z * 100)}%`;
+    b.addEventListener("click", () => {
+      setZoom(z);
+      paintTextSize();
+      announce(`Text size ${Math.round(z * 100)} percent.`);
+    });
+    textSize.append(b);
+  }
+}
+
+// This window is user-resizable, so nothing needs to re-measure after a step
+// - only the buttons need to show the new size.
+followZoom(() => paintTextSize());
+paintTextSize();
+
+/* The face on THIS computer (face-tuning.js). Per computer, never sent to the
+   phone. The face frames in the widget and the HUD read the same key. */
+let faceTuning = loadFaceTuning();
+const faceAuto = $("face-auto");
+const faceStatus = $("face-status");
+
+function choiceRow(box, options, label, onPick) {
+  if (!box) return;
+  for (const option of options) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "choice";
+    b.dataset.value = String(option.id ?? option);
+    b.textContent = label(option);
+    b.addEventListener("click", () => onPick(option));
+    box.append(b);
+  }
+}
+
+function paintFaceTuning() {
+  if (faceAuto) faceAuto.checked = faceTuning.autoAdjust;
+  const mark = (id, value) => {
+    const box = $(id);
+    if (!box) return;
+    for (const b of box.querySelectorAll("button")) {
+      b.setAttribute("aria-pressed", String(b.dataset.value === String(value)));
+    }
+  };
+  // While Auto is on, it is picking these; neither row claims a choice.
+  mark("face-quality", faceTuning.autoAdjust ? "" : faceTuning.quality);
+  mark("face-fps", faceTuning.autoAdjust ? "auto" : faceTuning.frameRate);
+  mark("face-speed", faceTuning.speed);
+  const note = $("face-quality-note");
+  if (note) {
+    note.textContent = faceTuning.autoAdjust
+      ? "Auto adjust is choosing. Picking one turns Auto adjust off."
+      : "High matches the reactor kit. Low is easiest on the graphics card.";
+  }
+}
+
+function setFaceTuning(next, said) {
+  faceTuning = saveFaceTuning(next);
+  paintFaceTuning();
+  if (faceStatus) report(faceStatus, said || "Saved on this computer.", "ok");
+}
+
+choiceRow($("face-quality"), QUALITIES, (q) => q.label, (q) =>
+  // An explicit choice is not overridden: Auto goes off, as on the phone.
+  setFaceTuning({ ...faceTuning, quality: q.id, autoAdjust: false }));
+choiceRow($("face-fps"), FRAME_RATES, (f) => f.label, (f) =>
+  setFaceTuning({ ...faceTuning, frameRate: f.id, autoAdjust: false }));
+choiceRow($("face-speed"), SPEEDS, (s) => `${s}×`, (s) =>
+  setFaceTuning({ ...faceTuning, speed: s }));
+if (faceAuto) {
+  faceAuto.addEventListener("change", () =>
+    setFaceTuning({ ...faceTuning, autoAdjust: faceAuto.checked }));
+}
+paintFaceTuning();
+
+/* Shared with your phone: whether the face and state colours actually reach
+   the phone, from get_appearance's own answer. Read on open and when the
+   window comes back into view - never from an `appearance-changed` listener,
+   because get_appearance broadcasts that event itself. */
+const appearanceShared = $("appearance-shared");
+
+async function paintShared() {
+  if (!appearanceShared || !IS_TAURI) return;
+  try {
+    const loaded = await invoke("get_appearance");
+    appearanceShared.dataset.tone = loaded && loaded.shared ? "ok" : "";
+    appearanceShared.textContent = loaded && loaded.shared
+      ? "Shared with your phone."
+      : `Not shared yet: ${String((loaded && loaded.note) || "Jarvis could not be asked.")} For now they stay on this computer.`;
+  } catch (error) {
+    appearanceShared.textContent =
+      `Could not check whether they are shared: ${String((error && error.message) || error)}`;
+  }
+}
+paintShared();
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) paintShared();
 });
 
-// This window is user-resizable, so nothing needs to re-measure after a step.
-followZoom();
+$("open-faces").addEventListener("click", async () => {
+  try {
+    await invoke("open_faces");
+    report($("faces-status"), "Opened.", "ok");
+  } catch (error) {
+    report($("faces-status"), String((error && error.message) || error), "bad");
+  }
+});
+
+/**
+ * "Show me where" (plain-errors.js): the quickbar left a place under
+ * SETTINGS_PLACE_KEY. Taken once, and only while fresh; "More options" is
+ * opened and the place scrolled to. Nothing is changed - the owner still
+ * presses Start themselves.
+ */
+function goToPlace() {
+  let left = null;
+  try {
+    left = JSON.parse(localStorage.getItem(SETTINGS_PLACE_KEY) || "null");
+    if (left) localStorage.removeItem(SETTINGS_PLACE_KEY);
+  } catch {
+    return;
+  }
+  if (!left || left.place !== START_PLACE) return;
+  if (!(Date.now() - Number(left.at) < PLACE_FRESH_MS)) return;
+  const more = $("more-options");
+  const card = $("start-jarvis");
+  if (!more || !card) return;
+  more.open = true;
+  // After the page has loaded and laid out: a scroll made earlier is undone
+  // by the browser putting the page back where it was.
+  const go = () => requestAnimationFrame(() => {
+    card.scrollIntoView({ block: "start" });
+    const first = dom.startBackend && !dom.startBackend.disabled ? dom.startBackend : dom.supervise;
+    if (first) first.focus({ preventScroll: true });
+  });
+  if (document.readyState === "complete") go();
+  else window.addEventListener("load", go, { once: true });
+}
+goToPlace();
+window.addEventListener("storage", (e) => {
+  if (e.key === SETTINGS_PLACE_KEY && e.newValue) goToPlace();
+});
+window.addEventListener("focus", goToPlace);
 
 startLink();
+// "Open the card": one line while an approval card waits (card-link.js).
+mountCardLink(document.getElementById("card-link"));
 
 onLink((link) => {
+  // The same words every other window uses (jarvis-link.js linkWords), plus
+  // what the quickbar cannot fit: where it is connected, and - behind
+  // "Technical detail" - the whole reason when it is not.
+  const words = linkWords(link);
   dom.linkState.dataset.connected = String(link.connected);
-  if (link.connected) {
-    const bits = [`event stream live on ${link.base}`, link.power];
-    if (link.activity !== "idle") bits.push(link.activity);
-    if (link.approvals > 0) bits.push(`${link.approvals} waiting`);
-    dom.linkText.textContent = bits.join(" · ");
+  dom.linkState.dataset.tone = words.tone;
+  if (words.canAct) {
+    const bits = ["Connected, and updates are arriving."];
+    if (link.approvals === 1) bits.push("1 approval waiting.");
+    else if (link.approvals > 1) bits.push(`${link.approvals} approvals waiting.`);
+    dom.linkText.textContent = bits.join(" ");
   } else {
-    dom.linkText.textContent = link.error || "no event stream";
+    dom.linkText.textContent = words.text;
   }
+  const detail = [link.base ? `Address: ${link.base}` : "", link.error || ""]
+    .filter(Boolean)
+    .join(" · ");
+  dom.linkTech.hidden = !detail;
+  dom.linkDetail.textContent = detail;
 });
 
 /* ==========================================================================
@@ -632,6 +1061,107 @@ dom.resetHotkeys.addEventListener("click", async () => {
 
 loadHotkeys();
 
+/* ==========================================================================
+   Security - Windows Hello
+   --------------------------------------------------------------------------
+   The app lock, Windows Hello for approvals and for the Brain's private
+   lists. Nothing is decided here: set_security_settings (lock.rs) asks
+   Windows Hello before anything is loosened, refuses a lock this PC could
+   never unlock, and answers with what is now stored - which is what this
+   paints, never what was asked for. A refused change therefore puts the
+   switch straight back.
+   ========================================================================== */
+
+const secDom = {
+  hello: $("sec-hello"),
+  appLock: $("sec-app-lock"),
+  appLockDetail: $("sec-app-lock-detail"),
+  relock: $("sec-relock"),
+  relockNote: $("sec-relock-note"),
+  approvals: $("sec-approvals"),
+  approvalsNote: $("sec-approvals-note"),
+  privateAnswers: $("sec-private"),
+  privateDetail: $("sec-private-detail"),
+  status: $("sec-status"),
+};
+const sec = { settings: null, hello: null, busy: false };
+
+function paintSecurity() {
+  if (!secDom.hello) return;
+  const known = sec.settings !== null;
+  const s = normaliseSecurity(sec.settings);
+  secDom.hello.textContent = known
+    ? helloLine(sec.hello, s)
+    : "Could not read these settings, so nothing here can be changed right now.";
+  secDom.hello.dataset.tone = sec.hello === "ready" ? "ok" : "";
+  secDom.appLock.checked = s.appLock;
+  secDom.privateAnswers.checked = s.privateAnswers;
+  secDom.appLockDetail.textContent = appLockDetail();
+  secDom.privateDetail.textContent = privateDetail();
+  secDom.relockNote.textContent = relockNote(s);
+  secDom.approvalsNote.textContent = approvalsNote(APPROVE_WHERE);
+  const mark = (box, value) => {
+    for (const b of box.querySelectorAll("button")) {
+      b.setAttribute("aria-pressed", String(known && b.dataset.value === String(value)));
+      b.disabled = !known || sec.busy;
+    }
+  };
+  mark(secDom.relock, s.relockAfterSecs);
+  mark(secDom.approvals, s.approvals);
+  secDom.appLock.disabled = !known || sec.busy;
+  secDom.privateAnswers.disabled = !known || sec.busy;
+}
+
+async function loadSecurity() {
+  try {
+    const out = await invoke("get_security_settings");
+    sec.settings = normaliseSecurity(out && out.settings);
+    sec.hello = String((out && out.hello) || "");
+  } catch (error) {
+    sec.settings = null;
+    report(secDom.status, String((error && error.message) || error), "bad");
+  }
+  paintSecurity();
+}
+
+async function changeSecurity(patch) {
+  if (sec.busy || sec.settings === null) return;
+  const before = sec.settings;
+  const next = { ...before, ...patch };
+  sec.busy = true;
+  paintSecurity();
+  report(secDom.status,
+    needsHello(before, next) ? "Waiting for Windows Hello…" : "Saving…");
+  try {
+    const saved = normaliseSecurity(await invoke("set_security_settings", { settings: next }));
+    sec.settings = saved;
+    report(secDom.status, savedLine(before, saved), "ok");
+    announce(savedLine(before, saved));
+  } catch (error) {
+    // Refused (Windows Hello said no, or is not set up): nothing changed,
+    // and the switch goes back to what is stored.
+    const said = String((error && error.message) || error);
+    report(secDom.status, /[.!?]$/.test(said) ? `${said} Nothing changed.` : `${said}. Nothing changed.`, "bad");
+    announce(said, "assertive");
+  } finally {
+    sec.busy = false;
+    paintSecurity();
+  }
+}
+
+if (secDom.hello) {
+  choiceRow(secDom.relock, RELOCK_CHOICES, (c) => c.label,
+    (c) => changeSecurity({ relockAfterSecs: c.id }));
+  choiceRow(secDom.approvals, APPROVAL_CHOICES, (c) => c.label,
+    (c) => changeSecurity({ approvals: c.id }));
+  secDom.appLock.addEventListener("change", () =>
+    changeSecurity({ appLock: secDom.appLock.checked }));
+  secDom.privateAnswers.addEventListener("change", () =>
+    changeSecurity({ privateAnswers: secDom.privateAnswers.checked }));
+  paintSecurity();
+  loadSecurity();
+}
+
 
 /* ==========================================================================
    Updates
@@ -650,6 +1180,13 @@ function paintUpdate(status) {
   dom.aboutVersion.textContent = status.current || "—";
   dom.updateAuto.checked = Boolean(status.check_on_start);
   dom.updateAuto.disabled = !status.supported;
+  // "Not set up yet" until this build carries the update key, and not a
+  // moment longer: the same `supported` that greys the buttons.
+  const setUp = Boolean(status.supported);
+  if (dom.updateIntroOff) dom.updateIntroOff.hidden = setUp;
+  if (dom.updateIntroOn) dom.updateIntroOn.hidden = !setUp;
+  if (dom.faqUpdateOff) dom.faqUpdateOff.hidden = setUp;
+  if (dom.faqUpdateOn) dom.faqUpdateOn.hidden = !setUp;
 
   const notes = String(status.notes || "").trim();
   dom.updateNotes.hidden = !notes;
@@ -807,5 +1344,1197 @@ document.addEventListener("click", (event) => {
     window.open(anchor.href, "_blank", "noopener");
   }
 });
+
+/* ==========================================================================
+   Second graphics card
+   --------------------------------------------------------------------------
+   Everything built for a second graphics card, all OFF (docs/SECOND-CARD.md).
+   Read from `get_second_card` (GET /api/second-card, the backend's
+   jarvis_second_card.status() - its real shape is
+   tests/fixtures/second-card-cases.json), written one switch at a time with
+   `set_second_card`.
+
+   Turning a switch ON approves nothing: the backend raises ONE approval card
+   and answers `pending: true`, and the switch stays off until the owner says
+   yes on that card, in the Jarvis bar, on the widget or on the phone. There
+   is no event for the card being decided, so this re-reads when the approval
+   queue changes (the "approvals-changed" signal every window gets), when the
+   window comes back into view, and gently every few seconds while a card is
+   waiting. Turning a switch OFF is immediate.
+
+   Every word about the cards comes from the backend's own sentences (`why`,
+   `pin_note`); nothing here guesses what a card can do.
+   ========================================================================== */
+
+const sc = {
+  card: $("second-card"),
+  state: $("sc-state"),
+  body: $("sc-body"),
+  found: $("sc-found"),
+  cards: $("sc-cards"),
+  blocked: $("sc-blocked"),
+  switches: $("sc-switches"),
+  status: $("sc-status"),
+  lane: $("sc-lane"),
+  pinned: $("sc-pinned"),
+  pin: $("sc-pin"),
+  pinCommand: $("sc-pin-command"),
+  pinCopy: $("sc-pin-copy"),
+  pinStatus: $("sc-pin-status"),
+};
+
+/** The same words the Brain's model install uses while its card waits. */
+const SC_WAITING =
+  `Waiting for your approval. Approve it ${APPROVE_WHERE} — nothing changes until you do.`;
+const SC_UPDATE =
+  "This PC's Jarvis does not have the second graphics card part yet. Update the backend by running apply-patches.ps1, then open this again.";
+/** The main switch has no row in `features`; these are its words. */
+const SC_MASTER = {
+  id: "master",
+  name: "Use the second graphics card",
+  what: "The main switch. None of the switches below can be turned on until this one is on.",
+};
+const SC_ROLE = {
+  primary: "the one chat runs on",
+  second: "the second card",
+  unused: "not used",
+};
+const SC_LANE = { off: "Off", starting: "Starting", running: "Running", failed: "Failed" };
+/** How often, and for how long, to re-read while a card waits. */
+const SC_POLL_MS = 5000;
+const SC_POLL_FOR_MS = 10 * 60 * 1000;
+
+let scLast = null;
+let scReadSeq = 0;
+let scBusy = false;
+let scPollTimer = null;
+/** When the gentle re-reading stops; 0 while no card waits. */
+let scPollUntil = 0;
+/** Switches with a card waiting at the last read, to say how each ended. */
+let scWaiting = new Set();
+/** When this page first saw each of those cards waiting, in seconds. */
+const scWaitingSince = new Map();
+
+/**
+ * How a switch's card ended, in words, for the second card and the big
+ * model alike.
+ *
+ * A backend with the `last` field (`status().last`: `{feature, outcome,
+ * why, at}`) says what really happened; without it - an older backend -
+ * the page can only see that the switch is still off, and says the old
+ * "denied or ran out of time". `last` is used only when it is about THIS
+ * switch and ended after the page started waiting on it, so an older card's
+ * ending is never reported as this one's. Every field is read defensively:
+ * a missing, renamed or odd value falls back to the old words, never to a
+ * guess.
+ */
+const CARD_OUTCOMES = {
+  enabled: "enabled", approved: "enabled", on: "enabled",
+  denied: "denied", rejected: "denied",
+  expired: "expired", timed_out: "expired", timeout: "expired",
+  refused: "refused",
+  failed: "failed", error: "failed",
+  withdrawn: "withdrawn", cancelled: "withdrawn", canceled: "withdrawn",
+};
+
+/** Seconds since the epoch from a number (seconds or ms) or a date string. */
+function cardSeconds(at) {
+  if (typeof at === "number" && Number.isFinite(at)) return at > 1e12 ? at / 1000 : at;
+  if (typeof at === "string" && at.trim()) {
+    const n = Number(at);
+    if (Number.isFinite(n)) return n > 1e12 ? n / 1000 : n;
+    const parsed = Date.parse(at);
+    if (Number.isFinite(parsed)) return parsed / 1000;
+  }
+  return null;
+}
+
+/** `last`, when it is about switch `id` and ended after `since` (seconds). */
+function cardLast(status, id, since) {
+  const last = status && status.last;
+  if (!last || typeof last !== "object") return null;
+  const which = String(last.feature ?? last.switch ?? "").trim();
+  if (which !== id) return null;
+  const outcome = CARD_OUTCOMES[String(last.outcome || "").trim().toLowerCase()];
+  if (!outcome) return null;
+  const at = cardSeconds(last.at);
+  // A few seconds of slack: the page's clock and the backend's are the same
+  // PC's, but the page noted `since` when it READ the card as waiting.
+  if (at !== null && Number.isFinite(since) && at < since - 5) return null;
+  return { outcome, why: String(last.why ?? last.reason ?? "").trim() };
+}
+
+/** The sentence for switch `name`, which was waiting and no longer is. */
+function cardEndedWords(name, on, last) {
+  if (on) return `"${name}" is on.`;
+  const why = scSentence(last && last.why);
+  const because = why ? ` ${why}` : "";
+  switch (last && last.outcome) {
+    case "denied":
+      return `"${name}" was not turned on: the card was denied.`;
+    case "expired":
+      return `"${name}" was not turned on: the card ran out of time before anyone answered it.`;
+    case "refused":
+      return `"${name}" was not turned on: Jarvis refused it.${because || " It did not say why."}`;
+    case "failed":
+      return `"${name}" was approved, but turning it on failed.${because || " Jarvis did not say why."}`;
+    case "withdrawn":
+      return `"${name}" was not turned on: the card was withdrawn before it was answered.${because}`;
+    case "enabled":
+      // Approved, yet off by this read: turned off again since.
+      return `"${name}" was approved and turned on, but it is off again now.${because}`;
+    default:
+      return `"${name}" was not turned on: the card was denied or ran out of time.`;
+  }
+}
+
+/** A backend sentence as a sentence: first letter up, one full stop. */
+function scSentence(text) {
+  const s = String(text || "").trim().replace(/[.\s]+$/, "");
+  return s ? `${s.charAt(0).toUpperCase()}${s.slice(1)}.` : "";
+}
+
+/** A backend sentence after a colon: as it was written, with one full stop. */
+function scClause(text) {
+  const s = String(text || "").trim().replace(/[.\s]+$/, "");
+  return s ? `${s}.` : "";
+}
+
+/** An error in words. The Rust side only ever rejects with a sentence; if
+ *  anything else arrives (a bridge error, JSON), it is not shown as is. */
+function scProblemWords(error) {
+  const said = String((error && error.message) || error || "").trim();
+  if (!said || /[{}<>]|::|not allowed|undefined|null/i.test(said) || said.length > 300) {
+    return "Try again in a moment, or restart Jarvis Desktop.";
+  }
+  return said;
+}
+
+function scNode(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function scGigabytes(mb) {
+  const n = Number(mb);
+  return Number.isFinite(n) && n > 0 ? `${Math.round(n / 1024)} GB` : "";
+}
+
+/** The model a feature uses, and whether it is installed - with the exact
+ *  name to type when it is not. There is no catalogue: the Brain's Install
+ *  box is the existing way, a typed name and an approval card. */
+function scModelLine(feature) {
+  const model = typeof feature.model === "string" ? feature.model.trim() : "";
+  if (!model) return "The model is chosen once a capable second card is found.";
+  if (feature.model_installed === true) return `Model: ${model}, installed.`;
+  if (feature.model_installed === false) {
+    return `Model: ${model}, not installed yet. To install it, open the Brain window, go to ` +
+      `Model, then Models, type ${model} in the Install box and press Install. ` +
+      "Nothing downloads until you approve that card too.";
+  }
+  return `Model: ${model}. Jarvis could not check whether it is installed.`;
+}
+
+function scMemoryLine(feature) {
+  const gib = Number(feature.memory_gib);
+  if (feature.memory_gib === null || feature.memory_gib === undefined || !Number.isFinite(gib)) {
+    return "";
+  }
+  return `Uses about ${gib.toFixed(1)} GB of the second card's memory.`;
+}
+
+/**
+ * Whether a switch may be changed now, and if not, why - in words.
+ * Only turning ON is ever held back: OFF only narrows what runs, so a switch
+ * that is on can always be turned off, even with the card gone.
+ */
+function scHeld(sw, status, names) {
+  if (sw.pending) return SC_WAITING;
+  if (sw.enabled) return "";
+  const detected = status.detected || {};
+  if (detected.capable !== true) {
+    return `Can't be turned on yet: ${scClause(detected.why) || "no capable second graphics card was found."}`;
+  }
+  if (sw.id !== "master" && status.enabled !== true) {
+    return `Turn on "${SC_MASTER.name}" first.`;
+  }
+  const missing = (sw.needs || []).filter((need) => !names.enabled.has(need));
+  if (missing.length) {
+    return `Needs ${missing.map((m) => `"${names.byId[m] || m}"`).join(" and ")} on first.`;
+  }
+  return "";
+}
+
+function scSwitchRow(sw, status, names) {
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = sw.id;
+  row.dataset.state = sw.pending ? "waiting" : sw.enabled ? "on" : "off";
+
+  const label = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = `sc-switch-${sw.id}`;
+  input.checked = Boolean(sw.enabled);
+  const held = scHeld(sw, status, names);
+  input.disabled = Boolean(held);
+  const text = scNode("span", "", sw.name);
+  text.append(scNode("span", "toggle-detail", sw.what || ""));
+  label.append(input, text);
+  row.append(label);
+
+  const lines = scNode("div", "sc-lines");
+  const describedBy = [];
+  const addLine = (className, words) => {
+    if (!words) return;
+    const line = scNode("p", className, words);
+    line.id = `sc-${sw.id}-${className.split(" ").pop()}`;
+    describedBy.push(line.id);
+    lines.append(line);
+  };
+  addLine("sc-why", sw.why);
+  const capable = (status.detected || {}).capable === true;
+  if (sw.pending) addLine("sc-held sc-waiting", SC_WAITING);
+  // With no capable card, the one line above the switches says why for all
+  // of them, rather than the same sentence under each.
+  // Nor twice when the backend's own line already says it ("Off. Needs
+  // Longer conversations on first.").
+  else if (held && capable && !String(sw.why || "").includes(held.replace(/"/g, ""))) {
+    addLine("sc-held", held);
+  }
+  if (held && !capable) describedBy.push("sc-blocked");
+  if (sw.id !== "master") {
+    addLine("sc-model", scModelLine(sw));
+    addLine("sc-memory", scMemoryLine(sw));
+  }
+  if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));
+  row.append(lines);
+
+  input.addEventListener("change", () => scToggle(sw, input));
+  return row;
+}
+
+function scCardItem(card) {
+  const item = scNode("li", "sc-gpu");
+  item.dataset.role = String(card.role || "unused");
+  const size = scGigabytes(card.total_mb);
+  item.append(scNode("span", "sc-gpu-name", `${card.name || "A graphics card"}${size ? ` (${size})` : ""}`));
+  const role = SC_ROLE[card.role] || SC_ROLE.unused;
+  item.append(scNode("span", "sc-gpu-role", `${role.charAt(0).toUpperCase()}${role.slice(1)}. ${scSentence(card.why)}`.trim()));
+  return item;
+}
+
+/** The master switch in the same shape as a feature row. */
+function scMasterSwitch(status) {
+  const detected = status.detected || {};
+  const pending = (status.pending || []).includes("master");
+  let why = "Off.";
+  if (status.enabled && status.active) why = "On.";
+  else if (status.enabled) {
+    why = `On, but it cannot run: ${scClause(detected.why) || "no capable second card was found."} Your choice is kept.`;
+  }
+  return { ...SC_MASTER, enabled: status.enabled === true, pending, needs: [], why };
+}
+
+function scShowProblem(words) {
+  scLast = null;
+  sc.body.hidden = true;
+  sc.state.hidden = false;
+  sc.state.dataset.tone = "bad";
+  sc.state.textContent = words;
+  scStopPoll();
+}
+
+function scPaint(status) {
+  const previous = scLast;
+  scLast = status;
+  const detected = status.detected || {};
+  const features = status.features.filter((f) => f && typeof f.id === "string");
+  const pending = new Set(Array.isArray(status.pending) ? status.pending : []);
+
+  sc.state.hidden = true;
+  delete sc.state.dataset.tone;
+  sc.body.hidden = false;
+
+  // What was found, in the backend's own words.
+  sc.found.textContent = scSentence(detected.why) || "Jarvis did not say what it found.";
+  const cards = Array.isArray(detected.cards) ? detected.cards : [];
+  sc.cards.replaceChildren(...cards.map(scCardItem));
+  sc.cards.hidden = !cards.length;
+
+  sc.blocked.hidden = detected.capable === true;
+  sc.blocked.textContent = detected.capable === true ? ""
+    : `Nothing here can be turned on until Jarvis finds a capable second graphics card ` +
+      `(an RTX 20 series or newer, with 10 GB or more): ${scClause(detected.why)} ` +
+      "The switches are shown so you can see what is coming.";
+
+  const names = {
+    byId: Object.fromEntries(features.map((f) => [f.id, String(f.name || f.id)])),
+    enabled: new Set(features.filter((f) => f.enabled === true).map((f) => f.id)),
+  };
+  const rows = [scMasterSwitch(status)].concat(features.map((f) => ({
+    ...f, enabled: f.enabled === true, pending: pending.has(f.id),
+    needs: Array.isArray(f.needs) ? f.needs : [],
+  })));
+  // Keep the keyboard where it was across a repaint.
+  const focused = document.activeElement && document.activeElement.id;
+  sc.switches.replaceChildren(...rows.map((sw) => scSwitchRow(sw, status, names)));
+  if (focused && focused.startsWith("sc-switch-")) {
+    const again = document.getElementById(focused);
+    if (again) again.focus();
+  }
+
+  // The second Ollama.
+  const lane = status.lane || {};
+  const laneWord = SC_LANE[lane.state] || "Unknown";
+  sc.lane.textContent = `${laneWord}. ${scSentence(lane.why)}`.trim();
+  sc.lane.dataset.tone = lane.state === "running" ? "ok" : lane.state === "failed" ? "bad" : "";
+
+  // Everyday Ollama pinned to the main card.
+  sc.pinned.textContent = scSentence(status.pin_note) ||
+    "Jarvis could not tell whether your everyday Ollama is kept on the main card.";
+  sc.pinned.dataset.tone = status.main_ollama_pinned === true ? "ok"
+    : status.main_ollama_pinned === false ? "warn" : "";
+  const command = typeof status.pin_command === "string" ? status.pin_command.trim() : "";
+  sc.pin.hidden = !command;
+  sc.pinCommand.value = command;
+
+  // How each card that was waiting ended.
+  if (previous) {
+    for (const id of scWaiting) {
+      if (pending.has(id)) continue;
+      const name = id === "master" ? SC_MASTER.name : names.byId[id] || id;
+      const on = id === "master" ? status.enabled === true : names.enabled.has(id);
+      report(sc.status, cardEndedWords(name, on, cardLast(status, id, scWaitingSince.get(id))),
+        on ? "ok" : null);
+      announce(sc.status.textContent);
+    }
+  }
+  for (const id of [...scWaitingSince.keys()]) if (!pending.has(id)) scWaitingSince.delete(id);
+  for (const id of pending) if (!scWaitingSince.has(id)) scWaitingSince.set(id, Date.now() / 1000);
+  scWaiting = pending;
+  if (pending.size) scStartPoll();
+  else scStopPoll();
+}
+
+async function loadSecondCard() {
+  if (!IS_TAURI || !sc.card) return;
+  const seq = ++scReadSeq;
+  let answer;
+  try {
+    answer = await invoke("get_second_card");
+  } catch (error) {
+    if (seq !== scReadSeq) return;
+    scShowProblem(`Jarvis could not be asked about your graphics cards. ${scProblemWords(error)}`);
+    return;
+  }
+  if (seq !== scReadSeq) return;
+  if (answer && answer.available === false) {
+    scShowProblem(typeof answer.why === "string" && answer.why ? answer.why : SC_UPDATE);
+    return;
+  }
+  if (!answer || typeof answer !== "object" || !answer.detected || !Array.isArray(answer.features)) {
+    scShowProblem(`Jarvis's answer about your graphics cards could not be read. ${SC_UPDATE}`);
+    return;
+  }
+  scPaint(answer);
+}
+
+function scStartPoll() {
+  if (!scPollUntil) scPollUntil = Date.now() + SC_POLL_FOR_MS;
+  clearTimeout(scPollTimer);
+  scPollTimer = null;
+  // Gently, and not forever: after ten minutes a card nobody has answered is
+  // left to the approval-queue signal and to the window coming back into view.
+  if (Date.now() > scPollUntil) return;
+  scPollTimer = setTimeout(() => {
+    scPollTimer = null;
+    // Not while the window is hidden; coming back into view re-reads.
+    if (!document.hidden) loadSecondCard();
+  }, SC_POLL_MS);
+}
+
+function scStopPoll() {
+  clearTimeout(scPollTimer);
+  scPollTimer = null;
+  scPollUntil = 0;
+}
+
+/** One switch, one request. ON raises a card and nothing more. */
+async function scToggle(sw, input) {
+  const turnOn = input.checked;
+  if (scBusy) {
+    input.checked = !turnOn;
+    return;
+  }
+  scBusy = true;
+  input.disabled = true;
+  report(sc.status, turnOn ? `Asking to turn on "${sw.name}"…` : `Turning off "${sw.name}"…`);
+  try {
+    const out = await invoke("set_second_card", { feature: sw.id, enabled: turnOn });
+    if (turnOn && out && out.pending === true) {
+      report(sc.status, SC_WAITING, "ok");
+      announce(`"${sw.name}": ${SC_WAITING}`);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(sc.status, out.message, "ok");
+    } else {
+      report(sc.status, turnOn ? `"${sw.name}" is on.` : `"${sw.name}" is off.`, "ok");
+    }
+  } catch (error) {
+    report(sc.status, scProblemWords(error), "bad");
+    announce(sc.status.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  // The switch shows what Jarvis says, never what was clicked: ON stays off
+  // until the card is approved.
+  await loadSecondCard();
+}
+
+if (sc.pinCopy) {
+  sc.pinCopy.addEventListener("click", async () => {
+    sc.pinCommand.select();
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(sc.pinCommand.value);
+      copied = true;
+    } catch {
+      try { copied = document.execCommand("copy"); } catch { copied = false; }
+    }
+    report(sc.pinStatus, copied ? "Copied. Paste it into PowerShell and press Enter." : "Select it and press Ctrl+C.",
+      copied ? "ok" : null);
+  });
+}
+
+// The approval-decided signal: the queue changes when a card is answered
+// (or expires). Only worth a read while one of these cards is waiting.
+onQueue(() => {
+  if (scWaiting.size) loadSecondCard();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadSecondCard();
+});
+loadSecondCard();
+
+/* ==========================================================================
+   Big model (slow)
+   --------------------------------------------------------------------------
+   colibri, a separate program, runs a model far bigger than a graphics card
+   holds, on the processor and the SSD, for background jobs only: the wiki
+   builder and deep questions - never chat, voice or approvals
+   (docs/BIG-MODEL.md). Read from `get_big_model` (GET /api/big-model, the
+   backend's jarvis_big_model.status() - its real shape is
+   tests/fixtures/big-model-cases.json), written one switch at a time with
+   `set_big_model`.
+
+   The same shape as the second graphics card above, on purpose: every
+   switch is OFF until the owner turns it on, and none can be turned on until
+   the backend says everything was found (`detected.capable`). Turning one ON
+   approves nothing - the backend raises ONE approval card and answers
+   `pending: true`, and the switch stays off until the owner says yes on that
+   card. So this re-reads when the approval queue changes, when the window
+   comes back into view, and gently every few seconds while a card waits (or
+   while colibri is loading, which takes minutes). Turning OFF is immediate.
+
+   Every sentence about what was found comes from the backend (`why`,
+   `note`, `key_where`, `unverified`); nothing here guesses. The key colibri
+   is started with never reaches this page - only where it is kept.
+   ========================================================================== */
+
+const bm = {
+  card: $("big-model"),
+  state: $("bm-state"),
+  body: $("bm-body"),
+  found: $("bm-found"),
+  parts: $("bm-parts"),
+  models: $("bm-models"),
+  blocked: $("bm-blocked"),
+  switches: $("bm-switches"),
+  status: $("bm-status"),
+  engine: $("bm-engine"),
+  address: $("bm-address"),
+  cuda: $("bm-cuda"),
+  key: $("bm-key"),
+  measured: $("bm-measured"),
+  unverified: $("bm-unverified"),
+};
+
+const BM_UPDATE =
+  "This PC's Jarvis does not have the big model part yet. Update the backend by running apply-patches.ps1, then open this again.";
+/** The main switch has no row in `switches`; these are its words. */
+const BM_MASTER = {
+  id: "master",
+  name: "Use the big model",
+  what: "The main switch. Neither job below can be turned on until this one is on.",
+};
+const BM_ENGINE = { off: "Off", loading: "Loading", ready: "Ready", failed: "Failed" };
+const BM_KIND = { medium: "medium model", giant: "giant model" };
+/** Said even when the backend's own sentence is missing - the owner's rule. */
+const BM_UNVERIFIED =
+  "None of colibri's speed claims have been checked on this PC. The numbers here, from your own jobs, are the first real ones.";
+
+let bmReadSeq = 0;
+let bmBusy = false;
+let bmPollTimer = null;
+/** When the gentle re-reading stops; 0 while nothing is waiting. */
+let bmPollUntil = 0;
+/** Switches with a card waiting at the last read, to say how each ended. */
+let bmWaiting = new Set();
+/** When this page first saw each of those cards waiting, in seconds. */
+const bmWaitingSince = new Map();
+let bmPainted = false;
+
+/** `scSentence`, except that colibri keeps its own lower-case name. */
+function bmSentence(text) {
+  return /^\s*colibri\b/.test(String(text || "")) ? scClause(text) : scSentence(text);
+}
+
+/** A number of gigabytes as the owner reads it: "3,100 GB", "25.3 GB". */
+function bmGb(value) {
+  const n = Number(value);
+  if (value === null || value === undefined || !Number.isFinite(n)) return "";
+  return `${n.toLocaleString("en-US", { maximumFractionDigits: 1 })} GB`;
+}
+
+function bmSeconds(value) {
+  const s = Math.round(Number(value));
+  if (!Number.isFinite(s) || s < 0) return "";
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ${s % 60} s`;
+  return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+}
+
+/** One entry in a list: a name, and lines under it. */
+function bmItem(name, lines, { tone, state } = {}) {
+  const item = scNode("li", "sc-gpu");
+  if (state) item.dataset.state = state;
+  item.append(scNode("span", "sc-gpu-name", name));
+  for (const line of lines) {
+    if (!line) continue;
+    const text = typeof line === "string" ? line : line.text;
+    const node = scNode("span", "sc-gpu-role", text);
+    if (typeof line === "object" && line.warn) node.classList.add("bm-warn");
+    item.append(node);
+  }
+  if (tone) item.dataset.tone = tone;
+  return item;
+}
+
+function bmParts(detected) {
+  const colibri = detected.colibri || {};
+  const python = detected.python || {};
+  const ram = detected.ram || {};
+  // Python is looked for only once colibri is found; the backend says "not
+  // checked" then, which is not the same as missing.
+  const found = (thing) => (thing.found === true ? "found"
+    : /^\s*not checked/i.test(String(thing.why || "")) ? "not checked yet" : "not found");
+  const memory = [bmGb(ram.total_gb) && `${bmGb(ram.total_gb)} in total`,
+    bmGb(ram.available_gb) && `${bmGb(ram.available_gb)} free right now`].filter(Boolean);
+  return [
+    bmItem(`colibri: ${found(colibri)}`, [bmSentence(colibri.why)],
+      { state: colibri.found === true ? "ok" : "missing" }),
+    bmItem(`Python 3: ${found(python)}`, [bmSentence(python.why)],
+      { state: python.found === true ? "ok" : "missing" }),
+    bmItem("Memory", [memory.length ? `${memory.join(", ")}.` : "Jarvis could not read this PC's memory."]),
+  ];
+}
+
+function bmModelItem(model) {
+  const kind = BM_KIND[model.kind] || "model";
+  const drive = String(model.drive || "").trim();
+  const type = model.drive_type && model.drive_type !== "unknown" ? model.drive_type : "drive type unknown";
+  const free = bmGb(model.free_gb);
+  const lines = [
+    model.dir ? `Folder: ${model.dir}` : "",
+    drive ? `On ${drive} (${type}), ${free ? `${free} free` : "free space unknown"}.` : "",
+    bmGb(model.need_gb) ? `Needs about ${bmGb(model.need_gb)} of free memory to run.` : "",
+    bmSentence(model.why),
+    model.note ? { text: bmSentence(model.note), warn: true } : "",
+  ];
+  return bmItem(`${model.name || model.id || "A model"} (${kind})`, lines,
+    { state: model.usable === true ? "ok" : "missing" });
+}
+
+/**
+ * Whether a switch may be changed now, and if not, why - in words. Only
+ * turning ON is ever held back: a switch that is on can always be turned off.
+ */
+function bmHeld(sw, status) {
+  if (sw.pending) return SC_WAITING;
+  if (sw.enabled) return "";
+  const detected = status.detected || {};
+  if (detected.capable !== true) {
+    return `Can't be turned on yet: ${scClause(detected.why) || "Jarvis has not found everything the big model needs."}`;
+  }
+  if (sw.id !== "master" && status.enabled !== true) return `Turn on "${BM_MASTER.name}" first.`;
+  return "";
+}
+
+function bmMasterSwitch(status) {
+  const detected = status.detected || {};
+  let why = "Off.";
+  if (status.enabled && status.active) why = "On.";
+  else if (status.enabled) {
+    why = `On, but it cannot run: ${scClause(detected.why) || "something it needs is missing."} Your choice is kept.`;
+  }
+  return { ...BM_MASTER, enabled: status.enabled === true,
+    pending: (status.pending || []).includes("master"), why };
+}
+
+function bmSwitchRow(sw, status) {
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = sw.id;
+  row.dataset.state = sw.pending ? "waiting" : sw.enabled ? "on" : "off";
+
+  const label = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = `bm-switch-${sw.id}`;
+  input.checked = Boolean(sw.enabled);
+  const held = bmHeld(sw, status);
+  input.disabled = Boolean(held);
+  const text = scNode("span", "", sw.name);
+  text.append(scNode("span", "toggle-detail", sw.what || ""));
+  label.append(input, text);
+  row.append(label);
+
+  const lines = scNode("div", "sc-lines");
+  const describedBy = [];
+  const addLine = (className, words) => {
+    if (!words) return;
+    const line = scNode("p", className, words);
+    line.id = `bm-${sw.id}-${className.split(" ").pop()}`;
+    describedBy.push(line.id);
+    lines.append(line);
+  };
+  addLine("sc-why", bmSentence(sw.why));
+  const capable = (status.detected || {}).capable === true;
+  if (sw.pending) addLine("sc-held sc-waiting", SC_WAITING);
+  // With nothing found, the one line above the switches says why for all of
+  // them. Nor twice when the backend's own line already says it ("Off. Turn
+  // on the big model itself first.").
+  else if (held && capable && !/\bfirst\b/i.test(String(sw.why || ""))) addLine("sc-held", held);
+  if (held && !capable) describedBy.push("bm-blocked");
+  if (sw.id !== "master") {
+    const model = String(sw.model_name || sw.model || "").trim();
+    addLine("sc-model", model ? `Model: ${model}.` : "No model is chosen for this job yet.");
+  }
+  if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));
+  row.append(lines);
+
+  input.addEventListener("change", () => bmToggle(sw, input));
+  return row;
+}
+
+function bmMeasuredItem(sw, m, names) {
+  if (!m || typeof m !== "object") return bmItem(sw.name, ["Not measured on this PC yet."], { state: "none" });
+  const model = names[m.model] || m.model || "the big model";
+  const when = Number(m.at) > 0
+    ? new Date(Number(m.at) * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    : "";
+  const lines = [
+    `${m.words_per_s} words a second (${m.tokens_per_s} tokens a second).`,
+    `${m.tokens} tokens in ${bmSeconds(m.seconds)}, by ${model}${when ? `, ${when}` : ""}.`,
+  ];
+  return bmItem(sw.name, lines, { state: "measured" });
+}
+
+function bmShowProblem(words) {
+  bm.body.hidden = true;
+  bm.state.hidden = false;
+  bm.state.dataset.tone = "bad";
+  bm.state.textContent = words;
+  bmPainted = false;
+  bmStopPoll();
+}
+
+function bmPaint(status) {
+  const detected = status.detected || {};
+  const jobs = status.switches.filter((s) => s && typeof s.id === "string");
+  const pending = new Set(Array.isArray(status.pending) ? status.pending : []);
+  const models = Array.isArray(detected.models) ? detected.models : [];
+  const names = Object.fromEntries(models.map((m) => [m.id, String(m.name || m.id)]));
+
+  bm.state.hidden = true;
+  delete bm.state.dataset.tone;
+  bm.body.hidden = false;
+
+  bm.found.textContent = bmSentence(detected.why) || "Jarvis did not say what it found.";
+  bm.parts.replaceChildren(...bmParts(detected));
+  bm.models.replaceChildren(...(models.length ? models.map(bmModelItem)
+    : [bmItem("No models set up", ["Add them to jarvis-framework.toml, [big_model] - docs/BIG-MODEL.md, step 3, says how."])]));
+
+  bm.blocked.hidden = detected.capable === true;
+  bm.blocked.textContent = detected.capable === true ? ""
+    : `Nothing here can be turned on until Jarvis finds colibri, Python 3, a model and enough ` +
+      `memory and disk: ${scClause(detected.why)} The switches are shown so you can see what is there.`;
+
+  const rows = [bmMasterSwitch(status)].concat(jobs.map((s) => ({
+    ...s, enabled: s.enabled === true, pending: pending.has(s.id) })));
+  const focused = document.activeElement && document.activeElement.id;
+  bm.switches.replaceChildren(...rows.map((sw) => bmSwitchRow(sw, status)));
+  if (focused && focused.startsWith("bm-switch-")) {
+    const again = document.getElementById(focused);
+    if (again) again.focus();
+  }
+
+  const engine = status.engine || {};
+  bm.engine.textContent = `${BM_ENGINE[engine.state] || "Unknown"}. ${bmSentence(engine.why)}`.trim() +
+    (engine.busy === true ? " It is working on a job right now." : "");
+  bm.engine.dataset.tone = engine.state === "ready" ? "ok" : engine.state === "failed" ? "bad" : "";
+  const idle = Number(engine.idle_minutes);
+  bm.address.textContent = [
+    engine.listens_on ? `Listens on ${engine.listens_on} - this computer only.` : "",
+    Number.isFinite(idle) && idle > 0 ? `Stops ${idle} minute${idle === 1 ? "" : "s"} after its last job.` : "",
+  ].filter(Boolean).join(" ");
+  bm.address.hidden = !bm.address.textContent;
+
+  const cuda = status.cuda || {};
+  bm.cuda.textContent = bmSentence(cuda.why) || "Jarvis did not say whether a graphics card is used.";
+  bm.cuda.dataset.tone = cuda.setting === "on" && cuda.usable === false ? "bad" : "";
+
+  const where = String(status.key_where || "").trim();
+  const lead = { "not-made-yet": "Not made yet. It is ", "credential-manager": "Kept in ",
+    "this-run-only": "Kept for this run only: " }[status.key_kept] || "Where it is kept: ";
+  bm.key.textContent = where
+    ? `${lead}${scClause(where)} The key itself is never shown here, and only colibri on this PC is given it.`
+    : "Jarvis did not say where the key is kept.";
+
+  const measured = status.measured && typeof status.measured === "object" ? status.measured : {};
+  bm.measured.replaceChildren(...jobs.map((sw) => bmMeasuredItem(sw, measured[sw.id], names)));
+  bm.unverified.textContent = String(status.unverified || "").trim() || BM_UNVERIFIED;
+
+  // How each card that was waiting ended.
+  if (bmPainted) {
+    const byId = Object.fromEntries(jobs.map((s) => [s.id, s]));
+    for (const id of bmWaiting) {
+      if (pending.has(id)) continue;
+      const name = id === "master" ? BM_MASTER.name : (byId[id] && byId[id].name) || id;
+      const on = id === "master" ? status.enabled === true : Boolean(byId[id] && byId[id].enabled);
+      report(bm.status, cardEndedWords(name, on, cardLast(status, id, bmWaitingSince.get(id))),
+        on ? "ok" : null);
+      announce(bm.status.textContent);
+    }
+  }
+  bmPainted = true;
+  for (const id of [...bmWaitingSince.keys()]) if (!pending.has(id)) bmWaitingSince.delete(id);
+  for (const id of pending) if (!bmWaitingSince.has(id)) bmWaitingSince.set(id, Date.now() / 1000);
+  bmWaiting = pending;
+  if (pending.size || engine.state === "loading") bmStartPoll();
+  else bmStopPoll();
+}
+
+async function loadBigModel() {
+  if (!IS_TAURI || !bm.card) return;
+  const seq = ++bmReadSeq;
+  let answer;
+  try {
+    answer = await invoke("get_big_model");
+  } catch (error) {
+    if (seq !== bmReadSeq) return;
+    bmShowProblem(`Jarvis could not be asked about the big model. ${scProblemWords(error)}`);
+    return;
+  }
+  if (seq !== bmReadSeq) return;
+  if (answer && answer.available === false) {
+    bmShowProblem(typeof answer.why === "string" && answer.why ? answer.why : BM_UPDATE);
+    return;
+  }
+  if (!answer || typeof answer !== "object" || !answer.detected || !Array.isArray(answer.switches)) {
+    bmShowProblem(`Jarvis's answer about the big model could not be read. ${BM_UPDATE}`);
+    return;
+  }
+  bmPaint(answer);
+}
+
+function bmStartPoll() {
+  if (!bmPollUntil) bmPollUntil = Date.now() + SC_POLL_FOR_MS;
+  clearTimeout(bmPollTimer);
+  bmPollTimer = null;
+  if (Date.now() > bmPollUntil) return;
+  bmPollTimer = setTimeout(() => {
+    bmPollTimer = null;
+    if (!document.hidden) loadBigModel();
+  }, SC_POLL_MS);
+}
+
+function bmStopPoll() {
+  clearTimeout(bmPollTimer);
+  bmPollTimer = null;
+  bmPollUntil = 0;
+}
+
+/** One switch, one request. ON raises a card and nothing more. */
+async function bmToggle(sw, input) {
+  const turnOn = input.checked;
+  if (bmBusy) {
+    input.checked = !turnOn;
+    return;
+  }
+  bmBusy = true;
+  input.disabled = true;
+  report(bm.status, turnOn ? `Asking to turn on "${sw.name}"…` : `Turning off "${sw.name}"…`);
+  try {
+    const out = await invoke("set_big_model", { switch: sw.id, enabled: turnOn });
+    if (turnOn && out && out.pending === true) {
+      report(bm.status, SC_WAITING, "ok");
+      announce(`"${sw.name}": ${SC_WAITING}`);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(bm.status, out.message, "ok");
+    } else {
+      report(bm.status, turnOn ? `"${sw.name}" is on.` : `"${sw.name}" is off.`, "ok");
+    }
+  } catch (error) {
+    report(bm.status, scProblemWords(error), "bad");
+    announce(bm.status.textContent, "assertive");
+  } finally {
+    bmBusy = false;
+  }
+  // The switch shows what Jarvis says, never what was clicked.
+  await loadBigModel();
+}
+
+onQueue(() => {
+  if (bmWaiting.size) loadBigModel();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadBigModel();
+});
+loadBigModel();
+
+/* ==========================================================================
+   Voice
+   --------------------------------------------------------------------------
+   What the PC says about listening to the owner: `get_voice_status` (GET
+   /api/voice/status, jarvis_speech.status() - its real shape is
+   tests/fixtures/voice-status-cases.json). The same facts the phone shows on
+   Platform checks under "Your voice" and the wake word, in the phone's words
+   where it has them (voice-settings.js). Training this PC's microphone, how
+   strict the check is, private answers, the guided test and custom voices
+   are drawn by voice-panel.js from the same status (and, for the voices,
+   GET /api/voice/voices).
+
+   The one thing it changes is the PC's "hey Jarvis" switch (`set_wake_word`,
+   POST /api/voice/wake), as the phone's wake-word card does. Turning it OFF
+   is immediate, is never held, and stops this PC's own listening too.
+   Turning it ON approves nothing: the server raises ONE approval card, and
+   the Rust holds the request while the event stream is stale. The switch
+   shows what Jarvis last said, never what was clicked.
+
+   Re-read when the window comes back into view, when the approval queue
+   changes while a voice card waits (there is no event for the decision), and
+   on the `voice` doorbell.
+   ========================================================================== */
+
+const vc = {
+  card: $("voice"),
+  state: $("voice-state"),
+  body: $("voice-body"),
+  summary: $("voice-summary"),
+  prints: $("voice-prints"),
+  check: $("voice-check"),
+  last: $("voice-last"),
+  talk: $("voice-talk"),
+  wake: $("voice-wake"),
+  verifier: $("voice-verifier"),
+  stopWord: $("voice-stop-word"),
+  turn: $("voice-turn"),
+  wakeOff: $("voice-wake-off"),
+  wakeOn: $("voice-wake-on"),
+  wakeOnNote: $("voice-wake-on-note"),
+  wakeStatus: $("voice-wake-status"),
+};
+
+const VC_UPDATE =
+  "This PC's Jarvis does not report its voice settings yet. Update the backend by running apply-patches.ps1, then open this again.";
+
+let vcReadSeq = 0;
+let vcBusy = false;
+/** A voice card (the wake word's, or a training) was waiting at the last read. */
+let vcWaiting = false;
+
+/** A `{text, tone}` line, or hidden when there is nothing to say. */
+function vcLine(node, line) {
+  if (!node) return;
+  const text = line && typeof line === "object" ? line.text : line;
+  node.hidden = !text;
+  node.textContent = text || "";
+  const tone = line && typeof line === "object" ? line.tone : "";
+  if (tone) node.dataset.tone = tone;
+  else delete node.dataset.tone;
+}
+
+function vcShowProblem(words) {
+  vc.body.hidden = true;
+  vc.state.hidden = false;
+  vc.state.dataset.tone = "bad";
+  vc.state.textContent = words;
+  vcWaiting = false;
+  // Nothing to switch when Jarvis could not say what is on.
+  vc.wakeOff.hidden = true;
+  vc.wakeOn.hidden = true;
+  vc.wakeOnNote.hidden = true;
+}
+
+function vcPrintItem(line) {
+  const item = scNode("li", "sc-gpu");
+  item.dataset.mic = line.id;
+  if (line.tone) item.dataset.tone = line.tone;
+  item.append(scNode("span", "sc-gpu-name", line.name));
+  item.append(scNode("span", "sc-gpu-role", line.text.charAt(0).toUpperCase() + line.text.slice(1)));
+  return item;
+}
+
+function vcPaint(status) {
+  vc.state.hidden = true;
+  delete vc.state.dataset.tone;
+  vc.body.hidden = false;
+
+  vcLine(vc.summary, { text: voiceSummaryLine(status, APPROVE_WHERE),
+                       tone: voiceIsTrained(status) ? "ok" : "warn" });
+  vc.prints.replaceChildren(...voicePrintLines(status).map(vcPrintItem));
+  vcLine(vc.check, voiceCheckLine(status));
+  vcLine(vc.last, lastTrainingLine(((status.gate || {}).training || {}).last, status));
+  vcLine(vc.talk, voiceTalkLine(status));
+
+  const wake = wakeInfo(status, APPROVE_WHERE);
+  vc.card.dataset.wake = wake.state;
+  vcLine(vc.wake, { text: wake.text, tone: wake.state === "waiting" ? "warn" : "" });
+  // The phone's buttons: off while it is on, on while it is off and no card
+  // waits. While a card waits there is nothing to press here - the card is
+  // the decision.
+  vc.wakeOff.hidden = wake.state !== "on";
+  vc.wakeOn.hidden = wake.state !== "off";
+  vc.wakeOnNote.hidden = wake.state !== "off";
+  vcLine(vc.verifier, voiceVerifierLine(status));
+  vcLine(vc.stopWord, stopWordLine(status));
+  vcLine(vc.turn, voiceTurnLine(status));
+
+  const gate = status.gate || {};
+  vcWaiting = wake.state === "waiting" || (gate.training || {}).pending === true;
+  paintVoicePanel(status);
+}
+
+async function loadVoice() {
+  if (!IS_TAURI || !vc.card) return;
+  const seq = ++vcReadSeq;
+  let answer;
+  try {
+    answer = await invoke("get_voice_status");
+  } catch (error) {
+    if (seq !== vcReadSeq) return;
+    vcShowProblem(`Jarvis could not be asked about voice. ${scProblemWords(error)}`);
+    return;
+  }
+  if (seq !== vcReadSeq) return;
+  if (answer && answer.available === false) {
+    vcShowProblem(typeof answer.why === "string" && answer.why ? answer.why : VC_UPDATE);
+    return;
+  }
+  if (!answer || typeof answer !== "object" || !answer.gate || !answer.listening) {
+    vcShowProblem(`Jarvis's answer about voice could not be read. ${VC_UPDATE}`);
+    return;
+  }
+  vcPaint(answer);
+}
+
+/** The PC's "hey Jarvis" switch: one request, one direction. */
+async function vcSetWake(enabled) {
+  if (vcBusy) return;
+  vcBusy = true;
+  const button = enabled ? vc.wakeOn : vc.wakeOff;
+  button.disabled = true;
+  report(vc.wakeStatus, enabled ? "Asking…" : "Turning it off…");
+  try {
+    const out = await invoke("set_wake_word", { enabled });
+    if (out && out.ok === false) {
+      report(vc.wakeStatus, scSentence(out.error) || "Jarvis did not change it.", "bad");
+    } else if (enabled && out && out.pending === true) {
+      report(vc.wakeStatus, SC_WAITING, "ok");
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(vc.wakeStatus, out.message, "ok");
+    } else {
+      report(vc.wakeStatus, enabled ? "\"Hey Jarvis\" is on." : "\"Hey Jarvis\" is off.", "ok");
+    }
+    announce(vc.wakeStatus.textContent);
+  } catch (error) {
+    report(vc.wakeStatus, scProblemWords(error), "bad");
+    announce(vc.wakeStatus.textContent, "assertive");
+  } finally {
+    vcBusy = false;
+    button.disabled = false;
+  }
+  await loadVoice();
+}
+
+startVoicePanel({ reload: loadVoice });
+if (vc.wakeOff) vc.wakeOff.addEventListener("click", () => vcSetWake(false));
+if (vc.wakeOn) vc.wakeOn.addEventListener("click", () => vcSetWake(true));
+
+/* "Interrupt Jarvis while it talks" - this PC's own setting (barge-in.js),
+   read by the Jarvis bar each time the listener hears something while
+   Jarvis is talking. Not the server's, so it works whatever Jarvis answered
+   above. */
+const bargeIn = $("voice-barge-in");
+const bargeInDetail = $("voice-barge-in-detail");
+
+function paintBargeIn() {
+  if (!bargeIn) return;
+  const on = loadBargeIn();
+  bargeIn.checked = on;
+  bargeInDetail.textContent = describeBargeIn(on);
+}
+
+if (bargeIn) {
+  bargeIn.addEventListener("change", () => {
+    if (!saveBargeIn(bargeIn.checked)) {
+      announce("That could not be saved on this PC.", "assertive");
+    }
+    paintBargeIn();
+    announce(bargeInDetail.textContent);
+  });
+  // Kept right if the value is changed from another window.
+  window.addEventListener("storage", (event) => {
+    if (event.key === BARGE_IN_KEY) paintBargeIn();
+  });
+  paintBargeIn();
+}
+
+/* "Say 'One moment' if I'm kept waiting" - this PC's own too (voice-flow.js),
+   read by the Jarvis bar when a tool starts during a spoken question. */
+const oneMoment = $("voice-one-moment");
+const oneMomentDetail = $("voice-one-moment-detail");
+
+function paintOneMoment() {
+  if (!oneMoment) return;
+  const on = loadMoment();
+  oneMoment.checked = on;
+  oneMomentDetail.textContent = describeMoment(on);
+}
+
+if (oneMoment) {
+  oneMoment.addEventListener("change", () => {
+    if (!saveMoment(oneMoment.checked)) {
+      announce("That could not be saved on this PC.", "assertive");
+    }
+    paintOneMoment();
+    announce(oneMomentDetail.textContent);
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === MOMENT_KEY) paintOneMoment();
+  });
+  paintOneMoment();
+}
+
+/* "Play a short sound when I finish speaking" - this PC's own too
+   (voice-flow.js), read by the Jarvis bar each time it would play the
+   "I heard you" sound. On by default (owner's decision, 2026-09-25). */
+const heardSound = $("voice-heard-sound");
+const heardSoundDetail = $("voice-heard-sound-detail");
+
+function paintHeardSound() {
+  if (!heardSound) return;
+  const on = loadHeard();
+  heardSound.checked = on;
+  heardSoundDetail.textContent = describeHeard(on);
+}
+
+if (heardSound) {
+  heardSound.addEventListener("change", () => {
+    if (!saveHeard(heardSound.checked)) {
+      announce("That could not be saved on this PC.", "assertive");
+    }
+    paintHeardSound();
+    announce(heardSoundDetail.textContent);
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === HEARD_KEY) paintHeardSound();
+  });
+  paintHeardSound();
+}
+
+onQueue(() => {
+  if (vcWaiting) loadVoice();
+});
+onEvent((frame) => {
+  if (frame && frame.kind === "voice") loadVoice();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadVoice();
+});
+loadVoice();
+
+/* ==========================================================================
+   What this backend supports
+   --------------------------------------------------------------------------
+   `get_backend_capabilities`: GET /api/version's `capabilities`, as two
+   sorted lists of NAMES - what the server says it has, and what it says it
+   does not - decided the phone's way (ApiModels.kt `asCapabilityFlag`, ported
+   to commands.rs `capability_present`). The phone shows the same list under
+   "This backend". Names only; nothing a capability carries reaches the page.
+   Read when the window opens, when it comes back into view, and when the
+   link connects again (a restarted backend may have gained a part).
+   ========================================================================== */
+
+const caps = {
+  state: $("caps-state"),
+  body: $("caps-body"),
+  server: $("caps-server"),
+  serverRow: $("caps-server-row"),
+  api: $("caps-api"),
+  on: $("caps-on"),
+  none: $("caps-none"),
+  offHeading: $("caps-off-heading"),
+  off: $("caps-off"),
+};
+let capsSeq = 0;
+
+function capsNames(list) {
+  return (Array.isArray(list) ? list : []).filter((n) => typeof n === "string" && n);
+}
+
+async function loadCapabilities() {
+  if (!IS_TAURI || !caps.state) return;
+  const seq = ++capsSeq;
+  let answer;
+  try {
+    answer = await invoke("get_backend_capabilities");
+  } catch (error) {
+    if (seq !== capsSeq) return;
+    caps.body.hidden = true;
+    caps.state.hidden = false;
+    caps.state.dataset.tone = "bad";
+    caps.state.textContent = `Jarvis could not be asked what it supports. ${scProblemWords(error)}`;
+    return;
+  }
+  if (seq !== capsSeq) return;
+  const on = capsNames(answer && answer.on);
+  const off = capsNames(answer && answer.off);
+  caps.state.hidden = true;
+  delete caps.state.dataset.tone;
+  caps.body.hidden = false;
+  const server = answer && typeof answer.server === "string" ? answer.server.trim() : "";
+  caps.serverRow.hidden = !server;
+  caps.server.textContent = server;
+  caps.api.textContent = answer && Number.isInteger(answer.api) ? String(answer.api) : "not reported";
+  caps.on.replaceChildren(...on.map((n) => scNode("li", "", n)));
+  caps.on.hidden = !on.length;
+  caps.none.hidden = on.length > 0;
+  caps.off.replaceChildren(...off.map((n) => scNode("li", "", n)));
+  caps.off.hidden = !off.length;
+  caps.offHeading.hidden = !off.length;
+}
+
+let capsConnected = null;
+onLink((l) => {
+  const connected = Boolean(l && l.connected);
+  if (connected && capsConnected === false) loadCapabilities();
+  capsConnected = connected;
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadCapabilities();
+});
+loadCapabilities();
 
 loadUpdate();

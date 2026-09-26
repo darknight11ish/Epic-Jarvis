@@ -173,7 +173,13 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   position:relative; display:flex; align-items:center; justify-content:center;
   padding:10px 0 4px; flex-shrink:0;
 }
-#reactor{width:232px; height:232px; display:block;}
+/* An iframe now, not a canvas: the kit face, see "Arc reactor" in the script.
+   Same box as before, click-through so it reads as part of this page rather
+   than a window inside it. Round, like the Widget's: the face paints its own
+   near-black well edge to edge, and a square of it on this stage's gradient
+   read as a hole cut in the page rather than a reactor sitting on it. */
+#reactor{width:232px; height:232px; display:block; border:0; background:transparent;
+         border-radius:50%; pointer-events:none;}
 .reactor-state{
   position:absolute; bottom:-2px; left:50%; transform:translateX(-50%);
   font-family:var(--f-mono); font-size:9.5px; letter-spacing:.28em;
@@ -208,6 +214,12 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 }
 .msg.system .body{
   background:none; border:1px dashed var(--line); color:var(--dim); font-size:13px;
+}
+/* A sample reply while offline: dashed and gold like the offline banner,
+   never the ice-blue of a real answer, and labelled as not from Jarvis. */
+.msg.sample .who{color:var(--gold);}
+.msg.sample .body{
+  background:none; border:1px dashed rgba(255,182,72,.45); color:var(--dim); font-size:13px;
 }
 .msg .body .cursor{
   display:inline-block; width:7px; height:1em; vertical-align:-2px;
@@ -446,7 +458,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   border-radius:10px; padding:12px 14px;
 }
 .appr .hdr{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
-.appr .who{ font-weight:650; letter-spacing:.01em; }
+.appr .who{ font-weight:650; letter-spacing:.01em; margin:0 0 6px; }
 .appr .tier{
   font:600 10px/1 "IBM Plex Mono",monospace; text-transform:uppercase;
   letter-spacing:.12em; padding:3px 7px; border-radius:5px;
@@ -457,6 +469,16 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   white-space:pre-wrap; word-break:break-word; margin:4px 0 10px;
   max-height:8.5em; overflow:auto;
 }
+/* Why it matters, whether something tried to rush you, how long is left. */
+.appr .raised{
+  border:1px solid rgba(255,127,127,.55); border-radius:7px; padding:7px 9px;
+  margin:4px 0 8px; color:#ffbcbc; font-size:12.5px;
+}
+.appr .raised .quote{ color:rgba(255,255,255,.82); margin-top:4px; }
+.appr .raised .src{ color:rgba(255,255,255,.72); font-size:11.5px; margin-top:3px; }
+.appr .risk, .appr .left{ font-size:12px; color:rgba(255,255,255,.72); margin:0 0 6px; }
+.appr .left:empty{ display:none; }
+.appr .yes:disabled{ opacity:.45; cursor:not-allowed; }
 .appr .btns{ display:flex; gap:8px; }
 .appr button{
   border-radius:7px; padding:7px 15px; font-weight:600; cursor:pointer;
@@ -522,7 +544,6 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
     <div class="rail-section hide-sm">
       <div class="hud-label">Systems</div>
       <div class="leds">
-        <div class="led" id="led-jarvis"><span class="dot"></span><span class="name">jarvis</span><span class="val">—</span></div>
         <div class="led" id="led-ollama"><span class="dot"></span><span class="name">ollama</span><span class="val">—</span></div>
         <div class="led" id="led-proxy"><span class="dot"></span><span class="name">proxy</span><span class="val">—</span></div>
       </div>
@@ -538,7 +559,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 
     <div id="banner">
       <b>Demo data.</b>
-      <span id="banner-text">Jarvis is not answering yet — start Ollama and <span class="mono">python jarvis_hud.py</span>, then reload.</span>
+      <span id="banner-text">Jarvis is not answering yet — start Ollama and <span class="mono">py -3 jarvis_hud.py</span>, then reload.</span>
     </div>
 
     <div class="stage-bar">
@@ -552,7 +573,10 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
     <!-- ---- TALK ---- -->
     <section class="view on" id="talk">
       <div class="reactor-wrap">
-        <canvas id="reactor" width="420" height="420" aria-hidden="true"></canvas>
+        <!-- Jarvis's face: the same kit renderer the Widget shows, in
+             display mode, driven by this page's own state. No src here -
+             the script sets it once it knows which face the owner chose. -->
+        <iframe id="reactor" title="Jarvis" tabindex="-1" aria-hidden="true"></iframe>
         <div class="reactor-state" id="reactor-state">standing by</div>
       </div>
 
@@ -580,16 +604,16 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
       <canvas id="galaxy"></canvas>
 
       <div class="brain-search">
-        <input id="gsearch" type="text" placeholder="search the brain…" autocomplete="off">
-        <button class="ghost" id="g-reset">reset view</button>
-        <button class="ghost" id="g-spin">pause spin</button>
+        <input id="gsearch" type="text" placeholder="Search the brain…" autocomplete="off">
+        <button class="ghost" id="g-reset">Reset view</button>
+        <button class="ghost" id="g-spin">Pause spin</button>
       </div>
 
       <div class="trace-bar off" id="trace-bar">
         <span class="q" id="trace-q">—</span>
         <span class="tally hit" id="trace-hits">0 recalled</span>
         <span class="tally near" id="trace-near">0 near</span>
-        <button class="ghost" id="trace-clear">clear</button>
+        <button class="ghost" id="trace-clear">Clear</button>
       </div>
 
       <div class="trace-list off" id="trace-list"></div>
@@ -605,7 +629,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
         <div class="meta" id="insp-meta"></div>
         <div class="detail" id="insp-detail"></div>
         <div class="links">
-          <button class="ghost" id="insp-ask">ask jarvis about this</button>
+          <button class="ghost" id="insp-ask">Ask Jarvis about this</button>
         </div>
       </div>
     </section>
@@ -749,11 +773,29 @@ const S = {
   state: "idle",              // idle | listening | thinking | speaking
   level: 0,                   // mic amplitude 0..1
   messages: [],
+  // Chat history on the PC (JARVIS-API.md section 18). One conversation per
+  // time this page is opened: this page has no "New conversation", and its
+  // messages live only as long as the page does.
+  conversationId: newConversationId(),
+  // Where the words in the box came from: "typed", "pasted" (a paste or a
+  // drop since the box was last empty) or "voice". Rides on each user
+  // message as `provenance` and stays with it in `messages`, so it is sent
+  // again with that turn - same rules as the quickbar (chat-history.js).
+  inputTag: "typed",
   graph: null,
   traces: [],
   activeTrace: null,
   reduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches
 };
+
+/** 8-64 characters of [A-Za-z0-9_-], what the PC accepts as an id. */
+function newConversationId(){
+  const c = window.crypto;
+  if(c && typeof c.randomUUID === "function") return c.randomUUID();
+  const b = new Uint8Array(16);
+  c.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+}
 
 const GROUPS = {
   core:     { label:"Core",      color:"#ffffff" },
@@ -838,122 +880,124 @@ function demoGraph(){
 }
 
 /* ==================================================================
- * Arc reactor
+ * Arc reactor — the kit face
+ *
+ * This used to draw its own rings on a canvas: a simpler, separate face
+ * from the one the Widget and the tray wear, and not the one the owner
+ * picked in the Faces window. It is now that face - faces.html in display
+ * mode, the Widget's own renderer, in an iframe of the same size. Every
+ * pixel and every flash / brightness limit comes from faces.html, so this
+ * page cannot drift from it again.
+ *
+ * Two things display mode cannot find out for itself inside this window,
+ * and this module hands it both:
+ *
+ *   - WHICH STATE. This page's own state machine (`reactor.set` below,
+ *     called by voice, send and status) stays the authority, so the label
+ *     under the face and the face can never disagree. Posted to the frame,
+ *     which faces.html applies itself when loaded with `&feed=parent` (see
+ *     FROM_PARENT in its bootDisplay).
+ *   - WHICH FACE, AND ITS COLOURS. This window has no app commands (see
+ *     capabilities/hud.json), so it cannot ask for the owner's appearance
+ *     document; the shell PUSHES it instead, the same one-way way it pushes
+ *     the event stream (hud_bootstrap.js's `__jarvisFeed`, channel
+ *     "appearance"). The face goes in the frame's URL; the colours are
+ *     posted.
+ *
+ * In a plain browser there is no shell and no push, and the face is the
+ * spec's default in its default colours - still the kit face, just not a
+ * personalised one.
  * ================================================================== */
 const reactor = (() => {
-  const cv = $("reactor"), ctx = cv.getContext("2d");
-  let t = 0, pulse = 0;
+  const frame = $("reactor");
+  const words = { idle:"standing by", listening:"listening", thinking:"thinking", speaking:"speaking" };
+  // This page's states are a subset of the spec's eight, by the same names.
+  // Offline is not one of them: it is "standby" - Jarvis is not answering,
+  // so the face goes quiet. Not "error": the page is still usable on sample
+  // replies, and a red face for "Ollama is not open yet" would be alarm
+  // about an ordinary morning.
+  const FACE_STATE = { idle:"idle", listening:"listening", thinking:"thinking", speaking:"speaking" };
+  const faceState = () => S.online ? (FACE_STATE[S.state] || "idle") : "standby";
 
-  const PALETTE = {
-    idle:      { ring:"#1d5f7a", core:"#6fe3ff", glow:.42, speed:.20 },
-    listening: { ring:"#6fe3ff", core:"#a8f0ff", glow:.95, speed:.65 },
-    thinking:  { ring:"#ffb648", core:"#ffd79a", glow:.78, speed:1.25 },
-    speaking:  { ring:"#6fe3ff", core:"#ffffff", glow:1.0,  speed:.45 },
-    offline:   { ring:"#2e5f78", core:"#5e9ab4", glow:.34, speed:.10 }
-  };
+  let appearance = null;   // the owner's document, once the shell pushes one
+  let ready = false;       // false until we know which face to load
+  let visible = true;      // the Talk view is on screen
+  let shown = "";          // what the frame currently holds, so equal pushes do not reload it
 
-  function arcRing(cx, cy, r, segments, gap, width, color, alpha, rotate){
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(rotate);
-    ctx.strokeStyle = color; ctx.globalAlpha = alpha;
-    ctx.lineWidth = width; ctx.lineCap = "butt";
-    const step = (Math.PI*2)/segments;
-    for(let i=0;i<segments;i++){
-      ctx.beginPath();
-      ctx.arc(0,0,r, i*step, i*step + step - gap);
-      ctx.stroke();
-    }
-    ctx.restore();
+  function post(){
+    const w = frame.contentWindow;
+    // "/" = this page's own origin, and the only receiver the bridge accepts.
+    if (w) w.postMessage({ type:"jarvis-hud-face", state:faceState(), appearance }, "/");
   }
 
-  function frame(){
-    const p = PALETTE[S.online ? S.state : "offline"] || PALETTE.idle;
-    const w = cv.width, h = cv.height, cx = w/2, cy = h/2;
-    const R = Math.min(w,h)/2 - 18;
-
-    t += S.reduced ? 0.002 : 0.01 * (0.6 + p.speed);
-    // Amplitude drives the core when listening; a synthetic envelope when speaking.
-    const drive = S.state === "listening" ? S.level
-                : S.state === "speaking"  ? 0.42 + 0.32*Math.abs(Math.sin(t*6.2))
-                : S.state === "thinking"  ? 0.30 + 0.14*Math.sin(t*3.4)
-                : 0.16 + 0.05*Math.sin(t*1.3);
-    pulse += (drive - pulse) * 0.18;
-
-    ctx.clearRect(0,0,w,h);
-
-    // outer tick ring
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(t*0.35);
-    ctx.strokeStyle = p.ring; ctx.globalAlpha = .5; ctx.lineWidth = 2;
-    for(let i=0;i<72;i++){
-      const a = (i/72)*Math.PI*2;
-      const long = i % 6 === 0;
-      const r1 = R, r2 = R - (long ? 12 : 6);
-      ctx.globalAlpha = long ? .72 : .28;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a)*r1, Math.sin(a)*r1);
-      ctx.lineTo(Math.cos(a)*r2, Math.sin(a)*r2);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // segmented rings, counter-rotating
-    arcRing(cx,cy,R-26, 6, .34, 5, p.ring, .85, -t*0.8);
-    arcRing(cx,cy,R-44, 12, .18, 3, p.core, .40,  t*1.4);
-    arcRing(cx,cy,R-62, 3, .55, 8, p.ring, .30, -t*0.5);
-
-    // amplitude spokes
-    const spokes = 60;
-    ctx.save(); ctx.translate(cx,cy);
-    ctx.strokeStyle = p.core; ctx.lineWidth = 2;
-    for(let i=0;i<spokes;i++){
-      const a = (i/spokes)*Math.PI*2;
-      const noise = Math.sin(i*2.1 + t*7) * .5 + .5;
-      const len = 8 + pulse * 40 * (0.35 + noise*0.65);
-      ctx.globalAlpha = .12 + pulse*.5;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a)*(R-78), Math.sin(a)*(R-78));
-      ctx.lineTo(Math.cos(a)*(R-78-len), Math.sin(a)*(R-78-len));
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // core
-    const coreR = 40 + pulse*16;
-    const g = ctx.createRadialGradient(cx,cy,2, cx,cy,coreR*2.3);
-    g.addColorStop(0, p.core);
-    g.addColorStop(.28, p.core + "cc");
-    g.addColorStop(.6, p.ring + "33");
-    g.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.globalAlpha = p.glow;
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx,cy,coreR*2.3,0,Math.PI*2); ctx.fill();
-
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = p.core;
-    ctx.beginPath(); ctx.arc(cx,cy,coreR*.42,0,Math.PI*2); ctx.fill();
-
-    // triangle plate, the one nod to the real reactor
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(-t*0.25);
-    ctx.strokeStyle = "#04070c"; ctx.lineWidth = 5; ctx.globalAlpha = .8;
-    ctx.beginPath();
-    for(let i=0;i<3;i++){
-      const a = (i/3)*Math.PI*2 - Math.PI/2;
-      const x = Math.cos(a)*coreR*.30, y = Math.sin(a)*coreR*.30;
-      i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
-    }
-    ctx.closePath(); ctx.stroke(); ctx.restore();
-
-    requestAnimationFrame(frame);
+  /* Loads, reloads or unloads the frame to match what should be showing.
+   *
+   * Unloaded while the Galaxy view is up. An iframe's animation loop keeps
+   * running under display:none, so hiding the view would stop it being SEEN
+   * but not being DRAWN - the Widget clears its face's src for the same
+   * reason (widget.js, applyFaceVisibility).
+   *
+   * Reloaded, not patched, when the owner's document changes: a face switch
+   * needs a fresh surface anyway, and a reload also drops a colour they have
+   * since reset to the default, which merging the new document over the old
+   * one would keep. It only happens on a save in the Faces window. */
+  function sync(){
+    const face = appearance && typeof appearance.face === "string" ? appearance.face : "";
+    // `feed=parent`: take state and colours from this page's posts instead
+    // of asking the shell, which would refuse this window anyway.
+    const url = "faces.html?mode=display&feed=parent" + (face ? "&face=" + encodeURIComponent(face) : "");
+    const want = ready && visible ? url : "about:blank";
+    const key = want === "about:blank" ? want
+              : want + "\n" + JSON.stringify((appearance && appearance.bindings) || {});
+    if (key === shown) return;
+    shown = key;
+    frame.src = want;
   }
-  requestAnimationFrame(frame);
+
+  // Every load of faces.html gets the current state and colours straight
+  // away: display mode registers its message listener before the frame's
+  // load event fires, so this first post is never lost.
+  frame.addEventListener("load", () => {
+    let doc = null;
+    try { doc = frame.contentDocument; } catch(e) { return; }
+    if (!doc || !doc.documentElement.classList.contains("display-mode")) return;
+    post();
+  });
+
+  function adopt(doc){
+    appearance = doc && typeof doc === "object" ? doc : null;
+    ready = true;
+    sync();
+    post();
+  }
+  window.addEventListener("jarvis-appearance", e => adopt(e.detail));
+
+  if (window.__jarvisAppearance) {
+    adopt(window.__jarvisAppearance);
+  } else if (typeof window.__jarvisFeed === "function") {
+    // Inside the shell, which pushes the document as soon as this page has
+    // loaded. Wait a moment for it rather than loading the default face and
+    // then swapping it out under the owner's eyes. If it never comes (an
+    // older shell), load the default anyway.
+    setTimeout(() => { if (!ready) { ready = true; sync(); } }, 1200);
+  } else {
+    ready = true;
+    sync();
+  }
 
   return {
     set(state){
       S.state = state;
-      const words = { idle:"standing by", listening:"listening", thinking:"thinking", speaking:"speaking" };
       const label = S.online ? (words[state] || state) : "offline";
       $("reactor-state").textContent = label;
       $("chip-state").textContent = label;
       $("chip-state").className = "chip" + (state === "thinking" ? " hot" : state === "listening" ? " live" : "");
+      post();
+    },
+    /** Called by setView: the face only runs while the Talk view is up. */
+    show(on){
+      visible = !!on;
+      sync();
     }
   };
 })();
@@ -1332,6 +1376,11 @@ const voice = (() => {
       let text = "";
       for(let i = e.resultIndex; i < e.results.length; i++) text += e.results[i][0].transcript;
       $("input").value = text;
+      // Claimed as voice. It is the browser's transcript, not the PC's, so
+      // the PC records it as "voice_unverified" (JARVIS-API.md section 18).
+      // Inside the app this never runs: hud_bootstrap.js removes the
+      // browser's recogniser, which uploads audio.
+      S.inputTag = "voice";
       if(e.results[e.results.length-1].isFinal){ stop(); send(); }
     };
     rec.onerror = () => stop();
@@ -1483,7 +1532,8 @@ function attachRecall(node, trace){
 function addMessage(role, text){
   const el = document.createElement("div");
   el.className = "msg " + role;
-  const who = role === "user" ? "you" : role === "jarvis" ? "jarvis" : "system";
+  const who = role === "user" ? "you" : role === "jarvis" ? "jarvis"
+            : role === "sample" ? "sample reply \u00b7 not from jarvis" : "system";
   el.innerHTML = `<div class="who">${who}</div><div class="body"></div>`;
   el.querySelector(".body").textContent = text;
   $("log").appendChild(el);
@@ -1491,11 +1541,18 @@ function addMessage(role, text){
   return el.querySelector(".body");
 }
 
-const DEMO_REPLIES = [
-  "I am running in demo mode, sir — the assistant itself is not answering yet. Start Ollama and `python jarvis_hud.py`, reload this page, and I will route through the real model.",
-  "Not connected to the local model at the moment. The brain map beside this is live sample data, so you can still see how the view behaves.",
-  "Standing by. Once Ollama and the HUD server are both up, this panel talks to them directly — nothing else to configure."
-];
+// Offline, the page still answers Send - but with a SAMPLE, never in
+// Jarvis's voice. These used to be written as Jarvis ("I am running in
+// demo mode, sir"), rendered in the same box as a real answer and read
+// aloud, so a canned line looked and sounded like the assistant replying.
+// Now it is labelled "sample reply - not from jarvis", styled like the
+// offline banner rather than like an answer, and not spoken.
+function sampleReply(){
+  return "This is a sample reply, not an answer. Jarvis is not connected " +
+    "(the notice at the top of this window says what is missing), so " +
+    "nothing you type here reaches it. Once it is running, reload this " +
+    "window and your messages will get real answers.";
+}
 
 let SEND_INFLIGHT = null;
 async function send(){
@@ -1507,11 +1564,17 @@ async function send(){
   if(SEND_INFLIGHT){ SEND_INFLIGHT.abort(); }
   const ctrl = new AbortController();
   SEND_INFLIGHT = ctrl;
-  const watchdog = setTimeout(() => ctrl.abort("timeout"), 300000);
+  // Silence, not duration: the clock restarts on every byte. The PC sends a
+  // keepalive every 10 s even while an approval card waits, so two minutes
+  // of nothing is a wedge; a long answer, or a long wait for you, is not.
+  let watchdog = setTimeout(() => ctrl.abort("timeout"), 120000);
+  const stillAlive = () => { clearTimeout(watchdog); watchdog = setTimeout(() => ctrl.abort("timeout"), 120000); };
+  const provenance = S.inputTag;
   $("input").value = "";
+  S.inputTag = "typed";
   $("input").style.height = "auto";
   const userNode = addMessage("user", text);
-  S.messages.push({role:"user", content:text});
+  S.messages.push({role:"user", content:text, provenance});
 
   // Retrieval runs alongside the answer, not after it, so the trace is ready
   // by the time you think to look.
@@ -1522,11 +1585,9 @@ async function send(){
 
   if(!S.online){
     await new Promise(r => setTimeout(r, 700));
-    const reply = DEMO_REPLIES[Math.floor(Math.random()*DEMO_REPLIES.length)];
-    addMessage("jarvis", reply);
+    addMessage("sample", sampleReply());
     reactor.set("idle");
     tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
-    voice.speak(reply);
     return;
   }
 
@@ -1535,9 +1596,16 @@ async function send(){
     lane: S.lane === "auto" ? null
         : (S.lane === "local" ? (S.defaultModel || "local") : S.lane),
     messages: S.messages.slice(-12),
+    // JARVIS-API.md section 18: which conversation, and that it was this
+    // page. The PC takes these and each message's provenance off before
+    // anything reaches a model.
+    conversation_id: S.conversationId,
+    device: "hud",
     stream: true,
-    temperature: 0.7,
-    max_tokens: 2048
+    temperature: 0.7
+    // No max_tokens: the PC uses one length for every window (1,024, the
+    // Modelfile's num_predict). This page used to ask for 2,048 while the
+    // quickbar and the phone got 1,024.
   };
 
   let node = null, full = "";
@@ -1554,8 +1622,11 @@ async function send(){
     });
     if(!res.ok){
       let msg = res.status + " " + res.statusText;
-      try{ const j = await res.json(); if(j.error) msg = j.error; }catch(e){}
-      throw new Error(msg);
+      try{
+        const j = await res.json();
+        if(j.error) msg = typeof j.error === "string" ? j.error : (j.error.message || msg);
+      }catch(e){}
+      const e = new Error(msg); e.fromServer = true; throw e;
     }
 
     // The proxy tells us which lane it picked and why.
@@ -1563,7 +1634,13 @@ async function send(){
       const routeRaw = res.headers.get("X-Jarvis-Route");
       if(routeRaw){
         const route = JSON.parse(routeRaw);
-        $("r-model").textContent = route.lane || "—";
+        // second-card.patch: `second_card` is set only on a turn the second
+        // graphics card answered; `lane` is then the model really answering.
+        const secondCard = typeof route.second_card === "string" && route.second_card;
+        $("r-model").textContent = route.lane
+          ? route.lane + (secondCard ? " on the second graphics card" : "")
+          : "—";
+        $("chip-model").title = secondCard ? "Answered on the second graphics card" : "";
         $("r-gate").textContent = route.gate || "—";
         $("r-why").textContent = route.reason || "—";
         $("r-complexity").textContent = (route.complexity ?? 0).toFixed(2);
@@ -1572,7 +1649,12 @@ async function send(){
           ? route.injected_facts + " facts"
           : (route.memory_side === "jarvis" ? "jarvis-side" : "none");
         $("chip-model").textContent = route.lane;
-        $("chip-model").className = "chip" + (route.gate === "privacy" ? "" : " hot");
+        // Gold means the answer left this PC. `where` says so (chat-stream
+        // .patch); an older backend is read by its gate - only "escalate"
+        // picks a cloud lane. This used to test gate === "privacy", a gate
+        // the router never returns, so EVERY answer was painted as cloud.
+        const cloud = route.where ? route.where === "cloud" : route.gate === "escalate";
+        $("chip-model").className = "chip" + (cloud ? " hot" : "");
       }
     }catch(e){}
 
@@ -1581,21 +1663,34 @@ async function send(){
       node = addMessage("jarvis","");
       const reader = res.body.getReader();
       const dec = new TextDecoder();
-      let buf = "", finished = false;
+      let buf = "", finished = false, cutShort = false;
       while(true){
         const {done, value} = await reader.read();
         if(done) break;
+        stillAlive();
         buf += dec.decode(value, {stream:true});
         const parts = buf.split("\n");
         buf = parts.pop();
         for(const line of parts){
           const s = line.trim();
+          // `: jarvis-status approval` (chat-stream.patch): an approval card
+          // is waiting, and nothing more happens until it is answered.
+          const status = /^:\s*jarvis-status\s+(\w+)/.exec(s);
+          if(status && !full){
+            node.textContent = status[1] === "approval" ? "Waiting for your approval\u2026"
+              : status[1] === "working" ? "Working\u2026" : "";
+            continue;
+          }
           if(!s.startsWith("data:")) continue;
           const payload = s.slice(5).trim();
           if(payload === "[DONE]"){ finished = true; continue; }
           try{
             const j = JSON.parse(payload);
-            if(j.error) throw new Error(typeof j.error === "string" ? j.error : (j.error.message || "upstream error"));
+            if(j.error){
+              const e = new Error(typeof j.error === "string" ? j.error : (j.error.message || "upstream error"));
+              e.fromServer = true; throw e;
+            }
+            if(j.choices?.[0]?.finish_reason === "length") cutShort = true;
             if(j.choices?.[0]?.finish_reason) finished = true;
             const d = j.choices?.[0]?.delta?.content;
             if(d){ full += d; node.textContent = full; $("log").scrollTop = $("log").scrollHeight; }
@@ -1608,14 +1703,24 @@ async function send(){
       // Without [DONE] or a finish_reason, what we have is a fragment, and a
       // fragment must not be committed to history as an answer.
       if(!finished){
-        if(node) node.textContent = full + (full ? " " : "") + "[interrupted]";
+        if(node){
+          node.textContent = full + (full ? " " : "") + "[interrupted]";
+          node.parentElement.dataset.state = "interrupted";
+        }
         throw new Error("the answer was cut off before it finished");
       }
+      // Stopped at the length limit: shown and kept, but said so.
+      if(cutShort) node.textContent = full + " [answer cut short \u2014 ask \u201cgo on\u201d for the rest]";
+      // Finished: the right/wrong mark (hud_bootstrap.js) may show now.
+      node.parentElement.dataset.state = "done";
     } else {
       const j = await res.json();
-      if(j.error) throw new Error(j.error);
+      if(j.error){
+        const e = new Error(typeof j.error === "string" ? j.error : (j.error.message || "upstream error"));
+        e.fromServer = true; throw e;
+      }
       full = j.choices?.[0]?.message?.content || "(empty reply)";
-      addMessage("jarvis", full);
+      addMessage("jarvis", full).parentElement.dataset.state = "done";
       $("r-model").textContent = j.model || "—";
       if(j.usage) $("r-tokens").textContent = j.usage.total_tokens ?? "—";
       if(j.complexity){
@@ -1638,7 +1743,9 @@ async function send(){
     const last = S.messages[S.messages.length - 1];
     if(last && last.role === "user" && last.content === text) S.messages.pop();
     const why = err && err.name === "AbortError" ? "the request was cancelled or timed out" : (err.message || String(err));
-    addMessage("system", "Could not reach Jarvis: " + why);
+    // The PC's own sentence (Ollama not running, a model not installed) is
+    // not "could not reach": Jarvis was reached and said what is wrong.
+    addMessage("system", (err && err.fromServer ? "Jarvis could not answer: " : "Could not reach Jarvis: ") + why);
     reactor.set("idle");
     return;
   }
@@ -1656,6 +1763,7 @@ function setView(v){
   $("brain").classList.toggle("on", v === "brain");
   $("stage-title").textContent = v === "talk" ? "Conversation" : "Brain map";
   if(v === "brain") requestAnimationFrame(() => galaxy.resize());
+  reactor.show(v === "talk");
 }
 document.querySelectorAll(".mode").forEach(b =>
   b.addEventListener("click", () => setView(b.dataset.view)));
@@ -1667,7 +1775,14 @@ $("input").addEventListener("keydown", e => {
 $("input").addEventListener("input", e => {
   e.target.style.height = "auto";
   e.target.style.height = Math.min(132, e.target.scrollHeight) + "px";
+  // A paste or a drop is tagged by its own event, which fires first. Any
+  // other edit: an emptied box starts again as typed, and an edited voice
+  // transcript is now the owner's typing. Pasted stays pasted until empty.
+  if(e.inputType === "insertFromPaste" || e.inputType === "insertFromDrop") return;
+  if(!e.target.value || S.inputTag === "voice") S.inputTag = "typed";
 });
+$("input").addEventListener("paste", () => { S.inputTag = "pasted"; });
+$("input").addEventListener("drop", () => { S.inputTag = "pasted"; });
 
 $("mic").addEventListener("click", () => voice.listening ? voice.stop() : voice.start());
 document.addEventListener("keydown", e => {
@@ -1682,7 +1797,7 @@ document.addEventListener("keyup", e => {
 $("gsearch").addEventListener("input", e => galaxy.search(e.target.value));
 $("g-reset").addEventListener("click", () => { galaxy.reset(); $("gsearch").value=""; galaxy.search(""); });
 $("g-spin").addEventListener("click", e => {
-  e.target.textContent = galaxy.toggleSpin() ? "pause spin" : "resume spin";
+  e.target.textContent = galaxy.toggleSpin() ? "Pause spin" : "Resume spin";
 });
 $("insp-close").addEventListener("click", () => { galaxy.reset(); });
 $("trace-clear").addEventListener("click", () => showTrace(null));
@@ -1728,17 +1843,16 @@ async function boot(){
   }catch(e){ status = null; }
 
   if(status){
-    // Ollama being up is enough to chat: since backend/ollama-direct.patch the
-    // local lane goes to Ollama directly. Gating on status.jarvis alone - the
-    // separate OpenJarvis agent on :8000, which this setup never ran - kept the
-    // page on sample replies for ever against a backend that could answer. A
-    // backend without that patch now fails the turn with its own 503 naming
-    // :8000, which is at least the true reason.
-    S.online = !!(status.jarvis || status.ollama);
+    // Ollama being up is what chat needs: since backend/ollama-direct.patch
+    // the local lane goes to Ollama directly. `status.jarvis` is the old
+    // OpenJarvis agent on :8000, which this setup never runs, so it is no
+    // longer read, and its "jarvis" light is gone from Systems (item 15 of
+    // docs/LEARNING-RESEARCH-2026-09-23.md). The backend's /api/status still
+    // probes :8000 itself - that check lives in jarvis_hud.py on the owner's
+    // machine, whose code is not in this repository.
+    S.online = !!status.ollama;
     S.lanes = status.lanes || [];
     S.defaultModel = status.default_model || "local model";
-    led("led-jarvis", status.jarvis,
-        status.jarvis ? "up" : (status.ollama ? "not running · optional" : "not running"));
     led("led-ollama", status.ollama);
     led("led-proxy",  status.proxy);
     $("r-tools").textContent = status.tools || "—";
@@ -1751,7 +1865,6 @@ async function boot(){
     S.jarvisMemory = !!status.jarvis_injects_memory;
     $("brand-sub").textContent = S.online ? "online · local first" : "offline · start ollama";
   } else {
-    led("led-jarvis", false, "no hud server");
     led("led-ollama", false, "—");
     led("led-proxy",  false, "—");
     S.lanes = ["jarvis-escalate","jarvis-critic","jarvis-bulk"];
@@ -1767,10 +1880,10 @@ async function boot(){
     $("banner").classList.add("on");
     $("banner-text").innerHTML = status
       ? 'The local model is not answering — open the Ollama app (or run <span class="mono">ollama serve</span>), then reload.'
-      : 'Serving without the HUD server — run <span class="mono">python jarvis_hud.py</span> on your desktop for live data.';
+      : 'Serving without the HUD server — run <span class="mono">py -3 jarvis_hud.py</span> on your desktop for live data.';
     addMessage("system", status
       ? "HUD server is up, but Ollama (the local model) is not answering yet. Everything below is sample data."
-      : "Running as a preview. On your desktop, start it with python jarvis_hud.py to connect to the real Jarvis.");
+      : "Running as a preview. On your desktop, start it with py -3 jarvis_hud.py to connect to the real Jarvis.");
   } else {
     addMessage("jarvis", "Systems online, sir. Local model loaded and the brain map is current. What are we working on?");
     if(S.jarvisMemory){
@@ -1788,7 +1901,19 @@ async function boot(){
   try{
     const r = await jfetch("/api/graph", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
     graph = await r.json();
-    if(!graph.nodes || graph.nodes.length < 3) graph = demoGraph();
+    // A real graph that is still small is SHOWN as it is, not swapped for the
+    // made-up one: that used to happen online too, with no banner, so a new
+    // owner with an empty memory saw invented facts presented as theirs.
+    // The sample graph is only for when there is no server to ask, and the
+    // offline banner above already says "Everything below is sample data".
+    graph = graph && typeof graph === "object" ? graph : {};
+    if(!Array.isArray(graph.nodes)) graph.nodes = [];
+    if(!Array.isArray(graph.links)) graph.links = [];
+    if(graph.nodes.length < 3){
+      addMessage("system", graph.nodes.length
+        ? "Your brain map is small so far. It fills in as you keep facts Jarvis learns."
+        : "Your brain map is empty so far. It fills in as you keep facts Jarvis learns.");
+    }
   }catch(e){ graph = demoGraph(); }
 
   S.graph = graph;
@@ -1851,21 +1976,123 @@ async function apprPoll(){
 
   for(const p of list){
     if(box.querySelector(`[data-id="${CSS.escape(String(p.id))}"]`)) continue;
-    let detail = p.detail || "";
-    try{ detail = JSON.stringify(JSON.parse(detail), null, 2); }catch(e){}
+    // Seconds left becomes a deadline NOW, at the read (approval-expiry.patch).
+    const deadline = (typeof p.expires_in === "number" && p.expires_in >= 0
+                      && p.expires_in <= 86400) ? Date.now() + p.expires_in * 1000 : null;
     const el = document.createElement("div");
     el.className = "appr"; el.dataset.id = p.id;
-    el.innerHTML =
-      `<div class="hdr"><span class="who">Jarvis wants to: ${apprEscape(p.action)}</span>`
-      + `<span class="tier">${apprEscape(p.tier)}</span></div>`
-      + `<div class="det">${apprEscape(apprDescribe(p, detail))}</div>`
-      + `<div class="btns"><button class="yes">Approve</button>`
-      + `<button class="no">Deny</button></div>`;
-    el.querySelector(".yes").onclick = () => apprDecide(p.id, true, el);
+    if(deadline !== null) el.dataset.deadline = String(deadline);
+    el.innerHTML = apprCardHtml(p, Date.now());
+    const yes = el.querySelector(".yes");
+    // A request cut off before it reached this card cannot be approved from
+    // it: what is shown is not all of what would run.
+    if(apprCutOff(p)) yes.disabled = true;
+    yes.onclick = () => apprDecide(p.id, true, el);
     el.querySelector(".no").onclick  = () => apprDecide(p.id, false, el);
     box.appendChild(el);
   }
+  apprTick();
 }
+
+/* The card, as HTML. Every value from the row is escaped.
+ *
+ * It used to show the action, the tier and the detail, with a one-click
+ * Approve - and nothing about WHY it matters or whether something had tried to
+ * rush the reader, which the quickbar and the desktop widget both show. So an
+ * item raised because outside text tried to hurry the owner looked exactly
+ * like any other here. Now, like them: the rush warning with its quote and
+ * source, the risk sentence, and how long is left. */
+function apprCardHtml(p, now){
+  let detail = p.detail;
+  if(detail && typeof detail === "object") detail = JSON.stringify(detail, null, 2);
+  detail = detail || "";
+  try{ detail = JSON.stringify(JSON.parse(detail), null, 2); }catch(e){}
+  const raised = apprRaised(p.raised);
+  const risk = p.risk && typeof p.risk === "object" ? p.risk : null;
+  // One card on every screen (card-words.js): the label, then the PC's own
+  // title for it - never the code name, and no tier word ("ask") to decode.
+  let html =
+    `<div class="hdr"><span class="tier">Needs your OK</span></div>`
+    + `<div class="who">${apprEscape(apprTitle(p))}</div>`;
+  if(raised){
+    html += `<div class="raised"><b>${apprEscape(raised.text
+              || "Tier raised - something Jarvis read tried to rush you")}</b>`
+      + (raised.quote ? `<div class="quote">\u201c${apprEscape(raised.quote)}\u201d</div>` : "")
+      + (raised.source ? `<div class="src">from ${apprEscape(raised.source)}</div>` : "")
+      + `<div class="src">Take your time: nothing runs until you decide.</div></div>`;
+  }
+  html += `<div class="det">${apprEscape(apprDescribe(p, detail))}</div>`;
+  html += `<div class="risk">${apprEscape(apprRiskLine(risk))}</div>`;
+  if(apprCutOff(p)){
+    html += `<div class="risk">This request was cut off before it reached this card, `
+      + `so it cannot be approved here. Deny it and ask Jarvis for a shorter plan.</div>`;
+  }
+  // Deny on the left, Approve on the right: the same order on every screen.
+  html += `<div class="left"></div>`
+    + `<div class="btns"><button class="no">Deny</button>`
+    + `<button class="yes">Approve</button></div>`;
+  return html;
+}
+
+/* The card's title: the PC's own words (notice.title, from
+ * backend/jarvis_card_words.py), else the PC's fallback for a name it has no
+ * phrase for - letter for letter card-words.js's fallbackTitle
+ * (tests/approvals-contract.mjs holds the two together). Never from
+ * `prompt` or `detail`. */
+function apprTitle(p){
+  const n = p && p.notice && typeof p.notice.title === "string" ? p.notice.title.trim() : "";
+  if(n) return n;
+  const w = String(p && typeof p.action === "string" ? p.action : "")
+    .replace(/_/g, " ").replace(/[^A-Za-z0-9 ]+/g, " ")
+    .split(" ").filter(Boolean).join(" ").slice(0, 60).trim();
+  return w ? `Jarvis wants your OK for "${w}"` : "Jarvis is asking for your approval";
+}
+
+/* `raised` in every shape the backend has used - an object, true, or JSON
+ * text. Anything truthy counts as raised; an unreadable one is an empty raise,
+ * never "not raised". */
+function apprRaised(v){
+  if(v === null || v === undefined || v === false || v === 0) return null;
+  if(typeof v === "string"){
+    const t = v.trim();
+    if(!t || /^(false|null|0)$/i.test(t)) return null;
+    try{ const o = JSON.parse(t); if(o && typeof o === "object" && !Array.isArray(o)) return o; }catch(e){}
+    return {};
+  }
+  if(Array.isArray(v)) return v.length ? {} : null;
+  if(typeof v === "object") return v;
+  return v ? {} : null;
+}
+
+/* The same sentence the quickbar and widget show (jarvis-link.js riskLine). */
+function apprRiskLine(risk){
+  if(!risk) return "This action is not classified, so treat it as irreversible.";
+  const undo = risk.reversible === "yes" ? "Reversible"
+             : risk.reversible === "hard" ? "Hard to undo" : "No undo";
+  const reach = risk.reach === "local" ? "stays on this machine" : "leaves this machine";
+  return risk.why ? `${undo} \u00b7 ${reach} \u2014 ${risk.why}` : `${undo} \u00b7 ${reach}`;
+}
+
+/* The gate keeps json.dumps(detail)[:4000]: text that long that no longer
+ * parses was cut off on the way here. */
+function apprCutOff(p){
+  if(typeof p.detail !== "string" || p.detail.length < 4000) return false;
+  try{ JSON.parse(p.detail); return false; }catch(e){ return true; }
+}
+
+/* How long each card has left, repainted each second while any is shown. */
+function apprTick(){
+  const now = Date.now();
+  document.querySelectorAll("#approvals .appr[data-deadline]").forEach(el => {
+    const line = el.querySelector(".left");
+    if(!line) return;
+    const left = Math.ceil((Number(el.dataset.deadline) - now) / 1000);
+    line.textContent = left <= 0
+      ? "Expired: Jarvis stopped waiting and refused it by itself."
+      : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} left to decide, then Jarvis refuses it by itself.`;
+  });
+}
+setInterval(apprTick, 1000);
 
 function apprDescribe(p, detail){
   // The human must see the COMMAND. A first version rendered `detail`
@@ -1873,6 +2100,8 @@ function apprDescribe(p, detail){
   // so a person approving `rm -rf ~/Documents` was shown a boolean.
   let d = null;
   try{ d = JSON.parse(detail); }catch(e){}
+  // jarvis_agent's cards carry the whole plan, every step, as {"text": ...}.
+  if(d && typeof d.text === "string" && d.text.trim()) return d.text;
   if(d && d.tool){
     return `${d.tool}\n${d.args || ""}`;
   }
@@ -1945,26 +2174,32 @@ async function initPoll(){
         }
       }
     }
+    // Memory cards are NOT decided here. They used to be, with Keep/Forget
+    // buttons that skipped every safety the Brain window's Memory tab has:
+    // no warning on text that reads like a slipped-in instruction, no "Both
+    // are true", "(replaces: ...)" shown even on a card that replaces
+    // nothing, no check that the link was live, and a card removed even when
+    // the decision failed to send. One place decides memory, with all of
+    // that: the Brain. This page only says how many are waiting and where.
+    // (A plain read: it does not ask for the overnight-tidy card, so it does
+    // not use that card up - see memory-pane.patch.)
     const m = await jfetch("/api/memory/pending", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
     if(m.ok){
       const j = await m.json();
-      for(const p of (j.pending || [])){
-        if(INIT.shown.has(p.id)) continue;
-        INIT.shown.add(p.id);
+      const n = (j.pending || []).length;
+      const old = document.getElementById("init-memory");
+      if(old && (n === 0 || old.dataset.n !== String(n))) old.remove();
+      if(n > 0 && !document.getElementById("init-memory")){
         const el = initCard(
-          `<div class="hdr"><span class="who">Remember this?</span><span class="kind">memory</span></div>`
-          + `<div class="det">${apprEscape(p.text)}${p.replaces ? "\n(replaces: " + apprEscape(p.replaces) + ")" : ""}</div>`
-          + `<div class="btns"><button class="yes">Keep</button><button class="no">Forget</button></div>`);
-        if(!el) continue;
-        const decide = async (accept) => {
-          el.querySelectorAll("button").forEach(b => b.disabled = true);
-          try{ await jfetch("/api/memory/decide", {method:"POST",
-            headers:{"Content-Type":"application/json","X-Jarvis-Client":"hud"},
-            body: JSON.stringify({id:p.id, accept})}); }catch(e){}
-          el.remove();
-        };
-        el.querySelector(".yes").onclick = () => decide(true);
-        el.querySelector(".no").onclick  = () => decide(false);
+          `<div class="hdr"><span class="who">${n} memory card${n === 1 ? "" : "s"} waiting for you</span><span class="kind">memory</span></div>`
+          + `<div class="det">Review them in the Brain window's Memory tab (tray icon, then Open the Brain). `
+          + `Each card there shows what it would replace and warns about anything that looks slipped in. Nothing is kept until you say so.</div>`
+          + `<div class="btns"><button class="no">Dismiss</button></div>`);
+        if(el){
+          el.id = "init-memory";
+          el.dataset.n = String(n);
+          el.querySelector(".no").onclick = () => el.remove();
+        }
       }
     }
   }catch(e){}

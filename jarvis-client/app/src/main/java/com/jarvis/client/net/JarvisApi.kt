@@ -6,6 +6,7 @@ import com.jarvis.client.data.TokenStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -24,8 +25,14 @@ import java.util.concurrent.TimeUnit
 
 /** What went wrong, in terms the UI can say out loud rather than a stack trace. */
 sealed interface ApiError {
-    /** No host, or nothing listening there. */
-    data class Unreachable(val detail: String) : ApiError
+    /**
+     * No host, or nothing listening there. [network] is the failure's kind
+     * in the plain-words contract's terms ("refused", "connect_timeout",
+     * "unknown_host", "read_timeout", ... - PlainErrors.networkKind), or
+     * "not_paired" when no address is saved; "" when [detail] is this app's
+     * own sentence (a blocker), shown as it is.
+     */
+    data class Unreachable(val detail: String, val network: String = "") : ApiError
 
     /** 401/403. The token is wrong or missing — the one failure worth naming precisely. */
     data object BadToken : ApiError
@@ -210,10 +217,30 @@ class JarvisApi(
         // nothing for a minute before the first byte. Two full minutes of
         // silence is a wedge, not slowness.
         //
+        // A chat turn waiting on an approval card can hold for three minutes
+        // (the gate's own timeout) before a word is written. That no longer
+        // trips this: the desktop sends a keepalive line every 10 seconds of
+        // silence (`backend/chat-stream.patch`), and each one restarts this
+        // clock. On a desktop without that patch it still would.
+        //
         // /api/events is NOT covered by this: [streamClient] overrides it with
         // the tighter keepalive-based 90s, and [shortCall] overrides it too.
         .readTimeout(120, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        // Never follow a redirect (apps security audit L1). Every request
+        // here carries X-Jarvis-Token, and a followed redirect would carry it
+        // to wherever it pointed: OkHttp strips only Authorization when a
+        // redirect changes host. The desktop's clients refuse redirects too,
+        // and so does UpdateChecker. A 3xx from the PC now comes back as the
+        // failure it is. [streamClient] and [shortCall] inherit both.
+        .followRedirects(false)
+        .followSslRedirects(false)
+        // Straight to the PC, never through the phone's HTTP proxy (audit
+        // L2). The link is plain HTTP inside Tailscale or NordVPN Meshnet,
+        // so a proxy set in the Wi-Fi settings, or installed by a work
+        // profile, would see the token in the clear. The desktop's clients
+        // use no proxy either (`.no_proxy()`).
+        .proxy(java.net.Proxy.NO_PROXY)
         .build()
 
     /**
@@ -233,8 +260,9 @@ class JarvisApi(
      * with nothing to say is never mistaken for a dead one, while a genuinely
      * dead socket now fails its read, reconnects through the normal backoff,
      * and clears itself. This 90s is deliberately not applied to [client]:
-     * `/api/chat` streams for as long as a reply takes and has no keepalive to
-     * pace it, so it gets the looser 120s silence limit set above instead.
+     * `/api/chat` streams for as long as a reply takes, with a keepalive only
+     * every 10s of silence (and none at all from a desktop without
+     * chat-stream.patch), so it gets the looser 120s silence limit set above.
      */
     val streamClient: OkHttpClient = client.newBuilder()
         .readTimeout(90, TimeUnit.SECONDS)
@@ -246,6 +274,20 @@ class JarvisApi(
         .build()
 
     fun baseUrl(): String? = settings.baseUrl()
+
+    /** Why the saved address is refused (off the owner's own networks), or null. */
+    fun baseProblem(): String? = settings.baseProblem()
+
+    /**
+     * Why a request has no address to go to. A saved address off the owner's
+     * own networks ([com.jarvis.client.data.OwnNetwork]) is never used, and
+     * says so in its own sentence - shown as it is, the way PlainErrors shows
+     * this app's own words - rather than "not paired", which would be untrue.
+     * With nothing saved at all, [network] says how to classify it.
+     */
+    private fun noAddress(network: String = PlainErrors.NOT_PAIRED): ApiError =
+        baseProblem()?.let { ApiError.Unreachable(it) }
+            ?: ApiError.Unreachable("No desktop address set", network)
 
     /**
      * Every request carries the token. `X-Jarvis-Client` rides along too: the
@@ -270,8 +312,17 @@ class JarvisApi(
     suspend fun status(): ApiResult<StatusInfo> =
         get("/api/status", StatusInfo.serializer())
 
-    suspend fun pending(): ApiResult<List<PendingItem>> =
-        get("/api/pending", ListSerializer(PendingItem.serializer()), PENDING_KEYS)
+    suspend fun pending(): ApiResult<List<PendingItem>> = pendingRead().map { it.items }
+
+    /**
+     * `/api/pending`, row by row: the list is found as raw JSON, then each row
+     * is read on its own (see [decodePendingRows]), so one row in an
+     * unexpected shape costs that row - counted in [PendingRead.skipped] -
+     * rather than the whole queue.
+     */
+    suspend fun pendingRead(): ApiResult<PendingRead> =
+        get("/api/pending", ListSerializer(JsonElement.serializer()), PENDING_KEYS)
+            .map { decodePendingRows(it) }
 
     suspend fun attention(): ApiResult<Attention> =
         get("/api/attention", AttentionResponse.serializer()).map { it.flatten() }
@@ -330,18 +381,14 @@ class JarvisApi(
 
     /**
      * A note sent before the first decision on a proposal -
-     * `docs/AUTONOMY-PROPOSALS.md` §3b on the desktop branch. This is NOT a
-     * decision and approves nothing; the expected result is a fresh set of
-     * options for the same id, which arrives the normal way through the next
-     * `/api/pending` read - this call does not wait for or apply it.
+     * `docs/AUTONOMY-PROPOSALS.md` §3b. This is NOT a decision and approves
+     * nothing. The desktop keeps the note with the card (the card itself
+     * does not change) and hands it to the model together with the owner's
+     * answer, whichever answer that is.
      *
-     * **DRAFT.** `jarvis_gate.py`/`jarvis_hud.py` are not in either repo, so
-     * neither this route nor its exact shape is confirmed - `POST
-     * /api/pending/<id>/amend` is the design doc's own proposed name, the
-     * same one the desktop's `amend_approval` Tauri command targets. A 404
-     * here means this desktop build does not have the route yet, not a
-     * wrong address, and [JarvisRuntime] reports it that way rather than
-     * through the generic [ApiError.NotFound] wording.
+     * Served by the desktop's `backend/task-control.patch`. A 404 means that
+     * patch is not applied there, and [JarvisRuntime] says so; a 409 means
+     * the card is no longer waiting.
      */
     suspend fun amend(id: String, note: String): ApiResult<Unit> {
         val encodedId = java.net.URLEncoder.encode(id, "UTF-8")
@@ -356,17 +403,11 @@ class JarvisApi(
      * need one, the same reasoning the desktop's own client code gives for
      * its matching, argument-free calls.
      *
-     * **DRAFT, same standing as [amend].** No route name for this is given
-     * anywhere in the shared design doc - only the mechanism is specified
-     * ("just another action against the running task's id, broadcast the
-     * same way `approval-resolved` already is"). `/api/task/pause` and its
-     * three siblings below follow this contract's own existing
-     * domain/verb shape (`/api/models/switch`, `/api/attention/mute`,
-     * `/api/voice/wake`) rather than inventing a new one, but are not
-     * confirmed against `jarvis_hud.py` and may need renaming once they
-     * are. Calling any of these against a backend that has not added them
-     * fails honestly - a 404, surfaced as an error - rather than silently
-     * doing nothing.
+     * Served by the desktop's `backend/task-control.patch`, under exactly
+     * these names. Stop and Pause need no approval card; Resume raises one
+     * listing the steps that are left and runs nothing until it is
+     * approved. A 409 means there was nothing to act on (nothing running or
+     * paused); a 404 means the patch is not applied - see [TaskControl].
      */
     suspend fun pauseTask(): ApiResult<Unit> = postJson("/api/task/pause", "{}")
 
@@ -374,8 +415,718 @@ class JarvisApi(
 
     suspend fun stopTask(): ApiResult<Unit> = postJson("/api/task/stop", "{}")
 
+    /**
+     * "Stop everything" - `backend/jarvis_stop_all.py`. The PC's answer is
+     * `{"ok", "stopped": [sentences], "problems", "message"}`; see
+     * [StopEverything]. Never a card, never gated on a stale link.
+     */
+    suspend fun stopEverything(): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/stop_all") ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = "{}".toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when {
+                        resp.isSuccessful -> ApiResult.Ok(obj ?: JsonObject(emptyMap()))
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 -> ApiResult.Failed(ApiError.NotFound)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     suspend fun injectTaskNote(note: String): ApiResult<Unit> =
         postJson("/api/task/note", """{"note":${quote(note)}}""")
+
+    // ------------------------------------------------------------ notes ----
+
+    /**
+     * Files the owner's own words in Logseq, Joplin or Obsidian - [NoteCapture]. The
+     * answer is the desktop's job record, 200 when finished and 202 while an
+     * approval card waits. A refusal the desktop explained (no Logseq
+     * folder, no Joplin token, "you said no") also comes back as a job, with
+     * `state: "not_filed"` and the reason, so the phone can show that
+     * sentence rather than a status code.
+     */
+    suspend fun captureNote(target: String, text: String): ApiResult<JsonObject> {
+        val body = NoteCapture.body(target, text)
+            ?: return ApiResult.Failed(ApiError.Malformed("the note is empty"))
+        return postForJob(NoteCapture.PATH, body)
+    }
+
+    /** How a note filed with [captureNote] ended. Never carries its text. */
+    suspend fun noteStatus(id: String): ApiResult<JsonObject> = probe(NoteCapture.statusPath(id))
+
+    /**
+     * Which note apps the desktop is set up for: the same path with no id,
+     * answering `{"ok": true, "targets": [...]}` - names only. Read it with
+     * [NoteCapture.targets].
+     */
+    suspend fun noteTargets(): ApiResult<JsonObject> = probe(NoteCapture.PATH)
+
+    // ------------------------------------------------------------- wiki ----
+
+    /**
+     * The wiki builder's documents and whether it can run - [Wiki.read].
+     * Names, states and reasons only: the phone never reads a page.
+     */
+    suspend fun wiki(): ApiResult<JsonObject> = probe(Wiki.PATH)
+
+    /**
+     * "Add to wiki" for one document in the desktop's `Jarvis Wiki/Sources`.
+     * Answers the job (202, `state: "reading"`), or a refusal the desktop
+     * explained (`state: "refused"` with `error`) - both as [ApiResult.Ok],
+     * for [Wiki.describe]. Nothing is written until the card it raises is
+     * approved.
+     */
+    suspend fun wikiIngest(source: String): ApiResult<JsonObject> {
+        val body = Wiki.body(source)
+            ?: return ApiResult.Failed(ApiError.Malformed("no document named"))
+        return postForJob(Wiki.INGEST_PATH, body)
+    }
+
+    /** How one "Add to wiki" is going. Never carries a page's text. */
+    suspend fun wikiJob(id: String): ApiResult<JsonObject> = probe(Wiki.statusPath(id))
+
+    // ------------------------------------------------------------ watch ----
+
+    /** `GET /api/watch` - the topics being watched ([Watch.read]). */
+    suspend fun watch(): ApiResult<JsonObject> = probe(Watch.PATH)
+
+    /** `GET /api/watch/report` - what is new. A peek: reading it marks nothing read. */
+    suspend fun watchReport(): ApiResult<JsonObject> = probe(Watch.REPORT_PATH)
+
+    /** Watch a topic. [body] is [Watch.addBody]'s. */
+    suspend fun watchAdd(body: String): ApiResult<DesktopWrite.Outcome> = postWrite(Watch.ADD_PATH, body)
+
+    /** Forget a topic and everything remembered about it. */
+    suspend fun watchRemove(name: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(Watch.REMOVE_PATH, Watch.removeBody(name))
+
+    /** Mark everything new as read - the consume, where [watchReport] is the peek. */
+    suspend fun watchSeen(): ApiResult<DesktopWrite.Outcome> = postWrite(Watch.SEEN_PATH, Watch.SEEN_BODY)
+
+    // ----------------------------------------------------------- skills ----
+
+    /**
+     * Removes one skill: `{"name": ..., "remove": true}`, as the desktop sends
+     * it. Removal only - there is no route that installs a skill, because
+     * installing runs the scanner and the gate on the PC.
+     */
+    suspend fun removeSkill(name: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(Skills.DECIDE_PATH, Skills.removeBody(name))
+
+    /** The learning switch - see [MemoryCounts]. ON answers 202 waiting while a card is up. */
+    suspend fun setLearning(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(MemoryCounts.LEARNING_WRITE_PATH, MemoryCounts.learningBody(on))
+
+    // ------------------------------------------------ automatic learning ----
+    // docs/JARVIS-API.md section 19 (2026-09-24). See [AutoLearn] for the
+    // shapes, the words and the rules; these only carry them.
+
+    /** `GET /api/memory/learning`: the two automatic-learning switches and their cards. */
+    suspend fun autoLearnSettings(): ApiResult<JsonObject> = probeKeeping503(AutoLearn.SETTINGS_PATH)
+
+    /**
+     * One switch. ON answers 202 waiting while its approval card is up; OFF is
+     * immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setAutoLearn(which: AutoLearn.Which, on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(which.path, AutoLearn.enabledBody(on))
+
+    /** `GET /api/memory/auto`: one page of the facts saved without a card, newest first. */
+    suspend fun autoFacts(before: Double? = null, limit: Int = AutoLearn.PAGE): ApiResult<JsonObject> =
+        probeKeeping503(AutoLearn.listPath(before, limit))
+
+    /**
+     * [probe], except that a 503 keeps its body: `ApiError.Server(503, body)`
+     * instead of [ApiError.NotAvailable], so the PC's own `error` ("automatic
+     * learning is not installed on this PC, ...") reaches the owner
+     * ([AutoLearn.readFailure]). Only the automatic-learning reads use it;
+     * every other route's 503 is unchanged.
+     */
+    private suspend fun probeKeeping503(path: String): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
+        val target = url(path) ?: return@withContext ApiResult.Failed(
+            noAddress(),
+        )
+        val req = Request.Builder().url(target).get().authed().build()
+        runCatching {
+            shortCall.newCall(req).execute().use {
+                if (it.code == 503) {
+                    return@use ApiResult.Failed(ApiError.Server(503, it.body?.string().orEmpty().take(2000)))
+                }
+                if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                val text = it.body?.string().orEmpty()
+                runCatching {
+                    when (val el = JarvisJson.parseToJsonElement(text)) {
+                        is JsonObject -> ApiResult.Ok(el)
+                        else -> ApiResult.Failed(ApiError.Malformed("not a JSON object"))
+                    }
+                }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+    }
+
+    /**
+     * `POST /api/memory/forget`: ONE fact, retired rather than deleted. The
+     * same route as the desktop's Forget; the phone sends no `valid_to`
+     * ("stopped being true just now", the usual case). A 404 - no such fact -
+     * comes back as [ApiError.NotFound].
+     */
+    suspend fun forgetFact(id: Long): ApiResult<JsonObject> =
+        postForJob(AutoLearn.FORGET_PATH, AutoLearn.forgetBody(id))
+
+    /**
+     * `POST /api/memory/erase`: "Erase the words" of ONE fact - its words
+     * wiped from the PC for good, its dates kept (the owner's decision,
+     * 2026-09-24). The status and body come back whole ([MemoryErase.Reply]):
+     * a 404 that says "no such fact" and a 404 from a PC without the route
+     * must read differently, and [postForJob] would make both [ApiError.NotFound].
+     * [MemoryErase.said] reads it.
+     */
+    suspend fun eraseFact(id: Long): ApiResult<MemoryErase.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(MemoryErase.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = MemoryErase.body(id).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(MemoryErase.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/memory/profile`: "Always keep in mind" - the facts the owner
+     * pinned, and how many of the list's characters they use
+     * ([MemoryProfile.parse]). A 404 or 501 is a PC without the list
+     * ([MemoryProfile.missing]).
+     */
+    suspend fun memoryProfile(): ApiResult<JsonObject> = probe(MemoryProfile.PATH)
+
+    /**
+     * `GET /api/schedule`: "Coming up" - the timers, alarms, reminders and
+     * the to-do list ([Schedule.parse]). A 404 or 501 is a PC without the
+     * scheduler ([Schedule.missing]). A read.
+     */
+    suspend fun schedule(): ApiResult<JsonObject> = probe(Schedule.PATH)
+
+    /**
+     * `GET /api/schedule?id=`: ONE job, also one that went off in the last
+     * day - how a notification gets its words, since the `schedule` event
+     * carries the id and the kind only ([Schedule.parseOne]). A read.
+     */
+    suspend fun scheduleJob(id: String): ApiResult<JsonObject> {
+        if (!Schedule.validId(id)) return ApiResult.Failed(ApiError.Malformed("not a job id"))
+        return probe(Schedule.PATH + "?id=" + id)
+    }
+
+    /**
+     * `GET /api/briefing`: the latest morning briefing, the briefing jobs and
+     * what a briefing includes ([Briefing.parse]). A 404 or 501 is a PC
+     * without it ([Briefing.missing]). A read.
+     */
+    suspend fun briefing(): ApiResult<JsonObject> = probe(Briefing.PATH)
+
+    /**
+     * `POST /api/briefing/senders`: "Show who new emails are from". OFF is
+     * done at once; ON is 202 while ONE approval card waits on the PC.
+     */
+    suspend fun setBriefingSenders(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(Briefing.SENDERS_PATH, Briefing.sendersBody(on))
+
+    /** "Brief me now" can wait for a slow calendar or mail server: the PC gives them 25 seconds. */
+    private val briefingCall: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(50, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * `POST /api/briefing/now`: put one together now ([Briefing.parse] reads
+     * the answer). It only READS on the PC - no card, nothing changes - so
+     * it is not held on a stale link, like every read.
+     */
+    suspend fun briefingNow(missed: Boolean = false): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
+        val target = url(Briefing.NOW_PATH) ?: return@withContext ApiResult.Failed(
+            noAddress(),
+        )
+        // {"missed": true}: "What did I miss?" (2026-09-25) - the same route.
+        val body = if (missed) Briefing.MISSED_BODY else "{}"
+        val req = Request.Builder().url(target)
+            .post(body.toRequestBody("application/json".toMediaType())).authed().build()
+        runCatching {
+            briefingCall.newCall(req).execute().use {
+                if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                val text = it.body?.string().orEmpty()
+                runCatching {
+                    when (val el = JarvisJson.parseToJsonElement(text)) {
+                        is JsonObject -> ApiResult.Ok(el)
+                        else -> ApiResult.Failed(ApiError.Malformed("not a JSON object"))
+                    }
+                }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+    }
+
+    /**
+     * `POST /api/schedule/act` (ONE job: pause, resume, delete, done) or
+     * `POST /api/schedule/add` (one to-do item). The status and body come
+     * back whole ([Schedule.Reply]), like [pinFact]: a 404 that says "no such
+     * job" and a 404 from a PC without the route must read differently.
+     */
+    suspend fun scheduleWrite(path: String, json: String): ApiResult<Schedule.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != Schedule.ACT_PATH && path != Schedule.ADD_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a schedule route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Schedule.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/memory/used?ids=`: the words of the few facts an answer used
+     * (its `X-Jarvis-Route` names them by id only), or that automatic
+     * learning just saved (the `memory_saved` event's ids) - the owner's
+     * decision of 2026-09-25. [MemoryUsed.parse] reads it. A read.
+     */
+    suspend fun memoryUsed(ids: List<Long>): ApiResult<JsonObject> {
+        val path = MemoryUsed.path(ids)
+            ?: return ApiResult.Failed(ApiError.Malformed("no fact ids to read"))
+        return probe(path)
+    }
+
+    /**
+     * `POST /api/memory/profile`: pin or unpin ONE fact (the owner's
+     * decision, 2026-09-24). The status and body come back whole
+     * ([MemoryProfile.Reply]), like [eraseFact]: a 404 that says "no such
+     * fact" and a 404 from a PC without the route must read differently, and
+     * a 409 carries the PC's own sentence. [MemoryProfile.said] reads it.
+     */
+    suspend fun pinFact(id: Long, pinned: Boolean): ApiResult<MemoryProfile.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(MemoryProfile.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = MemoryProfile.body(id, pinned).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(MemoryProfile.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * A POST whose answer's shape is not written down - read by
+     * [DesktopWrite.classify], which uses no field it has not seen the
+     * server's other routes use.
+     */
+    private suspend fun postWrite(path: String, json: String): ApiResult<DesktopWrite.Outcome> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    DesktopWrite.classify(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    private suspend fun postForJob(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when {
+                        resp.isSuccessful && obj != null -> ApiResult.Ok(obj)
+                        resp.isSuccessful -> ApiResult.Failed(ApiError.Malformed("not a job record"))
+                        // An explained refusal is an answer, not a transport error.
+                        obj != null && obj.containsKey("state") -> ApiResult.Ok(obj)
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 -> ApiResult.Failed(ApiError.NotFound)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    // ----------------------------------------------------- chat history ----
+    // docs/JARVIS-API.md section 18 (2026-09-24). See [ChatLog] for the
+    // shapes, the words and the rules; these only carry them.
+
+    /** `GET /api/history`: the switch and one page of conversations, newest first. */
+    suspend fun history(before: Long? = null): ApiResult<JsonObject> = probe(ChatLog.listPath(before))
+
+    /** `GET /api/history/conversation`: one conversation, read-only. 404 when it is gone. */
+    suspend fun historyConversation(id: String): ApiResult<JsonObject> = probe(ChatLog.conversationPath(id))
+
+    /**
+     * `POST /api/history/delete`: ONE conversation. No route deletes them
+     * all, on purpose. A 404 - already gone - comes back as
+     * [ApiError.NotFound] whatever its body says ([ChatLog.deleteSaid]).
+     */
+    suspend fun deleteHistory(id: String): ApiResult<JsonObject> =
+        postForJob(ChatLog.DELETE_PATH, ChatLog.deleteBody(id))
+
+    /** The switch. ON answers 202 waiting while its approval card is up; OFF is immediate. */
+    suspend fun setHistory(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(ChatLog.SETTINGS_PATH, ChatLog.enabledBody(on))
+
+    /** How long conversations are kept. The whole answer comes back: it says how many went. */
+    suspend fun setHistoryKeepDays(body: String): ApiResult<JsonObject> =
+        postForJob(ChatLog.SETTINGS_PATH, body)
+
+    // ------------------------------------------------------------ power ----
+
+    /**
+     * Active, Quiet or Standby - the desktop's `POST /api/power`
+     * (`backend/power-mode.patch`). The desktop decides through its approval
+     * gate as `power_manage`; the answer carries its own sentence in
+     * `message`, and `waiting: true` while a card is up. The mode shown on
+     * screen still comes from `/api/status` and the `power` event, never
+     * from this call.
+     */
+    suspend fun setPower(mode: String): ApiResult<JsonObject> =
+        postForJob("/api/power", "{\"mode\":${quote(mode)}}")
+
+    // ------------------------------------------------------ second card ----
+
+    /**
+     * `GET /api/second-card` - what the PC found and each switch's state
+     * ([SecondCard.parse]). A 404 is an older backend and a 503 a module that
+     * did not load; [SecondCard.readOf] turns both into sentences.
+     */
+    suspend fun secondCard(): ApiResult<JsonObject> = probe(SecondCard.PATH)
+
+    /**
+     * One second-card switch on or off. ON raises one approval card on the PC
+     * and changes nothing until it is approved; OFF is immediate. So a success
+     * never means "it is on" - re-read [secondCard] for that. See
+     * [SecondCard.classifyPost] for which answers come back as sentences.
+     */
+    suspend fun setSecondCard(feature: String, enabled: Boolean): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(SecondCard.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = SecondCard.postBody(feature, enabled)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    SecondCard.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    // --------------------------------------------------------- hardware ----
+
+    /**
+     * `GET /api/search` - web search's five providers with the PC's own "why
+     * use this one" lines, which is chosen, and its settings ([WebSearch.parse]).
+     * A read. A 404 is an older backend ([WebSearch.missing]).
+     */
+    suspend fun webSearch(): ApiResult<JsonObject> = probe(WebSearch.PATH)
+
+    /**
+     * `GET /api/reach` - "What Jarvis can reach": every way Jarvis can reach
+     * something outside itself, written by the PC from its settings
+     * ([Reach.parse]). A read. A 404 is an older backend ([Reach.missing]).
+     */
+    suspend fun reach(): ApiResult<JsonObject> = probe(Reach.PATH)
+
+    /**
+     * `GET /api/asks_first` - "What asks first": every action and whether it
+     * asks, in the PC's words ([AsksFirst.parse]). A read. A 404 is an older
+     * backend ([AsksFirst.missing]).
+     */
+    suspend fun asksFirst(): ApiResult<JsonObject> = probe(AsksFirst.PATH)
+
+    /**
+     * `POST /api/asks_first/tier {"action", "ask": true}` - make ONE action of
+     * the short safe list ask first. At once, no card. The phone sends only
+     * this direction: loosening is the PC's alone ([AsksFirst]).
+     */
+    suspend fun makeAskFirst(action: String): ApiResult<DesktopWrite.Outcome> {
+        val body = AsksFirst.stricterBody(action)
+            ?: return ApiResult.Failed(ApiError.Unreachable("That cannot be changed from the phone."))
+        return postWrite(AsksFirst.TIER_PATH, body)
+    }
+
+    /**
+     * `POST /api/asks_first/lights {"enabled"}` - "Lights, plugs and fans
+     * without a card". OFF is done at once; ON is 202 while ONE approval card
+     * waits on the PC.
+     */
+    suspend fun setLightsWithoutCard(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(AsksFirst.LIGHTS_PATH, AsksFirst.lightsBody(on))
+
+    /**
+     * `GET /api/email/sending` - whether sending email is set up, from which
+     * address and through which server, in the PC's own words
+     * ([EmailSending.parse]). A read; never the password. A 404 or 503 is a
+     * PC without it ([EmailSending.missing]).
+     */
+    suspend fun emailSending(): ApiResult<JsonObject> = probe(EmailSending.PATH)
+
+    /**
+     * `GET /api/folders` - "Folders Jarvis may look in": the list, in the PC's
+     * own words ([Folders.parse]). A read. A 404 is a PC without it
+     * ([Folders.missing]).
+     */
+    suspend fun folders(): ApiResult<JsonObject> = probe(Folders.PATH)
+
+    /**
+     * `POST /api/folders/remove {"path"}` - take ONE folder off the list. At
+     * once, no card. The phone never adds one: that is the PC's alone.
+     */
+    suspend fun removeFolder(path: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(Folders.REMOVE_PATH, Folders.removeBody(path))
+
+    /**
+     * `GET /api/focus`: the focus session - its countdown, booleans and counts
+     * and the last report card ([Focus.parse]). Never what was in front on
+     * the PC: the PC does not send it. A read.
+     */
+    suspend fun focus(): ApiResult<JsonObject> = probe(Focus.PATH)
+
+    /**
+     * `POST /api/focus/start` or `/api/focus/act`, with a body made by
+     * [Focus.startBody] or [Focus.actBody]. Any other path is refused here,
+     * before anything is sent. The status and body come back whole
+     * ([Focus.Reply]): a 409 carries the PC's own sentence.
+     */
+    suspend fun focusWrite(path: String, json: String): ApiResult<Focus.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != Focus.START_PATH && path != Focus.ACT_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a focus route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Focus.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /** A test search waits for the provider (up to 15 seconds on the PC). */
+    private val webSearchTestCall: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(40, TimeUnit.SECONDS)
+            .callTimeout(45, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * One of web search's two POSTs: ONE setting ([WebSearch.SETTINGS_PATH],
+     * a body made by [WebSearch.providerBody], [WebSearch.addressBody] or
+     * [WebSearch.askBody]) or a test search ([WebSearch.TEST_PATH]). Anything
+     * else is refused here, before anything is sent - there is no route for a
+     * key, and this phone never sends one (CLAUDE.md rule 3).
+     */
+    suspend fun webSearchPost(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            if (path != WebSearch.SETTINGS_PATH && path != WebSearch.TEST_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a web search route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            val caller = if (path == WebSearch.TEST_PATH) webSearchTestCall else shortCall
+            runCatching {
+                caller.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/manner` - "How Jarvis talks": warm and brief, or plain, with
+     * the PC's own words for both ([Manner.parse]). A read.
+     */
+    suspend fun manner(): ApiResult<JsonObject> = probe(Manner.PATH)
+
+    /**
+     * `POST /api/manner` with ONE change ([Manner.body]): at once, no card
+     * either way - it changes only how answers are worded. Nothing but a
+     * body [Manner.body] made is sent.
+     */
+    suspend fun mannerPost(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(Manner.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/hardware` - the cards, what runs now, the three setups the PC
+     * worked out for its own cards ([Hardware.parse]). Reads only. A 404 is
+     * an older backend and a 503 a module that did not load.
+     */
+    suspend fun hardware(): ApiResult<JsonObject> = probe(Hardware.PATH)
+
+    /**
+     * One of the hardware POSTs: choosing a setup ([Hardware.APPLY_PATH]),
+     * measuring ([Hardware.MEASURE_PATH]), or ONE step of the chosen setup -
+     * a route read from the PC's own answer, one of [Hardware.STEP_ROUTES]
+     * ([Hardware.stepRequest]). Anything else is refused here, before
+     * anything is sent. Each step raises its own approval card on the PC; a
+     * success never means it is done - re-read [hardware] for that.
+     */
+    suspend fun hardwarePost(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            if (path != Hardware.APPLY_PATH && path != Hardware.MEASURE_PATH &&
+                path !in Hardware.STEP_ROUTES
+            ) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a hardware route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    Hardware.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    // --------------------------------------------------------- big model ----
+
+    /**
+     * `GET /api/big-model` - what the PC found for the big model (slow) and
+     * each switch's state ([BigModel.parse]). Starts nothing on the PC. A 404
+     * is an older backend and a 503 a module that did not load;
+     * [BigModel.readOf] turns both into sentences.
+     */
+    suspend fun bigModel(): ApiResult<JsonObject> = probe(BigModel.PATH)
+
+    /**
+     * One big-model switch on or off: `{"switch": ..., "enabled": ...}`. ON
+     * raises one approval card on the PC and changes nothing until it is
+     * approved; OFF is immediate. So a success never means "it is on" -
+     * re-read [bigModel] for that. [BigModel.classifyPost] says which answers
+     * come back as sentences.
+     */
+    suspend fun setBigModel(switch: String, enabled: Boolean): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(BigModel.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = BigModel.postBody(switch, enabled)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    BigModel.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /** `GET /api/deep` - the deep questions and their answers, newest first ([BigModel.parseDeep]). */
+    suspend fun deep(): ApiResult<JsonObject> = probe(BigModel.DEEP_PATH)
+
+    /**
+     * Queues one deep question. Answers 202 with the job, or a refusal the
+     * PC explained (`state: "refused"` with `error`) - both as
+     * [ApiResult.Ok], for [BigModel.askReply]. No approval card per
+     * question: the switch was approved with one.
+     */
+    suspend fun deepAsk(question: String): ApiResult<JsonObject> {
+        val body = BigModel.askBody(question)
+            ?: return ApiResult.Failed(ApiError.Malformed("the question is empty"))
+        return postForJob(BigModel.ASK_PATH, body)
+    }
 
     // ------------------------------------------------------- appearance ----
 
@@ -426,6 +1177,35 @@ class JarvisApi(
         postJson("/api/memory/decide", """{"id":$id,"accept":$accept}""")
 
     /**
+     * The third answer on a correction card, "Both are true": keep the new
+     * fact AND keep the old one - nothing is retired (`memory-intake.patch`).
+     * One PROPOSAL id, one decision, like [decideMemory]; no list form.
+     *
+     * The backend answers 409 for a card that has no old fact to keep (and
+     * for a "stop using this fact?" card), which [postJson] reports as
+     * [ApiError.AlreadyHandled]; 404 when the card was already decided. The
+     * screen only offers this where the row's own `keep_both_ok` is true,
+     * so on a backend without the route the button never appears.
+     */
+    suspend fun keepBothMemory(id: Long): ApiResult<Unit> =
+        postJson(MemoryCards.KEEP_BOTH_PATH, MemoryCards.keepBothBody(id))
+
+    /**
+     * The owner's right/wrong mark on ONE answer - `POST /api/feedback/mark`
+     * (`feedback.patch`). [AnswerMark.NONE] takes a mark back. One id per
+     * call and no list form: the backend refuses a list, because a "mark
+     * all" would move every fact's counter at once on one tap.
+     *
+     * A mark never changes memory. At most it makes the desktop queue ONE
+     * "stop using this fact?" card, which the owner still has to answer.
+     */
+    suspend fun markAnswer(turnId: String, mark: AnswerMark): ApiResult<Unit> {
+        val body = Feedback.markBody(turnId, mark)
+            ?: return ApiResult.Failed(ApiError.Malformed("not an answer id"))
+        return postJson(Feedback.MARK_PATH, body)
+    }
+
+    /**
      * "What did I believe as of this moment?" - `GET /api/memory/facts?known_at=`,
      * the exact route the desktop's 2026-09-18 feature audit named for this
      * (§3, "Memory consolidation", P3). Read-only, and still not the memory
@@ -438,20 +1218,24 @@ class JarvisApi(
         probe("/api/memory/facts?known_at=$knownAtEpochSeconds")
 
     /**
-     * Answers the daily "let Jarvis tidy its memory overnight?" card - see
-     * `BrainSnapshot.memory`'s own `setup.sleep_time_offer`. This app's two
-     * real actions ("enable" and "stop asking") each send exactly one of
-     * [enabled]/[remind]; "not now" needs no call at all, since the card
-     * already tracks "already offered today" itself
-     * (`jarvis_sleep.py`'s own `_seen`), so a plain dismiss still does not
-     * return until tomorrow. The server reports a write that failed to
-     * persist as a non-2xx status, same as every other write here, so no
-     * response body needs reading.
+     * Answers the daily overnight-tidy card (not built yet) - see
+     * `BrainSnapshot.memory`'s own `setup.sleep_time_offer`. Each of its
+     * three actions sends exactly one field: "enable" [enabled], "stop
+     * asking" [remind] false, and "not now" [notNow] (since 2026-09-25,
+     * jarvis_backoff.py: the PC then keeps the offer quiet for a day, then
+     * a week, then a month; an older PC answers it with nothing written).
+     * The server reports a write that failed to persist as a non-2xx status,
+     * same as every other write here, so no response body needs reading.
      */
-    suspend fun setSleepTime(enabled: Boolean? = null, remind: Boolean? = null): ApiResult<Unit> {
+    suspend fun setSleepTime(
+        enabled: Boolean? = null,
+        remind: Boolean? = null,
+        notNow: Boolean = false,
+    ): ApiResult<Unit> {
         val fields = buildList {
             enabled?.let { add(""""enabled":$it""") }
             remind?.let { add(""""remind":$it""") }
+            if (notNow && enabled == null && remind == null) add(""""not_now":true""")
         }
         return postJson("/api/memory/sleep_time", "{${fields.joinToString(",")}}")
     }
@@ -463,13 +1247,11 @@ class JarvisApi(
      * unsend after that, and a client that reported success anyway would be
      * telling exactly the lie this feature exists to avoid.
      *
-     * **Currently unreachable, and left here deliberately.** The contract has
-     * this route but nothing that *lists* holds, so a phone has no way to learn
-     * a handle. An earlier draft of this file invented `GET /api/holds` to fill
-     * the gap — which is the exact mistake that produced `jarvis-android`'s
-     * protocol, so it was removed rather than kept behind a 404. When something
-     * serves handles (a `hold` event, or a field on a pending item), this is
-     * ready.
+     * The handle comes from the undo shelf (`GET /api/undo`), the same list
+     * the desktop's Brain window takes it from: an entry with `category:
+     * "hold"` and `detail.handle` - see [UndoEntry.holdHandle]. No
+     * `GET /api/holds` was invented for it (an earlier draft did, and it was
+     * rightly removed).
      */
     suspend fun cancelHold(handle: String): ApiResult<Unit> =
         postJson("/api/holds/cancel", """{"handle":${quote(handle)}}""")
@@ -496,7 +1278,7 @@ class JarvisApi(
     private suspend fun postJson(path: String, json: String): ApiResult<Unit> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(
-                ApiError.Unreachable("No desktop address set"),
+                noAddress(),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -511,7 +1293,7 @@ class JarvisApi(
                         else -> ApiResult.Failed(errorFor(it))
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     /**
@@ -530,7 +1312,7 @@ class JarvisApi(
      */
     suspend fun probe(path: String): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
         val target = url(path) ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            noAddress(),
         )
         val req = Request.Builder().url(target).get().authed().build()
         runCatching {
@@ -546,7 +1328,7 @@ class JarvisApi(
                     }
                 }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     // ------------------------------------------------------------ voice ----
@@ -559,16 +1341,82 @@ class JarvisApi(
      * into a 404.
      */
     suspend fun voiceStatus(): ApiResult<VoiceStatus> =
-        get("/api/voice/status", VoiceStatus.serializer())
+        voiceStatusRead().map { it.first }
+
+    /**
+     * `/api/voice/status`, read ONCE into both halves: the [VoiceStatus]
+     * the talk button has always read, and the stricter voice check
+     * ([VoiceStrict.View] - the two settings, training in rounds, the
+     * repeat numbers), which is read field by field so that nothing in it
+     * can hide the talk button. See [VoiceStrict.read].
+     */
+    suspend fun voiceStatusRead(): ApiResult<Pair<VoiceStatus, VoiceStrict.View>> =
+        when (val r = probe("/api/voice/status")) {
+            is ApiResult.Ok -> VoiceStrict.read(r.value)
+            is ApiResult.Failed -> r
+        }
+
+    /**
+     * `POST /api/voice/enroll` with a body built by [VoiceStrict] or
+     * [com.jarvis.client.voice.VoiceRounds]: a training round, a cancel, a
+     * setting or the guided test. Every explained answer comes back as an
+     * [VoiceStrict.Answer] - the refusals are sentences for the owner.
+     * Nothing here is logged: a round's body is the owner's voice.
+     */
+    suspend fun voiceEnroll(json: String): ApiResult<VoiceStrict.Answer> =
+        postVoice("/api/voice/enroll", json).map { (code, body) -> VoiceStrict.answer(code, body) }
+
+    /** `GET /api/voice/voices` - custom voices. Loads nothing on the PC. */
+    suspend fun customVoices(): ApiResult<JsonObject> = probe(CustomVoices.PATH)
+
+    /**
+     * One of the custom-voice POSTs ([CustomVoices.CREATE_PATH] and the
+     * rest). A create carries a recording of up to 2.9 MB, so this is the
+     * general client, not the short one - and its body is never logged.
+     */
+    suspend fun customVoicePost(path: String, json: String): ApiResult<CustomVoices.Answer> =
+        postVoice(path, json).map { (code, body) -> CustomVoices.answer(code, body) }
+
+    /**
+     * A voice POST whose refusals carry the PC's own sentence: (status,
+     * body) for any answer with a JSON object in it, so a 400/409/503 with
+     * `error` reaches the owner as it was written. A 404 is "this PC has no
+     * such route" unless the body is the voice module's own (`ok` in it -
+     * "there is no voice with that id"). 401/403 stay failures: a bad token
+     * is not the PC's sentence to relay.
+     */
+    private suspend fun postVoice(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                client.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
 
     /**
      * One complete utterance in, one verdict out.
      *
      * The only route on this server whose body is not JSON. The audio is
-     * already 16 kHz 16-bit mono PCM in a WAV container — resampled on this
-     * device, because the server refuses anything else rather than carrying a
-     * resampler in the most exposed code it has: these are bytes from the
-     * network arriving *before* the gate.
+     * 16 kHz 16-bit mono PCM in a WAV container, resampled on this device
+     * (Recorder.kt). That is the format the server asks for (`audio_in` in
+     * /api/voice/status), and the desktop sends the same since 2026-09-24.
+     * The server does still accept another rate or stereo: it averages the
+     * channels and hands the real rate to its speech models, which resample.
      *
      * Uses the general [client], whose read timeout is the generous one rather
      * than [shortCall]'s 15s. Verification and transcription happen before the
@@ -579,9 +1427,16 @@ class JarvisApi(
     suspend fun utterance(
         wav: ByteArray,
         source: String = SOURCE_PUSH_TO_TALK,
+        waitedMs: Long? = null,
     ): ApiResult<Heard> = withContext(Dispatchers.IO) {
-        val target = url("/api/voice/utterance?source=$source") ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+        // mic=phone: the PC checks the clip against this phone's own voice
+        // print when there is one (a PC older than 2026-09-24 ignores it).
+        // waited_ms (docs/JARVIS-API.md section 17, 2): how long it had been
+        // quiet when the clip was sent - a number for the PC's delay table,
+        // ignored by a PC without voice-flow.patch.
+        val waited = waitedMs?.let { "&waited_ms=${it.coerceIn(0L, 60_000L)}" }.orEmpty()
+        val target = url("/api/voice/utterance?source=$source&mic=$MIC_PHONE$waited") ?: return@withContext ApiResult.Failed(
+            noAddress(),
         )
         val body = wav.toRequestBody("audio/wav".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
@@ -595,7 +1450,58 @@ class JarvisApi(
                         { e -> ApiResult.Failed(ApiError.Malformed(e.message ?: "bad verdict")) },
                     )
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+    }
+
+    /**
+     * Interrupting Jarvis by talking (docs/JARVIS-API.md section 17, 1): about
+     * two seconds of what the microphone heard over a reply, and ONE question
+     * back - should Jarvis stop? The PC never transcribes it. Send it only
+     * while Jarvis is speaking and [VoiceStatus.bargeInUsable] is true: an
+     * older PC treats an unknown `source` as push-to-talk and would
+     * transcribe the clip. Anything but a readable answer is "carry on"
+     * ([com.jarvis.client.voice.BargeVerdict.FAILED]). The body is the
+     * owner's voice, and is never logged.
+     */
+    suspend fun bargeIn(wav: ByteArray): com.jarvis.client.voice.BargeVerdict = withContext(Dispatchers.IO) {
+        val failed = com.jarvis.client.voice.BargeVerdict.FAILED
+        val target = url("/api/voice/utterance?source=$SOURCE_BARGE_IN&mic=$MIC_PHONE")
+            ?: return@withContext failed
+        val body = wav.toRequestBody("audio/wav".toMediaType())
+        val req = Request.Builder().url(target).post(body).authed().build()
+        runCatching {
+            shortCall.newCall(req).execute().use {
+                if (!it.isSuccessful) return@use failed
+                val obj = runCatching {
+                    JarvisJson.parseToJsonElement(it.body?.string().orEmpty()) as? JsonObject
+                }.getOrNull()
+                com.jarvis.client.voice.BargeVerdict.read(obj)
+            }
+        }.getOrElse { failed }
+    }
+
+    /**
+     * The "One moment." clip (docs/JARVIS-API.md section 17, 3): a WAV in the
+     * voice Jarvis speaks in now. Fetched when `flow.moment.key` changes, and
+     * kept. A 503 is the PC's "none right now" - a failure here, not an error
+     * to show: the clip is a courtesy.
+     */
+    suspend fun voiceMoment(): ApiResult<ByteArray> = withContext(Dispatchers.IO) {
+        val target = url("/api/voice/moment") ?: return@withContext ApiResult.Failed(
+            noAddress(),
+        )
+        val req = Request.Builder().url(target).get().authed().header("Accept", "audio/wav").build()
+        runCatching {
+            shortCall.newCall(req).execute().use {
+                if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                val bytes = it.body?.bytes()
+                if (bytes == null || bytes.isEmpty()) {
+                    ApiResult.Failed(ApiError.NotAvailable)
+                } else {
+                    ApiResult.Ok(bytes)
+                }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     /**
@@ -608,7 +1514,7 @@ class JarvisApi(
      */
     suspend fun say(text: String): ApiResult<SaidAloud> = withContext(Dispatchers.IO) {
         val target = url("/api/voice/say") ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            noAddress(),
         )
         val body = """{"text":${quote(text)}}""".toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed()
@@ -646,11 +1552,13 @@ class JarvisApi(
                     else -> ApiResult.Failed(errorFor(it))
                 }
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     /**
-     * Asks the desktop to turn the wake word on or off.
+     * Asks the desktop to turn the wake word on or off. ON raises an
+     * approval card on the desktop and changes nothing until it is approved;
+     * OFF is immediate (backend/jarvis_speech.py `set_wake_enabled`).
      *
      * Gated as a config change server-side, and **approval means approved, not
      * already live** — the value lives in the TOML. So a success here does not
@@ -658,6 +1566,99 @@ class JarvisApi(
      */
     suspend fun setWakeWord(enabled: Boolean): ApiResult<Unit> =
         postJson("/api/voice/wake", """{"enabled":$enabled}""")
+
+    /**
+     * "Train my voice": sends the owner's recorded clips to the desktop.
+     *
+     * A 202 means **a card was raised**, not that anything was learned - the
+     * desktop enrols the voice only once that card is approved, and throws
+     * the clips away either way. So this never reports "trained"; re-read
+     * [voiceStatus] for that.
+     *
+     * A refusal the desktop explains (400 a bad clip, 409 a card already
+     * waiting, 503 not installed) comes back as `Ok` with [VoiceTrainingReply.error]
+     * set, because those sentences are written for the owner and are the
+     * most useful thing to show. 401/403/404 stay failures: a bad token and
+     * "this desktop has no such route" are not the desktop's words to relay.
+     *
+     * Uses the general [client]: a few megabytes over Tailscale is not a
+     * short call. Nothing here is logged - the body is the owner's voice.
+     */
+    suspend fun enrollVoice(clips: List<ByteArray>, mic: String? = null): ApiResult<VoiceTrainingReply> =
+        postTraining(enrollRequestBody(clips, mic = mic))
+
+    /**
+     * Proposes a new bar for the owner's voice on [mic] - the PC raises an
+     * approval card and changes nothing until it is approved. The same
+     * route and answer shape as [enrollVoice].
+     */
+    suspend fun proposeVoiceThreshold(value: Double, mic: String): ApiResult<VoiceTrainingReply> =
+        postTraining(thresholdRequestBody(value, mic))
+
+    /**
+     * The "someone else" check: another person's clips, scored against the
+     * owner's print on the PC and thrown away. Changes nothing, raises no
+     * card. **Only after [VoiceTrainingState.calibrate]** - see its doc for
+     * why an older PC must never be sent this.
+     */
+    suspend fun calibrateVoice(clips: List<ByteArray>, mic: String): ApiResult<VoiceCalibration> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/voice/enroll") ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = enrollRequestBody(clips, mic = mic, mode = "calibrate")
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                client.newCall(req).execute().use {
+                    when (it.code) {
+                        401, 403, 404 -> ApiResult.Failed(errorFor(it))
+                        else -> {
+                            val text = it.body?.string().orEmpty()
+                            val reply = runCatching {
+                                JarvisJson.decodeFromString(VoiceCalibration.serializer(), text)
+                            }.getOrNull()
+                            when {
+                                reply != null && (it.isSuccessful || reply.error.isNotBlank()) ->
+                                    ApiResult.Ok(reply)
+                                it.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                                else -> ApiResult.Failed(ApiError.Server(it.code, ""))
+                            }
+                        }
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    private suspend fun postTraining(json: String): ApiResult<VoiceTrainingReply> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/voice/enroll") ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                client.newCall(req).execute().use {
+                    when (it.code) {
+                        401, 403, 404 -> ApiResult.Failed(errorFor(it))
+                        else -> {
+                            val text = it.body?.string().orEmpty()
+                            val reply = runCatching {
+                                JarvisJson.decodeFromString(VoiceTrainingReply.serializer(), text)
+                            }.getOrNull()
+                            when {
+                                reply != null && (it.isSuccessful || reply.error.isNotBlank()) ->
+                                    ApiResult.Ok(reply)
+                                it.isSuccessful ->
+                                    ApiResult.Failed(ApiError.Malformed("unreadable training reply"))
+                                it.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                                else -> ApiResult.Failed(ApiError.Server(it.code, ""))
+                            }
+                        }
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
 
     // ------------------------------------------------------------- chat ----
 
@@ -675,15 +1676,36 @@ class JarvisApi(
      * OpenAI shape `/v1/chat/completions` expects. A bare `message` key is
      * not one of those, so the backend had nothing to read it as.
      *
-     * `has_image` is always false here: this client has no screenshot
-     * capture, so there is never an image to route the turn toward. `auto`
-     * mirrors the desktop's own `true` - matched rather than guessed,
-     * because the desktop side is the one already confirmed against the
-     * backend.
+     * `has_image` is true only with a [picture] - a photo the owner picked,
+     * sent only while the PC's second-card Pictures feature works (see
+     * [ChatPicture]). `auto` mirrors the desktop's own `true` - matched
+     * rather than guessed, because the desktop side is the one already
+     * confirmed against the backend.
+     *
+     * [history] is the conversation so far - earlier questions and the
+     * answers to them, already trimmed to fit - sent ahead of [asking] so a
+     * follow-up is understood. Only one user turn used to go, and every
+     * follow-up started from nothing. See [ChatHistory] for what is kept,
+     * how much, and why.
+     *
+     * [asking] is the new question's user message(s), each with where it
+     * came from ([ChatHistory.asking]), and [conversationId] the chat it
+     * belongs to - both for the PC's chat history (docs/JARVIS-API.md
+     * section 18, 2026-09-24).
      */
-    fun chatCall(message: String): Call? {
+    fun chatCall(
+        asking: List<ChatHistory.UserTurn>,
+        history: List<ChatHistory.Exchange> = emptyList(),
+        picture: String? = null,
+        conversationId: String? = null,
+        interrupted: String? = null,
+        temporary: Boolean = false,
+    ): Call? {
         val target = url("/api/chat") ?: return null
-        val body = """{"messages":[{"role":"user","content":${quote(message)}}],"has_image":false,"stream":true,"auto":true}"""
+        val body = ChatHistory.requestBody(
+            history, asking, picture, conversationId,
+            interrupted = interrupted, temporary = temporary,
+        )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
         return client.newCall(req)
@@ -697,7 +1719,7 @@ class JarvisApi(
         unwrap: List<String> = emptyList(),
     ): ApiResult<T> = withContext(Dispatchers.IO) {
         val target = url(path) ?: return@withContext ApiResult.Failed(
-            ApiError.Unreachable("No desktop address set"),
+            noAddress(),
         )
         val req = Request.Builder().url(target).get().authed().build()
         runCatching {
@@ -706,7 +1728,7 @@ class JarvisApi(
                 val text = it.body?.string().orEmpty()
                 parse(text, serializer, unwrap)
             }
-        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
     private fun <T> parse(
@@ -743,6 +1765,12 @@ class JarvisApi(
 
         const val SOURCE_PUSH_TO_TALK = "push_to_talk"
         const val SOURCE_WAKE_WORD = "wake_word"
+
+        /** Interrupting by talking: "should Jarvis stop?", never transcribed (section 17). */
+        const val SOURCE_BARGE_IN = "barge_in"
+
+        /** Which microphone this app's clips come from - the PC keeps a voice print per microphone. */
+        const val MIC_PHONE = "phone"
 
         const val TOKEN_HEADER = "X-Jarvis-Token"
         const val CLIENT_HEADER = "X-Jarvis-Client"

@@ -9,6 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.jarvis.client.face.Faces
 import com.jarvis.client.face.gl.GL
 import com.jarvis.client.platform.CrashLog
+import android.util.Log
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -86,6 +87,11 @@ class FaceRenderTest {
             // makes CrashLog alone blind to exactly the failure this test was
             // written to catch, so the marker is checked too.
             GL.lastBuildFailure = null
+            // Named in the device log before it draws, so a run that loses
+            // the whole emulator (four in a row since the Reactor Kit faces)
+            // still says which face was on screen when it went. The workflow
+            // streams this log off the device and prints these lines.
+            Log.i("JarvisFaceRender", "drawing face ${face.id}")
             JarvisRuntime.appearance.setFace(face.id)
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 assertEquals(

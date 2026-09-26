@@ -100,8 +100,11 @@ def t_the_error_message_names_the_right_service():
     src = SRC.read_text(encoding="utf-8")
     check("mentions Ollama's own start command for the local-lane failure",
           "ollama serve" in src, "expected the literal `ollama serve` advice somewhere")
-    check("still keeps the OpenJarvis-specific message for the non-local branch",
-          "uv run jarvis serve" in src)
+    # The non-local branch keeps a message of its own, naming where it looked.
+    # (It used to tell the owner to run `uv run jarvis serve`, a program this
+    # setup never installs; chat-stream.patch replaced that sentence.)
+    check("the non-local branch has its own message, naming JARVIS_URL",
+          "{JARVIS_URL}" in src)
     check("the local-lane message is conditioned on lane == local_model, not unconditional",
           "if lane == local_model else" in src or "if lane == local_model\n" in src,
           "expected the ternary picking the message by lane")

@@ -99,30 +99,53 @@ await check("the faces are painted once they are on screen", async () => {
   // for twenty procedural canvases several of which integrate a physics step
   // per frame. So this scrolls the grid past every one of them and then asks
   // whether each drew, which also exercises the lazy path itself.
+  //
+  // It WAITS FOR the drawing, rather than sleeping a fixed time and hoping.
+  // The first version scrolled every 450 ms and settled for 1.2 s; on a busy
+  // machine the first frame of a card can take longer than that, and the
+  // test failed on a page that was fine. Now each scroll step waits until
+  // every card on screen has drawn (up to 10 s a step), and a card counts as
+  // painted the first time any pixel of it is seen - so a card that stops
+  // animating once it scrolls away still counts.
   const page = await open();
-  await page.waitForTimeout(2000);
-  await page.evaluate(async () => {
+  await page.waitForFunction(() => document.querySelectorAll("#grid canvas").length >= 20,
+    null, { timeout: 30000 });
+  const got = await page.evaluate(async () => {
+    const canvases = [...document.querySelectorAll("#grid canvas")];
+    const seen = new Set();
+    const drew = (c) => {
+      const ctx = c.getContext("2d");
+      if (!ctx || !c.width || !c.height) return false;
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return true;
+      return false;
+    };
+    const note = () => canvases.forEach((c, i) => { if (!seen.has(i) && drew(c)) seen.add(i); });
+    const onScreen = () => canvases
+      .map((c, i) => [c.getBoundingClientRect(), i])
+      .filter(([r]) => r.bottom > 0 && r.top < window.innerHeight)
+      .map(([, i]) => i);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const step = window.innerHeight * 0.8;
     for (let y = 0; y < document.body.scrollHeight; y += step) {
       window.scrollTo(0, y);
-      await new Promise((r) => setTimeout(r, 450));
-    }
-  });
-  await page.waitForTimeout(1200);
-  const painted = await page.evaluate(() => {
-    let n = 0;
-    for (const c of document.querySelectorAll("#grid canvas")) {
-      const ctx = c.getContext("2d");
-      if (!ctx) continue;
-      const d = ctx.getImageData(0, 0, c.width, c.height).data;
-      for (let i = 3; i < d.length; i += 4) {
-        if (d[i] !== 0) { n += 1; break; }
+      const until = performance.now() + 10000;
+      for (;;) {
+        note();
+        if (onScreen().every((i) => seen.has(i)) || performance.now() > until) break;
+        await wait(100);
       }
     }
-    return n;
+    note();
+    return {
+      n: seen.size,
+      total: canvases.length,
+      missing: canvases.map((_, i) => i).filter((i) => !seen.has(i)),
+    };
   });
   await page.close();
-  assert.equal(painted, 20, `${painted} of 20 canvases drew anything`);
+  assert.equal(got.n, 20,
+    `${got.n} of ${got.total} canvases drew anything (never painted: #${got.missing.join(", #")})`);
 });
 
 await check("a card that is off screen is not being animated", async () => {
@@ -299,16 +322,17 @@ await check("choosing the same face again clears the choice", async () => {
 });
 
 await check("the window says where a face choice actually lands", async () => {
-  // Nothing on this desktop draws a spec face — the tray is a disc and the
-  // spotlight has its own SVG reactor — so a chosen face reaches the phone
-  // and changes nothing here. Saying so is the difference between a feature
-  // and a lie.
+  // The widget's open panel and the HUD window wear the chosen face here
+  // (widget.js postFace, feed=parent), and so does the phone. The page used
+  // to say "nothing on this desktop draws one yet", which the widget made
+  // untrue (ease-of-use audit 2026-09-27, #5).
   const page = await open();
   await page.waitForTimeout(1500);
   const text = await page.evaluate(() => document.body.innerText);
   await page.close();
-  assert.match(text, /nothing on this desktop draws one yet/i,
-    "the page does not say that a chosen face does not apply here");
+  assert.match(text, /face is worn by the widget's open panel and the HUD window on this PC,\s*and by the phone/i,
+    "the page does not say where a chosen face is worn");
+  assert.doesNotMatch(text, /nothing on this desktop draws one/i);
 });
 
 await check("CONTROL: the tray reads the saved bindings, not just the spec", async () => {
@@ -457,6 +481,116 @@ await check("solo view can cycle through every state slowly, and stop", async ()
   const afterOff = await pressedState();
   await page.close();
   assert.equal(afterOff, atOff, "the state kept advancing after cycling was turned off");
+});
+
+/**
+ * The Widget's live face, read once it has DRAWN at the tier it is set to.
+ *
+ * Two things on a busy machine made the sharpness check below measure load
+ * instead of sharpness. The tier: "Auto adjust" (on by default) steps down
+ * when frames are slow, so it is pinned off here, which leaves the tier as
+ * configured. And the first frame: the pixel size the shader draws at
+ * (GPUPX) is only worked out when a frame is drawn, and the check used to
+ * read it as soon as the tier was set - so when the machine was too busy to
+ * paint yet, it read the starting value (512) and failed with
+ * "512 !== 240". It now waits until three more frames have run after the
+ * tier is High. `lateFramesMs` holds the page's frames back that long after
+ * load, the way a loaded machine does, to prove the wait.
+ */
+async function widgetFace({ lateFramesMs = 0 } = {}) {
+  const tuning = await import(new URL("../src/face-tuning.js", import.meta.url).href);
+  assert.equal(tuning.FACE_TUNING_DEFAULT.quality, "high", "the face no longer defaults to High");
+  const page = await K.open(browser, base, "faces.html?mode=display&face=nucleus", {},
+                            { width: 120, height: 120 });
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value),
+    [tuning.FACE_TUNING_KEY, JSON.stringify({ ...tuning.FACE_TUNING_DEFAULT, autoAdjust: false })]);
+  await page.addInitScript((late) => {
+    const raf = window.requestAnimationFrame.bind(window);
+    const t0 = performance.now();
+    window.__frames = 0;
+    window.requestAnimationFrame = (cb) => {
+      const run = (t) => { window.__frames += 1; cb(t); };
+      const wait = late - (performance.now() - t0);
+      return wait > 0 ? setTimeout(() => raf(run), wait) : raf(run);
+    };
+  }, lateFramesMs);
+  await page.reload();
+  await page.waitForFunction(
+    () => document.documentElement.getAttribute("data-face-quality") === "high"
+          && document.getElementById("display-canvas"),
+    null, { timeout: 30000 }).catch(() => { /* the asserts below say what is wrong */ });
+  const settled = await page.evaluate(() => window.__frames);
+  await page.waitForFunction((n) => window.__frames >= n + 3, settled, { timeout: 30000 })
+    .catch(() => { /* the asserts below say what is wrong */ });
+  const got = await page.evaluate(() => ({
+    canvases: document.querySelectorAll("canvas").length,
+    grid: Boolean(document.getElementById("grid")),
+    css: Math.round(document.getElementById("display-canvas").getBoundingClientRect().width),
+    dpr: window.devicePixelRatio, tier: QNAME, gpu: Q.gpu, gpupx: GPUPX, detail: QUALITY,
+    frames: window.__frames,
+  }));
+  await page.close();
+  return got;
+}
+
+await check("the Widget's face draws at full sharpness, like the kit's solo view", async () => {
+  // Display mode (the Widget's live face) runs its own frame loop and never
+  // calls budget(), so it used to stay on the "medium" tier the editor only
+  // STARTS on: shader faces ray-marched 80% of the device pixels and were
+  // stretched to fit, and every face drew with less geometry (detail 1.6)
+  // than the same face in the solo view (1.9). Nucleus is a shader face, so
+  // it is the one that shows the gap.
+  //
+  // What is checked is the tier the face is CONFIGURED to draw at, not
+  // whatever the frame-time governor has picked since. "Face on this
+  // computer" defaults to High with Auto adjust on (face-tuning.js), and
+  // Auto adjust steps down to Medium when frames are slow - which on a busy
+  // test machine they are, so this failed with 'medium' !== 'high' on a
+  // page that was right. So: the default is asserted to be High, and the
+  // page is then loaded with that same default except Auto adjust off,
+  // which pins the governor and leaves the tier exactly as configured.
+  // It is then read only after frames have run at that tier (widgetFace).
+  const got = await widgetFace();
+  assert.equal(got.canvases, 1, "display mode should draw exactly one face");
+  assert.equal(got.grid, false, "display mode built the editor's grid");
+  assert.equal(got.tier, "high");
+  assert.equal(got.gpu, 1, `the shader is asked for ${got.gpu * 100}% of the device pixels`);
+  assert.equal(got.gpupx, Math.round(got.css * Math.min(got.dpr, 3)),
+    `shader renders ${got.gpupx}px into a ${got.css}px box at ${got.dpr}x`);
+  assert.ok(got.detail >= 1.9, `geometry detail ${got.detail}, the solo view uses 1.9`);
+});
+
+await check("CONTROL: the sharpness check still holds when the first frames come late, as on a busy machine", async () => {
+  // Frames held back 2 s after load: the old check read the starting pixel
+  // size (512) here and failed with "512 !== 240".
+  const got = await widgetFace({ lateFramesMs: 2000 });
+  assert.equal(got.tier, "high");
+  assert.ok(got.frames >= 3, `only ${got.frames} frames ran`);
+  assert.equal(got.gpupx, Math.round(got.css * Math.min(got.dpr, 3)),
+    `shader renders ${got.gpupx}px into a ${got.css}px box at ${got.dpr}x`);
+});
+
+await check("the Widget's face slows to 10 redraws a second under reduced motion", async () => {
+  // The editor paces itself to CALM_HZ when the OS asks for less motion;
+  // display mode (the Widget's face, and the HUD's) used to run at the
+  // panel's full rate regardless. Counted at drawSurface, so a frame that
+  // happens to look like the last one still counts.
+  const page = await K.open(browser, base, "faces.html?mode=display&face=arc", {},
+                            { width: 120, height: 120 });
+  await page.waitForTimeout(500);
+  const rate = () => page.evaluate(() => new Promise((done) => {
+    let n = 0;
+    const real = drawSurface;
+    drawSurface = function (...a) { n++; return real.apply(this, a); };
+    setTimeout(() => { drawSurface = real; done(n / 1.5); }, 1500);
+  }));
+  const normal = await rate();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calm = await rate();
+  await page.close();
+  assert.ok(normal > 20, `${normal} draws a second with no reduced-motion setting`);
+  assert.ok(calm > 0, "the face stopped drawing altogether - reduce means reduce, not remove");
+  assert.ok(calm <= 12, `${calm} draws a second under prefers-reduced-motion`);
 });
 
 await browser.close();

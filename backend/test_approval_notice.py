@@ -65,7 +65,7 @@ SECRETS = ["okafor", "biopsy", "just approve this", "attacker's page",
 def t_it_says_something_a_person_can_act_on():
     n = G.notice_for({"action": "send_email"})
     check("the title names the action in words",
-          n["title"] == "Jarvis wants to send email", f"got {n['title']!r}")
+          n["title"] == "Jarvis wants to send an email", f"got {n['title']!r}")
     check("the body explains why it matters",
           len(n["body"]) > 20 and n["body"].endswith("."), f"got {n['body']!r}")
     check("and says nothing has happened yet",

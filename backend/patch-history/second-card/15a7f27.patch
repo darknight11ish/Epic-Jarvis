@@ -1,0 +1,133 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -604,7 +604,16 @@
+             # turn sets the flag again and restarts this wait.
+             while not self._stop.is_set():
+                 self._woken.clear()
+-                if not self._woken.wait(EXTRACT_IDLE):
++                # second-card.patch: with the learner's model on the second
++                # graphics card it no longer competes with chat, so a short
++                # pause is enough (jarvis_second_card.learning_idle_seconds).
++                # EXTRACT_IDLE, unchanged, whenever that is not working.
++                try:
++                    import jarvis_second_card
++                    _idle = jarvis_second_card.learning_idle_seconds(EXTRACT_IDLE)
++                except Exception:
++                    _idle = EXTRACT_IDLE
++                if not self._woken.wait(_idle):
+                     break
+             if self._stop.is_set():
+                 return
+@@ -1908,6 +1917,21 @@
+                 return self._send(503, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
+ 
++        if path == "/api/second-card":
++            # second-card.patch - what a second graphics card could do here,
++            # which of its switches are on, and why each one is or is not
++            # working. Card names and hardware ids; never a token.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_second_card
++                return self._send(200, jarvis_second_card.status())
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++
+         if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
+                     "/api/compute", "/api/memory/facts", "/api/memory/export"):
+             if not _origin_ok(self):
+@@ -2269,6 +2293,29 @@
+             code, out = jarvis_power_switch.handle_post(body, by=by)
+             return self._send(code, out)
+ 
++        if route == "/api/second-card":
++            # second-card.patch - one second-card switch on or off. ON raises
++            # one approval card (second_card_enable, tier "ask") and changes
++            # nothing until it is approved; OFF is at once. The answer is
++            # {"ok": true, "pending": true} (a card is up), {"ok": true,
++            # "enabled": false} (off), 409 (a card already waits), or 400/503
++            # with {"error": "<a plain sentence>"}. See jarvis_second_card.py.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_second_card
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            code, out = jarvis_second_card.handle_post(body)
++            return self._send(code, out)
++
+         if route in ("/api/memory/forget", "/api/memory/edit",
+                      "/api/memory/learning", "/api/memory/sleep_time",
+                      "/api/memory/keep_both"):
+@@ -2884,6 +2931,27 @@
+                 # every app: this branch is only ever the local model.
+                 route_header["lane"] = lane
+                 route_header["where"] = "local"
++                # second-card.patch: a turn the second graphics card answers
++                # (a conversation too long for the main card, or a picture -
++                # jarvis_agent.choose_lane) is still made on this PC, so
++                # "where" stays "local". "lane" then names the model really
++                # answering, and "second_card" which feature moved it. With
++                # every second-card switch off (the default) this is None
++                # and nothing here changes.
++                _lane2 = None
++                try:
++                    if hasattr(jarvis_agent, "choose_lane"):
++                        _lane2 = jarvis_agent.choose_lane(
++                            messages, lane, ollama_url=OLLAMA_URL, request=payload,
++                            enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []))
++                except Exception:
++                    _lane2 = None
++                if _lane2 is not None:
++                    route_header["lane"] = _lane2.model
++                    route_header["second_card"] = _lane2.feature
++                    # Speed is recorded per model, for the everyday model's
++                    # figures; this answer came from another one.
++                    _speed = None
+                 self.send_header("X-Jarvis-Route", json.dumps(route_header))
+                 self.send_header("Access-Control-Expose-Headers", "X-Jarvis-Route")
+                 self.send_header("Cache-Control", "no-store")
+@@ -2904,6 +2972,11 @@
+                         # Ollama if the app goes away mid-answer - the same
+                         # reset the plain relay below uses.
+                         stream=_streaming, request=payload, abort=_abort,
++                        # second-card.patch: the choice made above, so the
++                        # header and the turn agree. Only to a jarvis_agent
++                        # that knows the argument.
++                        **({"lane_choice": _lane2}
++                           if hasattr(jarvis_agent, "choose_lane") else {}),
+                         # The same doorbell every other capability uses to
+                         # say what it is doing while it does it - see
+                         # jarvis_ui_control.py/jarvis_android_control.py's
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -315,6 +315,18 @@
+     "append_logseq_journal": ("yes", "local", "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"),
+     "create_joplin_note":    ("yes", "local", "creates one new note in Joplin on this PC; no existing note is changed"),
+     "append_obsidian_daily": ("yes", "local", "adds one entry to the end of today's Obsidian daily note on this PC; nothing already there is changed"),
++    # second-card.patch: "Browser control" (jarvis_second_card.BROWSER_ACTION).
++    # Turning it on starts the same second Ollama on this PC AND lets Jarvis
++    # offer its browser tool, which works real web pages on the internet -
++    # so "outbound", not "local", and the notice interrupts. Each plan of
++    # browser steps is still its own approval card.
++    "second_card_browser_enable": ("yes", "outbound", "lets Jarvis offer its browser tool, which works real web pages on the internet; each plan of steps there is its own card; turning the switch off takes the tool away"),
++    # second-card.patch (jarvis_second_card.py). Turning on a second-card
++    # switch starts a second copy of Ollama on THIS PC, listening on
++    # 127.0.0.1 only, and nothing is sent anywhere; turning the switch off
++    # stops it again. Without this line the action would be read as
++    # "unknown", and the notice would say it might leave the machine.
++    "second_card_enable": ("yes", "local", "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); turning the switch off stops it"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",

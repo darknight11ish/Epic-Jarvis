@@ -1,72 +1,135 @@
 package com.jarvis.client.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.FaceState
+import com.jarvis.client.data.EdgePref
+import com.jarvis.client.data.FaceTuning
+import com.jarvis.client.data.FaceSize
+import com.jarvis.client.data.Look
+import com.jarvis.client.data.MotionPref
+import com.jarvis.client.data.calmFace
+import com.jarvis.client.face.Binding
 import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Face
+import com.jarvis.client.face.FaceQuality
+import com.jarvis.client.face.FaceThumbnail
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.face.Faces
+import com.jarvis.client.face.Pattern
 import com.jarvis.client.ui.parts.Gap
-import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.Toggle
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.Chrome
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.LocalRadii
 import com.jarvis.client.ui.theme.Themes
 import kotlinx.coroutines.delay
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
- * Appearance — the theme, the face and the state colours.
+ * How long the Undo notice after Randomise or Reset stays up. The desktop is
+ * only sent the new colours once it closes, so a roll the owner did not like
+ * never reaches the other screen at all.
+ */
+private const val UNDO_WINDOW_MS = 10_000L
+
+/**
+ * How long after the last Pattern or Colour pick in the face editor the state
+ * colours are sent to the desktop. Long enough that tapping through a few
+ * colours is one send, short enough that the desktop is never far behind.
+ */
+private const val EDIT_SETTLE_MS = 2_000L
+
+/**
+ * Appearance — the theme, the look, the face and the state colours.
  *
  * Named "Look" until docs/UI-AUDIT-2026-09-18.md choice A1: a word from
  * outside the app's own vocabulary is exactly the "'Look' is not a word
  * anyone would guess means 'appearance settings'" finding that section
- * names. The screen and its nav entry are renamed together.
+ * names. The screen and its nav entry are renamed together. ("Look" is back,
+ * but only as the name of the preset card, where it sits under the heading
+ * "On this phone" and next to Focus, Night and the rest - it names a thing
+ * on the screen rather than the screen.)
  *
- * Per device, and it says so. There is no route in the contract that syncs a UI
- * preference (`POST /api/config` is 501 by design, and none of the 38 endpoints
- * reads or writes one), so this does not pretend to sync. The *bindings* are
- * the part that should eventually — they are a shared vocabulary rather than a
- * taste, and a phone whose `thinking` is violet while the desktop's is green
- * has learned a private language. That needs a backend route first.
+ * Split into two groups, and it says which is which. This screen used to end
+ * with "Nothing here is sent anywhere", which stopped being true when
+ * `/api/appearance` sync landed: picking a face, Randomise and Reset all post
+ * the face and the state colours to the desktop, and a change made there
+ * comes back here (the audit's custom-9). So:
+ *
+ * - **On this phone**: theme, look preset, Home layout, glow, motion, density,
+ *   shape, text size. Stored in [com.jarvis.client.data.AppearanceStore] and
+ *   never in its sync document.
+ * - **Shared with your desktop**: the face and the state colours - a shared
+ *   vocabulary rather than a taste, because a phone whose `thinking` is violet
+ *   while the desktop's is green has learned a private language. When the
+ *   backend lacks the `appearance` capability [desktopSyncs] is false and the
+ *   group says, in words, that it is not synced yet.
+ *
+ * Nothing here edits the desktop's configuration. The phone's rule against
+ * deep config editing is about the backend; every control on this screen is
+ * a paint choice.
  */
 @Composable
 fun AppearanceScreen(
@@ -79,13 +142,67 @@ fun AppearanceScreen(
     onPickFace: (Face) -> Unit,
     onRandomise: () -> Unit,
     onResetBindings: () -> Unit,
+    /** How big the face is drawn on Home. Stored on this phone only. */
+    faceSize: FaceSize = FaceSize.DEFAULT,
+    onPickFaceSize: (FaceSize) -> Unit = {},
     onBack: () -> Unit,
     /** What the store refused, e.g. "one theme change at a time". Null hides it. */
     notice: String? = null,
     onDismissNotice: () -> Unit = {},
     modifier: Modifier = Modifier,
+    /** Everything else about this phone's look. See [Look]. */
+    look: Look = Look(),
+    /** A fine control changed. The whole new record, ready for `AppearanceStore.setLook`. */
+    onLookChange: (Look) -> Unit = {},
+    /** The theme Follow the system uses when the phone is dark. */
+    preferredDark: Chrome = if (current.dark) current else Themes.DEFAULT,
+    /**
+     * A theme picked from the "Theme for dark mode" list shown while
+     * following the system. Should set the preferred dark theme and leave
+     * following ON. Defaults to [onPickTheme], which is what this list did
+     * before it existed.
+     */
+    onPickDarkTheme: (Chrome) -> Unit = onPickTheme,
+    /** Whether the desktop takes the shared part: the backend's `appearance` capability. */
+    desktopSyncs: Boolean = true,
+    /**
+     * The Undo window after Randomise or Reset has closed - by running out,
+     * by Undo, or by leaving this screen. This is when the state colours
+     * should be pushed to the desktop, and not before.
+     */
+    onBindingsSettled: () -> Unit = {},
+    /**
+     * Undo: put these bindings back. They are what the store held before the
+     * roll. Null - the default - offers no Undo at all, because an Undo button
+     * wired to nothing would be a control that lies; that is also the only
+     * safe default while the caller still pushes to the desktop straight away.
+     */
+    onUndoBindings: ((Bindings) -> Unit)? = null,
+    /**
+     * One cell of the face picker. Null keeps the name-only chips.
+     *
+     * The placeholder for the still-picture picker (visual-11, "specimen
+     * cards"): pass a composable that draws a still frame of the face - never
+     * a live one, see the ONE-live-preview note below - and calls onClick when
+     * tapped. It is laid out three to a row, each cell the same width.
+     */
+    faceTile: (@Composable (face: Face, selected: Boolean, onClick: () -> Unit) -> Unit)? = null,
+    /**
+     * The face editor's Pattern and Colour controls: one state's new binding.
+     * Part of the shared state colours, so it reaches the desktop - once the
+     * owner stops editing, through [onBindingsSettled], not on every tap.
+     */
+    onEditBinding: (FaceState, Binding) -> Unit = { _, _ -> },
+    /** The face editor's phone-only settings. See [FaceTuning]. */
+    faceTuning: FaceTuning = FaceTuning(),
+    onFaceTuningChange: (FaceTuning) -> Unit = {},
+    /** Android's own Battery Saver is on, which turns the face's on too. */
+    phoneBatterySaver: Boolean = false,
 ) {
     val chrome = LocalChrome.current
+    // What the face is actually running with right now - what Auto picked, or
+    // what battery saver forces. Changes rarely (at most every two seconds).
+    val liveBudget by FaceQuality.live.collectAsState()
 
     // Cycle states: steps the one live preview through all eight states every
     // four seconds, so picking colours doesn't mean tapping through them by
@@ -114,6 +231,109 @@ fun AppearanceScreen(
         onPickFace(picked)
     }
 
+    // Undo for Randomise and Reset (custom-10). Every roll used to overwrite
+    // the desktop's colours at once with no way back, so a combination the
+    // owner liked was lost on both screens by one more tap.
+    //
+    // `undoTo` is what the store held just before the last roll. While it is
+    // set, the new colours exist only on this phone; [onBindingsSettled] -
+    // the push to the desktop - runs once the window closes, whichever way it
+    // closes. A second roll inside the window moves `undoTo` to the colours
+    // just before THAT roll and restarts the clock, so there is still exactly
+    // one push, of whatever the owner ended up with.
+    //
+    // Held in `remember`, not saved: a rotation ends the window early through
+    // the dispose path below, which pushes. Losing an Undo is the safe way
+    // round; losing the push would leave the desktop silently out of step.
+    var undoTo by remember { mutableStateOf<Bindings?>(null) }
+    // The face editor's Reset also puts the quality, frame rate and speed
+    // back, so its Undo has to bring those back too. Null for the State
+    // colours' own Randomise and Reset, which never touch them.
+    var undoTuningTo by remember { mutableStateOf<FaceTuning?>(null) }
+    // The face editor: closed every visit, like More options.
+    var editorOpen by rememberSaveable { mutableStateOf(false) }
+    // Pattern and colour picks not yet sent to the desktop. Sent once the
+    // owner has stopped picking for a moment, or leaves the screen - one
+    // push for a run of taps, not one per tap.
+    var editsUnsent by remember { mutableIntStateOf(0) }
+    // "More options" starts closed every visit; saveable so turning the phone
+    // does not snap it shut while the owner is in it.
+    var moreOpen by rememberSaveable { mutableStateOf(false) }
+    var undoMessage by remember { mutableStateOf("") }
+    val settle by rememberUpdatedState(onBindingsSettled)
+    LaunchedEffect(undoTo) {
+        if (undoTo == null) return@LaunchedEffect
+        delay(UNDO_WINDOW_MS)
+        settle()
+        undoTo = null
+    }
+    LaunchedEffect(editsUnsent) {
+        if (editsUnsent == 0) return@LaunchedEffect
+        delay(EDIT_SETTLE_MS)
+        // While an Undo window is open, its own close sends the colours -
+        // including these edits - so there is nothing to add here.
+        if (undoTo == null) settle()
+        editsUnsent = 0
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            if (undoTo != null || editsUnsent > 0) settle()
+        }
+    }
+    val roll: (String, () -> Unit) -> Unit = { message, action ->
+        undoTo = bindings
+        undoTuningTo = null
+        undoMessage = message
+        action()
+    }
+    val editBinding: (FaceState, Binding) -> Unit = { state, binding ->
+        onEditBinding(state, binding)
+        editsUnsent += 1
+    }
+
+    // The Undo line after Randomise or Reset, shown under whichever set of
+    // buttons the owner is looking at. Shown only when the roll actually
+    // changed something: forty tries that found nothing separated enough
+    // leave the colours alone, and Reset on the defaults is a no-op - an Undo
+    // for either would undo nothing.
+    val undoLine: @Composable () -> Unit = {
+        val previous = undoTo
+        val previousTuning = undoTuningTo
+        val undo = onUndoBindings
+        val changed = previous != bindings || (previousTuning != null && previousTuning != faceTuning)
+        if (undo != null && previous != null && changed) {
+            Gap(6)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    undoMessage + if (desktopSyncs) {
+                        " Sent to your desktop when this goes away."
+                    } else {
+                        ""
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Quiet(
+                    "Undo",
+                    onClick = {
+                        undo(previous)
+                        previousTuning?.let(onFaceTuningChange)
+                        settle()
+                        undoTo = null
+                        undoTuningTo = null
+                    },
+                )
+            }
+        }
+    }
+
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
         TopBar("Appearance", onBack)
 
@@ -126,89 +346,111 @@ fun AppearanceScreen(
                 item(key = "notice") { Notice(notice, onDismissNotice) }
             }
 
+            // Above the theme list now, not below it: whether the list means
+            // "the theme" or "the theme for dark mode" depends on this switch,
+            // so it has to be read first.
+            item(key = "system") {
+                Plate {
+                    SwitchRow(
+                        title = "Follow the system",
+                        detail = "Daylight when the phone is light, your dark theme when it is dark. " +
+                            "A switch is held until Jarvis is resting, never mid-approval.",
+                        checked = followSystem,
+                        onChange = onFollowSystem,
+                    )
+                }
+            }
+
             item(key = "themes") {
-                Section("Theme") {
+                // While following, this list picks the theme for dark mode
+                // (custom-8). Daylight is left out of it, because Daylight is
+                // what light mode uses and is never "the theme for dark mode".
+                // Picking here keeps following on; picking from the full list
+                // with following off is the deliberate one-theme-always choice.
+                val shown = if (followSystem) Themes.ALL.filter { it.dark } else Themes.ALL
+                Section(if (followSystem) "Theme for dark mode" else "Theme") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Themes.ALL.forEach { theme ->
+                        shown.forEach { theme ->
                             ThemeRow(
                                 theme = theme,
-                                selected = theme.id == current.id,
+                                isSelected = if (followSystem) {
+                                    theme.id == preferredDark.id
+                                } else {
+                                    theme.id == current.id
+                                },
                                 // Never disabled on the dwell. A control that
                                 // greys out for half a second reads as broken,
                                 // and the store refuses the change anyway — the
                                 // notice explains it in words instead.
                                 enabled = true,
-                                onClick = { onPickTheme(theme) },
+                                onClick = {
+                                    if (followSystem) onPickDarkTheme(theme) else onPickTheme(theme)
+                                },
                             )
                         }
-                    }
-                }
-            }
-
-            item(key = "system") {
-                Plate {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
+                        if (followSystem) {
                             Text(
-                                "Follow the system",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = chrome.textHi,
-                            )
-                            Gap(2)
-                            Text(
-                                "Daylight when the phone is light, your dark theme when it is dark. " +
-                                    "A switch is held until Jarvis is resting, never mid-approval.",
+                                "Daylight is used while the phone is in light mode. To keep " +
+                                    "one theme all day, turn off Follow the system.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = chrome.textMid,
+                                color = chrome.textLo,
                             )
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Switch(
-                            checked = followSystem,
-                            onCheckedChange = onFollowSystem,
-                            colors = SwitchDefaults.colors(
-                                checkedTrackColor = LocalAccent.current.copy(alpha = 0.45f),
-                                checkedThumbColor = LocalAccent.current,
-                                uncheckedBorderColor = chrome.hairlineFocus,
-                            ),
-                        )
                     }
                 }
             }
 
-            item(key = "accent") {
-                Section("Accent") {
+            item(key = "home-layout") {
+                Section("Home") {
                     Plate {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(LocalAccent.current),
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    "Follows your Idle colour",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = chrome.textHi,
-                                )
-                                Gap(2)
-                                // There is deliberately no accent picker. The
-                                // accent is a function of the bindings, which is
-                                // what stops the chrome ever disagreeing with the
-                                // face about what colour Jarvis is.
-                                Text(
-                                    "Not a separate setting: the caret, focus ring and " +
-                                        "selection take the face's idle colour, stepped until " +
-                                        "it is legible on this theme.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = chrome.textMid,
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Setting(
+                                title = "Face size on Home",
+                                caption = "Full screen is for talking: just Jarvis and the " +
+                                    "microphone. Hidden gives the chat the whole screen. The two " +
+                                    "biggest sizes use more battery.",
+                            ) {
+                                // Rows of three: five options in one row leaves too
+                                // little room for "Extra large" at normal text size,
+                                // let alone at 200%.
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FaceSize.entries.chunked(3).forEach { row ->
+                                        Choices(
+                                            options = row,
+                                            isSelected = { it == faceSize },
+                                            label = { it.label },
+                                            onPick = onPickFaceSize,
+                                        )
+                                    }
+                                }
+                            }
+                            Setting(title = "Tabs row") {
+                                Choices(
+                                    options = listOf(false, true),
+                                    isSelected = { it == look.navAlwaysShown },
+                                    label = { if (it) "Always shown" else "Hidden until swiped" },
+                                    onPick = { onLookChange(look.copy(navAlwaysShown = it)) },
                                 )
                             }
                         }
                     }
                 }
+            }
+
+            // ------------------------------------- Shared with your desktop --
+
+            item(key = "group-shared") {
+                GroupHeader(
+                    "Shared with your desktop",
+                    if (desktopSyncs) {
+                        "The face and the state colours are sent to your desktop, and a " +
+                            "change made there shows up here too. Nothing else on this " +
+                            "screen leaves the phone."
+                    } else {
+                        "Not synced: your desktop doesn't support it yet. For now the face " +
+                            "and the state colours stay on this phone."
+                    },
+                )
             }
 
             item(key = "face") {
@@ -230,6 +472,16 @@ fun AppearanceScreen(
                                 bindings = bindings,
                                 notches = 0,
                                 modifier = Modifier.size(160.dp),
+                                // So this preview matches what Home actually
+                                // shows for the theme being looked at right
+                                // now, rather than always the same near-black.
+                                background = chrome.well,
+                                // The same glow and pace Home uses, so moving
+                                // the Glow or Motion control shows its effect
+                                // here instead of only after going back to
+                                // Home. Both can only dim and slow the face.
+                                glow = chrome.postScale * look.glow,
+                                calmMotion = look.motion.calmFace(LocalMotion.current.reduced),
                             )
                         }
                         Gap(8)
@@ -241,11 +493,60 @@ fun AppearanceScreen(
                             )
                         }
                         Gap(12)
+                        // The face editor: the reactor kit's controls, in one
+                        // dropdown that starts closed, so this screen stays
+                        // simple for anyone who never opens it. Right under
+                        // the preview, because its State control drives it.
+                        FaceEditor(
+                            open = editorOpen,
+                            onOpenChange = { editorOpen = it },
+                            previewState = previewState,
+                            onPreviewState = {
+                                cyclingStates = false
+                                previewState = it
+                            },
+                            bindings = bindings,
+                            onEditBinding = editBinding,
+                            tuning = faceTuning,
+                            onTuningChange = onFaceTuningChange,
+                            live = liveBudget,
+                            phoneBatterySaver = phoneBatterySaver,
+                            desktopSyncs = desktopSyncs,
+                            onRandomise = { roll("New colours.", onRandomise) },
+                            onReset = {
+                                val before = faceTuning
+                                roll("Face editor reset to the defaults.") {
+                                    onResetBindings()
+                                    // Battery saver is a power choice, not a
+                                    // look, so Reset leaves it as it is.
+                                    onFaceTuningChange(FaceTuning(batterySaver = before.batterySaver))
+                                }
+                                undoTuningTo = before
+                            },
+                            undoLine = undoLine,
+                        )
+                        Gap(12)
+                        // The still-picture picker goes here: see [faceTile].
+                        // Until something passes one, the name-only chips stay.
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Faces.all.chunked(3).forEach { row ->
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
                                     row.forEach { f ->
-                                        FaceChip(f, f.id == face.id) { pickFace(f) }
+                                        if (faceTile != null) {
+                                            Box(Modifier.weight(1f)) {
+                                                faceTile(f, f.id == face.id, { pickFace(f) })
+                                            }
+                                        } else {
+                                            FaceChip(f, f.id == face.id) { pickFace(f) }
+                                        }
+                                    }
+                                    // Keep the last row's cells the same width as
+                                    // the rows above, rather than stretching.
+                                    if (faceTile != null) {
+                                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                                     }
                                 }
                             }
@@ -321,14 +622,22 @@ fun AppearanceScreen(
                                     color = chrome.textHi,
                                     modifier = Modifier.weight(1f),
                                 )
-                                Pill(binding.pattern.id)
+                                // Plain words, not the spec's ids: "sweep" and
+                                // "temperature" are jargon to anyone who has not
+                                // read the visual spec (custom-10).
+                                Pill(plainPattern(binding.pattern))
                             }
                         }
                         Gap(10)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Quiet("Randomise", onClick = onRandomise)
-                            Quiet("Reset", color = chrome.textMid, onClick = onResetBindings)
+                            Quiet("Randomise", onClick = { roll("New colours.", onRandomise) })
+                            Quiet(
+                                "Reset",
+                                color = chrome.textMid,
+                                onClick = { roll("Colours reset to the defaults.", onResetBindings) },
+                            )
                         }
+                        undoLine()
                         Gap(6)
                         Text(
                             // Convention, never randomised. A green alarm is a
@@ -342,15 +651,371 @@ fun AppearanceScreen(
                 }
             }
 
-            item(key = "note") {
-                Text(
-                    "These are stored on this phone only. Nothing here is sent anywhere.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = chrome.textLo,
-                )
+            // Everything else, closed until asked for. The owner found the
+            // full list too much on one screen; none of it is needed to set
+            // the app up, and each control keeps working exactly as before.
+            item(key = "more") {
+                Plate {
+                    SwitchRow(
+                        title = "More options",
+                        detail = if (moreOpen) null else "Glow, motion, text size, spacing and how Home behaves.",
+                        checked = moreOpen,
+                        onChange = { moreOpen = it },
+                    )
+                    if (moreOpen) {
+                        Gap(12)
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            val share = (look.faceFraction * 100).roundToInt()
+                            Setting(
+                                title = "Face share of Home · $share%",
+                                caption = "How much of Home the face's panel takes. Dragging " +
+                                    "the handle on Home sets this too.",
+                            ) {
+                                Choices(
+                                    options = FACE_SHARES,
+                                    isSelected = { near(it, look.faceFraction) },
+                                    label = { "${(it * 100).roundToInt()}%" },
+                                    onPick = { onLookChange(look.copy(faceFraction = it)) },
+                                )
+                            }
+                            Column {
+                                SwitchRow(
+                                    title = "Make room for approvals",
+                                    detail = "Shrinks the face while something is waiting for you, " +
+                                        "so Approve and Deny are on screen. It never decides anything.",
+                                    checked = look.makeRoomForApprovals,
+                                    onChange = { onLookChange(look.copy(makeRoomForApprovals = it)) },
+                                )
+                                SwitchRow(
+                                    title = "Shrink the face while typing",
+                                    detail = null,
+                                    checked = look.shrinkWhileTyping,
+                                    onChange = { onLookChange(look.copy(shrinkWhileTyping = it)) },
+                                )
+                                SwitchRow(
+                                    title = "Follow the reply",
+                                    detail = "Keeps the newest words of a reply in view as they arrive.",
+                                    checked = look.followReply,
+                                    onChange = { onLookChange(look.copy(followReply = it)) },
+                                )
+                            }
+                            Setting(title = "Tapping the face") {
+                                Choices(
+                                    options = listOf(true, false),
+                                    isSelected = { it == look.tapFaceOpensMind },
+                                    label = { if (it) "Opens the Brain" else "Does nothing" },
+                                    onPick = { onLookChange(look.copy(tapFaceOpensMind = it)) },
+                                )
+                            }
+                            Setting(
+                                title = "Glow",
+                                caption = "A share of the theme's own glow. It can only dim it, " +
+                                    "never brighten it.",
+                            ) {
+                                Choices(
+                                    options = GLOWS,
+                                    isSelected = { near(it, look.glow) },
+                                    label = { "${(it * 100).roundToInt()}%" },
+                                    onPick = { onLookChange(look.copy(glow = it)) },
+                                )
+                            }
+                            // Full is not offered. See MotionPref: the only thing
+                            // it could add is overriding the phone's own request
+                            // for less motion, and these settings only reduce.
+                            // A stored FULL shows as Follow phone, which is how
+                            // every reader treats it.
+                            Setting(
+                                title = "Motion",
+                                caption = "Calm slows the face down. Nothing here speeds anything up.",
+                            ) {
+                                Choices(
+                                    options = listOf(MotionPref.FOLLOW, MotionPref.CALM),
+                                    isSelected = {
+                                        it == look.motion ||
+                                            (it == MotionPref.FOLLOW && look.motion == MotionPref.FULL)
+                                    },
+                                    label = { it.label },
+                                    onPick = { onLookChange(look.copy(motion = it)) },
+                                )
+                            }
+                            Setting(title = "Spacing") {
+                                Choices(
+                                    options = listOf(false, true),
+                                    isSelected = { it == look.compact },
+                                    label = { if (it) "Compact" else "Comfortable" },
+                                    onPick = { onLookChange(look.copy(compact = it)) },
+                                )
+                            }
+                            Setting(title = "Corners") {
+                                Choices(
+                                    options = listOf(false, true),
+                                    isSelected = { it == look.sharp },
+                                    label = { if (it) "Sharp" else "Rounded" },
+                                    onPick = { onLookChange(look.copy(sharp = it)) },
+                                )
+                            }
+                            Setting(
+                                title = "Text size",
+                                caption = "100% follows your phone's own text size. The others are " +
+                                    "a step up or down from it.",
+                            ) {
+                                Choices(
+                                    options = TEXT_SCALES,
+                                    isSelected = { near(it, look.textScale) },
+                                    label = { "${(it * 100).roundToInt()}%" },
+                                    onPick = { onLookChange(look.copy(textScale = it)) },
+                                )
+                            }
+                            Setting(title = "Panel edges") {
+                                Choices(
+                                    options = EdgePref.entries,
+                                    isSelected = { it == look.edges },
+                                    label = { it.label },
+                                    onPick = { onLookChange(look.copy(edges = it)) },
+                                )
+                            }
+                            Setting(
+                                title = "Screen transitions",
+                                caption = "Always off when the phone asks for less animation.",
+                            ) {
+                                Choices(
+                                    options = listOf(true, false),
+                                    isSelected = { it == look.transitions },
+                                    label = { if (it) "Standard" else "Off" },
+                                    onPick = { onLookChange(look.copy(transitions = it)) },
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             item(key = "tail") { Gap(24) }
+        }
+    }
+}
+
+/** Choices for the face's share of Home. 35% and 75% are the presets' own values. */
+private val FACE_SHARES = listOf(0.20f, 0.35f, 0.50f, 0.65f, 0.75f, 0.85f)
+
+/** Glow levels. 60% is Night's. Never above 100%: glow only dims. */
+private val GLOWS = listOf(0.25f, 0.40f, 0.60f, 0.80f, 1f)
+
+/** Text size, on top of the phone's own. 110% is Outdoor's. */
+private val TEXT_SCALES = listOf(0.90f, 1f, 1.10f, 1.20f, 1.30f)
+
+/**
+ * Close enough to count as the same choice. A dragged face share is any
+ * number at all, so exact equality would light up nothing even when the drag
+ * landed on 75% to the eye.
+ */
+internal fun near(a: Float, b: Float): Boolean = abs(a - b) < 0.005f
+
+/** The spec's pattern ids, in words a person would use. Unknown ids fall back to the id. */
+private val PLAIN_PATTERN_NAMES: Map<Pattern, String> = mapOf(
+    Pattern.SOLID to "Steady",
+    Pattern.RAINBOW to "Rainbow",
+    Pattern.CYCLE to "Colour steps",
+    Pattern.BREATHE to "Slow breath",
+    Pattern.PULSE to "Pulse",
+    Pattern.GRADIENT to "Two-colour drift",
+    Pattern.SWEEP to "Colour sweep",
+    Pattern.COMET to "Comet",
+    Pattern.FLICKER to "Flicker",
+    Pattern.REACTIVE to "Follows the voice",
+    Pattern.TEMPERATURE to "Warms up",
+    Pattern.STROBE to "Flash",
+)
+
+internal fun plainPattern(p: Pattern): String = PLAIN_PATTERN_NAMES[p] ?: p.id
+
+/**
+ * The two top-level groups, "On this phone" and "Shared with your desktop".
+ * Marked as headings so a screen reader can jump between them.
+ */
+@Composable
+private fun GroupHeader(title: String, detail: String) {
+    val chrome = LocalChrome.current
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = chrome.textHi,
+            modifier = Modifier.semantics { heading() },
+        )
+        Gap(4)
+        Text(
+            detail,
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid,
+        )
+    }
+}
+
+/** One labelled control inside a plate: a title, the control, and an optional line under it. */
+@Composable
+internal fun Setting(
+    title: String,
+    caption: String? = null,
+    content: @Composable () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = chrome.textHi,
+        )
+        Gap(6)
+        content()
+        if (caption != null) {
+            Gap(4)
+            Text(
+                caption,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo,
+            )
+        }
+    }
+}
+
+/** A row of equal-width [OptionChip]s, exactly one of which is normally selected. */
+@Composable
+internal fun <T> Choices(
+    options: List<T>,
+    isSelected: (T) -> Boolean,
+    label: (T) -> String,
+    onPick: (T) -> Unit,
+    enabled: Boolean = true,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        options.forEach { option ->
+            OptionChip(
+                label = label(option),
+                isSelected = isSelected(option),
+                modifier = Modifier.weight(1f),
+                enabled = enabled,
+                onClick = { onPick(option) },
+            )
+        }
+    }
+}
+
+/**
+ * One choice among several.
+ *
+ * Told apart by fill as well as colour, and announced as a selected or
+ * unselected radio button (a11y-8) rather than as one more "button" - which
+ * is all `pressable`'s default role could say, so the chosen option sounded
+ * exactly like every other one.
+ *
+ * The touch-target modifier comes FIRST (a11y-12): placed after the padding
+ * it grows the painted pill itself to 48dp; placed first it grows only the
+ * area that answers a tap.
+ */
+@Composable
+internal fun OptionChip(
+    label: String,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    /** False: shown, but greyed and not tappable (e.g. while Battery saver overrides it). */
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val shape = LocalRadii.current.chipShape
+    Box(
+        modifier
+            .minimumInteractiveComponentSize()
+            .semantics { selected = isSelected }
+            .clip(shape)
+            .background(if (isSelected && enabled) accent else chrome.surface2)
+            .pressable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = when {
+                !enabled -> chrome.textLo
+                isSelected -> chrome.surface0
+                else -> chrome.textMid
+            },
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/**
+ * A label and a switch, where the WHOLE row is the control.
+ *
+ * a11y-8: the switch used to be a separate focus stop with no name - TalkBack
+ * read "Switch, off" and then, separately, the words beside it. Now the row
+ * is one toggleable with the Switch role, so it is read as "Follow the
+ * system, switch, on", and a tap anywhere on the words flips it.
+ *
+ * visual-11: the drawn switch is this app's own `Toggle` now, not the stock
+ * Material one. It is hidden from TalkBack (the row already is the switch)
+ * but still answers a finger with the same [onChange]. It is NOT given a
+ * no-op callback: the Toggle's own touch area takes the tap before the row
+ * sees it, so a no-op there would make the one part that looks like a switch
+ * the one part that does nothing.
+ */
+@Composable
+internal fun SwitchRow(
+    title: String,
+    detail: String?,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+    /** False: shown as it is, but cannot be changed here (the phone is holding it). */
+    enabled: Boolean = true,
+) {
+    val chrome = LocalChrome.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .toggleable(
+                value = checked,
+                interactionSource = remember { MutableInteractionSource() },
+                // No ripple, like every other control built on `pressable`.
+                indication = null,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onChange,
+            )
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = chrome.textHi,
+            )
+            if (detail != null) {
+                Gap(2)
+                Text(
+                    detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid,
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        // This app's own Toggle, in a box that hides it from TalkBack: the
+        // row above is already the one switch a screen reader hears, with
+        // its name, so the Toggle's own switch node would be a second, nameless
+        // stop for the same setting. A finger on the Toggle itself still flips
+        // it - semantics are only what TalkBack reads, not what takes touches -
+        // and it calls the same `onChange` the row does.
+        Box(Modifier.clearAndSetSemantics { }) {
+            Toggle(checked = checked, onCheckedChange = onChange, enabled = enabled)
         }
     }
 }
@@ -361,11 +1026,16 @@ fun AppearanceScreen(
  * Static on purpose: a picker showing six live mini-reactors is the
  * cross-surface flash bug the spec already recorded, and six animated canvases
  * is several times the frame budget a phone has.
+ *
+ * The chosen row is marked three ways, none of them colour alone: a thicker
+ * accent border, a drawn check mark (visual-11, replacing a "●" glyph that
+ * TalkBack read aloud as a character), and the selected state a screen reader
+ * announces (a11y-8).
  */
 @Composable
 private fun ThemeRow(
     theme: Chrome,
-    selected: Boolean,
+    isSelected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
@@ -375,14 +1045,15 @@ private fun ThemeRow(
     Row(
         Modifier
             .fillMaxWidth()
+            .semantics { selected = isSelected }
             .clip(shape)
             .background(chrome.surface1)
             .border(
-                if (selected) 1.5.dp else 1.dp,
-                if (selected) accent else chrome.hairline,
+                if (isSelected) 1.5.dp else 1.dp,
+                if (isSelected) accent else chrome.hairline,
                 shape,
             )
-            .pressable(enabled = enabled, onClick = onClick)
+            .pressable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -401,10 +1072,39 @@ private fun ThemeRow(
                 color = chrome.textMid,
             )
         }
-        if (selected) {
+        if (isSelected) {
             Spacer(Modifier.width(8.dp))
-            Text("●", style = MaterialTheme.typography.labelMedium, color = accent)
+            CheckMark(accent)
         }
+    }
+}
+
+/**
+ * A drawn tick. Two strokes rather than a font glyph, so it looks the same on
+ * every phone's font and is never read aloud - the row's selected state says
+ * it in words instead.
+ */
+@Composable
+private fun CheckMark(color: Color) {
+    Canvas(Modifier.size(18.dp)) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.dp.toPx()
+        val corner = Offset(w * 0.40f, h * 0.74f)
+        drawLine(
+            color = color,
+            start = Offset(w * 0.16f, h * 0.50f),
+            end = corner,
+            strokeWidth = stroke,
+            cap = StrokeCap.Round,
+        )
+        drawLine(
+            color = color,
+            start = corner,
+            end = Offset(w * 0.86f, h * 0.24f),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round,
+        )
     }
 }
 
@@ -431,24 +1131,93 @@ private fun Swatch(theme: Chrome) {
     }
 }
 
+/**
+ * One face in the still-picture picker (visual-11's "specimen cards"): a
+ * still frame of the face on the theme's well, with its name under it. Handed
+ * to [AppearanceScreen] as its `faceTile` by MainActivity.
+ *
+ * Still, never live - see the ONE-live-preview note on the preview above.
+ * [FaceThumbnail] draws a single frame and runs no animation loop, so twenty
+ * of these are twenty drawings made once, not twenty clocks and twenty flash
+ * governors.
+ *
+ * The chosen face is marked without relying on colour alone: a thicker border
+ * (2dp against 1dp) in the accent, the name in the main text colour, and the
+ * selected state a screen reader announces (a11y-8). The picture has no
+ * description of its own; the name under it is the tile's label.
+ */
 @Composable
-private fun FaceChip(face: Face, selected: Boolean, onClick: () -> Unit) {
+fun FaceSpecimen(
+    face: Face,
+    bindings: Bindings,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val radii = LocalRadii.current
+    Column(
+        modifier
+            .fillMaxWidth()
+            .semantics { selected = isSelected }
+            .clip(radii.controlShape)
+            .border(
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) accent else chrome.hairline,
+                radii.controlShape,
+            )
+            .pressable(role = Role.RadioButton, onClick = onClick)
+            .padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        FaceThumbnail(
+            face = face,
+            bindings = bindings,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(radii.insetShape)
+                .background(chrome.well),
+            // The same ground Home and the live preview use.
+            background = chrome.well,
+        )
+        Gap(4)
+        Text(
+            face.name,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (isSelected) chrome.textHi else chrome.textMid,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * One face in the name-only picker.
+ *
+ * a11y-12: `minimumInteractiveComponentSize` used to sit at the END of this
+ * chain, innermost, where it grew the text's own box to 48dp before the
+ * padding and background wrapped it - so the painted pill came out about
+ * 66dp tall, not the ~38dp its comment promised. First in the chain, it
+ * grows only the area that answers a tap, and the pill keeps its size.
+ */
+@Composable
+private fun FaceChip(face: Face, isSelected: Boolean, onClick: () -> Unit) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
     val shape = LocalRadii.current.chipShape
     Text(
         face.name,
         style = MaterialTheme.typography.labelMedium,
-        color = if (selected) chrome.surface0 else chrome.textMid,
+        color = if (isSelected) chrome.surface0 else chrome.textMid,
         modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .semantics { selected = isSelected }
             .clip(shape)
-            .background(if (selected) accent else chrome.surface2)
-            .pressable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp)
-            // The visible pill stays this size; the touch target grows
-            // around it to the 48dp platform minimum. Measured at ~38dp
-            // without this - twenty of these sit in a grid on this screen.
-            .minimumInteractiveComponentSize(),
+            .background(if (isSelected) accent else chrome.surface2)
+            .pressable(role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
     )
 }
 
@@ -457,6 +1226,10 @@ private fun FaceChip(face: Face, selected: Boolean, onClick: () -> Unit) {
  * apart, so trying out colours doesn't mean tapping through them by hand. The
  * label names whichever state is currently showing once running, since that
  * is the one piece of information a glance at the chip cannot otherwise give.
+ *
+ * An on/off control, so it is announced as a switch with its state in words
+ * (a11y-8) rather than as a button whose label happens to change. Touch
+ * target first in the chain, for the reason [FaceChip] gives.
  */
 @Composable
 private fun CycleStatesChip(active: Boolean, previewing: FaceState, onClick: () -> Unit) {
@@ -473,10 +1246,11 @@ private fun CycleStatesChip(active: Boolean, previewing: FaceState, onClick: () 
         style = MaterialTheme.typography.labelMedium,
         color = if (active) chrome.surface0 else chrome.textMid,
         modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .semantics { stateDescription = if (active) "On" else "Off" }
             .clip(shape)
             .background(if (active) accent else chrome.surface2)
-            .pressable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp)
-            .minimumInteractiveComponentSize(),
+            .pressable(role = Role.Switch, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
     )
 }

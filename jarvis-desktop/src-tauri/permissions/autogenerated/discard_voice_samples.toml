@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discard-voice-samples"
+description = "Enables the discard_voice_samples command without any pre-configured scope."
+commands.allow = ["discard_voice_samples"]
+
+[[permission]]
+identifier = "deny-discard-voice-samples"
+description = "Denies the discard_voice_samples command without any pre-configured scope."
+commands.deny = ["discard_voice_samples"]

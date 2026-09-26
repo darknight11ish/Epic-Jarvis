@@ -56,8 +56,14 @@ def t_use_tools_requires_the_local_lane():
         rhs = ast.unparse(assigns[0].value)
         check("its condition compares lane to local_model",
               "lane == local_model" in rhs, rhs)
-        check("its condition also reads the [tools].enabled config, not just the lane",
-              "tools" in rhs and "enabled" in rhs, rhs)
+        # Before chat-stream.patch the condition read `[tools].enabled`
+        # itself. After it, every local turn goes through jarvis_agent
+        # (`_agent_ok`: the module is there and new enough), and the enabled
+        # list is what run_local_turn is handed to decide what to OFFER -
+        # checked in t_the_tool_branch_calls_run_local_turn_with_the_enabled_tools_whitelist.
+        check("its condition also reads the [tools].enabled config (or, with "
+              "chat-stream.patch, that jarvis_agent is there), not just the lane",
+              ("tools" in rhs and "enabled" in rhs) or "_agent_ok" in rhs, rhs)
 
 
 def t_the_degrade_loop_is_skipped_when_tools_are_in_play():

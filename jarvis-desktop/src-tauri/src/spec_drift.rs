@@ -133,6 +133,9 @@ async fn check(app: &AppHandle) -> DriftReport {
         .connect_timeout(TIMEOUT)
         .timeout(TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
     {
         Ok(c) => c,

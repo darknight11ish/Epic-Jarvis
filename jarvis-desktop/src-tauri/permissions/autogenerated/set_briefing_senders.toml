@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-briefing-senders"
+description = "Enables the set_briefing_senders command without any pre-configured scope."
+commands.allow = ["set_briefing_senders"]
+
+[[permission]]
+identifier = "deny-set-briefing-senders"
+description = "Denies the set_briefing_senders command without any pre-configured scope."
+commands.deny = ["set_briefing_senders"]

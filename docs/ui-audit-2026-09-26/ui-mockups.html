@@ -1,0 +1,1216 @@
+<title>Instrument Deck, Alive</title>
+<meta name="description" content="Before-and-after pictures of the UI audit's 'do first' ideas for the Jarvis desktop and phone apps.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Roboto:wght@300;400;500;600&display=swap">
+<style>
+/* ==========================================================================
+   Tokens. Every colour below is copied from the apps:
+   --d-*  jarvis-desktop/src/theme.css  (Reactor = :root, Daylight = [data-theme="paper"],
+          High Contrast = [data-theme="high-contrast"])
+   --p-*  jarvis-client/.../ui/theme/Themes.kt and face/Palette.kt
+   --st-* theme.css "Face states" (the same in every theme)
+   The page itself (--page, --ink ...) borrows the same values.
+   ========================================================================== */
+:root, .page[data-app="daylight"] {
+  color-scheme: light;
+  --page: #eef1f6; --panel: #ffffff; --ink: #10161f; --ink-2: #48566b; --ink-3: #59687d;
+  --rule: rgba(16,34,60,.14); --rule-2: rgba(16,34,60,.26);
+  --acc: #00697f; --acc-ink: #005263; --acc-faint: rgba(0,105,127,.10); --desk: #c7d0db;
+  --d-bg: rgb(244,246,249); --d-s1: #ffffff; --d-s2: rgb(237,241,246); --d-sunk: rgb(228,233,240);
+  --d-border: rgba(16,34,60,.14); --d-border-2: rgba(16,34,60,.24);
+  --d-text: #10161f; --d-muted: #48566b; --d-faint: #59687d; --d-on-acc: #ffffff;
+  --d-acc: #00697f; --d-acc-bright: #005263; --d-acc-dim: rgba(0,105,127,.32); --d-acc-faint: rgba(0,105,127,.10);
+  --d-ok: #17694a; --d-warn: #632303; --d-bad: #b3202f; --d-bad-rgb: 179 32 47;
+  --d-ok-fill: rgba(23,105,74,.12); --d-ok-edge: rgba(23,105,74,.5); --d-ok-text: #0d4a32;
+  --d-prose: #1b2532; --d-prose-strong: #050a12; --d-sheen: 10 30 60; --d-shade: 16 34 60;
+  --d-r-win: 18px; --d-r-card: 14px; --d-r-ctl: 9px; --d-hair: 1px;
+  --p-s0: #eef1f6; --p-s1: #ffffff; --p-s2: #e8edf4; --p-well: #04070c;
+  --p-hi: #0d1319; --p-mid: #46566a; --p-lo: #54677c; --p-hair: #c6d0dc; --p-hair-2: #98a6b6;
+  --p-acc: #12657f; --p-ok: #0a3d2a; --p-warn: #4a3708; --p-bad: #521018;
+  --st-idle: #2ea8cc; --st-listen: #ff9b52; --st-think: #ae7bff; --st-speak: #6fe3ff; --st-appr: #ffb648; --st-err: #ff7b86;
+  --well: #04070c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #04070c; --panel: #0a1119; --ink: #f2f5f8; --ink-2: #a8b2c1; --ink-3: #8e99a9;
+    --rule: rgba(255,255,255,.08); --rule-2: rgba(255,255,255,.18);
+    --acc: #38f0ff; --acc-ink: #b8fbff; --acc-faint: rgba(56,240,255,.10); --desk: #18222e;
+    --d-bg: rgba(4,7,12,.86); --d-s1: rgba(10,17,25,.9); --d-s2: rgba(14,24,34,.92); --d-sunk: #04070c;
+    --d-border: rgba(255,255,255,.08); --d-border-2: rgba(255,255,255,.14);
+    --d-text: #f2f5f8; --d-muted: #a8b2c1; --d-faint: #8e99a9; --d-on-acc: #04222a;
+    --d-acc: #38f0ff; --d-acc-bright: #b8fbff; --d-acc-dim: rgba(56,240,255,.32); --d-acc-faint: rgba(56,240,255,.12);
+    --d-ok: #3ddc97; --d-warn: #ffc860; --d-bad: #ff6b7a; --d-bad-rgb: 255 107 122;
+    --d-ok-fill: rgba(61,220,151,.14); --d-ok-edge: rgba(61,220,151,.45); --d-ok-text: #9ff0cc;
+    --d-prose: #dfe5ec; --d-prose-strong: #ffffff; --d-sheen: 255 255 255; --d-shade: 0 0 0;
+    --d-r-win: 18px; --d-r-card: 14px; --d-r-ctl: 9px; --d-hair: 1px;
+    --p-s0: #04070c; --p-s1: #0a1119; --p-s2: #0e1822; --p-well: #04070c;
+    --p-hi: #dde7f2; --p-mid: #8fa3b8; --p-lo: #6e8397; --p-hair: #172836; --p-hair-2: #24485e;
+    --p-acc: #2ea8cc; --p-ok: #5fe0a8; --p-warn: #ffb648; --p-bad: #ff7b86;
+    --well: #04070c;
+  }
+}
+:root[data-theme="dark"], .page[data-app="reactor"] {
+  color-scheme: dark;
+  --page: #04070c; --panel: #0a1119; --ink: #f2f5f8; --ink-2: #a8b2c1; --ink-3: #8e99a9;
+  --rule: rgba(255,255,255,.08); --rule-2: rgba(255,255,255,.18);
+  --acc: #38f0ff; --acc-ink: #b8fbff; --acc-faint: rgba(56,240,255,.10); --desk: #18222e;
+  --d-bg: rgba(4,7,12,.86); --d-s1: rgba(10,17,25,.9); --d-s2: rgba(14,24,34,.92); --d-sunk: #04070c;
+  --d-border: rgba(255,255,255,.08); --d-border-2: rgba(255,255,255,.14);
+  --d-text: #f2f5f8; --d-muted: #a8b2c1; --d-faint: #8e99a9; --d-on-acc: #04222a;
+  --d-acc: #38f0ff; --d-acc-bright: #b8fbff; --d-acc-dim: rgba(56,240,255,.32); --d-acc-faint: rgba(56,240,255,.12);
+  --d-ok: #3ddc97; --d-warn: #ffc860; --d-bad: #ff6b7a; --d-bad-rgb: 255 107 122;
+  --d-ok-fill: rgba(61,220,151,.14); --d-ok-edge: rgba(61,220,151,.45); --d-ok-text: #9ff0cc;
+  --d-prose: #dfe5ec; --d-prose-strong: #ffffff; --d-sheen: 255 255 255; --d-shade: 0 0 0;
+  --d-r-win: 18px; --d-r-card: 14px; --d-r-ctl: 9px; --d-hair: 1px;
+  --p-s0: #04070c; --p-s1: #0a1119; --p-s2: #0e1822; --p-well: #04070c;
+  --p-hi: #dde7f2; --p-mid: #8fa3b8; --p-lo: #6e8397; --p-hair: #172836; --p-hair-2: #24485e;
+  --p-acc: #2ea8cc; --p-ok: #5fe0a8; --p-warn: #ffb648; --p-bad: #ff7b86;
+  --well: #04070c;
+}
+.page[data-app="contrast"] {
+  color-scheme: dark;
+  --page: #000000; --panel: #0a0a0c; --ink: #ffffff; --ink-2: #e2e8f0; --ink-3: #c3ccd9;
+  --rule: rgba(255,255,255,.34); --rule-2: rgba(255,255,255,.6);
+  --acc: #63f7ff; --acc-ink: #ffffff; --acc-faint: rgba(99,247,255,.2); --desk: #2a3038;
+  --d-bg: rgb(0,0,0); --d-s1: rgb(10,10,12); --d-s2: rgb(20,20,24); --d-sunk: #000000;
+  --d-border: rgba(255,255,255,.34); --d-border-2: rgba(255,255,255,.6);
+  --d-text: #ffffff; --d-muted: #e2e8f0; --d-faint: #c3ccd9; --d-on-acc: #000000;
+  --d-acc: #63f7ff; --d-acc-bright: #ffffff; --d-acc-dim: rgba(99,247,255,.6); --d-acc-faint: rgba(99,247,255,.2);
+  --d-ok: #5cff9d; --d-warn: #ffd257; --d-bad: #ff8a95; --d-bad-rgb: 255 138 149;
+  --d-ok-fill: rgba(92,255,157,.18); --d-ok-edge: #5cff9d; --d-ok-text: #d6ffe8;
+  --d-prose: #ffffff; --d-prose-strong: #ffffff; --d-sheen: 255 255 255; --d-shade: 0 0 0;
+  --d-r-win: 10px; --d-r-card: 8px; --d-r-ctl: 6px; --d-hair: 2px;
+  --p-s0: #000000; --p-s1: #000000; --p-s2: #0a0a0a; --p-well: #000000;
+  --p-hi: #ffffff; --p-mid: #d5dde6; --p-lo: #d5dde6; --p-hair: #6b7a8a; --p-hair-2: #9fb0c0;
+  --p-acc: #2ea8cc; --p-ok: #5fe0a8; --p-warn: #ffb648; --p-bad: #ff7b86;
+  --well: #000000;
+}
+
+/* ---- Page ---------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); }
+.page {
+  background: var(--page); color: var(--ink); min-height: 100vh;
+  padding-inline: 16px; padding-block: 0 72px;
+  font: 15px/1.55 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1, h2, h3 { font-family: "Chakra Petch", "Segoe UI Variable Display", system-ui, sans-serif; text-wrap: balance; margin: 0; }
+.mono, code { font-family: "Cascadia Code", "IBM Plex Mono", Consolas, monospace; }
+code { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: var(--acc-faint); color: var(--ink); overflow-wrap: anywhere; }
+a { color: var(--acc-ink); }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+.masthead { padding-block: 40px 20px; display: grid; gap: 14px; }
+.eyebrow { font: 500 11.5px/1.3 "IBM Plex Mono", Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0; }
+.masthead h1 { font-size: clamp(30px, 5.4vw, 48px); font-weight: 600; line-height: 1.05; letter-spacing: -.01em; }
+.masthead .lede { max-width: 66ch; color: var(--ink-2); margin: 0; font-size: 16px; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 4px 0 0; padding: 0; list-style: none; color: var(--ink-3); font-size: 13.5px; }
+.facts li::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--acc); margin-right: 8px; vertical-align: 2px; }
+
+/* Controls */
+.controls {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+  padding: 10px 0; margin-bottom: 8px;
+  background: var(--page); border-bottom: 1px solid var(--rule);
+}
+.ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ctl-label { font-size: 12.5px; color: var(--ink-3); }
+.seg { display: inline-flex; border: 1px solid var(--rule-2); border-radius: 999px; padding: 2px; flex-wrap: wrap; }
+.seg button {
+  font-family: inherit; font-weight: 500; font-size: 13px; line-height: 1; color: var(--ink-2); background: none; border: 0;
+  padding: 7px 12px; border-radius: 999px; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--acc-faint); color: var(--ink); box-shadow: inset 0 0 0 1px var(--acc); }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; margin: 14px 0 6px; padding: 0; list-style: none; }
+.toc a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--rule-2); }
+.toc a:hover { color: var(--ink); border-color: var(--acc); }
+
+/* Idea sections */
+.idea { padding-block: 44px 8px; border-top: 1px solid var(--rule); scroll-margin-top: 64px; }
+.idea:first-of-type { border-top: 0; }
+.idea-head { display: grid; gap: 8px; margin-bottom: 22px; }
+.idea-head h2 { font-size: clamp(22px, 3.2vw, 28px); font-weight: 600; line-height: 1.15; }
+.idea-head p { margin: 0; max-width: 70ch; color: var(--ink-2); }
+.idea-head .why { font-size: 14px; color: var(--ink-3); }
+
+.pairs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 390px); gap: 28px 36px; align-items: start; }
+@media (max-width: 960px) { .pairs { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 22px; min-width: 0; }
+.col-title { font: 600 12px/1 "IBM Plex Mono", Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); padding-bottom: 8px; border-bottom: 1px solid var(--rule); }
+
+figure.panel { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.panel-label { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--ink-2); }
+.tag { font: 600 11px/1 "IBM Plex Mono", Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; padding: 5px 9px; border-radius: 999px; white-space: nowrap; }
+.tag-today { border: 1px solid var(--rule-2); color: var(--ink-2); }
+.tag-new { border: 1px solid var(--acc); color: var(--acc-ink); background: var(--acc-faint); }
+.tag-same { border: 1px dashed var(--rule-2); color: var(--ink-3); }
+.note { margin: 0; font-size: 14px; color: var(--ink-2); max-width: 62ch; }
+.note b { color: var(--ink); font-weight: 600; }
+.src { font-size: 12.5px; color: var(--ink-3); }
+.stage { border-radius: 12px; min-width: 0; }
+.stage-desk { background: var(--desk); padding: 22px 16px; display: flex; justify-content: center; }
+.stage-plain { padding: 0; display: flex; justify-content: center; }
+.replay {
+  justify-self: start; font-family: inherit; font-weight: 500; font-size: 13px; line-height: 1; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--rule-2); border-radius: 999px; padding: 8px 14px; cursor: pointer;
+}
+.replay:hover { border-color: var(--acc); }
+.textpanel { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; }
+.textpanel ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; color: var(--ink-2); }
+.textpanel li b { color: var(--ink); }
+.caveat { border-left: 3px solid var(--rule-2); padding: 4px 0 4px 12px; font-size: 13.5px; color: var(--ink-2); margin: 0; max-width: 70ch; }
+.caveat b { color: var(--ink); }
+
+/* ---- Desktop window pieces (after style.css) ------------------------------ */
+.dwin {
+  position: relative; width: 100%; max-width: 620px; overflow: hidden;
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--d-text); border-radius: var(--d-r-win);
+  background: linear-gradient(180deg, rgb(var(--d-sheen) / .045) 0%, rgb(var(--d-sheen) / 0) 42%), var(--d-bg);
+  border: var(--d-hair) solid var(--d-border);
+  box-shadow: 0 0 0 1px rgb(var(--d-shade) / .25), 0 22px 48px -20px rgb(var(--d-shade) / .6);
+}
+.dwin::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 1px; opacity: .45;
+  background: linear-gradient(90deg, transparent, var(--d-acc-dim) 22%, var(--d-acc) 50%, var(--d-acc-dim) 78%, transparent); }
+.dwin.streaming::before { opacity: 1; }
+.scan { position: absolute; inset: 0 0 auto 0; height: 1px; overflow: hidden; pointer-events: none; }
+.scan::after { content: ""; position: absolute; inset: 0; width: 300%; left: -100%;
+  background: linear-gradient(90deg, transparent 35%, var(--d-acc-bright) 50%, transparent 65%);
+  animation: scan 1.6s linear infinite; }
+@keyframes scan { from { transform: translate3d(-40%,0,0); } to { transform: translate3d(40%,0,0); } }
+
+.dbar { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; border-bottom: 1px solid var(--d-border); min-width: 0; }
+.dprompt { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.route { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--d-muted); border: 1px solid var(--d-border-2); border-radius: 999px; padding: 4px 9px; white-space: nowrap; }
+.route i { width: 6px; height: 6px; border-radius: 50%; background: var(--d-ok); }
+.mic { width: 28px; height: 28px; display: grid; place-items: center; color: var(--d-muted); border-radius: var(--d-r-ctl); flex: none; }
+.mic svg { width: 15px; height: 15px; fill: currentColor; }
+@media (max-width: 440px) { .route { display: none; } }
+
+.dhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 14px 9px 18px; border-bottom: 1px solid var(--d-border); }
+.dstatus { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--d-muted); min-width: 0; }
+.dstatus span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--d-acc); flex: none; }
+.pulse.live { box-shadow: 0 0 10px var(--d-acc); animation: pulse 1.1s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: .45; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.15); } }
+.tbtn { font-size: 12px; color: var(--d-muted); }
+.dacts { display: flex; gap: 12px; }
+.dbody { padding: 14px 18px 16px; color: var(--d-prose); font-size: 14px; line-height: 1.6; min-height: 56px; }
+.dbody p { margin: 0 0 8px; }
+.dbody ul { margin: 0 0 8px; padding-left: 20px; }
+.dbody strong { color: var(--d-prose-strong); }
+.cursor { display: inline-block; width: 8px; height: 16px; vertical-align: text-bottom; background: var(--d-acc); box-shadow: 0 0 10px var(--d-acc-dim); }
+.cursor.blink { animation: blink 1s steps(2, start) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.dfoot { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 14px 9px 18px; border-top: 1px solid var(--d-border); font-size: 11px; color: var(--d-faint); flex-wrap: wrap; }
+.services { display: inline-flex; gap: 12px; }
+.services span { display: inline-flex; align-items: center; gap: 5px; }
+.services i { width: 6px; height: 6px; border-radius: 50%; background: var(--d-ok); }
+kbd { font-family: "Cascadia Code", "IBM Plex Mono", monospace; font-size: 10.5px; border: 1px solid var(--d-border-2); border-radius: 4px; padding: 0 4px; color: var(--d-muted); }
+
+/* The small bar logo (index.html:50-73, style.css:338-400) */
+.reactor { width: 40px; height: 40px; flex: none; }
+.reactor svg { width: 100%; height: 100%; overflow: visible; }
+.r-halo { fill: var(--d-acc); opacity: .18; transform-origin: 24px 24px; }
+.r-ring { fill: none; stroke: var(--d-acc); stroke-width: 1.1; opacity: .55; transform-origin: 24px 24px; }
+.r-outer { stroke-dasharray: 26 12; }
+.r-mid { stroke-dasharray: 14 8; opacity: .4; }
+.r-vanes line { stroke: var(--d-acc); stroke-width: 1.4; stroke-linecap: round; opacity: .35; }
+.r-core { fill: var(--d-acc-bright); opacity: .9; transform-origin: 24px 24px; }
+.a-breathe .r-halo { animation: breathe 3.4s ease-in-out infinite; }
+.a-core .r-core { animation: corepulse 2.6s ease-in-out infinite; }
+.a-spin .r-outer { animation: spin 2.2s linear infinite; opacity: .9; }
+.a-spinmid .r-mid { animation: spin 6s linear infinite reverse; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breathe { 0%,100% { opacity: .12; transform: scale(.94); } 50% { opacity: .26; transform: scale(1.06); } }
+@keyframes corepulse { 0%,100% { opacity: .75; transform: scale(.92); } 50% { opacity: 1; transform: scale(1.08); } }
+/* Proposed state language */
+.st-wait .r-ring, .st-wait .r-vanes line { stroke: var(--st-appr); }
+.st-wait .r-core, .st-wait .r-halo { fill: var(--st-appr); }
+.r-knock { fill: none; stroke: var(--st-appr); stroke-width: 1.2; opacity: 0; transform-origin: 24px 24px; }
+.st-wait .r-knock { animation: knock 2.4s ease-out infinite; }
+@keyframes knock { 0% { opacity: .9; transform: scale(1); } 55%,100% { opacity: 0; transform: scale(1.5); } }
+.r-clock { fill: none; stroke: var(--st-appr); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 60 140; transform: rotate(-90deg); transform-origin: 24px 24px; }
+.st-err .r-ring, .st-err .r-vanes line { stroke: var(--st-err); }
+.st-err .r-core, .st-err .r-halo { fill: var(--st-err); }
+.st-err .r-outer { stroke-dasharray: 82 18.5; animation: spin 14s linear infinite reverse; opacity: .9; }
+.states { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; padding: 14px 12px; border-top: 1px solid var(--d-border); }
+.states figure { margin: 0; display: grid; justify-items: center; gap: 6px; text-align: center; font-size: 11.5px; color: var(--d-muted); }
+.states .reactor { width: 36px; height: 36px; }
+
+/* Face windows */
+.facebox { display: grid; justify-items: center; gap: 10px; padding: 18px 16px 16px; }
+canvas.face { display: block; border-radius: 50%; }
+.facestate { font-size: 13px; font-weight: 600; min-height: 1.4em; color: var(--d-text); }
+.meters { width: 100%; max-width: 280px; display: grid; gap: 6px; }
+.meter { display: grid; grid-template-columns: 8.6em 1fr; align-items: center; gap: 8px; font-size: 11.5px; color: var(--d-muted); }
+.meter span:first-child { white-space: nowrap; }
+.meter span:last-child { height: 6px; border-radius: 3px; background: var(--d-sunk); border: 1px solid var(--d-border); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 100%; background: var(--d-muted); transform-origin: left; transform: scaleX(.3); }
+.meter.face i { background: var(--d-acc); }
+.dtitle { display: flex; justify-content: space-between; padding: 9px 14px; font-size: 12px; color: var(--d-muted); border-bottom: 1px solid var(--d-border); }
+
+/* Desktop answer paragraphs fade in (style.css:918-925) */
+.fresh { animation: tokenin 260ms cubic-bezier(.22,1,.36,1) both; }
+@keyframes tokenin { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+/* Onboarding demo dots (onboarding.html:72-87) */
+.demos { display: grid; gap: 8px; padding: 18px; }
+.demo { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--d-border); border-radius: var(--d-r-ctl); font-size: 12.5px; color: var(--d-muted); background: rgb(var(--d-sheen) / .03); }
+.demo .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+/* Settings download bar (settings.css:518-530) */
+.dl { padding: 18px; display: grid; gap: 8px; font-size: 13px; color: var(--d-muted); }
+.dl strong { color: var(--d-text); font-weight: 600; }
+.track { height: 6px; border-radius: 3px; background: var(--d-sunk); border: 1px solid var(--d-border); overflow: hidden; position: relative; }
+.track i { position: absolute; inset: 0 auto 0 0; width: 30%; background: var(--d-acc); animation: sweep 1.2s ease-in-out infinite; }
+@keyframes sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+.track.still i { animation: none; width: 100%; opacity: .35; }
+
+/* Widget approval card (widget.css) */
+.wcard { width: 100%; max-width: 320px; }
+.wbody { padding: 14px 14px 12px; display: grid; gap: 8px; }
+.wkick { font-size: 11px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--d-warn); }
+.wtitle { font-size: 14px; font-weight: 600; color: var(--d-text); }
+.wdetail { font-size: 12px; color: var(--d-muted); }
+.raised { border-left: 2px solid rgb(var(--d-bad-rgb) / .5); background: rgb(var(--d-bad-rgb) / .08); border-radius: 6px; padding: 6px 8px; display: grid; gap: 3px; }
+.raised .chip { font-weight: 600; color: var(--d-bad); line-height: 1.35; }
+.raised .quote { font-style: italic; line-height: 1.35; opacity: .85; color: var(--d-text); }
+.t10 .chip, .t10 .quote { font-size: 10px; }
+.t12 .chip, .t12 .quote { font-size: 12px; }
+.wbtns { display: flex; gap: 8px; justify-content: flex-end; }
+.wbtn { font-size: 12.5px; font-weight: 600; padding: 7px 14px; border-radius: var(--d-r-ctl); }
+.wbtn.deny { border: 1px solid var(--d-bad); color: var(--d-bad); }
+.wbtn.approve { background: var(--d-ok); color: var(--d-on-acc); }
+
+/* Desktop Brain rail (brain.html:51-112) */
+.rail { display: flex; min-height: 190px; }
+.rail ul { list-style: none; margin: 0; padding: 12px 8px; display: grid; gap: 2px; align-content: start; border-right: 1px solid var(--d-border); min-width: 150px; }
+.rail li { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: var(--d-r-ctl); font-size: 13px; color: var(--d-muted); }
+.rail li.on { background: var(--d-acc-faint); color: var(--d-text); }
+.rail .g { width: 14px; text-align: center; color: var(--d-acc); }
+.rail .pane { flex: 1; padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.bars i { display: block; height: 8px; border-radius: 4px; background: rgb(var(--d-sheen) / .08); margin-bottom: 8px; }
+
+/* ---- Phone pieces (Compose, approximated) --------------------------------- */
+.phone {
+  width: 100%; max-width: 390px; margin: 0 auto; overflow: hidden;
+  background: var(--p-s0); color: var(--p-hi); border: 1px solid var(--rule-2); border-radius: 30px;
+  font-family: Roboto, "Google Sans", system-ui, sans-serif; font-size: 15px; line-height: 22px;
+}
+.psb { display: flex; justify-content: space-between; align-items: center; padding: 10px 22px 4px; font-size: 12.5px; color: var(--p-mid); font-variant-numeric: tabular-nums; }
+.psb .batt { display: inline-block; width: 20px; height: 10px; border: 1.5px solid currentColor; border-radius: 3px; position: relative; }
+.psb .batt::after { content: ""; position: absolute; inset: 1.5px 5px 1.5px 1.5px; background: currentColor; border-radius: 1px; }
+.pbody { padding: 10px 16px 20px; display: grid; gap: 12px; }
+.ptop { display: flex; align-items: center; gap: 10px; }
+.ptop svg { width: 22px; height: 22px; stroke: var(--p-hi); fill: none; stroke-width: 2; flex: none; }
+.ptop .t { flex: 1; min-width: 0; }
+.ptop .t b { display: block; font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -.005em; }
+.ptop .t small { display: block; font-size: 13px; line-height: 19px; color: var(--p-lo); }
+.quiet { font-size: 15px; font-weight: 500; color: var(--p-acc); }
+.kicker { font-size: 11px; line-height: 15px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--p-lo); }
+.plate { background: var(--p-s1); border: 1px solid var(--p-hair); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; }
+.pwell { display: flex; justify-content: center; padding: 6px 0 2px; }
+.pq { font-size: 15px; color: var(--p-mid); }
+.pa { font-size: 17px; line-height: 25px; color: var(--p-hi); }
+.pa p { margin: 0 0 10px; white-space: pre-wrap; }
+.pa p:last-child { margin-bottom: 0; }
+.pa ul { margin: 0 0 10px; padding-left: 22px; }
+.pa strong { font-weight: 600; }
+.plink { color: var(--p-acc); text-decoration: underline; text-underline-offset: 3px; }
+.paddr { display: inline-block; font-size: 13px; line-height: 18px; color: var(--p-mid); font-family: "Roboto Mono", "IBM Plex Mono", monospace; overflow-wrap: anywhere; }
+.pmid { color: var(--p-mid); }
+.field { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+.field span:first-child { color: var(--p-mid); }
+.field span:last-child { color: var(--p-hi); font-variant-numeric: tabular-nums; }
+.small { font-size: 13px; line-height: 19px; color: var(--p-mid); }
+.big { display: flex; align-items: baseline; gap: 10px; }
+.big b { font-size: 34px; line-height: 40px; font-weight: 300; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.big span { font-size: 15px; color: var(--p-mid); }
+.trio { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.trio div { border-top: 1px solid var(--p-hair); padding-top: 8px; }
+.trio b { display: block; font-size: 22px; line-height: 28px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.trio span { font-size: 13px; color: var(--p-mid); }
+.sec-h { font-size: 18px; line-height: 24px; font-weight: 600; color: var(--p-hi); }
+.ph { height: 8px; border-radius: 4px; background: var(--p-s2); }
+.grp { display: grid; gap: 8px; }
+.grp-h { font-size: 22px; line-height: 28px; font-weight: 500; letter-spacing: -.01em; padding-top: 6px; }
+.row { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; background: var(--p-s1); border: 1px solid var(--p-hair); border-radius: 12px; font-size: 15px; }
+.row svg { width: 16px; height: 16px; stroke: var(--p-mid); fill: none; stroke-width: 2; flex: none; }
+.longlist { display: grid; gap: 10px; max-height: 470px; overflow: hidden; position: relative; }
+.longlist::after { content: ""; position: absolute; inset: auto 0 0 0; height: 70px; background: linear-gradient(transparent, var(--p-s0)); }
+.more { text-align: center; font-size: 13px; color: var(--p-lo); }
+.pcard .title { font-size: 18px; line-height: 24px; font-weight: 600; }
+.pcard .kick { color: var(--p-warn); }
+.pbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pbtn { text-align: center; padding: 10px; border-radius: 10px; border: 1px solid var(--p-hair-2); font-weight: 500; font-size: 15px; }
+.reply { font-size: 15px; color: var(--p-mid); }
+.buzz { justify-self: center; font-size: 12px; font-weight: 600; color: var(--p-mid); border: 1px dashed var(--p-hair-2); border-radius: 999px; padding: 3px 10px; opacity: .25; transition: opacity 120ms; }
+.buzz.on { opacity: 1; color: var(--p-hi); border-style: solid; }
+.pmeters { max-width: 280px; margin: 0 auto; width: 100%; }
+.pmeters .meter { color: var(--p-mid); }
+.pmeters .meter span:first-child { white-space: nowrap; }
+.meter span:last-child { background: var(--p-s2); border-color: var(--p-hair); }
+.pmeters .meter i { background: var(--p-mid); }
+.pmeters .meter.face i { background: var(--p-acc); }
+.pfacestate { text-align: center; font-size: 13px; font-weight: 500; color: var(--p-hi); min-height: 1.4em; }
+
+/* Gliding list */
+.newcard { display: grid; grid-template-rows: 0fr; }
+.newcard.in { grid-template-rows: 1fr; }
+.newcard > .inner { overflow: hidden; min-height: 0; }
+.glide .newcard { transition: grid-template-rows 200ms cubic-bezier(.22,1,.36,1); }
+.glide .newcard > .inner { opacity: 0; transform: translateY(-8px); transition: opacity 200ms ease-out, transform 200ms cubic-bezier(.22,1,.36,1); }
+.glide .newcard.in > .inner { opacity: 1; transform: none; }
+.newcard .plate { margin-bottom: 12px; }
+
+/* Fewer animations: the page's own preview switch, and the OS setting. */
+.calm *, .calm *::before, .calm *::after { animation: none !important; transition: none !important; }
+.calm .glide .newcard > .inner { opacity: 1; transform: none; }
+.calm-note { display: none; }
+.calm .calm-note { display: block; }
+@media (prefers-reduced-motion: reduce) {
+  .page:not(.moving) *, .page:not(.moving) *::before, .page:not(.moving) *::after { animation: none !important; transition: none !important; }
+}
+.foot { margin-top: 48px; padding-top: 22px; border-top: 1px solid var(--rule); display: grid; gap: 10px; color: var(--ink-2); font-size: 14px; }
+.foot h2 { font-size: 20px; }
+.foot ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 80ch; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+
+<div class="page" id="page">
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">UI audit · 26 September 2026 · pictures, not app code</p>
+  <h1>Instrument Deck, alive</h1>
+  <p class="lede">These are pictures of the audit's ten "do first" ideas, each shown as it looks <b>Today</b> and as <b>Proposed</b>, on the PC and on the phone. Colours, text sizes and wording are copied from the apps' own files. Anything made up for the picture (a question, a number) is marked "sample".</p>
+  <ul class="facts">
+    <li>Nothing here changes the apps</li>
+    <li>Phone panels are drawn about 390 points wide, like a real phone</li>
+    <li>Roboto stands in for your phone's own font; Segoe UI is used where your PC has it</li>
+  </ul>
+</header>
+
+<div class="controls" role="group" aria-label="Page controls">
+  <div class="ctl">
+    <span class="ctl-label" id="theme-l">App theme</span>
+    <div class="seg" role="group" aria-labelledby="theme-l">
+      <button type="button" id="th-auto" data-theme-pick="auto" aria-pressed="true">Match my device</button>
+      <button type="button" id="th-reactor" data-theme-pick="reactor" aria-pressed="false">Reactor</button>
+      <button type="button" id="th-daylight" data-theme-pick="daylight" aria-pressed="false">Daylight</button>
+      <button type="button" id="th-contrast" data-theme-pick="contrast" aria-pressed="false">High Contrast</button>
+    </div>
+  </div>
+  <div class="ctl">
+    <span class="ctl-label" id="mo-l">Motion</span>
+    <div class="seg" role="group" aria-labelledby="mo-l">
+      <button type="button" id="mo-on" data-motion="on" aria-pressed="true">Play</button>
+      <button type="button" id="mo-off" data-motion="off" aria-pressed="false">Fewer animations</button>
+    </div>
+  </div>
+</div>
+
+<ul class="toc" aria-label="Ideas on this page">
+  <li><a href="#face">1 &amp; 7 · The face hears you</a></li>
+  <li><a href="#bar">2 &amp; 10 · A calmer Jarvis bar</a></li>
+  <li><a href="#calm">3 · One "fewer animations" rule</a></li>
+  <li><a href="#colours">4 · The right colour for "thinking"</a></li>
+  <li><a href="#format">5 · Formatted answers on the phone</a></li>
+  <li><a href="#glide">6 · Lists that glide</a></li>
+  <li><a href="#type">8 · Clearer text sizes</a></li>
+  <li><a href="#brain">9 · "Mind" becomes "Brain"</a></li>
+</ul>
+<p class="caveat calm-note" id="calm-note"><b>Fewer animations is on.</b> Every moving picture below is shown as a still. That is also what the proposed apps would do.</p>
+
+<!-- ======================================================================= -->
+<section class="idea" id="face" aria-labelledby="face-h">
+  <div class="idea-head">
+    <p class="eyebrow">Audit ideas 1 and 7 · both apps</p>
+    <h2 id="face-h">The face moves with real voices, and shows it heard you</h2>
+    <p>Watch the two bars under each face. <b>Loudness heard</b> is how loud the talking is. <b>Face size</b> is how much the face swells. Today on the PC they do not match: the face moves to a timer. Proposed, the face follows the loudness. Only the loudness number is passed along, never the sound itself.</p>
+    <p class="why">When you stop talking, the face does a short "inhale" so you know it caught what you said. On the phone you also feel one light buzz. Today, pressing and cancelling buzz on the phone, but letting go does nothing.</p>
+  </div>
+  <div class="pairs">
+    <div class="col">
+      <h3 class="col-title">On the PC</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> The face swells on a timer</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin" style="max-width:340px">
+            <div class="dtitle"><span>Jarvis</span><span>Faces</span></div>
+            <div class="facebox">
+              <canvas role="img" class="face" data-mode="timer" data-size="180" aria-label="Jarvis's face, today: moves on a timer"></canvas>
+              <div class="facestate" data-role="state">Jarvis is talking</div>
+              <div class="meters">
+                <div class="meter" data-role="heard"><span>Loudness heard</span><span><i></i></span></div>
+                <div class="meter face" data-role="size"><span>Face size</span><span><i></i></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note">The loudness code exists (<code>voice.js:288,293</code>) but nothing calls it, and the note at <code>voice.js:280</code> still says nothing plays speech. Both were re-checked by the audit.</p>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> The face follows your voice, then Jarvis's</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin" style="max-width:340px">
+            <div class="dtitle"><span>Jarvis</span><span>Faces</span></div>
+            <div class="facebox">
+              <canvas role="img" class="face" data-mode="voice-inhale" data-size="180" aria-label="Jarvis's face, proposed: follows the voices"></canvas>
+              <div class="facestate" data-role="state">Jarvis is talking</div>
+              <div class="meters">
+                <div class="meter" data-role="heard"><span>Loudness heard</span><span><i></i></span></div>
+                <div class="meter face" data-role="size"><span>Face size</span><span><i></i></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note">No new drawing work: the face already redraws every frame while talking. A PC cannot buzz, so it does the inhale only.</p>
+      </figure>
+    </div>
+    <div class="col">
+      <h3 class="col-title">On the phone</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> Already follows the voices</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="pwell"><canvas role="img" class="face" data-mode="voice" data-size="170" aria-label="Phone face, today"></canvas></div>
+            <div class="pfacestate" data-role="state">Jarvis is talking</div>
+            <div class="meters pmeters">
+              <div class="meter" data-role="heard"><span>Loudness heard</span><span><i></i></span></div>
+              <div class="meter face" data-role="size"><span>Face size</span><span><i></i></span></div>
+            </div>
+            <div class="buzz" style="opacity:.8">No buzz on letting go</div>
+          </div>
+        </div>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> One light buzz and an inhale on letting go</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="pwell"><canvas role="img" class="face" data-mode="voice-inhale" data-size="170" aria-label="Phone face, proposed"></canvas></div>
+            <div class="pfacestate" data-role="state">Jarvis is talking</div>
+            <div class="meters pmeters">
+              <div class="meter" data-role="heard"><span>Loudness heard</span><span><i></i></span></div>
+              <div class="meter face" data-role="size"><span>Face size</span><span><i></i></span></div>
+            </div>
+            <div class="buzz" data-role="buzz">Light buzz</div>
+          </div>
+        </div>
+        <p class="note">The inhale fits inside the face's existing 600 ms "wake up" moment, so it costs almost no battery.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= -->
+<section class="idea" id="bar" aria-labelledby="bar-h">
+  <div class="idea-head">
+    <p class="eyebrow">Audit ideas 2 and 10 · mainly the PC</p>
+    <h2 id="bar-h">One moving thing on the Jarvis bar, and words for what it is doing</h2>
+    <p>While Jarvis works, the bar today runs <b>seven animations at once</b>: two spinning rings, a breathing glow, a pulsing centre dot, a light sliding along the top edge, a pulsing status dot and a blinking cursor. Proposed: only the small logo spins. The status says what Jarvis is doing, in words.</p>
+    <p class="why">The small logo also gets one look per state, so "waiting on you" and "problem" can be told apart without seeing colour.</p>
+  </div>
+  <div class="pairs">
+    <div class="col">
+      <h3 class="col-title">On the PC</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> Seven things moving, and "Working…"</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin streaming">
+            <div class="scan" aria-hidden="true"></div>
+            <div class="dbar">
+              <div class="reactor a-breathe a-core a-spin a-spinmid" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="r-halo" cx="24" cy="24" r="17"/><circle class="r-ring r-outer" cx="24" cy="24" r="16"/><circle class="r-ring r-mid" cx="24" cy="24" r="11"/><g class="r-vanes"><line x1="24" y1="8" x2="24" y2="14"/><line x1="40" y1="24" x2="34" y2="24"/><line x1="24" y1="40" x2="24" y2="34"/><line x1="8" y1="24" x2="14" y2="24"/><line x1="35.3" y1="12.7" x2="31.1" y2="16.9"/><line x1="35.3" y1="35.3" x2="31.1" y2="31.1"/><line x1="12.7" y1="35.3" x2="16.9" y2="31.1"/><line x1="12.7" y1="12.7" x2="16.9" y2="16.9"/></g><circle class="r-core" cx="24" cy="24" r="5"/></svg></div>
+              <div class="dprompt">What's on my calendar tomorrow?</div>
+              <span class="route"><i></i>Local</span>
+              <span class="mic" aria-hidden="true"><svg viewBox="0 0 16 16"><use href="#mic-shape"/></svg></span>
+            </div>
+            <div class="dhead">
+              <span class="dstatus"><span class="pulse live" aria-hidden="true"></span><span>Working…</span></span>
+              <span class="dacts"><span class="tbtn">Copy</span><span class="tbtn">Stop</span></span>
+            </div>
+            <div class="dbody"><span class="cursor blink" aria-hidden="true"></span></div>
+            <div class="dfoot">
+              <span class="services"><span><i></i>Core</span><span><i></i>Ollama</span><span><i></i>LiteLLM</span></span>
+              <span><kbd>Esc</kbd> dismiss</span>
+            </div>
+          </div>
+        </div>
+        <p class="note">"Working…" is the desktop's own word (<code>plain-errors.js:152</code>). The question is a sample.</p>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> Only the logo spins; the status says the step</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin streaming">
+            <div class="dbar">
+              <div class="reactor a-spin" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="r-halo" cx="24" cy="24" r="17"/><circle class="r-ring r-outer" cx="24" cy="24" r="16"/><circle class="r-ring r-mid" cx="24" cy="24" r="11"/><g class="r-vanes"><line x1="24" y1="8" x2="24" y2="14"/><line x1="40" y1="24" x2="34" y2="24"/><line x1="24" y1="40" x2="24" y2="34"/><line x1="8" y1="24" x2="14" y2="24"/><line x1="35.3" y1="12.7" x2="31.1" y2="16.9"/><line x1="35.3" y1="35.3" x2="31.1" y2="31.1"/><line x1="12.7" y1="35.3" x2="16.9" y2="31.1"/><line x1="12.7" y1="12.7" x2="16.9" y2="16.9"/></g><circle class="r-core" cx="24" cy="24" r="5"/></svg></div>
+              <div class="dprompt">What's on my calendar tomorrow?</div>
+              <span class="route"><i></i>Local</span>
+              <span class="mic" aria-hidden="true"><svg viewBox="0 0 16 16"><use href="#mic-shape"/></svg></span>
+            </div>
+            <div class="dhead">
+              <span class="dstatus"><span class="pulse" aria-hidden="true"></span><span>Checking your calendar…</span></span>
+              <span class="dacts"><span class="tbtn">Copy</span><span class="tbtn">Stop</span></span>
+            </div>
+            <div class="dbody"><span class="cursor" aria-hidden="true"></span></div>
+            <div class="dfoot">
+              <span class="services"><span><i></i>Core</span><span><i></i>Ollama</span><span><i></i>LiteLLM</span></span>
+              <span><kbd>Esc</kbd> dismiss</span>
+            </div>
+            <div class="states" aria-label="How the small logo would show each state">
+              <figure><div class="reactor a-breathe" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="r-halo" cx="24" cy="24" r="17"/><circle class="r-ring r-outer" cx="24" cy="24" r="16"/><circle class="r-ring r-mid" cx="24" cy="24" r="11"/><g class="r-vanes"><line x1="24" y1="8" x2="24" y2="14"/><line x1="40" y1="24" x2="34" y2="24"/><line x1="24" y1="40" x2="24" y2="34"/><line x1="8" y1="24" x2="14" y2="24"/><line x1="35.3" y1="12.7" x2="31.1" y2="16.9"/><line x1="35.3" y1="35.3" x2="31.1" y2="31.1"/><line x1="12.7" y1="35.3" x2="16.9" y2="31.1"/><line x1="12.7" y1="12.7" x2="16.9" y2="16.9"/></g><circle class="r-core" cx="24" cy="24" r="5"/></svg></div>Resting<br>(breathes)</figure>
+              <figure><div class="reactor a-spin" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="r-halo" cx="24" cy="24" r="17"/><circle class="r-ring r-outer" cx="24" cy="24" r="16"/><circle class="r-ring r-mid" cx="24" cy="24" r="11"/><g class="r-vanes"><line x1="24" y1="8" x2="24" y2="14"/><line x1="40" y1="24" x2="34" y2="24"/><line x1="24" y1="40" x2="24" y2="34"/><line x1="8" y1="24" x2="14" y2="24"/><line x1="35.3" y1="12.7" x2="31.1" y2="16.9"/><line x1="35.3" y1="35.3" x2="31.1" y2="31.1"/><line x1="12.7" y1="35.3" x2="16.9" y2="31.1"/><line x1="12.7" y1="12.7" x2="16.9" y2="16.9"/></g><circle class="r-core" cx="24" cy="24" r="5"/></svg></div>Answering<br>(spins)</figure>
+              <figure><div class="reactor st-wait" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="r-halo" cx="24" cy="24" r="17"/><circle class="r-ring r-outer" cx="24" cy="24" r="16"/><circle class="r-ring r-mid" cx="24" cy="24" r="11"/><g class="r-vanes"><line x1="24" y1="8" x2="24" y2="14"/><line x1="40" y1="24" x2="34" y2="24"/><line x1="24" y1="40" x2="24" y2="34"/><line x1="8" y1="24" x2="14" y2="24"/><line x1="35.3" y1="12.7" x2="31.1" y2="16.9"/><line x1="35.3" y1="35.3" x2="31.1" y2="31.1"/><line x1="12.7" y1="35.3" x2="16.9" y2="31.1"/><line x1="12.7" y1="12.7" x2="16.9" y2="16.9"/></g><circle class="r-core" cx="24" cy="24" r="5"/><circle class="r-knock" cx="24" cy="24" r="16"/><circle class="r-clock" cx="24" cy="24" r="21" pathLength="200"/></svg></div>Waiting on you<br>(knocks)</figure>
+              <figure><div class="reactor st-err" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="r-halo" cx="24" cy="24" r="17"/><circle class="r-ring r-outer" cx="24" cy="24" r="16"/><circle class="r-ring r-mid" cx="24" cy="24" r="11"/><g class="r-vanes"><line x1="24" y1="8" x2="24" y2="14"/><line x1="40" y1="24" x2="34" y2="24"/><line x1="24" y1="40" x2="24" y2="34"/><line x1="8" y1="24" x2="14" y2="24"/><line x1="35.3" y1="12.7" x2="31.1" y2="16.9"/><line x1="35.3" y1="35.3" x2="31.1" y2="31.1"/><line x1="12.7" y1="35.3" x2="16.9" y2="31.1"/><line x1="12.7" y1="12.7" x2="16.9" y2="16.9"/></g><circle class="r-core" cx="24" cy="24" r="5"/></svg></div>Problem<br>(gap, turns back)</figure>
+            </div>
+          </div>
+        </div>
+        <p class="note">Cost goes <b>down</b>: fewer loops. The cursor stays but stops blinking. The footer is left alone here (removing it is a later idea, 18). "Checking your calendar…" is a sample: today the step messages carry tool names only, so each tool needs a plain sentence written for it.</p>
+      </figure>
+    </div>
+    <div class="col">
+      <h3 class="col-title">On the phone</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> Home also says only "Working…"</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="pwell"><canvas role="img" class="face" data-mode="still-think" data-size="120" aria-label="Phone face, thinking"></canvas></div>
+            <div class="plate">
+              <div class="pq">What's on my calendar tomorrow?</div>
+              <div class="kicker" style="color:var(--p-acc)">Jarvis</div>
+              <div class="pa pmid">Working…</div>
+            </div>
+          </div>
+        </div>
+        <p class="note"><b>A correction to the audit.</b> Its table says the phone already shows each step's words. I checked: Home shows the same fixed words, "Working…" (<code>PlainErrors.kt:165</code>, used at <code>ChatSession.kt:692-698</code>). The step list is on the Brain screen and shows tool names only (<code>StepsPlate.kt:26-28</code>).</p>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> Same words as the PC (added by this mockup)</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="pwell"><canvas role="img" class="face" data-mode="still-think" data-size="120" aria-label="Phone face, thinking"></canvas></div>
+            <div class="plate">
+              <div class="pq">What's on my calendar tomorrow?</div>
+              <div class="kicker" style="color:var(--p-acc)">Jarvis</div>
+              <div class="pa pmid">Checking your calendar…</div>
+            </div>
+          </div>
+        </div>
+        <p class="note">So both apps say the same thing. Same text, same place, nothing new moving. This half is not in the audit's list, so it is your call.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= -->
+<section class="idea" id="calm" aria-labelledby="calm-h">
+  <div class="idea-head">
+    <p class="eyebrow">Audit idea 3 · mainly the PC</p>
+    <h2 id="calm-h">One rule for "fewer animations"</h2>
+    <p>Windows and Android both have a setting that asks apps to move less. Today each desktop window handles it its own way. Proposed: one rule everywhere. Nothing shakes, slides or spins, and short fades stay.</p>
+  </div>
+  <div class="pairs">
+    <div class="col">
+      <h3 class="col-title">On the PC</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> Settings' download bar never stops sweeping</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin" style="max-width:420px">
+            <div class="dl">
+              <strong>Installing llama3.1:8b</strong>
+              <div class="track" aria-hidden="true"><i></i></div>
+              <span>Downloading…</span>
+            </div>
+          </div>
+        </div>
+        <p class="note">It sweeps even with "fewer animations" on, because <code>settings.css:524-527</code> has no rule for it. The desktop face also still <b>shakes</b> on an error (<code>faces.html:3687-3698</code>). Model name is a sample.</p>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> With "fewer animations" on: still, with words</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin" style="max-width:420px">
+            <div class="dl">
+              <strong>Installing llama3.1:8b</strong>
+              <div class="track still" aria-hidden="true"><i></i></div>
+              <span>Still downloading. The size was not reported, so there is no percentage.</span>
+            </div>
+          </div>
+        </div>
+        <p class="note">The face keeps its 10-frames-a-second cap that two tests require, and adds the phone's rule: no shake, no flinch, no push when speaking.</p>
+      </figure>
+    </div>
+    <div class="col">
+      <h3 class="col-title">On the phone</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-same">Today · no change</span> The phone already follows this rule</figcaption>
+        <div class="textpanel">
+          <ul>
+            <li><b>No shake, no flinch, no speech push</b> on the face when "fewer animations" is on (per the audit's motion report).</li>
+            <li>The new glide in idea 6 below would also turn <b>instant</b> under this setting.</li>
+          </ul>
+        </div>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= -->
+<section class="idea" id="colours" aria-labelledby="col-h">
+  <div class="idea-head">
+    <p class="eyebrow">Audit idea 4 · the PC</p>
+    <h2 id="col-h">Teach the right colour for "thinking"</h2>
+    <p>The first-run tour shows "thinking" in amber and "waiting on you" in red. But in the real app, <b>amber means waiting on you</b> and thinking is violet. So a new user learns the wrong meaning on day one. Proposed: the tour uses the real state colours.</p>
+  </div>
+  <div class="pairs">
+    <div class="col">
+      <h3 class="col-title">On the PC</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> Amber for thinking, red for waiting</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin" style="max-width:460px">
+            <div class="demos">
+              <div class="demo"><span class="dot" style="background:var(--d-acc);box-shadow:0 0 8px var(--d-acc-dim)"></span> Resting — nothing to do right now</div>
+              <div class="demo"><span class="dot" style="background:#ffb648;box-shadow:0 0 8px #ffb648"></span> Thinking, or in the middle of answering you</div>
+              <div class="demo"><span class="dot" style="background:#ff6a6a;box-shadow:0 0 8px #ff6a6a"></span> Waiting on you to approve or deny something</div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Copied from <code>onboarding.html:85-86</code> and <code>:136-138</code>.</p>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> Violet for thinking, amber for waiting on you</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin" style="max-width:460px">
+            <div class="demos">
+              <div class="demo"><span class="dot" style="background:var(--st-idle)"></span> Resting, nothing to do right now</div>
+              <div class="demo"><span class="dot" style="background:var(--st-think)"></span> Thinking, or in the middle of answering you</div>
+              <div class="demo"><span class="dot" style="background:var(--st-appr)"></span> Waiting on you to approve or deny something</div>
+            </div>
+          </div>
+        </div>
+        <p class="note">The colours are the app's own state colours (<code>theme.css:155-161</code>). The glow is dropped too, since nothing else in the tour glows. The dash becomes a comma as part of the wording tidy-up.</p>
+      </figure>
+    </div>
+    <div class="col">
+      <h3 class="col-title">On the phone</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-same">Today · no change</span> The phone has no tour</figcaption>
+        <div class="textpanel"><ul><li>The phone opens on pairing, so there is nothing to fix here. A small welcome (a still face and one sentence) is a later idea, 16.</li></ul></div>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= -->
+<section class="idea" id="format" aria-labelledby="fmt-h">
+  <div class="idea-head">
+    <p class="eyebrow">Audit idea 5 · the phone</p>
+    <h2 id="fmt-h">The phone shows bold, lists and links properly</h2>
+    <p>Today the phone prints answers as plain text, so the model's formatting marks show: <code>**</code> around bold words, <code>-</code> in front of list items, and links as raw brackets. Proposed: simple formatting, like the PC. <b>Every link also shows its real web address</b>, because after Jarvis reads an email or web page, a link's words may have been written by someone else.</p>
+  </div>
+  <div class="pairs">
+    <div class="col">
+      <h3 class="col-title">On the PC</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-same">Today · no change</span> Already formatted</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin">
+            <div class="dhead"><span class="dstatus"><span class="pulse" style="background:var(--d-ok)" aria-hidden="true"></span><span>Done</span></span><span class="dacts"><span class="tbtn">Copy</span></span></div>
+            <div class="dbody">
+              <p><strong>Tomorrow</strong> you have two things:</p>
+              <ul><li>9:00 Dentist, Smile Dental</li><li>13:30 Call with Sam</li></ul>
+              <p>The dentist's email says to <em>bring your new insurance card</em>.</p>
+            </div>
+          </div>
+        </div>
+        <p class="note">Sample answer. The phone would reuse the PC's own test cases, so both format the same way.</p>
+      </figure>
+    </div>
+    <div class="col">
+      <h3 class="col-title">On the phone</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> Marks show as symbols</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="plate">
+              <div class="pq">What's on my calendar tomorrow?</div>
+              <div class="kicker">Jarvis</div>
+              <div class="pa">
+                <p>**Tomorrow** you have two things:</p>
+                <p>- 9:00 Dentist, Smile Dental
+- 13:30 Call with Sam</p>
+                <p>The dentist's email says to *bring your new insurance card*. [Change the time](https://smile-dental.example/booking)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Each paragraph is one plain <code>Text</code> today (<code>HomeScreen.kt:1985-1992</code>).</p>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> Formatted, and the address is shown</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="plate">
+              <div class="pq">What's on my calendar tomorrow?</div>
+              <div class="kicker">Jarvis</div>
+              <div class="pa">
+                <p><strong>Tomorrow</strong> you have two things:</p>
+                <ul><li>9:00 Dentist, Smile Dental</li><li>13:30 Call with Sam</li></ul>
+                <p>The dentist's email says to <em>bring your new insurance card</em>. <span class="plink">Change the time</span><br><span class="paddr">smile-dental.example/booking</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note">A small hand-written formatter, no new library. It runs once per paragraph, so no ongoing battery cost.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= -->
+<section class="idea" id="glide" aria-labelledby="gl-h">
+  <div class="idea-head">
+    <p class="eyebrow">Audit idea 6 · the phone</p>
+    <h2 id="gl-h">Phone lists glide instead of jumping</h2>
+    <p>When a new approval card or reply arrives, everything below it jumps down at once. Proposed: the new item slides in once, over a fifth of a second, and the rest glides down. It only moves when something changes, and it is instant with "fewer animations" on. The card itself gets no glow and no pulse, and a card on its way out has its buttons switched off.</p>
+  </div>
+  <div class="pairs">
+    <div class="col">
+      <h3 class="col-title">On the PC</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-same">Today · no change</span> New paragraphs already fade in</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin">
+            <div class="dhead"><span class="dstatus"><span class="pulse" aria-hidden="true"></span><span>Answering…</span></span><span class="dacts"><span class="tbtn">Stop</span></span></div>
+            <div class="dbody" id="fade-body">
+              <p class="fresh">Tomorrow starts early: the dentist is at 9:00.</p>
+              <p class="fresh" style="animation-delay:.35s">After that you're free until the call with Sam at 13:30.</p>
+            </div>
+          </div>
+        </div>
+        <button class="replay" type="button" id="replay-fade">Replay the fade</button>
+        <p class="note">A 260 ms fade per new paragraph (<code>style.css:914-925</code>). Sample text.</p>
+      </figure>
+    </div>
+    <div class="col">
+      <h3 class="col-title">On the phone</h3>
+      <button class="replay" type="button" id="replay-glide">Show a new card arriving</button>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> It appears and the list jumps</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody" style="gap:0">
+            <div class="newcard in" data-role="newcard">
+              <div class="inner"><div class="plate pcard" id="card-today">
+                <div class="kicker kick">Needs your OK</div>
+                <div class="title">Jarvis wants to search the web</div>
+                <div class="small">Search words: “dentist opening hours saturday”</div>
+                <div class="pbtns"><span class="pbtn">Deny</span><span class="pbtn">Approve</span></div>
+                <div class="small">Nothing runs until you decide.</div>
+              </div></div>
+            </div>
+            <div class="plate"><div class="kicker">Jarvis</div><div class="reply">Your dentist is Smile Dental, on Park Road.</div></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> It slides in; the list glides</figcaption>
+        <div class="phone glide">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody" style="gap:0">
+            <div class="newcard in" data-role="newcard">
+              <div class="inner"><div class="plate pcard">
+                <div class="kicker kick">Needs your OK</div>
+                <div class="title">Jarvis wants to search the web</div>
+                <div class="small">Search words: “dentist opening hours saturday”</div>
+                <div class="pbtns"><span class="pbtn">Deny</span><span class="pbtn">Approve</span></div>
+                <div class="small">Nothing runs until you decide.</div>
+              </div></div>
+            </div>
+            <div class="plate"><div class="kicker">Jarvis</div><div class="reply">Your dentist is Smile Dental, on Park Road.</div></div>
+          </div>
+        </div>
+        <p class="note">Card words are the apps' own (<code>CardWords.kt:14-29</code>, <code>ApprovalCard.kt:485</code>); the search words are a sample. Deny and Approve keep the same weight.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= -->
+<section class="idea" id="type" aria-labelledby="ty-h">
+  <div class="idea-head">
+    <p class="eyebrow">Audit idea 8 · both apps</p>
+    <h2 id="ty-h">A short, fixed list of text sizes</h2>
+    <p>A <b>type scale</b> is a short list of allowed text sizes, used everywhere. Today the PC uses about 20 loose sizes, and some important warnings are tiny. The phone already has big sizes it never uses. Proposed: 4 or 5 sizes on the PC with nothing important under 12 px, and big numbers on the phone. Section titles get stronger through size and weight, not the accent colour, because the accent means "selected".</p>
+  </div>
+  <div class="pairs">
+    <div class="col">
+      <h3 class="col-title">On the PC · the approval widget</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> The "someone tried to rush you" warning is 10 px</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin wcard">
+            <div class="wbody t10">
+              <div class="wkick">Needs your OK</div>
+              <div class="wtitle">Jarvis wants to search the web</div>
+              <div class="raised"><span class="chip">Tier raised — this text tried to rush you</span><span class="quote">“Approve this right now or your account closes in 5 minutes.”</span></div>
+              <div class="wdetail">Search words: “account recovery form”</div>
+              <div class="wbtns"><span class="wbtn deny">Deny</span><span class="wbtn approve">Approve</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Sizes from <code>widget.css:900-915</code>. The warning and quote are samples; the real ones come from the PC.</p>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> The same warning at 12 px</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin wcard">
+            <div class="wbody t12">
+              <div class="wkick">Needs your OK</div>
+              <div class="wtitle">Jarvis wants to search the web</div>
+              <div class="raised"><span class="chip">Tier raised — this text tried to rush you</span><span class="quote">“Approve this right now or your account closes in 5 minutes.”</span></div>
+              <div class="wdetail">Search words: “account recovery form”</div>
+              <div class="wbtns"><span class="wbtn deny">Deny</span><span class="wbtn approve">Approve</span></div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Approval cards may only change to become easier to read, and this is only that. The solid green Approve is left as it is. Whether to soften it is question 2 in the audit, and your call.</p>
+      </figure>
+    </div>
+    <div class="col">
+      <h3 class="col-title">On the phone · Brain</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> Every number the same small size</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="ptop" style="justify-content:space-between"><span class="kicker">What Jarvis remembers</span><span class="quiet">Refresh</span></div>
+            <div class="plate">
+              <div class="field"><span>Facts</span><span>214</span></div>
+              <div class="field"><span>Waiting for your review</span><span>3</span></div>
+              <div class="field"><span>Saved this week</span><span>12</span></div>
+              <div class="small">Background learning is on: Jarvis reads your conversations for facts. "Learn automatically", below, says whether it saves them without asking.</div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Title is an 11-point capitals label (<code>Parts.kt:204-211</code>). Row names and numbers are samples; the real ones come from the PC.</p>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> One big number, a clear title</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="ptop" style="justify-content:space-between"><span class="sec-h">What Jarvis remembers</span><span class="quiet">Refresh</span></div>
+            <div class="plate">
+              <div class="big"><b>214</b><span>facts</span></div>
+              <div class="trio">
+                <div><b>3</b><span>waiting for your review</span></div>
+                <div><b>12</b><span>saved this week</span></div>
+              </div>
+              <div class="small">Background learning is on: Jarvis reads your conversations for facts. "Learn automatically", below, says whether it saves them without asking.</div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Uses the phone's existing sizes: 34-point light for the number and 18-point for the title (<code>JarvisTheme.kt</code>, <code>displaySmall</code> and <code>titleMedium</code>). No new font. The title uses the text colour, not the accent.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= -->
+<section class="idea" id="brain" aria-labelledby="br-h">
+  <div class="idea-head">
+    <p class="eyebrow">Audit idea 9 · the phone</p>
+    <h2 id="br-h">"Mind" becomes "Brain", in four groups</h2>
+    <p>You decided on 2026-09-26 that the screen is called "Brain" in both apps. The phone still says "Mind" (<code>BrainScreen.kt:242</code>, <code>HomeScreen.kt:1269</code>). It is also one long scroll of about 30 sections. Proposed: rename it, and put the sections under four headings: <b>Now</b>, <b>Memory</b>, <b>Model and PC</b>, <b>Settings</b>. Nothing is removed. Another agent may already be renaming it, so check first.</p>
+  </div>
+  <div class="pairs">
+    <div class="col">
+      <h3 class="col-title">On the PC</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-same">Today · no change</span> Already "Brain", already in tabs</figcaption>
+        <div class="stage stage-desk">
+          <div class="dwin">
+            <div class="dtitle"><span>Brain</span><span></span></div>
+            <div class="rail">
+              <ul>
+                <li class="on"><span class="g" aria-hidden="true">✦</span>Memory</li>
+                <li><span class="g" aria-hidden="true">◷</span>History</li>
+                <li><span class="g" aria-hidden="true">◆</span>Faculties</li>
+                <li><span class="g" aria-hidden="true">▤</span>Work</li>
+              </ul>
+              <div class="pane bars" aria-hidden="true"><i style="width:60%"></i><i style="width:90%"></i><i style="width:75%"></i><i style="width:82%"></i><i style="width:40%"></i></div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Tabs from <code>brain.html:51-81</code>. Swapping the text symbols for drawn icons is a later idea (12).</p>
+      </figure>
+    </div>
+    <div class="col">
+      <h3 class="col-title">On the phone</h3>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-today">Today</span> "Mind", one long scroll</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="ptop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><div class="t"><b>Mind</b><small>State of mind</small></div><span class="quiet">Refresh</span></div>
+            <div class="longlist" aria-label="Section titles in today's order">
+              <div class="kicker">Doing</div><div class="ph" style="width:70%"></div>
+              <div class="kicker">What Jarvis is doing</div><div class="ph" style="width:85%"></div>
+              <div class="kicker">Coming up</div><div class="ph" style="width:60%"></div>
+              <div class="kicker">Focus session</div><div class="ph" style="width:50%"></div>
+              <div class="kicker">Morning briefing</div><div class="ph" style="width:80%"></div>
+              <div class="kicker">Web search</div><div class="ph" style="width:65%"></div>
+              <div class="kicker">What asks first</div><div class="ph" style="width:90%"></div>
+              <div class="kicker">What Jarvis can reach</div><div class="ph" style="width:55%"></div>
+              <div class="kicker">Sending email</div><div class="ph" style="width:45%"></div>
+              <div class="kicker">How Jarvis talks</div><div class="ph" style="width:60%"></div>
+              <div class="kicker">Model</div><div class="ph" style="width:75%"></div>
+              <div class="kicker">Hardware</div><div class="ph" style="width:50%"></div>
+            </div>
+            <div class="more">…and about 20 more sections below</div>
+          </div>
+        </div>
+        <p class="note">Titles and order from <code>BrainScreen.kt:314-465</code> and each section's own title.</p>
+      </figure>
+      <figure class="panel">
+        <figcaption class="panel-label"><span class="tag tag-new">Proposed</span> "Brain", four headings</figcaption>
+        <div class="phone">
+          <div class="psb"><span>9:41</span><span class="batt" aria-hidden="true"></span></div>
+          <div class="pbody">
+            <div class="ptop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><div class="t"><b>Brain</b></div><span class="quiet">Refresh</span></div>
+            <div class="grp"><div class="grp-h">Now</div>
+              <div class="small">Doing · What Jarvis is doing · Coming up · Focus session · Morning briefing</div></div>
+            <div class="grp"><div class="grp-h">Memory</div>
+              <div class="small">What Jarvis remembers · Saved automatically · Always keep in mind · Memory awaiting review · Wiki · What did I believe on this date?</div></div>
+            <div class="grp"><div class="grp-h">Model and PC</div>
+              <div class="small">Model · Hardware · Second graphics card · Big model (slow) · Attention budget · Background work · This backend</div></div>
+            <div class="grp"><div class="grp-h">Settings</div>
+              <div class="small">Web search · What asks first · What Jarvis can reach · Sending email · How Jarvis talks · Skills</div></div>
+          </div>
+        </div>
+        <p class="note">Group headings use the phone's existing 22-point size, in the text colour. The sections stay as they are, just moved under a heading. Which section goes where is a first guess for you to adjust.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<footer class="foot">
+  <h2>What these pictures cannot tell you</h2>
+  <ul>
+    <li>Nobody has run the phone app for this audit, and there are no phone screenshots in the repo. The phone panels are drawn from reading the code, so spacing and some shapes are approximate.</li>
+    <li>The PC panels use Segoe UI only if this device has it. The real windows sit over your wallpaper; here a plain background stands in.</li>
+    <li>The face here is a simple stand-in drawing, not one of the 20 real faces. Only the timing and the size changes are the point.</li>
+    <li>Everything marked "sample" (questions, answers, numbers, model name, the rush warning) is made up for the picture.</li>
+  </ul>
+</footer>
+
+</div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="mic-shape">
+      <path d="M8 1.5a2.25 2.25 0 0 0-2.25 2.25v4a2.25 2.25 0 0 0 4.5 0v-4A2.25 2.25 0 0 0 8 1.5Z"/>
+      <path d="M4 7.25a.75.75 0 0 0-1.5 0 5.5 5.5 0 0 0 4.75 5.451V14.5H6a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5H8.75v-1.799A5.5 5.5 0 0 0 13.5 7.25a.75.75 0 0 0-1.5 0 4 4 0 0 1-8 0Z"/>
+    </g>
+  </defs>
+</svg>
+
+<script>
+(function () {
+  "use strict";
+  var page = document.getElementById("page");
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  var reduceMQ = window.matchMedia ? matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+
+  /* ---- Theme --------------------------------------------------------------- */
+  function setTheme(v) {
+    if (!v || v === "auto") page.removeAttribute("data-app"); else page.setAttribute("data-app", v);
+    document.querySelectorAll("[data-theme-pick]").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-theme-pick") === (v || "auto")));
+    });
+    drawStill(); // colours of the well may have changed
+  }
+  document.querySelectorAll("[data-theme-pick]").forEach(function (b) {
+    b.addEventListener("click", function () { var v = b.getAttribute("data-theme-pick"); store.set("jarvis-mock-theme", v); setTheme(v); });
+  });
+
+  /* ---- Motion -------------------------------------------------------------- */
+  var calm = false;
+  function setMotion(on, remember) {
+    calm = !on;
+    page.classList.toggle("calm", calm);
+    page.classList.toggle("moving", on);
+    document.getElementById("mo-on").setAttribute("aria-pressed", String(on));
+    document.getElementById("mo-off").setAttribute("aria-pressed", String(!on));
+    if (remember) store.set("jarvis-mock-motion", on ? "on" : "off");
+    if (calm) { stopLoop(); drawStill(); } else { startLoop(); }
+  }
+  document.getElementById("mo-on").addEventListener("click", function () { setMotion(true, true); });
+  document.getElementById("mo-off").addEventListener("click", function () { setMotion(false, true); });
+
+  /* ---- Faces --------------------------------------------------------------- */
+  // A scripted 9-second turn: you talk, you let go, Jarvis thinks, Jarvis talks.
+  var CYCLE = 9.0, L0 = 0.4, L1 = 3.0, IN1 = 3.6, T1 = 4.8, S1 = 8.2;
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function envelope(len, seed) {
+    var r = rng(seed), n = Math.ceil(len * 100), out = new Float32Array(n), t = 0.08, bumps = [];
+    while (t < len - 0.1) {
+      bumps.push([t, 0.35 + 0.65 * r()]);
+      t += 0.14 + 0.12 * r();
+      if (r() < 0.14) t += 0.22; // a pause between words
+    }
+    for (var i = 0; i < n; i++) {
+      var x = i / 100, v = 0;
+      for (var j = 0; j < bumps.length; j++) { var d = (x - bumps[j][0]) / 0.065; if (d > -4 && d < 4) v = Math.max(v, bumps[j][1] * Math.exp(-d * d)); }
+      out[i] = v;
+    }
+    return out;
+  }
+  var ENV_YOU = envelope(L1 - L0, 7), ENV_JARVIS = envelope(S1 - T1, 23);
+  function sample(env, x) { var i = Math.floor(x * 100); return i >= 0 && i < env.length ? env[i] : 0; }
+
+  var COLORS = {}, WELL = "#04070c";
+  function readColors() {
+    var cs = getComputedStyle(page);
+    ["idle","listen","think","speak"].forEach(function (k) { COLORS[k] = hex(cs.getPropertyValue("--st-" + k)); });
+    WELL = cs.getPropertyValue("--well").trim() || "#04070c";
+  }
+  function hex(s) { s = (s || "").trim().replace("#", ""); if (s.length !== 6) return [46,168,204]; return [parseInt(s.slice(0,2),16), parseInt(s.slice(2,4),16), parseInt(s.slice(4,6),16)]; }
+  function rgba(c, a) { return "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + Math.max(0, Math.min(1, a)).toFixed(3) + ")"; }
+
+  // What each face shows at time t in the cycle.
+  function frame(mode, t) {
+    var inhale = mode === "voice-inhale";
+    var st, heard = 0, a, s = 1, word, released = false;
+    if (t < L0) { st = "idle"; word = "Resting"; }
+    else if (t < L1) { st = "listen"; word = "You're talking"; heard = sample(ENV_YOU, t - L0); }
+    else if (t < IN1 && inhale) { st = "think"; word = "Caught it"; released = true; var p = (t - L1) / (IN1 - L1); s = 1 - 0.12 * Math.sin(Math.PI * p); }
+    else if (t < T1) { st = "think"; word = "Thinking"; }
+    else if (t < S1) { st = "speak"; word = "Jarvis is talking"; heard = sample(ENV_JARVIS, t - T1); }
+    else { st = "idle"; word = "Resting"; }
+    var breathe = 0.12 + 0.06 * Math.sin(t * 2 * Math.PI / 3.4);
+    if (mode === "timer") {
+      a = (st === "listen" || st === "speak") ? 0.4 + 0.3 * Math.sin(t * 2 * Math.PI / 1.1) : breathe;
+    } else {
+      a = (st === "listen" || st === "speak") ? Math.max(0.08, heard) : breathe;
+    }
+    return { st: st, a: a, s: s, heard: heard, word: word, released: released, rot: t * 0.35 };
+  }
+
+  var faces = [];
+  function setupFaces() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    document.querySelectorAll("canvas.face").forEach(function (c) {
+      var size = +c.getAttribute("data-size") || 160;
+      var cssSize = Math.min(size, (c.parentElement.clientWidth || size) - 8);
+      if (cssSize < 80) cssSize = 80;
+      c.style.width = cssSize + "px"; c.style.height = cssSize + "px";
+      c.width = Math.round(cssSize * dpr); c.height = Math.round(cssSize * dpr);
+      var box = c.closest(".facebox, .pbody");
+      faces.push({
+        c: c, ctx: c.getContext("2d"), mode: c.getAttribute("data-mode"), visible: true,
+        state: box ? box.querySelector('[data-role="state"]') : null,
+        heard: box ? box.querySelector('[data-role="heard"] i') : null,
+        size: box ? box.querySelector('[data-role="size"] i') : null,
+        buzz: box ? box.querySelector('[data-role="buzz"]') : null,
+        lastWord: ""
+      });
+    });
+  }
+  function draw(f, fr) {
+    var ctx = f.ctx, W = f.c.width, cx = W / 2, R = W / 2;
+    var col = COLORS[fr.st] || [46,168,204];
+    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, 0, W, W);
+    ctx.fillStyle = WELL; ctx.beginPath(); ctx.arc(cx, cx, R, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = "lighter";
+    var a = fr.a, s = fr.s;
+    var g = ctx.createRadialGradient(cx, cx, 0, cx, cx, R * 0.92 * s);
+    g.addColorStop(0, rgba(col, 0.22 + 0.3 * a)); g.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cx, R * 0.92 * s, 0, Math.PI * 2); ctx.fill();
+    var rc = R * (0.11 + 0.07 * a) * s;
+    g = ctx.createRadialGradient(cx, cx, 0, cx, cx, rc * 2.2);
+    g.addColorStop(0, "rgba(235,250,255,0.9)"); g.addColorStop(0.4, rgba(col, 0.75)); g.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cx, rc * 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgba(col, 0.9); ctx.lineWidth = Math.max(1.5, R * 0.03);
+    ctx.beginPath(); ctx.arc(cx, cx, R * (0.42 + 0.14 * a) * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.save(); ctx.translate(cx, cx); ctx.rotate(fr.rot);
+    ctx.strokeStyle = rgba(col, 0.55); ctx.lineWidth = Math.max(1, R * 0.016);
+    ctx.setLineDash([R * 0.26, R * 0.13]);
+    ctx.beginPath(); ctx.arc(0, 0, R * (0.66 + 0.05 * a) * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore(); ctx.setLineDash([]);
+    if (f.heard) f.heard.style.transform = "scaleX(" + fr.heard.toFixed(3) + ")";
+    if (f.size) f.size.style.transform = "scaleX(" + Math.min(1, a).toFixed(3) + ")";
+    if (f.state && f.lastWord !== fr.word) { f.state.textContent = fr.word; f.lastWord = fr.word; }
+    if (f.buzz) f.buzz.classList.toggle("on", fr.released);
+  }
+  function drawStill() {
+    if (!faces.length) return;
+    readColors();
+    faces.forEach(function (f) {
+      if (f.mode === "still-think") { draw(f, { st: "think", a: 0.2, s: 1, heard: 0, word: "", released: false, rot: 0.4 }); return; }
+      if (calm || !raf) {
+        var fr = { st: "speak", a: 0.45, s: 1, heard: 0.45, word: "Jarvis is talking (still picture)", released: false, rot: 0.4 };
+        if (f.mode === "timer") { fr.a = 0.6; fr.heard = 0.2; }
+        draw(f, fr);
+      }
+    });
+  }
+
+  var raf = 0, t0 = 0, last = 0;
+  function tick(now) {
+    raf = requestAnimationFrame(tick);
+    if (now - last < 33) return; // about 30 frames a second is plenty for a picture
+    last = now;
+    var t = ((now - t0) / 1000) % CYCLE;
+    for (var i = 0; i < faces.length; i++) {
+      var f = faces[i];
+      if (!f.visible || f.mode === "still-think") continue;
+      draw(f, frame(f.mode, t));
+    }
+  }
+  function startLoop() { if (raf || calm || document.hidden) return; readColors(); t0 = performance.now(); raf = requestAnimationFrame(tick); }
+  function stopLoop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
+  document.addEventListener("visibilitychange", function () { if (document.hidden) stopLoop(); else if (!calm) startLoop(); });
+
+  /* ---- Replays -------------------------------------------------------------- */
+  document.getElementById("replay-glide").addEventListener("click", function () {
+    var cards = document.querySelectorAll('[data-role="newcard"]');
+    cards.forEach(function (c) { c.style.transition = "none"; c.firstElementChild.style.transition = "none"; c.classList.remove("in"); void c.offsetHeight; c.style.transition = ""; c.firstElementChild.style.transition = ""; });
+    setTimeout(function () { cards.forEach(function (c) { c.classList.add("in"); }); }, 700);
+  });
+  document.getElementById("replay-fade").addEventListener("click", function () {
+    document.querySelectorAll("#fade-body .fresh").forEach(function (p) { p.classList.remove("fresh"); void p.offsetWidth; p.classList.add("fresh"); });
+  });
+
+  /* ---- Start ---------------------------------------------------------------- */
+  setupFaces();
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { faces.forEach(function (f) { if (f.c === e.target) f.visible = e.isIntersecting; }); });
+    });
+    faces.forEach(function (f) { io.observe(f.c); });
+  }
+  setTheme(store.get("jarvis-mock-theme") || "auto");
+  var savedMotion = store.get("jarvis-mock-motion");
+  setMotion(savedMotion ? savedMotion === "on" : !reduceMQ.matches, false);
+  drawStill();
+  if (reduceMQ.addEventListener) reduceMQ.addEventListener("change", function (e) { if (!store.get("jarvis-mock-motion")) setMotion(!e.matches, false); });
+})();
+</script>

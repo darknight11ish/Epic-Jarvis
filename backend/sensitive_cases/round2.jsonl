@@ -1,0 +1,712 @@
+# Round 2 (2026-09-24): lines written by the round-2 author, NOT a held-out set.
+# kind sibling: written before the round-2 rules, one per class of held-out miss;
+# kind fresh: written after the rules to check them (see backend/README.md);
+# kind harmless: everyday harmless lines, many aimed at the new rules.
+{"text": "my haematology appointment got moved to Friday", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I've got a gastroscopy booked for next month", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "had a cystoscopy last week, all clear", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "mi hanno fatto una gastroscopia", "sensitive": true, "category": "health", "lang": "it", "kind": "sibling"}
+{"text": "je dois faire une coloscopie", "sensitive": true, "category": "health", "lang": "fr", "kind": "sibling"}
+{"text": "ich hatte letzte Woche eine Magenspiegelung", "sensitive": true, "category": "health", "lang": "de", "kind": "sibling"}
+{"text": "mam kolonoskopię w piątek", "sensitive": true, "category": "health", "lang": "pl", "kind": "sibling"}
+{"text": "my vitamin D was 18, way too low", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "my TSH came back at 6.2", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "my PSA is up a bit", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "my eGFR has dropped to 45", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "my viral load is undetectable", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "blood pressure was 160 over 100 this morning", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "my bp was 145/90", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I'm type 1, so I carry snacks", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I have hemophilia", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I've got muscular dystrophy", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I have spina bifida", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I'm neurodivergent", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I'm registered blind", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I've got low vision", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I'm on PEP after a scare", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I take antidepressents", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "my perscription ran out", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "my exzema flared up", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I have a weakened immune system", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "tengo hipertiroidismo", "sensitive": true, "category": "health", "lang": "es", "kind": "sibling"}
+{"text": "sono ipotiroidea", "sensitive": true, "category": "health", "lang": "it", "kind": "sibling"}
+{"text": "I'm prediabetic", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "fell off the wagon last weekend", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I had my tubes tied", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "estoy en diálisis", "sensitive": true, "category": "health", "lang": "es", "kind": "sibling"}
+{"text": "czekam na przeszczep nerki", "sensitive": true, "category": "health", "lang": "pl", "kind": "sibling"}
+{"text": "je suis sur liste d'attente pour une greffe de rein", "sensitive": true, "category": "health", "lang": "fr", "kind": "sibling"}
+{"text": "I have thalassemia", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I'm dyspraxic", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I've got retinopathy from the diabetes", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "my cardiology follow-up is on Monday", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I see a neurologist every six months", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I'm red-green colour blind", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I've got a bun in the oven", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I have an ostomy bag", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "my endocrinologist upped my dose", "sensitive": true, "category": "health", "lang": "en", "kind": "sibling"}
+{"text": "I'm in arrears with the water company", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "got another letter about my arears", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "I remortgaged last year", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "we refinanced the house to clear the credit cards", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "I get paid cash-in-hand for the bar shifts", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "I don't declare my eBay income", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "my Schufa score is bad", "sensitive": true, "category": "money", "lang": "de", "kind": "sibling"}
+{"text": "tengo deudas y estoy en ASNEF", "sensitive": true, "category": "money", "lang": "es", "kind": "sibling"}
+{"text": "estou no SPC por causa de uma conta", "sensitive": true, "category": "money", "lang": "pt", "kind": "sibling"}
+{"text": "mam wpis w BIK", "sensitive": true, "category": "money", "lang": "pl", "kind": "sibling"}
+{"text": "my Experian score dropped", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "we're on SNAP", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "on ESA since my op", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "wij ontvangen zorgtoeslag", "sensitive": true, "category": "money", "lang": "nl", "kind": "sibling"}
+{"text": "wir bekommen Elterngeld", "sensitive": true, "category": "money", "lang": "de", "kind": "sibling"}
+{"text": "je touche la prime d'activité", "sensitive": true, "category": "money", "lang": "fr", "kind": "sibling"}
+{"text": "ricevo l'assegno unico", "sensitive": true, "category": "money", "lang": "it", "kind": "sibling"}
+{"text": "we got the winter fuel payment", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "only paying the minimum on my cards", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "rent is 950 and I only clear 1,300", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "my raise was 3%", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "got a 10% bonus this year", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "my commission is 12%", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "I'm down 40% on my crypto", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "sold my Apple stock at a loss", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "Ich bin mit den Raten im Rückstand", "sensitive": true, "category": "money", "lang": "de", "kind": "sibling"}
+{"text": "zalegam z czynszem od dwóch miesięcy", "sensitive": true, "category": "money", "lang": "pl", "kind": "sibling"}
+{"text": "I work cash in hand at the weekends", "sensitive": true, "category": "money", "lang": "en", "kind": "sibling"}
+{"text": "nas login: admin / Passw0rd", "sensitive": true, "category": "credentials", "lang": "en", "kind": "sibling"}
+{"text": "ssh user deploy pass Winter2024!", "sensitive": true, "category": "credentials", "lang": "en", "kind": "sibling"}
+{"text": "user: jsmith pw: blue42sky", "sensitive": true, "category": "credentials", "lang": "en", "kind": "sibling"}
+{"text": "log in with root / toor123", "sensitive": true, "category": "credentials", "lang": "en", "kind": "sibling"}
+{"text": "the tablet's unlock pattern is a Z", "sensitive": true, "category": "credentials", "lang": "en", "kind": "sibling"}
+{"text": "my pattern lock is a zigzag", "sensitive": true, "category": "credentials", "lang": "en", "kind": "sibling"}
+{"text": "şifrem kedi1234", "sensitive": true, "category": "credentials", "lang": "other", "kind": "sibling"}
+{"text": "lösenordet är sommar2024", "sensitive": true, "category": "credentials", "lang": "other", "kind": "sibling"}
+{"text": "my screen lock is the shape of an M", "sensitive": true, "category": "credentials", "lang": "en", "kind": "sibling"}
+{"text": "passwort: Sonne!2023", "sensitive": true, "category": "credentials", "lang": "de", "kind": "sibling"}
+{"text": "spent two years inside", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I served time for fraud", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I was locked up in my twenties", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "the police raided our house", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "cops pulled me over and searched the car", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "got stopped and searched on the way home", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I've got 9 points on my licence", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I've got a speeding ticket to pay", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I have a hearing at the family court", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "small claims court next week, against my landlord", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "ich habe einen Termin beim Arbeitsgericht", "sensitive": true, "category": "special", "lang": "de", "kind": "sibling"}
+{"text": "tengo un juicio en el juzgado el lunes", "sensitive": true, "category": "special", "lang": "es", "kind": "sibling"}
+{"text": "mam rozprawę w sądzie", "sensitive": true, "category": "special", "lang": "pl", "kind": "sibling"}
+{"text": "je passe au tribunal lundi", "sensitive": true, "category": "special", "lang": "fr", "kind": "sibling"}
+{"text": "I'm Sunni", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "we're Shia", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I'm a Latter-day Saint", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I'm Druze", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I'm a mason, the lodge meets Thursdays", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I'm a Rastafarian", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I'm a Scientologist", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I'm Brahmin", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I'm a member of the CWU", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "ik ben lid van de PvdA", "sensitive": true, "category": "special", "lang": "nl", "kind": "sibling"}
+{"text": "je suis adhérent au PS", "sensitive": true, "category": "special", "lang": "fr", "kind": "sibling"}
+{"text": "went to the anti-war rally last week", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "I'm a card-carrying Tory", "sensitive": true, "category": "special", "lang": "en", "kind": "sibling"}
+{"text": "we're in Lisbon 3rd-10th May, nobody's watching the house", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "we'll be in Spain for two weeks from the 12th", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "flying to Boston Tuesday, back the following Monday", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "we leave the back door unlocked", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "the kitchen window doesn't close properly", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "the doorbell camera's been offline since June", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "the patio door lock is broken", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "our CCTV isn't working", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "we never set the burglar alarm", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "spare key's in the fake rock by the steps", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "the key is on top of the door frame", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "la llave está en la maceta de la entrada", "sensitive": true, "category": "location", "lang": "es", "kind": "sibling"}
+{"text": "we're the house with the green door at the end of Mill Road", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "I live above the bakery on King St", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "our flat's opposite the Tesco on Station Road", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "I'm usually home alone after 6", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "I leave my car on Oak Street every night", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "I'm at the pool on Carr Lane every Tuesday at 7", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "my what3words is ///filled.count.soap", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "the safe is behind the painting in the study", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "I keep cash under the mattress", "sensitive": true, "category": "location", "lang": "en", "kind": "sibling"}
+{"text": "wir sind vom 1. bis 14. August weg", "sensitive": true, "category": "location", "lang": "de", "kind": "sibling"}
+{"text": "born 3rd March '88", "sensitive": true, "category": "identity", "lang": "en", "kind": "sibling"}
+{"text": "I'm turning 30 on the 5th of May", "sensitive": true, "category": "identity", "lang": "en", "kind": "sibling"}
+{"text": "DOB 04.07.91", "sensitive": true, "category": "identity", "lang": "en", "kind": "sibling"}
+{"text": "born in '79 on christmas day", "sensitive": true, "category": "identity", "lang": "en", "kind": "sibling"}
+{"text": "I'll be 50 on the 3rd of October", "sensitive": true, "category": "identity", "lang": "en", "kind": "sibling"}
+{"text": "I'm reviewing the password reset flow", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm writing a blog post about 2FA", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the SSH key setup was painless", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we store secrets in Vault", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I switched to passkeys last month", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my private key lives on a YubiKey", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm building a pill reminder app", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our fintech client is a bank", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm making an expense tracker app for fun", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the credit card input needs a mask", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm reading The Body Keeps the Score", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "currently reading Rich Dad Poor Dad", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my favourite singer is Adele", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm going hiking with friends on Sunday", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm addicted to Wordle", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm allergic to Mondays", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "a bit OCD about my desk", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "doing parkrun on saturday, hoping for a sub-25 5k", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I owe you a coffee", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I owe it all to practice", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the old chapel they turned into flats is gorgeous", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "Python is basically my religion", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my thesis was on the politics of migration", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I teach a module on religion and society", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the secret ingredient is miso", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "drop a pin at the trailhead", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my portfolio website needs a redesign", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "convert 70 kg to pounds", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the fake user in the seed data has password 'test123'", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "el banco de la plaza está roto", "sensitive": false, "category": "none", "lang": "es", "kind": "harmless"}
+{"text": "la clave del éxito es la constancia", "sensitive": false, "category": "none", "lang": "es", "kind": "harmless"}
+{"text": "conviction matters more than talent", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my cat has a UTI again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the dog's on steroids for his skin", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the tomato plants have blight", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the pill button needs more padding", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "Visa card icons in the checkout mockup", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm getting married in the spring", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the API token lives in the CI secrets", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I prefer passkeys to passwords", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a bit addicted to sourdough baking", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the diabetes app we built won an award", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm researching the history of medicine", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my favourite author is Ursula Le Guin", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm watching The Last of Us", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the camera on my phone is broken", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the lock screen widget is buggy", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love that café on Church Street", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the build is behind schedule again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the sprint runs 3rd to 17th May", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm in Berlin for two days for a conference", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our release is 2nd-9th June", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the API rate limit is 100 per minute", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I refactored the auth module today", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the balance of the layout feels off", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my test coverage is up 12%", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our conversion rate went up 3% after the redesign", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the cache hit rate is 94%", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I bought some new plants for the balcony", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I sold my old bike on eBay", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm buying a new keyboard", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the tribunal scene in that film was great", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love the Handmaid's Tale", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the photo of the old castle is my wallpaper", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we fixed the memory leak in the parser", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my laptop's battery is dead again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the Wi-Fi at the office is broken", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the office door code changed again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the train was cancelled so I worked from home", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my commute takes 40 minutes", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I prefer dark mode in every editor", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm learning Rust in the evenings", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm on the frontend team", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my manager approved the design", "sensitive": true, "category": "other_people", "lang": "en", "kind": "sibling", "everyday": true}
+{"text": "the server is down again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the database is locked during migrations", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I finally beat the final boss", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm building a CLI in Go", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I use a YubiKey for everything", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I switched my passwords to a manager last year", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the password policy at work is annoying", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I reset my router last night", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my phone's screen is cracked", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm reading Dune again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "watching Breaking Bad for the third time", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the Beatles are my favourite band", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my go-to karaoke song is Bohemian Rhapsody", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I bake sourdough every Sunday", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I walk to work most days", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I go to the climbing gym on Tuesdays", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like hiking in the Peak District", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I play five-a-side on Thursdays", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I've been doing yoga for a year", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my running pace is about 5:30 per km", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I did a 10k on Sunday", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm training for a half marathon", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm vegan", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I drink too much coffee", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I hate mornings", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a night owl", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm left-handed", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm six foot two", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I wear glasses", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love spicy food", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "tea over coffee, always", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I prefer trains to planes", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my favourite season is autumn", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm allergic to bad UX", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm addicted to mechanical keyboards", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "this code base is a crime scene", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "that bug is killing me", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the deadline is murder", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the meeting was painful", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the demo went viral", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my code has a virus of bugs", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the linter is too strict", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our cloud bill is huge this month", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the company raised a Series A", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the startup's valuation dropped 20%", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the stock market was wild today", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I read the FT every morning", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm reading a book about the history of banking", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I watched a documentary on the Great Depression", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the museum has a room on medieval medicine", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm studying for my AWS certification", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the course on data privacy was good", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm writing a talk on password hashing", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we added 2FA to the admin panel", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the login page needs a redesign", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the PIN pad component is done", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the checkout flow handles card payments", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our budgeting feature ships next week", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we built a symptom checker for a client", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the pharmacy app I'm building uses Flutter", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I take the 7:15 train", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I usually get up at 6", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the gym near work opens at 6am", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I park at the station", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the shop on High Street closes at 5", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love the café on Market Street", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "there's a great bakery on King St", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the flat above the shop is for sale", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our office is next to the station", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the pub opposite the office does good food", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I work from the library on Fridays", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we're moving offices next month", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm going to Lisbon in spring", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we went to Spain last summer", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I was born in Leeds", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I grew up near the sea", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I turned my old laptop into a server", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'll be 10 minutes late", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the kids' menu was tiny", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my niece-level Spanish is bad", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the team is on holiday next week", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my to-do list is endless", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I owe you lunch", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I owe my sanity to coffee", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the bank holiday traffic was awful", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my keys are always on the hook by the door", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I lost my keys again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the key to good bread is patience", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the lock on my bike is rusty", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the castle's gate was closed", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I painted the back door blue", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the garden gate squeaks", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our doorbell plays a tune", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the window in my study faces north", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I left the window open for some air", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the alarm on my phone didn't go off", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I set my alarm for 6", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the fire alarm test is on Friday", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a member of the chess club", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a member of the RSPB", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a member of the National Trust", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I support Arsenal", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I voted in the Eurovision poll", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I joined the BBC as an intern", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my religion is football, basically", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love the sound of church bells", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the cathedral in Cologne is stunning", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we visited a mosque in Istanbul on holiday", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like gospel music", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I sing in a choir", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a Leo, apparently", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I did the Camino last year", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm fasting until lunch, intermittent fasting", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I had a cold last week", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I've got a stiff neck from sleeping badly", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm tired today", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I slept badly", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I went for a massage", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I got a haircut", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I need new running shoes", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm trying to drink more water", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I've cut out sugar", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I go to the dentist twice a year", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my eyes are tired from screens", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the cat knocked my coffee over", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my dog is scared of fireworks", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the dog needs a haircut", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our cat is on a diet", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my plants are dying, too much water", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the tomatoes have blight again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I adopted a rescue cat", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm cat-sitting next week", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I cycled 50k on Saturday", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I lost 3 games of chess in a row", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I scored 3 points in the quiz", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the team lost 3-1", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the score was 2-2", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the quiz is on the 4th at 7pm", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my ssh config has five hosts", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the secret to good coffee is fresh beans", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "secrets are stored in 1Password", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the private key is in the HSM", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the token expires after an hour", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we rotate the API keys every 90 days", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I use passkeys where I can", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the recovery email for the test account is on the wiki", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the default port is 8080", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the pin headers on the Pi are bent", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "set the PIN length to 6 in the config", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the password field needs a show button", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm writing docs for the password reset endpoint", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my liver numbers were off at the last check", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "the endo wants me on a pump", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I get cluster migraines in spring", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I had a TIA two years ago", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "my GP referred me to the memory clinic", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm waiting on a hip op", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I use a CPAP machine at night", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I've had shingles twice", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "my heart rate goes to 180 randomly, they think it's SVT", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm on a waiting list for an ADHD assessment", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I got my coil fitted last week", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm 12 weeks along", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "my sperm count came back low", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I have a stoma since the surgery", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I've got gallstones", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "my kidneys are only working at 40 percent", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm on methotrexate", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I've been self-harming again", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm in AA, three years now", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I see a counsellor on Wednesdays", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm half deaf in my left ear", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I use a wheelchair outside the house", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "my cholesterol was 7.2", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I have IBS flare-ups when stressed", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I have POTS", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "my psychiatrist changed my meds", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "the dermatologist froze a wart off", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I had a mini stroke last year", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I've been off work with stress since May", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "tengo la tensión alta", "sensitive": true, "category": "health", "lang": "es", "kind": "fresh"}
+{"text": "j'ai fait une fausse couche en mars", "sensitive": true, "category": "health", "lang": "fr", "kind": "fresh"}
+{"text": "ich habe Diabetes Typ 2", "sensitive": true, "category": "health", "lang": "de", "kind": "fresh"}
+{"text": "ho la pressione alta", "sensitive": true, "category": "health", "lang": "it", "kind": "fresh"}
+{"text": "tenho asma desde criança", "sensitive": true, "category": "health", "lang": "pt", "kind": "fresh"}
+{"text": "ik heb een hernia", "sensitive": true, "category": "health", "lang": "nl", "kind": "fresh"}
+{"text": "mam niedoczynność tarczycy", "sensitive": true, "category": "health", "lang": "pl", "kind": "fresh"}
+{"text": "I'm maxed out on three cards", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "my overdraft is at the limit again", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "we're behind on the gas bill", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I earn just under 30 grand", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I've got a CCJ from 2021", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I'm on a debt management plan", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "the council's chasing me for arrears", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I lost 2k at the casino last month", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I get PIP for my back", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "we live off my wife's wage", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "my pension pot is about 60k", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I borrowed from a loan shark once", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "my student loan is 45k", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I'm skint till payday", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "ich habe Mietschulden", "sensitive": true, "category": "money", "lang": "de", "kind": "fresh"}
+{"text": "je suis à découvert de 800 euros", "sensitive": true, "category": "money", "lang": "fr", "kind": "fresh"}
+{"text": "tengo una deuda con Hacienda", "sensitive": true, "category": "money", "lang": "es", "kind": "fresh"}
+{"text": "ho un mutuo di 150 mila euro", "sensitive": true, "category": "money", "lang": "it", "kind": "fresh"}
+{"text": "estou endividado", "sensitive": true, "category": "money", "lang": "pt", "kind": "fresh"}
+{"text": "ik zit in de schuldsanering", "sensitive": true, "category": "money", "lang": "nl", "kind": "fresh"}
+{"text": "mam długi w banku", "sensitive": true, "category": "money", "lang": "pl", "kind": "fresh"}
+{"text": "netflix login: jen.k@mail.com / Tulip88", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "the garage keypad is 7-3-9-1", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "my bank PIN is the same as my phone's", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "the safe opens with 2210", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "my recovery phrase starts with apple river", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "wifi pass is LetMeIn2024", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "my Steam password is dragon55", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "GitHub token ghp_1234567890abcdefghijklmnopqrstuvwxyzAB", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "my online banking memorable word is Rosebud", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "el pin de la tarjeta es 5566", "sensitive": true, "category": "credentials", "lang": "es", "kind": "fresh"}
+{"text": "mein PIN ist 8844", "sensitive": true, "category": "credentials", "lang": "de", "kind": "fresh"}
+{"text": "o código do portão é 1234", "sensitive": true, "category": "credentials", "lang": "pt", "kind": "fresh"}
+{"text": "my passport number is 123456789", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "I was born on 3/5/1985", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "my NI is AB 12 34 56 C", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "driving licence MORGA657054SM9IJ", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "my birthday's 21st July, I'm 34", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "DOB: 12.10.1979", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "mi DNI es 12345678Z", "sensitive": true, "category": "identity", "lang": "es", "kind": "fresh"}
+{"text": "je suis né le 4 avril 1990", "sensitive": true, "category": "identity", "lang": "fr", "kind": "fresh"}
+{"text": "we live at 22 Rosewood Avenue", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "my postcode is LS6 2QT", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "the house is empty over Christmas", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "we're off to Greece for three weeks from Saturday", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "the back gate has no lock", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "the kids walk home alone from school at 3:30", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "I'm the only one home on Tuesdays", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "the spare key is under the frog statue", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "our alarm hasn't worked since the power cut", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "I leave for work at 7:10 every day", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "we're away 5th to 19th, the cat feeder is coming in", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "wir wohnen in der Lindenstraße 12", "sensitive": true, "category": "location", "lang": "de", "kind": "fresh"}
+{"text": "mi casa está en la calle Mayor 5", "sensitive": true, "category": "location", "lang": "es", "kind": "fresh"}
+{"text": "I'm bi", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm trans", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm Catholic but not practising", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I go to the mosque on Fridays", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm a Labour member", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm in the GMB", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I have a conviction for drink driving", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I was cautioned for possession at 19", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm on a spousal visa", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm half Jamaican", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I got nicked for shoplifting as a kid", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I spent a night in the cells", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "je suis musulman", "sensitive": true, "category": "special", "lang": "fr", "kind": "fresh"}
+{"text": "ich bin schwul", "sensitive": true, "category": "special", "lang": "de", "kind": "fresh"}
+{"text": "sono stato arrestato nel 2015", "sensitive": true, "category": "special", "lang": "it", "kind": "fresh"}
+{"text": "my brother's in rehab", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my wife is having IVF", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my son was expelled", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my mum has Alzheimer's", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "Jake from work is getting divorced", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my dad's struggling with money", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my best friend is gay but not out", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "mi hermana está embarazada", "sensitive": true, "category": "other_people", "lang": "es", "kind": "fresh"}
+{"text": "mein Vater hat Krebs", "sensitive": true, "category": "other_people", "lang": "de", "kind": "fresh"}
+{"text": "I'm learning the ukulele", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like crime novels", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm into bouldering", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I use Neovim with a custom config", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my favourite film is Heat", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I watch too much YouTube", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm redesigning my blog", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we use Postgres at work", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I prefer TypeScript", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my go-to lunch is a burrito", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm trying to read 30 books this year", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I just finished Project Hail Mary", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm planning a trip to Scotland in the summer", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like cold showers", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the new MacBook is fast", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I take the bus to work", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a morning runner", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like board games", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love a good pub quiz", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my favourite podcast is about history", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm writing a novel", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm terrible at small talk", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my flat is small but cosy", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love my standing desk", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a fan of Studio Ghibli", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I listen to a lot of jazz", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I play guitar badly", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm building a Home Assistant setup", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my smart lock integration keeps failing", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I want to learn Japanese", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm vegetarian most days", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love Thai food", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I've got a sweet tooth", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my sleep tracker says I sleep 7 hours", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I track my steps", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I did 12,000 steps today", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the weather app is wrong again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm addicted to crosswords", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I have a lot of houseplants", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I prefer paper books", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my bank app redesign is ugly", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the new tax year starts in April", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our team uses feature flags", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm on call this week", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm speaking at a meetup next month", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I got a new monitor", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm saving up for a new bike", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love the smell of rain", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my keyboard has brown switches", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm on the waiting list for a Steam Deck", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love medieval history", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm reading about the Reformation", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I support the local football club", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I volunteer at a food festival", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the church down the road does a great Christmas fair", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I work with the police on a data project", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my boss is great", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh", "everyday": true}
+{"text": "I call my mum every Sunday", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh", "everyday": true}
+{"text": "my hobby is genealogy", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like visiting old prisons as museums", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "me gusta el fútbol", "sensitive": false, "category": "none", "lang": "es", "kind": "harmless"}
+{"text": "j'adore le fromage", "sensitive": false, "category": "none", "lang": "fr", "kind": "harmless"}
+{"text": "ich lerne Klavier", "sensitive": false, "category": "none", "lang": "de", "kind": "harmless"}
+{"text": "mi piace cucinare", "sensitive": false, "category": "none", "lang": "it", "kind": "harmless"}
+{"text": "eu gosto de praia", "sensitive": false, "category": "none", "lang": "pt", "kind": "harmless"}
+{"text": "ik fiets naar mijn werk", "sensitive": false, "category": "none", "lang": "nl", "kind": "harmless"}
+{"text": "lubię góry", "sensitive": false, "category": "none", "lang": "pl", "kind": "harmless"}
+{"text": "I've been on sertraline for about a year", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "my asthma's been bad this winter", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I have a bad heart valve", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "they found a shadow on my lung", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm recovering from a slipped disc", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I get really bad period pain", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm lactose intolerant", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I've got tennis elbow from typing", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm getting my wisdom teeth out on Monday", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm on a waiting list for therapy", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "my blood sugar crashed at work again", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I've got early arthritis in my hands", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm deaf in one ear", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I stammer when I'm nervous", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I was hospitalised with sepsis last year", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I get panic attacks on trains", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm going through IVF", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm trying to quit vaping", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I have a pacemaker", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I've got long covid", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "my mental health has been rough lately", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I have a benign tumour in my ear", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I got diagnosed with sleep apnoea", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I'm on beta blockers for anxiety", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "I had a breakdown in 2020", "sensitive": true, "category": "health", "lang": "en", "kind": "fresh"}
+{"text": "je prends des antidépresseurs", "sensitive": true, "category": "health", "lang": "fr", "kind": "fresh"}
+{"text": "tengo migrañas crónicas", "sensitive": true, "category": "health", "lang": "es", "kind": "fresh"}
+{"text": "ich bin in Therapie", "sensitive": true, "category": "health", "lang": "de", "kind": "fresh"}
+{"text": "soffro di ansia", "sensitive": true, "category": "health", "lang": "it", "kind": "fresh"}
+{"text": "estou grávida de 5 meses", "sensitive": true, "category": "health", "lang": "pt", "kind": "fresh"}
+{"text": "ik heb reuma", "sensitive": true, "category": "health", "lang": "nl", "kind": "fresh"}
+{"text": "choruję na cukrzycę", "sensitive": true, "category": "health", "lang": "pl", "kind": "fresh"}
+{"text": "I've got about 3k in savings", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "my salary's 38k before tax", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I'm paying off a payday loan", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "we've got a 25-year mortgage", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I'm on Universal Credit since I lost my job", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I owe my brother 500 quid", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I have 12 grand on credit cards", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I'm self-employed and behind on my tax return", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "my credit score tanked after the divorce", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "we're struggling to pay the energy bill", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I got a redundancy payout", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I've got shares in my employer", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "I'm declaring bankruptcy", "sensitive": true, "category": "money", "lang": "en", "kind": "fresh"}
+{"text": "gano 1.800 euros al mes", "sensitive": true, "category": "money", "lang": "es", "kind": "fresh"}
+{"text": "je gagne 2 500 euros par mois", "sensitive": true, "category": "money", "lang": "fr", "kind": "fresh"}
+{"text": "ich verdiene 4.000 brutto", "sensitive": true, "category": "money", "lang": "de", "kind": "fresh"}
+{"text": "guadagno 1500 euro al mese", "sensitive": true, "category": "money", "lang": "it", "kind": "fresh"}
+{"text": "zarabiam 7 tysięcy", "sensitive": true, "category": "money", "lang": "pl", "kind": "fresh"}
+{"text": "my email password is Blue!Moon7", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "the router login is admin, password is 4f8Gk2", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "PIN for the card is 1357", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "my Apple ID password is the same as my email one", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "the lockbox code is 0911", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "backup codes: 8841 2290 5512", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "my Amazon password: horse-battery-9", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "the alarm code is our house number twice", "sensitive": true, "category": "credentials", "lang": "en", "kind": "fresh"}
+{"text": "il codice del bancomat è 4412", "sensitive": true, "category": "credentials", "lang": "it", "kind": "fresh"}
+{"text": "mijn wachtwoord is Zomer2023", "sensitive": true, "category": "credentials", "lang": "nl", "kind": "fresh"}
+{"text": "my social security number is 078-05-1120", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "my NHS number is 943 476 5919", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "my date of birth is 1 April 1983", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "I was born in 1991, on the 9th of March", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "passport expires 2029, number 548812307", "sensitive": true, "category": "identity", "lang": "en", "kind": "fresh"}
+{"text": "mein Geburtsdatum ist der 5.3.1982", "sensitive": true, "category": "identity", "lang": "de", "kind": "fresh"}
+{"text": "I live at flat 4, 18 Park Road", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "my address is 7 Birch Close, Hull", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "we're away all of August", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "nobody's home weekdays between 8 and 6", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "the key's under the mat", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "the kids get the bus at 8:05 from the corner", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "I live on my own", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "I walk the dog on the common at 6am every morning", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "we don't lock the back door during the day", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "the garage door doesn't close all the way", "sensitive": true, "category": "location", "lang": "en", "kind": "fresh"}
+{"text": "je vis seule", "sensitive": true, "category": "location", "lang": "fr", "kind": "fresh"}
+{"text": "vivo sola en un piso en Madrid", "sensitive": true, "category": "location", "lang": "es", "kind": "fresh"}
+{"text": "I came out last year", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm gay", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "my boyfriend and I live together", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm Jewish", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I pray five times a day", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I vote Green", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm a trade union rep", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I got arrested at a protest", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I have a criminal record", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm waiting on my citizenship application", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm an asylum seeker", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "I'm Romani", "sensitive": true, "category": "special", "lang": "en", "kind": "fresh"}
+{"text": "ich bin Muslim", "sensitive": true, "category": "special", "lang": "de", "kind": "fresh"}
+{"text": "soy lesbiana", "sensitive": true, "category": "special", "lang": "es", "kind": "fresh"}
+{"text": "sono ateo", "sensitive": true, "category": "special", "lang": "it", "kind": "fresh"}
+{"text": "my sister is pregnant", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my dad has dementia", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my friend Priya is in hospital", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my son has ADHD", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my partner earns more than me", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my neighbour's husband left her", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "Tom's in debt", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my ex is in prison", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "I like long walks", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a big fan of sci-fi", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my favourite band is Radiohead", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I use Linux at home", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm learning to cook Indian food", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I have a dog called Biscuit", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love autumn", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I prefer email to calls", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a software developer", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I play the piano", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm into photography", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my car is a Golf", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I drink oat milk", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I go climbing at the weekend", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm reading a book about space", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm doing a course on machine learning", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like strategy games", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm trying to get up earlier", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my favourite colour is green", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I hate cold weather", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a Liverpool fan", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love sushi", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm building a keyboard", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm into retro computers", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like to journal in the evenings", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I work remotely", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I have two monitors", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like my coffee black", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm training for a 10k", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I just bought a new tent", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm learning Spanish on Duolingo", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I like jigsaw puzzles", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I prefer to work in the morning", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm allergic to Excel", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my code review got approved", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the unit tests are failing", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the password reset email is broken", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "our API uses OAuth", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I set up SSH keys on the new server", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm writing a Rust crate", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm migrating to Kubernetes", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my GitHub streak is 100 days", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm into mechanical watches", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm a morning person", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love the sea", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm going to a gig on Friday", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I need a haircut", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my laptop is too slow", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the budget meeting ran long", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "the credit card field needs a mask", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm reading The Hunger Games", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm watching Succession", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "my favourite comedian is Bill Bailey", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm doing Dry January", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I bake bread on Saturdays", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm into birdwatching", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "we're getting a new sofa", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I love Christmas markets", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "I'm planning a garden", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
+{"text": "me encanta el cine", "sensitive": false, "category": "none", "lang": "es", "kind": "harmless"}
+{"text": "je fais du vélo", "sensitive": false, "category": "none", "lang": "fr", "kind": "harmless"}
+{"text": "ich mag Katzen", "sensitive": false, "category": "none", "lang": "de", "kind": "harmless"}
+{"text": "amo il caffè", "sensitive": false, "category": "none", "lang": "it", "kind": "harmless"}
+{"text": "eu jogo xadrez", "sensitive": false, "category": "none", "lang": "pt", "kind": "harmless"}
+{"text": "ik hou van wandelen", "sensitive": false, "category": "none", "lang": "nl", "kind": "harmless"}
+{"text": "gram w szachy", "sensitive": false, "category": "none", "lang": "pl", "kind": "harmless"}

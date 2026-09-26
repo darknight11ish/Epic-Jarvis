@@ -87,3 +87,117 @@ def explain() -> str:
     where = "JARVIS_BACKEND" if os.environ.get("JARVIS_BACKEND") else "this folder"
     return (f"Backend modules were looked for in {BACKEND} ({where}). "
             f"Set JARVIS_BACKEND to the folder holding jarvis_hud.py.")
+
+
+#: Modules this repository ships WHOLE, for the owner's backend folder:
+#: apply-patches.ps1 copies each one beside jarvis_hud.py (a "rebuilt/" entry
+#: lands there too, by file name). Every import of one of these is wrapped,
+#: so a backend without the file runs - with that feature quietly off.
+#:
+#: The SAME list, in the same order, as `$SHIPPED` in scripts/apply-patches.ps1.
+#: test_shipped_modules.py fails if they differ, and if any module a shipped
+#: file or a patch imports is in neither this list nor its exemptions. This
+#: tuple once lagged the script by seven modules and the script once lagged
+#: jarvis_agent.py by seven more.
+SHIPPED = (
+    # the ten rebuilt modules
+    "rebuilt/jarvis_compute.py", "rebuilt/jarvis_events.py",
+    "rebuilt/jarvis_framework.py", "rebuilt/jarvis_initiative.py",
+    "rebuilt/jarvis_memory.py", "rebuilt/jarvis_power.py",
+    "rebuilt/jarvis_recall.py", "rebuilt/jarvis_router.py",
+    "rebuilt/jarvis_sleep.py", "rebuilt/jarvis_voice.py",
+    # modules the patches call
+    "jarvis_intake.py", "jarvis_feedback.py", "jarvis_skill_discovery.py",
+    "jarvis_speed.py", "jarvis_owned_tables.py", "jarvis_agent.py",
+    "jarvis_voice_enroll.py", "jarvis_speech.py",
+    "jarvis_task_control.py", "jarvis_note_capture.py", "jarvis_power_switch.py",
+    "jarvis_wakeword.py",
+    "jarvis_token_store.py",
+    "jarvis_second_card.py",
+    "jarvis_wiki.py",
+    "jarvis_big_model.py",
+    "jarvis_turn.py", "jarvis_wakebank.py", "jarvis_stopword.py",
+    "jarvis_local_http.py", "jarvis_child_env.py",
+    "jarvis_voices.py", "jarvis_f5_worker.py", "jarvis_bakeoff.py",
+    "jarvis_learning_switch.py",
+    "jarvis_voicebank.py",
+    "jarvis_voice_flow.py",
+    "jarvis_chat_log.py",
+    "jarvis_auto_learn.py",
+    "jarvis_sensitive.py",
+    "jarvis_past.py",
+    "jarvis_entities.py",
+    "jarvis_profiles.py", "jarvis_hardware.py",
+    "jarvis_scrub.py",
+    "jarvis_schedule.py", "jarvis_quick.py",
+    "jarvis_standby_schedule.py",
+    "jarvis_backoff.py", "jarvis_briefing.py",
+    "jarvis_reach.py",
+    "jarvis_owner_check.py",
+    "jarvis_manner.py",
+    "jarvis_card_words.py",
+    # the tools jarvis_agent.py offers
+    "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
+    "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",
+    "jarvis_mail_mask.py",
+    "jarvis_email_send.py",
+    "jarvis_notes.py", "jarvis_home.py",
+    "jarvis_search.py",
+    # Stop everything (stop-all.patch)
+    "jarvis_stop_all.py",
+    # "tell me when ..." - a kind of job on the one scheduler (not a tool)
+    "jarvis_tellme.py",
+    # focus sessions (focus.patch): a kind of job on the one scheduler
+    "jarvis_focus.py",
+    # "What asks first" and "Lights, plugs and fans without a card" (asks-first.patch)
+    "jarvis_asks_first.py",
+    # "Folders Jarvis may look in" and the my_files tool (documents.patch)
+    "jarvis_documents.py",
+    # the words in a picture, read on this PC and marked as outside text (no patch)
+    "jarvis_ocr.py",
+    # plug-in programs (MCP): read-only tools from programs on this PC, through more_tools
+    "jarvis_mcp.py",
+)
+
+
+def _same_text(a: Path, b: Path) -> bool:
+    # Line endings do not count: a Windows clone may hold CRLF copies of
+    # files that are LF here, and Python reads both the same.
+    return (a.read_bytes().replace(b"\r\n", b"\n")
+            == b.read_bytes().replace(b"\r\n", b"\n"))
+
+
+def require_shipped(*names: str) -> None:
+    """Stop the suite, plainly, if the backend's copy of a shipped module is
+    missing or is not the one in this repository.
+
+    Only when JARVIS_BACKEND is set - that is, when the suite is being run
+    against a real install. Without this, the suite imported THIS folder's
+    copy whenever the backend had none (every suite also puts this folder on
+    sys.path), passed, and said nothing about the copy the backend actually
+    runs. In the dev container BACKEND is this folder, so there is nothing
+    to compare and nothing happens.
+    """
+    if not os.environ.get("JARVIS_BACKEND") or BACKEND == _HERE:
+        return
+    problems = []
+    for n in names:
+        # "rebuilt/jarvis_memory.py" is this repository's path; on the PC the
+        # file sits beside jarvis_hud.py under its own name.
+        leaf = n.rsplit("/", 1)[-1]
+        theirs, ours = BACKEND / leaf, _HERE / n
+        shown = "backend\\" + n.replace("/", "\\")
+        if not theirs.is_file():
+            problems.append(f"{leaf} is not in {BACKEND}, so the feature it carries "
+                            f"is switched off there. Copy {shown} into the "
+                            f"backend folder (apply-patches.ps1 does this for you).")
+        elif ours.is_file() and not _same_text(theirs, ours):
+            problems.append(f"{leaf} in {BACKEND} is not the copy in this repository "
+                            f"(an older one, most likely). Copy {shown} into "
+                            f"the backend folder (apply-patches.ps1 does this for you).")
+    if problems:
+        for p in problems:
+            print("FAIL  " + p)
+        print("\nNot run: this suite would have tested this repository's copy "
+              "instead of the one your backend uses.")
+        sys.exit(1)

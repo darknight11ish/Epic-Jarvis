@@ -1,0 +1,182 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2748,8 +2748,26 @@
+         # enabled = [...]` is the same config key collect_tools() and
+         # /api/status already read, so turning tools off here is the same
+         # switch that already existed, not a new one.
++        #
++        # chat-stream.patch: EVERY local turn goes through jarvis_agent now,
++        # not only a turn with tools on. It streams each round once (a turn
++        # used to be generated twice - unseen, then again), keeps the phone's
++        # connection alive while an approval card waits, sends the answer
++        # with the Content-Type that matches it, switches Qwen3's thinking
++        # off, cuts any <think> block out of the answer, trims the history to
++        # the model's real context, and says what went wrong in plain words.
++        # Which tools are OFFERED is still `[tools].enabled` - only the ones
++        # jarvis_agent really has; none listed means none offered. The name
++        # `use_tools` is kept so the lines below are unchanged. If
++        # jarvis_agent.py is missing or older than this patch, the plain
++        # relay below serves the turn exactly as before.
++        try:
++            import jarvis_agent
++            _agent_ok = hasattr(jarvis_agent, "content_type")
++        except Exception:
++            _agent_ok = False
+         use_tools = (lane == local_model
+-                     and bool((cfg.get("tools") or {}).get("enabled")))
++                     and _agent_ok)
+         # The degrade loop below opens its own connection to negotiate a
+         # lane; jarvis_agent.run_local_turn makes its own requests entirely,
+         # so running both would mean two live completions for one turn. Not
+@@ -2855,7 +2873,17 @@
+                 # its own request(s) to Ollama entirely on its own, so there
+                 # is no single response object to read a Content-Type from.
+                 self.send_response(200)
+-                self.send_header("Content-Type", "application/json")
++                # chat-stream.patch: the header says what the body is. This
++                # was application/json on an SSE body, and the HUD page -
++                # which picks its reader from this header - failed every such
++                # turn with "Unexpected token 'd'". `stream: false` now gets
++                # one JSON body, as the app asked.
++                _streaming = bool((payload or {}).get("stream"))
++                self.send_header("Content-Type", jarvis_agent.content_type(_streaming))
++                # Where the answer is made, for the Local/Cloud badge on
++                # every app: this branch is only ever the local model.
++                route_header["lane"] = lane
++                route_header["where"] = "local"
+                 self.send_header("X-Jarvis-Route", json.dumps(route_header))
+                 self.send_header("Access-Control-Expose-Headers", "X-Jarvis-Route")
+                 self.send_header("Cache-Control", "no-store")
+@@ -2864,13 +2892,18 @@
+                 _activity("speaking")
+                 try:
+                     import jarvis_agent
+-                    jarvis_agent.run_local_turn(
++                    _turn = jarvis_agent.run_local_turn(
+                         messages, lane, ollama_url=OLLAMA_URL,
+                         enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []),
+                         stream_out=lambda chunk: (self.wfile.write(chunk),
+                                                    self.wfile.flush(),
+                                                    _speed.feed(chunk)
+                                                    if _speed is not None else None),
++                        # chat-stream.patch: what the app asked for (stream,
++                        # temperature, max_tokens), and how to cut off
++                        # Ollama if the app goes away mid-answer - the same
++                        # reset the plain relay below uses.
++                        stream=_streaming, request=payload, abort=_abort,
+                         # The same doorbell every other capability uses to
+                         # say what it is doing while it does it - see
+                         # jarvis_ui_control.py/jarvis_android_control.py's
+@@ -2880,8 +2913,17 @@
+                     # tools=True: this answer's first-word time includes the
+                     # tool calls and any wait for your approval, so the
+                     # summaries leave it out of the first-word figure.
+-                    if _speed is not None:
+-                        _speed.finish(lane, tools=True)
++                    #
++                    # chat-stream.patch: every local turn comes this way now,
++                    # so "tools" is what really happened - more than one
++                    # round means the model asked for a tool. And
++                    # run_local_turn reports Ollama failing, or the app
++                    # leaving, by returning rather than raising, so only an
++                    # answer that really finished is recorded.
++                    _turn = _turn or {}
++                    if (_speed is not None and _turn.get("finish_reason")
++                            and not _turn.get("client_gone")):
++                        _speed.finish(lane, tools=int(_turn.get("rounds") or 1) > 1)
+                 except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
+                     # Unlike the plain-relay branch below, there is no
+                     # single `upstream` left open to abort - jarvis_agent's
+@@ -2889,6 +2931,12 @@
+                     # nobody reading the result. Accepted for this first
+                     # pass; the plain-relay branch's cancellation trick does
+                     # not translate directly to a multi-request loop.
++                    #
++                    # chat-stream.patch: it does now. jarvis_agent notices
++                    # the app has gone (a keepalive or a word that cannot be
++                    # written), aborts its own request with `_abort`, runs no
++                    # further tool, and returns - so this is only reached if
++                    # the very last write fails.
+                     return
+                 except Exception as exc:
+                     # Anything else - Ollama refusing the connection, a bug
+@@ -2912,13 +2960,27 @@
+                     # rather than the diagnosis, means a bug in jarvis_agent
+                     # doesn't send the owner to restart a service that was
+                     # never the problem.
++                    #
++                    # chat-stream.patch: jarvis_agent now reports Ollama
++                    # being down, a missing model and the like itself, in
++                    # plain words, so what reaches here is a bug in Jarvis.
++                    # Said so plainly; the details follow for whoever fixes
++                    # it, and the traceback goes to this window's log. The
++                    # line is framed the way the rest of the body is: an SSE
++                    # `data:` line, or a JSON body.
++                    import traceback as _tb
++                    _tb.print_exc()
+                     message = (
+-                        f"Something went wrong while using a tool: "
+-                        f"{type(exc).__name__}: {exc}. If Ollama itself is "
+-                        f"not running on {OLLAMA_URL}, start it with "
+-                        f"`ollama serve`.")
++                        f"Jarvis hit a problem while answering and stopped. "
++                        f"This is a bug in Jarvis, not something you did. "
++                        f"(Details for fixing it: {type(exc).__name__}: {exc})")
+                     try:
+-                        self.wfile.write(json.dumps({"error": message}).encode("utf-8") + b"\n")
++                        if _streaming:
++                            self.wfile.write(b"data: " + json.dumps(
++                                {"error": {"message": message, "type": "jarvis"}}
++                            ).encode("utf-8") + b"\n\n")
++                        else:
++                            self.wfile.write(json.dumps({"error": message}).encode("utf-8") + b"\n")
+                         self.wfile.flush()
+                     except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
+                         pass
+@@ -2928,6 +2990,10 @@
+                     self.send_response(200)
+                     self.send_header("Content-Type",
+                                      upstream.headers.get("Content-Type", "application/json"))
++                    # chat-stream.patch: the lane that is REALLY answering
++                    # (after any step down), and whether it is this PC.
++                    route_header["lane"] = lane
++                    route_header["where"] = "local" if lane == local_model else "cloud"
+                     self.send_header("X-Jarvis-Route", json.dumps(route_header))
+                     self.send_header("Access-Control-Expose-Headers", "X-Jarvis-Route")
+                     self.send_header("Cache-Control", "no-store")
+@@ -2939,8 +3005,12 @@
+                     # here it is not known anywhere.
+                     _activity("speaking")
+                     try:
++                        # read1, not read: on a chunked response read(1024)
++                        # waits for a whole 1,024 bytes - several words at a
++                        # time instead of each as it is written.
++                        _read = getattr(upstream, "read1", None) or upstream.read
+                         while True:
+-                            chunk = upstream.read(1024)
++                            chunk = _read(1024)
+                             if not chunk:
+                                 break
+                             self.wfile.write(chunk)
+@@ -2969,12 +3039,17 @@
+             return
+         except Exception as exc:
+             try:
++                # chat-stream.patch: what to DO, first. The cloud line used
++                # to say "Start it with `uv run jarvis serve`" - a program
++                # this setup never installs.
+                 unreachable_msg = (
+-                    f"Ollama is not answering on {OLLAMA_URL}. "
+-                    f"Start it with `ollama serve`. ({exc})"
++                    f"The local model is not running. Open Ollama on this PC "
++                    f"(or run `ollama serve`), then try again. "
++                    f"(Details: nothing answered at {OLLAMA_URL}: {exc})"
+                     if lane == local_model else
+-                    f"Jarvis is not answering on {JARVIS_URL}. "
+-                    f"Start it with `uv run jarvis serve`. ({exc})"
++                    f"The cloud model is not set up on this PC - nothing "
++                    f"answers at {JARVIS_URL}. Pick the local model and ask "
++                    f"again. (Details: {exc})"
+                 )
+                 self._send(503, {
+                     "error": unreachable_msg,

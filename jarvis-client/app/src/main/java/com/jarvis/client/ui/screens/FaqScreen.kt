@@ -3,6 +3,7 @@ package com.jarvis.client.ui.screens
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,17 +21,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.BuildConfig
+import com.jarvis.client.ui.Chevron
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.LocalRadii
 
 /**
@@ -38,9 +45,10 @@ import com.jarvis.client.ui.theme.LocalRadii
  *
  * Answers specific to THIS app — the one on the phone. The desktop program has
  * its own FAQ, in its own Settings window, because the two run into different
- * problems: this one is a thin client with no model of its own, reached over
- * Tailscale, gated by the phone's fingerprint sensor rather than its keyboard.
- * A phone owner asking "does this run anything on my phone" needs a different
+ * problems: this one is a thin client (its only models are small sound
+ * models - the wake word, the end of speech and "stop" - and none of them
+ * makes words), reached over a private mesh network (Tailscale or Meshnet), gated by the phone's
+ * fingerprint sensor rather than its keyboard. A phone owner asking "does this run anything on my phone" needs a different
  * answer than a desktop owner asking the same question about their graphics
  * card.
  */
@@ -61,50 +69,124 @@ private val FAQS = listOf(
     ),
     Faq(
         "Does this app run any AI on my phone?",
-        "No. This app is a thin client: it shows you what the desktop says, " +
-            "and it sends the desktop what you type or say. Recognising your " +
-            "voice, understanding it, and deciding what to say back all " +
-            "happen on the desktop, never here — a phone that transcribed " +
-            "your voice itself would have already turned it into text before " +
-            "the desktop's owner-voice check ever saw it, and there would be " +
-            "nothing left for that check to examine.",
+        // Used to answer "No." It was never true once the wake word came in:
+        // three small sound models run here (voice/OrtWakeModels.kt,
+        // SmartTurn.kt, StopWord.kt). None of them makes words.
+        "Only small sound models. They listen for the \"hey Jarvis\" wake " +
+            "word, for the end of your sentence, and for \"stop\" while Jarvis " +
+            "is talking. They only listen for sounds: none of them turns " +
+            "speech into words. Everything else runs on your PC: checking it " +
+            "is your voice, writing down what you said, understanding it, " +
+            "and deciding what to say back. That order matters - a phone " +
+            "that wrote down your words itself would have done it before " +
+            "your PC could check it was your voice.",
     ),
     Faq(
-        "Why doesn't saying \"hey Jarvis\" wake anything on my phone?",
-        "This phone never listens for a wake phrase — no wake-word model is " +
-            "bundled in the app at all, so its microphone only opens while " +
-            "you are holding the talk button down. A wake word can run on " +
-            "the desktop instead; Platform checks shows whether the desktop " +
-            "currently has one turned on, and lets you turn it off from " +
-            "here, but turning it on is a desktop-side choice, on purpose.",
+        "How do I use \"hey Jarvis\"?",
+        "It is off until you turn it on, in two steps. First, on Platform " +
+            "checks, tap Turn on \"hey Jarvis\" and approve the card that " +
+            "appears - that lets your desktop accept it. Then tap Listen on " +
+            "this phone. While that is on, the microphone stays open (Android " +
+            "shows its microphone dot and a notification), a small model on " +
+            "the phone listens for the phrase and nothing else, and nothing " +
+            "leaves the phone until it hears it. Then what you say next goes " +
+            "to your desktop, which checks it is your voice before it writes " +
+            "down a word. Two exceptions, both only while you are talking " +
+            "with Jarvis: with \"Interrupt Jarvis while it talks\" on, about " +
+            "two seconds of anything said over Jarvis's answer go to your " +
+            "desktop, which only checks whether it was you (it never writes " +
+            "those down); and when Jarvis ends an answer with a question, " +
+            "your reply goes without the phrase, checked the same way. It " +
+            "stops when you stop it, restart the phone, or Android closes " +
+            "Jarvis, and it uses some battery while on.",
+    ),
+    Faq(
+        "How do I teach Jarvis my voice? Where is the talk button?",
+        "Open Platform checks and tap Train my voice on the Your voice card. " +
+            "Read the twelve short sentences, send them, then approve the card that " +
+            "appears on your desktop or here - Jarvis learns your voice only " +
+            "when you approve it, and the recordings are deleted either way. " +
+            "The talk button on Home appears once your voice is trained and " +
+            "the desktop can turn speech into text; the same card says which " +
+            "of those is still missing.",
     ),
     Faq(
         "Why can't I approve everything waiting for me in one tap?",
+        // Used to say the cards were in the Inbox and the buttons were
+        // "Affirm" and "Refuse". The cards are on Home (Inbox only links to
+        // them), and "Affirm"/"Refuse" are the names of the components in
+        // the code, not the words on the buttons (screens-11).
         "On purpose, the same as on the desktop: there is no approve-all " +
-            "anywhere in Jarvis. Each card in your Inbox is answered on its " +
-            "own, by a swipe for the ones the desktop has already flagged as " +
-            "safe to swipe, or by tapping Affirm or Refuse otherwise. " +
+            "anywhere in Jarvis. Each card waiting for you on Home is answered " +
+            "on its own, by a swipe for the ones the desktop has already flagged " +
+            "as safe to swipe, or by tapping Approve or Deny otherwise. " +
             "Nothing runs until you decide, one thing at a time.",
     ),
     Faq(
         "Why does approving something ask for my fingerprint, but denying doesn't?",
-        "Your fingerprint is asked only for the actions where it matters most " +
-            "— ones that leave this machine, cannot be undone, or arrived " +
-            "flagged as rushed. A phone is the device most likely to be " +
-            "picked up by someone who is not you, so approving one of those " +
-            "actions checks that whoever is holding it right now is really " +
-            "the owner. Denying is always the safe direction, so it is never " +
-            "gated behind anything — the cautious answer should never be the " +
-            "slow one.",
+        // Kept in step with SecurityScreen.kt and data/Security.kt.
+        "Out of the box, your fingerprint (or phone PIN) is asked only for " +
+            "the risky ones: actions that leave your PC, cannot be undone, " +
+            "were not labelled by Jarvis, or arrived flagged as rushed. A phone " +
+            "is the device most likely to be picked up by someone who is not " +
+            "you, so approving one of those checks that whoever is holding it " +
+            "right now is really the owner. If you want it for every approval, " +
+            "open Platform checks, then Lock and fingerprint settings, and " +
+            "choose Every approval. Denying is always the safe direction, so it " +
+            "is never gated behind anything — the cautious answer should never " +
+            "be the slow one.",
+    ),
+    Faq(
+        "Can I lock Jarvis itself, or hide what it remembers?",
+        "Yes, in Platform checks, then Lock and fingerprint settings. Lock " +
+            "Jarvis makes opening the app need your fingerprint or phone PIN, " +
+            "and you choose how long it can be out of sight before it asks " +
+            "again. Hide memory lists and chat history keeps the Brain's memory lists, the wiki's " +
+            "list of your notes, your chat history and deep questions, the words of your " +
+            "timers, reminders and lists, the morning briefing's lines and what a focus " +
+            "session is on hidden until you tap Show and confirm; their notifications " +
+            "say only what kind of thing is due. Chat " +
+            "answers are not hidden, because your PC does not say which ones " +
+            "used your email, calendar, notes or memory. Fingerprint only " +
+            "leaves out the PIN; only a fingerprint or face that Android rates " +
+            "as strong counts, and many phones' face unlock does not. Turning " +
+            "something on is instant; turning it off asks for your fingerprint " +
+            "or PIN first. These settings stay on this phone and are never " +
+            "sent to your PC.",
+    ),
+    Faq(
+        "Are my chats kept anywhere?",
+        "On your PC, encrypted, and nowhere else - including what you say by " +
+            "voice. This phone keeps none of it. To read, delete or stop " +
+            "keeping them, open the Brain, then Chat history. Turning keeping back " +
+            "on asks you first, with an approval card; turning it off is " +
+            "instant, and what is already kept stays until you delete it. " +
+            "Text you share into Jarvis from another app is sent, and kept, " +
+            "marked as shared, so Jarvis never mistakes it for your own words.",
+    ),
+    Faq(
+        "My phone has no screen lock. Does the fingerprint check still work?",
+        "No, because there is nothing for Jarvis to check against. So risky " +
+            "approvals - anything that leaves your PC, cannot be undone, or " +
+            "that outside text tried to rush - are refused until the phone " +
+            "has a screen lock, with a message and a button that opens " +
+            "Android's screen-lock settings (Security, Screen lock). Other " +
+            "approvals still work. If you turn any Jarvis lock on, approvals " +
+            "that need the check are refused and the app lock and hidden " +
+            "lists stay shut too; Jarvis will not let you turn a lock on while " +
+            "the phone has no screen lock. The PC does the same without " +
+            "Windows Hello.",
     ),
     Faq(
         "What does a Jarvis notification show on my lock screen?",
         "Only that Jarvis is waiting on a decision — never the actual " +
             "content of what it wants to do. The real details stay hidden " +
-            "until you unlock the phone and open the app, and there is no " +
-            "Approve or Deny button on the notification itself, on purpose: " +
-            "a decision this app cares about enough to gate behind a " +
-            "fingerprint is not one to make from a locked screen either.",
+            "until you unlock the phone and open the app. The notification " +
+            "can have a Deny button, when refusing without reading is safe, " +
+            "but never an Approve button, on purpose: saying yes happens " +
+            "inside the app, where the risky ones ask for your fingerprint, " +
+            "and that is not a decision to make from a locked screen. The " +
+            "home-screen widget follows the same rule.",
     ),
     Faq(
         "Does Jarvis's spoken voice ever get sent to a company like Google?",
@@ -118,15 +200,17 @@ private val FAQS = listOf(
             "using one that phones home.",
     ),
     Faq(
-        "It says \"Cannot reach the desktop.\" Now what?",
-        "Check that Tailscale is actually running on both the phone and the " +
-            "desktop first — that is the most common cause by far. Open " +
-            "Platform checks from Home to see exactly what this phone thinks " +
-            "is wrong. One known rough edge worth knowing about: a desktop " +
-            "that is simply asleep or has its lid closed currently looks " +
-            "identical to a real error on this screen, rather than a calmer " +
-            "\"it's just asleep\" message — so before assuming something " +
-            "broke, check whether the desktop itself is actually awake.",
+        "It says \"Your PC isn't answering\" or \"Jarvis isn't running on your PC\". Now what?",
+        "\"Your PC isn't answering\" means nothing answered at all: the PC may be " +
+            "asleep or switched off, or your private network (Tailscale, or " +
+            "NordVPN's Meshnet) may be off at one end. Wake the PC first, then " +
+            "check the private network is running on both the phone and the PC. " +
+            "\"Jarvis isn't running on your PC\" means the PC answered but nothing " +
+            "was listening for the phone: Jarvis is not started (on the PC, start " +
+            "it the way you set it up, or in Jarvis Desktop's Settings, More " +
+            "options, Start), or it is running but listens on the PC only - " +
+            "then fill in \"Let my phone reach this\" in the desktop app's Settings. " +
+            "Open Platform checks from Home to see what this phone thinks is wrong.",
     ),
     Faq(
         "Why does Jarvis want an exception from battery optimisation?",
@@ -148,14 +232,49 @@ private val FAQS = listOf(
     ),
     Faq(
         "Is it a problem that I installed this from a file instead of the Play Store?",
-        "Not for a phone only you use, which is what this build is for. " +
-            "Worth knowing plainly rather than not mentioning: this is " +
-            "currently a debug build, which is slightly less locked down " +
-            "than a store release — specifically, a computer connected to " +
-            "the phone with developer tools can still reach into this app's " +
-            "own storage. Fine for a phone that stays in your own hands; " +
-            "worth remembering if that phone is ever going to be someone " +
-            "else's.",
+        // Used to say "this is currently a debug build". It is not: the
+        // workflow publishes the RELEASE build to the client-latest page
+        // (build.gradle.kts, the long comment on `release`), and the risk
+        // that is actually on record - the shared signing key - went
+        // unmentioned (screens-11). Kept to what the build files show.
+        "Not for a phone only you use, which is what this app is for. The " +
+            "copy on your GitHub release page is a release build, the " +
+            "finished and locked-down kind: developer tools on a computer " +
+            "plugged into the phone cannot reach into this app's storage. " +
+            "The one thing worth knowing: every build is signed with the same " +
+            "key, which is what lets an update install over the old copy " +
+            "without wiping your pairing. Anyone holding that key could build " +
+            "an app your phone accepts as an update to this one, and that app " +
+            "could read your pairing token. The key is kept as a hidden secret " +
+            "in the project's GitHub settings, not in the code. So install " +
+            "Jarvis updates only from your own release page, never from a " +
+            "file someone sends you.",
+    ),
+    Faq(
+        "How do I know when there is a newer version?",
+        // net/UpdateCheck.kt.
+        "Jarvis asks GitHub, at most every six hours, whether a newer build " +
+            "is on the client-latest release page, and if there is one, a " +
+            "quiet line near the top of Home offers to open that page. It " +
+            "never downloads or installs anything: you install it yourself, " +
+            "the same way as before. The question to GitHub carries nothing " +
+            "about you or Jarvis. To stop it, open Platform checks and turn " +
+            "off Check for new versions on the This app card; that card also " +
+            "says if the last check failed.",
+    ),
+    Faq(
+        // The one answer the "run apply-patches.ps1" messages point to
+        // (ease-of-use audit 2026-09-27, #8e). The desktop's FAQ says the same.
+        "How do I update Jarvis?",
+        "Three parts, in this order. Jarvis on your PC: stop it, then in " +
+            "PowerShell, in your copy of the Jarvis files, get the newest files " +
+            "(git pull) and run apply-patches.ps1 again - it keeps your settings " +
+            "file, backs up what it replaces and saves a log of the run in " +
+            "_jarvis-logs in your Jarvis folder - then start Jarvis again. The " +
+            "desktop app: build and install it again (there is no automatic " +
+            "update yet). This app: install the newest file from the release " +
+            "page over the old one; it stays paired. docs/INSTALL.md, \"Updating " +
+            "everything\", has each step as one line to copy.",
     ),
 )
 
@@ -166,10 +285,14 @@ fun FaqScreen(
 ) {
     val chrome = LocalChrome.current
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
+        // Titled with the word on the button that opened it. Home's nav says
+        // "Help", and a beginner who taps "Help" and lands on "Frequently
+        // asked questions" has to work out that they are the same place
+        // (screens-15). The old title moves into the subtitle.
         TopBar(
-            "Frequently asked questions",
+            "Help",
             onBack,
-            subtitle = "Answers specific to this phone. The desktop has its own.",
+            subtitle = "Frequently asked questions, for this phone. The desktop has its own.",
         )
 
         LazyColumn(
@@ -190,17 +313,35 @@ fun FaqScreen(
     }
 }
 
-/** One question. Closed by default, so the list is scannable rather than a wall of text. */
+/**
+ * One question. Closed by default, so the list is scannable rather than a wall of text.
+ *
+ * The open/closed mark is a drawn chevron that turns over, not a typed "+"
+ * and "−" (screens-14): those were whatever the phone's font made of them,
+ * and a bare "+" reads as "add". The chevron is decoration only. A screen
+ * reader is told the state in words instead - "Expanded" or "Collapsed" -
+ * which it had no way to know before (a11y-8), because "+" was read out as
+ * "plus".
+ *
+ * The answer is bodyMedium (15sp), not bodySmall (13sp): these are
+ * paragraphs meant to be read, and 13sp is the size for captions.
+ */
 @Composable
 private fun FaqCard(faq: Faq) {
     val chrome = LocalChrome.current
     var open by rememberSaveable { mutableStateOf(false) }
+    val turn by animateFloatAsState(
+        targetValue = if (open) 180f else 0f,
+        animationSpec = LocalMotion.current.micro(),
+        label = "faq-chevron",
+    )
     Column(
         Modifier
             .fillMaxWidth()
             .animateContentSize()
             .clip(LocalRadii.current.cardShape)
             .background(chrome.surface1)
+            .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
             .pressable(onClick = { open = !open })
             .padding(14.dp),
     ) {
@@ -211,15 +352,17 @@ private fun FaqCard(faq: Faq) {
                 color = chrome.textHi,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                if (open) "−" else "+",
-                style = MaterialTheme.typography.titleSmall,
-                color = chrome.textMid,
+            Spacer(Modifier.width(8.dp))
+            // Turned in the draw phase, so the 120ms turn redraws one small
+            // box and recomposes nothing.
+            Chevron(
+                tint = chrome.textMid,
+                modifier = Modifier.graphicsLayer { rotationZ = turn },
             )
         }
         if (open) {
             Spacer(Modifier.height(8.dp))
-            Text(faq.a, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            Text(faq.a, style = MaterialTheme.typography.bodyMedium, color = chrome.textMid)
         }
     }
 }
@@ -252,16 +395,20 @@ private fun AboutCard() {
         Spacer(Modifier.height(8.dp))
         Text(
             "A thin client to the Jarvis brain running on your own desktop, " +
-                "reached only over Tailscale - a private network between only " +
-                "the devices you own, never the open internet. No AI runs on " +
-                "this phone; there is no approve-all anywhere in this app, and " +
-                "every action still stops and asks first, one at a time.",
+                "reached only over a private network between only the devices " +
+                "you own (Tailscale, or NordVPN's Meshnet), never the open " +
+                "internet. Only small sound models run on this phone, and " +
+                "none of them turns speech into words; there is no " +
+                "approve-all anywhere in this app, and " +
+                "anything risky still asks first, one at a time. " +
+                "\"What asks first\" on Brain lists exactly what asks and what does not.",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textMid,
         )
         Spacer(Modifier.height(12.dp))
         AboutFact("Version", BuildConfig.VERSION_NAME)
-        AboutFact("License", "MIT — see LICENSE in the source")
+        AboutFact("Made by", "darknight11ish")
+        AboutFact("Licence", "MIT, with third-party parts under their own licences")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Source",
@@ -270,7 +417,7 @@ private fun AboutCard() {
                 modifier = Modifier.width(64.dp),
             )
             Text(
-                "github.com/darknight111/Epic-Jarvis",
+                "github.com/darknight11ish/Epic-Jarvis",
                 style = MaterialTheme.typography.bodySmall,
                 color = LocalAccent.current,
                 modifier = Modifier.pressable(onClick = {
@@ -280,11 +427,39 @@ private fun AboutCard() {
                     // render a web page.
                     val intent = Intent(
                         Intent.ACTION_VIEW,
-                        Uri.parse("https://github.com/darknight111/Epic-Jarvis"),
+                        Uri.parse("https://github.com/darknight11ish/Epic-Jarvis"),
                     )
                     context.startActivity(intent)
                 }),
             )
+        }
+        // The parts this app is built from, and their licences - required
+        // with every copy by several of them (MIT, BSD, Apache), and the
+        // wake-word models' non-commercial terms. Read from the APK's own
+        // assets/licenses/NOTICES.txt, only when opened.
+        var showNotices by rememberSaveable { mutableStateOf(false) }
+        Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Notices",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+                modifier = Modifier.width(64.dp),
+            )
+            Text(
+                if (showNotices) "Hide the third-party notices" else "Read the third-party notices",
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalAccent.current,
+                modifier = Modifier.pressable(onClick = { showNotices = !showNotices }),
+            )
+        }
+        if (showNotices) {
+            val notices = remember {
+                runCatching {
+                    context.assets.open("licenses/NOTICES.txt").bufferedReader().use { it.readText() }
+                }.getOrElse { "The notices could not be read from this copy of the app." }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(notices, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
     }
 }

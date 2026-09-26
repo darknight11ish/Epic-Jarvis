@@ -45,11 +45,18 @@ class NoRealProcess:
 
 
 DEVICES_OUT = b"List of devices attached\nEMULATOR123\tdevice\n\n"
+#: `adb shell dumpsys window` with the home screen in front, not Jarvis. Every
+#: input step now asks this first (security audit M3).
+FOCUS_OUT = (b"  mCurrentFocus=Window{1a2b u0 com.android.launcher3/"
+             b"com.android.launcher3.Launcher}\n"
+             b"  mFocusedApp=ActivityRecord{3c4d u0 com.android.launcher3/.Launcher t1}\n")
 
 
 def adb_ok(devices_out=DEVICES_OUT):
     """A fake `run_adb` that answers `adb devices` and succeeds otherwise."""
     def caller(argv):
+        if "dumpsys" in argv:
+            return Result(0, FOCUS_OUT)   # another app in front
         if argv[:2] == ["adb", "devices"]:
             return Result(0, devices_out)
         return Result(0, b"")
@@ -169,6 +176,8 @@ def t_run_refuses_if_the_device_disconnected():
 def t_run_stops_at_the_first_failed_command():
     calls = []
     def caller(argv):
+        if "dumpsys" in argv:
+            return Result(0, FOCUS_OUT)   # another app in front
         if argv[:2] == ["adb", "devices"]:
             return Result(0, DEVICES_OUT)
         calls.append(argv)
@@ -195,6 +204,8 @@ def t_run_executes_every_approved_step_and_reports_screenshots():
                    [{"action": "screenshot", "why": "see what's on screen"},
                     {"action": "tap", "x": 5, "y": 5, "why": "tap it"}])
         def caller(argv):
+            if "dumpsys" in argv:
+                return Result(0, FOCUS_OUT)   # another app in front
             if argv[:2] == ["adb", "devices"]:
                 return Result(0, DEVICES_OUT)
             if "screencap" in argv:
@@ -219,7 +230,9 @@ def t_announce_is_called_and_is_optional():
         p = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
         out = A.run(p, run_adb=adb_ok(), announce=heard.append, approved=True)
     check("announce heard the step and a final message", len(heard) == 2, repr(heard))
-    check("the step text names the device", "EMULATOR123" in heard[0], heard[0])
+    # Security audit L4: no content on the event stream.
+    check("the step text is the step's number and a fixed word",
+          heard[0] == "Step 1/1: a tap on the phone", heard[0])
     with NoRealProcess():
         p2 = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
         out2 = A.run(p2, run_adb=adb_ok(), approved=True)
@@ -234,6 +247,8 @@ def t_checkpoint_stop_ends_the_run_before_the_next_step():
                    [{"action": "tap", "x": 1, "y": 1, "why": "x"},
                     {"action": "tap", "x": 2, "y": 2, "why": "y"}])
         def caller(argv):
+            if "dumpsys" in argv:
+                return Result(0, FOCUS_OUT)   # another app in front
             if argv[:2] == ["adb", "devices"]:
                 return Result(0, DEVICES_OUT)
             acted.append(argv)
@@ -253,6 +268,8 @@ def t_checkpoint_pause_ends_the_run_and_says_so():
                    [{"action": "tap", "x": 1, "y": 1, "why": "x"},
                     {"action": "tap", "x": 2, "y": 2, "why": "y"}])
         def caller(argv):
+            if "dumpsys" in argv:
+                return Result(0, FOCUS_OUT)   # another app in front
             if argv[:2] == ["adb", "devices"]:
                 return Result(0, DEVICES_OUT)
             acted.append(argv)
@@ -284,6 +301,8 @@ def t_a_pause_still_returns_the_screenshots_already_taken():
                    [{"action": "screenshot", "why": "see what's on screen"},
                     {"action": "tap", "x": 2, "y": 2, "why": "y"}])
         def caller(argv):
+            if "dumpsys" in argv:
+                return Result(0, FOCUS_OUT)   # another app in front
             if argv[:2] == ["adb", "devices"]:
                 return Result(0, DEVICES_OUT)
             return Result(0, b"\x89PNGfakebytes")
@@ -303,6 +322,8 @@ def t_a_failed_step_still_returns_earlier_screenshots():
                     {"action": "tap", "x": 2, "y": 2, "why": "y"}])
         calls = []
         def caller(argv):
+            if "dumpsys" in argv:
+                return Result(0, FOCUS_OUT)   # another app in front
             if argv[:2] == ["adb", "devices"]:
                 return Result(0, DEVICES_OUT)
             calls.append(argv)
@@ -337,6 +358,8 @@ def t_the_checkpoint_is_read_before_the_step_is_announced():
                    [{"action": "tap", "x": 1, "y": 1, "why": "x"},
                     {"action": "tap", "x": 2, "y": 2, "why": "y"}])
         def caller(argv):
+            if "dumpsys" in argv:
+                return Result(0, FOCUS_OUT)   # another app in front
             if argv[:2] == ["adb", "devices"]:
                 return Result(0, DEVICES_OUT)
             acted.append(argv)
@@ -366,6 +389,8 @@ def t_a_pause_is_read_even_when_the_device_has_gone():
     with NoRealProcess():
         p = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
         def gone(argv):
+            if "dumpsys" in argv:
+                return Result(0, FOCUS_OUT)   # another app in front
             if argv[:2] == ["adb", "devices"]:
                 return Result(0, b"List of devices attached\n")   # nothing attached
             return Result(0, b"")

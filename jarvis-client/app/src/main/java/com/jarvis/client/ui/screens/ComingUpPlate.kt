@@ -1,0 +1,505 @@
+package com.jarvis.client.ui.screens
+
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.provider.AlarmClock
+import android.provider.CalendarContract
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.net.AlsoOnPhone
+import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.Schedule
+import com.jarvis.client.ui.parts.Gap
+import com.jarvis.client.ui.parts.Plate
+import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.TextInput
+import com.jarvis.client.ui.parts.liveStatus
+import com.jarvis.client.ui.theme.LocalChrome
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+/**
+ * "Coming up" on Mind ([Schedule], the owner's decisions of 2026-09-25):
+ * timers counting down, alarms, reminders, the repeating ones with how often
+ * and when next, and the to-do list - the desktop's Brain -> Work -> Coming
+ * up, in the same words.
+ *
+ * Each row has its own Pause / Resume / Delete (a to-do item: Done /
+ * Delete), ONE job per tap, asking nothing first and raising no card - none
+ * of them can make Jarvis do more - and held while the link is down or
+ * stale ([JarvisRuntime.scheduleAct]). There is no "delete all". A to-do
+ * item can be added here, one at a time; timers and reminders are set by
+ * saying or typing them to Jarvis.
+ *
+ * Read from the PC when Mind shows it, on Refresh, after every change, and
+ * on every `schedule` event ([JarvisRuntime.scheduleTick]). A running timer
+ * counts down once a second from what the PC last said. Nothing of it is
+ * kept on the phone.
+ *
+ * "Hide memory lists and chat history" (Security) hides the words - a
+ * reminder's and a to-do item's are the owner's own - but not the times, so
+ * a timer still counts down; Show brings the words back.
+ *
+ * Since 2026-09-25: "Just went off" at the top - a timer, alarm or reminder
+ * that went off in the last hour, with Snooze ([Schedule.SNOOZE], ONE job,
+ * no card, held on a stale link); and under the to-do list the NAMED lists
+ * ("shopping"), each with its items, an Add box, and "Clear list", which
+ * asks "are you sure?" right there first ([Schedule.clearListQuestion]) and
+ * sends how many items it showed ([JarvisRuntime.clearList], held on a stale
+ * link). The to-do list itself has no Clear. The desktop does the same.
+ *
+ * Under the to-do list, the standby schedule ([Schedule.STANDBY_TITLE]):
+ * Standby - the same one as the buttons under Doing - every day from one
+ * time to another. Two times and Set up, which the PC sets up at once, with
+ * no card since 2026-09-26 ([JarvisRuntime.addStandbySchedule], held on a
+ * stale link). Once there is one, it is a row in the list above
+ * (Pause, Delete) and the times are not offered again - the desktop's
+ * Brain -> Work -> Coming up does the same.
+ */
+@Composable
+internal fun ComingUpSection(
+    canAct: Boolean,
+    privateHidden: Boolean,
+    showPrivateBusy: Boolean,
+    onShowPrivate: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    val tick by JarvisRuntime.scheduleTick.collectAsState()
+    var reads by remember { mutableIntStateOf(0) }
+    var view by remember { mutableStateOf<Schedule.View?>(null) }
+    var readAt by remember { mutableLongStateOf(0L) }
+    var missing by remember { mutableStateOf(false) }
+    var readError by remember { mutableStateOf<String?>(null) }
+    var busyId by remember { mutableStateOf<String?>(null) }
+    var said by remember { mutableStateOf<String?>(null) }
+    var todoText by remember { mutableStateOf("") }
+    var adding by remember { mutableStateOf(false) }
+    var standbyStart by remember { mutableStateOf(Schedule.STANDBY_DEFAULT_START) }
+    var standbyEnd by remember { mutableStateOf(Schedule.STANDBY_DEFAULT_END) }
+    var settingUp by remember { mutableStateOf(false) }
+    // A named list's Add box, by the list's name, and the list whose
+    // "Clear list" is waiting for "are you sure?".
+    var listText by remember { mutableStateOf(mapOf<String, String>()) }
+    var confirmClear by remember { mutableStateOf<Schedule.ListPart?>(null) }
+    var clearing by remember { mutableStateOf(false) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(reads, tick) {
+        when (val r = JarvisRuntime.schedule()) {
+            is ApiResult.Ok -> {
+                val v = Schedule.parse(r.value)
+                if (v == null) {
+                    missing = true
+                } else {
+                    view = v
+                    readAt = System.currentTimeMillis()
+                    missing = false
+                }
+                readError = null
+            }
+            is ApiResult.Failed -> if (Schedule.missing(r.error)) {
+                missing = true
+                readError = null
+            } else {
+                readError = JarvisRuntime.noticeFor(r.error)
+            }
+        }
+    }
+    // A running timer counts down here, once a second, from what the PC said.
+    val ticking = Schedule.anyTicking(view)
+    LaunchedEffect(ticking) {
+        while (ticking) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+
+    fun act(job: Schedule.Job, action: String) {
+        busyId = job.id
+        said = null
+        scope.launch {
+            try {
+                val (_, sentence) = JarvisRuntime.scheduleAct(job.id, action)
+                said = sentence
+            } finally {
+                busyId = null
+            }
+        }
+    }
+
+    Section(Schedule.TITLE, trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
+        Plate {
+            Text(Schedule.UNDER, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Text(Schedule.PC_IS_THE_CLOCK, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Gap(6)
+            val shown = view?.let { if (privateHidden) Schedule.hide(it) else it }
+            val err = readError
+            when {
+                missing -> Text(Schedule.MISSING, style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid)
+                shown == null -> Text(
+                    if (err != null) "Couldn't read Coming up: $err" else "Reading…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (err != null) chrome.warnInk else chrome.textLo,
+                )
+                else -> {
+                    if (err != null) {
+                        Text("Couldn't read it again: $err", style = MaterialTheme.typography.labelSmall,
+                            color = chrome.warnInk)
+                    }
+                    if (privateHidden) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Words hidden. Tap Show and confirm it is you.",
+                                style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                                modifier = Modifier.weight(1f))
+                            Quiet(if (showPrivateBusy) "Checking…" else "Show",
+                                enabled = !showPrivateBusy, onClick = onShowPrivate)
+                        }
+                    }
+                    // Just went off (the last hour): Snooze, ONE job per tap.
+                    if (shown.wentOff.isNotEmpty()) {
+                        Text(Schedule.WENT_OFF_TITLE, style = MaterialTheme.typography.labelMedium,
+                            color = chrome.textMid)
+                        Text(Schedule.WENT_OFF_DETAIL, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo)
+                        shown.wentOff.forEach {
+                            WentOffRow(it, canAct && busyId == null) { a -> act(it, a) }
+                        }
+                        Gap(14)
+                    }
+                    if (shown.jobs.isEmpty()) {
+                        Gap(4)
+                        Text(Schedule.EMPTY_JOBS, style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid)
+                    }
+                    shown.jobs.forEach {
+                        ScheduleRow(it, now - readAt, canAct && busyId == null,
+                            onSaid = { s -> said = s }) { a -> act(it, a) }
+                    }
+                    // "Also on my phone": the one line that says what it does and
+                    // warns about two alarms and Google, once, while a row offers it.
+                    if (AlsoOnPhone.anyOffered(shown.jobs, System.currentTimeMillis())) {
+                        Gap(6)
+                        Text(AlsoOnPhone.NOTE, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo)
+                    }
+                    Gap(14)
+                    // "Tell me when" - set up by saying or typing it (one card
+                    // on the PC); its rows are in the list above.
+                    Text(Schedule.TELLME_TITLE, style = MaterialTheme.typography.labelMedium,
+                        color = chrome.textMid)
+                    Text(Schedule.TELLME_HINT, style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo)
+                    Gap(14)
+                    Text(Schedule.TODO_TITLE, style = MaterialTheme.typography.labelMedium,
+                        color = chrome.textMid)
+                    val todoItems = Schedule.todoItems(shown)
+                    if (todoItems.isEmpty()) {
+                        Gap(4)
+                        Text(Schedule.EMPTY_TODO, style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid)
+                    }
+                    todoItems.forEach { ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) } }
+                    Gap(8)
+                    val add: () -> Unit = {
+                        if (todoText.isNotBlank() && canAct && !adding) {
+                            adding = true
+                            said = null
+                            scope.launch {
+                                try {
+                                    val (changed, sentence) = JarvisRuntime.addTodo(todoText)
+                                    if (changed) todoText = ""
+                                    said = sentence
+                                } finally {
+                                    adding = false
+                                }
+                            }
+                        }
+                    }
+                    TextInput(
+                        value = todoText,
+                        onValueChange = { todoText = it.take(Schedule.MAX_TEXT) },
+                        placeholder = Schedule.ADD_HINT,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { add() }),
+                    )
+                    Quiet(
+                        if (adding) "Adding…" else Schedule.ADD,
+                        enabled = canAct && !adding && todoText.isNotBlank(),
+                        onClick = { add() },
+                    )
+                    // The named lists ("shopping"), each with its items, an Add
+                    // box and Clear list. While the lists are hidden only the
+                    // rows show (no names, no words), and nothing is offered.
+                    Schedule.namedLists(shown).forEach { part ->
+                        Gap(14)
+                        Text(part.title, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+                        part.items.forEach {
+                            ScheduleRow(it, now - readAt, canAct && busyId == null) { a -> act(it, a) }
+                        }
+                        if (!shown.hidden) {
+                            Gap(6)
+                            val words = listText[part.name] ?: ""
+                            val addHere: () -> Unit = {
+                                if (words.isNotBlank() && canAct && !adding) {
+                                    adding = true
+                                    said = null
+                                    scope.launch {
+                                        try {
+                                            val (changed, sentence) = JarvisRuntime.addTodo(words, part.name)
+                                            if (changed) listText = listText - part.name
+                                            said = sentence
+                                        } finally {
+                                            adding = false
+                                        }
+                                    }
+                                }
+                            }
+                            TextInput(
+                                value = words,
+                                onValueChange = { listText = listText + (part.name to it.take(Schedule.MAX_TEXT)) },
+                                placeholder = Schedule.addPlaceholder(part.title),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { addHere() }),
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Quiet(
+                                    if (adding) "Adding…" else Schedule.ADD,
+                                    enabled = canAct && !adding && words.isNotBlank(),
+                                    onClick = { addHere() },
+                                )
+                                Quiet(
+                                    Schedule.CLEAR_LIST,
+                                    color = chrome.badInk,
+                                    enabled = canAct && !clearing,
+                                    onClick = { confirmClear = part },
+                                )
+                            }
+                            // "Are you sure?" first, like Forget - right here.
+                            if (confirmClear?.name == part.name) {
+                                Text(
+                                    Schedule.clearListQuestion(part.title, part.items.size),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = chrome.warnInk,
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Quiet(Schedule.CLEAR_YES, color = chrome.badInk,
+                                        enabled = canAct && !clearing, onClick = {
+                                            confirmClear = null
+                                            clearing = true
+                                            said = null
+                                            scope.launch {
+                                                try {
+                                                    val (_, sentence) =
+                                                        JarvisRuntime.clearList(part.name, part.items.size)
+                                                    said = sentence
+                                                } finally {
+                                                    clearing = false
+                                                }
+                                            }
+                                        })
+                                    Quiet(Schedule.CLEAR_NO, onClick = { confirmClear = null })
+                                }
+                            }
+                        }
+                    }
+                    if (!shown.hidden) {
+                        Gap(6)
+                        Text(Schedule.LISTS_NOTE, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo)
+                    }
+                    Gap(14)
+                    Text(Schedule.STANDBY_TITLE, style = MaterialTheme.typography.labelMedium,
+                        color = chrome.textMid)
+                    Text(Schedule.STANDBY_DETAIL, style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo)
+                    Gap(6)
+                    if (Schedule.standbyOf(shown) != null) {
+                        Text(Schedule.STANDBY_IS_SET, style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid)
+                    } else {
+                        val times = Schedule.standbyTimes(standbyStart, standbyEnd)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextInput(
+                                value = standbyStart,
+                                onValueChange = { standbyStart = it.take(5) },
+                                label = Schedule.STANDBY_START_LABEL,
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            )
+                            TextInput(
+                                value = standbyEnd,
+                                onValueChange = { standbyEnd = it.take(5) },
+                                label = Schedule.STANDBY_END_LABEL,
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            )
+                        }
+                        if (times == null) {
+                            Text(Schedule.STANDBY_BAD_TIMES, style = MaterialTheme.typography.labelSmall,
+                                color = chrome.warnInk)
+                        }
+                        Quiet(
+                            if (settingUp) "Asking…" else Schedule.STANDBY_ADD,
+                            enabled = canAct && !settingUp && times != null,
+                            onClick = {
+                                if (canAct && !settingUp && times != null) {
+                                    settingUp = true
+                                    said = null
+                                    scope.launch {
+                                        try {
+                                            val (_, sentence) =
+                                                JarvisRuntime.addStandbySchedule(standbyStart, standbyEnd)
+                                            said = sentence
+                                        } finally {
+                                            settingUp = false
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+            said?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                    modifier = Modifier.liveStatus())
+            }
+            if (!missing && shown != null && !canAct) {
+                Text(
+                    "Not connected to the desktop, so changes wait until the link is back.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo,
+                )
+            }
+        }
+    }
+}
+
+/** Something that went off in the last hour: its words, when, and Snooze - ONE job per tap. */
+@Composable
+private fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> Unit) {
+    val chrome = LocalChrome.current
+    Gap(10)
+    Column(Modifier.fillMaxWidth()) {
+        Text(Schedule.tagOf(job), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Text(Schedule.titleOf(job), style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        Schedule.wentOffMeta(job).forEach {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Schedule.WENT_OFF_ACTIONS.forEach { action ->
+                Quiet(Schedule.labelOf(action), enabled = enabled, onClick = { onAct(action) })
+            }
+        }
+    }
+}
+
+/** One job: its kind, its title, its lines, and its own buttons - ONE job per tap. */
+@Composable
+private fun ScheduleRow(
+    job: Schedule.Job,
+    sinceMs: Long,
+    enabled: Boolean,
+    onSaid: (String) -> Unit = {},
+    onAct: (String) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val context = LocalContext.current
+    val offer = AlsoOnPhone.offer(job, System.currentTimeMillis())
+    Gap(10)
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            Schedule.tagOf(job),
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+        )
+        Text(Schedule.titleOf(job), style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        Schedule.metaOf(job, sinceMs).forEach {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        if (offer is AlsoOnPhone.Offer.Later) {
+            Text(offer.why, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Schedule.actionsOf(job).forEach { action ->
+                Quiet(
+                    Schedule.labelOf(action),
+                    color = if (action == "delete") chrome.badInk else null,
+                    enabled = enabled,
+                    onClick = { onAct(action) },
+                )
+            }
+            // The owner's tap is the approval: it only opens the phone's own
+            // Clock app or calendar, filled in, and the owner saves it there.
+            // Nothing is sent to the PC, so it is not held on a stale link.
+            val handOver: AlsoOnPhone.Offer? =
+                offer?.takeIf { it is AlsoOnPhone.Offer.ToClock || it is AlsoOnPhone.Offer.ToCalendar }
+            if (handOver != null) {
+                Quiet(AlsoOnPhone.LABEL, onClick = { handToPhone(context, handOver)?.let(onSaid) })
+            }
+        }
+    }
+}
+
+/**
+ * Opens the phone's own Clock app or calendar for an [AlsoOnPhone] offer -
+ * only ever from the owner's tap. Returns a sentence to show when no app on
+ * the phone takes it, else null.
+ */
+private fun handToPhone(context: Context, offer: AlsoOnPhone.Offer): String? {
+    val intent = when (offer) {
+        is AlsoOnPhone.Offer.ToClock -> Intent(AlarmClock.ACTION_SET_ALARM).apply {
+            putExtra(AlarmClock.EXTRA_HOUR, offer.alarm.hour)
+            putExtra(AlarmClock.EXTRA_MINUTES, offer.alarm.minute)
+            if (offer.alarm.message.isNotEmpty()) putExtra(AlarmClock.EXTRA_MESSAGE, offer.alarm.message)
+            if (offer.alarm.days.isNotEmpty()) {
+                putIntegerArrayListExtra(AlarmClock.EXTRA_DAYS, ArrayList(offer.alarm.days))
+            }
+            // The Clock app shows its own screen: the owner saves it there.
+            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+        }
+        is AlsoOnPhone.Offer.ToCalendar -> Intent(Intent.ACTION_INSERT).apply {
+            data = CalendarContract.Events.CONTENT_URI
+            putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, offer.event.beginMs)
+            putExtra(CalendarContract.EXTRA_EVENT_END_TIME, offer.event.endMs)
+            putExtra(CalendarContract.Events.TITLE, offer.event.title)
+            offer.event.rrule?.let { putExtra(CalendarContract.Events.RRULE, it) }
+        }
+        is AlsoOnPhone.Offer.Later -> return null
+    }
+    val missing = if (offer is AlsoOnPhone.Offer.ToClock) AlsoOnPhone.NO_CLOCK else AlsoOnPhone.NO_CALENDAR
+    return try {
+        context.startActivity(intent)
+        null
+    } catch (e: ActivityNotFoundException) {
+        missing
+    } catch (e: SecurityException) {
+        missing
+    }
+}

@@ -1,0 +1,233 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -399,6 +399,140 @@
+         pass
+ 
+ 
++# --------------------------------------------------------------------------
++#   Learning from the conversation
++#
++#   jarvis_extract has a prompt, a proposals table, a review queue, an accept
++#   path that supersedes the fact it replaces, and a decide() the HUD exposes
++#   over HTTP. Every piece of it works. Nothing has ever called propose():
++#   grep the tree and there are zero call sites, so the queue has always been
++#   empty and the memory store has only ever held what was typed into it by
++#   hand. The learning loop the design is arranged around had no trigger.
++#
++#   Three constraints decide the shape, and they are why this is not a call at
++#   the end of the handler:
++#
++#   * Extraction is another full generation on the SAME model that answers.
++#     Inline, it doubles the wait on every turn. Concurrent, it halves the
++#     speed of both, on one GPU with one 8B resident.
++#   * It must not be able to affect the answer. It runs after, on its own
++#     thread, and nothing it raises reaches the request.
++#   * Every turn is the wrong cadence. A conversation is cumulative, so the
++#     same text would be re-read again and again for facts the queue already
++#     holds. It runs when you stop talking, not when you pause for breath.
++#
++#   WHAT IT READS - user turns only, and this is the load-bearing decision.
++#   The cloud-lane filter below makes the same cut for the same reason, and
++#   the reasoning transfers exactly: the assistant turn is a carrier. It
++#   restates injected memory, it quotes tool output, and a Joplin read comes
++#   back through it - and the vault is deliberately kept out of the retrieval
++#   corpus (see the comment in retrieval_corpus) precisely so that something
++#   merely resembling it cannot pull it into a prompt. Extracting durable
++#   facts out of a vault read and filing them in memory would undo that
++#   separation quietly and permanently, one accepted proposal at a time.
++#   Reading only what you typed is the same promise the cloud lane makes, and
++#   it is also just better extraction: what you said is what you meant.
++# --------------------------------------------------------------------------
++EXTRACT_ENABLED = os.environ.get("JARVIS_EXTRACT", "1").lower() not in ("0", "false", "no", "off")
++# Seconds of silence before a pass runs. Every turn restarts this.
++EXTRACT_IDLE = float(os.environ.get("JARVIS_EXTRACT_IDLE", "45"))
++# And then nothing for this long, whatever happens. One pass covers a whole
++# conversation; the model that runs it is the model that answers.
++EXTRACT_MIN_GAP = float(os.environ.get("JARVIS_EXTRACT_MIN_GAP", "300"))
++
++
++class _Learner:
++    """One thread, one pending transcript, latest wins.
++
++    No clock anywhere in here on purpose. The idle wait is an Event with a
++    timeout, so a turn arriving restarts it by construction rather than by
++    comparing timestamps - which is the version that cannot drift, cannot be
++    confused by the system clock moving, and reads as what it is.
++    """
++
++    def __init__(self) -> None:
++        self._lock = threading.Lock()
++        self._pending: Optional[list] = None
++        self._last = ""
++        self._woken = threading.Event()
++        self._stop = threading.Event()
++        self._thread: Optional[threading.Thread] = None
++
++    # -- called from the request thread; must be cheap and must not raise ---
++    def offer(self, messages) -> None:
++        """A turn just ended. Keep what was said; do not act on it yet."""
++        if not EXTRACT_ENABLED or not messages:
++            return
++        said = [{"role": "user", "content": m.get("content")}
++                for m in messages
++                if isinstance(m, dict) and m.get("role") == "user"
++                and isinstance(m.get("content"), str) and m.get("content").strip()]
++        if not said:
++            return
++        with self._lock:
++            self._pending = said
++        self._woken.set()
++
++    def start(self) -> None:
++        if self._thread and self._thread.is_alive():
++            return
++        self._stop.clear()
++        self._thread = threading.Thread(target=self._loop, daemon=True,
++                                        name="jarvis-learn")
++        self._thread.start()
++
++    def stop(self) -> None:
++        self._stop.set()
++        self._woken.set()
++
++    # -- the thread ---------------------------------------------------------
++    def _loop(self) -> None:
++        while not self._stop.is_set():
++            if not self._woken.wait(1.0):
++                continue                       # nothing has been said yet
++            # Something landed. Wait for the talking to stop: each further
++            # turn sets the flag again and restarts this wait.
++            while not self._stop.is_set():
++                self._woken.clear()
++                if not self._woken.wait(EXTRACT_IDLE):
++                    break
++            if self._stop.is_set():
++                return
++            if self._pass() and self._stop.wait(EXTRACT_MIN_GAP):
++                return
++
++    def _pass(self) -> bool:
++        """One extraction. True if the model was actually asked."""
++        with self._lock:
++            convo, self._pending = self._pending, None
++        if not convo:
++            return False
++        seen = json.dumps(convo, sort_keys=True)[-8000:]
++        if seen == self._last:
++            return False                       # nothing new was said
++        try:
++            import jarvis_extract
++        except Exception:
++            return False                       # not installed; not an error
++        try:
++            out = jarvis_extract.propose(convo, source="conversation")
++        except Exception as exc:
++            # Never retried on the spot. The usual cause is that the local
++            # model is not up, and a tight retry against a model that is down
++            # is how a background thread becomes the reason the machine is
++            # warm.
++            print(f"  ! learning pass failed: {type(exc).__name__}: {exc}",
++                  file=sys.stderr)
++            return True
++        self._last = seen
++        if out:
++            print(f"  memory     {len(out)} proposal(s) waiting for review")
++        return True
++
++
++LEARNER = _Learner()
++
++
+ def _activity(state: str, detail: str = "") -> None:
+     """Announce what Jarvis is doing, if the event bus is importable.
+ 
+@@ -1940,6 +2074,18 @@
+             # refused, client vanished - the turn is over. In a finally block
+             # because the one state nobody must be left showing is "thinking".
+             _activity("idle")
++            # And the GPU is about to be free. Hand over what was typed; the
++            # learner does nothing with it until the conversation has actually
++            # stopped. `body["messages"]`, not the local `messages`, because
++            # that one has been rewritten for the lane - filtered on a cloud
++            # turn, and carrying the recalled-facts block on a local one.
++            # Off a try because a learning pass must never be the reason an
++            # answered turn reports an error.
++            try:
++                if MEMORY and not jarvis_side_memory:
++                    LEARNER.offer(body.get("messages") or [])
++            except Exception:
++                pass
+ 
+ 
+ # Keys whose values are content rather than plumbing. Walking only these
+@@ -2228,6 +2374,16 @@
+             xs = jarvis_extract.setup_status()
+             if not xs["setup_complete"]:
+                 print("  extraction SCAFFOLD - proposals queue for review; set-up pass still needed")
++            # Nothing was calling propose(). This banner has been reporting on
++            # a queue that could not fill, on every boot since it was written.
++            if EXTRACT_ENABLED:
++                LEARNER.start()
++                print(f"  learning   on - a pass runs after {EXTRACT_IDLE:g}s of quiet, "
++                      f"at most every {EXTRACT_MIN_GAP / 60:g} min, over your turns only")
++                if xs["pending"]:
++                    print(f"             {xs['pending']} proposal(s) already waiting for review")
++            else:
++                print("  learning   off (JARVIS_EXTRACT) - nothing will reach the review queue")
+             if not jarvis_sleep.enabled():
+                 print("  sleep-time off (a daily card will offer to enable it; remind=false stops that)")
+             cp = jarvis_compute.plan()
+--- a/jarvis_events.py
++++ b/jarvis_events.py
+@@ -63,7 +63,8 @@
+ @dataclass
+ class Event:
+     id: int
+-    kind: str                  # approval | finding | power | persona | model | voice | hello
++    kind: str                  # approval | proposal | finding | power | persona
++                               # | model | voice | hello
+     data: dict = field(default_factory=dict)
+     at: float = field(default_factory=time.time)
+ 
+@@ -163,6 +164,31 @@
+                         "items": pending[:10]})
+ 
+ 
++def _poll_proposals(bus: Bus) -> None:
++    """Facts the extractor would like to remember, waiting for a human.
++
++    The queue now fills on its own - a pass runs after a conversation goes
++    quiet - so nobody asked for the thing that is waiting. Without an event
++    the only way to find out is to open the memory pane and look, which means
++    the review queue grows unseen and the learning loop looks broken from
++    every surface at once.
++
++    A doorbell, like approvals: the count and the ids, never the text. A
++    proposal quotes whatever was said to produce it, and this bus reaches
++    every connected client, including a phone showing notifications on a lock
++    screen.
++    """
++    try:
++        import jarvis_extract
++        pending = jarvis_extract.pending()
++    except Exception:
++        return
++    ev = bus.note("proposals", sorted(int(p.get("id") or 0) for p in pending),
++                  "proposal")
++    if ev is not None:
++        ev.data.update({"count": len(pending)})
++
++
+ def _poll_power(bus: Bus) -> None:
+     try:
+         import jarvis_power
+@@ -252,7 +278,8 @@
+         return False
+ 
+ 
+-POLLERS: list[Callable] = [_poll_approvals, _poll_power, _poll_persona]
++POLLERS: list[Callable] = [_poll_approvals, _poll_proposals, _poll_power,
++                           _poll_persona]
+ 
+ 
+ class Pump:

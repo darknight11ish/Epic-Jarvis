@@ -21,7 +21,21 @@ permissions = [
   # Reading the theme is not privileged and every window needs it on load, or
   # it paints the wrong palette until something tells it otherwise.
   "allow-get-theme",
+  "allow-get-theme-prefs",
+  # The owner's face and state colours, read from memory - never the network,
+  # never a broadcast. Cosmetic: the accent and state dots follow them
+  # (jarvis-link.js followAppearance), and the widget's live face wears them.
+  "allow-appearance-snapshot",
+  "allow-appearance-colours",
 ]
+
+# Reading the theme and nothing else: the first-run window paints the
+# owner's theme on load, and must not hold `jarvis-link` above for it -
+# that set reads the approval queue (bug audit 2026-09-26, #6).
+[[set]]
+identifier = "theme-read"
+description = "Read the theme. Read-only; nothing else."
+permissions = ["allow-get-theme"]
 
 # Choosing the theme. Two windows offer a picker — settings and the Brain — and
 # `set_theme` fans the choice out to all four surfaces, so a third window
@@ -29,7 +43,7 @@ permissions = [
 [[set]]
 identifier = "theme-write"
 description = "Change the theme for every window."
-permissions = ["allow-set-theme"]
+permissions = ["allow-set-theme", "allow-set-theme-follow-system"]
 
 # Answering a gate is a decision with consequences, so it is separate from
 # reading the stream. The quickbar and the widget both render approvals and
@@ -44,7 +58,21 @@ permissions = [
   # so it rides with the windows that already render the gate rather than
   # earning a set of its own.
   "allow-amend-approval",
+  # App lock and the widget (apps security audit M3): whether the lock is on
+  # (a yes or no), and "Approve in the Jarvis bar", which only opens the bar
+  # - behind the lock - on the waiting card. Neither decides anything.
+  "allow-get-app-lock",
+  "allow-open-approval-in-quickbar",
 ]
+
+# "Open the card" (card-link.js): Settings and the Brain show one line while
+# an approval card waits, with a button that opens the Jarvis bar on it. That
+# DECIDES NOTHING - the bar, behind App lock, is where Deny and Approve are -
+# so those two windows get only this, not `approvals` above.
+[[set]]
+identifier = "open-card"
+description = "Open the Jarvis bar on a waiting approval card. Decides nothing."
+permissions = ["allow-open-approval-in-quickbar"]
 
 # Pause, resume or stop the turn Jarvis is running right now, and annotate it.
 # Granted to the two windows that actually draw those controls - the quickbar
@@ -80,6 +108,41 @@ permissions = [
   "allow-start-automatic-listening",
   "allow-stop-automatic-listening",
   "allow-speak-reply",
+  # Interrupting by talking (voice_flow.rs): ask for one utterance the
+  # listener already heard to be checked by the PC as "stop or not" - never
+  # transcribed, sent only to this PC's Jarvis. Records nothing itself.
+  "allow-judge-barge-in",
+  # The `flow` block of /api/voice/status (a read), and the "One moment."
+  # clip (GET /api/voice/moment).
+  "allow-get-voice-flow",
+  "allow-get-voice-moment",
+]
+
+# The HUD's mic button, and nothing else. The HUD loads a page vendored from
+# the backend, so it holds no recording command: this only shows the
+# quickbar with its mic button focused (voice.rs, `summon_push_to_talk`). The
+# microphone opens only when the owner holds that button - the `voice` set
+# above, which stays with the quickbar alone.
+[[set]]
+identifier = "hud-voice"
+description = "Show the quickbar with push-to-talk ready. Opens no microphone and records nothing."
+permissions = [
+  "allow-summon-push-to-talk",
+]
+
+# The HUD page's requests to Jarvis, made in Rust with the token, so the page
+# never holds it (apps security audit M2; hud_proxy.rs). Its reads from a
+# fixed list, its chat, and the right/wrong mark on one answer - the same
+# `mark_answer` the quickbar uses. No approve or deny (they are answered in
+# the Jarvis bar or the widget), no memory writes (the Brain's), no settings.
+[[set]]
+identifier = "hud-link"
+description = "The HUD page's reads from a fixed list, its chat, and the right/wrong mark, sent by Rust. Decides nothing."
+permissions = [
+  "allow-hud-get",
+  "allow-hud-chat",
+  "allow-hud-chat-cancel",
+  "allow-mark-answer",
 ]
 
 # The daily brief and the interruption budget. Granted to the quickbar alone,
@@ -129,12 +192,49 @@ permissions = [
   "allow-get-hotkeys",
   "allow-stream-chat",
   "allow-cancel-chat",
+  # Before a screen capture is sent: does the local model see pictures?
+  # Reads the model's name from Jarvis and its abilities from loopback
+  # Ollama. Sends nothing about the picture (vision.rs).
+  "allow-local-model-vision",
   "allow-set-route-lane",
   "allow-hide-quickbar",
   "allow-resize-quickbar",
   "allow-set-quickbar-pinned",
   "allow-write-clipboard",
   "allow-open-external-url",
+  # The right/wrong mark on the answer on screen - one answer, one mark.
+  # Changes no memory by itself; see commands.rs mark_answer.
+  "allow-mark-answer",
+  # `#log` / `#joplin` / `#obs` / Alt+Shift+N: the quickbar files the owner's own
+  # words straight to /api/notes/capture instead of asking a model to, and
+  # reports how it ended. The write itself still goes through the gate.
+  "allow-capture-note",
+  "allow-capture-note-status",
+  # Which of those note apps this PC is set up for: names only.
+  "allow-note-targets",
+  # Temporary chat (the owner's decision, 2026-09-25): can this PC hold one?
+  # GET /api/version's capabilities. A read; stream_chat checks again before
+  # it sends a temporary question.
+  "allow-temporary-chat-available",
+  # An error's fix button (plain_errors.rs): opens Settings or the Brain, and
+  # nothing else - the app lock still applies. It changes no setting.
+  "allow-open-fix-place",
+]
+
+# "Used in this answer" under the quickbar's answer, and "Jarvis remembered N
+# things" in the Brain (the owner's decision, 2026-09-25): the words of the
+# few facts an answer used or automatic learning just saved, by id (brain/
+# used.rs) - held back like every memory list while "Windows Hello for memory
+# lists and chat history" hides them - and Forget or "Erase the words" on ONE
+# of them. Those two are the Brain's own one-fact commands: held on a stale
+# link in Rust, one id per call, asked about first by the page, no list form.
+[[set]]
+identifier = "memory-used"
+description = "Read the words of the few facts an answer used (or automatic learning just saved), and forget or erase the words of ONE of them. No bulk form."
+permissions = [
+  "allow-memory-used",
+  "allow-brain-memory-forget",
+  "allow-brain-memory-erase",
 ]
 
 # ---------------------------------------------------------------------------
@@ -155,6 +255,10 @@ permissions = [
   "allow-get-widget-prefs",
   "allow-prefill-quickbar",
   "allow-capture-note",
+  # How that note ended - the server's answer, never the model's account.
+  "allow-capture-note-status",
+  # Which of those note apps this PC is set up for: names only.
+  "allow-note-targets",
 ]
 
 # ---------------------------------------------------------------------------
@@ -194,6 +298,135 @@ permissions = [
   "allow-restart-app",
   "allow-get-api-settings",
   "allow-set-api-settings",
+  # "Show the token for my phone": returns the pairing token to this one
+  # page, on a click, so the owner can type it into the phone. Here and
+  # nowhere else - the other windows never need to see it.
+  "allow-reveal-pairing-token",
+  # "Second graphics card": what was found, and one switch at a time. Turning
+  # a switch ON starts a second copy of Ollama once its approval card is
+  # approved, so it sits with the other settings-only powers. It approves
+  # nothing itself - ON only raises the card - and there is no form that
+  # sends more than one switch.
+  # "What this backend supports": the capability names GET /api/version
+  # reports, the list the phone shows under "This backend". A read, names
+  # only - what a capability carries (power's mode, say) is not passed on.
+  "allow-get-backend-capabilities",
+  "allow-get-second-card",
+  "allow-set-second-card",
+  # "Big model (slow)": what was found (colibri, Python, memory, the models
+  # and their drives) and one switch at a time. Turning a switch ON lets
+  # Jarvis start colibri on this PC for background jobs once its approval
+  # card is approved, so it sits with the other settings-only powers. It
+  # approves nothing itself - ON only raises the card, and is held while the
+  # event stream is stale - and there is no form that sends more than one
+  # switch.
+  "allow-get-big-model",
+  "allow-set-big-model",
+  # "Morning briefing": when it arrives, and what it includes. Setting one up
+  # approves nothing - it repeats, so the PC raises the scheduler's ONE
+  # approval card (schedule_repeat) listing the next three times - and is
+  # held while the event stream is stale. Stopping one is immediate, one
+  # briefing at a time, and only for a job the PC lists as a briefing. The
+  # briefing itself is never read here. "Show who new emails are from": OFF
+  # is immediate; ON only raises ONE approval card on the PC, and is held
+  # while the event stream is stale.
+  "allow-get-briefing-setup",
+  "allow-set-briefing",
+  "allow-stop-briefing",
+  "allow-set-briefing-senders",
+  # "Hardware and models": the cards and the three setups for them. Choosing
+  # a setup changes nothing by itself; each of its steps is ONE request that
+  # raises its own existing approval card (model install, model switch, a
+  # second-card switch) or the new models_create card, read from the
+  # backend's own answer - never a route or a body from the page. Asking and
+  # measuring are held while the event stream is stale.
+  "allow-get-hardware",
+  "allow-apply-hardware",
+  "allow-hardware-step",
+  "allow-measure-hardware",
+  # "Web search": the five providers with their "why" lines, and ONE change
+  # at a time - the provider, the SearXNG address, "Ask before every web
+  # search" (off raises an approval card on the PC). Changes and the test
+  # search are held while the event stream is stale. The Exa, Tavily and Brave
+  # keys are written straight into Credential Manager on this PC by
+  # save_search_key: never sent to the backend or the phone, never read
+  # back to a page. Settings window only - rule 3.
+  "allow-get-web-search",
+  "allow-set-web-search",
+  "allow-test-web-search",
+  "allow-save-search-key",
+  "allow-forget-search-key",
+  # "What Jarvis can reach": every way Jarvis can reach something outside
+  # itself, whether each is on, where it goes (a host only) and whether it
+  # asks first - written by the PC from its settings, never by the model.
+  # A read: it changes nothing, and no key or private link is in it.
+  "allow-get-reach",
+  # "What asks first" (backend/asks-first.patch, 2026-09-26): every action
+  # and whether it asks first, in the PC's words (a read); "Ask me first" on
+  # ONE action of the short safe list - stricter at once, looser only as one
+  # approval card that needs Windows Hello on the PC, held on a stale link in
+  # Rust; and "Lights, plugs and fans without a card" (ON one card, OFF at
+  # once). Rust refuses any action off the list before sending; so does the PC.
+  "allow-get-asks-first",
+  "allow-set-asks-first",
+  "allow-set-lights-without-card",
+  # "Sending email": whether it is set up, from which address and through
+  # which server (GET /api/email/sending). A read: it sends nothing and
+  # never carries the password. Each email is its own approval card.
+  "allow-get-email-sending",
+  # "Folders Jarvis may look in" (backend/documents.patch, 2026-09-26): the
+  # list (a read); adding ONE folder through the Windows folder picker - the
+  # PC raises one approval card, held on a stale link in Rust; removing one
+  # at once; bringing in a Notion export through the Windows file picker,
+  # held on a stale link. The pickers run in Rust: this window gets no file
+  # system of its own, only the path the owner chose.
+  "allow-get-folders",
+  "allow-add-folder",
+  "allow-remove-folder",
+  "allow-import-notion",
+  # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain.
+  # Wording only; no card either way; held on a stale link in Rust.
+  "allow-get-manner",
+  "allow-set-manner",
+  # "Voice": what the PC says about listening to the owner - whether each
+  # microphone's voice print is trained, which voice check is installed, the
+  # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:
+  # it records nothing and changes nothing. Training stays on the phone.
+  "allow-get-voice-status",
+  # The PC's "hey Jarvis" switch, one direction at a time. OFF is immediate
+  # and never held - it only narrows what listens. ON approves nothing: the
+  # server raises ONE approval card (change_own_config), and ON is held
+  # while the event stream is stale.
+  "allow-set-wake-word",
+  # Voice training on this PC, the voice-check settings, the guided test and
+  # custom voices (voice_training.rs). Recording opens the microphone, so it
+  # sits here with the other settings-only powers and nowhere else; the
+  # recordings are held in the app's memory, never in the page, never on
+  # disk, and sent only to this Jarvis. Everything that widens who Jarvis
+  # obeys, what it reads aloud or how it speaks only raises ONE approval
+  # card (and is held while the event stream is stale): finishing a
+  # training, loosening a setting, adding a voice, switching to one, the
+  # better voice ON. Tightening, cancelling, going back to the built-in
+  # voice, deleting a voice and the better voice OFF are immediate.
+  "allow-start-voice-sample",
+  "allow-voice-sample-level",
+  "allow-stop-voice-sample",
+  "allow-cancel-voice-sample",
+  "allow-discard-voice-samples",
+  "allow-send-voice-training",
+  "allow-cancel-voice-training",
+  "allow-measure-voice",
+  "allow-set-voice-setting",
+  "allow-check-voice-with-someone-else",
+  "allow-propose-voice-threshold",
+  "allow-get-custom-voices",
+  "allow-create-custom-voice",
+  "allow-set-active-voice",
+  "allow-delete-custom-voice",
+  "allow-set-better-voice",
+  # How fast every voice speaks (Slower / Normal / Faster): no card either
+  # way; held on a stale link in Rust, like the manner setting.
+  "allow-set-voice-speed",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",
@@ -210,6 +443,12 @@ permissions = [
   # the other settings-only powers rather than anywhere a chat page can reach.
   "allow-get-autostart",
   "allow-set-autostart",
+  # "Security": the app lock, Windows Hello for approvals and for private
+  # answers (lock.rs). Here and nowhere else, because lowering one is the
+  # power to switch a lock off. The command itself asks Windows Hello before
+  # anything is loosened, so even this window cannot lower one silently.
+  "allow-get-security-settings",
+  "allow-set-security-settings",
 ]
 
 # ---------------------------------------------------------------------------
@@ -270,15 +509,159 @@ permissions = ["allow-brain-remove-skill", "allow-brain-model"]
 # every other item here.
 [[set]]
 identifier = "brain-memory"
-description = "Keep or discard a proposed fact, reword one, stop one being recalled, export the store, read what Jarvis believed at a past moment, and turn the background learner on or off. One fact per decision; there is no bulk form."
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off, and pin or unpin a fact on \"Always keep in mind\". One fact per decision; there is no bulk form."
 permissions = [
   "allow-brain-memory-decide",
   "allow-brain-memory-forget",
+  # "Erase the words" (the owner's decision, 2026-09-24): ONE fact's words
+  # wiped for good, its dates kept. Stricter than forget, never looser:
+  # held on a stale link, one id per call, asked about first.
+  "allow-brain-memory-erase",
   "allow-brain-memory-edit",
   "allow-brain-memory-learning",
   "allow-brain-memory-export",
   "allow-brain-memory-as-of",
   "allow-brain-memory-sleep-time",
+  # "Both are true": one proposal, one decision, like decide above.
+  "allow-brain-memory-keep-both",
+  # Automatic learning (JARVIS-API.md section 19; brain/auto_learn.rs): the
+  # switches' state (GET /api/memory/learning, a read); the "Saved
+  # automatically" list - a read, held back like the other memory lists
+  # while "Windows Hello for memory lists and chat history" hides them; and
+  # its two switches, ONE setting per call. ON only raises an approval card
+  # (tier `ask`) and is held while the event stream is stale; OFF is
+  # immediate. Forgetting one of them is brain_memory_forget above.
+  "allow-brain-memory-learning-status",
+  "allow-brain-memory-auto-list",
+  "allow-brain-memory-learning-auto",
+  "allow-brain-memory-learning-sensitive",
+  # The ids of facts saved automatically that the owner has not looked at
+  # yet, counted in Rust because the Brain is destroyed when it is closed
+  # (brain/auto_learn.rs note_saved). Ids only, never a fact's words; it
+  # changes nothing but that count.
+  "allow-brain-memory-saved-unseen",
+  # "Always keep in mind" (brain/profile.rs; the owner's decision,
+  # 2026-09-24): the pinned facts - a read, held back like the other memory
+  # lists while "Windows Hello for memory lists and chat history" hides them
+  # - and pin or unpin ONE fact per call. No approval card (the owner's own
+  # tap, like Forget), held while the event stream is stale.
+  "allow-brain-memory-profile",
+  "allow-brain-memory-pin",
+]
+
+# Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).
+# Listing and opening a conversation are reads - and both are held back
+# while "Windows Hello for private answers" hides the Brain's lists. Delete
+# is ONE conversation per call; there is no "delete all" anywhere. The switch
+# is ONE setting per call: ON only raises an approval card (tier `ask`) and
+# is held while the event stream is stale, OFF is immediate.
+[[set]]
+identifier = "brain-history"
+description = "List and read the chat history kept on the PC, delete one conversation, and change its two settings (turning it on only raises an approval card). No bulk delete."
+permissions = [
+  "allow-brain-history-list",
+  "allow-brain-history-open",
+  "allow-brain-history-delete",
+  "allow-brain-history-settings",
+]
+
+# Show, on the Brain's memory lists while "Windows Hello for private
+# answers" is on (lock.rs). It asks Windows Hello and, when the owner
+# confirms, lets brain_read return the entries until they have been away
+# longer than "Lock again after". It changes no setting and no memory.
+[[set]]
+identifier = "private-reveal"
+description = "Show the Brain's hidden memory lists, after Windows Hello confirms it is the owner. Changes nothing."
+permissions = ["allow-reveal-private-answers"]
+
+# The wiki builder (backend/wiki.patch). Reading the list of documents and
+# following one job are reads; "Add to wiki" only raises ONE approval card
+# (wiki_update) - the backend writes nothing until it is answered, and the
+# command is held while the event stream is stale. Opening the folder opens
+# only a folder called "Jarvis Wiki" on this PC, named by the backend.
+[[set]]
+identifier = "brain-wiki"
+description = "Read the wiki builder's documents, add one document to the wiki (which raises one approval card), follow that, and open the Jarvis Wiki folder."
+permissions = [
+  "allow-wiki-status",
+  "allow-wiki-ingest",
+  "allow-wiki-ingest-status",
+  "allow-wiki-open-folder",
+]
+
+# Deep questions (backend/big-model.patch): the big model answers one
+# question in the background, with no tools, no internet and no memory of
+# other conversations. Reading the list is a read. Asking raises no card - the
+# owner approved the "Deep questions" switch in Settings with one - because a
+# question acts on nothing and nothing leaves the PC; it is still held while
+# the event stream is stale (rule 4). Nothing here can turn the big model on:
+# that is `get_big_model` / `set_big_model`, in settings-surface.
+[[set]]
+identifier = "brain-deep"
+description = "Read the deep questions and their answers, and ask one (no card per question; the switch was approved in Settings). Cannot turn the big model on or off."
+permissions = [
+  "allow-get-deep",
+  "allow-ask-deep",
+]
+
+# "Coming up" (backend/schedule.patch; the owner's decisions of 2026-09-25):
+# the timers, alarms, reminders, repeating jobs and the to-do list. Reading
+# is a read - the words taken out in Rust while "Windows Hello for memory
+# lists and chat history" hides the private lists. A change names ONE job
+# (pause, resume, delete, done, add time) or adds ONE to-do item; none raises
+# a card, because none can make Jarvis do more - a repeating job's card is
+# raised on the PC when it is SET, by talking to Jarvis. Every change is held
+# while the event stream is stale. There is no "delete all". Since 2026-09-25
+# a change may also be a Snooze (one job that went off, no card), and ONE
+# NAMED list ("shopping") may be cleared after the page's "are you sure?",
+# with the count it showed - never the to-do list itself.
+[[set]]
+identifier = "brain-schedule"
+description = "Read Coming up (timers, alarms, reminders, the to-do list and named lists), change ONE job at a time (pause, resume, delete, done, add time, snooze), add one to-do item, ask for a standby schedule (the PC raises one approval card), and clear ONE named list after the page's are-you-sure (never the to-do list)."
+permissions = [
+  "allow-brain-schedule",
+  "allow-brain-schedule-act",
+  "allow-brain-schedule-add-todo",
+  "allow-brain-schedule-add-standby",
+  "allow-brain-schedule-clear-list",
+]
+
+# Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
+# timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
+# is a read. ONE thing per call to the running session - pause, resume, +10
+# minutes, stop, and the widget's Lock on - no card (jarvis_focus.py says
+# why); resume, extend and lock are held on a stale link in Rust, pause and
+# stop are not (they only make Jarvis do less). Starting one is its own set,
+# the Brain's alone: the widget shows and steers a session, it does not start
+# one.
+[[set]]
+identifier = "focus"
+description = "Read the focus session (a countdown, booleans and counts - never what was in front) and do ONE thing to it: pause, resume, +10 minutes, stop, or lock on where the owner lands. No card; resume, extend and lock are held on a stale link."
+permissions = [
+  "allow-focus-status",
+  "allow-focus-act",
+]
+
+[[set]]
+identifier = "focus-start"
+description = "Start a focus session (minutes, and optionally what it is on). No card. Held on a stale link."
+permissions = [
+  "allow-focus-start",
+]
+
+# The morning briefing (backend/briefing.patch; the owner's decisions of
+# 2026-09-25): read the latest one, and "Brief me now". Both only READ - the
+# PC puts it together without the model and reads the calendar and the
+# unread-email count only as their own settings allow - so neither is held on
+# a stale link, like every read. The lines are taken out in Rust while the
+# private lists are hidden. Setting one up and stopping one are Settings'
+# (settings-surface), not here.
+[[set]]
+identifier = "brain-briefing"
+description = "Read the latest morning briefing and ask for one now (reads only; the lines hidden in Rust with the private lists). Cannot set one up or stop one."
+permissions = [
+  "allow-brain-briefing",
+  "allow-brain-briefing-now",
 ]
 
 # ---------------------------------------------------------------------------
@@ -293,6 +676,21 @@ permissions = [
 identifier = "appearance"
 description = "Read and write which face Jarvis wears and how each state looks. Cosmetic; approves nothing."
 permissions = ["allow-get-appearance", "allow-set-appearance"]
+
+# Reading it, and nothing else. The widget wears the owner's face (it used to
+# fall back to the default face because its capability had no appearance
+# permission at all), and Settings says whether the face and colours are
+# shared with the phone. Neither may change them: that is the Faces window.
+[[set]]
+identifier = "appearance-read"
+description = "Read which face Jarvis wears and whether that choice is shared with the phone. Cosmetic and read-only."
+permissions = ["allow-get-appearance"]
+
+# Settings' "Open Faces" button. Opens a window; changes nothing by itself.
+[[set]]
+identifier = "faces-open"
+description = "Open the Faces window."
+permissions = ["allow-open-faces"]
 
 # ---------------------------------------------------------------------------
 # The first-run walkthrough: closes itself, and nothing else.

@@ -1,0 +1,107 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1630,6 +1630,30 @@
+                 # The exception's NAME only.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
++        if path == "/api/asks_first":
++            # asks-first.patch - "What asks first" (jarvis_asks_first.py, the
++            # owner's decisions of 2026-09-26): every action and whether it asks
++            # you first, in plain words, from this PC's own settings - never
++            # written by the model - and the "Lights, plugs and fans without a
++            # card" setting. Reads only, so it is not held on a stale link.
++            # `can_loosen` is true only for a request from this PC.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_asks_first
++                peer = (getattr(self, "client_address", None) or ("",))[0]
++                try:
++                    local = self.connection.getsockname()[0]
++                except Exception:
++                    local = None
++                code, out = jarvis_asks_first.handle_get(peer, local)
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote a setting.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+         if path == "/api/schedule":
+             # schedule.patch - "Coming up": the timers, alarms, reminders and
+             # repeating jobs, and the to-do list (jarvis_schedule.py).
+@@ -2144,6 +2168,39 @@
+                 code, out = jarvis_focus.handle_act(body, by=by)
+             return self._send(code, out)
+ 
++        if route in ("/api/asks_first/tier", "/api/asks_first/lights"):
++            # asks-first.patch - "Ask me first" on one action of the short safe
++            # list (jarvis_asks_first.SWITCHABLE). {"ask": true} makes it
++            # stricter at once, from either app, never a card. {"ask": false}
++            # loosens it: refused unless it comes from THIS PC, and then ONE
++            # approval card (loosen_what_asks_first) that needs Windows Hello -
++            # jarvis_owner_check refuses its approval from any other device.
++            # Nothing off the list can be loosened, by the backend's own
++            # refusal. /lights {"enabled"}: "Lights, plugs and fans without a
++            # card" - OFF at once, ON one card (change_own_config).
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_asks_first
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++            peer = (getattr(self, "client_address", None) or ("",))[0]
++            try:
++                local = self.connection.getsockname()[0]
++            except Exception:
++                local = None
++            if route == "/api/asks_first/tier":
++                code, out = jarvis_asks_first.handle_tier(body, peer, local)
++            else:
++                code, out = jarvis_asks_first.handle_lights(body)
++            return self._send(code, out)
++
+         if route == "/api/second-card":
+             # second-card.patch - one second-card switch on or off. ON raises
+             # one approval card (second_card_enable, tier "ask") and changes
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -151,6 +151,7 @@
+     "write_notes_after_outside_text",  # jarvis_agent.py: a note after outside text asks every time
+     "power_manage",           # shipped "auto": a card means the owner chose "ask"
+     "append_obsidian_daily",  # shipped "auto": the same
++    "loosen_what_asks_first",  # jarvis_asks_first.py acts only on tier "ask" (asks-first.patch)
+ })
+ 
+ 
+@@ -659,10 +660,19 @@
+     # It leaves the machine and cannot be taken back, so the notice is heavy.
+     "send_email": ("no", "outbound", "sends the email shown on the card from your own account, to exactly the people it lists; once sent it cannot be taken back"),
+     # schedule.patch (jarvis_schedule.py). Setting up something that repeats
+-    # ("every weekday at 7", a standby schedule): it acts only on this PC,
+-    # and deleting it is immediate. Without this line the action would be
+-    # read as "unknown", and the notice would say it might leave the machine.
+-    "schedule_repeat": ("yes", "local", "sets up something that repeats on this PC - a reminder, an alarm, a morning briefing or a standby schedule; setting it up sends nothing anywhere, and deleting it is immediate"),
++    # (a morning briefing or a "tell me when" - since 2026-09-26 a plain
++    # repeating reminder, alarm or standby schedule has no card, asks-first.
++    # patch): it acts only on this PC, and deleting it is immediate. Without
++    # this line the action would be read as "unknown", and the notice would
++    # say it might leave the machine.
++    "schedule_repeat": ("yes", "local", "sets up a morning briefing or a \"tell me when\" that repeats on this PC; setting it up sends nothing anywhere, and deleting it is immediate"),
++    # asks-first.patch (jarvis_asks_first.py, the owner's decision of
++    # 2026-09-26). Loosening one line of [autonomy.tiers] from the desktop's
++    # "What asks first" page, from a short safe list: it changes one line of
++    # the settings file on this PC and sends nothing. Making it ask again is
++    # instant, from either app. jarvis_owner_check.PC_ONLY_ACTIONS makes its
++    # approval need Windows Hello on this PC whatever this line says.
++    "loosen_what_asks_first": ("yes", "local", "lets one action from a short list - reading your own calendar, email, notes or home status, or adding to your notes - go ahead without asking you first, by changing one line of your settings file on this PC; making it ask again is instant"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",

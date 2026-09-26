@@ -21,10 +21,29 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  */
 data class ReadinessItem(
     val title: String,
+    /** One or two plain sentences: what it means for the owner, and what to do. */
     val detail: String,
     val state: State,
+    /**
+     * The same finding in the platform's own words - manifest attributes, API
+     * names - for whoever is debugging. Hidden behind a tap on the Checks
+     * screen, because the owner is not expected to know what `specialUse` is,
+     * and the plain sentence above has to be enough on its own. Null when the
+     * plain sentence already says everything.
+     */
+    val technical: String? = null,
+    /** The button that fixes this, shown inside this item's card. Null for none. */
+    val fix: Fix? = null,
 ) {
     enum class State { OK, WARN, INFO }
+
+    /**
+     * Which action the card offers. The screen decides the label and whether
+     * it applies right now; this only says which one belongs to which card,
+     * so a button can never again sit in a strip far from the card that
+     * explains why it is there.
+     */
+    enum class Fix { NOTIFICATIONS, BATTERY, START_LINK, ASSISTANT_ROLE }
 }
 
 object PlatformReadiness {
@@ -151,19 +170,37 @@ object PlatformReadiness {
         return runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)
     }
 
+    /**
+     * Every check, in plain words first.
+     *
+     * Rewritten for the owner rather than for the person who wrote it: each
+     * [ReadinessItem.detail] now says what the finding means and what to tap,
+     * and the platform vocabulary it used to lead with (`specialUse`,
+     * `startForeground`, FCM) moved to [ReadinessItem.technical]. Nothing was
+     * dropped - every technical sentence is still here, one tap away.
+     *
+     * @param host the desktop address to judge. Before pairing, the caller
+     *   passes the one being typed on the pairing screen, not the saved one.
+     */
     fun report(context: Context, host: String): List<ReadinessItem> = listOf(
         ReadinessItem(
-            title = "Cleartext HTTP",
+            title = "Desktop address",
             detail = if (host.isBlank()) {
-                "No host set yet. A name ending .ts.net (Tailscale) or .nord " +
-                    "(NordVPN Meshnet) is permitted; a bare IP is not."
+                "No desktop address yet. Type the desktop's name on your private " +
+                    "network: its Tailscale name (ends in .ts.net) or its NordVPN " +
+                    "Meshnet name (ends in .nord)."
             } else if (cleartextPermitted(host)) {
-                "Permitted for $host by the network security config."
+                "Android will let this app connect to $host."
             } else {
-                "$host is NOT permitted in cleartext. Use the desktop's Tailscale " +
-                    "MagicDNS name (….ts.net) or Meshnet Nord Name (….nord) " +
-                    "rather than its IP address."
+                "Android will block $host. Use the desktop's name on your private " +
+                    "network instead of its number: its Tailscale name (ends in " +
+                    ".ts.net) or its NordVPN Meshnet name (ends in .nord)."
             },
+            technical = "Cleartext HTTP. The desktop serves plain HTTP over the private " +
+                "network, and Android refuses plain HTTP except to names listed in " +
+                "res/xml/network_security_config.xml: *.ts.net (Tailscale MagicDNS) " +
+                "and *.nord (Meshnet Nord Name). The config can list a name but " +
+                "cannot express an IP range, so a 100.x address is refused.",
             state = if (host.isNotBlank() && cleartextPermitted(host)) {
                 ReadinessItem.State.OK
             } else {
@@ -173,11 +210,12 @@ object PlatformReadiness {
         ReadinessItem(
             title = "Microphone",
             detail = if (micGranted(context)) {
-                "Granted. Push-to-talk will record and send one utterance at a time."
+                "Allowed. Holding the talk button records one message and sends it " +
+                    "to your desktop."
             } else {
-                "Not granted yet. Asked for the first time you hold the microphone " +
-                    "button, not at launch. Audio is sent to your desktop to be " +
-                    "checked and transcribed there — this app never transcribes."
+                "Not allowed yet. Jarvis asks the first time you hold the talk " +
+                    "button, not before. The recording goes to your desktop, which " +
+                    "turns it into text. This phone never does."
             },
             state = if (micGranted(context)) {
                 ReadinessItem.State.OK
@@ -189,16 +227,18 @@ object PlatformReadiness {
             },
         ),
         ReadinessItem(
-            title = "Foreground service type",
-            detail = "specialUse. dataSync would be capped at six hours a day on " +
-                "Android 15 and the service would be killed when the budget ran out.",
+            title = "Running in the background",
+            detail = "Set up correctly. Android lets Jarvis keep its connection open " +
+                "in the background with no daily time limit.",
+            technical = "Foreground service type is specialUse. dataSync would be " +
+                "capped at six hours a day on Android 15 and the service would be " +
+                "killed when the budget ran out.",
             state = ReadinessItem.State.OK,
         ),
         ReadinessItem(
             title = "Notifications",
             detail = if (notificationsGranted(context)) {
-                "Granted. Approvals are announced in the drawer, and the ongoing " +
-                    "service notification is visible."
+                "Allowed. New approvals show up in your notifications."
             } else {
                 // The old wording here was "its notification is hidden from the
                 // drawer and only appears in the Task Manager". True of the
@@ -210,64 +250,87 @@ object PlatformReadiness {
                 val silenced = ApprovalNotifier.silenced
                 val waiting = when (silenced) {
                     0 -> ""
-                    1 -> " - one is waiting unannounced right now"
-                    else -> " - $silenced are waiting unannounced right now"
+                    1 -> " One is waiting unannounced right now."
+                    else -> " $silenced are waiting unannounced right now."
                 }
-                "Denied, and that is worse than it sounds: no approval is " +
-                    "announced at all" + waiting +
-                    ". The service still runs and nothing else looks broken, so " +
-                    "this screen is the only place it shows. The ongoing service " +
-                    "notification is hidden too, and appears only in the Task Manager."
+                "Not allowed, so you are not told about any approval." + waiting +
+                    " Nothing else looks broken, so this is the only place it " +
+                    "shows. Tap Allow notifications to fix it."
+            },
+            technical = if (notificationsGranted(context)) {
+                "POST_NOTIFICATIONS granted. The ongoing link-service notification " +
+                    "is visible too."
+            } else {
+                "POST_NOTIFICATIONS denied. The ongoing link-service notification is " +
+                    "hidden as well, and appears only in the Task Manager."
             },
             state = if (notificationsGranted(context)) {
                 ReadinessItem.State.OK
             } else {
                 ReadinessItem.State.WARN
             },
+            fix = ReadinessItem.Fix.NOTIFICATIONS,
         ),
         ReadinessItem(
             title = "Background restart",
             detail = if (batteryExempt(context)) {
+                "Allowed. If Android closes Jarvis to free up memory, the " +
+                    "connection starts again by itself."
+            } else {
+                "Not allowed yet. If Android closes Jarvis to save battery, " +
+                    "approvals stop arriving until you open the app again. Tap " +
+                    "Keep link alive to fix it."
+            },
+            technical = if (batteryExempt(context)) {
                 "Exempt from battery optimisation, so the service can be restarted " +
                     "by the system after the process is reclaimed."
             } else {
-                "Not exempt. If Android reclaims the process, the sticky restart " +
-                    "happens in the background, startForeground is refused, and the " +
-                    "link stops for good until you reopen the app."
+                "Not exempt from battery optimisation. If Android reclaims the " +
+                    "process, the sticky restart happens in the background, " +
+                    "startForeground is refused, and the link stops for good until " +
+                    "the app is reopened."
             },
             state = if (batteryExempt(context)) {
                 ReadinessItem.State.OK
             } else {
                 ReadinessItem.State.WARN
             },
+            fix = ReadinessItem.Fix.BATTERY,
         ),
         ReadinessItem(
             title = "Link service",
-            detail = EventService.lastStartFailure?.let {
-                "The service was refused by the platform ($it) and stopped itself. " +
-                    "Grant the battery-optimisation exemption above and start it again."
-            } ?: "No start failures recorded.",
+            detail = if (EventService.lastStartFailure != null) {
+                "Android refused to start the connection, so it stopped. Allow " +
+                    "Background restart first, then tap Start link."
+            } else {
+                "No problems starting the connection so far."
+            },
+            technical = EventService.lastStartFailure?.let {
+                "The foreground service was refused by the platform ($it) and " +
+                    "stopped itself. The battery-optimisation exemption is what " +
+                    "lets it start from the background."
+            },
             state = if (EventService.lastStartFailure == null) {
                 ReadinessItem.State.INFO
             } else {
                 ReadinessItem.State.WARN
             },
+            fix = ReadinessItem.Fix.START_LINK,
         ),
         ReadinessItem(
             title = "Digital assistant",
             detail = if (!assistantRoleAvailable(context)) {
-                "This phone has no assistant role to hold. The plain assist " +
-                    "gesture (long-press home, or the assist swipe) may still " +
-                    "open Jarvis on some launchers."
+                "This phone has no assistant setting to give Jarvis. On some " +
+                    "phones, long-pressing home may still open it."
             } else if (assistantRoleHeld(context)) {
-                "Jarvis is the held assistant app. Long-press home, or the " +
-                    "assist gesture, opens this app - nothing about what " +
-                    "happens once it opens is different from a normal launch."
+                "Jarvis is your assistant app. Long-pressing home, or the assist " +
+                    "gesture, opens it. Nothing else about the app changes."
             } else {
-                "Not set. Some launchers only offer the assist gesture to " +
-                    "whichever app holds this role, rather than to anything " +
-                    "with a plain assist intent-filter."
+                "Not set. This is optional: it lets long-pressing home open Jarvis " +
+                    "on phones that only offer that to the chosen assistant app."
             },
+            technical = "RoleManager.ROLE_ASSISTANT. Launchers that still use the " +
+                "plain ACTION_ASSIST intent-filter can open Jarvis without the role.",
             state = when {
                 !assistantRoleAvailable(context) -> ReadinessItem.State.INFO
                 assistantRoleHeld(context) -> ReadinessItem.State.OK
@@ -277,13 +340,18 @@ object PlatformReadiness {
                 // Microphone above, for the same reason.
                 else -> ReadinessItem.State.INFO
             },
+            fix = ReadinessItem.Fix.ASSISTANT_ROLE,
         ),
         ReadinessItem(
-            title = "Doze",
-            detail = "A persistent socket is a deliberate departure from the " +
-                "platform's documented direction, which is FCM. FCM routes through " +
-                "Google and this app talks only to your backend, so the socket " +
-                "stands and the stale indicator is the mitigation.",
+            title = "Deep sleep (Doze)",
+            detail = "When the phone sleeps deeply, Android can interrupt the " +
+                "connection. If it does, Jarvis says the link is stale and will not " +
+                "let you approve anything until it catches up.",
+            technical = "A persistent socket is a deliberate departure from the " +
+                "platform's documented direction, which is FCM (Firebase Cloud " +
+                "Messaging). FCM routes through Google and this app talks only to " +
+                "your backend, so the socket stands and the stale indicator is the " +
+                "mitigation.",
             state = ReadinessItem.State.INFO,
         ),
     )

@@ -1,7 +1,6 @@
 package com.jarvis.client.widget
 
 import android.content.Context
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
@@ -20,7 +19,6 @@ import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.unit.ColorProvider
 import androidx.glance.layout.Alignment
@@ -38,8 +36,10 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.compose.ui.graphics.Color
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.service.EventService
 import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
+import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.PendingItem
 
 /**
@@ -173,12 +173,13 @@ class ApprovalWidget : GlanceAppWidget() {
                 modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity<MainActivity>()),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // The same label as every card (CardWords): the headline below
+                // already says "Jarvis wants to ...", and the tier word ("ASK")
+                // meant nothing to the reader.
                 Text(
-                    text = "Jarvis wants to:",
+                    text = CardWords.KICKER,
                     style = TextStyle(color = Palette.Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold),
                 )
-                Spacer(GlanceModifier.defaultWeight())
-                Badge(item.tier.uppercase())
             }
 
             Spacer(GlanceModifier.height(4.dp))
@@ -187,7 +188,7 @@ class ApprovalWidget : GlanceAppWidget() {
                 modifier = GlanceModifier.defaultWeight().fillMaxWidth()
                     .clickable(actionStartActivity<MainActivity>()),
             ) {
-                // `item.notice` first, `item.title`/`item.summary` only as
+                // `item.notice` first, `item.title`/`item.risk.why` only as
                 // the fallback - the same order, and for the same reason, as
                 // `ApprovalNotifier.textFor`. Its doc says outright why:
                 // those two are row prose, "and row prose can carry text
@@ -197,7 +198,11 @@ class ApprovalWidget : GlanceAppWidget() {
                 // home screen in full while the notification refused to.
                 // The notice is the desktop's own wording for the same item.
                 val headline = item.notice?.title?.takeIf { it.isNotBlank() } ?: item.title
-                val detail = item.notice?.body?.takeIf { it.isNotBlank() } ?: item.summary
+                // Never `item.summary` as the fallback: it carries the
+                // readable part of `detail` now (decodePendingRows), and the
+                // home screen is as public as a lock screen. The title is
+                // built from the action name alone, so it is safe here.
+                val detail = item.notice?.body?.takeIf { it.isNotBlank() } ?: item.risk.why
                 Text(text = headline, maxLines = 1, style = TextStyle(
                     color = Palette.TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                 ))
@@ -218,15 +223,9 @@ class ApprovalWidget : GlanceAppWidget() {
                 Spacer(GlanceModifier.height(4.dp))
             }
 
+            // Deny on the left, the way to Approve on the right: the same order
+            // as every card on the phone and the desktop (CardWords.BUTTONS).
             Row(modifier = GlanceModifier.fillMaxWidth()) {
-                // Approve opens the app - never a one-tap widget action. See
-                // the class doc for why this is not the retired app's shape.
-                PillButton(
-                    label = "Review",
-                    tint = Palette.StatusOk,
-                    onClick = actionStartActivity<MainActivity>(),
-                    modifier = GlanceModifier.defaultWeight(),
-                )
                 // Deny alone is a direct widget action - refusing is always
                 // the safe direction, the same rule the lock-screen
                 // notification's own Deny action already runs on.
@@ -239,7 +238,6 @@ class ApprovalWidget : GlanceAppWidget() {
                 // surfaces disagreeing about whether an item is safe to
                 // refuse unread is the disagreement mattering most.
                 if (item.notice?.denyOk != false) {
-                    Spacer(GlanceModifier.width(8.dp))
                     PillButton(
                         label = "Deny",
                         tint = Palette.StatusBad,
@@ -248,18 +246,17 @@ class ApprovalWidget : GlanceAppWidget() {
                         ),
                         modifier = GlanceModifier.defaultWeight(),
                     )
+                    Spacer(GlanceModifier.width(8.dp))
                 }
+                // Approve opens the app - never a one-tap widget action. See
+                // the class doc for why this is not the retired app's shape.
+                PillButton(
+                    label = "Review",
+                    tint = Palette.StatusOk,
+                    onClick = actionStartActivity<MainActivity>(),
+                    modifier = GlanceModifier.defaultWeight(),
+                )
             }
-        }
-    }
-
-    @Composable
-    private fun Badge(label: String) {
-        Box(
-            modifier = GlanceModifier.background(Palette.Surface1).cornerRadius(4.dp)
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        ) {
-            Text(label, style = TextStyle(color = Palette.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold))
         }
     }
 
@@ -314,8 +311,9 @@ class ApprovalWidgetReceiver : GlanceAppWidgetReceiver() {
  *
  * Deliberately the ONLY decision this widget can make directly - see
  * [ApprovalWidget]'s own doc comment. This does not build a second signing
- * path: [JarvisRuntime.decideDetached] is the same call the in-app card and
- * the lock-screen notification's own Deny action already use.
+ * path: it hands the id to [EventService.deny], the same service action the
+ * lock-screen notification's own Deny already uses, which ends in the same
+ * [JarvisRuntime.decide] as the in-app card.
  */
 class DenyActionCallback : ActionCallback {
 
@@ -325,47 +323,26 @@ class DenyActionCallback : ActionCallback {
         parameters: ActionParameters,
     ) {
         val id = parameters[PARAM_ID] ?: return
-        // Guarded for the same reason provideGlance guards it - a Keystore
-        // failure here would be an uncaught exception in a Glance worker.
-        if (runCatching { JarvisRuntime.initialize(context) }.isFailure) return
-        if (!JarvisRuntime.isInitialized) return
-        val item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
-        if (item == null) {
-            // Said out loud, not swallowed. This used to be `?: return`, and
-            // silence is the worst available answer: the owner believes they
-            // refused something, while either the desktop is still waiting or
-            // it was resolved hours ago - and the widget looks identical
-            // either way. The launcher can re-post a cached tile from a
-            // process that has never fetched anything, so this is reachable
-            // by simply tapping Deny the morning after.
-            //
-            // `EventService.denyFromNotification` has handled the identical
-            // case properly all along; this is the same response, because it
-            // is the same event on a different surface. A Toast because the
-            // app is almost certainly not on screen when a widget button is
-            // tapped, and the in-app notice too so the explanation survives
-            // until it is.
-            Log.w(TAG, "widget Deny tapped for an approval that is not pending any more")
-            val message = "That request is no longer waiting - it was handled elsewhere, " +
-                "or Jarvis restarted since the widget last drew."
+        // Handed to EventService, which answers the notification's Deny the
+        // same way: start the stream, wait for the link to be live, re-read
+        // the queue, then deny - or say out loud why it could not.
+        //
+        // This used to decide here, against `JarvisRuntime.pending` as this
+        // process held it. After Android had killed the process that list was
+        // empty, so a Deny tapped the next morning said "no longer waiting -
+        // handled elsewhere" about a request that was still waiting on the
+        // desktop; and when the item WAS found, `decideDetached` was refused
+        // because the stream had not been started, with nothing said at all.
+        if (!EventService.deny(context, id)) {
+            val message = "Could not start Jarvis to send the denial. Open the app to deny it."
             runCatching { Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
-            runCatching { JarvisRuntime.setNotice(message) }
-            runCatching { ApprovalWidget().updateAll(context) }
-            return
         }
-        JarvisRuntime.decideDetached(item, approve = false)
-        // No updateAll() here, and that is the correction rather than an
-        // omission. This used to redraw immediately under a comment claiming
-        // it stopped the widget "showing an already-denied item" - which the
-        // code could not do: decideDetached is `scope.launch { decide(...) }`
-        // and returns before the POST is even sent, so an immediate redraw
-        // reads the identical unchanged _pending. The redraw that actually
-        // lands is JarvisRuntime's own widgetJob, which fires when _pending
-        // really changes.
+        // No updateAll() here: the widget redraws when JarvisRuntime's
+        // `pending` really changes (its own widgetJob), which is after the
+        // desktop has accepted the denial, not before.
     }
 
     companion object {
         val PARAM_ID = ActionParameters.Key<String>("approval_id")
-        private const val TAG = "JarvisApprovalWidget"
     }
 }

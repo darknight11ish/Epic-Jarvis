@@ -8,9 +8,20 @@ on:
       # The shared debug key this module is now signed with.
       - "keystore/**"
       - ".github/workflows/jarvis-client.yml"
+      # The phone's unit tests also read these (the backend's modules and
+      # patches, the desktop's pages and Rust, and the shared test cases in
+      # jarvis-desktop/tests/fixtures), so a change there can break them.
+      - "backend/**"
+      - "jarvis-desktop/src/**"
+      - "jarvis-desktop/src-tauri/src/**"
+      - "jarvis-desktop/tests/fixtures/**"
+      # The one version number both apps and the backend share.
+      - "VERSION"
 
+# Read only by default. Only the `smoke` job, which publishes the APK after
+# it has passed, gets write access.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: jarvis-client-${{ github.ref }}
@@ -19,11 +30,16 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      # The SHA-256 of the certificate in the project key (see "Check the
+      # release APK is signed with the project key").
+      key_sha256: ${{ steps.signing.outputs.sha256 }}
     defaults:
       run:
         working-directory: jarvis-client
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Put the signing key back
         # From the DEBUG_KEYSTORE_B64 repository secret, not from the repo. The
         # key used to be committed; it was public, so it was removed and
@@ -51,13 +67,13 @@ jobs:
           echo "Signing key restored."
 
 
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
 
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           # Not the default `tools platform-tools`. Google removed the obsolete
           # `tools` package from the SDK repository, so the action's own default
@@ -135,7 +151,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: jarvis-client-test-reports
           path: jarvis-client/app/build/reports/tests/**
@@ -155,30 +171,29 @@ jobs:
             exit 1
           fi
 
-      - name: Collect APK
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          find . -name '*.apk' -not -path './artifacts/*' -exec cp {} artifacts/ \;
-          ls -lh artifacts
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: jarvis-client-debug-apk
-          path: jarvis-client/artifacts/*.apk
-          if-no-files-found: error
-          retention-days: 30
-
-      # After the debug artifact is collected, so `find -name '*.apk'` above
-      # keeps picking up exactly one file.
+      # No debug APK is uploaded any more (security audit L3). It was
+      # debuggable AND signed with the project key, and every build had the
+      # same versionCode - so anyone with adb on the unlocked phone could
+      # install it over the release, keep the app's data, and use
+      # `adb shell run-as` to act as the app and have the Keystore decrypt the
+      # pairing token. The release APK below is the one artifact now.
       #
-      # The release variant is now the one that gets published, but not from
-      # here. R8 breaks at RUNTIME, not at build time - a stripped serializer
-      # is a crash on first decode and a green `assembleRelease` - so the
-      # publish sits behind the smoke job, which installs and starts the
-      # shrunk APK on a real device first. This step earns its place anyway:
-      # it fails a broken shrink in about three minutes without waiting for an
-      # emulator to boot, and it prints the two sizes side by side.
+      # THE build that gets published. It is built here, and only here,
+      # because this is the one job that has the signing key: the smoke job
+      # below downloads this exact file, starts it on an emulator, and
+      # publishes it. It never rebuilds it.
+      #
+      # It used to rebuild it. The smoke job ran its own `assembleRelease` on
+      # a fresh machine with no key restored, the Android build tools quietly
+      # made a throwaway key there, and every release from 19 Sep 2026 to
+      # this fix was published with a different throwaway certificate - so
+      # none of them would install over the one before (security audit H1).
+      # build.gradle.kts now refuses a release build in CI without the key,
+      # and the step after this one compares the certificate itself.
+      #
+      # R8 breaks at RUNTIME, not at build time - a stripped serializer is a
+      # crash on first decode and a green `assembleRelease` - which is why the
+      # publish still waits for the smoke job to start this APK on a device.
       - name: Assemble release APK
         run: |
           set -uo pipefail
@@ -201,6 +216,82 @@ jobs:
           done
           echo "::endgroup::"
 
+      # The certificate inside the APK, compared with the certificate in the
+      # key CI restored above. If they differ, the APK was signed with
+      # something else (a throwaway key the build tools made, say) and must
+      # not be published: the phone would refuse to install it over the copy
+      # it has, and the only way past that is an uninstall that wipes the
+      # pairing. The fingerprint is handed to the smoke job, which checks the
+      # downloaded file against it again right before publishing.
+      #
+      # A certificate fingerprint is public - it is printed from the APK by
+      # anyone who downloads it - so passing it between jobs leaks nothing.
+      - name: Check the release APK is signed with the project key
+        id: signing
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/release/app-release.apk
+          ks="$GITHUB_WORKSPACE/keystore/debug.keystore"
+          if [ ! -e "$apk" ]; then
+            echo "::error::$apk is missing, so there is nothing to check."
+            exit 1
+          fi
+          if [ ! -e "$ks" ]; then
+            echo "::error::$ks is missing. The restore step should have stopped the job already."
+            exit 1
+          fi
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          apksigner=$(find "$sdk/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1) || true
+          if [ -z "$apksigner" ]; then
+            echo "::error::No apksigner under $sdk/build-tools, so the certificate cannot be checked."
+            exit 1
+          fi
+          echo "Using $apksigner"
+
+          # keytool prints "SHA256: AB:CD:..."; apksigner prints lowercase hex
+          # with no colons. Both are reduced to the second form. awk, not
+          # head, so nothing upstream is killed by a closed pipe under
+          # pipefail.
+          want=$(keytool -list -v -keystore "$ks" -storepass android -alias androiddebugkey \
+                 | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | awk 'NR == 1' \
+                 | tr -d ':[:space:]' | tr 'A-F' 'a-f')
+          certs=$("$apksigner" verify --print-certs "$apk")
+          printf '%s\n' "$certs"
+          # Older apksigner prints "Signer #1 certificate SHA-256 digest: ...", newer
+          # (build-tools 37) prints "V2 Signer: certificate SHA-256 digest: ...",
+          # once per signing scheme. So count DIFFERENT digests, whatever the prefix.
+          digests=$(printf '%s\n' "$certs" \
+                | sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest:[[:space:]]*//p' \
+                | tr -d ' \t\r' | tr 'A-F' 'a-f' | grep . | sort -u) || true
+          signers=$(printf '%s\n' "$digests" | grep -c .) || true
+          got=$(printf '%s\n' "$digests" | awk 'NR == 1')
+
+          echo "Key CI restored: ${want:-?}"
+          echo "APK is signed:   ${got:-?}"
+          if [ "${#want}" -ne 64 ]; then
+            echo "::error::Could not read a SHA-256 fingerprint from the restored keystore."
+            exit 1
+          fi
+          if [ "$signers" != "1" ]; then
+            echo "::error::Expected exactly one signer in the APK, found ${signers:-0}."
+            exit 1
+          fi
+          if [ "$got" != "$want" ]; then
+            echo "::error::The release APK is NOT signed with the project key. Not publishing it."
+            exit 1
+          fi
+          echo "sha256=$want" >> "$GITHUB_OUTPUT"
+          echo "The release APK is signed with the project key."
+
+      # Kept 30 days. It is what the smoke job installs and publishes, and it
+      # is the fallback if publishing to the release fails. Not debuggable.
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: jarvis-client-release-apk
+          path: jarvis-client/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
   # The gap that let a crash in onCreate ship with a green tick on every
   # check: the job above compiles the APK and runs unit tests, and never once
   # launches it. This one does, on a real Android image — and because an APK
@@ -210,13 +301,22 @@ jobs:
   # pinned to a SHA so it cannot be swapped underneath us, and the one I
   # reached for could not have its SHA verified from where this was written —
   # so it is thirty lines of shell against the SDK that the already-pinned
-  # setup-android installs. Publishing from this job rather than a third
-  # avoids an artifact download, which would have meant another unverifiable
-  # pin for no gain.
+  # setup-android installs.
+  #
+  # The APK this job starts and publishes is DOWNLOADED from the build job,
+  # not rebuilt here. This job has no signing key, and a rebuild here is
+  # exactly how every release from 19 Sep 2026 until this fix went out
+  # signed with a throwaway key (security audit H1). download-artifact is
+  # pinned below to the commit its v7.0.0 tag pointed at on 2026-09-26 (read
+  # from the tag list of github.com/actions/download-artifact).
+  #
+  # The one job that may write: it publishes the client-latest release.
   smoke:
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 35
+    permissions:
+      contents: write
     env:
       # Pinned explicitly because the default is not one path but three, tried
       # in order — $ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd, $HOME/.android/avd
@@ -227,15 +327,15 @@ jobs:
       run:
         working-directory: jarvis-client
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
 
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           # Not the default `tools platform-tools`. Google removed the obsolete
           # `tools` package from the SDK repository, so the action's own default
@@ -269,24 +369,30 @@ jobs:
       # Compiled before the device is needed, so a Kotlin error still fails in
       # about a minute rather than after a boot.
       #
-      # `assembleRelease` is here too, because the RELEASE apk is the one this
-      # job now publishes, and it has to exist on disk before the emulator is
-      # up. R8 takes about three and a half minutes; failing that here costs a
-      # boot cycle less than failing it later.
+      # NOT `assembleRelease`. The release APK comes from the build job (the
+      # step after this one), signed with the project key. The debug builds
+      # made here are only for the instrumentation tests on the emulator and
+      # are never published or uploaded; they are signed with whatever key
+      # this machine has, which does not matter for a throwaway emulator.
       - name: Compile the app and the test
         run: |
           set -uo pipefail
           chmod +x ./gradlew
-          if ! ./gradlew assembleDebug assembleDebugAndroidTest assembleRelease --stacktrace 2>&1 | tee build.log; then
-            echo "::group::Kotlin errors, and R8's"
-            # R8's complaints are not Kotlin diagnostics and look nothing like
-            # them: a missing keep rule appears as a warning about a class it
-            # could not resolve a reference for.
-            grep -E "^e: |Unresolved reference|Argument type mismatch|Compilation error|Missing class|R8: " build.log | head -80 \
+          if ! ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace 2>&1 | tee build.log; then
+            echo "::group::Kotlin errors"
+            grep -E "^e: |Unresolved reference|Argument type mismatch|Compilation error" build.log | head -80 \
               || echo "(no compiler diagnostics found; see the full log above)"
             echo "::endgroup::"
             exit 1
           fi
+
+      # The one signed release build, made by the build job. Lands at
+      # jarvis-client/signed/app-release.apk.
+      - name: Fetch the signed release APK from the build job
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: jarvis-client-release-apk
+          path: jarvis-client/signed
 
       # Create, start, wait and test in ONE step. Everything this job has got
       # wrong so far has been state that did not survive a step boundary: the
@@ -345,17 +451,18 @@ jobs:
             exit 1
           fi
 
-          # `-gpu swiftshader_indirect` is KEPT, deliberately, and this is the
-          # evidence for not churning it: `FaceRenderTest` launches the app
-          # once per face in `Faces.all` on this very emulator - including the
-          # `GLSurfaceView` faces, which ask for real GLES 3.0 and an
-          # RGBA8888 + 16-bit-depth config, and the AGSL face, whose shader is
-          # compiled at runtime by the device's own Skia - and asserts both
-          # that the activity reaches RESUMED and that `GL.lastBuildFailure`
-          # is null. Those tests pass on every run of this job. Software GL is
-          # demonstrably able to serve this app's shaders on this image, so
-          # swapping the renderer would be a guess that risks breaking the one
-          # part of this job that works.
+          # `-gpu swangle_indirect` - ANGLE on SwiftShader's Vulkan - and NOT
+          # the old swiftshader_indirect, on evidence. From a4c5ba9 (the
+          # Reactor Kit faces) on, five runs in a row lost the emulator
+          # process itself during FaceRenderTest; with the face logging each
+          # id, both attempts of a run died while Orbit was on screen. A
+          # probe then ran FaceRenderTest alone under three modes side by
+          # side (run 35907341828): swiftshader_indirect and guest both died
+          # on Orbit after 2 faces; swangle_indirect drew all 20, emulator
+          # still alive. So the crash lives in the emulator's SwiftShader
+          # GLES translator, not in anything this app can see - the app got
+          # no error, the host process segfaulted. Guest Vulkan stays off
+          # below; this is the HOST's Vulkan, which ANGLE translates to.
           #
           # -memory 4096, up from 2048. A GitHub ubuntu-latest runner has 16GB,
           # and a 2GB Android device that has just finished running a whole
@@ -365,11 +472,33 @@ jobs:
           # low-memory kill is not a crash and writes nothing there). A guess,
           # but a free one: the exit-info dump added below will say
           # outright if that is what happened.
-          "$ANDROID_HOME/emulator/emulator" -avd smoke \
-            -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
-            -camera-back none -camera-front none -memory 4096 \
-            -gpu swiftshader_indirect -accel auto > "$RUNNER_TEMP/emulator.log" 2>&1 &
-          EMU=$!
+          start_emulator() {
+            "$ANDROID_HOME/emulator/emulator" -avd smoke \
+              -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
+              -camera-back none -camera-front none -memory 4096 \
+              -gpu swangle_indirect -accel auto >> "$RUNNER_TEMP/emulator.log" 2>&1 &
+            EMU=$!
+            if ! timeout 300 adb wait-for-device; then
+              echo "::error::The emulator never registered with adb."
+              exit 1
+            fi
+            if ! timeout 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'; then
+              echo "::error::The emulator registered but never finished booting."
+              exit 1
+            fi
+            adb shell input keyevent 82 || true
+            adb devices
+
+            # The device's log, streamed to the RUNNER while the tests run,
+            # not read back from the device afterwards. The run for a4c5ba9
+            # lost the emulator itself (the host process segfaulted 84s into
+            # the suite), and a log that lives on a dead device cannot be
+            # read. This copy survives it, and AndroidJUnitRunner's
+            # "TestRunner( pid): started:" lines in it name the test that was
+            # running when the device went away.
+            adb logcat -v time >> "$RUNNER_TEMP/device.log" 2>/dev/null &
+            LOGCAT=$!
+          }
 
           finish() {
             # Twelve lines, not a hundred and twenty. This runs on EXIT, so it
@@ -381,32 +510,96 @@ jobs:
             # The emulator's own failures are at the end of its log anyway
             # (boot completed, panics, driver errors); the boot-property dump
             # that made up the bulk of it has never once been the answer.
+
             echo "::group::Emulator log (tail)"
             tail -12 "$RUNNER_TEMP/emulator.log" 2>/dev/null || echo "(none)"
             echo "::endgroup::"
-            kill "$EMU" 2>/dev/null || true
+            kill "${LOGCAT:-}" 2>/dev/null || true
+            kill "${EMU:-}" 2>/dev/null || true
           }
           trap finish EXIT
 
-          if ! timeout 300 adb wait-for-device; then
-            echo "::error::The emulator never registered with adb."
-            exit 1
+          # FaceShotTest does NOT run here; it has its own job, `face-shots`,
+          # below. The pictures are evidence, not a gate, and a test that can
+          # take the whole device down with it must not be what stops the APK
+          # being published.
+          #
+          # ONE fresh emulator if - and only if - the EMULATOR PROCESS died.
+          # Three runs in a row (a4c5ba9, 9473ca7, eab1b9c) lost the emulator
+          # itself: a segfault in the host process, "Failed to find
+          # ColorBuffer" from its software graphics layer, at a different
+          # point each time - once in FaceShotTest, once six seconds into
+          # FaceRenderTest on the very first face, a face the run before had
+          # drawn without trouble. Every run before the Reactor Kit faces
+          # (which draw several times more per frame) passed. What that points
+          # at is the emulator's software GPU falling over under load, which a
+          # phone's real GPU does not share - but it is an inference, not a
+          # proof, so it is not hidden: the retry is announced as a warning,
+          # a second death fails the job, and a TEST that fails with the
+          # emulator still alive is never retried at all.
+          # "Gone" is dead OR frozen: in the eab1b9c face-shots job the
+          # emulator process stayed alive but adb reported it "offline", and
+          # Gradle waited on it for 26 minutes. `timeout` bounds the suite so
+          # a frozen device ends the attempt instead of the job.
+          emulator_gone() {
+            ! kill -0 "$EMU" 2>/dev/null \
+              || [ "$(timeout 10 adb get-state 2>/dev/null)" != "device" ]
+          }
+          run_suite() {
+            timeout 900 ./gradlew connectedDebugAndroidTest --stacktrace \
+              -Pandroid.testInstrumentationRunnerArguments.notClass=com.jarvis.client.FaceShotTest \
+              2>&1 | tee smoke.log
+          }
+          start_emulator
+          suite_ok=1
+          run_suite || suite_ok=0
+          if [ "$suite_ok" = 0 ] && emulator_gone; then
+            echo "::warning::The EMULATOR died or froze during the tests (not the app, not an assertion). Starting a fresh one and running the suite ONE more time."
+            kill -9 "$EMU" 2>/dev/null || true
+            echo "::group::Emulator log before the retry (last 20 lines)"
+            tail -20 "$RUNNER_TEMP/emulator.log" 2>/dev/null || true
+            echo "::endgroup::"
+            echo "::group::The last tests the device started before it died"
+            grep -E "TestRunner\(.*\): (started|finished|failed):" "$RUNNER_TEMP/device.log" 2>/dev/null | tail -4 || true
+            echo "::endgroup::"
+            kill "$LOGCAT" 2>/dev/null || true
+            timeout 30 adb kill-server >/dev/null 2>&1 || true
+            # A crashed emulator leaves its AVD's lock files behind, and the
+            # next one refuses to start on a "running" AVD without this.
+            rm -rf "$ANDROID_AVD_HOME"/smoke.avd/*.lock
+            start_emulator
+            suite_ok=1
+            run_suite || suite_ok=0
           fi
-          if ! timeout 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'; then
-            echo "::error::The emulator registered but never finished booting."
-            exit 1
-          fi
-          adb shell input keyevent 82 || true
-          adb devices
-
-          if ! ./gradlew connectedDebugAndroidTest --stacktrace 2>&1 | tee smoke.log; then
+          if [ "$suite_ok" = 0 ]; then
+            kill "$LOGCAT" 2>/dev/null || true
             # Ordered noisiest-first, so the thing worth reading is LAST.
             # GitHub's log API serves a tail, and the emulator prints ~110
             # lines of boot properties on its way out - enough to push the
             # failing test names out of every window I could fetch. Three
             # separate log pulls said only "a test failed" because of it.
+            #
+            # Every adb call here has a `timeout`. Without one, `adb logcat`
+            # on a device that has gone away prints "- waiting for device -"
+            # and waits for it forever: the a4c5ba9 run sat there for 27
+            # minutes until the job's own 35-minute limit cancelled it, and
+            # the test names below were never printed.
             echo "::group::Crash log, if the app got that far"
-            adb logcat -d -b crash | tail -80 || true
+            timeout 20 adb logcat -d -b crash 2>/dev/null | tail -80 || true
+            echo "::endgroup::"
+
+            if emulator_gone; then
+              echo "::error::The EMULATOR itself died or froze during the tests - not the app, and not a test assertion."
+              echo "::group::Emulator log (last 40 lines)"
+              tail -40 "$RUNNER_TEMP/emulator.log" 2>/dev/null || true
+              echo "::endgroup::"
+            fi
+            echo "::group::The last tests the device started, and its last words"
+            grep -E "TestRunner\(.*\): (started|finished|failed):" "$RUNNER_TEMP/device.log" 2>/dev/null | tail -8 || true
+            echo "--- which face was drawing, and what the GPU check found ---"
+            grep -E "JarvisFaceRender|JarvisGpuProbe|FATAL EXCEPTION|AndroidRuntime" "$RUNNER_TEMP/device.log" 2>/dev/null | tail -12 || true
+            echo "--- last 25 lines of the device log ---"
+            tail -25 "$RUNNER_TEMP/device.log" 2>/dev/null || true
             echo "::endgroup::"
 
             echo "::group::What the device said"
@@ -502,6 +695,12 @@ jobs:
             exit 1
           fi
 
+          # FaceShotTest no longer runs in this job (see `face-shots`), but it
+          # used to override the display here, so reset it anyway: a no-op
+          # on a display nothing touched, and nothing here can fail the step.
+          adb shell wm density reset >/dev/null 2>&1 || true
+          adb shell wm size reset >/dev/null 2>&1 || true
+
           # ---------------------------------------------------------------
           # The release build, started on the device, before it is published.
           #
@@ -522,16 +721,12 @@ jobs:
           # signatures. It does not walk every screen. A keep rule missing for
           # something only reachable three taps in would still get through.
           echo "::group::The release build on the device"
-          # `|| true` on the assignment, not decoration. If the release
-          # directory does not exist, `find` exits non-zero, `pipefail` hands
-          # that status to the whole pipeline, and under `-e` the ASSIGNMENT
-          # is the failing command - so the step would die here and the
-          # friendly message two lines down, written for exactly this case,
-          # would never be printed. Same bug as the pid check below, same fix.
-          rel=$(find app/build/outputs/apk/release -name 'app-release.apk' 2>/dev/null | head -1) || true
-          if [ -z "$rel" ] || [ ! -e "$rel" ]; then
-            echo "::error::No release APK was built, so there is nothing to smoke or publish."
-            find app/build/outputs/apk -name '*.apk' 2>/dev/null || true
+          # The file downloaded from the build job - the same bytes that are
+          # published below, never a rebuild.
+          rel=signed/app-release.apk
+          if [ ! -e "$rel" ]; then
+            echo "::error::The release APK from the build job is missing, so there is nothing to smoke or publish."
+            find . -name '*.apk' -not -path './app/build/*' 2>/dev/null || true
             exit 1
           fi
           echo "Installing $rel"
@@ -692,7 +887,7 @@ jobs:
 
       - name: Upload the report
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: jarvis-client-smoke-report
           path: jarvis-client/app/build/reports/androidTests/**
@@ -706,74 +901,143 @@ jobs:
       # green run and means the next red one can be read properly.
       - name: Upload the emulator log
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: jarvis-client-emulator-log
           path: ${{ runner.temp }}/emulator.log
           if-no-files-found: ignore
           retention-days: 7
 
-      # The RELEASE apk, which the step above has just started on a real
-      # device. `app-release.apk` and not `*.apk`: the debug build and the
-      # androidTest build are both sitting in the same tree, and picking the
-      # wrong one here would publish a debuggable APK under release notes
-      # saying otherwise - which is worse than publishing the debug one openly.
+      # The RELEASE apk from the build job, which the step above has just
+      # started on a real device. Named exactly, not found by pattern: the
+      # debug build and the androidTest build are both sitting in this tree
+      # too, and picking the wrong one would publish a debuggable APK under
+      # release notes saying otherwise.
       - name: Collect APK
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          find . -name 'app-release.apk' -not -path './artifacts/*' -exec cp {} artifacts/ \;
-          if [ ! -e artifacts/app-release.apk ]; then
+          if [ ! -e signed/app-release.apk ]; then
             echo "::error::No release APK to publish."
             exit 1
           fi
+          cp signed/app-release.apk artifacts/app-release.apk
           ls -lh artifacts
+
+      # Right before publishing: the certificate in the file about to be
+      # published must be the project key's, as read from the restored
+      # keystore by the build job. The build job checked this already; this
+      # checks the downloaded copy, so nothing between the two jobs can
+      # swap the file unnoticed.
+      - name: Check the APK to publish is signed with the project key
+        env:
+          WANT: ${{ needs.build.outputs.key_sha256 }}
+        run: |
+          set -euo pipefail
+          apk=artifacts/app-release.apk
+          want=$(printf '%s' "$WANT" | tr -d ':[:space:]' | tr 'A-F' 'a-f')
+          if [ "${#want}" -ne 64 ]; then
+            echo "::error::The build job did not hand over the project key's fingerprint. Not publishing."
+            exit 1
+          fi
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          apksigner=$(find "$sdk/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1) || true
+          if [ -z "$apksigner" ]; then
+            echo "::error::No apksigner under $sdk/build-tools, so the certificate cannot be checked. Not publishing."
+            exit 1
+          fi
+          certs=$("$apksigner" verify --print-certs "$apk")
+          printf '%s\n' "$certs"
+          # Older apksigner prints "Signer #1 certificate SHA-256 digest: ...", newer
+          # (build-tools 37) prints "V2 Signer: certificate SHA-256 digest: ...",
+          # once per signing scheme. So count DIFFERENT digests, whatever the prefix.
+          digests=$(printf '%s\n' "$certs" \
+                | sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest:[[:space:]]*//p' \
+                | tr -d ' \t\r' | tr 'A-F' 'a-f' | grep . | sort -u) || true
+          signers=$(printf '%s\n' "$digests" | grep -c .) || true
+          got=$(printf '%s\n' "$digests" | awk 'NR == 1')
+          echo "Project key: $want"
+          echo "APK signed:  ${got:-?}"
+          if [ "$signers" != "1" ] || [ "$got" != "$want" ]; then
+            echo "::error::The APK is NOT signed with the project key. Not publishing it."
+            exit 1
+          fi
+          echo "Signed with the project key. Publishing."
 
       # This is the app that actually talks to Jarvis, so it gets the same
       # phone-reachable delivery as the other one: a plain .apk at a stable URL
       # rather than a zip buried in a run the GitHub mobile app cannot download.
+      # Only from the owner's working branch and main: any other branch's
+      # build is tested, and kept as a run artifact, but does not replace the
+      # APK the owner installs (DEPS-TESTS-CI audit B-20, 2026-09-26).
       - name: Publish the APK to a rolling release
         id: release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/admiring-ritchie-5urg5h'
         continue-on-error: true
         working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: client-latest
+          KEY_SHA256: ${{ needs.build.outputs.key_sha256 }}
         run: |
           set -euo pipefail
           short="${GITHUB_SHA::7}"
-          mv jarvis-client/artifacts/app-release.apk "jarvis-client/artifacts/jarvis-client-$short.apk"
-          size=$(du -h "jarvis-client/artifacts/jarvis-client-$short.apk" | cut -f1)
+          # The certificate fingerprint, colon-separated in pairs, as keytool
+          # and most tools print it. Checked equal to the APK's in the step
+          # before this one.
+          key_sha=$(printf '%s' "$KEY_SHA256" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
+          apk="jarvis-client-$short.apk"
+          mv jarvis-client/artifacts/app-release.apk "jarvis-client/artifacts/$apk"
+          size=$(du -h "jarvis-client/artifacts/$apk" | cut -f1)
+          commit_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+          built_at=$(date -u '+%Y-%m-%d %H:%M UTC')
 
+          # The one version number (VERSION at the top of the repository), with
+          # this workflow's run number as the last part - the same number the
+          # app shows in About (build.gradle.kts).
+          base=$(tr -d ' \r\n' < VERSION)
+          version="${base%.*}.$GITHUB_RUN_NUMBER"
+          file_sha=$(sha256sum "jarvis-client/artifacts/$apk" | cut -d' ' -f1)
+
+          # Short and plain. Only main and the owner's working branch publish
+          # here, so the notes still say which one this is.
           notes=$(printf '%s\n' \
-            "Release build of \`jarvis-client\` from commit \`$short\` on \`$GITHUB_REF_NAME\`. **$size.**" \
+            "**Jarvis for Android $version** - from \`$GITHUB_REF_NAME\`, commit [\`$short\`]($commit_url), built $built_at." \
             "" \
-            "The only app. It speaks the real Jarvis API - SSE on \`/api/events\` plus REST, authenticated with \`X-Jarvis-Token\`." \
+            "**Install:** open this page on the phone and tap \`$apk\` ($size), or from the PC: \`adb install -r $apk\`" \
             "" \
-            '```' \
-            "adb install -r jarvis-client-$short.apk" \
-            '```' \
+            "**What changed:** see [CHANGELOG.md]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/CHANGELOG.md)." \
             "" \
-            "Or open this page on the phone and tap the \`.apk\`." \
+            "**Checked before publishing:** the tests passed, and this exact file was installed on an Android emulator and started." \
             "" \
-            "### What changed about these builds" \
+            "**To check your download** (optional): its SHA-256 is \`$file_sha\`. It is signed with the project key, certificate SHA-256 \`$key_sha\`." \
             "" \
-            "This is the shrunk, optimised build, not the debug one. It is roughly a tenth the size, and Android is allowed to compile it ahead of time instead of interpreting every class - so the reactor face and the chat stream have a real frame budget for the first time. It also closes \`adb shell run-as\`, which on a debug build let anything with adb read the app's data directory, pairing token included." \
-            "" \
-            "### What was checked before this was published" \
-            "" \
-            "The unit tests and the instrumentation suite both passed, on an Android 34 emulator. Then THIS apk - the shrunk one, not a rebuild of it - was installed fresh on that emulator, started, and watched for fifteen seconds. It has to still be running, with nothing in its log that looks like the shrinker removed code it needed, or nothing is published." \
-            "" \
-            "Honest limit: that proves it starts and the first screen works. It does not walk every screen, so a shrinker fault on something only reachable several taps in would still get through. Report anything that crashes only on this build and not the previous debug one." \
-            "" \
-            "Signed with the committed debug key, the same one every previous build used, so it installs over an existing copy in place with no uninstall and no loss of pairing. This tag is rolling.")
+            "If installing says \`INSTALL_FAILED_UPDATE_INCOMPATIBLE\`, the copy on the phone was signed with a different key (builds from before 19 Sep 2026 were). Uninstall it once, install this one, and pair again. Do not uninstall to get past this for any later build - tell the Claude session instead.")
+          title="Jarvis for Android $version ($GITHUB_REF_NAME @ $short)"
 
-          gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
-          gh release create "$TAG" jarvis-client/artifacts/*.apk \
-            --prerelease \
-            --target "$GITHUB_SHA" \
-            --title "Jarvis client - latest release build" \
-            --notes "$notes"
+          # Replace the old build WITHOUT a moment of having none. The old
+          # way deleted the release first and then created the new one, so a
+          # failed create (a network blip, a 5xx) left no release and no APK
+          # at all. Now: the new APK is uploaded first; only once that has
+          # worked does the tag move, the notes change and the old APK go.
+          # A failure anywhere leaves the previous build downloadable.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "jarvis-client/artifacts/$apk" --clobber
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release edit "$TAG" --prerelease --title "$title" --notes "$notes"
+            gh release view "$TAG" --json assets --jq '.assets[].name' | while IFS= read -r old; do
+              if [ "$old" != "$apk" ]; then
+                gh release delete-asset "$TAG" "$old" --yes
+              fi
+            done
+          else
+            gh release create "$TAG" "jarvis-client/artifacts/$apk" \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes "$notes"
+          fi
 
           echo "Published: $(gh release view "$TAG" --json url --jq .url)"
 
@@ -783,5 +1047,141 @@ jobs:
         run: |
           echo "::warning::Could not publish the release. If this was a 403, set" \
                "Settings -> Actions -> General -> Workflow permissions to" \
-               "'Read and write permissions'. The APK is still available as the" \
-               "jarvis-client-debug-apk run artifact."
+               "'Read and write permissions'. The same signed APK is still available" \
+               "as the jarvis-client-release-apk run artifact."
+
+  # The face photographs, on their own emulator, never gating anything.
+  #
+  # FaceShotTest used to run inside `smoke`, and twice took the emulator down
+  # with it (see the comment on the test command there). Here it gets a
+  # device built at phone size and density from the start - 1080x2160 at
+  # 420 dpi, what the test was switching the 320x640 panel to with
+  # `wm size` / `wm density` mid-run - so its own override becomes a no-op
+  # instead of a live resize under a running GL surface. Whether that is what
+  # was crashing the emulator is not known; this job exists to find out
+  # without costing a release, which is why it is continue-on-error.
+  #
+  # Runs 65-67 of this workflow then timed out here (Gradle killed at 900 s,
+  # exit 124) after 3, 5 and 13 faces, with the emulator still alive and adb
+  # still answering, and run 68 photographed all twenty. That is the test
+  # waiting forever, not the device dying: see FaceShotTest's class comment
+  # for the idle waits it no longer makes, and the watchdog that now stops
+  # it and names the step instead.
+  face-shots:
+    runs-on: ubuntu-latest
+    needs: build
+    continue-on-error: true
+    timeout-minutes: 30
+    env:
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.avd
+    defaults:
+      run:
+        working-directory: jarvis-client
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+
+      - name: Let the runner use KVM
+        working-directory: .
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install the system image
+        working-directory: .
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "system-images;android-34;default;x86_64" \
+                               "platforms;android-34" "platform-tools" "emulator"
+
+      - name: Compile the app and the test
+        run: |
+          set -uo pipefail
+          chmod +x ./gradlew
+          ./gradlew assembleDebug assembleDebugAndroidTest
+
+      - name: Photograph every face
+        run: |
+          set -uo pipefail
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd -n shots \
+            -k "system-images;android-34;default;x86_64" --force
+          # Phone-sized from boot. config.ini is the AVD's own hardware
+          # description; the emulator reads it at start.
+          cfg="$ANDROID_AVD_HOME/shots.avd/config.ini"
+          sed -i '/^hw.lcd.width=/d;/^hw.lcd.height=/d;/^hw.lcd.density=/d' "$cfg"
+          printf 'hw.lcd.width=1080\nhw.lcd.height=2160\nhw.lcd.density=420\n' >> "$cfg"
+          mkdir -p "$HOME/.android"
+          printf 'Vulkan = off\nGLDirectMem = on\n' >> "$HOME/.android/advancedFeatures.ini"
+
+          "$ANDROID_HOME/emulator/emulator" -avd shots \
+            -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
+            -camera-back none -camera-front none -memory 4096 \
+            -gpu swangle_indirect -accel auto > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          EMU=$!
+
+          finish() {
+            # Every adb call here has a timeout: on a device that has gone
+            # away, adb waits for it forever otherwise.
+            timeout 120 adb pull /data/local/tmp/jarvis-face-shots "$RUNNER_TEMP" >/dev/null 2>&1 || true
+            shots=$( { find "$RUNNER_TEMP/jarvis-face-shots" -name '*.png' 2>/dev/null || true; } | wc -l )
+            echo "Face photographs pulled off the device: ${shots:-0} (artifact: jarvis-client-face-shots)"
+            if ! kill -0 "$EMU" 2>/dev/null; then
+              echo "::warning::The emulator process died during the photographs."
+            fi
+            # What the test itself wrote down, face by face. FaceShotTest
+            # saves it after every face, so a run that stalls still says
+            # which face and which step it was on.
+            echo "::group::manifest.txt"
+            cat "$RUNNER_TEMP/jarvis-face-shots/manifest.txt" 2>/dev/null || echo "(no manifest)"
+            echo "::endgroup::"
+            echo "::group::Device log: the test, the test runner and crashes (tail)"
+            { grep -E "FaceShotTest|TestRunner|AndroidRuntime|FATAL" "$RUNNER_TEMP/device.log" 2>/dev/null || true; } | tail -40
+            echo "::endgroup::"
+            # "Failed to find ColorBuffer" at the end of this log is NOT the
+            # failure: the one run that photographed all twenty faces
+            # (36074481330) printed it three times too.
+            echo "::group::Emulator log (tail)"
+            tail -30 "$RUNNER_TEMP/emulator.log" 2>/dev/null || true
+            echo "::endgroup::"
+            kill "${LOGCAT:-}" 2>/dev/null || true
+            kill "$EMU" 2>/dev/null || true
+          }
+          trap finish EXIT
+
+          timeout 300 adb wait-for-device || { echo "::error::no device"; exit 1; }
+          timeout 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done' \
+            || { echo "::error::the emulator never finished booting"; exit 1; }
+          timeout 20 adb shell wm size || true
+          timeout 20 adb shell wm density || true
+          # The device's log, kept on the RUNNER as the test runs (as the smoke
+          # job does), so it survives a device that stops answering.
+          adb logcat -v time >> "$RUNNER_TEMP/device.log" 2>/dev/null &
+          LOGCAT=$!
+
+          # Bounded: at this size the eab1b9c run's emulator went "offline"
+          # and Gradle waited on it until the job limit cancelled everything.
+          timeout 900 ./gradlew connectedDebugAndroidTest \
+            -Pandroid.testInstrumentationRunnerArguments.class=com.jarvis.client.FaceShotTest
+
+      - name: Upload the face photographs
+        if: success() || failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: jarvis-client-face-shots
+          path: ${{ runner.temp }}/jarvis-face-shots
+          if-no-files-found: warn
+          retention-days: 7

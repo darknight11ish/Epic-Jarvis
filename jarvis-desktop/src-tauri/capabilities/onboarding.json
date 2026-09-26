@@ -1,13 +1,16 @@
 {
   "$schema": "../gen/schemas/windows-schema.json",
   "identifier": "onboarding",
-  "description": "The first-run walkthrough: three static screens and a close button. `jarvis-link` is granted only for its read-only `get_theme`, the same as every other window, so this page paints the owner's actual theme rather than always opening in the default one. It cannot read the event stream, the approval queue, memory, or anything else Jarvis does — the only write it is capable of is marking itself seen.",
+  "description": "The first-run walkthrough: three static screens and a close button. It reads the theme (`theme-read`: `get_theme` only), so this page paints the owner's actual theme rather than always opening in the default one. It cannot read the event stream, the approval queue, memory, or anything else Jarvis does: it holds no event permission (in Tauri 2 a page's global listen() hears every event the app sends, even one sent to another window) and not `jarvis-link`, which reads the approval queue. The only write it is capable of is marking itself seen.",
   "windows": [
     "onboarding"
   ],
   "permissions": [
-    "core:default",
-    "jarvis-link",
+    "core:app:default",
+    "core:path:default",
+    "core:webview:default",
+    "core:window:default",
+    "theme-read",
     "onboarding-surface"
   ]
 }

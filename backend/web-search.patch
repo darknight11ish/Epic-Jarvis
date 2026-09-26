@@ -1,0 +1,93 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1528,6 +1528,25 @@
+             except Exception as exc:
+                 return self._send(503, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
++
++        if path == "/api/search":
++            # web-search.patch - web search (jarvis_search.py, the owner's
++            # decisions of 2026-09-25): which of the five providers is chosen,
++            # each one's "why use this one" line (both apps show these words),
++            # whether it is ready, the SearXNG address, "Ask before every web
++            # search", and Whoogle's reason for being left out. Whether a
++            # Exa, Tavily or Brave key is saved - yes or no, never the key.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_search
++                code, out = jarvis_search.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote a setting.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
+         if path == "/api/schedule":
+             # schedule.patch - "Coming up": the timers, alarms, reminders and
+@@ -2069,6 +2088,36 @@
+                 code, out = jarvis_hardware.handle_create(body)
+             else:
+                 code, out = jarvis_hardware.request_measure()
++            return self._send(code, out)
++
++        if route in ("/api/search/settings", "/api/search/test"):
++            # web-search.patch - web search (jarvis_search.py).
++            #   settings: ONE change per request - {"provider": id} or
++            #     {"searxng_url": address} (this PC or the owner's own
++            #     networks only) at once; {"ask_every_time": true} at once
++            #     (stricter); {"ask_every_time": false} 202, ONE approval
++            #     card (stop_asking_before_every_web_search, tier "ask"). There is no route
++            #     for an Exa, Tavily or Brave key: keys are entered on the PC only,
++            #     straight into Credential Manager (CLAUDE.md rule 3).
++            #   test: one search for a fixed harmless word through the chosen
++            #     provider, and what happened in plain words. Never another
++            #     provider (no silent fallback).
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_search
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++            if route == "/api/search/settings":
++                code, out = jarvis_search.handle_settings(body)
++            else:
++                code, out = jarvis_search.handle_test(body)
+             return self._send(code, out)
+ 
+         if route in ("/api/schedule/add", "/api/schedule/act"):
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -145,6 +145,8 @@
+     "switch_model",           # shipped "ask"; the owner picked the model
+     "models_create",          # jarvis_hardware.py acts only on tier "ask" (hardware.patch)
+     "schedule_repeat",        # jarvis_schedule.py acts only on tier "ask" (schedule.patch)
++    "search_the_web",         # jarvis_agent.py: this card asks about ONE search's words (web-search.patch)
++    "stop_asking_before_every_web_search",    # jarvis_search.py acts only on tier "ask" (web-search.patch)
+     "write_notes_after_outside_text",  # jarvis_agent.py: a note after outside text asks every time
+     "power_manage",           # shipped "auto": a card means the owner chose "ask"
+     "append_obsidian_daily",  # shipped "auto": the same
+@@ -589,6 +591,16 @@
+     # sent anywhere. Without this line the action would be read as
+     # "unknown", and the notice would say it might leave the machine.
+     "models_create": ("yes", "local", "makes a tuned copy of a model you already downloaded, with Ollama on this PC; nothing is downloaded or sent anywhere, and jarvis-primary is not changed"),
++    # web-search.patch (jarvis_search.py, jarvis_agent.py). One web search,
++    # asked about because private things could slip into its words (or the
++    # owner chose "Ask before every web search"): the words shown on the card
++    # go to the search the owner chose - SearXNG on this PC, which asks other
++    # engines, DuckDuckGo, Exa, Tavily or Brave. Outbound, so the notice is heavy.
++    "search_the_web": ("yes", "outbound", "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent"),
++    # Turning "Ask before every web search" off: a setting on this PC. It
++    # sends nothing; searches straight from the owner's own question then run
++    # without a card again.
++    "stop_asking_before_every_web_search": ("yes", "local", "stops asking before every web search - a search straight from your own question runs without a card again, and a search after Jarvis has read email, files, notes or other outside text, one whose words repeat a saved fact, and one after a sensitive saved fact was used still ask; nothing is sent by this change"),
+     # schedule.patch (jarvis_schedule.py). Setting up something that repeats
+     # ("every weekday at 7", a standby schedule): it acts only on this PC,
+     # and deleting it is immediate. Without this line the action would be

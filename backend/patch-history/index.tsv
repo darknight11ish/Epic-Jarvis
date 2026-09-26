@@ -1,0 +1,72 @@
+# Every earlier committed version of each patch, newest first per patch.
+# Written by tools/build_patch_history.py - do not edit by hand.
+# Columns: patch, file (under backend/patch-history/), commit, date, subject
+appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a23a	2026-09-15T03:11:39+00:00	Three honesty fixes: /api/visual-spec, the HUD proposal handler, INSTALL
+appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30+00:00	I invented a NameError, then reported it twice as a finding
+appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27+00:00	The backend route, written against the real jarvis_hud.py
+approval-expiry.patch	approval-expiry/ba8799f.patch	ba8799f4c6df6486a22a93b38d079fa9a66ed520	2026-09-24T00:01:50+00:00	Approvals: a countdown on every card, rush and risk on the HUD, one row shape
+approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b644c3c2491cc	2026-09-15T17:29:34+00:00	Approval notifications you can act on, and fix the CRLF that broke all 20 patches
+asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37+00:00	Backend: repeats without a card, lights setting, "What asks first"
+auto-learn.patch	auto-learn/1f2f70f.patch	1f2f70f6654c9f70f2851848f65b3791868a9f7c	2026-09-24T23:00:16+00:00	Say what always waits for a yes: birthdays, phone numbers and email addresses too
+auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23+00:00	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
+auto-learn.patch	auto-learn/6ad4a3c.patch	6ad4a3cfab9caeba68578c0f3bc1cb60b80542be	2026-09-24T21:28:10+00:00	Merge the rebuilt sensitive-topic check; "Remember:" no longer waits on the chat thread
+auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e0353	2026-09-24T20:51:14+00:00	Automatic learning: the audits' backend findings, and injected_sensitive on the chat route
+auto-learn.patch	auto-learn/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44+00:00	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
+big-model.patch	big-model/ee05ef0.patch	ee05ef0b3dcca894079a3ccda259a71560e2f8cc	2026-09-24T04:35:14+00:00	Big model: big-model.patch, the install lists, and parity
+bitemporal.patch	bitemporal/688640e.patch	688640efca47502ec38032394fa127eabb03101b	2026-09-15T03:28:09+00:00	bitemporal.patch: the second time axis, and a surface that shows it
+briefing.patch	briefing/a0305da.patch	a0305dabd58fb35767fc11f2cbc914701eaf2057	2026-09-25T05:06:37+00:00	Merge the morning briefing and the back-off for offers
+briefing.patch	briefing/5350f7f.patch	5350f7f719f299875b3529c2304821dbf9176bce	2026-09-25T04:20:17+00:00	Morning briefing and the back-off for offers (backend)
+chat-history.patch	chat-history/92cbd90.patch	92cbd906388bfa9a2b6b9c7f7377e621ae5bcd30	2026-09-24T17:50:35+00:00	Merge branch 'worktree-agent-a6ef7f4f8bec69b97' into claude/admiring-ritchie-5urg5h
+chat-history.patch	chat-history/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53+00:00	Backend: keep chat history on the PC, encrypted (chat-history.patch)
+email-send.patch	email-send/ab2eb89.patch	ab2eb8925786245dca22da666433ce25f1b22678	2026-09-25T22:40:42+00:00	Email sending: one approval card per email, the whole text on it (backend)
+extraction-wiring.patch	extraction-wiring/2641f6d.patch	2641f6d676ed75ad47d45e453c350baf9b163eab	2026-09-15T02:33:18+00:00	Routes to read, edit, forget and export what Jarvis has learned
+extraction-wiring.patch	extraction-wiring/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30+00:00	I invented a NameError, then reported it twice as a finding
+extraction-wiring.patch	extraction-wiring/80309e5.patch	80309e584047abb27a30f3163c29a841000ea7f7	2026-09-15T01:42:10+00:00	The route is /api/pending, and I told the other client the wrong one
+extraction-wiring.patch	extraction-wiring/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34+00:00	Master audit: the worst finding was a cloud lane nobody re-filtered
+extraction-wiring.patch	extraction-wiring/a50cbf1.patch	a50cbf1ee96d71ac66e3d7a9bab702dc5b7b8b49	2026-09-15T00:50:38+00:00	backend: give the learning loop a trigger and the review queue a doorbell
+feedback.patch	feedback/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
+feedback.patch	feedback/5d1cfa3.patch	5d1cfa36b3fc94807dae3597d00ffe0d54df5c77	2026-09-23T08:19:29+00:00	Backend: right/wrong mark per answer, helpful/harmful counts, retire card
+focus.patch	focus/3f467d9.patch	3f467d91283363030b92b0399a8f46354fb61406	2026-09-25T23:45:52+00:00	Focus sessions, backend: jarvis_focus.py, focus.patch, the fast-path commands
+gate-outcome.patch	gate-outcome/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44+00:00	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
+gate-outcome.patch	gate-outcome/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53+00:00	Backend: keep chat history on the PC, encrypted (chat-history.patch)
+gate-outcome.patch	gate-outcome/ae434de.patch	ae434de4ffc8c18144aa3a65af57f209dcddc9aa	2026-09-24T08:27:21+00:00	Merge voice-custom: custom voices backend (ZipVoice now, F5 on the second card)
+gate-outcome.patch	gate-outcome/7f6b490.patch	7f6b49027b128beee4839a565e296bfbb4b1c0da	2026-09-24T08:14:30+00:00	gate-outcome: a "no" on a custom-voice card proposes no standing rule
+gate-outcome.patch	gate-outcome/c7e17c8.patch	c7e17c81fe7db24c95a804c3c1bcd6c6570d9206	2026-09-24T08:13:46+00:00	Turning background learning on asks first, from both apps
+gate-outcome.patch	gate-outcome/fabb3f6.patch	fabb3f66b919f48fa5603572b3c31ce7d4c9435c	2026-09-24T06:55:22+00:00	gate-outcome: Browser control's own action is always-ask too
+gate-outcome.patch	gate-outcome/3fe5486.patch	3fe5486e240d54cd0ca8f77dd9dbc3b9ce72091b	2026-09-24T06:11:30+00:00	Gate (AP-11): no memory proposal from a "no" on an always-ask card
+gate-outcome.patch	gate-outcome/37fad26.patch	37fad2683a8941a4d26ae5ce6909cc9c984d6a4d	2026-09-16T20:38:00+00:00	gate: a denial can propose a standing rule, never apply one
+gate-outcome.patch	gate-outcome/10db67c.patch	10db67c2111fb8d61d0954380cd764052c5717d5	2026-09-15T04:28:13+00:00	There was an approve-all in the gate, and a timeout looked like a refusal
+gate-push.patch	gate-push/5cb5947.patch	5cb5947da824b6d2faf13f16a5335674a2cdabd5	2026-09-15T00:16:24+00:00	Stop the two paths that send private content off the machine
+loopback-too.patch	loopback-too/88921b8.patch	88921b89d89c516c30caad112696d0e79b7dcbdc	2026-09-24T00:20:44+00:00	Bind address: refuse every spelling of "every interface", on both sides
+memory-intake.patch	memory-intake/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
+memory-intake.patch	memory-intake/c870ceb.patch	c870cebfff6cebd437ac56e4aa8ff78a8b915f93	2026-09-23T09:02:25+00:00	Learning jobs integrated: patch order, retire card vs "Both are true", script fix
+memory-intake.patch	memory-intake/a1d21de.patch	a1d21de7a10014af8282786adf8e4653c25b52ed	2026-09-23T08:37:20+00:00	Memory intake: Remember:, near-duplicates, numbered corrections, keep-both, real dates, planted-instruction flags, origin check
+memory-pane.patch	memory-pane/03c51c7.patch	03c51c7b1b5e56df1ee596ebc27d0b4ca599a3b3	2026-09-17T02:21:24+00:00	backend + desktop: wire the overnight-memory offer into the Brain pane
+memory-pane.patch	memory-pane/c75a8bf.patch	c75a8bf0e80faea37ae80e6b7c0557dca2c886c4	2026-09-16T20:19:56+00:00	memory: make backdated corrections reachable, not just supported
+memory-pane.patch	memory-pane/2641f6d.patch	2641f6d676ed75ad47d45e453c350baf9b163eab	2026-09-15T02:33:18+00:00	Routes to read, edit, forget and export what Jarvis has learned
+memory-prefix.patch	memory-prefix/a7ed401.patch	a7ed401bdbf059e6b8a633844d657ad2365e0658	2026-09-15T00:53:01+00:00	backend: the recalled-facts block was also dropping the persona invariants
+memory-prefix.patch	memory-prefix/3040b3d.patch	3040b3dc0803600ff1ccd92e8ed6460c921d687c	2026-09-15T00:43:39+00:00	backend: recalled facts were at token 0, so every turn re-prefilled everything
+memory-safety.patch	memory-safety/3d8df73.patch	3d8df73437d50b3b98382c87bd41012e637e0cb4	2026-09-19T17:53:10+00:00	fix(backend): the audit's Python findings
+memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34+00:00	Master audit: the worst finding was a cloud lane nobody re-filtered
+memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51+00:00	Memory: stop the destructive paths, and start the event pump
+note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49+00:00	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
+note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28+00:00	Logseq and Joplin notes that are really filed
+schedule.patch	schedule/97885fd.patch	97885fd9027e5f7c6a3d163fd5133cf634a0562a	2026-09-25T02:17:12+00:00	Timers, alarms, reminders, a to-do list and one scheduler (backend)
+second-card.patch	second-card/2a25605.patch	2a25605de02b58dfbe278a6043a478ac81ed8819	2026-09-24T06:14:15+00:00	Gate notice words (AP-10): what the second card, wiki and big model do
+second-card.patch	second-card/15a7f27.patch	15a7f27ebe5d5bb6bfad2f7cdd962f0c0aa1a7d6	2026-09-24T06:11:02+00:00	AP-9: Browser control's card no longer says "Nothing leaves this PC"
+second-card.patch	second-card/a0f23da.patch	a0f23dad6d3e20eee783f05a77ab4921da96818a	2026-09-24T02:37:56+00:00	Second graphics card: the switches, the second Ollama, and /api/second-card
+skill-notes.patch	skill-notes/2c4f24c.patch	2c4f24cd99c3400a83e45efb2d743e8b0c4bdd0b	2026-09-15T00:20:02+00:00	Three sentences that were not true, and an ungated insight pool
+temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a5039378a5264e50	2026-09-25T01:17:50+00:00	Temporary chat and "Used in this answer", in both apps and on the PC
+tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27+00:00	backend: fix the 6 findings from the tool-calling audit
+tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47+00:00	backend: jarvis_agent.py - the model can finally use a tool, local lane only
+voice-503.patch	voice-503/8d2c6f6.patch	8d2c6f615e4db690c28465fc892805f3d74a70a0	2026-09-15T01:07:41+00:00	The voice routes were telling four different stories, and one was a leak
+voices.patch	voices/ca3f625.patch	ca3f62575069f0b741ace3645b33729f9c2c7d9c	2026-09-24T08:14:23+00:00	Custom voices, backend: jarvis_voices.py, voices.patch, and the better voice
+web-search.patch	web-search/dcfdbaf.patch	dcfdbafdf25c0944179e6103990326786c11de38	2026-09-25T06:49:40+00:00	Web search: Brave back as the fifth option, and its line says it can cost money
+web-search.patch	web-search/7c82046.patch	7c820464c4b614c3305ce54d126772b7e6e09d09	2026-09-25T06:33:24+00:00	Web search: Exa replaces Brave (SearXNG, DuckDuckGo, Exa, Tavily)
+web-search.patch	web-search/4312b46.patch	4312b4686e51299212f51077097d4a49e380ced2	2026-09-25T06:02:46+00:00	Web search in both apps: Settings (desktop) and Mind (phone); docs
+web-search.patch	web-search/22cf8a5.patch	22cf8a5d8dd1f89daab77e7ab81062886118a66b	2026-09-25T05:46:04+00:00	Web search: jarvis_search.py (four providers), the web_search tool, web-search.patch
+wiki.patch	wiki/9aaab08.patch	9aaab08a9cdea55259a23a50ee9b1b2e990921fd	2026-09-24T03:29:14+00:00	Wiki builder: jarvis_wiki.py, wiki.patch, and its tests
+rebuilt-patches/approval-notice.patch	rebuilt-patches/approval-notice/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
+rebuilt-patches/bitemporal.patch	rebuilt-patches/bitemporal/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
+rebuilt-patches/extraction-wiring.patch	rebuilt-patches/extraction-wiring/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
+rebuilt-patches/memory-safety.patch	rebuilt-patches/memory-safety/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild

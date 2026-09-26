@@ -25,6 +25,15 @@ fn main() {
             "get_pending_approvals",
             "refresh_link",
             "decide_approval",
+            // The HUD page's requests, made in Rust so the page holds no
+            // token (apps security audit M2; hud_proxy.rs).
+            "hud_get",
+            "hud_chat",
+            "hud_chat_cancel",
+            // App lock and the widget: is the lock on, and "Approve in the
+            // Jarvis bar" (apps security audit M3).
+            "get_app_lock",
+            "open_approval_in_quickbar",
             // A note on a proposal, and the controls for the turn already
             // running. `jarvis-link.js` invoked all five of these before any
             // of them existed, so every one of those buttons failed at the
@@ -56,6 +65,8 @@ fn main() {
             // whether facts are proposed at all.
             "brain_memory_decide",
             "brain_memory_forget",
+            // "Erase the words": one fact's words wiped, its dates kept.
+            "brain_memory_erase",
             "brain_memory_edit",
             "brain_memory_learning",
             "brain_memory_export",
@@ -64,6 +75,33 @@ fn main() {
             // called by brain.js, absent here, so unreachable from every
             // window.
             "brain_memory_sleep_time",
+            // "Both are true" on a correction card (memory-intake.patch).
+            "brain_memory_keep_both",
+            // Automatic learning (JARVIS-API.md section 19): the "Saved
+            // automatically" list and its two switches. Brain only.
+            "brain_memory_learning_status",
+            "brain_memory_auto_list",
+            "brain_memory_learning_auto",
+            "brain_memory_learning_sensitive",
+            // How many facts were saved automatically while the Brain was
+            // closed - ids only, never the words. Brain only.
+            "brain_memory_saved_unseen",
+            // "Always keep in mind" (JARVIS-API.md section 6): the pinned
+            // facts, and pin or unpin ONE fact. Brain only.
+            "brain_memory_profile",
+            "brain_memory_pin",
+            // "Used in this answer" / "Jarvis remembered N things" (the
+            // owner's decision, 2026-09-25): the words of a few facts, by id.
+            // A read. The quickbar and the Brain.
+            "memory_used",
+            // Can this PC hold a temporary chat? A read. The quickbar.
+            "temporary_chat_available",
+            // Chat history on the PC (JARVIS-API.md section 18): list, open
+            // one read-only, delete ONE, and the two settings. Brain only.
+            "brain_history_list",
+            "brain_history_open",
+            "brain_history_delete",
+            "brain_history_settings",
             // Backend supervision — settings window only
             "supervisor_status",
             "set_supervision",
@@ -73,14 +111,141 @@ fn main() {
             // that offer a picker.
             "get_theme",
             "set_theme",
+            // "Match Windows light or dark mode": the read is everywhere the
+            // theme is, the switch is with the two pickers.
+            "get_theme_prefs",
+            "set_theme_follow_system",
+            // Settings' "Open Faces" button.
+            "open_faces",
+            // The right/wrong mark on one answer (feedback.patch). Quickbar.
+            "mark_answer",
             // The first-run walkthrough — one command, closes itself.
             "finish_onboarding",
+            // Windows Hello (lock.rs). The Security settings are read and
+            // changed from the settings window only; loosening one asks
+            // Windows Hello first. Show, for the Brain's private lists, is
+            // the Brain's only.
+            "get_security_settings",
+            "set_security_settings",
+            "reveal_private_answers",
             // Connection settings — settings window only
             "get_api_settings",
             "set_api_settings",
+            // Settings' "Show the token for my phone". Settings window only.
+            "reveal_pairing_token",
+            // Settings' "Second graphics card": read what was found and the
+            // switches, and turn ONE switch on or off. ON only raises an
+            // approval card. Settings window only.
+            // Settings' "What this backend supports": the capability NAMES
+            // GET /api/version reports, as the phone lists them. Read only.
+            // Settings window only.
+            "get_backend_capabilities",
+            "get_second_card",
+            "set_second_card",
+            // Settings' "Big model (slow)" (backend/big-model.patch): read
+            // what was found and the three switches, and turn ONE switch on
+            // or off. ON only raises an approval card. Settings window only.
+            "get_big_model",
+            "set_big_model",
+            // Settings' "Hardware and models" (backend/hardware.patch): the
+            // cards and the three setups; choose one (changes nothing by
+            // itself); ask for ONE step of it, read from the backend's own
+            // answer (each step is its own approval card); measure.
+            // Settings window only.
+            "get_hardware",
+            "apply_hardware",
+            "hardware_step",
+            "measure_hardware",
+            // Settings' "Web search" (backend/web-search.patch): the five
+            // providers and their "why" lines, ONE change at a time (turning
+            // "Ask before every web search" off raises a card on the PC), a
+            // test search, and the Exa / Tavily / Brave key written straight into
+            // Credential Manager on this PC - never sent over HTTP, never
+            // shown again. Settings window only.
+            "get_web_search",
+            "set_web_search",
+            "test_web_search",
+            "save_search_key",
+            "forget_search_key",
+            // Settings' "What Jarvis can reach" (backend/reach.patch): every
+            // way Jarvis can reach something outside itself, written by the
+            // PC from its settings. Read only. Settings window only.
+            "get_reach",
+            // Settings' "What asks first" (backend/asks-first.patch): every
+            // action and whether it asks, in the PC's words; "Ask me first"
+            // on ONE action of the short safe list (stricter at once, never
+            // held; looser is one card plus Windows Hello on the PC, held on
+            // a stale link); and "Lights, plugs and fans without a card" (ON
+            // is one card, held; OFF at once). Settings window only.
+            "get_asks_first",
+            "set_asks_first",
+            "set_lights_without_card",
+            // Settings' "Sending email" (backend/email-send.patch): whether
+            // sending is set up - from which address, through which server -
+            // in the PC's own words. A read; never the password. Settings
+            // window only. Each email is its own approval card, answered
+            // through decide_approval like every other.
+            "get_email_sending",
+            // Settings' "Folders Jarvis may look in" (backend/documents.patch):
+            // the list (a read); add ONE folder through the Windows folder
+            // picker (one approval card on the PC, held on a stale link);
+            // remove one (at once); bring in a Notion export through the
+            // Windows file picker (held on a stale link). The pickers run in
+            // Rust - the window gets only the chosen path. Settings window only.
+            "get_folders",
+            "add_folder",
+            "remove_folder",
+            "import_notion",
+            // Settings' "How Jarvis talks" (backend/manner.patch): warm and
+            // brief, or plain. One change at a time, no approval card either
+            // way (it changes wording only). Settings window only.
+            "get_manner",
+            "set_manner",
+            // The quickbar's error fix buttons ("Check the connection
+            // settings", "Choose a model"): open Settings or the Brain,
+            // nothing else (plain_errors.rs).
+            "open_fix_place",
+            // Settings' "Voice": what the PC's voice settings are (GET
+            // /api/voice/status) - whether each microphone's voice print is
+            // trained, the wake word, the stop word, Smart Turn. Read only.
+            // Settings window only.
+            "get_voice_status",
+            // Settings' "Voice": the PC's "hey Jarvis" switch. OFF at once
+            // (and this PC stops listening); ON only raises an approval card,
+            // and is held while the event stream is stale. Settings only.
+            "set_wake_word",
+            // Settings' "Voice", the parts that record and change things
+            // (voice_training.rs): record a sentence through this PC's
+            // microphone and hold it in memory; train in rounds (finishing
+            // raises ONE card); the strictness and private-answer settings
+            // (loosening raises a card); the guided test; custom voices
+            // (adding one and switching to one each raise a card; going back
+            // to the built-in voice and deleting are immediate) and the
+            // better voice (ON a card, OFF at once). Settings window only.
+            "start_voice_sample",
+            "voice_sample_level",
+            "stop_voice_sample",
+            "cancel_voice_sample",
+            "discard_voice_samples",
+            "send_voice_training",
+            "cancel_voice_training",
+            "measure_voice",
+            "set_voice_setting",
+            "check_voice_with_someone_else",
+            "propose_voice_threshold",
+            "get_custom_voices",
+            "create_custom_voice",
+            "set_active_voice",
+            "delete_custom_voice",
+            "set_better_voice",
+            "set_voice_speed",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",
+            // The in-memory appearance, for windows that only draw it: no
+            // network call and no broadcast, so safe inside a listener.
+            "appearance_snapshot",
+            "appearance_colours",
             "update_status",
             "check_for_update",
             "set_update_check_on_start",
@@ -102,6 +267,54 @@ fn main() {
             "get_widget_prefs",
             "prefill_quickbar",
             "capture_note",
+            // How a filed note ended: waiting for approval, filed, or not.
+            "capture_note_status",
+            // Which note apps this PC is set up for - names only.
+            "note_targets",
+            // The wiki builder (backend/wiki.patch): read the list, add one
+            // document (raises one approval card), follow that job, and
+            // open the Jarvis Wiki folder. Brain window only.
+            "wiki_status",
+            "wiki_ingest",
+            "wiki_ingest_status",
+            "wiki_open_folder",
+            // Deep questions (backend/big-model.patch): read the recent ones
+            // and their answers, and ask one. No card per question - the
+            // switch was approved - and asking is held on a stale link.
+            // Brain window only.
+            "get_deep",
+            "ask_deep",
+            // "Coming up" (backend/schedule.patch): timers, alarms,
+            // reminders and the to-do list - a read, ONE job per change
+            // (pause, resume, delete, done, add time), and one new to-do
+            // item. No card; every change held on a stale link. Brain only.
+            // And the standby schedule: one card on the PC (it repeats).
+            "brain_schedule",
+            "brain_schedule_act",
+            "brain_schedule_add_todo",
+            "brain_schedule_add_standby",
+            // A NAMED list ("shopping") cleared after the page's "are you
+            // sure?", with the count it showed (2026-09-25).
+            "brain_schedule_clear_list",
+            // Focus sessions (backend/focus.patch): read one, start one
+            // (Brain only, held on a stale link), and ONE thing to it -
+            // pause, resume, +10 minutes, stop, and the widget's Lock on
+            // (resume, extend and lock held on a stale link). No card.
+            "focus_status",
+            "focus_start",
+            "focus_act",
+            // The morning briefing (backend/briefing.patch): read the latest
+            // one and "Brief me now" (a read, not held on a stale link) -
+            // Brain only; and its setup - read it, set one up that repeats
+            // (the scheduler's ONE card; held on a stale link), stop ONE,
+            // and "Show who new emails are from" (ON is ONE card on the PC,
+            // held on a stale link; OFF at once) - Settings only.
+            "brain_briefing",
+            "brain_briefing_now",
+            "get_briefing_setup",
+            "set_briefing",
+            "stop_briefing",
+            "set_briefing_senders",
             // Quickbar
             "hide_quickbar",
             "resize_quickbar",
@@ -126,6 +339,18 @@ fn main() {
             "start_automatic_listening",
             "stop_automatic_listening",
             "speak_reply",
+            // Interrupting by talking and "One moment." (voice_flow.rs):
+            // ask for one utterance to be checked, read the status's `flow`
+            // block, fetch the clip. Quickbar only; none records anything.
+            "judge_barge_in",
+            "get_voice_flow",
+            "get_voice_moment",
+            // The HUD's mic button. Shows the quickbar with push-to-talk
+            // ready; records nothing. The one command the HUD holds.
+            "summon_push_to_talk",
+            // Before a screen capture is sent: can the local model see it?
+            // Asks the Jarvis server and loopback Ollama; quickbar only.
+            "local_model_vision",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and

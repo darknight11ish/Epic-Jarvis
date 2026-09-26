@@ -3,7 +3,7 @@
 A native **Windows 11** client for the Jarvis stack: a Rust (Tauri v2) backend
 driving a WebView2 frontend.
 
-* **Quickbar** — a 750×80 frameless, transparent, always-on-top spotlight bar
+* **The Jarvis bar** (the code calls it the quickbar) — a 750×80 frameless, transparent, always-on-top spotlight bar
   summoned with `Alt+Space`. Streams answers from the local Jarvis server into
   an expandable card that the native window grows to fit.
 * **HUD** — a 1280×820 frameless window pointed at `http://127.0.0.1:4719`.
@@ -18,35 +18,43 @@ driving a WebView2 frontend.
 ## Running against the backend — read this first
 
 The HUD window loads the bundled `jarvis_hud.html`, so its origin is
-`http://tauri.localhost`, not the server. Two things follow, and the first one
-is not optional:
+`http://tauri.localhost`, not the server. Two things follow:
 
-**1. The backend must be told this origin is legitimate.**
+**1. The backend no longer needs to be told about this origin.**
 
-```
-set JARVIS_HUD_ORIGINS=http://tauri.localhost,tauri://localhost
-python jarvis_hud.py
-```
+Until 2026-09-25 the HUD page called the backend straight from the webview,
+so the backend had to allow `http://tauri.localhost` (`JARVIS_HUD_ORIGINS`),
+and `sidecar.rs` set it on a backend it started. Now every request from the
+HUD page is made by Rust (`hud_proxy.rs`, see point 2), which sends no
+`Origin` - the backend's `_origin_ok()` then accepts the `X-Jarvis-Client: hud`
+header, as for every other window. So nothing needs setting, and the app no
+longer sets it. If you set `JARVIS_HUD_ORIGINS` yourself before, you can
+leave it out: it is harmless, and not needed.
 
-Without it every call from the HUD page is **403**. `_origin_ok()` only falls
-back to the `X-Jarvis-Client: hud` header when a request carries *no* `Origin`,
-and a cross-origin `fetch` from the webview always sends one — so the header
-fallback the page relies on in a browser does nothing here. This is set in the
-child's environment automatically once the app supervises the backend
-(build order step 4); until then it is a manual step.
+**2. The base URL comes from the desktop shell, and the page never gets the token.**
 
-**2. The base URL and token come from the desktop shell, not the page.**
+The base URL lives in the settings store (`jarvis-desktop.json` in the app
+config dir), is read in Rust, and is pushed into the page as
+`JARVIS.set(base, "", false)` on page load - with an EMPTY token, and
+`persist = false`, so nothing is cached in `localStorage`. `JARVIS_HUD_BASE`
+is the environment fallback. Nothing hardcodes a port: `JARVIS_HUD_PORT`
+defaults to 4719 in `jarvis_hud.py` and `DEFAULT_BASE` in `commands.rs`
+matches it. Either way the address must be on the owner's own networks
+(this PC, the home network, Tailscale or NordVPN Meshnet - the backend's
+own rule, `docs/ARCHITECTURE.md` section 2, rule 2); one that is not is
+refused in Settings, and one saved or set before that rule is not used:
+requests go to this PC's `DEFAULT_BASE` and the link stays offline, saying
+why.
 
-They live in the settings store (`jarvis-desktop.json` in the app config dir),
-are read in Rust, and are pushed into the page as `JARVIS.set(base, token)` on
-page load. `JARVIS_HUD_BASE` and `JARVIS_TOKEN`/`HUD_TOKEN` are the environment
-fallbacks. Nothing hardcodes a port: `JARVIS_HUD_PORT` defaults to 4719 in
-`jarvis_hud.py` and `DEFAULT_BASE` in `commands.rs` matches it.
-
-One caveat worth knowing: the brief says to read these from the store "rather
-than `localStorage`", and the *source* is the store — but the shipped page's
-`JARVIS.set()` writes both to `localStorage` itself as it stores them. The
-shell controls where they come from; it cannot stop the page caching them.
+The page used to be given the token too, so any script running in it could
+call the whole API, `POST /api/approve` included (apps security audit M2,
+2026-09-25). Now every request the page makes to Jarvis goes through Rust
+(`src-tauri/src/hud_proxy.rs`), which adds the token itself: the page's own
+reads from a fixed list (`hud_get`), its chat (`hud_chat`, streamed back over
+a channel) and the right/wrong mark (`mark_answer`). `hud_bootstrap.js`
+section 2c routes them. Approve and Deny are not answered in the HUD at all:
+its buttons are removed, and approvals are answered in the Jarvis bar or the
+widget.
 
 ## Global hotkeys
 
@@ -55,7 +63,7 @@ shell controls where they come from; it cannot stop the page caching them.
 | `Alt` + `Space` | Toggle the quickbar. On show it is centred, focused, and the frontend receives `focus-input`. |
 | `Win` + `Shift` + `J` | Read the clipboard and inject it into the quickbar as context. |
 | `Alt` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
-| `Alt` + `Shift` + `N` | Summon the bar pre-armed for a Logseq journal note (`#log `). |
+| `Alt` + `Shift` + `N` | Open the Jarvis bar pre-armed for a note (`#log `, or the first note app the PC is set up for). |
 | `Ctrl` + `+` / `-` / `0` | Text size, per window. Not a global hotkey — the window must have focus. |
 
 Every global combination in that table is a **default**, not a constant. They
@@ -133,8 +141,10 @@ npm test               # the Rust unit tests
 ```
 
 `npm run build` writes the installers to
-`src-tauri/target/release/bundle/msi/` and `.../nsis/`. The NSIS one installs
-per-machine, so it will ask for elevation.
+`src-tauri/target/release/bundle/msi/` and `.../nsis/`. Use the NSIS one
+(`nsis\*-setup.exe`): it installs for your user only, into `%LOCALAPPDATA%`
+(`installMode: currentUser` in `tauri.conf.json`), so it does not ask for
+administrator rights.
 
 Everything in `src/` is copied verbatim — `frontendDist` is `../src` and there
 is no build step for the frontend, so `npm run dev` picks up an edit to a
@@ -142,8 +152,13 @@ is no build step for the frontend, so `npm run dev` picks up an edit to a
 
 ### First run
 
-The app has no window at startup by design: it lives in the notification area.
-Look for the tray icon, or press `Alt`+`Space`.
+Started by you, the app opens the **HUD window** (1280×820, centred) and the
+small **widget** pill at the top-left, and puts an icon in the notification
+area - on Windows 11 that icon starts hidden under the `^` arrow; drag it
+onto the taskbar. Started by Windows at login, or by a notification's Deny
+button, the HUD is built but stays hidden until you open it from the tray
+(`build_hud_window` in `src-tauri/src/lib.rs`). `Alt`+`Space` opens the
+quick-ask bar either way.
 
 If nothing happens on `Alt`+`Space`, the hotkey was refused — PowerToys Run
 claims the same combination. The app raises a Windows notification naming the
@@ -159,28 +174,107 @@ GET carrying nothing but the request — no identifier, no telemetry, no account
 is the same rule the rest of the app follows for every action it can take, and
 an update replaces the executable, so it applies here most of all.
 
-### Turning it on
+### Turning on updates
 
-The updater is inert until you publish a signed release. One-time setup:
+**Where things stand:** the pieces are built, but updates are off until you
+do the steps below once. Settings → Updates says "Not set up yet" until
+then, and that is true.
+
+What is already done: the app's updater (`src-tauri/src/update.rs`), and a
+GitHub Actions workflow (`.github/workflows/desktop-release.yml`) that builds
+the Windows installer on GitHub's own Windows machine every time desktop code
+changes on `main` or on the working branch Claude pushes to
+(`claude/admiring-ritchie-5urg5h` - the same rule as the phone's app;
+other branches no longer publish, since 2026-09-26). Without a key it builds an unsigned installer, keeps it
+with the run for 14 days, and publishes nothing. With a key it signs the
+installer and publishes it, with the small `latest.json` file the app reads,
+to the release called **`desktop-latest`**.
+
+What a signing key is, in one line: a pair of files. The **private** key
+stamps each installer; the **public** key goes inside the app, so the app
+can tell a real installer from a tampered one. The private key must stay
+secret. The public key is safe to share.
+
+**1. Make the key, on your PC.** Open PowerShell and paste this one line.
+It asks for a password twice: pick one and write it down, you need it in
+step 3. (It needs Node, which you already have if you build the app.)
 
 ```powershell
-npm run tauri signer generate -- -w $HOME\.tauri\jarvis.key
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.tauri" | Out-Null; npx --yes @tauri-apps/cli@2 signer generate -w "$env:USERPROFILE\.tauri\jarvis-desktop.key"; Write-Host "Private key (keep secret): $env:USERPROFILE\.tauri\jarvis-desktop.key"; Write-Host "Public key (safe to share): $env:USERPROFILE\.tauri\jarvis-desktop.key.pub"
 ```
 
-Put the **public** key in `src-tauri/tauri.conf.json` under
-`plugins.updater.pubkey`. Keep the private key and its password out of the
-repository; `tauri build` reads them from `TAURI_SIGNING_PRIVATE_KEY` and
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+Both files land in the `.tauri` folder inside your user folder
+(`C:\Users\<you>\.tauri\`). **Back up the private key and the password**
+somewhere safe, such as a password manager. If you lose them, the copies
+already installed cannot accept updates made with a new key, and you would
+have to install once by hand again.
 
-With `pubkey` empty — which is how it ships — the app says so in Settings and
-disables the Check button, rather than offering one that can only ever fail.
+**2. Put the public key in the app.** This copies it to your clipboard:
 
-Then publish a release containing the installers and the generated
-`latest.json`, at the endpoint in `tauri.conf.json`.
+```powershell
+(Get-Content "$env:USERPROFILE\.tauri\jarvis-desktop.key.pub" -Raw).Trim() | Set-Clipboard; Write-Host "The PUBLIC key is on your clipboard."
+```
 
-A download whose signature does not verify is refused before anything is
-executed, so a replaced artifact, a hijacked DNS answer or a proxy rewriting
-the response all fail closed.
+Open `jarvis-desktop\src-tauri\tauri.conf.json`, find the line
+`"pubkey": "",` near the bottom, and paste between the two quotes, so it
+reads `"pubkey": "<the long text>",`. Commit and push it. (Easier: send the
+PUBLIC key to Claude and ask for it to be put in. Never send the private key.)
+
+**3. Give GitHub the private key.** This copies it to your clipboard:
+
+```powershell
+(Get-Content "$env:USERPROFILE\.tauri\jarvis-desktop.key" -Raw).Trim() | Set-Clipboard; Write-Host "The PRIVATE key is on your clipboard. Paste it into GitHub now, then copy something else."
+```
+
+Then, on github.com:
+
+1. Open the repository (`darknight11ish/Epic-Jarvis`) and click
+   **Settings** (the tab at the top of the repository, not your account).
+2. In the left column: **Secrets and variables** → **Actions**.
+3. Click the green **New repository secret**.
+4. Name: `TAURI_SIGNING_PRIVATE_KEY`. Secret: paste. Click **Add secret**.
+5. **New repository secret** again. Name:
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Secret: the password from step 1.
+   Click **Add secret**.
+
+Nobody, including you, can read a secret back after saving it; GitHub
+only hands it to the workflow while it builds.
+
+**4. Make the first signed build.** Pushing step 2's change starts it. Or: the repository's **Actions** tab → **Desktop release** (left
+column) → **Run workflow** → **Run workflow**. It takes about 15-25
+minutes. The run's summary says in one line what it did ("Signed, and
+published...", or why not).
+
+**5. Install that build once, by hand.** The copy you have now was built
+without the public key, so it cannot check, or accept, any update. Open the
+repository's **Releases** (right-hand column on the main page) →
+**Jarvis Desktop - latest** → download
+`jarvis-desktop_0.2.<number>_x64-setup.exe` and run it. From then on,
+Settings → Updates shows "Check now", and each new build appears there.
+Installing is still the Install button, pressed by you.
+
+If the run fails at "Publish" with a 403: the repository's **Settings** →
+**Actions** → **General** → **Workflow permissions** → **Read and write
+permissions** → **Save**, then run it again.
+
+**How versions work:** Jarvis has one version number, in the `VERSION` file
+at the top of the repository (0.2.0), shared by this app, the phone app and
+the backend files. Each published build is `0.2.<run number>`, so every
+build is newer than the one before. The updater only ever offers a higher
+number than the one installed.
+
+**What leaves your PC:** a check is one plain request for `latest.json` at
+`https://github.com/darknight11ish/Epic-Jarvis/releases/download/desktop-latest/latest.json`,
+with nothing about you in it. A download whose signature does not match the
+public key inside the app is refused before anything runs, so a replaced
+file, a hijacked DNS answer or a proxy rewriting the response all fail
+closed.
+
+**Why `desktop-latest` and not GitHub's "latest release" link:** that link
+means "whichever normal release in this whole repository is newest", which
+could be anything, and the phone's `client-latest` release lives in the same
+repository. A fixed name for the desktop's own release cannot be taken over
+by something else.
 
 ## IPC surface
 
@@ -190,7 +284,9 @@ Commands exposed to the frontend (`invoke("<name>", …)`):
 |---------|---------|
 | `stream_chat` | Open a chat stream against the Jarvis server and push each response line down a Tauri channel. Returns the stream's generation number. |
 | `cancel_chat` | Abort the stream in flight; drops the socket, so the workstation stops generating. |
-| `decide_approval` | Answer a pending approval — `POST /api/approve` or `/api/deny` with `{id, by: "desktop_spotlight"}`. |
+| `decide_approval` | Answer a pending approval — `POST /api/approve` or `/api/deny` with `{id, by: "desktop_spotlight"}`. An Approve asks Windows Hello first when Settings' Security section says it should (`lock.rs`); Deny never does. |
+| `get_security_settings` / `set_security_settings` | Settings' Security section: the app lock, Windows Hello for approvals, and Windows Hello for memory lists and chat history. Loosening one asks Windows Hello first. Settings window only. |
+| `reveal_private_answers` | The Brain's Show button on its hidden memory lists: asks Windows Hello. Brain window only. |
 | `capture_screen` | Grab the primary display, return a base64 JPEG data URI. |
 | `check_server_health` | Probe Jarvis (`:4719/api/status`), Ollama (`:11434/api/tags`) and LiteLLM (`:4000/health`) concurrently; returns a structured report. |
 | `hide_quickbar` / `show_quickbar` | Dismiss or summon the spotlight. |
@@ -214,18 +310,21 @@ Events emitted to the frontend: `focus-input`, `clipboard-inject`,
 
 ## Security posture
 
-`capabilities/default.json` grants only `core:default`, window drag and the
-devtools toggle. Everything privileged — capture, health probes, clipboard,
-notifications, window control — is an app-defined command in `commands.rs`,
-and app commands are not permission-gated, so the clipboard, notification and
-global-shortcut *plugin* permissions are simply not granted.
+Each window has its own capability file in `src-tauri/capabilities/`, and
+`build.rs` declares an app manifest, so every app command is permission-gated:
+a window can call only the sets its file grants (`permissions/surfaces.toml`).
+The core permissions are listed by hand in each file instead of
+`core:default`: app, path, webview and window defaults, and event
+`listen`/`unlisten` only - no `emit` or `emit_to`, so no page can send events
+that other windows trust (apps security audit M1). The clipboard,
+notification and global-shortcut *plugin* permissions are not granted to any
+window; Rust uses those plugins itself.
 
-There is deliberately no `remote` block. The HUD loads
-`http://127.0.0.1:4719` over plain HTTP; without a remote grant that origin
-gets no IPC at all, so an XSS in the HUD web app cannot reach the clipboard,
-the global shortcuts, or the window list. If the HUD ever needs IPC, add a
-*separate* capability file scoped to that one window and that one command —
-do not widen this one.
+There is deliberately no `remote` block: every window, the HUD included,
+loads a bundled page. The HUD page (vendored from the backend) holds no
+token and gets only `hud-voice` and `hud-link` (see "Running against the backend", point 2, above).
+Note that Tauri's IPC works from it despite its own CSP - Tauri falls back to
+`postMessage` - so its capability file, not its CSP, is what limits it.
 
 External links in the answer card are opened by `open_external_url`, which
 validates the URL and then spawns `rundll32 url.dll,FileProtocolHandler`. It
@@ -234,23 +333,37 @@ its command line, Rust's argument escaping targets the C runtime convention
 rather than cmd's metacharacters, and link text here is written by a language
 model — a URL containing `&` would become a second command.
 
-## Dual-note quick capture
+## Quick notes: Logseq, Joplin, Obsidian
 
-A prefix at the head of the prompt pre-routes the turn and shows a chip beside
-the reactor:
+A prefix at the head of the prompt files the rest as a note instead of asking
+Jarvis anything, and shows a chip beside the reactor while you type:
 
 | Prefix | Target | Chip |
 |--------|--------|------|
-| `#log`, `#logseq`, `#journal` | Logseq daily journal (`append_logseq_journal`) | cyan **Logseq Journal** |
-| `#joplin`, `#vault` | Joplin personal vault (`create_joplin_note` / `search_joplin`) | violet **Joplin Vault** |
+| `#log`, `#logseq`, `#journal` | today's Logseq journal (`append_logseq_journal`) | cyan **Logseq Journal** |
+| `#joplin`, `#jop` | a new Joplin note (`create_joplin_note`) | violet **Joplin Note** |
+| `#obs`, `#obsidian`, `#daily`, `#vault` | today's Obsidian daily note (`append_obsidian_daily`) | violet **Obsidian Daily Note** |
 
-`Alt+Shift+N` summons the bar with `#log ` already typed and the caret after
-it; anything already in the box is kept.
+`#vault` meant Joplin until 2026-09-24; it moved to Obsidian, whose own word
+it is.
 
-The prefix is stripped before sending. Routing is declared twice, so a server
-reading either mechanism lands in the same place: a top-level `note_target`
-field, and a system turn naming the tool. `note_target` is additive — a server
-that does not know the field ignores it.
+The prefix is stripped, and the rest goes to `/api/notes/capture` through the
+`capture_note` command — no chat turn and no model. The backend writes it
+through the approval gate and the card shows its answer: filed (and where),
+waiting for approval, or not filed and why.
+
+**Only the note apps the PC is set up for are shown.** `note_targets` asks the
+backend (`GET /api/notes/capture` with no id) when the bar starts and each
+time it is focused; the help list shows only those prefixes. A prefix typed
+by hand for an app the PC said is not set up turns the chip amber ("not set
+up"), and Enter says "Obsidian isn't set up on your PC" (or Logseq, or
+Joplin) and sends nothing. If the backend could not be asked, the help shows
+no prefix and says why; a typed note is then still sent, and the backend's
+own answer is shown. Setting each one up: `docs/INSTALL.md`, "Notes".
+
+`Alt+Shift+N` summons the bar with `#log ` already typed (or the first note
+app that is set up, if Logseq is not) and the caret after it; anything
+already in the box is kept.
 
 ## Approval gates
 
@@ -286,15 +399,13 @@ response down a `tauri::ipc::Channel`:
 ```jsonc
 {
   "messages": [
-    { "role": "system", "content": "Route this turn to the Logseq daily journal…" },
     { "role": "system", "content": "Context:\n…clipboard…" },
     { "role": "user",   "content": "…" }
   ],
   "has_image": true,
   "images": ["data:image/jpeg;base64,…"],
   "stream": true,
-  "auto": true,
-  "note_target": "logseq"   // only when a prefix pre-routed the turn
+  "auto": true
 }
 ```
 
@@ -341,7 +452,8 @@ A separate `widget` window, 320px wide, transparent and frameless, with Acrylic
 behind it. It starts visible and is remembered between runs.
 
 **Collapsed (44px).** Connection dot, GPU temperature, the active route pill,
-`#log` / `#jop` quick-capture buttons, a pin toggle and the expand chevron. The
+`#log` / `#jop` / `#obs` quick-capture buttons (only for the note apps the PC
+is set up for), a pin toggle and the expand chevron. The
 whole bar is a `data-tauri-drag-region`, so it drags from anywhere.
 
 **Expanded.** Three meters (VRAM, CPU, GPU), any pending approval gate, and a

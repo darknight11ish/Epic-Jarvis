@@ -1,0 +1,72 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1567,6 +1567,34 @@
+                 # The exception's NAME only: its message could quote a setting.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
++        if path in ("/api/focus", "/api/focus/diag", "/api/focus/callout"):
++            # focus.patch - focus sessions (jarvis_focus.py, the owner's decision
++            # of 2026-09-25): a timer plus Quiet, and Jarvis naming a drift out
++            # loud ON THIS PC. GET /api/focus: the countdown, booleans and counts
++            # and the last report card - never what was in front (both apps).
++            # /diag: booleans and counts only, for "it didn't notice".
++            # /callout?seq=N: the one waiting spoken line as a WAV, read once and
++            # then gone, and ONLY to this PC (loopback) - the phone is refused.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_focus
++                if path == "/api/focus/callout":
++                    peer = (getattr(self, "client_address", None) or ("",))[0]
++                    code, out, ctype = jarvis_focus.handle_callout(
++                        self.path.split("?", 1)[1] if "?" in self.path else "", peer)
++                    if ctype:
++                        return self._send(code, out, ctype=ctype)
++                    return self._send(code, out)
++                code, out = (jarvis_focus.handle_diag() if path == "/api/focus/diag"
++                             else jarvis_focus.handle_get())
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+         if path == "/api/schedule":
+             # schedule.patch - "Coming up": the timers, alarms, reminders and
+             # repeating jobs, and the to-do list (jarvis_schedule.py).
+@@ -2053,6 +2081,34 @@
+             code, out = jarvis_power_switch.handle_post(body, by=by)
+             return self._send(code, out)
+ 
++        if route in ("/api/focus/start", "/api/focus/act"):
++            # focus.patch - start a focus session, or ONE thing to the running
++            # one: pause, resume, stop, extend, snooze, research, relief, lock.
++            # No approval card: the owner asked for it, it reads only which app
++            # or site is in front on this PC and keeps only counts, and Quiet
++            # is power_manage (auto) - see jarvis_focus.py, "WHY THERE IS NO
++            # APPROVAL CARD". Both apps hold start/resume/extend on a stale
++            # link and let pause and stop through.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_focus
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++            host = str((getattr(self, "client_address", None) or ("",))[0])
++            by = "this PC" if host in ("127.0.0.1", "::1") else "another device"
++            if route == "/api/focus/start":
++                code, out = jarvis_focus.handle_start(body, by=by)
++            else:
++                code, out = jarvis_focus.handle_act(body, by=by)
++            return self._send(code, out)
++
+         if route == "/api/second-card":
+             # second-card.patch - one second-card switch on or off. ON raises
+             # one approval card (second_card_enable, tier "ask") and changes

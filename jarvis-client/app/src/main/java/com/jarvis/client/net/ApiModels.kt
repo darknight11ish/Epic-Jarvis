@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -84,7 +85,9 @@ data class StatusInfo(
     val activity: String? = null,
     val held: Boolean = false,
     /**
-     * What Jarvis is doing right now, in words - "Step 2/3: click 'Send'".
+     * What Jarvis is doing right now, in words - "Step 2/3: a click in another
+     * program's window" (a step number and a fixed word, never a control's name,
+     * a window title or an address - security audit L4).
      *
      * Proposed by `docs/AUTONOMY-PROPOSALS.md` §3c on the desktop branch as an
      * additive sibling of `activity`: the sentence the backend's `announce()`
@@ -121,6 +124,8 @@ data class ModelsInfo(
     val previous: String?,
     val entries: List<ModelEntry>,
     val offload: ModelOffload?,
+    /** `speed-record.patch`'s `speed` block, or null on a backend without it. */
+    val speed: ModelSpeed? = null,
 ) {
     companion object {
         fun from(json: JsonObject): ModelsInfo {
@@ -151,7 +156,14 @@ data class ModelsInfo(
             val offload = (json["offload"] as? JsonObject)?.let {
                 ModelOffload(status = it.str("status"), note = it.str("note"))
             }
-            return ModelsInfo(currentRef = current, previous = previous, entries = entries, offload = offload)
+            val speed = ModelSpeed.from(json["speed"] as? JsonObject, current)
+            return ModelsInfo(
+                currentRef = current,
+                previous = previous,
+                entries = entries,
+                offload = offload,
+                speed = speed,
+            )
         }
 
         private fun JsonObject.str(key: String): String? =
@@ -171,6 +183,73 @@ data class ModelOffload(
     val note: String? = null,
 ) {
     val bad: Boolean get() = status == "cpu" || status == "partial"
+}
+
+/**
+ * How fast recent answers were - `speed-record.patch`, item 11 of
+ * docs/LEARNING-RESEARCH-2026-09-23.md. Numbers only: nothing in the block is
+ * conversation text. docs/JARVIS-API.md says how to show it, and this follows
+ * that: one line for the running model, the backend's `note` as a warning
+ * only when `slowdown.slower` is true, and `last_switch_note` word for word
+ * when there has been a switch.
+ */
+data class ModelSpeed(
+    /** "Recent answers: about 14 words a second, first word after 0.8 s." Null: no answers yet. */
+    val currentLine: String?,
+    /** The backend's own "got slower" sentence, or null when nothing slowed down. */
+    val slowdownNote: String?,
+    /** The backend's own old-vs-new sentence from the last model switch, or null. */
+    val lastSwitchNote: String?,
+) {
+    val isEmpty: Boolean get() = currentLine == null && slowdownNote == null && lastSwitchNote == null
+
+    companion object {
+        fun from(speed: JsonObject?, current: String?): ModelSpeed? {
+            if (speed == null) return null
+            if ((speed["available"] as? JsonPrimitive)?.booleanOrNull == false) return null
+            val byModel = speed["by_model"] as? JsonObject
+            val mine = current?.let { cur ->
+                (byModel?.get(cur) as? JsonObject)
+                    ?: byModel?.entries?.firstOrNull { (k, _) -> sameModel(k, cur) }?.value as? JsonObject
+            }
+            val slower = ((speed["slowdown"] as? JsonObject)?.get("slower") as? JsonPrimitive)
+                ?.booleanOrNull == true
+            val switched = speed["last_switch"] is JsonObject
+            val out = ModelSpeed(
+                currentLine = mine?.let { line(it) },
+                slowdownNote = if (slower) speed.text("note") else null,
+                lastSwitchNote = if (switched) speed.text("last_switch_note") else null,
+            )
+            return out.takeUnless { it.isEmpty }
+        }
+
+        /** "qwen3:8b" and "qwen3:8b:latest"/"qwen3" + ":latest" name the same model. */
+        private fun sameModel(a: String, b: String): Boolean =
+            a.removeSuffix(":latest") == b.removeSuffix(":latest")
+
+        private fun line(m: JsonObject): String? {
+            val wps = m.num("median_words_per_s")
+            val firstMs = m.num("median_first_word_ms")
+            val parts = buildList {
+                if (wps != null) add("about ${Math.round(wps)} words a second")
+                if (firstMs != null) {
+                    val tenths = Math.round(firstMs / 100.0)
+                    add("first word after ${tenths / 10}.${tenths % 10} s")
+                }
+            }
+            if (parts.isEmpty()) return null
+            val n = m.num("answers")?.let { Math.round(it) }
+            val over = if (n != null && n > 0) " (middle of the last $n answers)" else ""
+            return "Recent answers: " + parts.joinToString(", ") + over + "."
+        }
+
+        private fun JsonObject.num(key: String): Double? =
+            (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull && !it.isString }
+                ?.content?.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0.0 }
+
+        private fun JsonObject.text(key: String): String? =
+            (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content?.takeIf { it.isNotBlank() }
+    }
 }
 
 // ------------------------------------------------------------ approvals ----
@@ -302,6 +381,14 @@ data class PendingItem(
     val needsChoice: Boolean get() = options.size > 1
 
     /**
+     * Whether this card may only be approved on the PC: loosening "What asks
+     * first" (the owner's decision of 2026-09-26) - one card plus Windows
+     * Hello, on the PC. The PC refuses its approval from any other device
+     * (jarvis_owner_check.PC_ONLY_ACTIONS). Denying still works here.
+     */
+    val pcOnly: Boolean get() = action == AsksFirst.LOOSEN_ACTION
+
+    /**
      * Whether a swipe may decide this item.
      *
      * `swipe_ok` and nothing else — except that an item carrying [raised] is
@@ -428,7 +515,47 @@ data class UndoEntry(
     /** Present when it cannot be undone. Listed anyway — see JARVIS-EXPLAINED §3. */
     val reason: String? = null,
     @SerialName("at_ms") val atMs: Long = 0,
-)
+    /**
+     * The shelf's own category. `"hold"` is a message still inside its send
+     * window - it has not gone yet and can be stopped. Read the same way the
+     * desktop's Brain window reads it (`brain.js` renderUndo: `category ===
+     * "hold"` with `detail.handle`). Neither client has seen the backend's
+     * `jarvis_undo.py`, so this is the desktop's reading, not a confirmed
+     * shape - absent fields simply mean no Stop button.
+     */
+    val category: String? = null,
+    val detail: JsonObject? = null,
+    /*
+     * The desktop's names for the same row (brain.js renderUndo): `action` or
+     * `kind` for what happened, and `revertible`. jarvis_undo.py lives only
+     * on the owner's PC and neither app has seen it; the desktop's names
+     * match the config's own word ("non-revertible", jarvis-framework.toml),
+     * so they are at least as likely. Both sets are read, on both apps, and
+     * [title] / [canRevert] pick whichever the server sent. (The desktop
+     * also shows `target`; the phone deliberately shows no more than it did.)
+     */
+    val action: String? = null,
+    val kind: String? = null,
+    val revertible: Boolean? = null,
+) {
+    /** What happened, in whichever field the server used. */
+    val title: String
+        get() = label.ifBlank { what }.ifBlank { action.orEmpty() }.ifBlank { kind.orEmpty() }
+            .ifBlank { "(action)" }
+
+    /** Undoable, by either name. */
+    val canRevert: Boolean
+        get() = reversible || revertible == true
+
+    /** The handle `/api/holds/cancel` takes, when this entry is a live hold. */
+    val holdHandle: String?
+        get() = if (category == "hold") {
+            (detail?.get("handle") as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+}
 
 @Serializable
 data class JobRecord(
@@ -444,7 +571,25 @@ data class JobRecord(
      */
     val capabilities: List<String> = emptyList(),
     val private: Boolean = false,
-)
+    /*
+     * The desktop's names (brain.js renderJobs): `handler`, `caps`,
+     * `tainted`. jarvis_jobs.py is only on the owner's PC, so both sets are
+     * read - see [UndoEntry]'s note. `tainted` is kept apart from `private`:
+     * the desktop says it means the job read private data and stays local,
+     * which is not the same promise.
+     */
+    val handler: String? = null,
+    val caps: List<String> = emptyList(),
+    val tainted: Boolean = false,
+) {
+    /** A name to show, by either field, falling back to the id. */
+    val title: String
+        get() = label.ifBlank { handler.orEmpty() }.ifBlank { id }
+
+    /** The frozen permissions, by either name. */
+    val frozen: List<String>
+        get() = capabilities.ifEmpty { caps }
+}
 
 /**
  * What `/api/voice/say` came back with.

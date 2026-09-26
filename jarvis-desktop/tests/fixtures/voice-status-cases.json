@@ -1,0 +1,3886 @@
+{
+  "_about": "Real output of backend/jarvis_speech.status() (GET /api/voice/status) in named cases, and of set_wake_enabled() (POST /api/voice/wake) under `answers`, made by tools/gen_voice_status_cases.py. Voice prints are trained from synthesised tones with the basic check; model files are empty stand-ins. Folders and times are made the same on every machine. Do not edit by hand: re-run the tool.",
+  "answers": {
+    "train_needs_model": {
+      "error": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")",
+      "needs_model": true,
+      "pending": false
+    },
+    "wake_off": {
+      "applied": true,
+      "enabled": false,
+      "message": "The wake word is off. Nothing listens for it now.",
+      "ok": true,
+      "pending": false
+    },
+    "wake_on_pending": {
+      "applied": false,
+      "enabled": false,
+      "message": "Approve the card on your PC or phone to turn it on. Nothing changes until you do.",
+      "ok": true,
+      "pending": true
+    }
+  },
+  "cases": {
+    "needs_retraining": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "flow": {
+        "after_question": true,
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "cut_off": true,
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
+      "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_model": "",
+          "very_strict_uses": 0
+        },
+        "needs_retraining": true,
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart). your voice was trained with a different voice check than the one installed now, so it will be refused until you train it again",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": true,
+            "samples": 5,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 5
+              }
+            ],
+            "threshold": 0.35,
+            "trained": true
+          },
+          "phone": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          }
+        },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
+        "samples": 5,
+        "sensitive_memory": "sensitive_on_screen",
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "hands_free": "same_as_button",
+            "memory": "memory_aloud",
+            "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict"
+          },
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": false,
+        "strictness": "very_strict",
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
+            "min_clips": 3,
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
+          },
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
+        }
+      },
+      "hands_free": "same_as_button",
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
+      "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_model": "",
+        "very_strict_uses": 0
+      },
+      "needs_retraining": true,
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart). your voice was trained with a different voice check than the one installed now, so it will be refused until you train it again sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": true,
+          "samples": 5,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 5
+            }
+          ],
+          "threshold": 0.35,
+          "trained": true
+        },
+        "phone": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        }
+      },
+      "privacy": "private_on_screen",
+      "profile_embedder": "sherpa-onnx:0123456789ab",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
+      "samples": 5,
+      "sensitive_memory": "sensitive_on_screen",
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict"
+        },
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "not_trained": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": false,
+      "flow": {
+        "after_question": true,
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
+        },
+        "cut_off": true,
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
+      "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": false,
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_model": "",
+          "very_strict_uses": 0
+        },
+        "needs_retraining": false,
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          }
+        },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
+        "samples": 0,
+        "sensitive_memory": "sensitive_on_screen",
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "hands_free": "same_as_button",
+            "memory": "memory_aloud",
+            "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict"
+          },
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": false,
+        "strictness": "very_strict",
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
+            "min_clips": 3,
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
+          },
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
+        }
+      },
+      "hands_free": "same_as_button",
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
+      "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_model": "",
+        "very_strict_uses": 0
+      },
+      "needs_retraining": false,
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        }
+      },
+      "privacy": "private_on_screen",
+      "profile_embedder": "",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
+      "samples": 0,
+      "sensitive_memory": "sensitive_on_screen",
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict"
+        },
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "older_single_print": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "flow": {
+        "after_question": true,
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "cut_off": true,
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
+      "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_model": "",
+          "very_strict_uses": 0
+        },
+        "needs_retraining": false,
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 4,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 4
+              }
+            ],
+            "threshold": 0.35,
+            "trained": true
+          },
+          "phone": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          }
+        },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
+        "samples": 4,
+        "sensitive_memory": "sensitive_on_screen",
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "hands_free": "same_as_button",
+            "memory": "memory_aloud",
+            "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict"
+          },
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": false,
+        "strictness": "very_strict",
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
+            "min_clips": 3,
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
+          },
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
+        }
+      },
+      "hands_free": "same_as_button",
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
+      "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_model": "",
+        "very_strict_uses": 0
+      },
+      "needs_retraining": false,
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 4,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 4
+            }
+          ],
+          "threshold": 0.35,
+          "trained": true
+        },
+        "phone": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        }
+      },
+      "privacy": "private_on_screen",
+      "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
+      "samples": 4,
+      "sensitive_memory": "sensitive_on_screen",
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict"
+        },
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "phone_trained": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "flow": {
+        "after_question": true,
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "cut_off": true,
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
+      "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_model": "",
+          "very_strict_uses": 0
+        },
+        "needs_retraining": false,
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 3
+              }
+            ],
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
+        "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "hands_free": "same_as_button",
+            "memory": "memory_aloud",
+            "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict"
+          },
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": false,
+        "strictness": "very_strict",
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
+            "min_clips": 3,
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
+          },
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
+        }
+      },
+      "hands_free": "same_as_button",
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
+      "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_model": "",
+        "very_strict_uses": 0
+      },
+      "needs_retraining": false,
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 3
+            }
+          ],
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "privacy": "private_on_screen",
+      "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
+      "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict"
+        },
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "ready_wake_on": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
+      "embedder": "sherpa-onnx:fixture00000",
+      "enabled": true,
+      "enrolled": true,
+      "flow": {
+        "after_question": true,
+        "available": true,
+        "barge_in": {
+          "available": true,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": true,
+          "why": ""
+        },
+        "cut_off": true,
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "warming",
+          "steps": {}
+        }
+      },
+      "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
+        "embedder": "sherpa-onnx:fixture00000",
+        "enabled": true,
+        "enrolled": true,
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "mode": "owner",
+        "models": {
+          "balanced_uses": "small",
+          "small": {
+            "bars_measured": false,
+            "installed": true,
+            "label": "a voice-ID model whose bars were not measured here",
+            "name": "sherpa-onnx:fixture00000",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_model": "small",
+          "very_strict_uses": 1
+        },
+        "needs_retraining": false,
+        "note": "only the small voice-ID model is installed, so very strict is using it instead of the stronger one, and will turn you away far more often - and measured here, it alone does not reliably keep other people out. Install the stronger one (looked for ~/.openjarvis/voice-models/speaker/strong.onnx). the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+        "prints": {
+          "desktop": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 4,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 4
+              }
+            ],
+            "threshold": 0.35,
+            "trained": true
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 3
+              }
+            ],
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
+        "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "hands_free": "same_as_button",
+            "memory": "memory_aloud",
+            "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict"
+          },
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": true,
+        "strictness": "very_strict",
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
+            "min_clips": 3,
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
+          },
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
+        }
+      },
+      "hands_free": "same_as_button",
+      "listening": {
+        "push_to_talk": true,
+        "push_to_talk_why": "",
+        "wake_word": true,
+        "wake_word_pending": false,
+        "wake_word_why": "switched on"
+      },
+      "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
+      "mode": "owner",
+      "models": {
+        "balanced_uses": "small",
+        "small": {
+          "bars_measured": false,
+          "installed": true,
+          "label": "a voice-ID model whose bars were not measured here",
+          "name": "sherpa-onnx:fixture00000",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_model": "small",
+        "very_strict_uses": 1
+      },
+      "needs_retraining": false,
+      "note": "only the small voice-ID model is installed, so very strict is using it instead of the stronger one, and will turn you away far more often - and measured here, it alone does not reliably keep other people out. Install the stronger one (looked for ~/.openjarvis/voice-models/speaker/strong.onnx). the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
+      "prints": {
+        "desktop": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 4,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 4
+            }
+          ],
+          "threshold": 0.35,
+          "trained": true
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 3
+            }
+          ],
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "privacy": "private_on_screen",
+      "profile_embedder": "sherpa-onnx:fixture00000",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
+      "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict"
+        },
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
+      "speaker_model": true,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
+      "stt": {
+        "available": true,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "ready (nemo_transducer)"
+      },
+      "stt_available": true,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": true,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "ready",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
+      },
+      "tts_available": true,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": true,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": ""
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": true,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": true,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": ""
+        },
+        "stop_word": {
+          "available": true,
+          "threshold": 0.5,
+          "why": ""
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 4,
+          "trained": true,
+          "why": ""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": true
+    },
+    "trained_by_card": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "flow": {
+        "after_question": true,
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "cut_off": true,
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
+      "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_model": "",
+          "very_strict_uses": 0
+        },
+        "needs_retraining": false,
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "close",
+                "samples": 3
+              }
+            ],
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
+        "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "hands_free": "same_as_button",
+            "memory": "memory_aloud",
+            "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict"
+          },
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": false,
+        "strictness": "very_strict",
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "last": {
+            "added": false,
+            "at": 1790000000.0,
+            "outcome": "enrolled",
+            "outliers": [],
+            "samples": 3,
+            "subprints": [
+              "close"
+            ],
+            "wake_check": "not built: the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          },
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
+            "min_clips": 3,
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
+          },
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
+        }
+      },
+      "hands_free": "same_as_button",
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
+      "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_model": "",
+        "very_strict_uses": 0
+      },
+      "needs_retraining": false,
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "close",
+              "samples": 3
+            }
+          ],
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "privacy": "private_on_screen",
+      "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
+      "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict"
+        },
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "wake_off_after_waiting": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "flow": {
+        "after_question": true,
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "cut_off": true,
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
+      "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_model": "",
+          "very_strict_uses": 0
+        },
+        "needs_retraining": false,
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 3
+              }
+            ],
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
+        "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "hands_free": "same_as_button",
+            "memory": "memory_aloud",
+            "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict"
+          },
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": false,
+        "strictness": "very_strict",
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
+            "min_clips": 3,
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
+          },
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
+        }
+      },
+      "hands_free": "same_as_button",
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
+      "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_model": "",
+        "very_strict_uses": 0
+      },
+      "needs_retraining": false,
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 3
+            }
+          ],
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "privacy": "private_on_screen",
+      "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
+      "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict"
+        },
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "wake_waiting": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "flow": {
+        "after_question": true,
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "cut_off": true,
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
+      "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_model": "",
+          "very_strict_uses": 0
+        },
+        "needs_retraining": false,
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 3
+              }
+            ],
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
+        "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "hands_free": "same_as_button",
+            "memory": "memory_aloud",
+            "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
+            "strictness": "very_strict"
+          },
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": false,
+        "strictness": "very_strict",
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
+            "min_clips": 3,
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
+          },
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
+        }
+      },
+      "hands_free": "same_as_button",
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
+        "wake_word": false,
+        "wake_word_pending": true,
+        "wake_word_why": "waiting for you to approve the card"
+      },
+      "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
+      "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_model": "",
+        "very_strict_uses": 0
+      },
+      "needs_retraining": false,
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 3
+            }
+          ],
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "privacy": "private_on_screen",
+      "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
+      "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "hands_free": "same_as_button",
+          "memory": "memory_aloud",
+          "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
+          "strictness": "very_strict"
+        },
+        "hands_free": "same_as_button",
+        "memory": "memory_aloud",
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "expires_in": 170,
+        "pending": true,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    }
+  }
+}

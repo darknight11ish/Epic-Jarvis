@@ -28,6 +28,10 @@ import kotlin.random.Random
  * `docs/APPEARANCE-API.md` on the desktop branch. Gated on the `appearance`
  * capability by [JarvisRuntime], so a backend that predates the route is
  * simply never asked, and this store works exactly as it always did.
+ *
+ * Everything else here is per device and never synced: the theme, the dark
+ * theme Follow the system returns to ([preferredDark]), the face size, the
+ * [look] record, and the face editor's [faceTuning].
  */
 class AppearanceStore(context: Context) {
 
@@ -47,6 +51,101 @@ class AppearanceStore(context: Context) {
 
     private val _bindings = MutableStateFlow(loadBindings())
     val bindings: StateFlow<Bindings> = _bindings.asStateFlow()
+
+    private val _faceSize = MutableStateFlow(FaceSize.byId(prefs.getString(KEY_FACE_SIZE, null)))
+
+    /**
+     * How big the face is drawn on Home. Per device, like the theme, and for
+     * the same reason: it is a taste about this screen, not part of the
+     * shared vocabulary - so [toSyncDocument] leaves it out.
+     */
+    val faceSize: StateFlow<FaceSize> = _faceSize.asStateFlow()
+
+    fun setFaceSize(value: FaceSize) {
+        prefs.edit { putString(KEY_FACE_SIZE, value.id) }
+        _faceSize.value = value
+    }
+
+    private val _look = MutableStateFlow(loadLook())
+
+    /**
+     * Everything else about how THIS phone looks, as one record: the Home
+     * layout, glow, motion, density, shape, text size, panel edges and the
+     * behaviour switches. See [Look].
+     *
+     * One record rather than a key per setting, so a dozen controls are one
+     * save and one read. Per device, like the theme, and never in
+     * [toSyncDocument]: none of it is part of the vocabulary the desktop
+     * shares, and none of it touches the desktop's settings.
+     */
+    val look: StateFlow<Look> = _look.asStateFlow()
+
+    /** Clamped and saved. Anything out of range is pulled back in, never refused. */
+    fun setLook(value: Look) {
+        val clamped = value.clamped()
+        prefs.edit { putString(KEY_LOOK, encodeLook(clamped)) }
+        _look.value = clamped
+    }
+
+    /**
+     * The face's share of Home, as set by dragging the handle there.
+     *
+     * Only the owner's own drag should come here. A temporary shrink - for an
+     * approval, or while typing - is Home's business and must not be saved,
+     * or the owner's layout would be overwritten by the app's.
+     */
+    fun setFaceFraction(value: Float) = setLook(_look.value.copy(faceFraction = value))
+
+    private val _faceTuning = MutableStateFlow(FaceTuning.decode(prefs.getString(KEY_FACE_TUNING, null)))
+
+    /**
+     * The face editor's phone-only settings: quality, frame rate, speed, Auto
+     * adjust and Battery saver. See [FaceTuning]. Per device and never in
+     * [toSyncDocument]: what this phone's graphics can draw says nothing about
+     * the desktop's.
+     */
+    val faceTuning: StateFlow<FaceTuning> = _faceTuning.asStateFlow()
+
+    /** Clamped and saved. */
+    fun setFaceTuning(value: FaceTuning) {
+        val clamped = value.clamped()
+        prefs.edit { putString(KEY_FACE_TUNING, clamped.encode()) }
+        _faceTuning.value = clamped
+    }
+
+    private val _preferredDark = MutableStateFlow(loadPreferredDark())
+
+    /**
+     * The dark theme Follow the system comes back to when the phone goes dark.
+     *
+     * This used to be worked out from the CURRENT theme, which is Daylight
+     * all day while following - so the answer was always Reactor, and a Void
+     * or Ember Dusk owner got Reactor at every dusk (the audit's custom-8).
+     * Now it is remembered: every dark theme accepted by [setTheme] is
+     * written here, and [setPreferredDark] sets it directly for the "Theme
+     * for dark mode" list shown while following.
+     */
+    val preferredDark: StateFlow<Chrome> = _preferredDark.asStateFlow()
+
+    /** Dark themes only. Daylight is never "the theme for dark mode", so it is ignored. */
+    fun setPreferredDark(theme: Chrome) {
+        if (!theme.dark) return
+        if (_preferredDark.value.id == theme.id) return
+        prefs.edit { putString(KEY_PREFERRED_DARK, theme.id) }
+        _preferredDark.value = theme
+    }
+
+    /**
+     * What was stored, if it is still a dark theme; otherwise the current
+     * theme if that is dark (an install from before this key existed keeps
+     * what it has); otherwise the default.
+     */
+    private fun loadPreferredDark(): Chrome {
+        val stored = prefs.getString(KEY_PREFERRED_DARK, null)
+        Themes.ALL.firstOrNull { it.id == stored && it.dark }?.let { return it }
+        val current = _chrome.value
+        return if (current.dark) current else Themes.DEFAULT
+    }
 
     /**
      * When the theme last changed, in wall-clock millis.
@@ -73,11 +172,16 @@ class AppearanceStore(context: Context) {
         nowMs - lastChangeAt >= THEME_DWELL_MS
 
     fun setTheme(theme: Chrome, nowMs: Long = SystemClock.elapsedRealtime()): Boolean {
-        if (theme.id == _chrome.value.id) return true
+        if (theme.id == _chrome.value.id) {
+            setPreferredDark(theme)
+            return true
+        }
         if (!canChangeNow(nowMs)) return false
         lastChangeAt = nowMs
         prefs.edit { putString(KEY_THEME, theme.id) }
         _chrome.value = theme
+        // Remembered for Follow the system. A no-op for Daylight.
+        setPreferredDark(theme)
         return true
     }
 
@@ -94,6 +198,14 @@ class AppearanceStore(context: Context) {
     fun setBindings(value: Bindings) {
         prefs.edit { putString(KEY_BINDINGS, encode(value)) }
         _bindings.value = value
+    }
+
+    /**
+     * One state's binding, from the face editor's Pattern and Colour
+     * controls. The others are left exactly as they are.
+     */
+    fun setBinding(state: FaceState, binding: Binding) {
+        setBindings(Bindings(_bindings.value.byState + (state to binding)))
     }
 
     fun resetBindings() {
@@ -333,12 +445,68 @@ class AppearanceStore(context: Context) {
         return Bindings(out)
     }
 
+    /**
+     * [Look] as JSON, keyed in snake_case like the bindings. Every field is
+     * written, so a later default change does not silently move a setting
+     * the owner chose.
+     */
+    private fun encodeLook(l: Look): String = JSONObject().apply {
+        put("face_fraction", l.faceFraction.toDouble())
+        put("nav_always_shown", l.navAlwaysShown)
+        put("glow", l.glow.toDouble())
+        put("motion", l.motion.id)
+        put("compact", l.compact)
+        put("sharp", l.sharp)
+        put("text_scale", l.textScale.toDouble())
+        put("edges", l.edges.id)
+        put("transitions", l.transitions)
+        put("make_room_for_approvals", l.makeRoomForApprovals)
+        put("shrink_while_typing", l.shrinkWhileTyping)
+        put("follow_reply", l.followReply)
+        put("tap_face_opens_mind", l.tapFaceOpensMind)
+    }.toString()
+
+    /**
+     * Same promise as [loadBindings]: anything unreadable falls back to the
+     * default for that field, and a wholly unreadable record is the default
+     * look. NaN is refused by `isFinite` for the reason [parseBindings] gives,
+     * and [Look.clamped] pulls anything out of range back in.
+     */
+    private fun loadLook(): Look = runCatching {
+        val raw = prefs.getString(KEY_LOOK, null) ?: return Look()
+        val o = JSONObject(raw)
+        val d = Look()
+        fun f(key: String, default: Float): Float =
+            if (o.has(key)) o.optDouble(key).takeIf { it.isFinite() }?.toFloat() ?: default else default
+        fun b(key: String, default: Boolean): Boolean =
+            if (o.has(key)) o.optBoolean(key, default) else default
+        Look(
+            faceFraction = f("face_fraction", d.faceFraction),
+            navAlwaysShown = b("nav_always_shown", d.navAlwaysShown),
+            glow = f("glow", d.glow),
+            motion = MotionPref.byId(o.optString("motion")),
+            compact = b("compact", d.compact),
+            sharp = b("sharp", d.sharp),
+            textScale = f("text_scale", d.textScale),
+            edges = EdgePref.byId(o.optString("edges")),
+            transitions = b("transitions", d.transitions),
+            makeRoomForApprovals = b("make_room_for_approvals", d.makeRoomForApprovals),
+            shrinkWhileTyping = b("shrink_while_typing", d.shrinkWhileTyping),
+            followReply = b("follow_reply", d.followReply),
+            tapFaceOpensMind = b("tap_face_opens_mind", d.tapFaceOpensMind),
+        ).clamped()
+    }.getOrDefault(Look())
+
     private companion object {
         const val PREFS = "jarvis_appearance"
         const val KEY_THEME = "theme"
         const val KEY_FOLLOW_SYSTEM = "follow_system"
         const val KEY_FACE = "face"
         const val KEY_BINDINGS = "bindings"
+        const val KEY_FACE_SIZE = "face_size"
+        const val KEY_LOOK = "look"
+        const val KEY_PREFERRED_DARK = "preferred_dark"
+        const val KEY_FACE_TUNING = "face_tuning"
 
         /**
          * 500ms crossfade plus 500ms dwell means two opposing swings can be no
@@ -351,5 +519,186 @@ class AppearanceStore(context: Context) {
         )
 
         const val MIN_SEPARATION = 0.28f
+    }
+}
+
+/**
+ * How big the face is drawn on Home - or whether it is there at all.
+ *
+ * Large (260dp) is the size the face has always been and stays the default.
+ *  - [fill]: the face grows to fill its panel instead of stopping at 260dp.
+ *    Opt-in, and costs more to draw on every frame than Large does.
+ *  - [voiceOnly]: Home becomes the face and a microphone - the chat and the
+ *    typing box step aside. HomeScreen brings the normal layout back on its
+ *    own whenever something needs reading or deciding (an approval, a task
+ *    running), and the status line stays on screen in every size.
+ *  - [hidden]: no face on Home at all; the conversation takes the room. The
+ *    status line carries what the face was saying - link, activity, lane.
+ *
+ * Small and Tiny were offered for a day and taken out at the owner's
+ * request; a phone that saved either lands on Medium, the nearest one left,
+ * rather than jumping back up to the default.
+ */
+enum class FaceSize(
+    val id: String,
+    val label: String,
+    val sizeDp: Int,
+    val fill: Boolean = false,
+    val voiceOnly: Boolean = false,
+    val hidden: Boolean = false,
+) {
+    FULL_SCREEN("full_screen", "Full screen", 260, fill = true, voiceOnly = true),
+    EXTRA_LARGE("extra_large", "Extra large", 260, fill = true),
+    LARGE("large", "Large", 260),
+    MEDIUM("medium", "Medium", 200),
+    HIDDEN("hidden", "Hidden", 0, hidden = true),
+    ;
+
+    companion object {
+        val DEFAULT = LARGE
+
+        /** Ids that were once offered and are not any more, and where they went. */
+        private val RETIRED = mapOf("small" to MEDIUM, "tiny" to MEDIUM)
+
+        /** Anything unknown or missing is the default, never a crash. */
+        fun byId(id: String?): FaceSize =
+            entries.firstOrNull { it.id == id } ?: RETIRED[id] ?: DEFAULT
+    }
+}
+
+/**
+ * How the face should move, on top of what the phone itself asks for.
+ *
+ * [FOLLOW] leaves it to the phone's own "remove animations" setting, as the
+ * app always has. [CALM] slows the face's motion down whatever the phone
+ * says. Neither ever speeds anything up, and neither touches the flash
+ * limits in `face/Spec.kt`, which apply to every setting identically.
+ *
+ * [FULL] exists because the shared contract between the UI-audit slices
+ * names it, but the Appearance screen does NOT offer it and every reader
+ * should treat it exactly like [FOLLOW]. The audit's table has "Full" as a
+ * choice, and the only thing it could add over Follow is overriding the
+ * phone's own request for less motion - which is speeding motion up, and
+ * the rule for this work is that motion settings may only reduce. Offering
+ * it is the owner's decision to make, not a default to slip in.
+ */
+enum class MotionPref(val id: String, val label: String) {
+    FOLLOW("follow", "Follow phone"),
+    CALM("calm", "Calm"),
+    FULL("full", "Full"),
+    ;
+
+    companion object {
+        fun byId(id: String?): MotionPref = entries.firstOrNull { it.id == id } ?: FOLLOW
+    }
+}
+
+/**
+ * Whether the face should run in calm motion (FaceView's `calmMotion`).
+ *
+ * One rule, read by both places that draw a face - Home and the Appearance
+ * preview - so the preview never shows a speed Home will not. Calm when the
+ * owner picked Calm, or when they left it on Follow and the phone itself asks
+ * for less motion (animations off, the same flag `Motion.reduced` reads).
+ * [MotionPref.FULL] is treated as Follow, for the reason its KDoc gives: it
+ * may never override the phone's own request for less motion.
+ */
+fun MotionPref.calmFace(phoneAsksLessMotion: Boolean): Boolean = when (this) {
+    MotionPref.CALM -> true
+    MotionPref.FOLLOW, MotionPref.FULL -> phoneAsksLessMotion
+}
+
+/**
+ * The line around each panel. Stored here as the phone's own choice; the
+ * theme code draws it (`ui/theme`'s own edge enum is mapped from this by id,
+ * so the two can be renamed independently without a stored preference
+ * breaking).
+ */
+enum class EdgePref(val id: String, val label: String) {
+    HAIRLINE("hairline", "Hairline"),
+    BEVEL("bevel", "Bevel"),
+    NONE("none", "None"),
+    ;
+
+    companion object {
+        fun byId(id: String?): EdgePref = entries.firstOrNull { it.id == id } ?: HAIRLINE
+    }
+}
+
+/**
+ * Everything about how this phone looks that is not the theme, the face,
+ * the state colours or the face size - which each keep the key they always
+ * had, so nothing an existing install chose moves.
+ *
+ * Appearance only. Nothing here reaches the desktop or its settings: the
+ * phone's rule against deep config editing is about the backend, and this
+ * is a paint choice on one screen.
+ *
+ * A record the phone saved before the presets were removed may still carry
+ * a "based_on" key; [loadLook] simply does not read it.
+ */
+data class Look(
+    /** The face's share of Home, 0.20..0.85. The rest is the conversation. */
+    val faceFraction: Float = DEFAULT_FACE_FRACTION,
+    /** The tabs row on Home: hidden until swiped (false) or always shown. */
+    val navAlwaysShown: Boolean = false,
+    /**
+     * Multiplier on the face's glow, 0.25..1. The caller multiplies it with
+     * the theme's own `Chrome.postScale`, so it can only ever dim the glow
+     * below the theme's level, never brighten it past that.
+     */
+    val glow: Float = 1f,
+    val motion: MotionPref = MotionPref.FOLLOW,
+    /** Tighter padding and list spacing. */
+    val compact: Boolean = false,
+    /** Square-ish corners instead of rounded ones. */
+    val sharp: Boolean = false,
+    /**
+     * Multiplier on top of the phone's own text size, 0.9..1.3. 1 means
+     * "follow the phone": the phone's font-scale setting still applies
+     * underneath whatever this is, so there is no separate "follow" value.
+     */
+    val textScale: Float = 1f,
+    val edges: EdgePref = EdgePref.HAIRLINE,
+    /**
+     * Screen changes fade and slide. Off when false - and also off whenever
+     * the phone asks for less motion, whatever this says.
+     */
+    val transitions: Boolean = true,
+
+    // Behaviour switches -----------------------------------------------------
+    /**
+     * Shrink the face while an approval is waiting, so Approve and Deny are
+     * on screen. It only moves the layout; it never decides anything.
+     */
+    val makeRoomForApprovals: Boolean = true,
+    /** Shrink the face while the keyboard is open. */
+    val shrinkWhileTyping: Boolean = true,
+    /** Keep the newest words of a streaming reply in view. */
+    val followReply: Boolean = true,
+    /** Tapping the face opens Mind. False: it does nothing. */
+    val tapFaceOpensMind: Boolean = true,
+) {
+    /** Every number pulled into its range, and NaN back to its default. */
+    fun clamped(): Look = copy(
+        faceFraction = faceFraction.orIfNotFinite(DEFAULT_FACE_FRACTION)
+            .coerceIn(MIN_FACE_FRACTION, MAX_FACE_FRACTION),
+        glow = glow.orIfNotFinite(1f).coerceIn(MIN_GLOW, 1f),
+        textScale = textScale.orIfNotFinite(1f).coerceIn(MIN_TEXT_SCALE, MAX_TEXT_SCALE),
+    )
+
+    companion object {
+        /** Home's own limits: neither pane may be dragged away entirely. */
+        const val DEFAULT_FACE_FRACTION = 0.75f
+        const val MIN_FACE_FRACTION = 0.20f
+        const val MAX_FACE_FRACTION = 0.85f
+
+        /** Glow only ever dims, and never so far the face disappears. */
+        const val MIN_GLOW = 0.25f
+
+        const val MIN_TEXT_SCALE = 0.9f
+        const val MAX_TEXT_SCALE = 1.3f
+
+        private fun Float.orIfNotFinite(default: Float): Float = if (isFinite()) this else default
     }
 }

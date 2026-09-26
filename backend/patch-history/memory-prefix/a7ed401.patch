@@ -1,0 +1,84 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -87,6 +87,14 @@
+ CONFIG_FILE = CONFIG_DIR / "config.toml"
+ PROXY_FILE = CONFIG_DIR / "litellm-proxy.yaml"
+ 
++# How many facts a local turn recalls. This was a literal 5 buried in the
++# search call, which is a token budget written where nobody would look for
++# one: five facts is 100-150 tokens on every prompt, whether or not the fifth
++# had anything to do with the question. With memory-safety.patch applied the
++# store's search has a distance floor, so a lower k costs nothing on a query
++# that genuinely has less to recall - it stops the tail being padded to five.
++MEMORY_K = max(0, int(os.environ.get("JARVIS_MEMORY_K", "5")))
++
+ # Keep the galaxy responsive. Past roughly this many nodes the force
+ # simulation stops holding 60fps on an average machine.
+ MAX_FACTS = 400
+@@ -1751,7 +1759,7 @@
+                 # current facts only. Falls back to the word matcher over
+                 # the jsonl if the store is empty or unavailable.
+                 try:
+-                    hits = jarvis_memory.store().search(query, k=5)
++                    hits = jarvis_memory.store().search(query, k=MEMORY_K)
+                     if hits:
+                         chosen_facts = [{"text": h["text"], "id": h["id"]} for h in hits]
+                         facts = chosen_facts
+@@ -1766,11 +1774,55 @@
+                 injected_ids = [f"mem:{f['id']}" if "id" in f else f"fact:{facts.index(f)}"
+                                 for f in chosen_facts if f in facts]
+                 block = "\n".join(f"- {f.get('text','')}" for f in chosen_facts)
+-                messages = [{
++                recalled = {
+                     "role": "system",
+                     "content": "Things you know about the user, recalled for this "
+                                "question:\n" + block,
+-                }] + messages
++                }
++                # Late, not first. This block used to be prepended, and the
++                # facts it holds are chosen per question, so token 0 of the
++                # request differed on every single turn. llama.cpp - and so
++                # Ollama - reuses a cached KV prefix only up to the first
++                # token that differs, so a changing position 0 means the whole
++                # conversation is re-prefilled every turn: on a 6,000-token
++                # history that is seconds of GPU time, growing as you talk,
++                # spent re-reading text the model read a moment ago.
++                #
++                # Inserting it just before the last user turn leaves every
++                # earlier turn byte-identical, so the prefix matches up to the
++                # final question and only the tail is prefilled. The facts
++                # also end up adjacent to the question they were recalled for,
++                # which is where they are most use.
++                #
++                # And it restores the persona invariants, which is the more
++                # serious of the two. Ollama's chat handler reads:
++                #
++                #     if req.Messages[0].Role != "system" && m.System != "" {
++                #         msgs = append([]api.Message{{Role: "system",
++                #                        Content: m.System}}, msgs...)
++                #
++                # (ollama/server/routes.go). A system message at index 0
++                # SUPPRESSES the Modelfile's own SYSTEM block. So on every
++                # local turn where recall fired - and only those turns -
++                # jarvis_persona.INVARIANT_PROMPT was silently dropped:
++                # "say what is a guess and what is verified", "never claim an
++                # action was taken that was not". The invariants went missing
++                # at exactly the moment the model was holding private facts.
++                # With the block moved off index 0 they are back, and they are
++                # now a STABLE position 0, which is what a prefix cache wants.
++                #
++                # Truncation does not undo this. chatPrompt re-collects system
++                # messages only from the region it SKIPS (`for j := range i`,
++                # ollama/server/prompt.go) and this block is at the tail, in
++                # the kept region - the one exception being a conversation
++                # truncated to its final message alone, where there is no
++                # prefix left to preserve anyway.
++                #
++                # If delimiters are ever added around recalled facts, add them
++                # HERE, to `recalled` - wrapping the whole message list, or
++                # putting a marker at position 0, puts both problems back.
++                messages = (messages[:-1] + [recalled, messages[-1]]
++                            if messages else [recalled])
+                 # Memory is now in the transcript. Pin the conversation local
+                 # for the latch window so a follow-up cannot carry the model's
+                 # restatement of it to a cloud lane - the same over-

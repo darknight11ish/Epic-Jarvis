@@ -1,0 +1,22 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -1207,6 +1207,19 @@
+         # desktop cannot word the same warning two different ways - and so
+         # there is one place to audit what a notification may contain.
+         d["notice"] = notice_for(d)
++        # approval-expiry.patch: how many seconds this card has left before
++        # check() stops waiting and refuses it. check() waits APPROVAL_TIMEOUT
++        # from just after the row is written, so `created` plus that is the
++        # deadline. Sent as seconds LEFT, not a clock time, so a phone whose
++        # clock disagrees with this PC still counts down correctly. A row
++        # whose `created` is not a number gets no field, and the clients then
++        # show no countdown rather than a wrong one.
++        try:
++            d["expires_in"] = max(0, int(float(d.get("created"))
++                                         + float(APPROVAL_TIMEOUT)
++                                         - time.time()))
++        except (TypeError, ValueError):
++            pass
+         # Why this is being asked about at all, when the table said otherwise.
+         # A card shows this instead of a coloured dot: the reason is the thing
+         # that changes the decision.

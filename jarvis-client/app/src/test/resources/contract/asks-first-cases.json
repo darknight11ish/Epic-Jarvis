@@ -1,0 +1,2756 @@
+{
+ "cases": {
+  "pc_shipped": {
+   "available": true,
+   "can_loosen": true,
+   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
+   "groups": [
+    {
+     "rows": [
+      {
+       "action": "calendar_read",
+       "fixed": false,
+       "id": "calendar_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Read your calendar"
+      },
+      {
+       "action": "email_read",
+       "fixed": false,
+       "id": "email_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Read your email"
+      },
+      {
+       "action": "notes_search",
+       "fixed": false,
+       "id": "notes_search",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Search your notes"
+      },
+      {
+       "action": "home_read",
+       "fixed": false,
+       "id": "home_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Check your smart home"
+      },
+      {
+       "action": "read_files_readonly",
+       "fixed": false,
+       "id": "read_files_readonly",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read files on this PC"
+      },
+      {
+       "action": "read_joplin_note",
+       "fixed": false,
+       "id": "read_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read a note in Joplin"
+      },
+      {
+       "action": "read_logseq_page",
+       "fixed": false,
+       "id": "read_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read a page in Logseq"
+      }
+     ],
+     "title": "Reading your own things"
+    },
+    {
+     "rows": [
+      {
+       "action": "append_obsidian_daily",
+       "fixed": false,
+       "id": "append_obsidian_daily",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Add to today's Obsidian daily note"
+      },
+      {
+       "action": "append_logseq_journal",
+       "fixed": false,
+       "id": "append_logseq_journal",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Add to today's Logseq journal"
+      },
+      {
+       "action": "create_joplin_note",
+       "fixed": false,
+       "id": "create_joplin_note",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it, then tells you",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "notify"
+       },
+       "tier": "notify",
+       "title": "Add a note in Joplin"
+      },
+      {
+       "action": "create_logseq_page",
+       "fixed": false,
+       "id": "create_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Make a new page in Logseq"
+      },
+      {
+       "action": "edit_joplin_note",
+       "fixed": false,
+       "id": "edit_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in Joplin"
+      },
+      {
+       "action": "edit_logseq_page",
+       "fixed": false,
+       "id": "edit_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a page in Logseq"
+      },
+      {
+       "action": "delete_joplin_note",
+       "fixed": false,
+       "id": "delete_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Delete a note in Joplin"
+      },
+      {
+       "action": "delete_logseq_page",
+       "fixed": false,
+       "id": "delete_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Delete a page in Logseq"
+      },
+      {
+       "action": "write_notes_after_outside_text",
+       "fixed": false,
+       "id": "write_notes_after_outside_text",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write to your notes after reading outside text"
+      },
+      {
+       "action": "wiki_update",
+       "fixed": false,
+       "id": "wiki_update",
+       "note": "Always asks: the wiki is written only on your yes (security audit), so it cannot be loosened - a looser line would switch \"Add to wiki\" off.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write pages in the Jarvis Wiki"
+      }
+     ],
+     "title": "Writing your notes"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:timers",
+       "note": "Your own words only; deleting is immediate.",
+       "says": "Does it without asking",
+       "title": "Set a timer, or a reminder or alarm that goes off once"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:repeats",
+       "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
+       "says": "Does it without asking",
+       "title": "Set up a repeating reminder or alarm, or the standby schedule"
+      },
+      {
+       "action": "schedule_repeat",
+       "fixed": false,
+       "id": "schedule_repeat",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Set up something that repeats"
+      }
+     ],
+     "title": "Timers and reminders"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:lights",
+       "lights": true,
+       "note": "Off by default. The switch is below.",
+       "says": "Asks you first, every time",
+       "title": "Switch lights, plugs and fans you name"
+      },
+      {
+       "action": "home_control",
+       "fixed": false,
+       "id": "home_control",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change something in your home"
+      }
+     ],
+     "title": "Your smart home"
+    },
+    {
+     "rows": [
+      {
+       "action": "draft_email",
+       "fixed": false,
+       "id": "draft_email",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write an email draft"
+      },
+      {
+       "action": "send_email",
+       "fixed": false,
+       "id": "send_email",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send an email"
+      },
+      {
+       "action": "edit_calendar_event",
+       "fixed": false,
+       "id": "edit_calendar_event",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change an event in your calendar"
+      },
+      {
+       "action": "delete_calendar_event",
+       "fixed": false,
+       "id": "delete_calendar_event",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete an event from your calendar"
+      }
+     ],
+     "title": "Email and calendar"
+    },
+    {
+     "rows": [
+      {
+       "action": "search_the_web",
+       "fixed": false,
+       "id": "search_the_web",
+       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
+       "says": "Asks only when something private could slip in",
+       "tier": "ask",
+       "title": "Search the web"
+      },
+      {
+       "action": "web_research",
+       "fixed": false,
+       "id": "web_research",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Refused - it only runs on your yes, so its line must say \"ask\"",
+       "tier": "auto",
+       "title": "Search GitHub"
+      },
+      {
+       "action": "research_authenticated",
+       "fixed": false,
+       "id": "research_authenticated",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Search GitHub signed in as you"
+      },
+      {
+       "action": "control_browser",
+       "fixed": false,
+       "id": "control_browser",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Work a web page for you in a browser"
+      },
+      {
+       "action": "post_to_external_service",
+       "fixed": false,
+       "id": "post_to_external_service",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Post to an outside service"
+      },
+      {
+       "action": "open_public_tunnel",
+       "fixed": false,
+       "id": "open_public_tunnel",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Open this PC to the internet"
+      }
+     ],
+     "title": "The internet"
+    },
+    {
+     "rows": [
+      {
+       "action": "run_shell_on_host",
+       "fixed": false,
+       "id": "run_shell_on_host",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a command on this PC"
+      },
+      {
+       "action": "control_computer",
+       "fixed": false,
+       "id": "control_computer",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use the mouse and keyboard on this PC"
+      },
+      {
+       "action": "control_phone",
+       "fixed": false,
+       "id": "control_phone",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tap and type on your phone"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_start",
+       "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
+       "says": "Asks you when it is new or has changed",
+       "title": "Start a plug-in program on this PC (MCP)"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_use",
+       "note": "Always asks, whatever your settings file says: it is someone else's program. Only tools that read are offered for now.",
+       "says": "Asks you first, every time",
+       "title": "Use a tool from a plug-in program on this PC (MCP)"
+      },
+      {
+       "action": "delete_file",
+       "fixed": false,
+       "id": "delete_file",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a file"
+      },
+      {
+       "action": "spend_money",
+       "fixed": false,
+       "id": "spend_money",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Spend money"
+      },
+      {
+       "action": "power_manage",
+       "fixed": false,
+       "id": "power_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Change its power mode (Active, Quiet or Standby)"
+      }
+     ],
+     "title": "This PC and your phone"
+    },
+    {
+     "rows": [
+      {
+       "action": "browse_model_catalog",
+       "fixed": false,
+       "id": "browse_model_catalog",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Look up AI models online"
+      },
+      {
+       "action": "download_model",
+       "fixed": false,
+       "id": "download_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Download an AI model"
+      },
+      {
+       "action": "switch_model",
+       "fixed": false,
+       "id": "switch_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Switch to a different AI model"
+      },
+      {
+       "action": "rollback_model",
+       "fixed": false,
+       "id": "rollback_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Go back to the AI model you had before"
+      },
+      {
+       "action": "models_create",
+       "fixed": false,
+       "id": "models_create",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a tuned copy of an AI model"
+      },
+      {
+       "action": "second_card_enable",
+       "fixed": false,
+       "id": "second_card_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start using the second graphics card"
+      },
+      {
+       "action": "second_card_browser_enable",
+       "fixed": false,
+       "id": "second_card_browser_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on browser control, which works real web pages"
+      },
+      {
+       "action": "big_model_enable",
+       "fixed": false,
+       "id": "big_model_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start the big model for background jobs"
+      }
+     ],
+     "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "action": "change_own_config",
+       "fixed": false,
+       "id": "change_own_config",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change one of its settings"
+      },
+      {
+       "action": "stop_asking_before_every_web_search",
+       "fixed": false,
+       "id": "stop_asking_before_every_web_search",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop asking before every web search"
+      },
+      {
+       "action": "learning_enable",
+       "fixed": false,
+       "id": "learning_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on learning"
+      },
+      {
+       "action": "learning_auto_enable",
+       "fixed": false,
+       "id": "learning_auto_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on automatic learning"
+      },
+      {
+       "action": "learning_sensitive_enable",
+       "fixed": false,
+       "id": "learning_sensitive_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Also learn sensitive topics automatically"
+      },
+      {
+       "action": "history_enable",
+       "fixed": false,
+       "id": "history_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep your chat history"
+      },
+      {
+       "action": "memory_manage",
+       "fixed": false,
+       "id": "memory_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change what it remembers"
+      },
+      {
+       "action": "user_profile_manage",
+       "fixed": false,
+       "id": "user_profile_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change your profile"
+      },
+      {
+       "action": "custom_voice",
+       "fixed": false,
+       "id": "custom_voice",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep or use a custom voice"
+      },
+      {
+       "action": "better_voice_enable",
+       "fixed": false,
+       "id": "better_voice_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the better custom voice"
+      },
+      {
+       "action": "modify_own_code",
+       "fixed": false,
+       "id": "modify_own_code",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change its own code"
+      },
+      {
+       "action": "loosen_what_asks_first",
+       "fixed": false,
+       "id": "loosen_what_asks_first",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let one action go ahead without asking you first"
+      }
+     ],
+     "title": "Jarvis's own settings, memory and voice"
+    },
+    {
+     "rows": [
+      {
+       "action": "agent_spawn",
+       "fixed": false,
+       "id": "agent_spawn",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start a helper task"
+      },
+      {
+       "action": "agent_kill",
+       "fixed": false,
+       "id": "agent_kill",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop a helper task"
+      },
+      {
+       "action": "execute_pending_actions",
+       "fixed": false,
+       "id": "execute_pending_actions",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run actions it has lined up"
+      },
+      {
+       "action": "unclassified_tool",
+       "fixed": false,
+       "id": "unclassified_tool",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a tool it has no plain name for"
+      }
+     ],
+     "title": "Other"
+    }
+   ],
+   "last": null,
+   "lights": {
+    "detail": "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis switches it without an approval card. Locks, doors, alarms, covers and garage doors always ask, each with a card of its own, and so does everything after Jarvis has read outside text in the chat. Turning this on shows you an approval card first; turning it off happens at once.",
+    "label": "Lights, plugs and fans without a card",
+    "last": null,
+    "on": false,
+    "waiting": false,
+    "why": ""
+   },
+   "switch_label": "Ask me first",
+   "switchable": [
+    "calendar_read",
+    "email_read",
+    "notes_search",
+    "home_read",
+    "append_obsidian_daily",
+    "append_logseq_journal",
+    "create_joplin_note"
+   ],
+   "title": "What asks first",
+   "waiting": null
+  },
+  "pc_stricter_lights_on": {
+   "available": true,
+   "can_loosen": true,
+   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
+   "groups": [
+    {
+     "rows": [
+      {
+       "action": "calendar_read",
+       "fixed": false,
+       "id": "calendar_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. Your settings file also has an older line for this, read_calendar = \"auto\". The calendar tool follows this row (calendar_read).",
+       "says": "Asks you first, every time",
+       "switch": {
+        "asks": true,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "ask",
+       "title": "Read your calendar"
+      },
+      {
+       "action": "email_read",
+       "fixed": false,
+       "id": "email_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Read your email"
+      },
+      {
+       "action": "notes_search",
+       "fixed": false,
+       "id": "notes_search",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Search your notes"
+      },
+      {
+       "action": "home_read",
+       "fixed": false,
+       "id": "home_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Check your smart home"
+      },
+      {
+       "action": "read_files_readonly",
+       "fixed": false,
+       "id": "read_files_readonly",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read files on this PC"
+      },
+      {
+       "action": "read_joplin_note",
+       "fixed": false,
+       "id": "read_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read a note in Joplin"
+      },
+      {
+       "action": "read_logseq_page",
+       "fixed": false,
+       "id": "read_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read a page in Logseq"
+      }
+     ],
+     "title": "Reading your own things"
+    },
+    {
+     "rows": [
+      {
+       "action": "append_obsidian_daily",
+       "fixed": false,
+       "id": "append_obsidian_daily",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Add to today's Obsidian daily note"
+      },
+      {
+       "action": "append_logseq_journal",
+       "fixed": false,
+       "id": "append_logseq_journal",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Add to today's Logseq journal"
+      },
+      {
+       "action": "create_joplin_note",
+       "fixed": false,
+       "id": "create_joplin_note",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Asks you first, every time",
+       "switch": {
+        "asks": true,
+        "can_loosen": true,
+        "loose": "notify"
+       },
+       "tier": "ask",
+       "title": "Add a note in Joplin"
+      },
+      {
+       "action": "create_logseq_page",
+       "fixed": false,
+       "id": "create_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Make a new page in Logseq"
+      },
+      {
+       "action": "edit_joplin_note",
+       "fixed": false,
+       "id": "edit_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in Joplin"
+      },
+      {
+       "action": "edit_logseq_page",
+       "fixed": false,
+       "id": "edit_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a page in Logseq"
+      },
+      {
+       "action": "delete_joplin_note",
+       "fixed": false,
+       "id": "delete_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Delete a note in Joplin"
+      },
+      {
+       "action": "delete_logseq_page",
+       "fixed": false,
+       "id": "delete_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Delete a page in Logseq"
+      },
+      {
+       "action": "write_notes_after_outside_text",
+       "fixed": false,
+       "id": "write_notes_after_outside_text",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write to your notes after reading outside text"
+      },
+      {
+       "action": "wiki_update",
+       "fixed": false,
+       "id": "wiki_update",
+       "note": "Always asks: the wiki is written only on your yes (security audit), so it cannot be loosened - a looser line would switch \"Add to wiki\" off.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write pages in the Jarvis Wiki"
+      }
+     ],
+     "title": "Writing your notes"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:timers",
+       "note": "Your own words only; deleting is immediate.",
+       "says": "Does it without asking",
+       "title": "Set a timer, or a reminder or alarm that goes off once"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:repeats",
+       "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
+       "says": "Does it without asking",
+       "title": "Set up a repeating reminder or alarm, or the standby schedule"
+      },
+      {
+       "action": "schedule_repeat",
+       "fixed": false,
+       "id": "schedule_repeat",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Set up something that repeats"
+      }
+     ],
+     "title": "Timers and reminders"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:lights",
+       "lights": true,
+       "note": "Off by default. The switch is below.",
+       "says": "Does it without asking",
+       "title": "Switch lights, plugs and fans you name"
+      },
+      {
+       "action": "home_control",
+       "fixed": false,
+       "id": "home_control",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change something in your home"
+      }
+     ],
+     "title": "Your smart home"
+    },
+    {
+     "rows": [
+      {
+       "action": "draft_email",
+       "fixed": false,
+       "id": "draft_email",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write an email draft"
+      },
+      {
+       "action": "send_email",
+       "fixed": false,
+       "id": "send_email",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Refused - it only runs on your yes, so its line must say \"ask\"",
+       "tier": "auto",
+       "title": "Send an email"
+      },
+      {
+       "action": "edit_calendar_event",
+       "fixed": false,
+       "id": "edit_calendar_event",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change an event in your calendar"
+      },
+      {
+       "action": "delete_calendar_event",
+       "fixed": false,
+       "id": "delete_calendar_event",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete an event from your calendar"
+      }
+     ],
+     "title": "Email and calendar"
+    },
+    {
+     "rows": [
+      {
+       "action": "search_the_web",
+       "fixed": false,
+       "id": "search_the_web",
+       "note": "\"Ask before every web search\" is on, so every search waits for your yes. Turning it off (web search settings) takes an approval card.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Search the web"
+      },
+      {
+       "action": "web_research",
+       "fixed": false,
+       "id": "web_research",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Refused - it only runs on your yes, so its line must say \"ask\"",
+       "tier": "auto",
+       "title": "Search GitHub"
+      },
+      {
+       "action": "research_authenticated",
+       "fixed": false,
+       "id": "research_authenticated",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Search GitHub signed in as you"
+      },
+      {
+       "action": "control_browser",
+       "fixed": false,
+       "id": "control_browser",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Work a web page for you in a browser"
+      },
+      {
+       "action": "post_to_external_service",
+       "fixed": false,
+       "id": "post_to_external_service",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Post to an outside service"
+      },
+      {
+       "action": "open_public_tunnel",
+       "fixed": false,
+       "id": "open_public_tunnel",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Open this PC to the internet"
+      }
+     ],
+     "title": "The internet"
+    },
+    {
+     "rows": [
+      {
+       "action": "run_shell_on_host",
+       "fixed": false,
+       "id": "run_shell_on_host",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a command on this PC"
+      },
+      {
+       "action": "control_computer",
+       "fixed": false,
+       "id": "control_computer",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use the mouse and keyboard on this PC"
+      },
+      {
+       "action": "control_phone",
+       "fixed": false,
+       "id": "control_phone",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tap and type on your phone"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_start",
+       "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
+       "says": "Asks you when it is new or has changed",
+       "title": "Start a plug-in program on this PC (MCP)"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_use",
+       "note": "Always asks, whatever your settings file says: it is someone else's program. Only tools that read are offered for now.",
+       "says": "Asks you first, every time",
+       "title": "Use a tool from a plug-in program on this PC (MCP)"
+      },
+      {
+       "action": "delete_file",
+       "fixed": false,
+       "id": "delete_file",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a file"
+      },
+      {
+       "action": "spend_money",
+       "fixed": false,
+       "id": "spend_money",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Spend money"
+      },
+      {
+       "action": "power_manage",
+       "fixed": false,
+       "id": "power_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Change its power mode (Active, Quiet or Standby)"
+      }
+     ],
+     "title": "This PC and your phone"
+    },
+    {
+     "rows": [
+      {
+       "action": "browse_model_catalog",
+       "fixed": false,
+       "id": "browse_model_catalog",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Look up AI models online"
+      },
+      {
+       "action": "download_model",
+       "fixed": false,
+       "id": "download_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Download an AI model"
+      },
+      {
+       "action": "switch_model",
+       "fixed": false,
+       "id": "switch_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Switch to a different AI model"
+      },
+      {
+       "action": "rollback_model",
+       "fixed": false,
+       "id": "rollback_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Go back to the AI model you had before"
+      },
+      {
+       "action": "models_create",
+       "fixed": false,
+       "id": "models_create",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a tuned copy of an AI model"
+      },
+      {
+       "action": "second_card_enable",
+       "fixed": false,
+       "id": "second_card_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start using the second graphics card"
+      },
+      {
+       "action": "second_card_browser_enable",
+       "fixed": false,
+       "id": "second_card_browser_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on browser control, which works real web pages"
+      },
+      {
+       "action": "big_model_enable",
+       "fixed": false,
+       "id": "big_model_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start the big model for background jobs"
+      }
+     ],
+     "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "action": "change_own_config",
+       "fixed": false,
+       "id": "change_own_config",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change one of its settings"
+      },
+      {
+       "action": "stop_asking_before_every_web_search",
+       "fixed": false,
+       "id": "stop_asking_before_every_web_search",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop asking before every web search"
+      },
+      {
+       "action": "learning_enable",
+       "fixed": false,
+       "id": "learning_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on learning"
+      },
+      {
+       "action": "learning_auto_enable",
+       "fixed": false,
+       "id": "learning_auto_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on automatic learning"
+      },
+      {
+       "action": "learning_sensitive_enable",
+       "fixed": false,
+       "id": "learning_sensitive_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Also learn sensitive topics automatically"
+      },
+      {
+       "action": "history_enable",
+       "fixed": false,
+       "id": "history_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep your chat history"
+      },
+      {
+       "action": "memory_manage",
+       "fixed": false,
+       "id": "memory_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change what it remembers"
+      },
+      {
+       "action": "user_profile_manage",
+       "fixed": false,
+       "id": "user_profile_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change your profile"
+      },
+      {
+       "action": "custom_voice",
+       "fixed": false,
+       "id": "custom_voice",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep or use a custom voice"
+      },
+      {
+       "action": "better_voice_enable",
+       "fixed": false,
+       "id": "better_voice_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the better custom voice"
+      },
+      {
+       "action": "modify_own_code",
+       "fixed": false,
+       "id": "modify_own_code",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change its own code"
+      },
+      {
+       "action": "loosen_what_asks_first",
+       "fixed": false,
+       "id": "loosen_what_asks_first",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let one action go ahead without asking you first"
+      }
+     ],
+     "title": "Jarvis's own settings, memory and voice"
+    },
+    {
+     "rows": [
+      {
+       "action": "agent_spawn",
+       "fixed": false,
+       "id": "agent_spawn",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start a helper task"
+      },
+      {
+       "action": "agent_kill",
+       "fixed": false,
+       "id": "agent_kill",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop a helper task"
+      },
+      {
+       "action": "execute_pending_actions",
+       "fixed": false,
+       "id": "execute_pending_actions",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run actions it has lined up"
+      },
+      {
+       "action": "unclassified_tool",
+       "fixed": false,
+       "id": "unclassified_tool",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a tool it has no plain name for"
+      }
+     ],
+     "title": "Other"
+    }
+   ],
+   "last": null,
+   "lights": {
+    "detail": "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis switches it without an approval card. Locks, doors, alarms, covers and garage doors always ask, each with a card of its own, and so does everything after Jarvis has read outside text in the chat. Turning this on shows you an approval card first; turning it off happens at once.",
+    "label": "Lights, plugs and fans without a card",
+    "last": null,
+    "on": true,
+    "waiting": false,
+    "why": ""
+   },
+   "switch_label": "Ask me first",
+   "switchable": [
+    "calendar_read",
+    "email_read",
+    "notes_search",
+    "home_read",
+    "append_obsidian_daily",
+    "append_logseq_journal",
+    "create_joplin_note"
+   ],
+   "title": "What asks first",
+   "waiting": null
+  },
+  "phone_cards_waiting": {
+   "available": true,
+   "can_loosen": false,
+   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
+   "groups": [
+    {
+     "rows": [
+      {
+       "action": "calendar_read",
+       "fixed": false,
+       "id": "calendar_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello. Your settings file also has an older line for this, read_calendar = \"auto\". The calendar tool follows this row (calendar_read).",
+       "says": "Asks you first, every time",
+       "switch": {
+        "asks": true,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "ask",
+       "title": "Read your calendar"
+      },
+      {
+       "action": "email_read",
+       "fixed": false,
+       "id": "email_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Read your email"
+      },
+      {
+       "action": "notes_search",
+       "fixed": false,
+       "id": "notes_search",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Search your notes"
+      },
+      {
+       "action": "home_read",
+       "fixed": false,
+       "id": "home_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Check your smart home"
+      },
+      {
+       "action": "read_files_readonly",
+       "fixed": false,
+       "id": "read_files_readonly",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read files on this PC"
+      },
+      {
+       "action": "read_joplin_note",
+       "fixed": false,
+       "id": "read_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read a note in Joplin"
+      },
+      {
+       "action": "read_logseq_page",
+       "fixed": false,
+       "id": "read_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read a page in Logseq"
+      }
+     ],
+     "title": "Reading your own things"
+    },
+    {
+     "rows": [
+      {
+       "action": "append_obsidian_daily",
+       "fixed": false,
+       "id": "append_obsidian_daily",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Add to today's Obsidian daily note"
+      },
+      {
+       "action": "append_logseq_journal",
+       "fixed": false,
+       "id": "append_logseq_journal",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Add to today's Logseq journal"
+      },
+      {
+       "action": "create_joplin_note",
+       "fixed": false,
+       "id": "create_joplin_note",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes. To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
+       "says": "Asks you first, every time",
+       "switch": {
+        "asks": true,
+        "can_loosen": false,
+        "loose": "notify"
+       },
+       "tier": "ask",
+       "title": "Add a note in Joplin"
+      },
+      {
+       "action": "create_logseq_page",
+       "fixed": false,
+       "id": "create_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Make a new page in Logseq"
+      },
+      {
+       "action": "edit_joplin_note",
+       "fixed": false,
+       "id": "edit_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in Joplin"
+      },
+      {
+       "action": "edit_logseq_page",
+       "fixed": false,
+       "id": "edit_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a page in Logseq"
+      },
+      {
+       "action": "delete_joplin_note",
+       "fixed": false,
+       "id": "delete_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Delete a note in Joplin"
+      },
+      {
+       "action": "delete_logseq_page",
+       "fixed": false,
+       "id": "delete_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Delete a page in Logseq"
+      },
+      {
+       "action": "write_notes_after_outside_text",
+       "fixed": false,
+       "id": "write_notes_after_outside_text",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write to your notes after reading outside text"
+      },
+      {
+       "action": "wiki_update",
+       "fixed": false,
+       "id": "wiki_update",
+       "note": "Always asks: the wiki is written only on your yes (security audit), so it cannot be loosened - a looser line would switch \"Add to wiki\" off.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write pages in the Jarvis Wiki"
+      }
+     ],
+     "title": "Writing your notes"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:timers",
+       "note": "Your own words only; deleting is immediate.",
+       "says": "Does it without asking",
+       "title": "Set a timer, or a reminder or alarm that goes off once"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:repeats",
+       "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
+       "says": "Does it without asking",
+       "title": "Set up a repeating reminder or alarm, or the standby schedule"
+      },
+      {
+       "action": "schedule_repeat",
+       "fixed": false,
+       "id": "schedule_repeat",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Set up something that repeats"
+      }
+     ],
+     "title": "Timers and reminders"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:lights",
+       "lights": true,
+       "note": "Off by default. The switch is below.",
+       "says": "Asks you first, every time",
+       "title": "Switch lights, plugs and fans you name"
+      },
+      {
+       "action": "home_control",
+       "fixed": false,
+       "id": "home_control",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change something in your home"
+      }
+     ],
+     "title": "Your smart home"
+    },
+    {
+     "rows": [
+      {
+       "action": "draft_email",
+       "fixed": false,
+       "id": "draft_email",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write an email draft"
+      },
+      {
+       "action": "send_email",
+       "fixed": false,
+       "id": "send_email",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Refused - it only runs on your yes, so its line must say \"ask\"",
+       "tier": "auto",
+       "title": "Send an email"
+      },
+      {
+       "action": "edit_calendar_event",
+       "fixed": false,
+       "id": "edit_calendar_event",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change an event in your calendar"
+      },
+      {
+       "action": "delete_calendar_event",
+       "fixed": false,
+       "id": "delete_calendar_event",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete an event from your calendar"
+      }
+     ],
+     "title": "Email and calendar"
+    },
+    {
+     "rows": [
+      {
+       "action": "search_the_web",
+       "fixed": false,
+       "id": "search_the_web",
+       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
+       "says": "Asks only when something private could slip in",
+       "tier": "ask",
+       "title": "Search the web"
+      },
+      {
+       "action": "web_research",
+       "fixed": false,
+       "id": "web_research",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Refused - it only runs on your yes, so its line must say \"ask\"",
+       "tier": "auto",
+       "title": "Search GitHub"
+      },
+      {
+       "action": "research_authenticated",
+       "fixed": false,
+       "id": "research_authenticated",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Search GitHub signed in as you"
+      },
+      {
+       "action": "control_browser",
+       "fixed": false,
+       "id": "control_browser",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Work a web page for you in a browser"
+      },
+      {
+       "action": "post_to_external_service",
+       "fixed": false,
+       "id": "post_to_external_service",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Post to an outside service"
+      },
+      {
+       "action": "open_public_tunnel",
+       "fixed": false,
+       "id": "open_public_tunnel",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Open this PC to the internet"
+      }
+     ],
+     "title": "The internet"
+    },
+    {
+     "rows": [
+      {
+       "action": "run_shell_on_host",
+       "fixed": false,
+       "id": "run_shell_on_host",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a command on this PC"
+      },
+      {
+       "action": "control_computer",
+       "fixed": false,
+       "id": "control_computer",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use the mouse and keyboard on this PC"
+      },
+      {
+       "action": "control_phone",
+       "fixed": false,
+       "id": "control_phone",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tap and type on your phone"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_start",
+       "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
+       "says": "Asks you when it is new or has changed",
+       "title": "Start a plug-in program on this PC (MCP)"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_use",
+       "note": "Always asks, whatever your settings file says: it is someone else's program. Only tools that read are offered for now.",
+       "says": "Asks you first, every time",
+       "title": "Use a tool from a plug-in program on this PC (MCP)"
+      },
+      {
+       "action": "delete_file",
+       "fixed": false,
+       "id": "delete_file",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a file"
+      },
+      {
+       "action": "spend_money",
+       "fixed": false,
+       "id": "spend_money",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Spend money"
+      },
+      {
+       "action": "power_manage",
+       "fixed": false,
+       "id": "power_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Change its power mode (Active, Quiet or Standby)"
+      }
+     ],
+     "title": "This PC and your phone"
+    },
+    {
+     "rows": [
+      {
+       "action": "browse_model_catalog",
+       "fixed": false,
+       "id": "browse_model_catalog",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Look up AI models online"
+      },
+      {
+       "action": "download_model",
+       "fixed": false,
+       "id": "download_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Download an AI model"
+      },
+      {
+       "action": "switch_model",
+       "fixed": false,
+       "id": "switch_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Switch to a different AI model"
+      },
+      {
+       "action": "rollback_model",
+       "fixed": false,
+       "id": "rollback_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Go back to the AI model you had before"
+      },
+      {
+       "action": "models_create",
+       "fixed": false,
+       "id": "models_create",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a tuned copy of an AI model"
+      },
+      {
+       "action": "second_card_enable",
+       "fixed": false,
+       "id": "second_card_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start using the second graphics card"
+      },
+      {
+       "action": "second_card_browser_enable",
+       "fixed": false,
+       "id": "second_card_browser_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on browser control, which works real web pages"
+      },
+      {
+       "action": "big_model_enable",
+       "fixed": false,
+       "id": "big_model_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start the big model for background jobs"
+      }
+     ],
+     "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "action": "change_own_config",
+       "fixed": false,
+       "id": "change_own_config",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change one of its settings"
+      },
+      {
+       "action": "stop_asking_before_every_web_search",
+       "fixed": false,
+       "id": "stop_asking_before_every_web_search",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop asking before every web search"
+      },
+      {
+       "action": "learning_enable",
+       "fixed": false,
+       "id": "learning_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on learning"
+      },
+      {
+       "action": "learning_auto_enable",
+       "fixed": false,
+       "id": "learning_auto_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on automatic learning"
+      },
+      {
+       "action": "learning_sensitive_enable",
+       "fixed": false,
+       "id": "learning_sensitive_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Also learn sensitive topics automatically"
+      },
+      {
+       "action": "history_enable",
+       "fixed": false,
+       "id": "history_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep your chat history"
+      },
+      {
+       "action": "memory_manage",
+       "fixed": false,
+       "id": "memory_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change what it remembers"
+      },
+      {
+       "action": "user_profile_manage",
+       "fixed": false,
+       "id": "user_profile_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change your profile"
+      },
+      {
+       "action": "custom_voice",
+       "fixed": false,
+       "id": "custom_voice",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep or use a custom voice"
+      },
+      {
+       "action": "better_voice_enable",
+       "fixed": false,
+       "id": "better_voice_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the better custom voice"
+      },
+      {
+       "action": "modify_own_code",
+       "fixed": false,
+       "id": "modify_own_code",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change its own code"
+      },
+      {
+       "action": "loosen_what_asks_first",
+       "fixed": false,
+       "id": "loosen_what_asks_first",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let one action go ahead without asking you first"
+      }
+     ],
+     "title": "Jarvis's own settings, memory and voice"
+    },
+    {
+     "rows": [
+      {
+       "action": "agent_spawn",
+       "fixed": false,
+       "id": "agent_spawn",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start a helper task"
+      },
+      {
+       "action": "agent_kill",
+       "fixed": false,
+       "id": "agent_kill",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop a helper task"
+      },
+      {
+       "action": "execute_pending_actions",
+       "fixed": false,
+       "id": "execute_pending_actions",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run actions it has lined up"
+      },
+      {
+       "action": "unclassified_tool",
+       "fixed": false,
+       "id": "unclassified_tool",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a tool it has no plain name for"
+      }
+     ],
+     "title": "Other"
+    }
+   ],
+   "last": null,
+   "lights": {
+    "detail": "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis switches it without an approval card. Locks, doors, alarms, covers and garage doors always ask, each with a card of its own, and so does everything after Jarvis has read outside text in the chat. Turning this on shows you an approval card first; turning it off happens at once.",
+    "label": "Lights, plugs and fans without a card",
+    "last": null,
+    "on": false,
+    "waiting": true,
+    "why": ""
+   },
+   "switch_label": "Ask me first",
+   "switchable": [
+    "calendar_read",
+    "email_read",
+    "notes_search",
+    "home_read",
+    "append_obsidian_daily",
+    "append_logseq_journal",
+    "create_joplin_note"
+   ],
+   "title": "What asks first",
+   "waiting": {
+    "action": "calendar_read",
+    "said": "Waiting for your yes on the approval card, and Windows Hello, on your PC.",
+    "title": "Read your calendar"
+   }
+  },
+  "phone_shipped": {
+   "available": true,
+   "can_loosen": false,
+   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
+   "groups": [
+    {
+     "rows": [
+      {
+       "action": "calendar_read",
+       "fixed": false,
+       "id": "calendar_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Read your calendar"
+      },
+      {
+       "action": "email_read",
+       "fixed": false,
+       "id": "email_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Read your email"
+      },
+      {
+       "action": "notes_search",
+       "fixed": false,
+       "id": "notes_search",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Search your notes"
+      },
+      {
+       "action": "home_read",
+       "fixed": false,
+       "id": "home_read",
+       "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Check your smart home"
+      },
+      {
+       "action": "read_files_readonly",
+       "fixed": false,
+       "id": "read_files_readonly",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read files on this PC"
+      },
+      {
+       "action": "read_joplin_note",
+       "fixed": false,
+       "id": "read_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read a note in Joplin"
+      },
+      {
+       "action": "read_logseq_page",
+       "fixed": false,
+       "id": "read_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Read a page in Logseq"
+      }
+     ],
+     "title": "Reading your own things"
+    },
+    {
+     "rows": [
+      {
+       "action": "append_obsidian_daily",
+       "fixed": false,
+       "id": "append_obsidian_daily",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Add to today's Obsidian daily note"
+      },
+      {
+       "action": "append_logseq_journal",
+       "fixed": false,
+       "id": "append_logseq_journal",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
+       "tier": "auto",
+       "title": "Add to today's Logseq journal"
+      },
+      {
+       "action": "create_joplin_note",
+       "fixed": false,
+       "id": "create_joplin_note",
+       "note": "After Jarvis has read outside text in a chat, a note still waits for your yes.",
+       "says": "Does it, then tells you",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "notify"
+       },
+       "tier": "notify",
+       "title": "Add a note in Joplin"
+      },
+      {
+       "action": "create_logseq_page",
+       "fixed": false,
+       "id": "create_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Make a new page in Logseq"
+      },
+      {
+       "action": "edit_joplin_note",
+       "fixed": false,
+       "id": "edit_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a note in Joplin"
+      },
+      {
+       "action": "edit_logseq_page",
+       "fixed": false,
+       "id": "edit_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change a page in Logseq"
+      },
+      {
+       "action": "delete_joplin_note",
+       "fixed": false,
+       "id": "delete_joplin_note",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Delete a note in Joplin"
+      },
+      {
+       "action": "delete_logseq_page",
+       "fixed": false,
+       "id": "delete_logseq_page",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Delete a page in Logseq"
+      },
+      {
+       "action": "write_notes_after_outside_text",
+       "fixed": false,
+       "id": "write_notes_after_outside_text",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write to your notes after reading outside text"
+      },
+      {
+       "action": "wiki_update",
+       "fixed": false,
+       "id": "wiki_update",
+       "note": "Always asks: the wiki is written only on your yes (security audit), so it cannot be loosened - a looser line would switch \"Add to wiki\" off.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write pages in the Jarvis Wiki"
+      }
+     ],
+     "title": "Writing your notes"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:timers",
+       "note": "Your own words only; deleting is immediate.",
+       "says": "Does it without asking",
+       "title": "Set a timer, or a reminder or alarm that goes off once"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:repeats",
+       "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
+       "says": "Does it without asking",
+       "title": "Set up a repeating reminder or alarm, or the standby schedule"
+      },
+      {
+       "action": "schedule_repeat",
+       "fixed": false,
+       "id": "schedule_repeat",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Set up something that repeats"
+      }
+     ],
+     "title": "Timers and reminders"
+    },
+    {
+     "rows": [
+      {
+       "fixed": true,
+       "id": "fixed:lights",
+       "lights": true,
+       "note": "Off by default. The switch is below.",
+       "says": "Asks you first, every time",
+       "title": "Switch lights, plugs and fans you name"
+      },
+      {
+       "action": "home_control",
+       "fixed": false,
+       "id": "home_control",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change something in your home"
+      }
+     ],
+     "title": "Your smart home"
+    },
+    {
+     "rows": [
+      {
+       "action": "draft_email",
+       "fixed": false,
+       "id": "draft_email",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Write an email draft"
+      },
+      {
+       "action": "send_email",
+       "fixed": false,
+       "id": "send_email",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send an email"
+      },
+      {
+       "action": "edit_calendar_event",
+       "fixed": false,
+       "id": "edit_calendar_event",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change an event in your calendar"
+      },
+      {
+       "action": "delete_calendar_event",
+       "fixed": false,
+       "id": "delete_calendar_event",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete an event from your calendar"
+      }
+     ],
+     "title": "Email and calendar"
+    },
+    {
+     "rows": [
+      {
+       "action": "search_the_web",
+       "fixed": false,
+       "id": "search_the_web",
+       "note": "A search straight from your own question runs without a card. It asks first, showing the exact search words, after Jarvis has read an email, a file, a note, a web page or other outside text in the chat, when your message was pasted or shared, when the search words repeat something you told Jarvis, or when it used a sensitive saved fact. \"Ask before every web search\" (web search settings) makes it ask every time.",
+       "says": "Asks only when something private could slip in",
+       "tier": "ask",
+       "title": "Search the web"
+      },
+      {
+       "action": "web_research",
+       "fixed": false,
+       "id": "web_research",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Refused - it only runs on your yes, so its line must say \"ask\"",
+       "tier": "auto",
+       "title": "Search GitHub"
+      },
+      {
+       "action": "research_authenticated",
+       "fixed": false,
+       "id": "research_authenticated",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Search GitHub signed in as you"
+      },
+      {
+       "action": "control_browser",
+       "fixed": false,
+       "id": "control_browser",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Work a web page for you in a browser"
+      },
+      {
+       "action": "post_to_external_service",
+       "fixed": false,
+       "id": "post_to_external_service",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Post to an outside service"
+      },
+      {
+       "action": "open_public_tunnel",
+       "fixed": false,
+       "id": "open_public_tunnel",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Never - your settings file switches it off",
+       "tier": "never",
+       "title": "Open this PC to the internet"
+      }
+     ],
+     "title": "The internet"
+    },
+    {
+     "rows": [
+      {
+       "action": "run_shell_on_host",
+       "fixed": false,
+       "id": "run_shell_on_host",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a command on this PC"
+      },
+      {
+       "action": "control_computer",
+       "fixed": false,
+       "id": "control_computer",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use the mouse and keyboard on this PC"
+      },
+      {
+       "action": "control_phone",
+       "fixed": false,
+       "id": "control_phone",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tap and type on your phone"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_start",
+       "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
+       "says": "Asks you when it is new or has changed",
+       "title": "Start a plug-in program on this PC (MCP)"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:plugin_use",
+       "note": "Always asks, whatever your settings file says: it is someone else's program. Only tools that read are offered for now.",
+       "says": "Asks you first, every time",
+       "title": "Use a tool from a plug-in program on this PC (MCP)"
+      },
+      {
+       "action": "delete_file",
+       "fixed": false,
+       "id": "delete_file",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a file"
+      },
+      {
+       "action": "spend_money",
+       "fixed": false,
+       "id": "spend_money",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Spend money"
+      },
+      {
+       "action": "power_manage",
+       "fixed": false,
+       "id": "power_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Change its power mode (Active, Quiet or Standby)"
+      }
+     ],
+     "title": "This PC and your phone"
+    },
+    {
+     "rows": [
+      {
+       "action": "browse_model_catalog",
+       "fixed": false,
+       "id": "browse_model_catalog",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Look up AI models online"
+      },
+      {
+       "action": "download_model",
+       "fixed": false,
+       "id": "download_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Download an AI model"
+      },
+      {
+       "action": "switch_model",
+       "fixed": false,
+       "id": "switch_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Switch to a different AI model"
+      },
+      {
+       "action": "rollback_model",
+       "fixed": false,
+       "id": "rollback_model",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Does it without asking",
+       "tier": "auto",
+       "title": "Go back to the AI model you had before"
+      },
+      {
+       "action": "models_create",
+       "fixed": false,
+       "id": "models_create",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Make a tuned copy of an AI model"
+      },
+      {
+       "action": "second_card_enable",
+       "fixed": false,
+       "id": "second_card_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start using the second graphics card"
+      },
+      {
+       "action": "second_card_browser_enable",
+       "fixed": false,
+       "id": "second_card_browser_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on browser control, which works real web pages"
+      },
+      {
+       "action": "big_model_enable",
+       "fixed": false,
+       "id": "big_model_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start the big model for background jobs"
+      }
+     ],
+     "title": "AI models and graphics cards"
+    },
+    {
+     "rows": [
+      {
+       "action": "change_own_config",
+       "fixed": false,
+       "id": "change_own_config",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change one of its settings"
+      },
+      {
+       "action": "stop_asking_before_every_web_search",
+       "fixed": false,
+       "id": "stop_asking_before_every_web_search",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop asking before every web search"
+      },
+      {
+       "action": "learning_enable",
+       "fixed": false,
+       "id": "learning_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on learning"
+      },
+      {
+       "action": "learning_auto_enable",
+       "fixed": false,
+       "id": "learning_auto_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on automatic learning"
+      },
+      {
+       "action": "learning_sensitive_enable",
+       "fixed": false,
+       "id": "learning_sensitive_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Also learn sensitive topics automatically"
+      },
+      {
+       "action": "history_enable",
+       "fixed": false,
+       "id": "history_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep your chat history"
+      },
+      {
+       "action": "memory_manage",
+       "fixed": false,
+       "id": "memory_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change what it remembers"
+      },
+      {
+       "action": "user_profile_manage",
+       "fixed": false,
+       "id": "user_profile_manage",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change your profile"
+      },
+      {
+       "action": "custom_voice",
+       "fixed": false,
+       "id": "custom_voice",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep or use a custom voice"
+      },
+      {
+       "action": "better_voice_enable",
+       "fixed": false,
+       "id": "better_voice_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on the better custom voice"
+      },
+      {
+       "action": "modify_own_code",
+       "fixed": false,
+       "id": "modify_own_code",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Change its own code"
+      },
+      {
+       "action": "loosen_what_asks_first",
+       "fixed": false,
+       "id": "loosen_what_asks_first",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let one action go ahead without asking you first"
+      }
+     ],
+     "title": "Jarvis's own settings, memory and voice"
+    },
+    {
+     "rows": [
+      {
+       "action": "agent_spawn",
+       "fixed": false,
+       "id": "agent_spawn",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start a helper task"
+      },
+      {
+       "action": "agent_kill",
+       "fixed": false,
+       "id": "agent_kill",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop a helper task"
+      },
+      {
+       "action": "execute_pending_actions",
+       "fixed": false,
+       "id": "execute_pending_actions",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run actions it has lined up"
+      },
+      {
+       "action": "unclassified_tool",
+       "fixed": false,
+       "id": "unclassified_tool",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a tool it has no plain name for"
+      }
+     ],
+     "title": "Other"
+    }
+   ],
+   "last": null,
+   "lights": {
+    "detail": "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis switches it without an approval card. Locks, doors, alarms, covers and garage doors always ask, each with a card of its own, and so does everything after Jarvis has read outside text in the chat. Turning this on shows you an approval card first; turning it off happens at once.",
+    "label": "Lights, plugs and fans without a card",
+    "last": null,
+    "on": false,
+    "waiting": false,
+    "why": ""
+   },
+   "switch_label": "Ask me first",
+   "switchable": [
+    "calendar_read",
+    "email_read",
+    "notes_search",
+    "home_read",
+    "append_obsidian_daily",
+    "append_logseq_journal",
+    "create_joplin_note"
+   ],
+   "title": "What asks first",
+   "waiting": null
+  }
+ },
+ "loose": {
+  "append_logseq_journal": "auto",
+  "append_obsidian_daily": "auto",
+  "calendar_read": "auto",
+  "create_joplin_note": "notify",
+  "email_read": "auto",
+  "home_read": "auto",
+  "notes_search": "auto"
+ },
+ "switchable": [
+  "calendar_read",
+  "email_read",
+  "notes_search",
+  "home_read",
+  "append_obsidian_daily",
+  "append_logseq_journal",
+  "create_joplin_note"
+ ],
+ "words": {
+  "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
+  "lights_detail": "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis switches it without an approval card. Locks, doors, alarms, covers and garage doors always ask, each with a card of its own, and so does everything after Jarvis has read outside text in the chat. Turning this on shows you an approval card first; turning it off happens at once.",
+  "lights_label": "Lights, plugs and fans without a card",
+  "lights_waiting": "Waiting for your yes on the approval card, on your PC or phone.",
+  "missing": "Your PC's Jarvis cannot show what asks first yet - run apply-patches.ps1 on the PC.",
+  "not_on_list": "Only reading your calendar, email, notes and home status, and adding to your notes, can be changed from an app. Everything else changes only in your settings file (jarvis-framework.toml), and some things always ask.",
+  "pc_only": "Letting Jarvis do this without asking can only be done on the PC (Settings, What asks first), with an approval card and Windows Hello.",
+  "phone_loosen": "To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
+  "says": {
+   "ask": "Asks you first, every time",
+   "auto": "Does it without asking",
+   "never": "Never - your settings file switches it off",
+   "notify": "Does it, then tells you"
+  },
+  "says_search": "Asks only when something private could slip in",
+  "switch_label": "Ask me first",
+  "title": "What asks first",
+  "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
+ }
+}

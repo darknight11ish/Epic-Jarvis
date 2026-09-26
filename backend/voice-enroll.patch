@@ -1,0 +1,45 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1605,6 +1605,42 @@
+                     "reason": _SAY_FALLBACK})
+             return self._send(200, wav, ctype="audio/wav")
+ 
++        if route == "/api/voice/enroll":
++            # "Train my voice" (voice-enroll.patch). The phone sends the
++            # owner's sample clips as {"clips": [base64 WAV, ...]}. This
++            # STAGES them and raises ONE approval card - it enrols nothing.
++            # Only approving the card replaces the voice print, on
++            # jarvis_voice_enroll's own thread, and the clips are dropped
++            # whatever the answer. Never logged, never written to disk.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                raw = _read_body(self)
++            except Exception as exc:
++                return self._send(400, {"error": "could not read the request "
++                                                 f"({type(exc).__name__})"})
++            try:
++                import jarvis_voice_enroll
++            except ImportError:
++                # 503 like the other voice routes' missing-module answer, but
++                # not through _no_speech: that helper's four call sites are
++                # counted by test_voice_503.py, and this is not one of the
++                # four speech routes it describes.
++                return self._send(503, {
++                    "error": "voice training is not installed on this PC",
++                    "available": False,
++                    "reason": "copy backend\\jarvis_voice_enroll.py into the "
++                              "backend folder (apply-patches.ps1 does this)"})
++            try:
++                code, out = jarvis_voice_enroll.stage(raw)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote the
++                # request, and the request is the owner's voice.
++                return self._send(500, {"error": type(exc).__name__})
++            return self._send(code, out)
++
+         if route in ("/api/models/install", "/api/models/switch",
+                      "/api/models/rollback", "/api/config", "/api/skills/decide",
+                      "/api/appearance",

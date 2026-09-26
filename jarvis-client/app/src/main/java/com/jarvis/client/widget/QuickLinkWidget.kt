@@ -37,12 +37,14 @@ import com.jarvis.client.MainActivity
  * Link status plus a one-tap Mic, on the home screen.
  *
  * Ported from the retired `jarvis-android/`'s own `QuickLauncherWidget`, cut
- * down to what this app can actually back. The original also carried two
- * capture buttons that filed straight to Logseq and Joplin - that app's own
- * backend implemented those; this app's does not, `net/ApiModels.kt` has no
- * note-capture endpoint at all, and a button wired to nothing would be worse
- * than no button. Only the two actions every desktop already supports made
- * the cut: opening the app, and starting the mic.
+ * down to what this app can actually back. The original carried two capture
+ * buttons that filed straight to Logseq and Joplin, which were left out while
+ * this app's desktop had no note route. It has one now
+ * (`backend/note-capture.patch`, [com.jarvis.client.net.NoteCapture]), so the
+ * row has a Note button - but it opens the app with the quick-note field
+ * open rather than filing from here: a home-screen widget cannot hold a text
+ * field, and the answer ("Filed", "Waiting for your approval", or why not)
+ * needs a screen to be read on.
  *
  * Mic does not record from here - a Glance worker has no microphone access
  * of its own, and would not survive the seconds a capture takes even if it
@@ -86,7 +88,7 @@ class QuickLinkWidget : GlanceAppWidget() {
                 Spacer(GlanceModifier.width(8.dp))
                 Text(
                     text = when (link) {
-                        LinkState.CONNECTED -> "Linked"
+                        LinkState.CONNECTED -> "Connected"
                         LinkState.RECONNECTING -> "Reconnecting"
                         LinkState.OFFLINE -> "Offline"
                     },
@@ -111,6 +113,8 @@ class QuickLinkWidget : GlanceAppWidget() {
                 // tapping it is FOR - one tap closer to the hold-to-talk
                 // button than the rest of the row's own bare open is - without
                 // implying capture starts here.
+                PillButton(label = "Note", tint = QuickLinkPalette.TextMuted, onClick = quickNote(context))
+                Spacer(GlanceModifier.width(6.dp))
                 PillButton(label = "Talk", tint = QuickLinkPalette.Accent, onClick = startVoice(context))
             }
         }
@@ -148,6 +152,13 @@ class QuickLinkWidget : GlanceAppWidget() {
             )
         }
     }
+
+    private fun quickNote(context: Context): Action =
+        actionStartActivityIntent(
+            Intent(context, MainActivity::class.java)
+                .setAction(MainActivity.ACTION_QUICK_NOTE)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        )
 
     private fun startVoice(context: Context): Action =
         actionStartActivityIntent(

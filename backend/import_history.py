@@ -11,9 +11,14 @@ the exact same function a live conversation triggers once it goes quiet -
 once per historical conversation, exactly as if that history had happened
 live. Everything propose() already guarantees keeps guaranteeing itself here,
 for free, because nothing about propose() changes: the model call is
-whatever `_local_llm` is (Ollama, on this machine, never a cloud lane), a
-proposal still needs a human to accept it before it becomes a fact, and the
-review queue's cap still applies.
+whatever `_local_llm` is (Ollama at OLLAMA_URL), a proposal still needs a
+human to accept it before it becomes a fact, and the review queue's cap
+still applies.
+
+"On this machine" is CHECKED, not assumed. OLLAMA_URL is an environment
+variable, and one pointing at another computer would have sent your whole
+history there. So `run()` refuses to start unless it is this machine, and
+memory-intake.patch makes propose() itself refuse as well, for every caller.
 
 THAT LAST PART IS THE POINT, NOT A LIMITATION TO WORK AROUND. Two full
 conversation histories could easily be thousands of conversations. There is
@@ -52,7 +57,8 @@ conversation twice, which would be slow for no benefit; it is not a second
 copy of the decision the review queue already tracks.
 
 WHAT ACTUALLY LEAVES THIS MACHINE: nothing. Both export files are read from
-disk. Nothing here opens a socket.
+disk. The only connection made is propose()'s own, to Ollama on this machine
+(see above: refused otherwise).
 
 TWO FORMATS, TWO CONFIDENCE LEVELS
 The Claude parser is checked against the export shape this project's own
@@ -215,6 +221,41 @@ def _claude_turns(convo: dict) -> list[dict]:
     return turns
 
 
+#: conversation id -> when it happened (epoch seconds), for every conversation
+#: the parsers below have yielded whose export said. A side table rather than
+#: a third item in the tuple, so everything that already unpacks
+#: `(conv_id, turns)` keeps working. run() reads it to date the conversation:
+#: "yesterday" in a 2023 chat means a day in 2023, not yesterday
+#: (jarvis_intake.conversation_at, memory-intake.patch).
+WHEN: dict = {}
+
+
+def _parse_time(raw) -> Optional[float]:
+    """An export timestamp - ISO 8601 text, or epoch seconds - or None."""
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        v = float(raw)
+        return v / 1000.0 if v > 1e12 else v
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    from datetime import datetime
+    s = raw.strip().replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(s).timestamp()
+    except ValueError:
+        pass
+    # Python before 3.11 refuses fractional seconds that are not 3 or 6
+    # digits; the exports are not consistent about it.
+    try:
+        head, _, tail = s.partition(".")
+        zone = ""
+        for mark in ("+", "-"):
+            if mark in tail:
+                zone = tail[tail.index(mark):]
+        return datetime.fromisoformat(head + zone).timestamp()
+    except ValueError:
+        return None
+
+
 def claude_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
     """Yields (id, turns) for every conversation this export holds."""
     for _label, doc in _walk_json_documents(path):
@@ -225,7 +266,11 @@ def claude_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
             turns = _claude_turns(entry)
             if len(turns) >= 2:  # a monologue with no reply teaches nothing
                 raw_id = entry.get("uuid") or entry.get("id")
-                yield _conv_id("claude", raw_id, turns), turns
+                conv_id = _conv_id("claude", raw_id, turns)
+                when = _parse_time(entry.get("created_at") or entry.get("updated_at"))
+                if when is not None:
+                    WHEN[conv_id] = when
+                yield conv_id, turns
 
 
 # --------------------------------------------------------------------------
@@ -289,7 +334,11 @@ def gemini_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
                 # invented reply.
                 pass
             raw_id = rec.get("titleUrl") or f"{rec.get('time','')}:{title}"
-            yield _conv_id("gemini", raw_id, turns), turns
+            conv_id = _conv_id("gemini", raw_id, turns)
+            when = _parse_time(rec.get("time"))
+            if when is not None:
+                WHEN[conv_id] = when
+            yield conv_id, turns
 
 
 # --------------------------------------------------------------------------
@@ -333,10 +382,53 @@ def _walk_json_documents(path: Path) -> Iterator[tuple[str, object]]:
 #   Feeding the review queue
 # --------------------------------------------------------------------------
 
+def _dated(when):
+    """jarvis_intake.conversation_at(when), or a do-nothing block without it."""
+    try:
+        import jarvis_intake
+        return jarvis_intake.conversation_at(when)
+    except Exception:
+        import contextlib
+        return contextlib.nullcontext()
+
+
+def local_model_ok(X) -> bool:
+    """Is jarvis_extract's model on this machine?
+
+    jarvis_extract.local_model_ok() when memory-intake.patch is applied (the
+    same check propose() itself now makes), and otherwise the same test done
+    here on X.OLLAMA - so this script refuses even on a backend that does
+    not have that patch yet. Anything unparseable or missing is a no.
+    """
+    check = getattr(X, "local_model_ok", None)
+    if callable(check):
+        try:
+            return bool(check())
+        except Exception:
+            return False
+    try:
+        import urllib.parse
+        host = (urllib.parse.urlparse(str(getattr(X, "OLLAMA", "") or "")).hostname
+                or "").lower()
+    except Exception:
+        return False
+    return host in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
+
+
 def run(sources: list[tuple[str, Path]]) -> int:
     """sources: [("claude", path), ("gemini", path), ...]. Returns an exit
     code, non-zero only when nothing at all could be read."""
     import jarvis_extract as X  # the real module, from BACKEND
+
+    # Before anything is read or marked done: a refusal inside propose()
+    # would return [] for every conversation, and each one would then be
+    # recorded as "already offered" and skipped for ever after.
+    if not local_model_ok(X):
+        print(f"  Refusing to start: OLLAMA_URL is {getattr(X, 'OLLAMA', None)!r}, "
+              f"which is not this computer. Your history would have been sent "
+              f"there. Point OLLAMA_URL at this machine (for example "
+              f"http://127.0.0.1:11434), or remove it, and run this again.")
+        return 2
 
     progress = _load_progress()
     done = set(progress.get("done", []))
@@ -357,7 +449,11 @@ def run(sources: list[tuple[str, Path]]) -> int:
             if conv_id in done:
                 continue
             seen_this_run += 1
-            proposed = X.propose(turns, source=f"import:{kind}")
+            # Dated to when the conversation happened, if the export says and
+            # jarvis_intake.py is installed. Nothing else about the call
+            # changes: same propose(), same model, same review queue.
+            with _dated(WHEN.get(conv_id)):
+                proposed = X.propose(turns, source=f"import:{kind}")
             proposed_this_run += len(proposed)
             done.add(conv_id)
 

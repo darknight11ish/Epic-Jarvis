@@ -1,10 +1,10 @@
 [package]
 name = "jarvis-desktop"
-version = "0.1.0"
-description = "Jarvis Desktop — native Windows 11 spotlight client for the Jarvis stack"
-authors = ["Jarvis Labs"]
+version = "0.2.0"
+description = "Jarvis Desktop - the Windows app for Jarvis, a private assistant that runs on your own PC"
+authors = ["darknight11ish"]
 license = "MIT"
-repository = "https://github.com/darknight111/Epic-Jarvis"
+repository = "https://github.com/darknight11ish/Epic-Jarvis"
 edition = "2021"
 rust-version = "1.89"
 build = "build.rs"
@@ -75,6 +75,10 @@ windows-sys = { version = "0.59", features = [
   # CreateJobObjectW takes a SECURITY_ATTRIBUTES pointer, so the job-object
   # bindings are gated on this even though the pointer we pass is null.
   "Win32_Security",
+  # CredReadW / CredWriteW / CredDeleteW: the pairing token lives in Windows
+  # Credential Manager, not the settings file (token_store.rs). A feature of
+  # a crate already here, not a new dependency.
+  "Win32_Security_Credentials",
   "Win32_System_JobObjects",
   "Win32_System_Threading",
   "Win32_System_Diagnostics_ToolHelp",
@@ -96,7 +100,34 @@ windows = { version = "0.61", features = [
   "UI_Notifications",
   "Data_Xml_Dom",
   "Win32_UI_Shell",
+  # The Windows "Save as" dialog for the Brain's memory export (brain.rs,
+  # `save_dialog`): COM to create it, the filter type it takes. Features of
+  # a crate already here, so nothing new is downloaded or pinned.
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_UI_Shell_Common",
+  # Windows' own echo cancelling for "hey Jarvis" listening (aec.rs): the
+  # WASAPI capture client in the "communications" category, and the
+  # effects list that says whether acoustic echo cancellation is on.
+  # Features of a crate already here - nothing new is downloaded.
+  "Win32_Media_Audio",
+  "Win32_Media_KernelStreaming",
+  "Win32_Media_Multimedia",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
+  # Windows Hello for the app lock, approvals and private answers (lock.rs):
+  # UserConsentVerifier, and the desktop-app form of its prompt that is shown
+  # over a real window (IUserConsentVerifierInterop). Features of a crate
+  # already here - nothing new is downloaded.
+  "Security_Credentials_UI",
+  "Win32_System_WinRT",
 ] }
+# The type that Windows Hello's answer arrives in (IAsyncOperation). Not a new
+# download either: the `windows` crate above already depends on exactly this
+# version (0.2.1, in Cargo.lock), it just does not re-export it, and lock.rs
+# has to name the type to ask for it. No default features, so nothing about
+# how the existing copy is built changes.
+windows-future = { version = "0.2", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

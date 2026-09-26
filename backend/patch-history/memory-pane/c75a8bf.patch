@@ -1,0 +1,177 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -776,6 +776,22 @@
+         return ""
+ 
+ 
++def _qs_int(handler, key: str, default: int) -> int:
++    """One integer out of the query string, clamped and never raising.
++
++    A caller that sends limit=all, limit=-1 or limit=99999999 gets the default
++    or the ceiling rather than a traceback, because this feeds a LIMIT clause
++    and the window asking is not the only thing that can reach the port.
++    """
++    try:
++        from urllib.parse import parse_qs
++        raw = (parse_qs(handler.path.split("?", 1)[1]).get(key) or [""])[0] \
++            if "?" in handler.path else ""
++        return max(1, min(5000, int(raw))) if raw else default
++    except Exception:
++        return default
++
++
+ def _auth_headers(extra: dict | None = None) -> dict:
+     headers = dict(extra or {})
+     if JARVIS_API_KEY:
+@@ -1656,7 +1672,8 @@
+             except Exception as exc:
+                 return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
+ 
+-        if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative", "/api/compute"):
++        if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
++                    "/api/compute", "/api/memory/facts", "/api/memory/export"):
+             if not _origin_ok(self):
+                 return self._send(403, {"error": "cross-origin request refused"})
+             if not _token_ok(self):
+@@ -1667,6 +1684,51 @@
+                 if path == "/api/memory/pending":
+                     return self._send(200, {"available": True, "pending": jarvis_extract.pending(),
+                                             "setup": jarvis_extract.setup_status()})
++                if path == "/api/memory/facts":
++                    # Everything the store holds, retired rows included, newest
++                    # first. Retired ones are NOT hidden: the whole point of a
++                    # bi-temporal store is that "this used to be true" is a
++                    # thing you can see, and a pane that showed only current
++                    # facts would make a superseded fact look deleted when it
++                    # is not.
++                    st = jarvis_memory.store()
++                    c = st._connect()
++                    try:
++                        rows = [dict(r) for r in c.execute(
++                            "SELECT * FROM facts ORDER BY valid_from DESC LIMIT ?",
++                            (int(_qs_int(self, "limit", 500)),))]
++                    finally:
++                        c.close()
++                    now = time.time()
++                    for r in rows:
++                        r["current"] = r.get("valid_to") is None or r["valid_to"] > now
++                    return self._send(200, {
++                        "available": True, "facts": rows,
++                        "learning": learning_enabled(),
++                        "pending": len(jarvis_extract.pending())})
++
++                if path == "/api/memory/export":
++                    # Local only. This writes nothing and sends nothing
++                    # anywhere; it hands the file to the window that asked,
++                    # which is already inside the token boundary. It exists so
++                    # the owner can keep a copy that does not depend on this
++                    # program continuing to work.
++                    st = jarvis_memory.store()
++                    c = st._connect()
++                    try:
++                        facts = [dict(r) for r in c.execute(
++                            "SELECT * FROM facts ORDER BY id")]
++                    finally:
++                        c.close()
++                    return self._send(200, {
++                        "available": True,
++                        "exported": time.time(),
++                        "note": "every fact this machine holds, current and "
++                                "retired. Nothing was sent anywhere to produce "
++                                "it.",
++                        "facts": facts,
++                        "pending": jarvis_extract.pending()})
++
+                 if path == "/api/memory/status":
+                     return self._send(200, {"available": True, **jarvis_memory.store().status(),
+                                             "sleep_time": {"enabled": jarvis_sleep.enabled(),
+@@ -1853,6 +1915,89 @@
+                 return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
+             return self._send(code, out)
+ 
++        if route in ("/api/memory/forget", "/api/memory/edit",
++                     "/api/memory/learning"):
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            if not MEMORY:
++                return self._send(503, {"error": "memory layer not importable"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            if not isinstance(body, dict):
++                return self._send(400, {"error": "need an object"})
++
++            if route == "/api/memory/learning":
++                if not isinstance(body.get("enabled"), bool):
++                    return self._send(400, {"error": 'need {"enabled": true|false}'})
++                return self._send(200, set_learning(body["enabled"]))
++
++            # One integer id, like /api/memory/decide. There is deliberately no
++            # list form: forgetting is irreversible and editing supersedes, so
++            # both are one decision about one fact, every time.
++            if not isinstance(body.get("id"), int):
++                return self._send(400, {"error": "need an integer id"})
++            st = jarvis_memory.store()
++            fact = st.get(body["id"])
++            if fact is None:
++                return self._send(404, {"error": "no fact with that id"})
++
++            if route == "/api/memory/forget":
++                # retire(), which until now had no caller anywhere in the tree.
++                # It does not delete: the row stays and stops being current, so
++                # the history of what you once believed survives. Nothing here
++                # can remove a row, and that is on purpose.
++                #
++                # `valid_to`, optional: when the fact you are forgetting
++                # actually stopped being true, if that was before now. Absent,
++                # retire() defaults to now exactly as it always has.
++                valid_to = body.get("valid_to")
++                if valid_to is not None and not isinstance(valid_to, (int, float)):
++                    return self._send(400, {"error": "valid_to must be a unix timestamp"})
++                try:
++                    ok = st.retire(body["id"], valid_to=valid_to)
++                except Exception as exc:
++                    return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
++                return self._send(200 if ok else 409, {
++                    "ok": bool(ok), "id": body["id"],
++                    "was": fact.get("text"),
++                    "note": "retired, not deleted - it stops being recalled and "
++                            "stays in the history. There is no undo for this.",
++                })
++
++            # /api/memory/edit
++            text = " ".join(str(body.get("text") or "").split())
++            if len(text) < 3:
++                return self._send(400, {"error": "need the new wording"})
++            # Same optional field as forget, same meaning: when the fact being
++            # replaced stopped being true, if that was before now rather than
++            # at the moment of this correction.
++            valid_to = body.get("valid_to")
++            if valid_to is not None and not isinstance(valid_to, (int, float)):
++                return self._send(400, {"error": "valid_to must be a unix timestamp"})
++            if text == str(fact.get("text") or "") and valid_to is None:
++                return self._send(200, {"ok": True, "unchanged": True, "id": body["id"]})
++            try:
++                # A backdated correction retires the old fact with the real
++                # date FIRST - the workflow add()'s own supersede logic
++                # expects (jarvis_memory.py: "callers that know the real date
++                # call retire() with it before adding"). Without a date,
++                # add_fact's own supersede path retires it at "now" exactly
++                # as before.
++                if valid_to is not None:
++                    st.retire(body["id"], valid_to=valid_to)
++                # Supersede rather than overwrite. Editing a fact in place would
++                # throw away when the old wording was true, which is the one
++                # thing this store is built to keep.
++                new_id = st.add_fact(text, source="edited", supersedes=body["id"])
++            except Exception as exc:
++                return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
++            return self._send(200, {"ok": True, "id": new_id, "replaced": body["id"],
++                                    "was": fact.get("text"), "now": text})
++
+         if route == "/api/memory/decide":
+             if not _origin_ok(self):
+                 return self._send(403, {"error": "cross-origin request refused"})

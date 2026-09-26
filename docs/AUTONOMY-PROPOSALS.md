@@ -238,6 +238,16 @@ Until those exist, the desktop widget's Pause button still sends a
 request that goes nowhere - the honest state this section already
 described, one layer closer to done rather than fully closed.
 
+**Update, 2026-09-23: 3d and the note half of 3b are served.**
+`backend/task-control.patch` adds the routes both clients call
+(`/api/task/pause|resume|stop|note`, `/api/pending/<id>/amend`) and reports
+`activity: "paused"` from a real pause. Two deliberate differences from the
+text above: Resume raises one approval card listing the remaining steps
+(it never just carries on), and a note on a card does **not** make Jarvis
+re-plan the card's options - it is kept with the card and handed to the
+model with the owner's answer, so Deny is how to ask for a different plan.
+3a (options) and 3c are unchanged. See `backend/README.md`'s section on it.
+
 **What needs the Android session:** the same UI additions, on their branch.
 This document is the thing to hand them, the same way
 `docs/ANDROID-FEATURE-AUDIT.md` already hands over the backend audit -

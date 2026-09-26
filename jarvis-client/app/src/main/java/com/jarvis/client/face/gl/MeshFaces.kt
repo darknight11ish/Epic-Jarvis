@@ -28,4 +28,14 @@ object MeshFaces {
         "membrane" -> MembraneRenderer()
         else -> null
     }
+
+    /**
+     * Whether [rendererFor] would return a renderer for [id], without building
+     * one. A renderer is not free to construct - Tokamak's allocates its
+     * direct vertex buffers up front - so something that only needs to know
+     * (FaceView's still thumbnail) asks this instead. Must list exactly the
+     * ids [rendererFor] does; a face missing here would have its `draw`
+     * called, which for a mesh face throws.
+     */
+    fun isMesh(id: String): Boolean = id == "tokamak" || id == "membrane"
 }

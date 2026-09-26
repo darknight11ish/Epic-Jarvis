@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-summon-push-to-talk"
+description = "Enables the summon_push_to_talk command without any pre-configured scope."
+commands.allow = ["summon_push_to_talk"]
+
+[[permission]]
+identifier = "deny-summon-push-to-talk"
+description = "Denies the summon_push_to_talk command without any pre-configured scope."
+commands.deny = ["summon_push_to_talk"]

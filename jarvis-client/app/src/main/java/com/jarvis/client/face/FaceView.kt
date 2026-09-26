@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import com.jarvis.client.FaceState
 import com.jarvis.client.face.gl.MeshFaces
@@ -45,6 +46,7 @@ import kotlin.math.max
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntOffset
@@ -76,6 +78,44 @@ fun FaceView(
     micLevel: () -> Float? = { null },
     /** Jarvis's own voice, 0..1, per audio frame. Null when nothing is playing. */
     speechLevel: () -> Float? = { null },
+    /**
+     * The ground this face draws on — [Spec.BACKGROUND] unless a caller reads
+     * [com.jarvis.client.ui.theme.Chrome.well] and passes it, which is the
+     * theme's own answer to what the reactor should sit in. Both paths follow
+     * it: the `Canvas` faces paint it, and [GLFaceSurface]'s two mesh faces
+     * clear their GPU surface to it (handed over on the GL thread, alongside
+     * each frame). They used to clear to [Spec.BACKGROUND] whatever the theme,
+     * so Tokamak and Membrane sat in a different black from the well around
+     * them.
+     */
+    background: Color = Spec.BACKGROUND,
+    /**
+     * How much of the glow to draw, as a share of the normal amount: 1 is the
+     * glow as designed, 0.25 a quarter of it. The caller folds in the theme's
+     * own `Chrome.postScale` and the owner's Glow setting and passes the
+     * product.
+     *
+     * Clamped to 0..1 here, whatever arrives, so this can only ever take
+     * light AWAY. The flash limits in [Spec] are written against the glow at
+     * its designed strength; a setting that could raise it would be a way
+     * round them, and nothing in this app is allowed one. Scales the additive
+     * glow sprite on the canvas faces and Tokamak's radial wash; Membrane has
+     * no glow of its own to scale.
+     */
+    glow: Float = 1f,
+    /**
+     * Calm motion: the face moves at [CALM_MOTION_RATE] of its normal speed,
+     * and drops the three positional jolts (the error shake, the tap flinch
+     * and the speech push). Never faster than normal, whatever else is set.
+     *
+     * What it deliberately does NOT touch: the colour patterns and the two
+     * flash governors that police them, which still run on real time exactly
+     * as before, and state changes, which still animate - a face that stops
+     * moving when Jarvis changes state has stopped reporting state. The caller
+     * decides when this is on (the owner's Motion setting, or the phone's own
+     * "remove animations" when that setting says to follow the phone).
+     */
+    calmMotion: Boolean = false,
 ) {
     val host = remember { FaceHost() }
     var frame by remember { mutableStateOf(host.snapshot()) }
@@ -106,6 +146,16 @@ fun FaceView(
     //    visible thing this app does was inert, and no test could see it.
     val liveState by rememberUpdatedState(state)
 
+    // Same shape again: the loop below outlives any one composition, so a
+    // Motion setting changed while the face is on screen has to reach it
+    // through here rather than being captured once when the loop started.
+    val calm by rememberUpdatedState(calmMotion)
+
+    // Clamped once, here, so no draw below can be handed more than 1. NaN is
+    // treated as "the designed amount" rather than passed on, because
+    // coerceIn lets NaN straight through and a NaN alpha is undefined.
+    val glowK = if (glow.isNaN()) 1f else glow.coerceIn(0f, 1f)
+
     // One glow sprite, painted once and reused.
     //
     // It used to be a Brush.radialGradient built inside the draw: a new
@@ -115,7 +165,7 @@ fun FaceView(
     // covers essentially the whole canvas, roughly thirty times the fill of the
     // entire particle field, so it was the single most expensive thing on
     // screen and it was being rebuilt sixty times a second.
-    val glow = rememberGlowSprite()
+    val glowSprite = rememberGlowSprite()
 
     // A tap wakes the sleeping branch of the loop below. In BANKED the loop
     // sleeps half a second between frames, so a tap could sit unanswered for
@@ -123,7 +173,16 @@ fun FaceView(
     // Conflated: a burst of touches is one wake, not a queue of them.
     val wake = remember { Channel<Unit>(Channel.CONFLATED) }
 
+    // How long the last draw took, for the Auto adjust governor. Written by
+    // the Canvas below (main thread) or by the mesh faces' GL thread, read by
+    // the frame loop - hence the @Volatile fields inside.
+    val drawCost = remember { DrawCost() }
+
     LaunchedEffect(state) { host.onStateChange(state) }
+
+    // A new face's first frames include one-off work (a shader compiling, a
+    // point cloud being built), which is not what it costs to keep drawing.
+    LaunchedEffect(face.id) { FaceQuality.onFaceChanged() }
 
     // The frame loop is suspended while the app is not at least STARTED.
     //
@@ -137,9 +196,64 @@ fun FaceView(
     // at ON_START; `last` is re-declared inside, so the first frame back is
     // treated as a fresh start rather than one enormous delta.
     val frameLoopOwner = LocalLifecycleOwner.current
+
+    // The panel's refresh rate, as the platform reports it, for the frame
+    // budget (see FaceQuality). Asked every couple of seconds rather than
+    // listened for: the answer changes when DisplayRate asks for a faster
+    // mode, or when the phone drops the rate for battery or heat, and one
+    // cached read every two seconds is nothing next to a frame. Never per
+    // frame, and stopped with the screen off like the loop below.
+    val hostView = LocalView.current
+    LaunchedEffect(hostView, frameLoopOwner) {
+        frameLoopOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                runCatching { hostView.display?.refreshRate }.getOrNull()
+                    ?.let { FaceQuality.setPanelHz(it) }
+                delay(PANEL_POLL_MS)
+            }
+        }
+    }
+
     LaunchedEffect(face, bindings, frameLoopOwner) {
         frameLoopOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             var last = 0L
+            // Every vsync, drawn or skipped: for the divisor count and for the
+            // fastest vsync gap seen lately (see FramePacing.vsyncPeriodMs).
+            var vsyncs = 0L
+            var lastVsync = 0L
+            var windowMin = Float.MAX_VALUE
+            var prevWindowMin = Float.MAX_VALUE
+            var windowCount = 0
+            // Which branch drew the last frame. A switch between them makes one
+            // gap that belongs to neither, and it is not reported.
+            var onVsync = false
+
+            // Before the very first frame: is this a software renderer (an
+            // emulator)? Normally answered long before now - GpuProbe starts
+            // with the process - but if not, wait a moment rather than draw
+            // one detailed frame too many on a device that may not survive
+            // it. Returns at once after the first time.
+            com.jarvis.client.platform.GpuProbe.await(GPU_PROBE_WAIT_MS)
+                ?.let { FaceQuality.onGpuProbed(it) }
+
+            // One drawn frame, reported to the Auto adjust governor. A few
+            // float operations; it never measures anything itself.
+            fun report(nowNs: Long, intervalNs: Long, expectedMs: Float, b: ResolvedBudget) {
+                if (!b.governed) return
+                val periodMs = FramePacing.vsyncPeriodMs(b.panelHz, min(windowMin, prevWindowMin))
+                val budgetMs = periodMs * b.stride
+                // A mesh face draws on its own GL thread, so its lateness shows
+                // in that thread's gaps, not in this loop's.
+                val intervalMs = max(intervalNs / 1_000_000f, drawCost.glGapNanos / 1_000_000f)
+                val costMs = FramePacing.frameCostMs(
+                    drawMs = drawCost.nanos / 1_000_000f,
+                    intervalMs = intervalMs,
+                    expectedIntervalMs = if (expectedMs > 0f) expectedMs else budgetMs,
+                    budgetMs = budgetMs,
+                )
+                FaceQuality.onFrame(nowNs / 1_000_000L, costMs, budgetMs)
+            }
+
             while (true) {
                 val fps = Spec.fpsFor(liveState)
                 if (fps in 1..30) {
@@ -164,27 +278,60 @@ fun FaceView(
                     // rather than at the end of the step.
                     withTimeoutOrNull(stepMs) { wake.receive() }
                     val now = System.nanoTime()
+                    // The first frame, or the first after the vsync branch: its
+                    // gap is not this branch's, so it is not reported.
+                    val fresh = last == 0L || onVsync
                     if (last == 0L) last = now
-                    val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
+                    val interval = now - last
+                    val dt = (interval / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                     last = now
-                    if (host.advance(dt, liveState, mic(), speech(), bindings, face)) {
+                    onVsync = false
+                    val b = FaceQuality.current
+                    if (host.advance(dt, liveState, mic(), speech(), bindings, face, calm || b.calm, b.speed)) {
                         frame = host.snapshot()
+                        if (!fresh) report(now, interval, stepMs.toFloat(), b)
                     }
                 } else {
                     withFrameNanos { now ->
+                        // The fastest gap between vsyncs seen lately, over two
+                        // windows of 120 so an old reading ages out. See
+                        // FramePacing.vsyncPeriodMs for why it is needed.
+                        if (lastVsync != 0L) {
+                            val gapMs = (now - lastVsync) / 1_000_000f
+                            if (gapMs > 0.5f && gapMs < windowMin) windowMin = gapMs
+                            if (++windowCount >= 120) {
+                                prevWindowMin = windowMin
+                                windowMin = Float.MAX_VALUE
+                                windowCount = 0
+                            }
+                        }
+                        lastVsync = now
+                        vsyncs++
+                        val b = FaceQuality.current
+                        // Pace to a whole divisor of the refresh rate (the
+                        // kit's divisor rule): with a stride of 2 on a 120 Hz
+                        // panel, every other vsync is skipped here and costs
+                        // nothing. `last` is left alone, so the next drawn
+                        // frame's dt covers the skipped time - frame skipping,
+                        // not slow motion.
+                        if (b.stride > 1 && last != 0L && vsyncs % b.stride != 0L) return@withFrameNanos
+                        val fresh = last == 0L || !onVsync
                         if (last == 0L) last = now
                         // Measured on the surface that actually matters, rather
                         // than assumed: the panel drops rate on its own for battery
                         // saver, brightness and heat, and a face driven by an
                         // assumed delta runs at the wrong speed the moment it does.
                         com.jarvis.client.platform.DisplayRate.sample(now - last)
-                        val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
+                        val interval = now - last
+                        val dt = (interval / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                         last = now
+                        onVsync = true
                         // Resting states draw at 30 rather than the display rate.
                         // The accumulated dt is handed to the draw, so motion covers
                         // the same distance — frame skipping, not slow motion.
-                        if (host.advance(dt, liveState, mic(), speech(), bindings, face)) {
+                        if (host.advance(dt, liveState, mic(), speech(), bindings, face, calm || b.calm, b.speed)) {
                             frame = host.snapshot()
+                            if (!fresh) report(now, interval, 0f, b)
                         }
                     }
                 }
@@ -247,13 +394,200 @@ fun FaceView(
             // not an alternative: GLSurfaceView throws if it is called twice on
             // one view, so the view itself has to be new, and `key` is what
             // makes the composition treat it as new.
+            //
+            // `{ frame }`, a lambda, not `frame`: passing the value here read
+            // it during COMPOSITION, so every frame the loop wrote re-ran this
+            // whole function - the semantics block, the spoken-state string,
+            // GLFaceSurface and AndroidView's update - up to the panel rate.
+            // Exactly what FaceHost's own doc warns against. The canvas branch
+            // below never had the problem, because it reads `frame` only inside
+            // its draw lambda; the lambda gives the mesh branch the same shape,
+            // read only where it is used (see GLFaceSurface).
             key(face.id) {
-                GLFaceSurface(mesh, frame, face, notches)
+                GLFaceSurface(mesh, { frame }, face, notches, background, glowK, drawCost)
             }
         } else {
             Canvas(Modifier.matchParentSize()) {
-                drawFace(frame, face, notches, glow)
+                // Timed for the Auto adjust governor: two clock reads a frame.
+                val t0 = System.nanoTime()
+                // The quality tier's `post`: no glow at Low or in battery saver.
+                val postGlow = if (FaceQuality.current.post) glowK else 0f
+                drawFace(frame, face, notches, glowSprite, background, postGlow)
+                drawCost.nanos = System.nanoTime() - t0
             }
+        }
+    }
+}
+
+/**
+ * One still picture of [face], for a picker that shows every face at once.
+ *
+ * Not a small [FaceView]. The picker's own comment says why a grid of live
+ * reactors is wrong - twenty frame loops, twenty flash governors, and a phone
+ * that can afford one animated surface - so this has no frame loop, no clock
+ * and no state: it advances a throwaway [FaceHost] a little over a second of
+ * IDLE once, when the face or the colours change, and draws that one frame.
+ * The Canvas then redraws only when Compose asks it to (size or colours), not
+ * per frame.
+ *
+ * The two mesh faces (Tokamak, Membrane) get a simple drawn stand-in instead
+ * of their real picture: their real picture needs a live `GLSurfaceView` - a
+ * GL thread and a GPU context each - which is exactly the cost this exists to
+ * avoid, twenty times over. The stand-in is their silhouette in the same
+ * colours, not a render of them.
+ *
+ * Nucleus draws its real picture here, which compiles its shader the first
+ * time a thumbnail of it is drawn - once, and only if the picker is opened.
+ */
+@Composable
+fun FaceThumbnail(
+    face: Face,
+    bindings: Bindings,
+    modifier: Modifier = Modifier,
+    /** The same ground FaceView takes - pass `Chrome.well` to match Home. */
+    background: Color = Spec.BACKGROUND,
+) {
+    val still = remember(face, bindings) { stillFrameOf(face, bindings) }
+    val mesh = remember(face.id) { MeshFaces.isMesh(face.id) }
+    Canvas(modifier) {
+        if (mesh) {
+            drawMeshStandIn(still, face, background)
+        } else {
+            // No glow sprite: IDLE is not an active state, so drawFace would
+            // not draw one anyway, and a still picture is no reason to hold a
+            // bitmap per thumbnail.
+            drawFace(still, face, notches = 0, glow = null, background = background, glowScale = 1f)
+        }
+    }
+}
+
+/**
+ * About a second and a quarter of IDLE, in the same 30 fps steps the live
+ * loop takes for that state - enough for the angles to leave zero, so a
+ * thumbnail is not every face at its starting pose, and for the colour to be
+ * the resolved one rather than the host's initial placeholder.
+ */
+private fun stillFrameOf(face: Face, bindings: Bindings): FaceFrame {
+    val host = FaceHost()
+    repeat(STILL_FRAME_STEPS) {
+        host.advance(1f / 30f, FaceState.IDLE, null, null, bindings, face)
+    }
+    return host.snapshot()
+}
+
+private const val STILL_FRAME_STEPS = 38
+
+/** How often FaceView re-reads the panel's refresh rate. Never per frame. */
+private const val PANEL_POLL_MS = 2_000L
+
+/**
+ * How long a face's frame loop waits, once per process, for GpuProbe's answer
+ * before its first frame. Normally the answer is already in; this only
+ * matters if the probe is still running when Home first appears.
+ */
+private const val GPU_PROBE_WAIT_MS = 800L
+
+/**
+ * What the last frame cost, for the Auto adjust governor (see
+ * [FaceQuality.onFrame]). Written by whichever thread draws - the main thread
+ * for a canvas face, the GL thread for a mesh face - and read by the frame
+ * loop on the main thread, hence @Volatile. Two longs: nothing allocated per
+ * frame.
+ */
+internal class DrawCost {
+    /** How long the last draw call itself took. */
+    @Volatile var nanos: Long = 0L
+
+    /**
+     * For a mesh face: the gap between the starts of its last two GL frames,
+     * or 0. A slow GPU shows here, on the GL thread, and never in the main
+     * thread's own frame gaps. Always 0 for a canvas face.
+     */
+    @Volatile var glGapNanos: Long = 0L
+}
+
+/**
+ * A mesh face's renderer, timed. Every call goes straight through to [inner];
+ * this only reads the clock around `onDrawFrame`, on the GL thread, and
+ * writes two longs into [cost].
+ */
+private class TimedRenderer(
+    private val inner: MeshRenderer,
+    private val cost: DrawCost,
+) : GLSurfaceView.Renderer {
+    private var lastStart = 0L
+
+    override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
+        lastStart = 0L
+        inner.onSurfaceCreated(gl, config)
+    }
+
+    override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
+        inner.onSurfaceChanged(gl, width, height)
+    }
+
+    override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
+        val start = System.nanoTime()
+        val gap = if (lastStart == 0L) 0L else start - lastStart
+        // A long pause (the face was off screen, nothing asked for a frame) is
+        // not a slow frame, so it is not reported as one.
+        cost.glGapNanos = if (gap in 1L..GL_GAP_MAX_NANOS) gap else 0L
+        lastStart = start
+        inner.onDrawFrame(gl)
+        cost.nanos = System.nanoTime() - start
+    }
+}
+
+private const val GL_GAP_MAX_NANOS = 1_500_000_000L
+
+/**
+ * The mesh faces' silhouettes, for [FaceThumbnail] only - see there for why
+ * they are not the real render. Proportions follow the renderers' own
+ * numbers (Tokamak's ring radius 0.72 and tube 0.29, viewed from its -0.55
+ * pitch; Membrane's disc from its -0.72 pitch), so the stand-in is at least
+ * the right shape and size.
+ */
+private fun DrawScope.drawMeshStandIn(f: FaceFrame, face: Face, background: Color) {
+    drawRect(background, size = Size(size.width, size.height))
+    val w = size.minDimension
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    val r = w / 2f * 0.5f * face.fit
+    val hot = dimmed(f.swatch.a, f.dim, background)
+    val cool = dimmed(f.swatch.b, f.dim, background)
+    if (face.id == "tokamak") {
+        // A torus seen from above at an angle: one thick elliptical band.
+        val ring = r * (0.72f / 1.01f)
+        val squash = sin(0.55f)
+        val tube = r * (0.29f * 2f / 1.01f)
+        drawOval(
+            color = cool,
+            topLeft = Offset(cx - ring, cy - ring * squash),
+            size = Size(ring * 2f, ring * 2f * squash),
+            style = Stroke(width = tube),
+        )
+        drawOval(
+            color = hot,
+            topLeft = Offset(cx - ring, cy - ring * squash),
+            size = Size(ring * 2f, ring * 2f * squash),
+            style = Stroke(width = tube * 0.18f),
+        )
+    } else {
+        // A drum skin seen at an angle: a disc with its rings.
+        val squash = sin(0.72f)
+        drawOval(
+            color = cool,
+            topLeft = Offset(cx - r, cy - r * squash),
+            size = Size(r * 2f, r * 2f * squash),
+        )
+        for (i in 1..3) {
+            val rr = r * i / 4f
+            drawOval(
+                color = hot.copy(alpha = 0.9f - i * 0.2f),
+                topLeft = Offset(cx - rr, cy - rr * squash),
+                size = Size(rr * 2f, rr * 2f * squash),
+                style = Stroke(width = r * 0.04f),
+            )
         }
     }
 }
@@ -266,8 +600,16 @@ fun FaceView(
  * body is - it is a whole layer underneath a second, much smaller Canvas
  * that draws only the shell-level pieces every face still needs: the
  * approval clock, the notch ring, the tap ring. The GL surface clears to
- * [Spec.BACKGROUND] itself (see `TokamakRenderer.onDrawFrame`), so there is
- * no separate background rect to paint here.
+ * [background] itself (handed to the renderer with each frame, on the GL
+ * thread - see `MeshRenderer.setFrame`), so there is no separate background
+ * rect to paint here.
+ *
+ * [frame] is a function, not a value, so that reading it is never a
+ * composition read: it is called only inside AndroidView's `update` block and
+ * the overlay Canvas's draw lambda. Compose watches the reads inside `update`
+ * and re-runs just that block when the frame changes, and a read inside a draw
+ * lambda re-runs just the draw - so a new frame costs one GL upload and one
+ * overlay redraw, and nothing recomposes.
  *
  * Two things every canvas face gets are deliberately skipped for a mesh
  * face: the additive glow sprite, and the shake/flinch/speech-push
@@ -279,7 +621,15 @@ fun FaceView(
  * risk than a mesh face sitting still while every other face flinches.
  */
 @Composable
-private fun GLFaceSurface(mesh: MeshRenderer, frame: FaceFrame, face: Face, notches: Int) {
+private fun GLFaceSurface(
+    mesh: MeshRenderer,
+    frame: () -> FaceFrame,
+    face: Face,
+    notches: Int,
+    background: Color,
+    glow: Float,
+    drawCost: DrawCost,
+) {
     val lifecycleOwner = LocalLifecycleOwner.current
     // AndroidView's factory runs exactly once per call site and hands back
     // the same instance on every later recomposition - this just keeps that
@@ -300,16 +650,29 @@ private fun GLFaceSurface(mesh: MeshRenderer, frame: FaceFrame, face: Face, notc
                 // The torus mesh needs real depth testing - the near wall
                 // has to hide the far one - and GLSurfaceView's own default
                 // config carries no depth buffer at all unless one is asked
-                // for. RGBA8888 plus a 16-bit depth buffer, no stencil.
-                setEGLConfigChooser(8, 8, 8, 8, 16, 0)
-                setRenderer(mesh)
+                // for. RGBA8888 plus a 16-bit depth buffer, no stencil, and
+                // now 4x multisampling where the device has it: the kit's
+                // WebGL context antialiases its mesh edges, and without it
+                // the torus and drum silhouettes were single-sample
+                // staircases. Falls back to exactly the old config.
+                setEGLConfigChooser(com.jarvis.client.face.gl.GL.MsaaConfigChooser())
+                // Wrapped only to time it for the Auto adjust governor; every
+                // call goes straight through to the face's own renderer.
+                setRenderer(TimedRenderer(mesh, drawCost))
                 renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
             }.also { glSurfaceView = it }
         },
         update = { glView ->
-            val hot = dimmed(frame.swatch.a, frame.dim)
-            val cool = dimmed(frame.swatch.b, frame.dim)
-            glView.queueEvent { mesh.setFrame(frame, hot, cool, face.fit) }
+            // Read once, here on the UI thread, into a local the GL-thread
+            // lambda captures - never read from inside queueEvent, which runs
+            // later on another thread.
+            val f = frame()
+            // Dimmed toward the same ground the surface now clears to, as the
+            // canvas faces do, so a dimmed state fades into the well it is
+            // actually drawn on rather than into a different black.
+            val hot = dimmed(f.swatch.a, f.dim, background)
+            val cool = dimmed(f.swatch.b, f.dim, background)
+            glView.queueEvent { mesh.setFrame(f, hot, cool, face.fit, background) }
             glView.requestRender()
         },
     )
@@ -335,43 +698,57 @@ private fun GLFaceSurface(mesh: MeshRenderer, frame: FaceFrame, face: Face, notc
     }
 
     Canvas(Modifier.fillMaxSize()) {
+        val f = frame()
         val w = size.minDimension
         val cx = size.width / 2f
         val cy = size.height / 2f
         val radius = w / 2f * 0.5f * face.fit
-        val hot = dimmed(frame.swatch.a, frame.dim)
-        val cool = dimmed(frame.swatch.b, frame.dim)
+        val hot = dimmed(f.swatch.a, f.dim, background)
+        val cool = dimmed(f.swatch.b, f.dim, background)
+        // The quality tier's `post`: no glow at Low or in battery saver.
+        val glowNow = if (FaceQuality.current.post) glow else 0f
 
         // Tokamak's own reference composites a soft, centre-bright radial
         // wash back over its GPU mesh output after drawing it (the `gr0`
         // gradient in its own draw() in the desktop's faces.html). Ported as
         // a post-layer here for the same reason: it already IS one on the
         // reference, not a new choice made to fit this split.
-        if (face.id == "tokamak") {
+        //
+        // It is this face's glow, so the Glow setting scales it the same way
+        // it scales the canvas faces' sprite - down only, `glow` is 0..1.
+        //
+        // The kit's wash reaches half its canvas (`S * .5`), and its canvas
+        // is S = 4 radii here (TokamakRenderer draws the torus at the kit's
+        // `S * 1.05` on that same S) - so the wash is 2 radii. It was 2.5, a
+        // wash a quarter wider than the kit's; narrowing it only ever takes
+        // light away.
+        if (face.id == "tokamak" && glowNow > 0f) {
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(hot.copy(alpha = 0.13f), hot.copy(alpha = 0f)),
+                    colors = listOf(hot.copy(alpha = 0.13f * glowNow), hot.copy(alpha = 0f)),
                     center = Offset(cx, cy),
-                    radius = radius * 2.5f,
+                    radius = radius * 2f,
                 ),
-                radius = radius * 2.5f,
+                radius = radius * 2f,
                 center = Offset(cx, cy),
             )
         }
 
-        when (frame.overlay) {
-            Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, radius, hot, frame)
-            Spec.Overlay.NOTCHES -> drawNotches(cx, cy, radius, cool, notches)
+        when (f.overlay) {
+            Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, w, hot, f)
+            Spec.Overlay.NOTCHES -> drawNotches(cx, cy, w, cool, notches)
             else -> Unit
         }
 
-        val at = frame.ringAt
-        if (at != null && frame.ringFrac in 0f..1f) {
+        val at = f.ringAt
+        if (at != null && f.ringFrac in 0f..1f) {
             drawCircle(
-                color = hot.copy(alpha = (1f - frame.ringFrac) * 0.6f),
-                radius = w * Spec.TAP_RING_FRAC * frame.ringFrac,
+                color = hot.copy(alpha = (1f - f.ringFrac) * 0.6f),
+                radius = w * Spec.TAP_RING_FRAC * f.ringFrac,
                 center = at,
-                style = Stroke(width = 2f),
+                // The kit's `max(1, w * 0.006)`: a line that scales with the
+                // face, not a fixed 2 px that is a hairline on a big screen.
+                style = Stroke(width = max(1f, w * 0.006f)),
             )
         }
     }
@@ -397,7 +774,30 @@ data class FaceFrame(
     val yaw: Float,
     val pitch: Float,
     val t: Float,
+    /**
+     * Calm motion is on (see FaceView's `calmMotion`). [t], [angle] and
+     * [tableAngle] are already slowed when it is, and [shake] and [flinch]
+     * already zero - this is for the few readers that keep their own clock or
+     * add their own jolt: the speech push in `drawFace`, and
+     * `MembraneRenderer`'s physics, which runs on real elapsed time.
+     */
+    val calm: Boolean = false,
+    /**
+     * The movement ([motion]) of the state before the current one; [motion]
+     * itself when nothing has changed yet. With [hitchPhase] (seconds since
+     * that change) it lets a face ease a per-state target in from where the
+     * last state left it - see `CoreKit.settle` - while staying a pure
+     * function of this frame, rather than carrying last frame's value.
+     */
+    val prevMotion: FaceState = motion,
 )
+
+/**
+ * The share of normal speed a face moves at under calm motion: two thirds, so
+ * every period is half as long again. Slower only - a rate below 1 can only
+ * stretch a movement out, never add to it.
+ */
+const val CALM_MOTION_RATE = 2f / 3f
 
 /**
  * The state machine behind a face. Not a composable: it is mutable, per-frame
@@ -422,6 +822,21 @@ class FaceHost {
     private val seed = (0..9_999).random()
 
     private var t = 0f
+
+    /**
+     * The clock handed to faces as [FaceFrame.t]. The same as [t] unless calm
+     * motion is on, when it runs at [CALM_MOTION_RATE] of it.
+     *
+     * A separate clock rather than a slowed [t], because [t] also feeds the
+     * flash governor and the strobe budget, whose limits are in real seconds:
+     * slowing their clock would stretch "at most two seconds of strobe" into
+     * three. They keep real time; only what the face draws slows down.
+     * Accumulated, never computed as `t * rate`, for the reason the angle
+     * comment in [advance] gives - so turning calm on or off mid-flight is a
+     * change of speed, not a jump.
+     */
+    private var motionT = 0f
+    private var calm = false
     private var angle = 0f
     private var tableAngle = 0f
     private var rate = 1f
@@ -436,6 +851,7 @@ class FaceHost {
     private var colEase = 1f
 
     private var state: FaceState = FaceState.IDLE
+    private var prevState: FaceState = FaceState.IDLE
     private var changedAt = -999f
 
     private var clockStartedAt = -999f
@@ -453,6 +869,7 @@ class FaceHost {
 
     fun onStateChange(next: FaceState) {
         if (next == state) return
+        prevState = state
         state = next
         changedAt = t
         // The RATE is eased, not snapped: a face whose rate steps from 0.22 to
@@ -496,9 +913,23 @@ class FaceHost {
         voiceIn: Float?,
         bindings: Bindings,
         face: Face,
+        /** Calm motion: see FaceView's `calmMotion`. Only ever slows. */
+        calm: Boolean = false,
+        /**
+         * The face editor's "All speeds" multiplier. Under calm motion it is
+         * capped at 1 first, so calm still only ever slows the face: speed
+         * cannot override the phone's own request for less motion.
+         */
+        speed: Float = 1f,
     ): Boolean {
         if (wanted != state) onStateChange(wanted)
+        this.calm = calm
+        val speedK = if (speed.isFinite() && speed > 0f) speed else 1f
+        // Exactly 1 when calm is off and speed is 1, so a default face
+        // advances exactly as it always has.
+        val motionK = if (calm) CALM_MOTION_RATE * min(speedK, 1f) else speedK
         t += dtIn
+        motionT += dtIn * motionK
         accum += dtIn
 
         val tf = Spec.transformFor(state)
@@ -550,8 +981,8 @@ class FaceHost {
         rate = smooth(rate, rateTarget, dt, Spec.RATE_EASE_S, Spec.RATE_EASE_S)
         val motion = tf.borrow
         val faceSpeed = face.speedFor(motion)
-        angle += dt * rate * tf.dir * faceSpeed
-        tableAngle += dt * rate * faceSpeed
+        angle += dt * rate * tf.dir * faceSpeed * motionK
+        tableAngle += dt * rate * faceSpeed * motionK
 
         // Colour: resolve the target, then crossfade from what is on screen.
         val target = resolve(bindings.of(state), t, drive, governor, strobeBudget, seed)
@@ -594,7 +1025,9 @@ class FaceHost {
         // demanded the `!!`, and a local makes it true instead of merely
         // likely. Last one in the codebase.
         val at = tapAt
-        val flinch = if (tapLive && at != null) {
+        // Calm motion drops the flinch; the tap ring below still answers the
+        // touch, so a tap is still visibly received.
+        val flinch = if (tapLive && at != null && !calm) {
             val d = Offset(0.5f * faceWidth - at.x, 0.5f * faceWidth - at.y)
             val len = max(1f, hypot(d.x, d.y))
             val push = faceWidth * Spec.TAP_FLINCH_FRAC * tapK
@@ -623,7 +1056,10 @@ class FaceHost {
 
         // The error hitch: stop dead in 60 ms, hold, shake, then crawl.
         val sinceChange = t - changedAt
-        val shake = if (state == FaceState.ERROR && sinceChange in 0.31f..0.61f) {
+        // Not under calm motion. The error still reads: its own colour, and
+        // the transform's stop-then-crawl, which is a change of speed rather
+        // than a jolt.
+        val shake = if (state == FaceState.ERROR && sinceChange in 0.31f..0.61f && !calm) {
             val amp = faceWidth * 0.015f
             Offset(sin(sinceChange * 8f * PI2) * amp, 0f)
         } else {
@@ -648,7 +1084,9 @@ class FaceHost {
             ringFrac = ringFrac,
             yaw = yaw,
             pitch = pitch,
-            t = t,
+            t = motionT,
+            calm = calm,
+            prevMotion = Spec.transformFor(prevState).borrow,
         )
     }
 
@@ -671,32 +1109,55 @@ private fun smoothstep(x: Float) = x * x * (3f - 2f * x)
  * A multiply lands banked's already-dark colour around 0.002 relative
  * luminance, which many OLED panels quantise to black — so the state that means
  * "something is waiting" would vanish on the device most likely to show it.
+ *
+ * `bg` should be the ground the face is actually drawn on - FaceView's
+ * `background`, which both the canvas faces and (since they clear to it) the
+ * mesh faces sit in. Dimming toward any other colour fades a dimmed state into
+ * a ground that is not there. No default, so a new caller has to say which
+ * ground it means rather than silently getting `Spec.BACKGROUND`.
  */
-private fun dimmed(c: Color, dim: Float): Color = mix(Spec.BACKGROUND, c, dim)
+private fun dimmed(c: Color, dim: Float, bg: Color): Color = mix(bg, c, dim)
 
-private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int, glow: ImageBitmap) {
+/**
+ * @param glow the glow sprite, or null to draw no glow at all (a still
+ *   thumbnail, which has no business holding its own 100 KB bitmap).
+ * @param glowScale 0..1, already clamped by the caller - see FaceView's `glow`.
+ */
+private fun DrawScope.drawFace(
+    f: FaceFrame,
+    face: Face,
+    notches: Int,
+    glow: ImageBitmap?,
+    background: Color,
+    glowScale: Float,
+) {
     val w = size.minDimension
     val cx = size.width / 2f
     val cy = size.height / 2f
     // faces[].render.fit — a uniform scale so no face touches its edge.
     val radius = w / 2f * 0.5f * face.fit
 
-    // One background for all faces. Each used to paint its own, which showed as
-    // a differently tinted rectangle behind every one.
-    drawRect(Spec.BACKGROUND, size = Size(size.width, size.height))
+    // One ground for all faces on this path - a caller's theme, or
+    // Spec.BACKGROUND by default. Each face used to paint its own background,
+    // which showed as a differently tinted rectangle behind every one; this
+    // keeps that single-ground guarantee while letting the ground itself be
+    // themed, since a theme applies to every face identically or not at all.
+    drawRect(background, size = Size(size.width, size.height))
 
-    val hot = dimmed(f.swatch.a, f.dim)
-    val cool = dimmed(f.swatch.b, f.dim)
+    val hot = dimmed(f.swatch.a, f.dim, background)
+    val cool = dimmed(f.swatch.b, f.dim, background)
 
     // The speech / microphone push: up to 3.5% growth on a loud syllable.
-    // Positional, not luminance, so it is not a flash.
-    val push = 1f + Spec.SPEECH_SCALE * f.speechPush
+    // Positional, not luminance, so it is not a flash. Off under calm motion:
+    // it is a jolt on every loud syllable. The brightness lift just below is
+    // not motion and stays.
+    val push = if (f.calm) 1f else 1f + Spec.SPEECH_SCALE * f.speechPush
     val lifted = lift(hot, Spec.SPEECH_BRIGHTNESS * f.speechPush)
 
     translate(f.flinch.x + f.shake.x, f.flinch.y + f.shake.y) {
         // A cached-gradient halo rather than a blur. A real blur over a canvas
         // face was measured at 3-6 ms on a mid-range phone; this is one draw.
-        if (Spec.isActive(f.state)) {
+        if (glow != null && glowScale > 0f && Spec.isActive(f.state)) {
             // One textured quad, tinted, composited additively.
             //
             // Additive rather than SrcOver because the spec's own canvas
@@ -708,7 +1169,9 @@ private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int, glow: Ima
                 image = glow,
                 dstOffset = IntOffset((cx - r).toInt(), (cy - r).toInt()),
                 dstSize = IntSize(side, side),
-                colorFilter = ColorFilter.tint(lifted.copy(alpha = 0.30f)),
+                // 0.30 is the designed strength; glowScale (0..1) can only
+                // take it down from there. See FaceView's `glow`.
+                colorFilter = ColorFilter.tint(lifted.copy(alpha = 0.30f * glowScale)),
                 blendMode = BlendMode.Plus,
             )
         }
@@ -716,8 +1179,8 @@ private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int, glow: Ima
         face.draw(this, cx, cy, radius * push, lifted, cool, f)
 
         when (f.overlay) {
-            Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, radius, lifted, f)
-            Spec.Overlay.NOTCHES -> drawNotches(cx, cy, radius, cool, notches)
+            Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, w, lifted, f)
+            Spec.Overlay.NOTCHES -> drawNotches(cx, cy, w, cool, notches)
             else -> Unit
         }
 
@@ -727,11 +1190,31 @@ private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int, glow: Ima
                 color = lifted.copy(alpha = (1f - f.ringFrac) * 0.6f),
                 radius = w * Spec.TAP_RING_FRAC * f.ringFrac,
                 center = at,
-                style = Stroke(width = 2f),
+                // The kit's `max(1, w * 0.006)`: a line that scales with the
+                // face, not a fixed 2 px that is a hairline on a big screen.
+                style = Stroke(width = max(1f, w * 0.006f)),
             )
         }
     }
 }
+
+/**
+ * The kit's radius basis for every state overlay, as a share of the face's
+ * box: `R = Math.min(w, h) * 0.44`, "the rim of the FACE, not of the buffer"
+ * (the spec's `overlay_spec.radius_basis`).
+ *
+ * The overlays used to be sized from the shell's own radius instead - a
+ * quarter of the box times the face's `fit`, times 1.5 - which put the clock
+ * and the notch ring at 0.375 of the box, or less for a face that fits
+ * itself smaller. That was right for the old faces. The ported kit faces
+ * draw out to the kit's own rim - the kit says "faces draw inside
+ * `min(w,h)/2 - w*0.06`", which is 0.44 of the box - so a ring at 0.375 cut
+ * across the face instead of sitting around it. Now both follow the kit: the clock
+ * at 0.95 R (0.418 of the box), the notch ring at 0.93 R, notches from
+ * 0.86 R to 0.99 R, and the knock from 0.12 R out to 0.94 R - independent of
+ * `fit`, as the kit's are.
+ */
+private const val OVERLAY_R_FRAC = 0.44f
 
 /**
  * The waiting clock: an arc from twelve o'clock closing clockwise, with the
@@ -740,11 +1223,15 @@ private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int, glow: Ima
  * Approval and listening measure 4.5 ΔE apart for a deuteranope, so two states
  * may share a hue only if they never share a movement. This is approval's
  * identity, and it is legible with no colour at all.
+ *
+ * @param w the face's box, its shorter side. Radii and line widths are the
+ *   kit's shares of it - see [OVERLAY_R_FRAC].
  */
 private fun DrawScope.drawApprovalClock(
-    cx: Float, cy: Float, r: Float, tint: Color, f: FaceFrame,
+    cx: Float, cy: Float, w: Float, tint: Color, f: FaceFrame,
 ) {
-    val ring = r * 1.5f
+    val big = w * OVERLAY_R_FRAC
+    val ring = big * 0.95f
     drawArc(
         color = tint.copy(alpha = 0.22f),
         startAngle = -90f,
@@ -752,7 +1239,7 @@ private fun DrawScope.drawApprovalClock(
         useCenter = false,
         topLeft = Offset(cx - ring, cy - ring),
         size = Size(ring * 2, ring * 2),
-        style = Stroke(width = 3f),
+        style = Stroke(width = max(1f, w * 0.004f)),
     )
     drawArc(
         color = tint,
@@ -761,7 +1248,7 @@ private fun DrawScope.drawApprovalClock(
         useCenter = false,
         topLeft = Offset(cx - ring, cy - ring),
         size = Size(ring * 2, ring * 2),
-        style = Stroke(width = 3f),
+        style = Stroke(width = max(1.5f, w * 0.010f), cap = StrokeCap.Round),
     )
 
     // The knock: a ring leaving the core every 1.6 s. It repeats, it is
@@ -771,27 +1258,38 @@ private fun DrawScope.drawApprovalClock(
         val e = 1f - (1f - ph) * (1f - ph) * (1f - ph)
         drawCircle(
             color = tint.copy(alpha = (1f - e) * 0.55f),
-            radius = r * (0.12f + e * 0.82f) * 1.5f,
+            radius = big * (0.12f + e * 0.82f),
             center = Offset(cx, cy),
-            style = Stroke(width = 2f),
+            style = Stroke(width = max(1f, w * 0.008f * (1f - e * 0.5f))),
         )
     }
 }
 
-/** The rim ring drawn full, with one notch per waiting item. */
-private fun DrawScope.drawNotches(cx: Float, cy: Float, r: Float, tint: Color, notches: Int) {
-    val ring = r * 1.5f
-    drawCircle(tint.copy(alpha = 0.35f), ring, Offset(cx, cy), style = Stroke(width = 3f))
+/**
+ * The rim ring drawn full, with one notch per waiting item.
+ *
+ * @param w the face's box, its shorter side - see [OVERLAY_R_FRAC].
+ */
+private fun DrawScope.drawNotches(cx: Float, cy: Float, w: Float, tint: Color, notches: Int) {
+    val big = w * OVERLAY_R_FRAC
+    drawCircle(
+        tint.copy(alpha = 0.35f),
+        big * 0.93f,
+        Offset(cx, cy),
+        style = Stroke(width = max(1f, w * 0.004f)),
+    )
     if (notches <= 0) return
     val n = min(notches, 24)
+    val inner = big * 0.86f
+    val outer = big * 0.99f
+    val stroke = max(1.5f, w * 0.012f)
     for (i in 0 until n) {
         val a = (-PI / 2 + i * (PI2 / n)).toFloat()
-        val inner = ring - r * 0.12f
         drawLine(
             color = tint,
             start = Offset(cx + cos(a) * inner, cy + sin(a) * inner),
-            end = Offset(cx + cos(a) * (ring + r * 0.06f), cy + sin(a) * (ring + r * 0.06f)),
-            strokeWidth = 3f,
+            end = Offset(cx + cos(a) * outer, cy + sin(a) * outer),
+            strokeWidth = stroke,
         )
     }
 }

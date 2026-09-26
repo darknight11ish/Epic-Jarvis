@@ -46,6 +46,7 @@ __pycache__/
 
 # Rust / Tauri build output
 jarvis-desktop/src-tauri/target/
+tools/tool_eval/tool_eval_results.json
 
 # /brag skill scratch output. The skill renders into brag-output/ (or a
 # timestamped brag-output-*/); finished videos are copied into videos/vN/

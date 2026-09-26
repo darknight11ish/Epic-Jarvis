@@ -6,15 +6,30 @@
     "brain"
   ],
   "permissions": [
-    "core:default",
+    "core:app:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:path:default",
+    "core:webview:default",
+    "core:window:default",
     "core:window:allow-start-dragging",
     "core:webview:allow-set-webview-zoom",
     "core:webview:allow-internal-toggle-devtools",
     "jarvis-link",
+    "open-card",
     "theme-write",
     "brain-read",
     "brain-act",
     "brain-faculties",
-    "brain-memory"
+    "brain-memory",
+    "memory-used",
+    "private-reveal",
+    "brain-wiki",
+    "brain-deep",
+    "brain-schedule",
+    "brain-briefing",
+    "brain-history",
+    "focus",
+    "focus-start"
   ]
 }

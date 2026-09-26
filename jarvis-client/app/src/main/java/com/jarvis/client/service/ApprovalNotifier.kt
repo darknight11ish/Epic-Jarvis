@@ -229,8 +229,12 @@ object ApprovalNotifier {
      * all is the mistake, and it is the same mistake in three other places in
      * this project's history.
      *
-     * The fallback is the old composition, used only when `notice` is absent,
-     * which means a desktop older than the contract. Posting nothing would be
+     * The fallback, used only when `notice` is absent (a desktop older than
+     * the contract), is the title - built by decodePendingRows from the action
+     * name alone, never from `prompt` or `detail` - and `risk.why`. It no
+     * longer includes `item.summary`: that now carries the readable part of
+     * `detail` (so the in-app card says what Jarvis wants), which is exactly
+     * the payload a notification must not show. Posting nothing would be
      * worse: an approval nobody is told about is the failure this whole file
      * exists to prevent.
      */
@@ -240,7 +244,6 @@ object ApprovalNotifier {
             return notice.title to notice.body.ifBlank { "Nothing has happened yet." }
         }
         val body = buildString {
-            if (item.summary.isNotBlank()) appendLine(item.summary)
             if (item.risk.why.isNotBlank()) appendLine(item.risk.why)
             if (item.raised != null) {
                 // Named, never quoted. See the importance note below.
@@ -259,6 +262,9 @@ object ApprovalNotifier {
         val channel = if (item.shouldInterrupt) CHANNEL_ID else QUIET_CHANNEL_ID
 
         return NotificationCompat.Builder(context, channel)
+            // Never copied to a paired watch or other device (Android bridges
+            // notifications by default): what Jarvis says stays on this phone.
+            .setLocalOnly(true)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body.lineSequence().first())
@@ -317,6 +323,9 @@ object ApprovalNotifier {
 
     private fun redacted(context: Context): Notification =
         NotificationCompat.Builder(context, CHANNEL_ID)
+            // Never copied to a paired watch or other device (Android bridges
+            // notifications by default): what Jarvis says stays on this phone.
+            .setLocalOnly(true)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.approval_locked))
@@ -325,6 +334,9 @@ object ApprovalNotifier {
 
     private fun summary(context: Context, count: Int, loud: Boolean): Notification =
         NotificationCompat.Builder(context, if (loud) CHANNEL_ID else QUIET_CHANNEL_ID)
+            // Never copied to a paired watch or other device (Android bridges
+            // notifications by default): what Jarvis says stays on this phone.
+            .setLocalOnly(true)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.approvals_waiting, count))

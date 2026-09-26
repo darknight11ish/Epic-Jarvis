@@ -4,6 +4,7 @@ import android.opengl.GLES30
 import android.util.Log
 import androidx.compose.ui.graphics.Color
 import com.jarvis.client.FaceState
+import com.jarvis.client.face.CALM_MOTION_RATE
 import com.jarvis.client.face.FaceFrame
 import com.jarvis.client.face.Spec
 import java.nio.FloatBuffer
@@ -17,40 +18,55 @@ import kotlin.math.sqrt
 
 /**
  * A real spring-mass drum skin, Verlet-integrated - not a moving picture of
- * one. This is the one face in this app that genuinely cannot be a pure
+ * one. This is one of the faces in this app that genuinely cannot be a pure
  * function of `t`: each node's height depends on the two heights before it,
  * so it needs real state that persists between frames. Unlike a `Face`
- * singleton (shared, stateless, safe because it holds nothing but a
- * compiled program), a [MembraneRenderer] is created fresh per composition
- * by [MeshFaces] - exactly the right place to own that state, since it
- * already has to own live GL object ids tied to one specific surface.
+ * singleton, a [MembraneRenderer] is created fresh per composition by
+ * [MeshFaces] - exactly the right place to own that state, since it already
+ * has to own live GL object ids tied to one specific surface.
  *
- * Ported close to the reference's own physics (`draw()` in the desktop's
+ * Ported close to the reference's own physics (`membrane` in the reactor kit,
+ * `docs/reference/jarvis-reactor-kit.html`, the same code as the desktop's
  * `faces.html`: the five-point Laplacian stencil, the rim clamp, the
  * energy/"room" limiter that backs off the drive as the skin gets livelier)
  * and its GPU mesh upload (`gpu()`: central-difference normals from the
  * slope of the simulated heights, the rim pulled onto a circle rather than
- * left jagged, `MEMBRANE_VS`/`MEMBRANE_FS`). Nucleus and Tokamak's
- * precedent is followed for what's dropped and why: no environment
- * texture, no `HUD.beat`, and the shell's own hot/cool in place of the
- * reference's hardcoded per-state colours.
+ * left jagged, `MEMBRANE_VS`/`MEMBRANE_FS`), including its environment
+ * reflection ([com.jarvis.client.face.EnvMap]) and multisampled edges
+ * ([GL.MsaaConfigChooser]). What is dropped: `HUD.beat` (nothing here drives
+ * it) and the kit's hardcoded per-state colours, in favour of the shell's
+ * own hot/cool, as for Nucleus and Tokamak.
+ *
+ * Two things were brought up to the kit, and both changed the picture far
+ * more than their size suggests:
+ *
+ *  - The grid. The kit's is `detail(GPUPX, 40, 150, 168)` cells across -
+ *    168 on any phone-sized face in its solo view (see [GL.detail]). This
+ *    used a fixed 40. A drum's ripples are
+ *    a fixed number of CELLS long for a given stiffness and drive rate, so
+ *    on a 40-cell skin every ripple was about a skin wide: the surface rose
+ *    and fell as one bulge instead of carrying rings across it.
+ *  - The clock. The kit steps its Verlet grid once per frame at 1x speed,
+ *    whatever the state; each state's `rate` only sets how fast the centre
+ *    is DRIVEN (`ph = t * p.rate`). This port read `rate` as a time scale
+ *    and took `rate` physics ticks per 60th of a second - six times the
+ *    kit's wave speed in thinking, 1.4x at idle - which stretched every
+ *    ripple by the same factor and compounded the bulge above. Now the
+ *    physics ticks at the kit's 60 a second in every state and the drive
+ *    phase advances at `rate`, as in the kit.
  *
  * Three things are NOT literal ports, because the reference's own model for
  * them has no honest Android equivalent:
  *
- *  - Time stepping. The reference advances Verlet by a whole tick per frame
- *    at 1x and takes extra whole substeps above it, both driven by a global
- *    `SPEED` slider this app has no equivalent of - `speedFor` only ever
- *    scales an accumulated phase, never hands a face a raw multiplier. This
- *    uses a standard fixed-timestep accumulator instead: real elapsed time
- *    between frames feeds an accumulator (scaled by the state's own `rate`,
- *    playing the same role `p.rate` plays in the reference), which drains
- *    in fixed-size physics ticks - the numerically stable technique this
- *    kind of explicit stencil is normally built on anyway, and it needs no
- *    translation of a slider that was never there. The backlog IS chased,
- *    up to [MAX_STEPS_PER_FRAME] - that bound is what stops a stall from
- *    bursting, and it is set high enough that no real render rate in the
- *    spec is throttled into slow motion by it.
+ *  - Time stepping. The kit takes one tick per display frame, which on a
+ *    120 Hz panel is twice the wave speed of a 60 Hz one. This uses a fixed-
+ *    timestep accumulator at 60 ticks a second instead - the kit at 60 Hz -
+ *    fed by real elapsed time times the shell's transform rate and calm
+ *    motion, and drained in fixed-size ticks, the numerically stable way to
+ *    run an explicit stencil like this. The backlog IS chased, up to
+ *    [MAX_STEPS_PER_FRAME] - that bound is what stops a stall from bursting,
+ *    and it is set high enough that no real render rate in the spec is
+ *    throttled into slow motion by it.
  *  - The touch-driven strike point. The reference excites the skin at a
  *    location TOUCH.x/y sets directly. Touch already means something else
  *    for every 3D face in this app - camera orbit - and turning it into a
@@ -64,6 +80,11 @@ import kotlin.math.sqrt
  *    consistency: a drum reads by the wave crossing it, and an orbiting
  *    camera fights that reading in a way it doesn't for a fixed shape like
  *    a torus.
+ *
+ * Cost, at the kit's 168-cell grid: ~28,000 cells per tick (one tick a frame
+ * at 60 Hz, a few tenths of a millisecond) and ~900 KB of vertex data
+ * uploaded per frame - the most bandwidth of any face, and the same the kit
+ * uploads in its solo view on the same phone.
  */
 class MembraneRenderer : MeshRenderer {
 
@@ -77,10 +98,6 @@ class MembraneRenderer : MeshRenderer {
     }
 
     private companion object {
-        // Conservative and fixed rather than the reference's adaptive
-        // detail() ramp, matching Tokamak's own reasoning - there is no
-        // device here to profile it against.
-        const val N = 40
         const val AMPL_H = 0.42f
 
         /**
@@ -100,23 +117,17 @@ class MembraneRenderer : MeshRenderer {
 
         // How much simulated time one rendered frame may carry.
         //
-        // The old ceiling of 4 ticks (0.067 s of sim) coupled the drum's speed
-        // to the panel and to the shell's frame-rate gate, because the surplus
-        // was thrown away: THINKING asks for rate 6.0, which is 0.1 s of sim
-        // per 60 Hz frame and could never fit in 4 ticks, so the same state ran
-        // at 4.0x on a 60 Hz phone and 6.0x on a 120 Hz one. Worse, the shell
-        // renders BANKED at 2 fps - 0.5 s of real time per frame, 0.7 s of sim
-        // at that state's rate 1.4 - so the membrane crawled at about an eighth
-        // of real speed, breaking the contract FaceView states for every other
-        // face: frame skipping, not slow motion.
-        //
-        // The bound is the worst LEGITIMATE case, so nothing real is discarded
-        // and a genuine stall still cannot burst without limit: the slowest
-        // render rate in the spec is BANKED's 2 fps (0.5 s), and the highest
-        // rate any state asks for is THINKING's 6.0 - but those never coincide,
-        // since BANKED's borrowed motion is a resting one. 0.8 s of sim, 48
-        // ticks, covers BANKED at 0.7 s with slack and is ~150 k cell updates
-        // in the worst frame, which that state only reaches twice a second.
+        // An old ceiling of 4 ticks threw the surplus away, which coupled the
+        // drum's speed to the panel and to the shell's frame-rate gate: the
+        // shell renders BANKED at 2 fps and STANDBY at 15, and a frame there
+        // carries 30 and 4 ticks of real time. The bound is the worst
+        // LEGITIMATE case - the slowest render rate in the spec, 2 fps, is
+        // 0.5 s and 30 ticks - with slack, so nothing real is discarded and a
+        // genuine stall still cannot burst without limit. Ticks are 60 a
+        // second times the transform rate (at most 1) in every state now, so
+        // no state asks for more than that. The worst frame is 48 ticks of a
+        // 168-cell grid, about 1.4 million cell updates, and only a stall can
+        // reach it.
         const val MAX_STEPS_PER_FRAME = 48
 
         /**
@@ -163,9 +174,12 @@ class MembraneRenderer : MeshRenderer {
             }
         """.trimIndent()
 
+        // The environment block goes in straight after `precision` - see
+        // TokamakRenderer's FS for why it is joined rather than inlined.
         val FS = """
             #version 300 es
             precision highp float;
+        """.trimIndent() + "\n" + GL.ENV_GLSL + """
             in vec3 vN;
             in vec2 vAux;
             out vec4 oCol;
@@ -190,8 +204,7 @@ class MembraneRenderer : MeshRenderer {
                 // the skin is displaced - neither alone reads as a drum.
                 float lift = clamp(0.5 + vAux.x * 3.0 + vAux.y * 1.1, 0.0, 1.0);
                 vec3 base = mix(uCol * (0.35 + lam * 1.25), uHot, min(1.0, lift * 0.55 + rim * 0.4));
-                vec3 env = vec3(22.0, 24.0, 30.0) / 255.0;
-                vec3 col = mix(base, env, clamp(0.05 + rim * 0.28, 0.0, 1.0));
+                vec3 col = mix(base, envSample(n), clamp(0.05 + rim * 0.28, 0.0, 1.0));
                 oCol = vec4(tonemap(col), 1.0);
             }
         """.trimIndent()
@@ -208,55 +221,84 @@ class MembraneRenderer : MeshRenderer {
     private var uScaleLoc = 0
     private var uColLoc = 0
     private var uHotLoc = 0
+    private var uEnvLoc = -1
 
     private var vao = 0
     private var posBuf = 0
     private var nrmBuf = 0
     private var auxBuf = 0
     private var idxBuf = 0
+    private var envTex = 0
     private var indexCount = 0
 
     private var surfaceW = 1
     private var surfaceH = 1
 
-    // The simulation. Three grids rotated each physics tick rather than
-    // copied, and a fixed mask worked out once: the clamped rim, tested
-    // once up front rather than inside the step loop, where cells being
-    // zeroed mid-sweep is a known way this kind of stencil detonates.
-    private val mid = (N - 1) / 2f
-    private var z = FloatArray(N * N)
-    private var zp = FloatArray(N * N)
-    private var zn = FloatArray(N * N)
-    private val mask = BooleanArray(N * N) { idx ->
-        val i = idx % N
-        val j = idx / N
-        val di = i - mid
-        val dj = j - mid
-        i > 0 && j > 0 && i < N - 1 && j < N - 1 && sqrt(di * di + dj * dj) / mid <= 0.96f
-    }
+    // The simulation, sized by GL.detail for the surface (see ensureGrid).
+    // Three grids rotated each physics tick rather than copied, and a fixed
+    // mask worked out once per size: the clamped rim, tested up front rather
+    // than inside the step loop, where cells being zeroed mid-sweep is a
+    // known way this kind of stencil detonates.
+    private var n = 0
+    private var mid = 0f
+    private var z = FloatArray(0)
+    private var zp = FloatArray(0)
+    private var zn = FloatArray(0)
+    private var mask = BooleanArray(0)
     /** Cells the stencil actually integrates. Fixed by [mask], so counted once. */
-    private val liveCells = max(1, mask.count { it })
-    private var physicsTime = 0f
+    private var liveCells = 1
+    /**
+     * The two excitation shapes - the kit's centre pulse, and the ring used
+     * when `tf.dir` is negative - per cell. They depend only on the grid, so
+     * they are worked out once per size instead of an `exp()` per cell per
+     * tick, which at 168 cells would be 28,000 of them every tick.
+     */
+    private var centreFalloff = FloatArray(0)
+    private var ringFalloff = FloatArray(0)
+    /** The GPU side (index list, attribute stores) needs building for [n]. */
+    private var gpuGridStale = true
+
+    /** The drive's own phase: the kit's `t * p.rate`, integrated per tick. */
+    private var drivePhase = 0f
     private var accumulator = 0f
     private var lastFrameNanos = 0L
     /**
      * RMS height of the live cells, carried between ticks. Accumulated inside
      * the stencil sweep that produces it rather than by a second full pass over
-     * all 1600 cells per frame, which is what it used to cost.
+     * every cell per frame, which is what it used to cost.
      */
     private var rms = 0f
+
+    // Vertex data. x and z of every vertex are fixed for a grid size (the
+    // rim pull included), so they are written once in ensureGrid and only
+    // the height is rewritten per frame.
+    private var pos = FloatArray(0)
+    private var nrm = FloatArray(0)
+    private var aux = FloatArray(0)
+    /** Vertices pulled onto the rim circle; their height is pinned to 0. */
+    private var onRim = BooleanArray(0)
+
+    // One direct buffer per attribute for the life of a grid size. These were
+    // once a fresh `ByteBuffer.allocateDirect` each, three times a frame -
+    // native memory that only the Cleaner ever hands back, so at frame rate it
+    // accumulates faster than it is freed.
+    private var posFb = GL.directFloatBuffer(0)
+    private var nrmFb = GL.directFloatBuffer(0)
+    private var auxFb = GL.directFloatBuffer(0)
 
     // Written from the UI thread via queueEvent, read only on the GL thread.
     private var frame: FaceFrame? = null
     private var hot = Color(0xFF8AD8FF)
     private var cool = Color(0xFF2F5FA8)
     private var fit = 1f
+    private var background = Spec.BACKGROUND
 
-    override fun setFrame(f: FaceFrame, hot: Color, cool: Color, fit: Float) {
+    override fun setFrame(f: FaceFrame, hot: Color, cool: Color, fit: Float, background: Color) {
         this.frame = f
         this.hot = hot
         this.cool = cool
         this.fit = fit
+        this.background = background
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -266,9 +308,9 @@ class MembraneRenderer : MeshRenderer {
         // harmless only while `setPreserveEGLContextOnPause` stays at its
         // default false, because the lost context takes the objects with it;
         // preserve the context and every background/foreground cycle leaks a
-        // program, a VAO and four buffers. Deleting first is right either way:
-        // after a real context loss the stale ids name nothing in the new
-        // context and the driver ignores them.
+        // program, a VAO, four buffers and a texture. Deleting first is right
+        // either way: after a real context loss the stale ids name nothing in
+        // the new context and the driver ignores them.
         deleteGlObjects()
         // Rendering stopped while the context was gone, so the clock this
         // renderer measures its own timestep with is stale by however long that
@@ -296,6 +338,7 @@ class MembraneRenderer : MeshRenderer {
         uScaleLoc = GLES30.glGetUniformLocation(program, "uScale")
         uColLoc = GLES30.glGetUniformLocation(program, "uCol")
         uHotLoc = GLES30.glGetUniformLocation(program, "uHot")
+        uEnvLoc = GLES30.glGetUniformLocation(program, "uEnv")
 
         val vaoArr = IntArray(1)
         GLES30.glGenVertexArrays(1, vaoArr, 0)
@@ -306,44 +349,12 @@ class MembraneRenderer : MeshRenderer {
         nrmBuf = bufs[1]
         auxBuf = bufs[2]
         idxBuf = bufs[3]
+        envTex = GL.envTexture()
 
-        // The rim is a circle, so a quad whose corners stray past it is cut
-        // rather than left in - otherwise the silhouette is a polygon with
-        // one side per grid cell, which is most of what reads as "jagged".
-        val tris = ArrayList<Int>(N * N * 6)
-        for (j in 0 until N - 1) {
-            for (i in 0 until N - 1) {
-                val di = i - mid + 0.5f
-                val dj = j - mid + 0.5f
-                if (sqrt(di * di + dj * dj) / mid > 0.99f) continue
-                val a = j * N + i
-                val b = j * N + i + 1
-                val c = (j + 1) * N + i + 1
-                val d = (j + 1) * N + i
-                tris.add(a); tris.add(b); tris.add(c)
-                tris.add(a); tris.add(c); tris.add(d)
-            }
-        }
-        indexCount = tris.size
-        val idxData = GL.intBuffer(tris.toIntArray())
-        GLES30.glBindVertexArray(vao)
-        GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, idxBuf)
-        GLES30.glBufferData(
-            GLES30.GL_ELEMENT_ARRAY_BUFFER,
-            indexCount * 4,
-            idxData,
-            GLES30.GL_STATIC_DRAW,
-        )
-        GLES30.glBindVertexArray(0)
-
-        // The three attribute stores are DYNAMIC but FIXED SIZE, so their GPU
-        // storage is allocated once here (`null` data = uninitialised store)
-        // and refilled with glBufferSubData every frame. Calling glBufferData
-        // per frame instead orphans and re-allocates the whole store on the
-        // driver side, three times a frame, for nothing.
-        allocAttr(posBuf, pos.size * 4)
-        allocAttr(nrmBuf, nrm.size * 4)
-        allocAttr(auxBuf, aux.size * 4)
+        // The index list and attribute stores depend on the grid size, which
+        // depends on the surface size - built on the first frame that knows
+        // it (see ensureGrid).
+        gpuGridStale = true
 
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
@@ -365,6 +376,10 @@ class MembraneRenderer : MeshRenderer {
             auxBuf = 0
             idxBuf = 0
         }
+        if (envTex != 0) {
+            GLES30.glDeleteTextures(1, intArrayOf(envTex), 0)
+            envTex = 0
+        }
     }
 
     private fun allocAttr(buf: Int, bytes: Int) {
@@ -378,21 +393,125 @@ class MembraneRenderer : MeshRenderer {
         GLES30.glViewport(0, 0, surfaceW, surfaceH)
     }
 
+    /**
+     * Sizes the grid to the kit's `detail()` for this surface. A new size
+     * starts the skin flat again, as the kit's does when its `N` changes;
+     * detail() moves in whole cells, so resizing the face's pane restarts
+     * the drum a handful of times, not on every pixel of the drag.
+     */
+    private fun ensureGrid() {
+        val want = GL.detail(GL.meshPx(surfaceW, surfaceH), 40, 150, 168)
+        if (want != n) {
+            n = want
+            mid = (n - 1) / 2f
+            val cells = n * n
+            z = FloatArray(cells)
+            zp = FloatArray(cells)
+            zn = FloatArray(cells)
+            rms = 0f
+            mask = BooleanArray(cells) { idx ->
+                val i = idx % n
+                val j = idx / n
+                val di = i - mid
+                val dj = j - mid
+                i > 0 && j > 0 && i < n - 1 && j < n - 1 && sqrt(di * di + dj * dj) / mid <= 0.96f
+            }
+            liveCells = max(1, mask.count { it })
+            // Tuned in CELLS on a 26-cell grid in the kit; scaling by the grid
+            // keeps the strike the same FRACTION of the skin at any size.
+            val gs = (26f / n) * (26f / n)
+            val ringR = mid * RING_SOURCE_R_FRAC
+            centreFalloff = FloatArray(cells)
+            ringFalloff = FloatArray(cells)
+            for (q in 0 until cells) {
+                val di = q % n - mid
+                val dj = q / n - mid
+                val cd = di * di + dj * dj
+                centreFalloff[q] = exp(-cd * 0.10f * gs)
+                val d = sqrt(cd) - ringR
+                ringFalloff[q] = exp(-d * d * 0.10f * gs)
+            }
+
+            // Fixed vertex positions: the rim is a circle, so vertices past
+            // it are pulled ONTO it rather than left sticking out - without
+            // that the silhouette is a polygon with one side per grid cell.
+            pos = FloatArray(cells * 3)
+            nrm = FloatArray(cells * 3)
+            aux = FloatArray(cells * 2)
+            onRim = BooleanArray(cells)
+            val step = 1.9f / n
+            val rimR = mid * 0.96f
+            for (q in 0 until cells) {
+                val di = q % n - mid
+                val dj = q / n - mid
+                val rr = sqrt(di * di + dj * dj)
+                var gi = di
+                var gj = dj
+                if (rr > rimR && rr > 0f) {
+                    val pull = rimR / rr
+                    gi = di * pull
+                    gj = dj * pull
+                    onRim[q] = true
+                }
+                pos[q * 3] = gi * step
+                pos[q * 3 + 2] = gj * step
+            }
+            posFb = GL.directFloatBuffer(pos.size)
+            nrmFb = GL.directFloatBuffer(nrm.size)
+            auxFb = GL.directFloatBuffer(aux.size)
+            gpuGridStale = true
+        }
+        if (!gpuGridStale) return
+
+        // A quad whose centre strays past the rim is cut rather than left in,
+        // for the same reason the rim vertices are pulled in.
+        val tris = ArrayList<Int>(n * n * 6)
+        for (j in 0 until n - 1) {
+            for (i in 0 until n - 1) {
+                val di = i - mid + 0.5f
+                val dj = j - mid + 0.5f
+                if (sqrt(di * di + dj * dj) / mid > 0.99f) continue
+                val a = j * n + i
+                val b = j * n + i + 1
+                val c = (j + 1) * n + i + 1
+                val d = (j + 1) * n + i
+                tris.add(a); tris.add(b); tris.add(c)
+                tris.add(a); tris.add(c); tris.add(d)
+            }
+        }
+        indexCount = tris.size
+        GLES30.glBindVertexArray(vao)
+        GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, idxBuf)
+        GLES30.glBufferData(
+            GLES30.GL_ELEMENT_ARRAY_BUFFER,
+            indexCount * 4,
+            GL.intBuffer(tris.toIntArray()),
+            GLES30.GL_STATIC_DRAW,
+        )
+        GLES30.glBindVertexArray(0)
+
+        // The three attribute stores are DYNAMIC but FIXED SIZE for a grid,
+        // so their GPU storage is allocated here (`null` data = uninitialised
+        // store) and refilled with glBufferSubData every frame. Calling
+        // glBufferData per frame instead orphans and re-allocates the whole
+        // store on the driver side, three times a frame, for nothing.
+        allocAttr(posBuf, pos.size * 4)
+        allocAttr(nrmBuf, nrm.size * 4)
+        allocAttr(auxBuf, aux.size * 4)
+        gpuGridStale = false
+    }
+
     override fun onDrawFrame(gl: GL10?) {
         // The shader did not build on this device (see onSurfaceCreated). A
         // dark, still surface beats an uninitialised framebuffer - and beats
         // the process dying, which is what used to happen instead.
         if (program == 0) {
-            GLES30.glClearColor(
-                Spec.BACKGROUND.red,
-                Spec.BACKGROUND.green,
-                Spec.BACKGROUND.blue,
-                1f,
-            )
+            GLES30.glClearColor(background.red, background.green, background.blue, 1f)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
             return
         }
         val f = frame ?: return
+        ensureGrid()
         step(f)
         upload()
         draw(f)
@@ -407,10 +526,9 @@ class MembraneRenderer : MeshRenderer {
         // (`FaceView.advance`: `angle += dt * rate * tf.dir * faceSpeed`). This
         // one builds its own clock out of `System.nanoTime()` - deliberately,
         // so the physics is not throttled by the frame-rate gate - and in doing
-        // so it stepped straight past the transform layer. The four borrowed
-        // states were all wrong here and nowhere else: BANKED's `rate 0.0`,
-        // which the spec says means "the clock actually stops", kept running at
-        // full speed; STANDBY ran at 1.0 instead of 0.5; ERROR ran forwards.
+        // so it has to apply the transform layer itself: BANKED's `rate 0.0`,
+        // which the spec says means "the clock actually stops", STANDBY's 0.5,
+        // and ERROR's reversal (see the excitation below).
         val tf = Spec.transformFor(f.state)
         val now = System.nanoTime()
         val elapsed = if (lastFrameNanos == 0L) {
@@ -425,11 +543,18 @@ class MembraneRenderer : MeshRenderer {
         // after any resume spends the whole step budget on catch-up.
         val dt = if (elapsed > RESUME_GAP_S) 0f else elapsed
 
-        accumulator += dt * st.rate * tf.rate
+        // Calm motion slows the drum the way the shell slows every other
+        // face's clock. This face keeps its own clock, so the shell's slowing
+        // of `f.angle` and `f.t` never reaches it; this is the one place it
+        // has to be applied by hand. A factor below 1 only ever means fewer
+        // physics ticks per second - slower, never faster.
+        val calmK = if (f.calm) CALM_MOTION_RATE else 1f
+        // 60 ticks a second in every state, as the kit ticks once a frame
+        // whatever the state is - NOT times st.rate (see the class comment).
+        accumulator += dt * tf.rate * calmK
         // The only place time is discarded. See MAX_STEPS_PER_FRAME: the cap is
         // the worst legitimate frame, so this trims genuine stalls only, and
-        // the loop below drains the whole of what is left - the physics runs at
-        // the state's rate whatever the panel and the frame-rate gate are doing.
+        // the loop below drains the whole of what is left.
         val backlogCap = MAX_STEPS_PER_FRAME * FIXED_STEP
         if (accumulator > backlogCap) accumulator = backlogCap
 
@@ -437,21 +562,42 @@ class MembraneRenderer : MeshRenderer {
         // at a fixed rate with light damping pumps itself to infinity, which is
         // a real failure mode of this stencil, not a hypothetical one.
         val driveBase = st.drive * (if (f.motion == FaceState.LISTENING) 0.4f + f.amp * 2.2f else 1f)
-        // Tuned in CELLS on a small grid; scaling by the grid keeps the
-        // strike the same FRACTION of the skin at any resolution.
-        val gs = (26f / N) * (26f / N)
         val k = min(0.24f, st.k)
+        val cells = n * n
+        // WHERE the drive is applied is `tf.dir`. Negating the drive's phase -
+        // the obvious reading of "backwards" - is not visible on a drum: an
+        // inverted sine at the same point source still radiates outward, which
+        // is the one thing the direction is supposed to tell you apart from. So
+        // the source MOVES instead. Forwards it is the reference's own point
+        // source at the centre and the rings expand; backwards it is a ring out
+        // near the rim, and the rings collapse inward onto the centre. Nothing
+        // else in this app moves inward, which is the point of `tf.dir` per
+        // `Spec.transformFor`: "the direction is the signal ... colour alone
+        // fails for the one man in twelve with a red-green deficiency".
+        //
+        // This is an interpretation, not a port - the reference has no
+        // reversed membrane to copy - so it is the one thing here worth a
+        // second opinion from a real screen.
+        val falloff = if (tf.dir < 0) ringFalloff else centreFalloff
 
         var steps = 0
         while (accumulator >= FIXED_STEP && steps < MAX_STEPS_PER_FRAME) {
             accumulator -= FIXED_STEP
-            physicsTime += FIXED_STEP
+            // The kit's `ph = t * p.rate`: the state's rate sets how fast the
+            // centre is driven, integrated so a state change bends the phase
+            // rather than jumping it.
+            drivePhase += FIXED_STEP * st.rate
 
+            // Jacobi, not Gauss-Seidel: read z and zp, write zn, then rotate.
+            // Mixing already-updated neighbours into the same sweep injects
+            // energy.
             var energy = 0f
-            for (q in 0 until N * N) {
+            for (q in 0 until cells) {
                 if (!mask[q]) { zn[q] = 0f; continue }
-                val acc = (z[q - 1] + z[q + 1] + z[q - N] + z[q + N] - 4f * z[q]) * k
+                val acc = (z[q - 1] + z[q + 1] + z[q - n] + z[q + n] - 4f * z[q]) * k
                 var nv = z[q] + (z[q] - zp[q]) * st.damp + acc
+                // Hard ceiling. One bad frame should bend the skin, never
+                // launch a spike off the screen.
                 if (nv > 1.2f) nv = 1.2f else if (nv < -1.2f) nv = -1.2f
                 zn[q] = nv
                 energy += nv * nv
@@ -460,97 +606,38 @@ class MembraneRenderer : MeshRenderer {
             zp = z
             z = zn
             zn = tmp
-            // Free: the sweep above already touched every live cell. It used to
-            // be a separate 1600-cell pass per frame, and re-evaluating it per
-            // TICK rather than per frame matters now that a frame can carry
-            // dozens of ticks - a limiter held fixed across a long catch-up
-            // burst is a limiter that does not limit.
+            // Free: the sweep above already touched every live cell. Re-read
+            // per TICK rather than per frame, because a frame can carry dozens
+            // of ticks - a limiter held fixed across a long catch-up burst is a
+            // limiter that does not limit.
             rms = sqrt(energy / liveCells)
             val drive = driveBase * max(0f, 1f - rms / 0.27f)
 
             // Excitation applied after the step, so it reads as a real
             // impulse rather than a forced boundary condition.
-            //
-            // WHERE it is applied is `tf.dir`. Negating the drive's phase - the
-            // obvious reading of "backwards" - is not visible on a drum: an
-            // inverted sine at the same point source still radiates outward,
-            // which is the one thing the direction is supposed to tell you
-            // apart from. So the source MOVES instead. Forwards it is the
-            // reference's own point source at the centre and the rings expand;
-            // backwards it is a ring out near the rim, and the rings collapse
-            // inward onto the centre. Nothing else in this app moves inward,
-            // which is the point of `tf.dir` per `Spec.transformFor`: "the
-            // direction is the signal ... colour alone fails for the one man in
-            // twelve with a red-green deficiency".
-            //
-            // This is an interpretation, not a port - the reference has no
-            // reversed membrane to copy - so it is the one thing here worth a
-            // second opinion from a real screen.
-            val ph = physicsTime
-            val inward = tf.dir < 0
-            val ringR = mid * RING_SOURCE_R_FRAC
-            for (j in 1 until N - 1) {
-                for (i in 1 until N - 1) {
-                    val q = j * N + i
-                    if (!mask[q]) continue
-                    val di = i - mid
-                    val dj = j - mid
-                    val cd = di * di + dj * dj
-                    val falloff = if (inward) {
-                        val d = sqrt(cd) - ringR
-                        exp(-d * d * 0.10f * gs)
-                    } else {
-                        exp(-cd * 0.10f * gs)
-                    }
-                    z[q] += falloff * (drive * 0.30f * sin(ph * 1.3f))
-                }
+            val kick = drive * 0.30f * sin(drivePhase * 1.3f)
+            for (q in 0 until cells) {
+                if (mask[q]) z[q] += falloff[q] * kick
             }
             steps++
         }
     }
 
-    private val pos = FloatArray(N * N * 3)
-    private val nrm = FloatArray(N * N * 3)
-    private val aux = FloatArray(N * N * 2)
-
-    // One direct buffer per attribute for the life of the renderer. These were
-    // a fresh `ByteBuffer.allocateDirect` each, three times a frame - ~51 KB a
-    // frame of native memory that only the Cleaner ever hands back, so at frame
-    // rate it accumulates faster than it is freed. The sizes are fixed, so one
-    // each is all that was ever needed.
-    private val posFb = GL.directFloatBuffer(pos.size)
-    private val nrmFb = GL.directFloatBuffer(nrm.size)
-    private val auxFb = GL.directFloatBuffer(aux.size)
-
     /** Hands the simulated grid to the GPU as a triangle mesh, rebuilt every frame since it IS the simulation. */
     private fun upload() {
-        val step = 1.9f / N
-        val rimR = mid * 0.96f
-        for (j in 0 until N) {
-            for (i in 0 until N) {
-                val q = j * N + i
+        val step = 1.9f / n
+        for (j in 0 until n) {
+            for (i in 0 until n) {
+                val q = j * n + i
                 val o3 = q * 3
                 val o2 = q * 2
-                val di = i - mid
-                val dj = j - mid
-                val rr = sqrt(di * di + dj * dj)
-                var gi = i.toFloat()
-                var gj = j.toFloat()
-                var hh = z[q] * AMPL_H
-                if (rr > rimR && rr > 0f) {
-                    val fpull = rimR / rr
-                    gi = mid + di * fpull
-                    gj = mid + dj * fpull
-                    hh = 0f
-                }
-                pos[o3] = (gi - mid) * step
-                pos[o3 + 1] = hh
-                pos[o3 + 2] = (gj - mid) * step
+                pos[o3 + 1] = if (onRim[q]) 0f else z[q] * AMPL_H
 
+                // Central differences where they exist, one-sided at the border.
                 val iL = if (i > 0) q - 1 else q
-                val iR = if (i < N - 1) q + 1 else q
-                val jU = if (j > 0) q - N else q
-                val jD = if (j < N - 1) q + N else q
+                val iR = if (i < n - 1) q + 1 else q
+                val jU = if (j > 0) q - n else q
+                val jD = if (j < n - 1) q + n else q
                 val gx = (z[iR] - z[iL]) * AMPL_H
                 val gy = (z[jD] - z[jU]) * AMPL_H
                 val nX = -gx
@@ -574,11 +661,14 @@ class MembraneRenderer : MeshRenderer {
     }
 
     private fun draw(f: FaceFrame) {
-        GLES30.glClearColor(Spec.BACKGROUND.red, Spec.BACKGROUND.green, Spec.BACKGROUND.blue, 1f)
+        // The caller's ground (the theme's well), not a fixed Spec.BACKGROUND,
+        // so this face sits in the same black as the pane around it.
+        GLES30.glClearColor(background.red, background.green, background.blue, 1f)
         GLES30.glClearDepthf(1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glUseProgram(program)
+        GL.bindEnv(envTex, uEnvLoc)
 
         GLES30.glUniform2f(uResLoc, surfaceW.toFloat(), surfaceH.toFloat())
         // No auto-spin term here - see the class doc comment on why the
@@ -586,12 +676,13 @@ class MembraneRenderer : MeshRenderer {
         GLES30.glUniform1f(uYawLoc, f.yaw)
         GLES30.glUniform1f(uPitLoc, -0.72f + f.pitch)
         GLES30.glUniform1f(uDistLoc, DIST)
-        // Same derivation as Tokamak's: r (the on-screen radius every face
-        // is handed) at this scale makes the skin's own object-space half
-        // extent (mid * step) fill roughly that radius.
+        // The kit's `scale = S * 1.35`, with S = 4r: the kit's canvas is the
+        // face's box scaled by `fit`, and the shell hands every face r = box
+        // / 4 x fit - the same S = 4r every canvas face in Faces.kt uses. This
+        // used to fit the skin's half-extent (mid * step) to r, which drew it
+        // at about 0.82 of the kit's size.
         val r = min(surfaceW, surfaceH) / 2f * 0.5f * fit
-        val halfExtent = mid * (1.9f / N)
-        GLES30.glUniform1f(uScaleLoc, r * DIST / halfExtent)
+        GLES30.glUniform1f(uScaleLoc, 4f * r * 1.35f)
         GLES30.glUniform3f(uColLoc, cool.red, cool.green, cool.blue)
         GLES30.glUniform3f(uHotLoc, hot.red, hot.green, hot.blue)
 

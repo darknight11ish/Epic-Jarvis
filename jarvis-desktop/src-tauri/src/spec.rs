@@ -242,6 +242,36 @@ pub fn has_state(state_id: &str) -> bool {
     spec().states.contains_key(state_id)
 }
 
+/// `#rrggbb`, lower case.
+pub fn rgb_hex(c: Rgb) -> String {
+    format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
+}
+
+/// A state's colour as one fixed value, for chrome that cannot animate - a
+/// 7px status dot, the accent. The bound colour when the binding names one;
+/// otherwise the pattern's colour at t = 0 (a hue sweep has no colour of its
+/// own to name).
+pub fn static_colour(bind: &Binding) -> Rgb {
+    match bind.color.as_deref() {
+        Some(id) => hex_of(Some(id)),
+        None => resolve(bind, 0.0, 0.0, 0.0).a,
+    }
+}
+
+/// The family a colour belongs to, as its whole ramp (deep to mist) and the
+/// colour's index in it, or `None` for a colour outside the palette.
+///
+/// The phone's `accentFor` walks this ramp to find a legible accent that is
+/// still recognisably the colour the owner bound; the desktop now does the
+/// same (jarvis-link.js `followAppearance`).
+pub fn family_ramp_of(c: Rgb) -> Option<(Vec<Rgb>, usize)> {
+    spec().families.values().find_map(|ramp| {
+        ramp.iter()
+            .position(|step| *step == c)
+            .map(|i| (ramp.clone(), i))
+    })
+}
+
 // ---------------------------------------------------------------------------
 // The primitives the pattern engine is written in.
 //

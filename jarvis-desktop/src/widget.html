@@ -18,7 +18,7 @@
     <script>
       try {
         var t = localStorage.getItem("jarvis.theme");
-        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+        if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
           document.documentElement.setAttribute("data-theme", t);
         }
       } catch (e) {
@@ -49,11 +49,16 @@
         <div class="route-pill mono" id="route-pill" title="Active model route">LOCAL</div>
 
         <div class="quick-actions">
-          <button class="icon-btn" id="btn-quick-log" title="Capture to the Logseq journal — press N for the field">
+          <!-- Shown only for the note apps the PC says are set up
+               (widget.js syncNoteTargets). -->
+          <button class="icon-btn" id="btn-quick-log" title="Capture to the Logseq journal — press N for the field" hidden>
             #log
           </button>
-          <button class="icon-btn" id="btn-quick-joplin" title="Capture to the Joplin vault">
+          <button class="icon-btn" id="btn-quick-joplin" title="Capture a new Joplin note" hidden>
             #jop
+          </button>
+          <button class="icon-btn" id="btn-quick-obs" title="Capture to today's Obsidian daily note" hidden>
+            #obs
           </button>
           <button
             class="icon-btn pin-btn"
@@ -72,6 +77,20 @@
           </button>
         </div>
       </header>
+
+      <!-- ── Focus session (focus.js) ──────────────────────────────────────
+           Shown only while a focus session runs, in both the pill and the
+           card, so the countdown is always on the desktop. Tinted while the
+           owner is off target. Never what was in front: the PC sends only
+           booleans and counts. Lock on: Jarvis's own window is in front when
+           it is pressed, so the PC locks on where the owner lands next. -->
+      <div class="focus-strip" id="focus-strip" data-tone="on" hidden>
+        <span class="focus-clock mono" id="focus-clock" aria-label="Focus time left">0:00</span>
+        <span class="focus-word" id="focus-word">Focus</span>
+        <button class="btn btn-quiet" type="button" id="focus-pause">Pause</button>
+        <button class="btn btn-quiet" type="button" id="focus-lock">Lock on</button>
+        <button class="btn btn-quiet" type="button" id="focus-stop">Stop</button>
+      </div>
 
       <!-- ── Expanded tray: telemetry, gates, capture ───────────────────── -->
       <main class="widget-tray" id="widget-tray" hidden>
@@ -100,7 +119,11 @@
              bar reports it but sits inside the drag region, where a click is a
              drag; this row is the action, in the half of the window that has
              room for a sentence. -->
-        <div class="widget-offline" id="widget-offline" hidden>
+        <!-- Shown while the link is down OR connected-but-stale: in both,
+             nothing can be approved, and the second used to show no words at
+             all. `data-tone` is red for offline, amber for stale or
+             connecting (jarvis-link.js linkWords). -->
+        <div class="widget-offline" id="widget-offline" data-tone="bad" hidden>
           <span id="widget-offline-text">Jarvis is not answering.</span>
           <button class="btn btn-quiet" type="button" id="widget-offline-retry">Reconnect</button>
         </div>
@@ -185,6 +208,10 @@
             </div>
             <div class="meter-track"><i id="gpu-bar" style="transform: scaleX(0)"></i></div>
           </div>
+
+          <!-- Every graphics card, one line each, when there are two or more
+               (I12): the meters above are the first card's. -->
+          <ul class="gpu-cards mono" id="gpu-cards" aria-label="Graphics cards" hidden></ul>
         </section>
 
         <!-- Pending autonomy gate -->
@@ -198,10 +225,17 @@
           <!-- Same reasoning as the quickbar: no modality, no focus trap, so
                no `alertdialog`. Announced through the shared live region
                instead, which also fixes writing to a hidden region. -->
+          <!-- One card on every screen (card-words.js): the label, then the
+               PC's own title for it (notice.title) - never the code name. -->
           <div class="approval-header">
-            <span class="warn-badge">APPROVAL REQUIRED</span>
-            <span class="action-name mono" id="appr-action">--</span>
+            <span class="warn-badge" id="appr-kicker">Needs your OK</span>
+            <!-- Which of how many, as in the quickbar. The next card replacing
+                 the answered one under the cursor, with no sign more were
+                 waiting, is how a click lands on a card nobody read. Display
+                 only: there is no control here that acts on more than one. -->
+            <span class="appr-count mono" id="appr-count" hidden></span>
           </div>
+          <p class="appr-title" id="appr-action">Jarvis is asking for your approval</p>
           <!-- Outside text tried to rush the reader and the tier went up.
                The chip and the quote; the surrounding context stays on the
                quickbar's card, because this window is 320px wide and a
@@ -229,6 +263,9 @@
             role="group"
             aria-label="Choose which version to approve"
           ></div>
+          <!-- Why Approve is missing, in words on the card - it used to be a
+               tooltip on a disabled button, which the keyboard cannot reach. -->
+          <p class="appr-options-why" id="appr-options-why" hidden></p>
 
           <!-- A note before the first decision - §3b. Submitting sends it
                back for a NEW proposal; it never edits the one on screen,
@@ -251,20 +288,27 @@
             >↵</button>
           </div>
 
+          <!-- Why the two buttons are grey, when they are: the queue cannot be
+               confirmed, or a decision is already on its way. -->
+          <p class="appr-why" id="appr-why" role="status" hidden></p>
+          <!-- Deny on the left, Approve on the right - the same order on every
+               screen, the phone's included (docs/ARCHITECTURE.md §3). -->
           <div class="approval-actions">
-            <button class="btn btn-approve" id="btn-appr-yes">Approve</button>
             <button class="btn btn-deny" id="btn-appr-no">Deny</button>
+            <button class="btn btn-approve" id="btn-appr-yes">Approve</button>
           </div>
+          <p class="appr-hint">Nothing runs until you decide.</p>
         </section>
 
         <!-- One-shot capture -->
-        <section class="capture-row">
+        <p class="note-targets-line" id="note-targets-line" role="status">Checking which note apps are set up on your PC…</p>
+        <section class="capture-row" id="capture-row" hidden>
           <button
             type="button"
             class="capture-target mono"
             id="capture-target"
             data-target="logseq"
-            aria-label="Capture target: Logseq journal. Activate to switch to the Joplin vault."
+            aria-label="Capture target: Logseq journal. Activate to switch to the next note app."
           >#log</button>
           <input
             id="capture-input"

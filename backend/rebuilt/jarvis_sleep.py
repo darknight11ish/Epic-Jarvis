@@ -21,8 +21,10 @@ is exactly the thing that decision was about, so this module reports and
 offers; it does not consolidate. An INFERRED implementation of the pass itself
 would be a silent, unreviewed rewrite of the fact store.
 
-`set_enabled`/`set_remind` answer the card's own three actions ("enable",
-"not now", "stop asking") so a client can act on it, added when the card was
+`set_enabled`/`set_remind`/`not_now` answer the card's own three actions
+("enable", "not now", "stop asking") so a client can act on it - `not_now`
+added 2026-09-25 with jarvis_backoff.py, which keeps the offer quiet for 1
+day, then 7, then 30 after each "not now" - added when the card was
 first wired into the desktop and phone UIs rather than only ever printed to a
 console. Neither writes `jarvis-framework.toml` - that file is the owner's
 own, hand-edited, and this module was never going to start rewriting it from
@@ -110,16 +112,82 @@ def _set(key: str, value: bool) -> dict:
 
 
 def set_enabled(on: bool) -> dict:
-    """The card's "enable" action. Still starts nothing by itself - turning
-    this on only stops `reminder_card()` from offering again; the
+    """The card's "enable" action. Starts nothing - turning this on only
+    records the wish and stops `reminder_card()` from offering again; the
     consolidation pass itself remains unimplemented, see the module
-    docstring."""
-    return _set("enabled", on)
+    docstring. If it is ever built, it may only PROPOSE changes as review
+    cards: nothing retires a stored fact without the owner's yes on that
+    one fact."""
+    out = _set("enabled", on)
+    if on and out.get("ok"):
+        _backoff_do("accepted")
+    return out
 
 
 def set_remind(on: bool) -> dict:
     """The card's "stop asking" action, sent as `set_remind(False)`."""
-    return _set("remind", on)
+    out = _set("remind", on)
+    if out.get("ok"):
+        _backoff_do("closed")
+    return out
+
+
+# --------------------------------------------------------------------------
+#   The back-off (jarvis_backoff.py, briefing.patch, 2026-09-25)
+# --------------------------------------------------------------------------
+#
+# This card is an OFFER nobody asked for, so it follows the three rules every
+# offer follows: it is not handed out while the owner is chatting (two
+# minutes), nor while too many other offers wait, and each "not now" keeps it
+# quiet for 1 day, then 7, then 30. "Stop asking" is still for good, and
+# switching it on is still the owner's own choice at any time - a "not now"
+# never stops that. Without jarvis_backoff.py the card behaves as it always
+# did: once a day.
+
+#: The offer's fingerprint: what it offers, not its words.
+OFFER = "sleep_time_offer"
+
+
+def _backoff():
+    try:
+        import jarvis_backoff
+        return jarvis_backoff.get(), jarvis_backoff.fingerprint(OFFER)
+    except Exception:
+        return None, None
+
+
+def _backoff_do(what: str) -> None:
+    bo, fp = _backoff()
+    if bo is None:
+        return
+    try:
+        getattr(bo, what)(fp)
+    except Exception:
+        pass
+
+
+def not_now() -> dict:
+    """The card's "not now" action: the owner said no, for now. Quiet for 1
+    day, then 7, then 30 (jarvis_backoff.SILENCE_DAYS). Changes no setting:
+    switching it on stays one tap away, and nothing here stops that."""
+    bo, fp = _backoff()
+    if bo is None:
+        return {"ok": True, "enabled": enabled(), "remind": remind(),
+                "quiet_until": None,
+                "said": "Not now. It may offer again tomorrow."}
+    try:
+        until = bo.declined(fp)
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__, "enabled": enabled(),
+                "remind": remind()}
+    try:
+        now = float(bo.now())
+    except Exception:
+        now = time.time()
+    days = max(1, round((until - now) / 86400))
+    return {"ok": True, "enabled": enabled(), "remind": remind(), "quiet_until": until,
+            "said": f"Not now. It will not offer this again for "
+                    f"{days} day{'s' if days != 1 else ''}."}
 
 
 def enabled() -> bool:
@@ -154,23 +222,58 @@ def hour() -> int:
 def reminder_card() -> Optional[dict]:
     """The daily offer to switch it on, or None.
 
-    None in three cases: it is already on, reminders are off, or one has
-    already been offered today. The last is why this returns None rather than
-    an empty dict - the HUD tests the result for truthiness.
+    None in four cases: it is already on, reminders are off, one has
+    already been offered today, or the back-off says wait (Jarvis is in
+    Quiet or Standby, the owner chatted in the last two minutes, other
+    offers are waiting, or a recent "not now" still holds -
+    jarvis_backoff.py). That is why this returns None rather
+    than an empty dict - the HUD tests the result for truthiness.
     """
     if enabled() or not remind():
         return None
     today = time.strftime("%Y-%m-%d")
     if _seen.get("day") == today:
         return None
+    # The back-off: asked BEFORE the day is marked, so a card held back
+    # because the owner is chatting is offered later the same day.
+    bo, fp = _backoff()
+    if bo is not None:
+        try:
+            # No card was handed out today (the check above), so an earlier
+            # day's card still counted as waiting is replaced by this one,
+            # not left to hold it back.
+            bo.closed(fp)
+            # kind=: rule 4 - an offer never asks for more (jarvis_backoff.OFFERS).
+            may, _why = bo.may_offer(fp, kind=OFFER)
+        except Exception:
+            may = False
+        if not may:
+            return None
     _seen["day"] = today
+    if bo is not None:
+        try:
+            bo.opened(fp)
+        except Exception:
+            pass
+    # The words are the whole of this card, so they must be true. They used
+    # to promise a pass that would "merge duplicates and retire facts that
+    # newer ones replaced" - nothing does either (status() says
+    # "implemented": false), and a pass that retired facts by itself would
+    # break the rule that no fact is retired without the owner's yes on that
+    # one fact. So: what is built (nothing runs), what switching it on does
+    # (records a wish), and what any future version may do (ask, card by
+    # card). The clients show `title` and `body` as they are.
     return {
         "kind": "sleep_time_offer",
-        "title": "Let Jarvis tidy its memory overnight?",
-        "body": ("Once a night it would re-read what it learned that day, "
-                 "merge duplicates and retire facts that newer ones replaced. "
-                 "It changes stored facts, so it is off until you say."),
+        "title": "Overnight memory tidying - not built yet",
+        "body": ("One day, Jarvis could look over what it learned each day and "
+                 "suggest tidying it, such as merging repeats - as ordinary "
+                 "review cards you answer one at a time. None of that is built "
+                 "yet. Switching it on only records that you want it: nothing "
+                 "runs, and nothing in memory changes. Jarvis never changes or "
+                 "retires a stored fact without your yes on that one fact."),
         "actions": ["enable", "not now", "stop asking"],
+        "implemented": False,
         "config": "[memory.sleep_time] enabled / remind",
     }
 

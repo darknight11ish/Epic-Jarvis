@@ -177,18 +177,33 @@ def plan(device: str, goal: str, requests: list) -> Plan:
         if_refused="nothing happens on the phone; the goal is not attempted")
 
 
+# The weight the CARD prints is the heavier of two: the steps the model
+# flagged, and the gate's own risk table - which classifies this whole
+# action as one that cannot be undone and leaves the machine (by its worst
+# case: tapping the phone can send a message or complete a purchase). The
+# card used to print only the model's flags, so a plan whose Send click the
+# model left unflagged read "weight: normal" while the notice and the risk
+# line said the opposite. `Plan.weight` stays the model's own marking; this
+# is what a person is shown.
+CARD_WEIGHT_LINE = (
+    "weight: heavy - any tap can send something or be impossible to undo, "
+    "so the whole plan is treated that way. The steps marked below are the "
+    "ones Jarvis flagged itself; an unmarked step is not a promise that it "
+    "is safe.")
+
+
 def describe(p: Plan) -> str:
     """The card text. Every literal command in full - this is an adb
     command line, and summarising it defeats the point of printing one."""
     lines = [f"Jarvis would like to do this on device {p.device}: {p.goal}",
              "",
-             f"{len(p.steps)} step(s), weight: {p.weight}.",
+             f"{len(p.steps)} step(s), {CARD_WEIGHT_LINE}",
              "Talks to your own paired phone over adb. Nothing goes to a "
              "third party.",
              ""]
     for i, s in enumerate(p.steps, 1):
         lines += [f"  {i}. {s.action}" +
-                  ("  [irreversible or leaves the machine]" if s.heavy else ""),
+                  ("  [Jarvis flagged: irreversible or leaves the machine]" if s.heavy else ""),
                   f"     {' '.join(shlex.quote(a) for a in s.argv)}",
                   f"     why: {s.why}", ""]
     if p.rejected:
@@ -205,8 +220,75 @@ def describe(p: Plan) -> str:
 #   Execution - only the enumerated commands, against the SAME device
 # --------------------------------------------------------------------------
 
+def adb_env() -> dict:
+    """What adb inherits (security audit M2): jarvis_child_env's allowlist,
+    plus adb's and the Android tools' own settings - never the pairing token
+    or a service password, which Jarvis's own environment holds. adb finds
+    its pairing key under the user's profile folder, which is on the list."""
+    import jarvis_child_env
+    return jarvis_child_env.inherited(prefixes=("ANDROID_", "ADB_"))
+
+
 def _real_adb(argv: list, timeout: float = 15.0):
-    return subprocess.run(argv, capture_output=True, timeout=timeout)
+    return subprocess.run(argv, capture_output=True, timeout=timeout, env=adb_env())
+
+
+# --------------------------------------------------------------------------
+#   Never the Jarvis app (security audit M3, GUARDS S4, 2026-09-25)
+#
+#   A plan shaped by outside text could tap Approve in the Jarvis app on the
+#   phone: one card would then approve another the owner never saw. So
+#   before every step that sends input (everything but a screenshot), run()
+#   asks the phone which app is in front - `adb shell dumpsys window`, its
+#   mCurrentFocus / mFocusedApp lines - and stops if it is a Jarvis app
+#   (jarvis-client's com.jarvis.client, the older jarvis-android's
+#   com.jarvis.assistant, or any debug build of either: every package under
+#   com.jarvis.). If the answer cannot be read, it stops too: "I could not
+#   tell" is not "it is safe".
+# --------------------------------------------------------------------------
+
+JARVIS_PACKAGE_PREFIX = "com.jarvis."
+_FOCUS_LINE = re.compile(r"^\s*(mCurrentFocus|mFocusedApp|mFocusedWindow)=(.*)$", re.M)
+_PACKAGE = re.compile(r"\b([A-Za-z][\w]*(?:\.[\w]+)+)/")
+
+
+def foreground_packages(text: str) -> Optional[list]:
+    """The packages `dumpsys window` names as focused; None when it names
+    none - no focus line at all (the command failed, or the phone words it
+    some other way), or only lines with no package in them
+    (`mCurrentFocus=null` while a window opens or the shade is pulled down,
+    a popup's window title). None is "could not tell", and nothing is
+    tapped: an empty list used to read as "Jarvis is not in front"
+    (2026-09-26, outside audit finding 5)."""
+    lines = _FOCUS_LINE.findall(text or "")
+    pkgs = [m for _key, rest in lines for m in _PACKAGE.findall(rest)]
+    return pkgs or None
+
+
+def jarvis_in_front(device: str, run_adb: Callable) -> str:
+    """"" when it is safe to send input to `device`, else why not."""
+    try:
+        result = run_adb(["adb", "-s", device, "shell", "dumpsys", "window"])
+        out = getattr(result, "stdout", b"")
+        text = out.decode("utf-8", "replace") if isinstance(out, bytes) else str(out)
+        ok = getattr(result, "returncode", 0) == 0
+    except Exception:
+        ok, text = False, ""
+    pkgs = foreground_packages(text) if ok else None
+    if pkgs is None:
+        return ("Jarvis could not tell which app is in front on the phone, so it "
+                "stopped rather than risk tapping inside the Jarvis app")
+    for pkg in pkgs:
+        if pkg.startswith(JARVIS_PACKAGE_PREFIX):
+            return (f"the Jarvis app ({pkg}) is in front on the phone, and Jarvis "
+                    f"does not tap inside its own app: a tap there could approve a "
+                    f"card you never saw")
+    return ""
+
+
+#: The words a live status line may use for a step (see run()).
+_STEP_WORD = {"tap": "a tap", "swipe": "a swipe", "key": "a key press",
+              "text": "typing", "screenshot": "a screenshot"}
 
 
 def _current_serials(run_adb: Callable) -> set:
@@ -301,7 +383,18 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
                                  f"{p.device!r} is no longer connected - "
                                  "stopping rather than sending it to whatever "
                                  "phone is plugged in now")
-        tell(f"Step {i}/{len(p.steps)}: {step.action} on {p.device}")
+        if step.action != "screenshot":
+            why_not = jarvis_in_front(p.device, caller)
+            if why_not:
+                return stopped_at(i, f"step {i} ({step.action}): {why_not}")
+        # The line goes out on the event stream (`announce` is wired to
+        # jarvis_events.set_activity), which reaches a phone with the screen
+        # off - and ARCHITECTURE.md section 6 says an event carries "never
+        # content". So only the step's number and a word from a fixed list;
+        # never the text typed or the device's serial. Those are on the card the owner approved
+        # (security audit L4, 2026-09-25).
+        tell(f"Step {i}/{len(p.steps)}: {_STEP_WORD.get(step.action, 'a step')} on "
+             f"the phone")
         result = caller(step.argv)
         rc = getattr(result, "returncode", 0)
         if rc != 0:

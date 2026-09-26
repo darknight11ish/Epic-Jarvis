@@ -54,6 +54,14 @@ def _words_of(text):
 
 REBUILT = Path(__file__).resolve().parent / "rebuilt"
 
+# This suite imports THIS folder's rebuilt/ copies (below), so on the owner's
+# PC a green run would say nothing about the copies the backend actually runs
+# - which, until apply-patches.ps1 learned to copy them in, could be any age.
+# With JARVIS_BACKEND set, stop plainly unless the backend's copy of every
+# rebuilt module IS this one. (Nothing happens in the dev container or CI.)
+from _where import require_shipped  # noqa: E402
+require_shipped(*[f"rebuilt/{p.name}" for p in sorted(REBUILT.glob("jarvis_*.py"))])
+
 # The rebuilt modules are the ones under test, so they come FIRST on the path -
 # ahead of any copy that may be sitting in the backend folder. Testing whichever
 # copy happened to be found first is how you get a green suite for code nobody
@@ -989,12 +997,105 @@ class Router(unittest.TestCase):
                     self.assertFalse(d.inject_memory,
                                      f"memory offered to cloud lane for {q[:30]!r}")
 
+    def test_the_cloud_is_offered_never_taken_without_a_yes(self):
+        """The owner's decision, 2026-09-24: ask each time. A long, plain
+        question used to go to the first cloud lane by itself."""
+        long_q = ("explain in detail and compare the trade-offs of three sorting "
+                  "algorithms, step by step, why each is chosen ") * 3
+        fresh = RT.Budget(path=None)
+        d = RT.choose(long_q, local_model="local", lanes=self.LANES, budget=fresh)
+        self.assertEqual((d.lane, d.gate, d.offer), ("local", "offer", "jarvis-escalate"))
+        self.assertIn("say yes", d.reason)
+        # Only a real True counts: a truthy string or number from a JSON body
+        # is not the owner's yes.
+        for almost in ("yes", 1, "true", [True], None, False):
+            d = RT.choose(long_q, local_model="local", lanes=self.LANES, budget=fresh,
+                          owner_said_yes=almost)
+            self.assertEqual(d.lane, "local", f"{almost!r} counted as a yes")
+        d = RT.choose(long_q, local_model="local", lanes=self.LANES, budget=fresh,
+                      owner_said_yes=True)
+        self.assertEqual((d.lane, d.gate, d.offer), ("jarvis-escalate", "escalate", ""))
+        self.assertFalse(d.inject_memory)
+
+    def test_a_yes_never_carries_a_private_turn_out_and_nothing_private_is_offered(self):
+        long_tail = " explain in detail and compare step by step" * 4
+        fresh = RT.Budget(path=None)
+        cases = [dict(query="what is my password" + long_tail),
+                 dict(query="summarise this" + long_tail, has_image=True),
+                 dict(query="summarise this" + long_tail, conversation_tainted=True),
+                 dict(query="sk-ant-api03-AbC9dEf1GhI2jKl3MnO4pQr5StU6vWx7" + long_tail)]
+        for kw in cases:
+            for yes in (False, True):
+                d = RT.choose(local_model="local", lanes=self.LANES, budget=fresh,
+                              owner_said_yes=yes, **kw)
+                self.assertEqual(d.lane, "local", f"{kw} went out with yes={yes}")
+                self.assertEqual(d.offer, "", f"{kw} was offered to the cloud")
+
+    def test_todays_api_key_shapes_are_recognised(self):
+        """Anthropic and current OpenAI keys have dashes inside; the old
+        pattern (letters and digits only after "sk-") missed both."""
+        for key, kind in (
+                ("sk-ant-api03-AbC9dEf1GhI2jKl3MnO4pQr5StU6vWx7Yz8aB9cD0eF1", "API key"),
+                ("sk-proj-Ab_C9dEf1-GhI2jKl3MnO4pQr5StU6vWx7", "API key"),
+                ("sk-AbC9dEf1GhI2jKl3MnO4pQr5", "API key"),
+                ("AIzaSyA1b2C3d4E5f6G7h8I9j0KlMnOpQrStUvW", "Google"),
+                ("hf_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "Hugging Face")):
+            found = RT.looks_like_a_secret(f"here is my config: {key} thanks")
+            self.assertIsNotNone(found, key[:12])
+            self.assertIn(kind, found)
+            self.assertNotIn(key, found, "the finding must not repeat the key")
+        for plain in ("the sk-8 skateboard", "task-list-for-monday", "AIza is a prefix"):
+            self.assertIsNone(RT.looks_like_a_secret(plain), plain)
+
+    def test_fine_grained_github_and_other_key_shapes_are_recognised(self):
+        """GitHub's fine-grained tokens (github_pat_, the default since 2023)
+        were missed - the extraction research, Module 1 - and so were AWS
+        temporary keys, GitLab tokens, Stripe secret keys and Google OAuth
+        tokens. jarvis_scrub.py uses this same table for backend.log."""
+        # Fake keys, split in two so GitHub's secret scanner does not block the push.
+        for key, kind in (
+                ("github_pat_11ABCDEFG0a1b2c3d4e5f6g7h8i9j0_k1l2m3n4o5p6q7r8s9t0u1v2w3x4",
+                 "GitHub"),
+                ("ASIAIOSFODNN7EXAMPLE", "AWS"),
+                ("glpat" + "-Ab1Cd2Ef3Gh4Ij5Kl6Mn", "GitLab"),
+                ("sk_" + "live_4eC39HqLyjWDarjtT1zdp7dc", "Stripe"),
+                ("ya29.a0AfH6SMBx1y2z3AbCdEfGhIjKlMn", "Google OAuth")):
+            found = RT.looks_like_a_secret(f"here is my config: {key} thanks")
+            self.assertIsNotNone(found, key[:12])
+            self.assertIn(kind, found)
+            self.assertNotIn(key, found, "the finding must not repeat the key")
+        for plain in ("github_pat is the name of the token type", "pk_live_ is public",
+                      "ya29 is a prefix"):
+            self.assertIsNone(RT.looks_like_a_secret(plain), plain)
+
     def test_taint_pins_the_turn_local(self):
         long_q = ("explain in detail and compare the trade-offs, step by step, "
                   "why this design was chosen " * 4)
         d = RT.choose(long_q, local_model="local", lanes=self.LANES, tainted=True)
         self.assertEqual(d.lane, "local")
         self.assertEqual(d.gate, "taint")
+
+    def test_a_picture_never_goes_to_a_cloud_lane(self):
+        """Rule 1. A screen capture can show an email, a file or a password
+        manager, and none of the text checks can read it. choose() used to
+        escalate a turn with a picture like any other long question, and
+        even went looking for a lane with "vision" in its name. A fresh
+        Budget (in memory, nothing spent) so the budget gate cannot be what
+        keeps it local."""
+        long_q = ("explain in detail and compare the trade-offs, step by step, "
+                  "why this design was chosen " * 4)
+        lanes = ["jarvis-escalate", "jarvis-vision", "jarvis-bulk"]
+        fresh = RT.Budget(path=None)
+        # CONTROL: the same question with no picture does escalate, so the
+        # assertion below is about the picture and nothing else.
+        plain = RT.choose(long_q, local_model="local", lanes=lanes, budget=fresh,
+                          owner_said_yes=True)
+        self.assertIn(plain.lane, lanes, f"control did not escalate: {plain}")
+        d = RT.choose(long_q, local_model="local", lanes=lanes, has_image=True,
+                      budget=fresh, owner_said_yes=True)
+        self.assertEqual(d.lane, "local")
+        self.assertEqual(d.gate, "image")
+        self.assertIn("picture", d.reason)
 
     def test_the_private_backstop_pins_the_turn_local(self):
         d = RT.choose("what is the api key for my bank account and the cvv, "
@@ -1081,7 +1182,7 @@ class Router(unittest.TestCase):
             "an AWS access key": "AKIAABCDEFGHIJKLMNOP",
             "a GitHub token": "ghp_" + "a" * 36,
             "a Slack token": "xoxb-1234567890-abcdefghij",
-            "an OpenAI-style API key": "sk-" + "a" * 24,
+            "an OpenAI or Anthropic API key": "sk-" + "a" * 24,
             "a JSON web token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
             "a bearer token": "Bearer " + "a" * 24,
             "a labelled secret value": 'api_key: "abcdefghijklmnop1234"',
@@ -1185,13 +1286,30 @@ class Voice(unittest.TestCase):
 
     def test_a_different_voice_is_refused(self):
         class Fixed(VO.Embedder):
+            # A speaker model, as far as verify() is concerned: since
+            # 2026-09-24 the basic (semantic = False) check lets nobody in.
+            semantic = True
             def __init__(self, v): self.v = list(v)
             def embed(self, audio): return self.v
 
         VO.VoiceProfile(centroid=[1.0, 0.0, 0.0, 0.0], threshold=0.5,
                         samples=3).save(self.prof)
-        self.assertFalse(VO.verify(b"x", Fixed([0.0, 1.0, 0.0, 0.0])).is_owner)
-        self.assertTrue(VO.verify(b"x", Fixed([1.0, 0.0, 0.0, 0.0])).is_owner)
+        # strong=False: no stronger model, whatever this PC has installed.
+        self.assertFalse(VO.verify(b"x", Fixed([0.0, 1.0, 0.0, 0.0]), strong=False).is_owner)
+        self.assertTrue(VO.verify(b"x", Fixed([1.0, 0.0, 0.0, 0.0]), strong=False).is_owner)
+
+    def test_the_basic_check_never_lets_anyone_in(self):
+        """Hole 1 (2026-09-24): the spectral stand-in cannot tell two people
+        apart, and it used to answer is_owner=True for a close enough clip."""
+        class Fixed(VO.Embedder):
+            def __init__(self, v): self.v = list(v)
+            def embed(self, audio): return self.v
+
+        VO.VoiceProfile(centroid=[1.0, 0.0, 0.0, 0.0], threshold=0.5,
+                        samples=3).save(self.prof)
+        v = VO.verify(b"x", Fixed([1.0, 0.0, 0.0, 0.0]), strong=False)
+        self.assertFalse(v.is_owner)
+        self.assertIn("install the voice-ID model", v.reason)
 
     def test_broad_mode_is_always_visible_in_the_verdict(self):
         VO._cfg = lambda k, d=None: {"enabled": True, "mode": "broad"}.get(k, d)

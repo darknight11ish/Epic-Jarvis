@@ -14,14 +14,22 @@
 //! the right rule for a single-owner machine and the wrong one for a team —
 //! there is one owner here.
 //!
-//! ## The route does not exist yet
+//! ## The route exists once `appearance.patch` is applied
 //!
-//! `GET /api/appearance` and `POST /api/appearance` are a proposal, written up
-//! in `docs/APPEARANCE-API.md`. Today the backend answers neither, so every
-//! read falls back to the local store and every write reports that it stayed
-//! local. That is deliberately visible in the UI rather than silent: a picker
-//! that claims to have changed the phone when it has not is worse than one that
-//! says it could not.
+//! `GET /api/appearance` and `POST /api/appearance` were first a proposal,
+//! written up in `docs/APPEARANCE-API.md`. `backend/appearance.patch` now adds
+//! both to `jarvis_hud.py` (tested by `backend/test_appearance.py`): the
+//! document lives in `appearance.json` beside `config.toml`, a save publishes
+//! an `appearance` event, and the write carries the same origin and token
+//! checks as the other desktop-only routes. It needs no approval: it is
+//! cosmetic, and `backend/README.md` says why it should stay that way.
+//!
+//! The backend lives on the owner's machine, not in this repo, so whether a
+//! given backend has the patch is only known at run time. One without it
+//! answers 404 or 501, and then every read falls back to the local store and
+//! every write reports that it stayed local. That is deliberately visible in
+//! the UI rather than silent: a picker that claims to have changed the phone
+//! when it has not is worse than one that says it could not.
 //!
 //! `/api/config` was the obvious existing home and is not one — it is a read on
 //! this side and a 501 on the server, so there is no write path to borrow.
@@ -37,7 +45,7 @@ use crate::commands;
 /// Key in the settings store.
 const STORE_KEY: &str = "appearance";
 
-/// The routes this module would use, once they exist.
+/// The route this module reads and writes (`backend/appearance.patch`).
 const ROUTE: &str = "/api/appearance";
 
 /// Short: this is read on the way into a window the user is already looking at,
@@ -91,6 +99,18 @@ impl AppearanceState {
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = doc.clone();
     }
 
+    /// A copy of the whole document, for the HUD window.
+    ///
+    /// That window cannot ask for it (`capabilities/hud.json` grants it one
+    /// command, the mic button's, and no read), so `lib.rs` pushes this into
+    /// it when its page loads.
+    pub fn snapshot(&self) -> Appearance {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
     /// The owner's binding for a state, if they have set one.
     ///
     /// Returns `None` for a state they have not touched, so the caller falls
@@ -142,6 +162,10 @@ fn adopt(app: &AppHandle, doc: &Appearance) {
     app.state::<AppearanceState>().put(doc);
     crate::tray::on_appearance_changed(app);
     let _ = app.emit(crate::events::APPEARANCE_CHANGED, ());
+    // The HUD cannot hear that event - its page's own CSP refuses Tauri's
+    // IPC - so its reactor, which wears this same face, is handed the
+    // document directly. See `push_to_hud`.
+    crate::push_to_hud(app, "appearance", doc);
 }
 
 /// Loads the stored document at startup so the tray wears it immediately.
@@ -166,6 +190,9 @@ fn client() -> Option<reqwest::Client> {
         .connect_timeout(TIMEOUT)
         .timeout(TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .ok()
 }
@@ -273,6 +300,87 @@ pub async fn get_appearance(app: AppHandle) -> Loaded {
             },
         },
     }
+}
+
+/// Re-reads the server's copy after an `appearance` event (stream.rs) and
+/// wears it. Read-only towards the server - it never posts - so a save made
+/// here, which the server announces back as an event, does not loop. A
+/// failure keeps what is already worn: the event is a convenience, and the
+/// next window that opens asks again anyway.
+pub async fn refresh_from_server(app: &AppHandle) {
+    if let Ok(doc) = from_server(app).await {
+        let _ = save_local(app, &doc);
+        adopt(app, &doc);
+    }
+}
+
+/// The appearance document this process is already wearing, from memory.
+///
+/// For a window that only needs to DRAW the owner's face - the Widget's live
+/// face - rather than show where it came from. Unlike [`get_appearance`] it
+/// makes no network call and broadcasts nothing, so a window may call it
+/// from its own `appearance-changed` listener without starting a loop (that
+/// command re-broadcasts the event every time it is called).
+#[tauri::command]
+pub fn appearance_snapshot(app: AppHandle) -> Appearance {
+    app.state::<AppearanceState>().snapshot()
+}
+
+/// One state's colour for the window chrome - see [`appearance_colours`].
+#[derive(Debug, Clone, Serialize)]
+pub struct ChromeColour {
+    /// `#rrggbb`.
+    pub hex: String,
+    /// The colour's palette family, deep to mist, when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ramp: Option<Vec<String>>,
+    /// This colour's index in `ramp`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<usize>,
+}
+
+/// The owner's state colours, as fixed values the window chrome can use: the
+/// Brain's state dots and the accent (jarvis-link.js `followAppearance`).
+///
+/// Only the states the owner has bound. An unbound state keeps the colour
+/// theme.css tuned for it, because those were measured against every theme's
+/// surfaces and a spec default re-derived here would undo that. From memory,
+/// like [`appearance_snapshot`]: no network, no broadcast.
+#[tauri::command]
+pub fn appearance_colours(app: AppHandle) -> BTreeMap<String, ChromeColour> {
+    let state = app.state::<AppearanceState>();
+    let mut out = BTreeMap::new();
+    for id in [
+        "idle",
+        "listening",
+        "thinking",
+        "speaking",
+        "approval",
+        "standby",
+        "error",
+        "banked",
+    ] {
+        let Some(bind) = state.binding(id) else {
+            continue;
+        };
+        let rgb = crate::spec::static_colour(&bind);
+        let (ramp, step) = match crate::spec::family_ramp_of(rgb) {
+            Some((ramp, i)) => (
+                Some(ramp.into_iter().map(crate::spec::rgb_hex).collect()),
+                Some(i),
+            ),
+            None => (None, None),
+        };
+        out.insert(
+            id.to_string(),
+            ChromeColour {
+                hex: crate::spec::rgb_hex(rgb),
+                ramp,
+                step,
+            },
+        );
+    }
+    out
 }
 
 /// Saves. Always locally; to the server too when there is one.
@@ -428,6 +536,31 @@ mod tests {
         });
         let bound = state.binding("thinking").expect("binding lost");
         assert_eq!(bound.params.get("span_deg"), Some(&serde_json::json!(58)));
+    }
+
+    #[test]
+    fn the_hud_snapshot_is_the_whole_document() {
+        // The HUD's reactor picks its face from `face` and its colours from
+        // `bindings`, so the push has to carry both, as the page will read
+        // them: the same field names the Faces window saves.
+        let state = AppearanceState::default();
+        let mut doc = Appearance {
+            face: Some("orbit".into()),
+            ..Default::default()
+        };
+        doc.bindings.insert(
+            "thinking".into(),
+            Binding {
+                pattern: "breathe".into(),
+                color: Some("amber-4".into()),
+                params: serde_json::Map::new(),
+            },
+        );
+        state.put(&doc);
+        let pushed = serde_json::to_value(state.snapshot()).unwrap();
+        assert_eq!(pushed["face"], "orbit");
+        assert_eq!(pushed["bindings"]["thinking"]["pattern"], "breathe");
+        assert_eq!(pushed["bindings"]["thinking"]["color"], "amber-4");
     }
 
     #[test]

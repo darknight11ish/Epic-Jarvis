@@ -26,8 +26,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +49,7 @@ import com.jarvis.client.ui.theme.LocalRadii
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +57,19 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import com.jarvis.client.ui.theme.LocalPlateEdges
+import com.jarvis.client.ui.theme.LocalSpacing
+import com.jarvis.client.ui.theme.PlateEdges
+import com.jarvis.client.ui.theme.contrastRatio
+import androidx.compose.ui.graphics.compositeOver
 
 /**
  * A tap that presses.
@@ -110,21 +128,60 @@ fun Plate(
 ) {
     val chrome = LocalChrome.current
     val radii = LocalRadii.current
+    val edges = LocalPlateEdges.current
     val s = shape ?: radii.cardShape
-    // A card colour equal to the background draws no visible edge from tone
-    // alone - true of Void and true of Contrast, whose own doc comment
-    // already promises "depth comes from borders rather than tone" without
-    // anything here ever supplying one. Every `Plate` on those two themes had
-    // no edge at all unless its call site happened to pass `outline`, which
-    // most do not. This activates only where tone genuinely cannot show a
-    // boundary; an explicit `outline` from the caller always wins.
+    // The 1dp border the design always described ("flat plates and 1dp
+    // borders") used to be drawn only where surface1 equals surface0, which
+    // is High Contrast alone - Void's surface1 is #070A0F, not black, whatever
+    // an older version of this comment said. Everywhere else a plate stood
+    // off the page by tone only, about 1.06:1, so cards barely registered and
+    // screens read as text floating on black. So every plate now gets the
+    // decorative `hairline` (1.2-2.0:1, which is right for a card edge; the
+    // words inside say what it is) unless the owner picks "Panel edges: None".
+    //
+    // A flat theme keeps the stronger edge under EVERY setting, None
+    // included: with no tone difference, None would leave no boundary at all.
+    // An explicit `outline` from the caller always wins.
     val flat = chrome.surface1 == chrome.surface0
-    val effectiveOutline = outline ?: if (flat) chrome.hairlineStrong else null
+    val effectiveOutline = outline ?: when {
+        flat -> chrome.hairlineStrong
+        edges == PlateEdges.NONE -> null
+        else -> chrome.hairline
+    }
+    // Bevel's "light catch": one static 1dp line just inside the top edge,
+    // drawn once per draw of the plate - no blur, no shadow, no animation.
+    // Inset by the corner radius at both ends so it never pokes out past a
+    // rounded corner. On a light theme a line lighter than a white card is
+    // invisible, so there it is the plain hairline and reads as an engraved
+    // top edge instead.
+    val catchColor = if (chrome.dark) chrome.hairlineStrong else chrome.hairline
+    val catchInset = radii.card
     Column(
         modifier
             .fillMaxWidth()
             .clip(s)
             .background(tone ?: chrome.surface1)
+            .then(
+                if (edges == PlateEdges.BEVEL) {
+                    Modifier.drawBehind {
+                        val stroke = 1.dp.toPx()
+                        // Below the 1dp border when there is one, so the two
+                        // lines sit side by side instead of on top of each other.
+                        val y = (if (effectiveOutline != null) stroke else 0f) + stroke / 2f
+                        val inset = catchInset.toPx()
+                        if (size.width > inset * 2f) {
+                            drawLine(
+                                color = catchColor,
+                                start = Offset(inset, y),
+                                end = Offset(size.width - inset, y),
+                                strokeWidth = stroke,
+                            )
+                        }
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .then(
                 if (effectiveOutline != null) {
                     Modifier.border(1.dp, effectiveOutline, s)
@@ -132,7 +189,7 @@ fun Plate(
                     Modifier
                 },
             )
-            .padding(14.dp),
+            .padding(LocalSpacing.current.plate),
         content = content,
     )
 }
@@ -197,24 +254,83 @@ fun Dot(color: Color, modifier: Modifier = Modifier, size: Int = 8) {
  * stop a screen showing what it last knew - but a screen that shows last-known
  * data and does not say so is the one thing that rule cannot tolerate, because
  * the owner cannot tell "nothing is waiting" from "I stopped being told".
+ *
+ * "Live." on its own describes the event stream, not the data under it. Mind
+ * and Inbox are read once when they open, so ten minutes later a bare "Live."
+ * sat over ten-minute-old numbers. Given [readWhat], the line splits into its
+ * two halves - "Link live · board read 2 min ago" - and the age ticks on a
+ * slow timer (see [rememberTickingNow]), not every frame.
+ *
+ * @param fetchedAtMs when the data below was read. 0 means not yet, and reads
+ *   "Reading…". The default, 1, means the caller does not time its data, and
+ *   keeps the old bare "Live.".
+ * @param readWhat what was read, e.g. "Board" or "Inbox". Null keeps the old
+ *   wording.
+ * @param refreshing true while a re-read is in flight.
  */
 @Composable
-fun Freshness(link: LinkState, stale: Boolean, fetchedAtMs: Long = 1L) {
+fun Freshness(
+    link: LinkState,
+    stale: Boolean,
+    fetchedAtMs: Long = 1L,
+    readWhat: String? = null,
+    refreshing: Boolean = false,
+) {
     val chrome = LocalChrome.current
     val bad = stale || link != LinkState.CONNECTED
+    val timed = readWhat != null && fetchedAtMs > 1L
+    // Only a line that shows an age needs a clock. Called conditionally on
+    // purpose: an untimed line should not wake up every few seconds.
+    val age = if (timed) ageText(rememberTickingNow(fetchedAtMs) - fetchedAtMs) else null
+    val what = readWhat?.lowercase()
     Row(verticalAlignment = Alignment.CenterVertically) {
         Dot(if (bad) chrome.warnMark else chrome.okMark)
         Spacer(Modifier.width(10.dp))
         Text(
             when {
+                link != LinkState.CONNECTED && age != null ->
+                    "Not connected. Everything below is last known, read $age."
                 link != LinkState.CONNECTED -> "Not connected. Everything below is last known."
+                stale && age != null ->
+                    "The stream is stale. Everything below is last known, read $age."
                 stale -> "The stream is stale. Everything below is last known."
                 fetchedAtMs == 0L -> "Reading…"
+                age != null && refreshing -> "Link live · $what read $age · refreshing…"
+                age != null -> "Link live · $what read $age"
                 else -> "Live."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = if (bad) chrome.warnInk else chrome.textMid,
         )
+    }
+}
+
+/**
+ * The wall clock, re-read every [periodMs] rather than every frame - for
+ * "read 2 min ago" lines, which only need to move once a minute. Restarts
+ * (and so re-reads at once) whenever [key] changes, so a fresh read never
+ * shows an age worked out from a clock that is still up to a period behind.
+ */
+@Composable
+fun rememberTickingNow(key: Any? = null, periodMs: Long = 15_000L): Long {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(key, periodMs) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(periodMs)
+        }
+    }
+    return now
+}
+
+/** "just now", "4 min ago", "2 h ago" - coarse on purpose, and never negative. */
+fun ageText(elapsedMs: Long): String {
+    val s = elapsedMs.coerceAtLeast(0L) / 1000L
+    return when {
+        s < 60L -> "just now"
+        s < 3_600L -> "${s / 60L} min ago"
+        s < 86_400L -> "${s / 3_600L} h ago"
+        else -> "${s / 86_400L} d ago"
     }
 }
 
@@ -229,7 +345,7 @@ fun Field(
 ) {
     val chrome = LocalChrome.current
     Row(
-        modifier.fillMaxWidth().padding(vertical = 5.dp),
+        modifier.fillMaxWidth().padding(vertical = LocalSpacing.current.field),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -394,6 +510,13 @@ fun Quiet(
  * different text tints, so [color] says which one this is rather than the
  * component insisting on the accent. Same flat-plate shape as [Plate], same
  * spring-press as every other control here, sized to the 48dp touch minimum.
+ *
+ * It used to be a bare `surface1` box: 1.06:1 against the page on Reactor and
+ * 1.00:1 inside a plate, so "Connect" - the first thing a new owner must
+ * press - looked like a floating label, and it was the same box as "Platform
+ * checks" beside it. Now it is filled with its own tint at 12% and ringed in
+ * `hairlineFocus`, which clears the 3:1 a control's boundary needs on every
+ * theme. The quieter choice beside it is [Secondary].
  */
 @Composable
 fun Primary(
@@ -404,16 +527,69 @@ fun Primary(
     /** Shows a spinner instead of the label. The click target stays put. */
     busy: Boolean = false,
     onClick: () -> Unit,
+) = BoxedAction(text, modifier, color, enabled, busy, emphasised = true, onClick = onClick)
+
+/**
+ * The quieter boxed action, for the second choice beside a [Primary]:
+ * "Platform checks" next to "Connect", "Ask the desktop again".
+ *
+ * Told apart from Primary by shape and fill, not by text colour alone - a
+ * hairline outline and no fill, against Primary's tinted fill and stronger
+ * ring - so the pair reads correctly in greyscale and to a colour-blind eye.
+ * Same signature as [Primary], so a call site switches by changing the name.
+ */
+@Composable
+fun Secondary(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color? = null,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    onClick: () -> Unit,
+) = BoxedAction(text, modifier, color, enabled, busy, emphasised = false, onClick = onClick)
+
+@Composable
+private fun BoxedAction(
+    text: String,
+    modifier: Modifier,
+    color: Color?,
+    enabled: Boolean,
+    busy: Boolean,
+    emphasised: Boolean,
+    onClick: () -> Unit,
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
     val shape = LocalRadii.current.controlShape
     val tint = color ?: accent
+    // Disabled drops the fill and falls back to the decorative hairline, so
+    // "not yet" is visible in the shape too and not only in the grey text.
+    val edge = when {
+        !enabled -> chrome.hairline
+        emphasised -> chrome.hairlineFocus
+        else -> chrome.hairline
+    }
+    val fill = if (emphasised && enabled) {
+        tint.copy(alpha = 0.12f).compositeOver(chrome.surface1)
+    } else {
+        chrome.surface1
+    }
+    // The tinted fill costs the label some contrast: measured across every
+    // palette family, an accent that clears 4.5:1 on a plain card can fall
+    // to about 3.9:1 on its own 12% fill (Daylight is the worst). Where that
+    // happens the label takes the theme's main text colour instead, so the
+    // fill never makes a button harder to read.
+    val ink = when {
+        !enabled -> chrome.textLo
+        contrastRatio(tint, fill) >= 4.5f -> tint
+        else -> chrome.textHi
+    }
     Box(
         modifier
             .heightIn(min = 48.dp)
             .clip(shape)
-            .background(chrome.surface1)
+            .background(fill)
+            .border(1.dp, edge, shape)
             .pressable(enabled = enabled && !busy, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -427,7 +603,11 @@ fun Primary(
             Text(
                 text,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (enabled) tint else chrome.textLo,
+                color = ink,
+                textAlign = TextAlign.Center,
+                // Now that the box has a visible edge, a long label in a
+                // half-width button must not run into it.
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
     }
@@ -454,10 +634,20 @@ fun TextInput(
     password: Boolean = false,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
+    /** False for prose: the field grows to [maxLines] lines, then scrolls. */
+    singleLine: Boolean = true,
+    maxLines: Int = 6,
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
     val radii = LocalRadii.current
+    // The field's edge. It used to be marked out by tone alone - surface2 on
+    // surface1, 1.06:1 - although Chrome names "an input border" as exactly
+    // what `hairlineFocus` (3:1 or better on every theme) exists for. With
+    // focus it becomes a 2dp ring in the accent: a change of width as well as
+    // colour, so it does not rely on colour alone. The focus flag changes only
+    // when focus moves, so this costs nothing per frame.
+    var focused by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth()) {
         if (label != null) {
             Kicker(label)
@@ -468,6 +658,11 @@ fun TextInput(
                 .fillMaxWidth()
                 .clip(radii.controlShape)
                 .background(chrome.surface2)
+                .border(
+                    width = if (focused) 2.dp else 1.dp,
+                    color = if (focused) accent else chrome.hairlineFocus,
+                    shape = radii.controlShape,
+                )
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             if (value.isEmpty() && placeholder != null) {
@@ -487,8 +682,11 @@ fun TextInput(
                 },
                 keyboardOptions = keyboardOptions,
                 keyboardActions = keyboardActions,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                singleLine = singleLine,
+                maxLines = if (singleLine) 1 else maxLines,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focused = it.isFocused },
             )
         }
         if (supportingText != null) {
@@ -513,21 +711,186 @@ fun TextInput(
  * screen rendered one) or reinvented it.
  */
 @Composable
-fun Notice(text: String, onDismiss: () -> Unit) {
+fun Notice(
+    text: String,
+    onDismiss: () -> Unit,
+    /**
+     * A failure's technical detail for a bug report, already scrubbed of
+     * tokens, keys, passwords, email addresses and user names
+     * ([com.jarvis.client.net.PlainErrors.scrubDetails]). Behind "Details",
+     * closed until tapped. Null or blank: no toggle.
+     */
+    details: String? = null,
+    /** The failure's ONE fix button ("Try again", "Check the connection settings"...). */
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
     val chrome = LocalChrome.current
+    var open by remember(text) { mutableStateOf(false) }
     Plate(tone = chrome.warnInk.copy(alpha = 0.10f), outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text,
                 style = MaterialTheme.typography.bodyMedium,
                 color = chrome.warnInk,
-                modifier = Modifier.weight(1f),
+                // Spoken when it appears or changes. A refused theme change or
+                // a failed send used to appear in silence for a TalkBack user.
+                modifier = Modifier.weight(1f).liveStatus(),
             )
             Spacer(Modifier.width(8.dp))
             Quiet("Dismiss", onClick = onDismiss)
         }
+        val hasDetails = !details.isNullOrBlank()
+        if ((onAction != null && !actionLabel.isNullOrBlank()) || hasDetails) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onAction != null && !actionLabel.isNullOrBlank()) {
+                    Quiet(actionLabel, onClick = onAction)
+                    Spacer(Modifier.width(8.dp))
+                }
+                if (hasDetails) {
+                    Quiet(if (open) "Hide details" else "Details", onClick = { open = !open })
+                }
+            }
+        }
+        if (hasDetails && open) {
+            // Selectable, so it can be copied by hand into a bug report
+            // (ease-of-use audit 2026-09-27, #6). No Copy button: the
+            // desktop's clipboard can sync off the PC, and one wording and
+            // one way for both apps.
+            SelectionContainer {
+                Text(
+                    details.orEmpty(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo,
+                )
+            }
+        }
     }
 }
+
+/**
+ * Marks text as a status that TalkBack should read out when it changes,
+ * without interrupting what it is already saying ("polite").
+ *
+ * For news the owner has to hear - a warning, a link going stale, a reason a
+ * button just stopped working. Never for something that changes every second,
+ * such as a countdown: a polite region that updates each second never stops
+ * talking. The face's own description is the only other live region in the
+ * app (FaceView).
+ */
+fun Modifier.liveStatus(): Modifier = semantics { liveRegion = LiveRegionMode.Polite }
+
+/**
+ * An on/off switch drawn in this app's own parts, replacing Material's
+ * `Switch` - the last recognisably stock control, a pill track with a round
+ * thumb sitting beside hand-built plates.
+ *
+ * State is shown three ways, so it never rests on colour alone: the word ON
+ * or OFF inside the track, the thumb's side, and the colour (accent when on).
+ * The track's edge is `hairlineFocus` when off, which is the token for "the
+ * only thing marking this control's boundary" and clears 3:1 on every theme.
+ *
+ * TalkBack hears it as a switch with its on/off state (Role.Switch). The ON/
+ * OFF word is hidden from TalkBack, because the state is already spoken and
+ * would otherwise be read twice. Give it a label where it is used - the text
+ * beside it, or a contentDescription on [modifier] - because a switch with no
+ * name is only "switch, on".
+ *
+ * No ripple, and no auto-anything: it changes only when tapped.
+ */
+@Composable
+fun Toggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val motion = LocalMotion.current
+    val interaction = remember { MutableInteractionSource() }
+    val trackShape = LocalRadii.current.insetShape
+    val thumbShape = RoundedCornerShape(3.dp)
+    // Read in the draw phase below, so the slide never recomposes anything.
+    val position by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = motion.micro(),
+        label = "toggle",
+    )
+    val onColor = if (enabled) accent else chrome.textLo
+    val trackEdge = when {
+        !enabled -> chrome.hairline
+        checked -> accent
+        else -> chrome.hairlineFocus
+    }
+    val trackFill = if (checked && enabled) {
+        accent.copy(alpha = 0.15f).compositeOver(chrome.surface2)
+    } else {
+        chrome.surface2
+    }
+    // Same guard as the boxed actions: the accent word on its own tinted
+    // track can dip under 4.5:1, and then it takes the main text colour.
+    val word = when {
+        !checked -> chrome.textMid
+        !enabled -> chrome.textLo
+        contrastRatio(accent, trackFill) >= 4.5f -> accent
+        else -> chrome.textHi
+    }
+    // The 48dp touch target wraps a smaller drawn track, the same way the
+    // Quiet action does: the control looks compact and is still easy to hit.
+    Box(
+        modifier
+            .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
+            .toggleable(
+                value = checked,
+                interactionSource = interaction,
+                // Null, deliberately: no Material ripple (see pressable).
+                indication = null,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(width = TOGGLE_WIDTH, height = TOGGLE_HEIGHT)
+                .clip(trackShape)
+                .background(trackFill)
+                .border(1.dp, trackEdge, trackShape),
+        ) {
+            Text(
+                if (checked) "ON" else "OFF",
+                style = com.jarvis.client.ui.theme.JarvisType.telemetry,
+                color = word,
+                modifier = Modifier
+                    // On: the word on the left, thumb on the right. Off: the
+                    // other way round, so the word is never under the thumb.
+                    .align(if (checked) Alignment.CenterStart else Alignment.CenterEnd)
+                    .padding(horizontal = 7.dp)
+                    .clearAndSetSemantics { },
+            )
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(horizontal = TOGGLE_INSET)
+                    .graphicsLayer {
+                        val travel = (TOGGLE_WIDTH - TOGGLE_THUMB - TOGGLE_INSET * 2).toPx()
+                        translationX = travel * position
+                    }
+                    .size(TOGGLE_THUMB)
+                    .clip(thumbShape)
+                    .background(if (checked) onColor else chrome.textLo),
+            )
+        }
+    }
+}
+
+private val TOGGLE_WIDTH = 56.dp
+private val TOGGLE_HEIGHT = 28.dp
+private val TOGGLE_THUMB = 18.dp
+private val TOGGLE_INSET = 5.dp
 
 /** A hairline rule. */
 @Composable
@@ -540,9 +903,12 @@ fun Rule(modifier: Modifier = Modifier) {
     )
 }
 
-/** Section spacing, so the screens do not each invent their own. */
+/**
+ * Section spacing, so the screens do not each invent their own. Tightens by
+ * a third under Density: Compact (see `Spacing.gap`).
+ */
 @Composable
-fun Gap(dp: Int = 12) = Spacer(Modifier.height(dp.dp))
+fun Gap(dp: Int = 12) = Spacer(Modifier.height(LocalSpacing.current.gap(dp)))
 
 /** A titled group of fields. */
 @Composable
@@ -558,7 +924,12 @@ fun Section(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Kicker(title)
+            // A heading for TalkBack's "jump by heading" gesture. Mind, Checks
+            // and Help are long lists, and with no headings anywhere in the app
+            // the only way through them was one swipe per row. Here rather than
+            // in Kicker, because a Kicker is also a field label and a "Jarvis"
+            // tag on a reply, and those are not headings.
+            Kicker(title, Modifier.semantics { heading() })
             if (trailing != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, content = trailing)
             }

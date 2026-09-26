@@ -1,0 +1,121 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -135,65 +135,42 @@
+ 
+ MAX_BODY = 4 * 1024 * 1024          # a chat turn is never four megabytes
+ 
+-TOKEN_FILE = CONFIG_DIR / "token"
++TOKEN_FILE = CONFIG_DIR / "token"      # the OLD plain-text place; only read, to move it
++TOKEN_BANNER: list = []                # the boot banner's token lines - never the token
+ 
+ 
+ def _resolve_token() -> str:
+-    """The shared secret, made on first run if nobody has made one.
++    """The shared secret, made on first run if nobody has made one - and kept
++    in Windows Credential Manager, not in a file (token-store.patch).
+ 
+-    Two problems, one answer.
++    Why there is a token at all: with none, every process on this machine can
++    open /api/events and read the doorbell, and the phone - which has no
++    Origin, only the token - can never pair.
+ 
+-    The first is that with no token every process on this machine can open
+-    /api/events and read the doorbell - what is waiting, how much of it - by
+-    sending a bare GET to loopback. Not catastrophic on a single-owner
+-    workstation, since anything that could subscribe could also read
+-    ~/.openjarvis directly, but it is a door that costs nothing to close.
++    Why not the file token-file.patch used to write: CLAUDE.md rule 3 says a
++    key is kept out of anything the app writes to disk in plain text. So
++    jarvis_token_store.resolve() does the work: HUD_TOKEN in the environment
++    still wins; otherwise the token in Credential Manager; otherwise a new one
++    saved there. An old TOKEN_FILE is moved in and deleted once the move is
++    checked. Nothing is ever written to a file, and the token is never printed.
+ 
+-    The second is worse and is the reason this exists: THE PHONE HAS NEVER
+-    BEEN PAIRABLE. The Android client authenticates by token alone - it has no
+-    Origin, so the origin check cannot help it - and nothing in this project
+-    has ever generated one. docs/INSTALL.md lists that as an unbuilt piece.
+-    A secret nobody creates is not a default, it is a missing feature.
+-
+-    HUD_TOKEN in the environment still wins, unchanged, because someone who
+-    set it meant it. Otherwise this reads the file, and writes one if it is
+-    not there.
+-
+-    Deliberately NOT a fatal error if the file cannot be written. A read-only
+-    config directory should cost the phone its pairing, not cost the owner
+-    their assistant - so it degrades to the old tokenless loopback behaviour
+-    and says so at boot.
++    Deliberately NOT a fatal error if Credential Manager refuses: the token is
++    then used for this run only, and the banner says so. And if
++    jarvis_token_store.py itself is missing, the backend runs with no token
++    (only this PC can connect) rather than fall back to writing a plain file.
+     """
+-    env = os.environ.get("HUD_TOKEN", "").strip()
+-    if env:
+-        return env
++    global TOKEN_BANNER
+     try:
+-        if TOKEN_FILE.is_file():
+-            existing = TOKEN_FILE.read_text(encoding="utf-8").strip()
+-            if existing:
+-                return existing
+-    except OSError:
+-        return ""
+-    try:
+-        import secrets
+-        made = secrets.token_urlsafe(32)
+-        TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+-        # Written beside and renamed, then narrowed: a half-written token is a
+-        # token that does not match, which looks exactly like an attacker to
+-        # every client at once.
+-        tmp = TOKEN_FILE.with_suffix(".tmp")
+-        tmp.write_text(made + "\n", encoding="utf-8")
+-        tmp.replace(TOKEN_FILE)
+-        try:
+-            # Best effort. On Windows this is close to decorative - the file is
+-            # already under the user profile - but it costs nothing and it is
+-            # correct everywhere else.
+-            os.chmod(TOKEN_FILE, 0o600)
+-        except OSError:
+-            pass
+-        return made
+-    except Exception:
+-        return ""
++        import jarvis_token_store
++    except ImportError:
++        env = os.environ.get("HUD_TOKEN", "").strip()
++        TOKEN_BANNER = ["  token      " + ("from HUD_TOKEN in the environment" if env else
++                        "NONE - jarvis_token_store.py is missing from this folder."),
++                        "             Run apply-patches.ps1 again to copy it in."]
++        return env
++    got = jarvis_token_store.resolve(TOKEN_FILE)
++    TOKEN_BANNER = got.banner()
++    return got.token
+ 
+ 
+ def _binds_every_interface(bind):
+@@ -2409,18 +2386,17 @@ def _read_body(handler) -> bytes:
+         print()
+         print("  Either set HUD_TOKEN, or set bind_address = \"127.0.0.1\".")
+         print()
+-        print(f"  (A token is normally made for you at {TOKEN_FILE}. Reaching")
+-        print("   this message means that file could not be written OR read -")
+-        print("   check the permissions on the folder.)")
++        # A token is normally made for you; these lines say why there is none.
++        for line in TOKEN_BANNER:
++            print(line)
+         print()
+         raise SystemExit(2)
+     if bind not in ("127.0.0.1", "::1", "localhost"):
+         print(f"  bind       {bind}  - REACHABLE OFF THIS MACHINE (token required)")
+-    # Where the phone's half of the pairing lives. Printed rather than shown,
++    # Where the phone's half of the pairing lives - never the token itself,
+     # because a token echoed to a terminal is a token in a scrollback buffer.
+-    if not os.environ.get("HUD_TOKEN", "").strip() and HUD_TOKEN:
+-        print(f"  token      {TOKEN_FILE}")
+-        print("             (pair the phone with this; it was made on first run)")
++    for line in TOKEN_BANNER:
++        print(line)
+     # Before anything listens: every interface is not a private mesh.
+     _refuse_every_interface(bind)
+     # Before the main socket, so the banner lists every address together.

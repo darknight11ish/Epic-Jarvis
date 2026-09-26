@@ -35,7 +35,14 @@ use tauri::{AppHandle, Manager};
 
 use crate::commands;
 
+pub mod auto_learn;
+pub mod briefing;
+pub mod focus;
+pub mod history;
+pub mod profile;
 mod routes;
+pub mod schedule;
+pub mod used;
 use routes::{first_line, route_for};
 
 /// Reads are small JSON except the graph, which walks several SQLite files and
@@ -99,7 +106,7 @@ pub async fn brain_read(
             } else {
                 READ_TIMEOUT
             };
-            (section, get_json(&base, path, headers, budget).await)
+            (section, get_json_status(&base, path, headers, budget).await)
         });
     }
 
@@ -117,9 +124,28 @@ pub async fn brain_read(
             section,
             match result {
                 Ok(body) => body,
-                Err(err) => serde_json::json!({ "available": false, "error": err }),
+                // `read` tells the window which of two very different things
+                // happened, because they need different words and only one
+                // of them is worth a Retry: `absent` is a 404 or 503 - this
+                // backend does not have the module, a fact about the machine
+                // - and `failed` is everything else, a fault that may pass.
+                // Before this both arrived as the same grey "not available".
+                Err((status, err)) => serde_json::json!({
+                    "available": false,
+                    "error": err,
+                    "read": read_kind(status),
+                }),
             },
         );
+    }
+
+    // "Windows Hello for memory lists and chat history" (lock.rs): the memory lists come
+    // back with their entries taken out until Show has passed Windows Hello.
+    // Here rather than in brain.js, so a page script cannot read round it.
+    if crate::lock::private_hidden(&app) {
+        for (section, body) in out.iter_mut() {
+            *body = crate::lock::redact_private(section, std::mem::take(body));
+        }
     }
     Ok(serde_json::Value::Object(out))
 }
@@ -204,6 +230,10 @@ pub async fn brain_watch_add(
     language: Option<String>,
     notify: Option<bool>,
 ) -> Result<serde_json::Value, String> {
+    // Held on a stale link, as the phone's JarvisRuntime.addWatch is:
+    // creating a watch turns something ON (apps security audit L4). Removing
+    // one and marking findings read are not held, on either app.
+    require_link_live(&app)?;
     let mut body = serde_json::Map::new();
     body.insert("name".into(), serde_json::json!(name));
     if let Some(q) = query.filter(|q| !q.trim().is_empty()) {
@@ -301,11 +331,73 @@ pub async fn brain_memory_forget(
     id: i64,
     valid_to: Option<f64>,
 ) -> Result<serde_json::Value, String> {
+    // Gated like brain_memory_decide: this acts on a fact the window drew
+    // from a read that may be stale, and forgetting cannot be undone.
+    require_link_live(&app)?;
     let mut body = serde_json::json!({ "id": id });
     if let Some(vt) = valid_to {
         body["valid_to"] = serde_json::json!(vt);
     }
     post(&app, "/api/memory/forget", body).await
+}
+
+/// "Erase the words" (the owner's decision, 2026-09-24): wipes ONE fact's
+/// words from the PC for good and keeps only its dates, so the history shows
+/// that something was erased there. Works on a forgotten fact too.
+///
+/// One integer id and nothing else - the server refuses any other key, so
+/// there is no list form. Like forget there is no approval card, and the
+/// page asks "are you sure?" first; there is no undo at all.
+#[tauri::command]
+pub async fn brain_memory_erase(app: AppHandle, id: i64) -> Result<serde_json::Value, String> {
+    // Held on a stale link, like forget: it acts on a fact the window drew
+    // from a read that may be stale, and nothing brings the words back.
+    require_link_live(&app)?;
+    post(&app, "/api/memory/erase", serde_json::json!({ "id": id }))
+        .await
+        .map_err(erase_refusal)
+}
+
+/// The erase route's refusals in plain words. A 404 is two different
+/// things: "no fact with that id" (nothing left to erase) and a PC whose
+/// backend has no such route at all - an older one, where the words are
+/// still there. A 501 is an older `jarvis_memory.py`. Everything else is
+/// passed on as `post` wrote it.
+fn erase_refusal(err: String) -> String {
+    if err.starts_with("HTTP 404") && err.contains("no fact with that id") {
+        "Jarvis had no such fact any more.".to_string()
+    } else if err.starts_with("HTTP 404") || err.starts_with("HTTP 501") {
+        "Not erased: your PC's Jarvis cannot erase words yet - run apply-patches.ps1 \
+         on the PC to update it."
+            .to_string()
+    } else {
+        err
+    }
+}
+
+#[cfg(test)]
+mod erase_tests {
+    use super::erase_refusal;
+
+    /// A PC without the route must never read as "erased" or "gone".
+    #[test]
+    fn a_missing_route_is_not_a_missing_fact() {
+        assert_eq!(
+            erase_refusal("HTTP 404: no fact with that id".into()),
+            "Jarvis had no such fact any more."
+        );
+        for old in [
+            "HTTP 404: not found",
+            "HTTP 404",
+            "HTTP 501: this PC's jarvis_memory.py",
+        ] {
+            assert!(erase_refusal(old.into()).starts_with("Not erased: your PC's Jarvis cannot"));
+        }
+        assert_eq!(
+            erase_refusal("HTTP 400: need an integer id".into()),
+            "HTTP 400: need an integer id"
+        );
+    }
 }
 
 /// Rewords a fact by superseding it.
@@ -322,6 +414,8 @@ pub async fn brain_memory_edit(
     text: String,
     valid_to: Option<f64>,
 ) -> Result<serde_json::Value, String> {
+    // Gated for the same reason as forget: it retires the fact it rewords.
+    require_link_live(&app)?;
     let mut body = serde_json::json!({ "id": id, "text": text });
     if let Some(vt) = valid_to {
         body["valid_to"] = serde_json::json!(vt);
@@ -339,6 +433,14 @@ pub async fn brain_memory_learning(
     app: AppHandle,
     enabled: bool,
 ) -> Result<serde_json::Value, String> {
+    // Turning learning ON is held on a stale link (rule 4): the button's
+    // label came from a read a stale link cannot confirm, and ON now raises
+    // an approval card (learning-asks.patch). OFF is never held - it only
+    // narrows what Jarvis does, and a stop that refuses when the link is
+    // unwell fails exactly when it is wanted.
+    if enabled {
+        require_link_live(&app)?;
+    }
     post(
         &app,
         "/api/memory/learning",
@@ -347,18 +449,36 @@ pub async fn brain_memory_learning(
     .await
 }
 
-/// Answers the daily "let Jarvis tidy its memory overnight?" card.
+/// Answers the daily overnight-tidy card ("not built yet" - switching it on
+/// only records the wish; nothing runs).
 ///
-/// Two independent fields because the card offers two independent actions:
-/// "enable" sends `enabled`, "stop asking" sends `remind`. "not now" calls
-/// nothing at all — the server's own once-a-day tracking already keeps the
-/// card from returning today regardless, so a plain dismiss needs no request.
+/// Independent fields because the card offers independent actions:
+/// "enable" sends `enabled`, "stop asking" sends `remind`, and "not now"
+/// sends `not_now` (backend/briefing.patch): each "not now" keeps the card
+/// quiet on the PC for 1 day, then 7, then 30 (jarvis_backoff.py). An older
+/// PC answers it with nothing written - the card then returns tomorrow, as
+/// before.
 #[tauri::command]
 pub async fn brain_memory_sleep_time(
     app: AppHandle,
     enabled: Option<bool>,
     remind: Option<bool>,
+    not_now: Option<bool>,
 ) -> Result<serde_json::Value, String> {
+    if enabled.is_none() && remind.is_none() && not_now == Some(true) {
+        // "Not now" only makes Jarvis quieter, so it is not held on a stale
+        // link - the phone sends it the same way (JarvisRuntime.sleepNotNow).
+        return post(
+            &app,
+            "/api/memory/sleep_time",
+            serde_json::json!({ "not_now": true }),
+        )
+        .await;
+    }
+    // Gated like brain_memory_decide above: this answers a card the Brain
+    // drew from a read that may be stale, and the phone refuses the same
+    // answer while its link is stale (JarvisRuntime.setSleepTime).
+    require_link_live(&app)?;
     let mut body = serde_json::json!({});
     if let Some(e) = enabled {
         body["enabled"] = serde_json::json!(e);
@@ -369,17 +489,188 @@ pub async fn brain_memory_sleep_time(
     post(&app, "/api/memory/sleep_time", body).await
 }
 
-/// Every fact and every pending proposal, for the owner to keep a copy of.
+/// "Both are true": the third answer on a correction card
+/// (memory-intake.patch). Keeps the new fact AND leaves the old one current -
+/// nothing is retired or deleted. One proposal id, one decision, exactly like
+/// [`brain_memory_decide`], and gated on a live link the same way. The window
+/// offers it only on a card whose `keep_both_ok` is true, which only a
+/// patched backend sends.
+#[tauri::command]
+pub async fn brain_memory_keep_both(app: AppHandle, id: i64) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    post(
+        &app,
+        "/api/memory/keep_both",
+        serde_json::json!({ "id": id }),
+    )
+    .await
+}
+
+/// Every fact and every pending proposal, saved to a file the owner picks.
 ///
 /// A command rather than a read section because it is large and wanted rarely;
 /// putting it in the section table would fetch the whole store every time the
-/// pane opened. It leaves the machine only if the owner then saves it
-/// somewhere that does.
+/// pane opened.
+///
+/// A FILE, not the clipboard. It used to be copied to the clipboard, and
+/// Windows can sync the clipboard to the owner's other devices through their
+/// Microsoft account ("Sync across your devices") - so everything Jarvis knows
+/// about the owner could leave the machine with nobody deciding it should
+/// (rule 1). The standard Windows "Save as" dialog is opened here, by the app,
+/// so the window itself gets no file access at all; the only file written is
+/// the one the owner named in that dialog.
+///
+/// Returns `{"saved": <path>, "facts": <count>}`, or `{"cancelled": true}`
+/// when the owner closed the dialog. The facts themselves never go back to
+/// the window.
 #[tauri::command]
 pub async fn brain_memory_export(app: AppHandle) -> Result<serde_json::Value, String> {
+    // Every fact at once: held while the memory lists are hidden (lock.rs).
+    crate::lock::require_private_shown(&app)?;
     let base = commands::jarvis_base(&app);
     let headers = commands::jarvis_headers(&app)?;
-    get_json(&base, "/api/memory/export", headers, READ_TIMEOUT).await
+    // Read first: a backend that cannot answer is said before a dialog opens.
+    let export = get_json(&base, "/api/memory/export", headers, READ_TIMEOUT).await?;
+    let count = export
+        .get("facts")
+        .and_then(|f| f.as_array())
+        .map_or(0, Vec::len);
+    let text = serde_json::to_string_pretty(&export)
+        .map_err(|e| format!("could not write the export as JSON: {e}"))?;
+    let name = export_file_name(unix_now());
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    // Its own thread: the dialog needs a single-threaded COM apartment, which
+    // a shared runtime worker thread cannot promise.
+    std::thread::spawn(move || {
+        let _ = tx.send(save_dialog::pick(&name));
+    });
+    let picked = rx
+        .await
+        .map_err(|_| "the save dialog closed unexpectedly".to_string())??;
+    let Some(path) = picked else {
+        return Ok(serde_json::json!({ "cancelled": true }));
+    };
+    std::fs::write(&path, text).map_err(|e| format!("could not save {}: {e}", path.display()))?;
+    Ok(serde_json::json!({ "saved": path.display().to_string(), "facts": count }))
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+/// The name the dialog suggests: `jarvis-memory-2026-09-23.json` (UTC date).
+fn export_file_name(unix_seconds: u64) -> String {
+    // Days since 1970-01-01 to a civil date (Howard Hinnant's algorithm), so
+    // no date crate is pulled in for one file name.
+    let days = (unix_seconds / 86_400) as i64;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("jarvis-memory-{y:04}-{m:02}-{d:02}.json")
+}
+
+/// The Windows "Save as" dialog, and nothing else.
+#[cfg(windows)]
+mod save_dialog {
+    use std::path::PathBuf;
+    use windows::core::{w, HSTRING};
+    use windows::Win32::Foundation::ERROR_CANCELLED;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+    };
+    use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
+    use windows::Win32::UI::Shell::{
+        FileSaveDialog, IFileSaveDialog, FOS_FORCEFILESYSTEM, FOS_OVERWRITEPROMPT,
+        SIGDN_FILESYSPATH,
+    };
+
+    /// `Ok(None)` when the owner cancelled.
+    pub fn pick(suggested: &str) -> Result<Option<PathBuf>, String> {
+        // SAFETY: plain COM calls on this thread, which is ours alone and is
+        // initialised as a single-threaded apartment first. Every pointer
+        // handed out by COM is released: the interfaces by their Drop, the
+        // path string by CoTaskMemFree.
+        unsafe {
+            let init = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+            if init.is_err() {
+                return Err(format!("could not open the save dialog: {init:?}"));
+            }
+            let out = show(suggested);
+            CoUninitialize();
+            out
+        }
+    }
+
+    unsafe fn show(suggested: &str) -> Result<Option<PathBuf>, String> {
+        let fail = |e: windows::core::Error| format!("the save dialog failed: {e}");
+        let dialog: IFileSaveDialog =
+            CoCreateInstance(&FileSaveDialog, None, CLSCTX_INPROC_SERVER).map_err(fail)?;
+        let types = [COMDLG_FILTERSPEC {
+            pszName: w!("JSON file"),
+            pszSpec: w!("*.json"),
+        }];
+        dialog.SetFileTypes(&types).map_err(fail)?;
+        dialog.SetDefaultExtension(w!("json")).map_err(fail)?;
+        dialog
+            .SetTitle(w!("Save everything Jarvis remembers"))
+            .map_err(fail)?;
+        dialog
+            .SetFileName(&HSTRING::from(suggested))
+            .map_err(fail)?;
+        let options = dialog.GetOptions().map_err(fail)?;
+        dialog
+            .SetOptions(options | FOS_OVERWRITEPROMPT | FOS_FORCEFILESYSTEM)
+            .map_err(fail)?;
+        if let Err(e) = dialog.Show(None) {
+            if e.code() == ERROR_CANCELLED.to_hresult() {
+                return Ok(None);
+            }
+            return Err(fail(e));
+        }
+        let item = dialog.GetResult().map_err(fail)?;
+        let raw = item.GetDisplayName(SIGDN_FILESYSPATH).map_err(fail)?;
+        let path = raw.to_string();
+        CoTaskMemFree(Some(raw.0 as *const _));
+        path.map(|p| Some(PathBuf::from(p)))
+            .map_err(|e| format!("the chosen file name could not be read: {e}"))
+    }
+}
+
+/// Not Windows: this app is only built for Windows; say so rather than guess.
+#[cfg(not(windows))]
+mod save_dialog {
+    pub fn pick(_suggested: &str) -> Result<Option<std::path::PathBuf>, String> {
+        Err("saving the memory export needs the Windows save dialog".to_string())
+    }
+}
+
+#[cfg(test)]
+mod export_name_tests {
+    use super::export_file_name;
+
+    #[test]
+    fn the_suggested_name_carries_the_date() {
+        assert_eq!(export_file_name(0), "jarvis-memory-1970-01-01.json");
+        // 2026-09-23 12:00:00 UTC
+        assert_eq!(
+            export_file_name(1_790_164_800),
+            "jarvis-memory-2026-09-23.json"
+        );
+        // A leap day.
+        assert_eq!(
+            export_file_name(1_709_208_000),
+            "jarvis-memory-2024-02-29.json"
+        );
+    }
 }
 
 /// What Jarvis believed at a past moment, right or wrong.
@@ -406,6 +697,8 @@ pub async fn brain_memory_as_of(app: AppHandle, when: f64) -> Result<serde_json:
     if !when.is_finite() || when <= 0.0 {
         return Err(format!("{when} is not a moment in time"));
     }
+    // The same facts in another shape: held while the lists are hidden.
+    crate::lock::require_private_shown(&app)?;
     let base = commands::jarvis_base(&app);
     let headers = commands::jarvis_headers(&app)?;
     // Whole seconds. Sub-second precision means nothing here and a float in
@@ -430,6 +723,11 @@ pub async fn brain_model(
     action: String,
     reference: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    // Rule 4: nothing acts on a stale link. Switch and install only raise a
+    // card, but they raise it against a model list this window read from a
+    // link that has stopped updating; rollback is tier `auto` and acts at
+    // once, which is the stronger reason. The phone's canAct gate is the same.
+    require_link_live(&app)?;
     let path = match action.as_str() {
         "install" => "/api/models/install",
         "switch" => "/api/models/switch",
@@ -448,6 +746,65 @@ pub async fn brain_model(
 // Plumbing
 // ---------------------------------------------------------------------------
 
+/// `"absent"` for a 404 or a 503 (the backend does not have this module),
+/// `"failed"` for anything else, including no answer at all.
+fn read_kind(status: Option<u16>) -> &'static str {
+    match status {
+        Some(404) | Some(503) => "absent",
+        _ => "failed",
+    }
+}
+
+/// [`get_json`], keeping the HTTP status of a refusal so [`brain_read`] can
+/// tell a missing module from a fault. `None` when there was no answer.
+async fn get_json_status(
+    base: &str,
+    path: &str,
+    headers: reqwest::header::HeaderMap,
+    budget: Duration,
+) -> Result<serde_json::Value, (Option<u16>, String)> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(READ_TIMEOUT)
+        .timeout(budget)
+        .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| (None, format!("could not build an HTTP client: {e}")))?;
+    let response = client
+        .get(format!("{base}{path}"))
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|e| {
+            let why = if e.is_connect() {
+                format!("could not reach the Jarvis server at {base}")
+            } else if e.is_timeout() {
+                format!("{path} did not answer within {}s", budget.as_secs())
+            } else {
+                format!("{path}: {e}")
+            };
+            (None, why)
+        })?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err((
+            Some(status.as_u16()),
+            format!(
+                "{path} answered HTTP {}{}",
+                status.as_u16(),
+                first_line(&body)
+            ),
+        ));
+    }
+    response
+        .json()
+        .await
+        .map_err(|e| (None, format!("{path} returned something unreadable: {e}")))
+}
+
 /// A GET that refuses to treat an error body as data.
 ///
 /// The status is checked before the body is parsed, because this server answers
@@ -460,39 +817,9 @@ async fn get_json(
     headers: reqwest::header::HeaderMap,
     budget: Duration,
 ) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(READ_TIMEOUT)
-        .timeout(budget)
-        .no_proxy()
-        .build()
-        .map_err(|e| format!("could not build an HTTP client: {e}"))?;
-    let response = client
-        .get(format!("{base}{path}"))
-        .headers(headers)
-        .send()
+    get_json_status(base, path, headers, budget)
         .await
-        .map_err(|e| {
-            if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}")
-            } else if e.is_timeout() {
-                format!("{path} did not answer within {}s", budget.as_secs())
-            } else {
-                format!("{path}: {e}")
-            }
-        })?;
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "{path} answered HTTP {}{}",
-            status.as_u16(),
-            first_line(&body)
-        ));
-    }
-    response
-        .json()
-        .await
-        .map_err(|e| format!("{path} returned something unreadable: {e}"))
+        .map_err(|(_, why)| why)
 }
 
 /// A POST that hands the server's own words back on failure.
@@ -510,6 +837,9 @@ async fn post(
         .connect_timeout(READ_TIMEOUT)
         .timeout(WRITE_TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("could not build an HTTP client: {e}"))?;
     let response = client
@@ -532,4 +862,19 @@ async fn post(
     }
     Ok(serde_json::from_str(&text)
         .unwrap_or_else(|_| serde_json::json!({ "ok": true, "status": status.as_u16() })))
+}
+
+#[cfg(test)]
+mod read_kind_tests {
+    use super::read_kind;
+
+    /// A missing module is a fact, not a fault: no Retry for it.
+    #[test]
+    fn a_404_or_503_is_absent_and_anything_else_failed() {
+        assert_eq!(read_kind(Some(404)), "absent");
+        assert_eq!(read_kind(Some(503)), "absent");
+        assert_eq!(read_kind(Some(500)), "failed");
+        assert_eq!(read_kind(Some(401)), "failed");
+        assert_eq!(read_kind(None), "failed");
+    }
 }

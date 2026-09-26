@@ -142,29 +142,38 @@ await check("no hard-coded model name survives in the source", async () => {
 await check("the card says Thinking until a token actually arrives", async () => {
   const main = read("src/main.js");
   // Both transports used to label the card "Streaming" before any token — one
-  // of them before the request had even left.
-  const premature = main.match(/textContent = "Streaming"/g) || [];
+  // of them before the request had even left. Since 2026-09-25 the word is
+  // the plain "Answering…" (plain-errors.js STATUSES), never "Streaming".
+  assert.ok(!/"Streaming"/.test(main), "the developer word Streaming is back");
+  const premature = main.match(/textContent = STATUSES\.answering/g) || [];
   assert.equal(premature.length, 1,
-    `"Streaming" is set in ${premature.length} places; it belongs in exactly one`);
-  assert.match(main, /if \(!state\.chunks\) dom\.cardStatusText\.textContent = "Streaming";/,
+    `"Answering…" is set in ${premature.length} places; it belongs in exactly one`);
+  assert.match(main, /if \(!state\.chunks\) dom\.cardStatusText\.textContent = STATUSES\.answering;/,
     "the label no longer waits for the first chunk");
+  assert.ok(!/chunks · /.test(main), "the card counts chunks again");
 });
 
 /* ── The widget does not claim to have filed anything ────────────────────── */
 
-await check("a capture says it was sent, never that it was filed", async () => {
+await check("a capture says filed only when the PC says so", async () => {
+  // It used to ask a model to call a tool that did not exist, so the widget
+  // could only say "Sent". Now the words come from the backend's answer
+  // (note-capture.patch), and the widget has no sentence of its own that
+  // claims a note landed.
   const widget = read("src/widget.js");
-  assert.ok(!/Filed to Joplin|Appended to Logseq/.test(widget),
-    "the widget still claims a note landed, which it cannot know");
-  assert.match(widget, /Sent to \$\{where\}/, "the widget no longer says what it did");
+  assert.ok(!/Filed to Joplin|Appended to Logseq|Sent to \$\{where\}/.test(widget),
+    "the widget still writes its own claim about where the note went");
+  assert.match(widget, /fileNote\(invokeStrict/, "the widget no longer uses the shared filer");
+  const filer = read("src/note-capture.js");
+  assert.match(filer, /capture_note_status/, "a waiting card is never followed up");
 });
 
-await check("the capture shows Jarvis's own account of what it did", async () => {
+await check("the capture goes to the notes route, not a chat turn", async () => {
   const rust = read("src-tauri/src/commands.rs");
-  assert.match(rust, /fn assistant_reply/,
-    "capture_note returns a raw body rather than the model's answer");
-  assert.match(rust, /tool-execution receipt/,
-    "nothing records WHY a 200 is not a receipt");
+  const i = rust.indexOf("pub async fn capture_note(");
+  const body = rust.slice(i, rust.indexOf("\n}\n", i));
+  assert.match(body, /\/api\/notes\/capture/, "capture_note does not post to /api/notes/capture");
+  assert.ok(!/\/api\/chat/.test(body), "capture_note still runs a chat turn");
 });
 
 /* ── The tray ────────────────────────────────────────────────────────────── */
@@ -181,7 +190,10 @@ await check("the permanently dead power row is gone", async () => {
   const tray = read("src-tauri/src/tray.rs");
   assert.ok(!/the server exposes no route yet/.test(tray),
     "a row that can never do anything is still spending a line of the menu");
-  assert.match(tray, /read-only/, "the power row no longer says it cannot be set");
+  // Since backend/power-mode.patch the mode CAN be set, so the row no longer
+  // says read-only - and the three modes are live items instead.
+  assert.ok(!/format!\("Power: \{\}\{by\} · read-only"/.test(tray), "the power row still claims it cannot be set");
+  assert.match(tray, /ID_POWER_STANDBY/, "there is no way to choose a power mode");
 });
 
 await check("the menu is sentence case and grouped", async () => {

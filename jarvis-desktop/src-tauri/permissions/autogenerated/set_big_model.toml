@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-big-model"
+description = "Enables the set_big_model command without any pre-configured scope."
+commands.allow = ["set_big_model"]
+
+[[permission]]
+identifier = "deny-set-big-model"
+description = "Denies the set_big_model command without any pre-configured scope."
+commands.deny = ["set_big_model"]

@@ -1,0 +1,23 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2435,6 +2435,20 @@
+     except Exception as exc:
+         print(f"  stop       NOT ON ({type(exc).__name__}) - Stop everything cannot reach")
+         print("             this PC until jarvis_stop_all.py is back: run apply-patches.ps1 again")
++    # documents.patch ("Folders Jarvis may look in", the owner's decisions of
++    # 2026-09-26: asking about PDFs and Word files, and the Notion import):
++    # GET /api/folders, POST /api/folders/add (this PC only, ONE approval
++    # card), /api/folders/remove (at once, either app) and /api/folders/import
++    # (a Notion export, this PC only). Wrapped round Handler here, before
++    # anything listens, like stop-all above; the rules are all in
++    # jarvis_documents.py.
++    try:
++        import jarvis_documents
++        print(jarvis_documents.install(Handler, origin_ok=_origin_ok,
++                                       token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  folders    NOT ON ({type(exc).__name__}) - Folders Jarvis may look in is off")
++        print("             until jarvis_documents.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

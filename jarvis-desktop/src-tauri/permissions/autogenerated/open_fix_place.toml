@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-fix-place"
+description = "Enables the open_fix_place command without any pre-configured scope."
+commands.allow = ["open_fix_place"]
+
+[[permission]]
+identifier = "deny-open-fix-place"
+description = "Denies the open_fix_place command without any pre-configured scope."
+commands.deny = ["open_fix_place"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-email-sending"
+description = "Enables the get_email_sending command without any pre-configured scope."
+commands.allow = ["get_email_sending"]
+
+[[permission]]
+identifier = "deny-get-email-sending"
+description = "Denies the get_email_sending command without any pre-configured scope."
+commands.deny = ["get_email_sending"]

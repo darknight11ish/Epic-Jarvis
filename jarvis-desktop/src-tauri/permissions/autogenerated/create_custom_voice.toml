@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-custom-voice"
+description = "Enables the create_custom_voice command without any pre-configured scope."
+commands.allow = ["create_custom_voice"]
+
+[[permission]]
+identifier = "deny-create-custom-voice"
+description = "Denies the create_custom_voice command without any pre-configured scope."
+commands.deny = ["create_custom_voice"]

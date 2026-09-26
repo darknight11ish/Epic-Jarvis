@@ -1,18 +1,23 @@
 package com.jarvis.client.voice
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.jarvis.client.audio.Recorder
 import com.jarvis.client.audio.Speaker
+import com.jarvis.client.audio.Wav
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.FlowStatus
 import com.jarvis.client.net.SaidAloud
 import com.jarvis.client.net.Heard
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.VoiceStatus
+import com.jarvis.client.net.VoiceStrict
 import com.jarvis.client.net.WakeWord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -36,12 +41,50 @@ class VoiceSession(
     private val api: JarvisApi,
     private val scope: CoroutineScope,
     /**
-     * Sends a turn and returns the reply, or null if it could not be sent.
-     * `onDelta` is called, zero or more times, with the reply accumulated so
-     * far as it streams in - see [ChatSession.send]'s own doc for why this is
-     * a call-local callback and not a subscription to a shared flow.
+     * Why a state-changing request cannot go now (the runtime's
+     * `actionBlocker()`: a stale or dropped link, rule 4), or null. Read only
+     * by [setWakeWord], and only for turning it ON - see
+     * [WakeRules.requestBlocker].
      */
-    private val chat: suspend (String, onDelta: (String) -> Unit) -> String?,
+    private val linkBlocker: () -> String? = { null },
+    /**
+     * What the phone knows about tools right now, for "private answers stay
+     * on screen" ([PrivateAloud]): how many `step` events said a tool ran,
+     * how many times the event stream dropped, and whether it is live. The
+     * default knows nothing - so nothing private-looking is read aloud.
+     */
+    private val toolWatch: () -> PrivateAloud.Watch = { PrivateAloud.Watch(0, 0, live = false) },
+    /**
+     * "Say 'One moment' if I'm kept waiting" on this phone (ClientSettings,
+     * [OneMoment]). Read when a tool starts during a spoken question.
+     */
+    private val oneMoment: () -> Boolean = { true },
+    /**
+     * "Play a short sound when I finish speaking" on this phone
+     * (ClientSettings, [HeardSound]). Read each time [heardYou] is called.
+     */
+    private val heardSoundOn: () -> Boolean = { false },
+    /**
+     * The owner cut the spoken answer off while [String] was the last
+     * sentence they heard (the runtime hands it to ChatSession's `cutOff`,
+     * for the next question - docs/JARVIS-API.md section 17, 6).
+     */
+    private val onCutOff: (String) -> Unit = {},
+    /**
+     * Sends a turn and returns the reply, or null if it could not be sent.
+     * `onRoute` is called once with the answer's `X-Jarvis-Route` header (or
+     * null) before any words; `onStatus` with each `: jarvis-status` word
+     * (a card is waiting, and how it ended - [CardVoice]); `onDelta`, zero
+     * or more times, with the reply accumulated so far as it streams in -
+     * see [ChatSession.send]'s own doc for why these are call-local
+     * callbacks and not subscriptions to a shared flow.
+     */
+    private val chat: suspend (
+        String,
+        onRoute: (String?) -> Unit,
+        onStatus: (String) -> Unit,
+        onDelta: (String) -> Unit,
+    ) -> String?,
 ) {
 
     enum class Phase {
@@ -81,6 +124,15 @@ class VoiceSession(
     /** What the desktop says the voice path can do. Refusing defaults. */
     val status: StateFlow<VoiceStatus> = _status.asStateFlow()
 
+    private val _strict = MutableStateFlow(VoiceStrict.View())
+
+    /**
+     * The stricter voice check, from the same `/api/voice/status` read as
+     * [status]: very strict or balanced, private answers, training in
+     * rounds, the repeat numbers. An older PC's defaults: none of it.
+     */
+    val strict: StateFlow<VoiceStrict.View> = _strict.asStateFlow()
+
     private val _answered = MutableStateFlow(false)
 
     /**
@@ -105,6 +157,229 @@ class VoiceSession(
 
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
+
+    private val _speakingText = MutableStateFlow<String?>(null)
+
+    /**
+     * The sentence being spoken right now, or null. Read by the barge-in
+     * listener ([BargeIn.decide]): while Jarvis itself says "stop", its own
+     * voice from the speaker must not count as the owner's stop word.
+     */
+    val speakingText: StateFlow<String?> = _speakingText.asStateFlow()
+
+    private val recentSpeech = RecentSpeech()
+
+    // -- The voice flow (VoiceFlow.kt; docs/JARVIS-API.md section 17) --------
+
+    /** Interrupting by talking: pause first, decide second. */
+    private val interrupt = InterruptFlow()
+
+    /** "One moment.", once per spoken question. */
+    private val moment = MomentFlow()
+
+    /**
+     * What the PC's `flow` block allows, from the last status read - nothing
+     * until it says (an older PC must never be sent a barge-in clip).
+     */
+    @Volatile private var flow: FlowStatus = FlowStatus()
+
+    /** The "One moment." clip and its key (`flow.moment.key`). */
+    @Volatile private var momentClip: Pair<String, ByteArray>? = null
+
+    /** "One moment." while it plays: the reply waits for it, never plays over it. */
+    @Volatile private var momentJob: Job? = null
+
+    /** Carries on after [VoiceFlow.WAIT_MAX_MS] paused with no answer from the PC. */
+    @Volatile private var pauseTimer: Job? = null
+
+    /** Numbers the clips heard over a reply. */
+    private val bargeSeq = java.util.concurrent.atomic.AtomicLong(0)
+
+    private val heardSound: ShortArray by lazy { HeardSound.samples() }
+
+    /** The last sentence of this turn's answer that started playing (not the fixed private line). */
+    @Volatile private var lastPlayed: String? = null
+
+    /**
+     * Keep listening after a question (section 17, 5): the answer just spoken
+     * ended with a question, and was not cut off. The hands-free listener
+     * then records the owner's reply without waiting for "hey Jarvis" - the
+     * PC opened the same window when it made that sentence's sound, and the
+     * owner check still runs on the clip.
+     */
+    fun askedBack(): Boolean = flow.available && flow.afterQuestion && current?.silenced == false &&
+        VoiceFlow.endsWithQuestion(lastPlayed)
+
+    /**
+     * "I heard you": the owner's turn has just been cut (the talk button let
+     * go, or the end of a "hey Jarvis" sentence). A tiny sound of the phone's
+     * own; it records and sends nothing. Silent when the owner switched it
+     * off ([heardSoundOn]); nothing else about the turn changes.
+     */
+    fun heardYou() {
+        if (!heardSoundOn()) return
+        speaker.playTone(heardSound, HeardSound.RATE)
+    }
+
+    /**
+     * Half a second of speech heard over the reply (the barge-in listener's
+     * [SpeechRun]). When the reply may be interrupted - it has been playing
+     * for [VoiceFlow.GRACE_MS], the PC can tell the owner's voice, the link
+     * is live, and "stop" was not already said - it is PAUSED here and the
+     * clip's number returned: the listener then sends about two seconds of
+     * that speech to [judgeBargeIn]. Null: nothing paused, send nothing.
+     */
+    fun bargeOnset(): Long? {
+        val turn = current ?: return null
+        val allowed = flow.bargeInUsable && linkBlocker() == null && !turn.silenced &&
+            _phase.value == Phase.SPEAKING
+        val id = bargeSeq.incrementAndGet()
+        if (interrupt.onset(SystemClock.elapsedRealtime(), id, allowed) != VoiceFlow.Action.PAUSE) return null
+        pauseSpeaking()
+        return id
+    }
+
+    /**
+     * Asks the PC about clip [id] (`source=barge_in`: "should Jarvis stop?",
+     * never transcribed) and acts on the answer: the owner's voice or "stop"
+     * silences the reply for good ([stopSpeaking] - a sentence made ahead is
+     * dropped with it); anything else, and no answer, carries on. Held, not
+     * sent, on a stale link (rule 4) - the reply then carries on after the
+     * wait.
+     */
+    suspend fun judgeBargeIn(id: Long, wav: ByteArray) {
+        val verdict = if (linkBlocker() != null || !flow.bargeInUsable) {
+            BargeVerdict(stop = false, available = true, why = "held")
+        } else {
+            api.bargeIn(wav)
+        }
+        // The PC cannot tell the owner's voice now: no more clips until its
+        // status says otherwise.
+        if (!verdict.available) flow = flow.copy(bargeIn = flow.bargeIn.copy(available = false))
+        act(interrupt.verdict(id, verdict.stop))
+    }
+
+    private fun pauseSpeaking() {
+        speaker.pause()
+        pauseTimer?.cancel()
+        pauseTimer = scope.launch {
+            delay(VoiceFlow.WAIT_MAX_MS)
+            act(interrupt.tick(SystemClock.elapsedRealtime()))
+        }
+    }
+
+    private fun act(action: VoiceFlow.Action) {
+        when (action) {
+            VoiceFlow.Action.PAUSE -> pauseSpeaking()
+            VoiceFlow.Action.RESUME -> {
+                pauseTimer?.cancel()
+                speaker.resume()
+            }
+            VoiceFlow.Action.STOP -> stopSpeaking()
+            VoiceFlow.Action.NONE -> Unit
+        }
+    }
+
+    /**
+     * A `step` event said a tool is starting (JarvisRuntime). During a
+     * spoken question, before the reply has made a sound, "One moment." is
+     * played - once per question, only with this phone's switch on and a
+     * clip from the PC. The reply waits for it to end ([playClip]).
+     */
+    fun toolStarted() {
+        val turn = current ?: return
+        if (turn.silenced) return
+        val now = _phase.value
+        if (now != Phase.THINKING && now != Phase.SPEAKING) return
+        val clip = momentClip
+        if (!moment.toolStarted(oneMoment() && flow.momentUsable, clip != null) || clip == null) return
+        momentJob = scope.launch { speaker.play(clip.second) }
+    }
+
+    /** Fetches the "One moment." clip when the PC's key for it changed. */
+    private suspend fun refreshMoment() {
+        val f = flow
+        if (!f.momentUsable) return
+        val key = f.moment.key
+        if (momentClip?.first == key) return
+        (api.voiceMoment() as? ApiResult.Ok)?.let { momentClip = key to it.value }
+    }
+
+    /** The `flow` block again, quietly: only this class's own copy changes. */
+    private suspend fun refreshFlow() {
+        flow = (api.voiceStatus() as? ApiResult.Ok)?.value?.flow ?: FlowStatus()
+        refreshMoment()
+    }
+
+    /**
+     * Every sentence Jarvis is saying now or said in the last few seconds
+     * ([RecentSpeech.WINDOW_MS]). Read by the barge-in listener alongside
+     * [speakingText]: the stop head fires after the quiet that follows a
+     * word, when Jarvis may already be on its next sentence, so "is the
+     * current sentence saying stop" alone missed its own voice.
+     */
+    fun recentlySpoken(): List<String> = recentSpeech.texts(SystemClock.elapsedRealtime())
+
+    /**
+     * Silences the reply being spoken - and nothing else. The turn carries
+     * on (the answer still arrives on screen); only the voice stops, for the
+     * rest of this turn. The one thing the stop word may do.
+     *
+     * "For the rest of this turn" is held by the turn's own
+     * [Turn.silenced], not only by the speaker's stop flag. Before, the
+     * later sentences still went to the PC's say route one by one (the PC
+     * made audio nobody would hear), and when the PC had no voice the
+     * phone's own voice refused them - which was then reported as "No
+     * offline voice on this phone", a false notice.
+     */
+    fun stopSpeaking() {
+        // Where the owner cut the answer off - the sentence playing now, or
+        // the last one heard - goes with the next question (section 17, 6).
+        // Only while it was being spoken, and only the first time.
+        if (current?.silenced == false && _phase.value == Phase.SPEAKING && flow.available && flow.cutOff) {
+            (_speakingText.value ?: lastPlayed)?.let(onCutOff)
+        }
+        current?.silenced = true
+        interrupt.replyEnded()
+        moment.stopped()
+        pauseTimer?.cancel()
+        speaker.stop()
+        _speakingText.value = null
+    }
+
+    /**
+     * "Hey Jarvis" said over a reply: the old turn ends NOW, so the new
+     * sentence can be sent at once - the way the desktop aborts its old
+     * stream when it is interrupted.
+     *
+     * Before, the listener stopped the voice and then waited for the whole
+     * old answer to finish arriving from the model (tens of seconds for a
+     * long one) with the face stuck on "speaking", and only then sent what
+     * the owner had just said. Now the old turn's speech is stopped and its
+     * job cancelled - which cancels its chat stream, and with it the HTTP
+     * call (see `ChatSession.send`'s `closer`) - and its own `finally` puts
+     * the phase back to OFF as it unwinds. The cut-off answer stays on screen
+     * as far as it got; it is not added to the conversation, as any
+     * interrupted answer is not.
+     *
+     * Not suspending, on purpose: the listener calls this and goes straight
+     * on recording the owner's next words, and the microphone's buffer holds
+     * well under a second - waiting here for the old turn to unwind could
+     * lose the start of the sentence. [deliverWakeClip] waits for it instead,
+     * when the new clip is ready to go.
+     *
+     * Nothing is approved, sent or decided here: the new sentence still goes
+     * through every check the desktop makes on any "hey Jarvis".
+     */
+    fun interruptForWake() {
+        stopSpeaking()
+        val running = job ?: return
+        interrupted = running
+        running.cancel()
+    }
+
+    /** The turn [interruptForWake] cancelled, until [deliverWakeClip] has waited for it. */
+    @Volatile private var interrupted: Job? = null
 
     private var job: Job? = null
 
@@ -148,6 +423,9 @@ class VoiceSession(
      */
     private class Turn {
         @Volatile var releaseRequested = false
+
+        /** "Stop" was said: nothing more of this turn's reply is spoken. See [stopSpeaking]. */
+        @Volatile var silenced = false
     }
 
     private var current: Turn? = null
@@ -183,42 +461,138 @@ class VoiceSession(
 
     /** Call before offering the button. Never assumes; a failure leaves it hidden. */
     suspend fun refreshStatus() {
-        when (val r = api.voiceStatus()) {
-            is ApiResult.Ok -> { _status.value = r.value; _answered.value = true }
-            is ApiResult.Failed -> { _status.value = VoiceStatus(available = false); _answered.value = false }
+        // One read, two halves: the talk button's status as before, and the
+        // stricter voice check (VoiceStrict), read field by field so that
+        // nothing in it can hide the talk button.
+        when (val r = api.voiceStatusRead()) {
+            is ApiResult.Ok -> {
+                _status.value = r.value.first
+                _strict.value = r.value.second
+                _answered.value = true
+                flow = r.value.first.flow
+                refreshMoment()
+            }
+            is ApiResult.Failed -> {
+                _status.value = VoiceStatus(available = false)
+                _strict.value = VoiceStrict.View()
+                _answered.value = false
+                flow = FlowStatus()
+            }
         }
     }
 
     /**
-     * Turns the desktop's wake word off (or on), then asks what actually
-     * happened.
+     * Turns the desktop's wake word off, or asks for it to be turned on, then
+     * asks what actually happened.
      *
-     * The re-read is not belt and braces. `/api/voice/wake` is a **config
-     * write**: the value lands in the desktop's TOML and a 200 means the change
-     * was accepted, not that the wake word has stopped listening. Flipping a
-     * switch in the UI on the strength of that response would show "off" over a
-     * microphone that is still open, which is the one lie this control must not
-     * tell. So the response is discarded and [refreshStatus] decides.
+     * The re-read is not belt and braces. Turning it ON raises an approval
+     * card on the desktop (`change_own_config`) and changes nothing until the
+     * card is approved, so a 200 means "a card is up", never "it is on".
+     * Turning it OFF is immediate. Either way the response is discarded and
+     * [refreshStatus] decides - a switch flipped on the strength of the reply
+     * would show "off" over a microphone that is still open, or "on" over a
+     * card nobody has approved.
      *
-     * @return null on success, or a sentence to show the owner.
+     * Turning it ON is held while the link is stale or down, like every
+     * other request that raises a card (rule 4); nothing is sent then.
+     * Turning it OFF always goes.
+     *
+     * @return null when the desktop now says what was asked for, or a sentence
+     *   to show the owner (including "approve the card").
      */
     suspend fun setWakeWord(enabled: Boolean): String? {
+        WakeRules.requestBlocker(enabled, linkBlocker())?.let { return it }
         val sent = api.setWakeWord(enabled)
-        if (sent is ApiResult.Failed) {
-            refreshStatus()
-            return "Could not reach the desktop to change that."
-        }
         refreshStatus()
         if (!_answered.value) {
-            return "The change was sent, but the desktop did not say what it is doing now."
+            return if (sent is ApiResult.Failed) {
+                "Could not reach the desktop to change that."
+            } else {
+                "The change was sent, but the desktop did not say what it is doing now."
+            }
         }
-        if (_status.value.wakeWordOn == enabled) return null
-        return if (enabled) {
-            "The desktop accepted that but still reports the wake word off."
-        } else {
-            // The honest version of the failure this whole re-read exists for.
-            "The desktop accepted the change but still reports the wake word ON. " +
-                "It may need restarting before it takes effect."
+        val now = _status.value
+        return WakeRules.afterRequest(enabled, now.wakeWordOn, now.listening.wakeWordPending)
+    }
+
+    /**
+     * One clip the wake-word listener already recorded ([com.jarvis.client.service.WakeWordService]),
+     * sent as `source=wake_word` and taken through the same path as a
+     * push-to-talk turn from VERIFYING on: the desktop checks the phrase and
+     * the voice, transcribes, and the answer is spoken.
+     *
+     * Returns the desktop's verdict once the whole turn is over (spoken, or
+     * refused), so the listener does not hear Jarvis's own reply as a new
+     * wake word. Null when it was not sent: a push-to-talk turn is running,
+     * or the desktop could not be reached.
+     */
+    suspend fun deliverWakeClip(wav: ByteArray, waitedMs: Long? = null): Heard? {
+        // A turn "hey Jarvis" just cut off may still be unwinding. It has
+        // been cancelled, so this is short; without it the guards below
+        // could see it half-finished and drop the owner's new sentence.
+        interrupted?.let { old ->
+            old.join()
+            if (interrupted === old) interrupted = null
+        }
+        val previous = job
+        if (previous != null && !previous.isCompleted) return null
+        if (_phase.value != Phase.OFF) return null
+        val turn = Turn()
+        current = turn
+        _notice.value = null
+        _transcript.value = null
+        var verdict: Heard? = null
+        val running = scope.launch {
+            try {
+                verdict = deliver(turn, wav, JarvisApi.SOURCE_WAKE_WORD, waitedMs)
+            } finally {
+                if (current === turn) {
+                    _micLevel.value = null
+                    if (_phase.value != Phase.OFF) _phase.value = Phase.OFF
+                }
+            }
+        }
+        job = running
+        running.join()
+        return verdict
+    }
+
+    /**
+     * One clip for "Train my voice", through the same [recorder] the talk
+     * button uses, so the PC gets exactly the format it checks every other
+     * utterance in (16 kHz, 16-bit mono WAV, resampled here).
+     *
+     * Not a voice turn: nothing is sent, nothing is transcribed, and the
+     * phase the face and the talk button read is left alone. Refused while a
+     * voice turn holds the microphone, rather than fighting it for the
+     * hardware. Capped at [VoiceTraining.MAX_SECONDS], the PC's own limit.
+     */
+    suspend fun recordTrainingClip(
+        stopWhen: () -> Boolean,
+        onLevel: (Float) -> Unit,
+    ): VoiceTraining.Take {
+        if (_phase.value != Phase.OFF || job?.isCompleted == false) {
+            return VoiceTraining.Take.Failed(
+                "The talk button is using the microphone. Try again in a moment.",
+            )
+        }
+        releasing?.join()
+        return when (
+            val r = recorder.record(
+                maxSeconds = VoiceTraining.MAX_SECONDS,
+                onLevel = onLevel,
+                stopWhen = stopWhen,
+            )
+        ) {
+            is Recorder.Result.Captured -> VoiceTraining.Take.Captured(r.wav, r.seconds)
+            is Recorder.Result.Refused -> VoiceTraining.Take.Failed(
+                if (r.why == Recorder.Failure.NoPermission) {
+                    "Jarvis needs the microphone for this. Tap Allow the microphone below."
+                } else {
+                    describe(r.why)
+                },
+                needsPermission = r.why == Recorder.Failure.NoPermission,
+            )
         }
     }
 
@@ -286,7 +660,15 @@ class VoiceSession(
                     setPhase(turn, Phase.OFF)
                     setNotice(turn, describe(captured.why))
                 }
-                is Recorder.Result.Captured -> deliver(turn, captured.wav, source)
+                is Recorder.Result.Captured -> {
+                    // The owner let go: a small "I heard you", and how long
+                    // it had been quiet when the clip went (`waited_ms`).
+                    heardYou()
+                    val waited = runCatching {
+                        VoiceFlow.trailingQuietMs(Wav.decode(captured.wav), Wav.rateOf(captured.wav))
+                    }.getOrNull()
+                    deliver(turn, captured.wav, source, waited)
+                }
             }
             } finally {
                 // Only if this turn is still the current one - the same guard
@@ -353,15 +735,56 @@ class VoiceSession(
         running.cancel()
     }
 
-    private suspend fun deliver(turn: Turn, wav: ByteArray, source: String) {
+    private suspend fun deliver(turn: Turn, wav: ByteArray, source: String, waitedMs: Long? = null): Heard? {
         setPhase(turn, Phase.VERIFYING)
-        val result = api.utterance(wav, source)
+        // A new question: interrupting starts again with its answer (its own
+        // three seconds of grace), and what the PC allows is read again while
+        // it checks this one - so the "One moment." clip is here in time.
+        interrupt.replyEnded()
+        moment.turnEnded()
+        lastPlayed = null
+        scope.launch { runCatching { refreshFlow() } }
+        val result = api.utterance(wav, source, waitedMs)
         if (result is ApiResult.Failed) {
             setPhase(turn, Phase.OFF)
             setNotice(turn, "Could not reach the desktop to check that.")
-            return
+            return null
         }
         val heard = (result as ApiResult.Ok).value
+
+        if (source == JarvisApi.SOURCE_WAKE_WORD) {
+            when (WakeRules.verdict(heard)) {
+                // Not addressed to Jarvis (the desktop did not hear "hey
+                // Jarvis" in it, or not from the owner): dropped without a
+                // word, the way the desktop dropped it.
+                WakeRules.Verdict.IGNORE -> {
+                    setPhase(turn, Phase.OFF)
+                    return heard
+                }
+                // "Hey Jarvis." and nothing after it: the listener records
+                // the next sentence and sends that.
+                WakeRules.Verdict.AWAKE -> {
+                    setPhase(turn, Phase.OFF)
+                    setNotice(turn, "Listening…")
+                    return heard
+                }
+                // The desktop cannot do this at all right now; the listener
+                // stops and shows [Heard.reason].
+                WakeRules.Verdict.STOP -> {
+                    setPhase(turn, Phase.OFF)
+                    setNotice(turn, heard.reason.ifBlank { "The desktop cannot take \"hey Jarvis\" right now." })
+                    return heard
+                }
+                // "Hey Jarvis" from the owner, and a command too short to
+                // check: the PC's own "say a little more", nothing sent.
+                WakeRules.Verdict.TOO_SHORT -> {
+                    setPhase(turn, Phase.OFF)
+                    setNotice(turn, heard.message())
+                    return heard
+                }
+                WakeRules.Verdict.ANSWER -> Unit
+            }
+        }
 
         when (heard.outcome) {
             // All three of these arrive as HTTP 200. A voice that did not match
@@ -374,7 +797,7 @@ class VoiceSession(
             -> {
                 setPhase(turn, Phase.OFF)
                 setNotice(turn, heard.message())
-                return
+                return heard
             }
             Heard.Outcome.TRANSCRIBED -> Unit
         }
@@ -386,7 +809,7 @@ class VoiceSession(
             // nothing at all.
             setPhase(turn, Phase.OFF)
             setNotice(turn, "Nothing came back to send.")
-            return
+            return heard
         }
 
         setTranscript(turn, text)
@@ -396,8 +819,20 @@ class VoiceSession(
         // erased a cancel that had arrived during the previous one and Jarvis
         // spoke on. See `Speaker.arm`.
         speaker.arm()
-        speakStreamed(turn, text)
+        // "One moment." may be said once for this question, if a tool starts
+        // before the answer makes a sound (VoiceFlow.kt).
+        moment.turnStarted()
+        // What the phone knows about tools as the question goes: every
+        // sentence is checked against it before it is read aloud.
+        try {
+            speakStreamed(turn, text, heard, toolWatch())
+        } finally {
+            moment.turnEnded()
+            interrupt.replyEnded()
+            pauseTimer?.cancel()
+        }
         setPhase(turn, Phase.OFF)
+        return heard
     }
 
     /**
@@ -414,23 +849,58 @@ class VoiceSession(
      * them as locals rather than fields makes that true by construction
      * rather than by remembering to reset them.
      */
-    private suspend fun speakStreamed(turn: Turn, text: String) {
+    private suspend fun speakStreamed(turn: Turn, text: String, heard: Heard, asked: PrivateAloud.Watch) {
         var spokenUpTo = 0
         var spokeAny = false
         val queue = Channel<String>(Channel.UNLIMITED)
+        // This answer's X-Jarvis-Route header, read once before any words
+        // (on the HTTP thread, hence the atomic).
+        val route = java.util.concurrent.atomic.AtomicReference<PrivateAloud.Route?>(null)
 
         // Speaks whatever lands in the queue, one sentence at a time, in
         // order - concurrently with `chat` below, so the first sentence can
         // be playing while the model is still writing the third. Ends only
         // when the queue is closed AND drained, never merely when it is
         // momentarily empty (a fast model can easily outrun TTS).
+        //
+        // The NEXT sentence's sound is asked of the PC while the current one
+        // plays - one ahead, never more (SpeechAhead) - so there is no
+        // silence between sentences while the PC makes the next one.
+        //
+        // "Private answers stay on screen": for EVERY sentence the phone
+        // asks whether this answer may be read aloud (PrivateAloud) - before
+        // asking for its sound, and again right before playing it, because a
+        // tool can start while the sound is being made. The first time it
+        // may not, that sound is dropped, the one fixed line is said
+        // instead, and nothing more of this answer is read - it stays on the
+        // screen as always. "Stop" ([Turn.silenced]) drops a sound made
+        // ahead, too, and so does cancelling this job.
         val drainJob = scope.launch {
-            for (sentence in queue) speak(turn, sentence)
+            SpeechAhead<ApiResult<SaidAloud>>(
+                mayRead = { PrivateAloud.mayRead(heard, route.get(), asked, toolWatch()) },
+                stopped = { turn.silenced },
+                fetch = { sentence -> api.say(sentence) },
+                play = { sentence, said -> playClip(turn, sentence, said) },
+                // "I need your OK for that..." and how the card ended: fixed
+                // words, said whatever the private-answer rule says.
+                fixedLine = { line -> CardVoice.isCardLine(line) },
+            ).speak(queue)
+        }
+
+        // A card this question waits on is said aloud, in order with the
+        // answer's own sentences (CardVoice): that one is waiting, then how
+        // it ended. Called on the reading thread, one word at a time.
+        val cardVoice = CardVoice()
+        val onStatus: (String) -> Unit = { word ->
+            cardVoice.onStatus(word)?.let { line -> queue.trySend(line) }
         }
 
         try {
-            val reply = chat(text) { soFar ->
-                for ((sentence, consumedTo) in SpeechText.findSentences(soFar, spokenUpTo)) {
+            val reply = chat(text, { header -> route.set(PrivateAloud.route(header)) }, onStatus) { soFar ->
+                // Nothing cut yet: the first piece may end at its first
+                // comma, so the phone starts speaking sooner (SpeechText).
+                val firstPiece = spokenUpTo == 0
+                for ((sentence, consumedTo) in SpeechText.findSentences(soFar, spokenUpTo, firstPiece)) {
                     spokenUpTo = consumedTo
                     if (!spokeAny) {
                         spokeAny = true
@@ -483,8 +953,34 @@ class VoiceSession(
      * refused unless the server says otherwise. Silence with the reply on
      * screen is an acceptable outcome; uploading it is not.
      */
-    private suspend fun speak(turn: Turn, text: String) {
-        when (val said = api.say(text)) {
+    private suspend fun playClip(turn: Turn, text: String, said: ApiResult<SaidAloud>) {
+        // Stopped this turn: not spoken. The reply is still on screen; only
+        // the voice was told to stop. (After "stop", SpeechAhead does not ask
+        // the PC for anything more either.)
+        if (turn.silenced) return
+        // The reply is about to make a sound: "One moment." is not started
+        // after this, and one already playing is let finish first (it is
+        // under a second) - never over the reply.
+        moment.replyStarted()
+        momentJob?.join()
+        if (turn.silenced) return
+        interrupt.replyStarted(SystemClock.elapsedRealtime())
+        // Only the answer's own words count as where the owner cut it off -
+        // never a fixed line of Jarvis's ("It's on your screen.", a card line).
+        if (text != PrivateAloud.ON_SCREEN && !CardVoice.isCardLine(text)) lastPlayed = text
+        _speakingText.value = text
+        recentSpeech.started(text)
+        try {
+            playNow(turn, text, said)
+        } finally {
+            _speakingText.value = null
+            recentSpeech.ended(SystemClock.elapsedRealtime())
+        }
+    }
+
+    /** [said] is the PC's `/api/voice/say` answer for [text], asked for ahead of time by [SpeechAhead]. */
+    private suspend fun playNow(turn: Turn, text: String, said: ApiResult<SaidAloud>) {
+        when (said) {
             is ApiResult.Ok -> when (val out = said.value) {
                 is SaidAloud.Audio -> speaker.play(out.wav)
                 is SaidAloud.NoEngine -> {
@@ -499,13 +995,10 @@ class VoiceSession(
                     val spoke = runCatching { speaker.speakOnDevice(text) }
                         .onFailure { Log.w(TAG, "on-device synthesis failed", it) }
                         .getOrDefault(false)
-                    if (!spoke) {
-                        setNotice(
-                            turn,
-                            "No offline voice on this phone, so it was not spoken aloud. " +
-                                "The reply is on screen.",
-                        )
-                    }
+                    // `speakOnDevice` also returns false when it was stopped;
+                    // only a real failure is reported as one.
+                    SpokenNotice.afterOnDevice(spoke, stoppedThisTurn = turn.silenced)
+                        ?.let { setNotice(turn, it) }
                 }
             }
             // Deliberately no fallback. `client_fallback_ok` is the only thing

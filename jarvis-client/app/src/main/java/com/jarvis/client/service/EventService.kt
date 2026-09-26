@@ -26,7 +26,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Holds the SSE connection open.
@@ -78,10 +80,28 @@ class EventService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            stoppedByOwner = true
             JarvisRuntime.stopStream()
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_STOP_RINGING) {
+            // Stop on a ringing alarm or urgent "tell me when": silence and
+            // remove that one notification. Nothing is sent, nothing decided -
+            // and a link the owner switched off stays off (bug audit
+            // 2026-09-26, #4): the service woken only for this goes away
+            // again. Otherwise the link is (re)started as before - after the
+            // process was reclaimed, that is what keeps approvals arriving.
+            ScheduleNotifier.stopRinging(this, intent.getStringExtra(ScheduleNotifier.EXTRA_TAG))
+            if (stoppedByOwner) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            JarvisRuntime.startStream()
+            return START_STICKY
+        }
+        // Every other start runs the link.
+        stoppedByOwner = false
         if (intent?.action == ACTION_DENY) {
             // The stream first, same as every other start. This branch used to
             // skip it, so a Deny tapped while the service was cold - after a
@@ -99,8 +119,34 @@ class EventService : Service() {
             // because the last onStartCommand happened to be a Deny tap.
             return START_STICKY
         }
+        if (intent?.action == ACTION_SNOOZE) {
+            // A notification's Snooze (ScheduleNotifier): the stream first,
+            // like Deny, then ONE snooze once the link is live.
+            JarvisRuntime.startStream()
+            snoozeFromNotification(intent.getStringExtra(ScheduleNotifier.EXTRA_JOB_ID))
+            return START_STICKY
+        }
         JarvisRuntime.startStream()
         return START_STICKY
+    }
+
+    /**
+     * The Snooze button on a timer's, alarm's or reminder's notification. It
+     * waits for the link like [denyFromNotification] - a change is refused on
+     * a stale link (rule 4), and a cold process starts stale - then sends ONE
+     * snooze through the same call as Coming up's button
+     * ([JarvisRuntime.scheduleAct], held on a stale link), and says how it
+     * went in a toast: the app is very likely not on screen. The
+     * notification goes only once the PC said yes.
+     */
+    private fun snoozeFromNotification(id: String?) {
+        if (id == null || !com.jarvis.client.net.Schedule.validId(id)) return
+        scope.launch {
+            awaitLive()
+            val (changed, said) = JarvisRuntime.scheduleAct(id, "snooze")
+            runCatching { Toast.makeText(this@EventService, said, Toast.LENGTH_LONG).show() }
+            if (changed) runCatching { ScheduleNotifier.cancel(this@EventService, id) }
+        }
     }
 
     /**
@@ -143,6 +189,14 @@ class EventService : Service() {
     private fun denyFromNotification(id: String?) {
         if (id == null) return
         scope.launch {
+            // Wait - briefly - for the link to be live before looking. On a
+            // cold process the stream has only just been started, `stale` is
+            // still true, and `decide()` rightly refuses to act on a stale
+            // queue (rule 4). Deciding at once therefore always failed on a
+            // cold start; the toast said so, but the denial never went out.
+            // Waiting for the first successful re-read fixes that without
+            // loosening the rule: `decide()` still checks for itself.
+            val live = awaitLive()
             var item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
             if (item == null) {
                 JarvisRuntime.refreshPending()
@@ -168,7 +222,7 @@ class EventService : Service() {
                 // saying "handled elsewhere" here would be exactly the false
                 // closure this whole rewrite exists to stop.
                 Log.w(TAG, "deny tapped for an approval that is not pending any more")
-                val message = if (JarvisRuntime.stale.value || JarvisRuntime.link.value != LinkState.CONNECTED) {
+                val message = if (!live || JarvisRuntime.stale.value || JarvisRuntime.link.value != LinkState.CONNECTED) {
                     "Could not reach the desktop to check - this may still be waiting. " +
                         "Open the app once it reconnects."
                 } else {
@@ -194,6 +248,17 @@ class EventService : Service() {
             }
         }
     }
+
+    /**
+     * True once the link is connected and not stale, false if that has not
+     * happened within [LIVE_WAIT_MS]. Returns at once when it already is.
+     */
+    private suspend fun awaitLive(): Boolean =
+        withTimeoutOrNull(LIVE_WAIT_MS) {
+            combine(JarvisRuntime.stale, JarvisRuntime.link) { stale, link ->
+                !stale && link == LinkState.CONNECTED
+            }.first { it }
+        } ?: false
 
     override fun onDestroy() {
         watcher?.cancel()
@@ -287,11 +352,14 @@ class EventService : Service() {
             activity == Activity.WORKING -> "Working"
             activity == Activity.PAUSED -> "Paused"
             activity == Activity.ERROR -> "Something went wrong"
-            else -> "Linked"
+            else -> "Connected"
         }
 
         val notification: Notification =
             NotificationCompat.Builder(this, CHANNEL_ID)
+                // Never copied to a paired watch or other device (Android bridges
+                // notifications by default): what Jarvis says stays on this phone.
+                .setLocalOnly(true)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(getString(R.string.app_name))
                 .setContentText(text)
@@ -359,6 +427,16 @@ class EventService : Service() {
         private const val NOTIFICATION_ID = 0x4A56
         const val ACTION_STOP = "com.jarvis.client.STOP_LINK"
         const val ACTION_DENY = "com.jarvis.client.DENY_APPROVAL"
+        const val ACTION_SNOOZE = "com.jarvis.client.SNOOZE_JOB"
+        const val ACTION_STOP_RINGING = "com.jarvis.client.STOP_RINGING"
+
+        /**
+         * How long a Deny from outside the app waits for the link to come up
+         * before answering "could not reach the desktop". Long enough for a
+         * cold start over Tailscale; short enough that the toast still reads
+         * as the answer to the tap.
+         */
+        private const val LIVE_WAIT_MS = 20_000L
 
         /**
          * Set when the platform refused to let the service go foreground. Read by
@@ -368,6 +446,16 @@ class EventService : Service() {
         @Volatile
         var lastStartFailure: String? = null
 
+        /**
+         * The owner switched the link off ([stop], ACTION_STOP) and nothing has
+         * started it since, in this process. A ringing alarm's Stop tapped
+         * then must not switch it back on. (Nothing in the app calls [stop]
+         * today - checked 2026-09-26 - so this guards the route, not a
+         * button.)
+         */
+        @Volatile
+        private var stoppedByOwner = false
+
         fun start(context: Context) {
             runCatching {
                 ContextCompat.startForegroundService(
@@ -376,6 +464,30 @@ class EventService : Service() {
                 )
             }.onFailure { Log.e(TAG, "could not start", it) }
         }
+
+        /**
+         * Denies one approval from outside the app - the home-screen widget.
+         *
+         * Goes through this service, the same as the notification's Deny, so
+         * both get the same handling: the stream is started, the queue is
+         * re-read once the link is live, and the answer is said out loud
+         * either way. The widget used to decide on its own against whatever
+         * `pending` held in memory - empty after the process had been killed
+         * - so it said "handled elsewhere" about approvals still waiting.
+         *
+         * A tap on a widget is one of Android's allowed reasons to start a
+         * foreground service from the background. False if the start was
+         * refused anyway, so the caller can say so.
+         */
+        fun deny(context: Context, id: String): Boolean =
+            runCatching {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, EventService::class.java)
+                        .setAction(ACTION_DENY)
+                        .putExtra(ApprovalNotifier.EXTRA_APPROVAL_ID, id),
+                )
+            }.onFailure { Log.e(TAG, "could not start to deny", it) }.isSuccess
 
         fun stop(context: Context) {
             runCatching {

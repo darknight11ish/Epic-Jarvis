@@ -1,0 +1,48 @@
+{
+  "_about": "The address the backend may be told to listen on (Settings -> 'Let my phone reach this', JARVIS_HUD_BIND). Read by three tests: commands.rs capture_tests (the desktop's validate_bind_address), backend/test_bind_wildcard.py (which binds a REAL socket to every every_interface entry to prove the OS reads it as 0.0.0.0, then checks the backend patch agrees), and tests/tailscale.mjs. Add a case here and all three check it.",
+  "every_interface": [
+    "0.0.0.0",
+    "0",
+    "00",
+    "0x0",
+    "0x00000000",
+    "0.0",
+    "0.0.0",
+    "000.000.000.000",
+    "::",
+    "::0",
+    "0:0:0:0:0:0:0:0"
+  ],
+  "refused": [
+    "100.64.012.3",
+    "0177.0.0.1",
+    "1684017411",
+    "0x64.0x40.0x0c.0x03",
+    "100.64.12",
+    "192.168.1.20",
+    "10.0.0.5",
+    "8.8.8.8",
+    "100.63.255.255",
+    "100.128.0.1",
+    "255.255.255.255",
+    "<broadcast>",
+    "my-pc.local",
+    "marioirelan11-alps.nord",
+    "100.64.12.3/api",
+    "100.64.12.3?x=1",
+    "100.64.12.3#frag",
+    "user@100.64.12.3",
+    "100.64.12.3:4719",
+    "100.64.12.3 ",
+    "100.64.12.3\n"
+  ],
+  "accepted": [
+    "",
+    "100.64.12.3",
+    "100.64.0.1",
+    "100.100.100.100",
+    "100.127.255.254",
+    "127.0.0.1",
+    "localhost"
+  ]
+}

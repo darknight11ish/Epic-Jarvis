@@ -1,0 +1,67 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1057,6 +1057,29 @@
+         return ""
+ 
+ 
++def _qs_float(handler, key: str):
++    """One epoch-seconds float out of the query string, or None.
++
++    Separate from _qs_int because a timestamp has no sensible clamp and no
++    sensible default: absent means "now", and a garbage value must also mean
++    "now" rather than 1970, which is what int() of a bad string would have
++    given after the except.
++    """
++    try:
++        from urllib.parse import parse_qs
++        raw = (parse_qs(handler.path.split("?", 1)[1]).get(key) or [""])[0] \
++            if "?" in handler.path else ""
++        if not raw:
++            return None
++        v = float(raw)
++        # Rejects a value that cannot be a date this store knows about: before
++        # 2001, or more than a day ahead. Both are almost always a client
++        # sending milliseconds, or seconds where it meant milliseconds.
++        return v if 1.0e9 < v < time.time() + 86400 else None
++    except Exception:
++        return None
++
++
+ def _qs_int(handler, key: str, default: int) -> int:
+     """One integer out of the query string, clamped and never raising.
+ 
+@@ -2026,11 +2049,33 @@
+                     # facts would make a superseded fact look deleted when it
+                     # is not.
+                     st = jarvis_memory.store()
++                    limit = int(_qs_int(self, "limit", 500))
++                    # ?known_at=<epoch seconds> answers a different question:
++                    # not "what is true" but "what did this machine believe
++                    # then". A fact entered on Tuesday and retired on Friday
++                    # is in Wednesday's answer. This is the whole reason
++                    # retired_at exists, and without a caller it would be a
++                    # column nobody reads.
++                    known = _qs_float(self, "known_at")
++                    if known is not None:
++                        rows = st.known_at(known, limit=limit)
++                        for r in rows:
++                            # "Current" AS OF THAT MOMENT, not as of now.
++                            vt = r.get("valid_to")
++                            r["current"] = vt is None or vt > known
++                        return self._send(200, {
++                            "available": True, "facts": rows,
++                            "known_at": known,
++                            "note": "what Jarvis believed at that moment, "
++                                    "right or wrong. Read-only: you cannot "
++                                    "edit the past.",
++                            "learning": learning_enabled(),
++                            "pending": len(jarvis_extract.pending())})
+                     c = st._connect()
+                     try:
+                         rows = [dict(r) for r in c.execute(
+                             "SELECT * FROM facts ORDER BY valid_from DESC LIMIT ?",
+-                            (int(_qs_int(self, "limit", 500)),))]
++                            (limit,))]
+                     finally:
+                         c.close()
+                     now = time.time()

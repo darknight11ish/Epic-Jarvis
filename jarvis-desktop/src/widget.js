@@ -22,16 +22,33 @@ import {
   currentLink,
   decide as decideOnBackend,
   injectTaskNote,
+  onEvent,
   onLink,
   onQueue,
   pauseTask,
   resumeTask,
   riskLine,
+  expiryWords,
   stopTask,
   followTheme,
   followZoom,
+  linkWords,
+  surfaceState,
   start as startLink,
 } from "./jarvis-link.js";
+import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./note-capture.js";
+import { EMAIL_APPROVE, EMAIL_DETAIL, isEmailCard } from "./email-sending.js";
+import { CARD_KICKER, cardTitle } from "./card-words.js";
+import {
+  actionsOf as focusActionsOf,
+  clock as focusClock,
+  HELD_WHEN_STALE as FOCUS_HELD,
+  LABELS as FOCUS_LABELS,
+  leftNow as focusLeftNow,
+  LOCK_TITLE as FOCUS_LOCK_TITLE,
+  readFocus,
+  toneOf as focusToneOf,
+} from "./focus.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -80,6 +97,13 @@ const dom = {
   faceWrap: $("face-wrap"),
   faceFrame: $("face-frame"),
 
+  focusStrip: $("focus-strip"),
+  focusClock: $("focus-clock"),
+  focusWord: $("focus-word"),
+  focusPause: $("focus-pause"),
+  focusLock: $("focus-lock"),
+  focusStop: $("focus-stop"),
+
   netDot: $("net-dot"),
   offline: $("widget-offline"),
   offlineText: $("widget-offline-text"),
@@ -91,6 +115,7 @@ const dom = {
   btnPin: $("btn-pin"),
   btnLog: $("btn-quick-log"),
   btnJoplin: $("btn-quick-joplin"),
+  btnObs: $("btn-quick-obs"),
 
   meterVram: $("meter-vram"),
   meterCpu: $("meter-cpu"),
@@ -101,6 +126,7 @@ const dom = {
   cpuBar: $("cpu-bar"),
   gpuVal: $("gpu-val"),
   gpuBar: $("gpu-bar"),
+  gpuCards: $("gpu-cards"),
 
   apprCard: $("approval-card"),
   apprRisk: $("appr-risk"),
@@ -110,6 +136,9 @@ const dom = {
   apprAction: $("appr-action"),
   apprDetail: $("appr-detail"),
   apprOptions: $("appr-options"),
+  apprOptionsWhy: $("appr-options-why"),
+  apprWhy: $("appr-why"),
+  apprCount: $("appr-count"),
   apprNoteInput: $("appr-note"),
   btnApprNoteSend: $("btn-appr-note-send"),
   btnApprYes: $("btn-appr-yes"),
@@ -124,6 +153,8 @@ const dom = {
   btnTaskNoteSend: $("btn-task-note-send"),
 
   captureTarget: $("capture-target"),
+  captureRow: $("capture-row"),
+  noteTargetsLine: $("note-targets-line"),
   captureInput: $("capture-input"),
   btnCaptureSend: $("btn-capture-send"),
   flash: $("widget-flash"),
@@ -138,8 +169,12 @@ const state = {
   alwaysOnTop: true,
   /** Id of the gate awaiting a decision, or null. */
   approval: null,
-  /** `"logseq"` or `"joplin"` — which store the capture field files to. */
+  /** `"logseq"`, `"joplin"` or `"obsidian"` — which store the capture field
+   *  files to. Only ever one the PC says is set up. */
   captureTarget: "logseq",
+  /** Which note apps the PC is set up for (note-capture.js `readTargets`).
+   *  Unknown until the PC answers - and unknown shows none, never all. */
+  noteTargets: { known: false, why: "not checked yet" },
   /** A note is being filed. Separate from `deciding`: they are unrelated, and
    *  one shared flag meant each silently disabled the other. */
   busy: false,
@@ -165,6 +200,10 @@ const state = {
    *  comment on `sendTaskAction` before changing that - it is the one
    *  honesty rule this whole feature exists to hold. */
   taskActivity: "idle",
+  /** App lock is on (Settings, Security). While it is, an approval card
+   *  here shows the notice's title only, and Approve opens the Jarvis bar -
+   *  behind the lock - instead of approving. See `applyAppLock`. */
+  appLock: false,
 };
 
 /**
@@ -211,6 +250,114 @@ if (typeof ResizeObserver !== "undefined") {
 }
 
 /* ==========================================================================
+   Focus session (focus.js; JARVIS-API.md section 31)
+
+   A countdown under the bar while a session runs, tinted when the owner is
+   off target, with Pause / Resume, Lock on and Stop - ONE thing per tap, no
+   card. Resume and Lock on wait while the link is stale (Rust refuses them
+   too); Pause and Stop do not. Never what was in front: the PC sends only
+   booleans and counts, and says the distraction out loud through the Jarvis
+   bar (focus.rs play_callout), not here.
+   ========================================================================== */
+
+const focus = { view: null, readAt: 0, triedAt: 0, timer: null, loading: false, again: false,
+  readOnce: false };
+const FOCUS_WORDS = { drift: "off target", paused: "paused", settling: "settling in",
+  on: "on target" };
+
+async function loadFocus() {
+  if (!IS_TAURI) return;
+  if (focus.loading) {
+    focus.again = true;
+    return;
+  }
+  focus.loading = true;
+  focus.triedAt = Date.now();
+  try {
+    const got = await invoke("focus_status");
+    if (got) {
+      focus.view = readFocus(got);
+      focus.readAt = Date.now();
+      focus.readOnce = true;
+    }
+  } finally {
+    focus.loading = false;
+  }
+  if (focus.again) {
+    focus.again = false;
+    await loadFocus();
+    return;
+  }
+  paintFocus();
+}
+
+function focusTickOnce() {
+  const v = focus.view;
+  if (!v || !v.on) return;
+  const left = focusLeftNow(v, Date.now() - focus.readAt);
+  dom.focusClock.textContent = focusClock(left);
+  // At zero, ask the PC whether it has ended - every 2 s at most, like the
+  // Brain, not every second (bug audit 2026-09-26, "possible" list).
+  if (left <= 0 && !focus.loading && Date.now() - focus.triedAt > 2000) loadFocus();
+}
+
+function syncFocusButtons() {
+  if (!dom.focusStrip) return;
+  const canAct = linkWords(currentLink()).canAct;
+  for (const b of [dom.focusPause, dom.focusLock, dom.focusStop]) {
+    const held = FOCUS_HELD.has(b.dataset.action) && !canAct;
+    b.disabled = held || b.dataset.busy === "true";
+  }
+}
+
+function paintFocus() {
+  if (!dom.focusStrip) return;
+  const v = focus.view;
+  const on = Boolean(v && v.available && v.on);
+  dom.focusStrip.hidden = !on;
+  if (on) {
+    const tone = focusToneOf(v);
+    dom.focusStrip.dataset.tone = tone;
+    dom.focusWord.textContent = v.excused && v.drifting ? "research" : FOCUS_WORDS[tone] || "";
+    dom.focusClock.textContent = focusClock(focusLeftNow(v, Date.now() - focus.readAt));
+    const [first] = focusActionsOf(v, "widget");
+    dom.focusPause.textContent = FOCUS_LABELS[first];
+    dom.focusPause.dataset.action = first;
+    dom.focusLock.dataset.action = "lock";
+    dom.focusLock.title = FOCUS_LOCK_TITLE;
+    dom.focusStop.dataset.action = "stop";
+    syncFocusButtons();
+  }
+  const ticking = on && !v.paused;
+  if (ticking && !focus.timer) focus.timer = setInterval(focusTickOnce, 1000);
+  if (!ticking && focus.timer) {
+    clearInterval(focus.timer);
+    focus.timer = null;
+  }
+  syncSize();
+}
+
+async function focusAct(button) {
+  const action = button.dataset.action;
+  if (!action) return;
+  button.dataset.busy = "true";
+  syncFocusButtons();
+  try {
+    const out = await invokeStrict("focus_act", { action, minutes: null });
+    announce(String((out && out.said) || "Done."));
+  } catch (error) {
+    announce(String(error && error.message ? error.message : error));
+  } finally {
+    button.dataset.busy = "false";
+  }
+  await loadFocus();
+}
+
+for (const b of [dom.focusPause, dom.focusLock, dom.focusStop]) {
+  if (b) b.addEventListener("click", () => focusAct(b));
+}
+
+/* ==========================================================================
    Expand / collapse / pin
    ========================================================================== */
 
@@ -243,7 +390,48 @@ if (typeof ResizeObserver !== "undefined") {
 function applyFaceVisibility() {
   const show = state.expanded && !state.approval;
   if (dom.faceWrap) dom.faceWrap.hidden = !show;
-  if (dom.faceFrame) dom.faceFrame.src = show ? "faces.html?mode=display" : "";
+  // `feed=parent`: this window tells the face what to wear and what state to
+  // show, the way the HUD does. The frame used to ask for the owner's face
+  // itself and was refused - the widget's capability had no appearance
+  // permission at all - so the widget always wore the default face in the
+  // default colours. And an event sent to this window is delivered to its
+  // top-level page, never to a frame inside it, so the frame could not have
+  // followed a change anyway. See `postFace`.
+  if (dom.faceFrame) dom.faceFrame.src = show ? "faces.html?mode=display&feed=parent" : "";
+}
+
+/** The owner's appearance document, as this window last read it. */
+let faceAppearance = null;
+
+/** Hands the face frame the state to show and the face to wear. */
+function postFace() {
+  const frame = dom.faceFrame;
+  if (!frame || !frame.contentWindow || !frame.getAttribute("src")) return;
+  const message = { type: "jarvis-hud-face", state: surfaceState(currentLink()) };
+  if (faceAppearance) message.appearance = faceAppearance;
+  try {
+    frame.contentWindow.postMessage(message, location.origin);
+  } catch (error) {
+    /* the frame is mid-navigation; its load event posts again */
+  }
+}
+
+/**
+ * Reads the owner's face. `fromServer` once at boot - `get_appearance` asks
+ * Jarvis, so a face or colour changed on the phone arrives - and from memory
+ * (`appearance_snapshot`) after that. Never `get_appearance` from inside the
+ * `appearance-changed` listener: that command broadcasts the same event, and
+ * listening to your own echo is a loop.
+ */
+async function readFaceAppearance(fromServer) {
+  if (!IS_TAURI) return;
+  try {
+    const doc = await TAURI.core.invoke(fromServer ? "get_appearance" : "appearance_snapshot");
+    if (doc && typeof doc === "object") faceAppearance = { face: doc.face || null, bindings: doc.bindings || {} };
+  } catch (error) {
+    if (fromServer) return readFaceAppearance(false);
+  }
+  postFace();
 }
 
 function applyExpanded(expanded) {
@@ -342,18 +530,68 @@ function applyTelemetry(data) {
     paintMeter(dom.meterGpu, dom.gpuBar, 0, false);
   }
 
+  // Every card, one line each, once there are two (I12, 2026-09-26): the
+  // meters above are the first card's, so a second card was never shown.
+  const cards = gpuCards(data);
+  paintGpuCards(cards);
+
   // Compact readout: temperature is the one number worth a glance when the
-  // widget is collapsed.
-  if (Number.isFinite(data.gpuTempC)) {
-    dom.gpuTemp.textContent = `${data.gpuTempC}°`;
-    dom.gpuTemp.classList.toggle("hot", data.gpuTempC >= TEMP_WARN);
-    dom.gpuTemp.classList.toggle("critical", data.gpuTempC >= TEMP_CRITICAL);
+  // widget is collapsed - the HOTTEST card's, so a hot second card shows.
+  const hottest = cards.reduce((t, c) => (Number.isFinite(c.tempC) && c.tempC > t ? c.tempC : t),
+    Number.isFinite(data.gpuTempC) ? data.gpuTempC : -Infinity);
+  if (Number.isFinite(hottest)) {
+    dom.gpuTemp.textContent = `${hottest}°`;
+    dom.gpuTemp.title = cards.length > 1 ? "The hottest graphics card's temperature" : "GPU temperature";
+    dom.gpuTemp.classList.toggle("hot", hottest >= TEMP_WARN);
+    dom.gpuTemp.classList.toggle("critical", hottest >= TEMP_CRITICAL);
   } else {
     dom.gpuTemp.textContent = `${Math.round(cpu)}%`;
     dom.gpuTemp.title = "CPU load (no NVIDIA GPU detected)";
   }
 
   if (data.routeLane) applyLane(data.routeLane);
+}
+
+/** The telemetry's `gpus`, read: numbers only where they are numbers. */
+function gpuCards(data) {
+  const list = Array.isArray(data.gpus) ? data.gpus : [];
+  const num = (v) => (Number.isFinite(v) ? v : null);
+  return list.filter((g) => g && typeof g === "object").map((g, i) => ({
+    name: typeof g.name === "string" && g.name.trim() ? g.name.trim() : `Card ${i + 1}`,
+    tempC: num(g.tempC),
+    util: num(g.utilPercent),
+    usedMb: num(g.vramUsedMb),
+    totalMb: num(g.vramTotalMb),
+    powerW: num(g.powerW),
+  }));
+}
+
+/** "RTX 2060 · 38° · 0.3 / 12.0 GB · 10 W" - one card's line. */
+function gpuCardLine(c) {
+  const short = c.name.replace(/^NVIDIA\s+/i, "").replace(/^GeForce\s+/i, "");
+  const bits = [short];
+  if (c.tempC !== null) bits.push(`${c.tempC}°`);
+  if (c.util !== null) bits.push(`${c.util}%`);
+  if (c.usedMb !== null && c.totalMb) bits.push(`${(c.usedMb / 1024).toFixed(1)} / ${(c.totalMb / 1024).toFixed(1)} GB`);
+  if (c.powerW !== null) bits.push(`${c.powerW} W`);
+  return bits.join(" · ");
+}
+
+function paintGpuCards(cards) {
+  if (!dom.gpuCards) return;
+  if (cards.length < 2) {
+    dom.gpuCards.hidden = true;
+    dom.gpuCards.replaceChildren();
+    return;
+  }
+  dom.gpuCards.replaceChildren(...cards.map((c) => {
+    const li = document.createElement("li");
+    li.textContent = gpuCardLine(c);
+    li.classList.toggle("hot", c.tempC !== null && c.tempC >= TEMP_WARN);
+    li.classList.toggle("critical", c.tempC !== null && c.tempC >= TEMP_CRITICAL);
+    return li;
+  }));
+  dom.gpuCards.hidden = false;
 }
 
 /** Paints the route pill. */
@@ -368,12 +606,16 @@ function applyLane(lane) {
 /** Paints the connection dot from a health report. */
 function applyHealth(report) {
   if (!report || !Array.isArray(report.services)) return;
-  const online = report.services.filter((s) => s.online).length;
-  dom.netDot.classList.toggle("online", online === report.services.length);
-  dom.netDot.classList.toggle("partial", online > 0 && online < report.services.length);
+  // An optional service (LiteLLM, the cloud lane's proxy) counts only when it
+  // answers - not running is normal with no cloud model set up. Same rule as
+  // commands.rs summarise_health.
+  const counted = report.services.filter((s) => s.online || !s.optional);
+  const online = counted.filter((s) => s.online).length;
+  dom.netDot.classList.toggle("online", online === counted.length);
+  dom.netDot.classList.toggle("partial", online > 0 && online < counted.length);
   dom.netDot.title = report.summary || "Core connection";
   // The shape and the hue are for the eye. This is the same fact in words.
-  const word = online === report.services.length
+  const word = online === counted.length
     ? "all local services answered"
     : online > 0
       ? "some local services answered"
@@ -414,6 +656,60 @@ function approvalDetail(approval) {
   return "No detail supplied.";
 }
 
+/* App lock and this window (apps security audit M3; the owner's decision,
+ * 2026-09-25). The widget sits on the desktop outside the lock, where anyone
+ * at the PC can read it. So while App lock is on its approval card shows only
+ * the notice's short title - never `detail`, `prompt`, the rush quote or the
+ * options, which can quote an email or a file - and its Approve opens the
+ * Jarvis bar, which asks Windows Hello before it shows, to approve there.
+ * Deny stays here, as on the phone's widget: refusing never needs the lock.
+ * Rust holds the same rule in `decide_approval`, so this is the courtesy and
+ * that is the gate. */
+const LOCKED_TITLE = "Jarvis is waiting for your approval";
+const LOCKED_DETAIL = "App lock is on, so what this is for is shown in the Jarvis bar, not here.";
+const LOCKED_APPROVE = "Approve in the Jarvis bar";
+
+/** The one line shown about a card while App lock is on. */
+function lockedTitle(approval) {
+  const title = approval && approval.notice && typeof approval.notice.title === "string"
+    ? approval.notice.title.trim()
+    : "";
+  return title ? clip(title, 80) : LOCKED_TITLE;
+}
+
+/** App lock turned on or off (read at start, then `security-changed`). */
+function applyAppLock(on) {
+  const next = Boolean(on);
+  if (next === state.appLock) return;
+  state.appLock = next;
+  // Repaint the card on screen under the new rule. Same id, so nothing is
+  // announced again and a half-typed note is kept.
+  if (state.approval) openApproval(state.approval);
+  syncTaskControls();
+}
+
+/** Whether App lock is on. Fails closed: a read that fails is treated as on,
+ *  which only means Approve opens the Jarvis bar. */
+async function readAppLock() {
+  try {
+    return (await invokeStrict("get_app_lock")) !== false;
+  } catch (error) {
+    console.error("[widget] could not read whether App lock is on:", error);
+    return true;
+  }
+}
+
+/** Approve while App lock is on, or on an email: open the Jarvis bar on this
+ *  card. */
+async function approveInBar() {
+  flash("Opening the Jarvis bar - approve it there.");
+  try {
+    await invokeStrict("open_approval_in_quickbar");
+  } catch (error) {
+    flash(`${String((error && error.message) || error)} - nothing was decided.`, "bad");
+  }
+}
+
 /**
  * Renders the gate.
  *
@@ -428,24 +724,40 @@ function openApproval(approval) {
   if (state.decided && state.decided !== approval.id) state.decided = null;
   // The gate no longer claims `alertdialog`, so it announces itself — with the
   // risk line, which is the part that changes the decision.
+  const locked = state.appLock;
   if (!state.approval || state.approval.id !== approval.id) {
     announce(
-      `Approval required: ${approval.action}. ${riskLine(approval.risk)}.`,
+      `${CARD_KICKER}: ${locked ? lockedTitle(approval) : cardTitle(approval)}. ${riskLine(approval.risk)}.`,
       "assertive"
     );
   }
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
-  dom.apprAction.textContent = approval.action;
+  // An email is approved in the Jarvis bar, lock or not: this card shows
+  // one line, and an email's card is its recipients, subject and every word
+  // (the owner's decision of 2026-09-25). Rust refuses an email's Approve
+  // from this window too (commands.rs, `waiting_email`).
+  const email = isEmailCard(approval);
+  // The PC's own words for it (card-words.js), never the code name.
+  dom.apprAction.textContent = locked ? lockedTitle(approval) : cardTitle(approval);
   // textContent, never innerHTML: this string comes from a model.
-  dom.apprDetail.textContent = approvalDetail(approval);
+  dom.apprDetail.textContent = locked ? LOCKED_DETAIL
+    : email ? EMAIL_DETAIL : approvalDetail(approval);
+  dom.btnApprYes.textContent = locked ? LOCKED_APPROVE : email ? EMAIL_APPROVE : "Approve";
+  dom.btnApprYes.title = locked
+    ? "App lock is on: opens the Jarvis bar, which asks Windows Hello, to approve there"
+    : email ? "Opens the Jarvis bar on this email, to read all of it and approve there" : "";
+  // A note changes the plan, so it waits for the unlocked Jarvis bar too.
+  const noteRow = dom.apprNoteInput.closest(".appr-note-row");
+  if (noteRow) noteRow.hidden = locked;
   dom.apprRisk.textContent = riskLine(approval.risk);
   dom.apprRisk.dataset.reversible = approval.risk ? approval.risk.reversible : "no";
 
   // Why this is being asked at all. `text` already carries its own "(4th time
   // today)" when the source has tripped this repeatedly; nothing here counts.
   // Both strings are hostile text by definition and go in as textContent.
-  const raised = approval.raised;
+  // Not while App lock is on: the quote is outside text, word for word.
+  const raised = locked ? null : approval.raised;
   dom.apprRaised.hidden = !raised;
   dom.apprRaisedChip.textContent = raised ? raised.text : "";
   dom.apprRaisedQuote.textContent = raised && raised.quote ? `“${raised.quote}”` : "";
@@ -486,11 +798,17 @@ function openApproval(approval) {
  * out first.
  */
 function renderOptions(approval) {
-  const options = Array.isArray(approval.options) ? approval.options : [];
+  // No options while App lock is on: their labels are the plan's own words,
+  // and the one button then opens the Jarvis bar, which shows them.
+  const options = !state.appLock && Array.isArray(approval.options) ? approval.options : [];
   dom.apprOptions.replaceChildren();
   const multiple = options.length > 1;
   dom.apprOptions.hidden = !multiple;
   dom.btnApprYes.hidden = multiple;
+  dom.apprOptionsWhy.hidden = !multiple;
+  dom.apprOptionsWhy.textContent = multiple
+    ? `Jarvis offered ${options.length} ways to do this. The desktop can't yet tell it which one you picked, so approving is off here. Deny still works.`
+    : "";
   if (!multiple) return;
   for (const option of options) {
     const btn = document.createElement("button");
@@ -498,7 +816,7 @@ function renderOptions(approval) {
     btn.className = "appr-option";
     btn.dataset.optionId = option.id;
     btn.disabled = true;
-    btn.title = "This desktop can't tell the server which option was picked yet — see docs/JARVIS-API.md §8. Deny still works.";
+    btn.title = "Approving one option is not possible from the desktop yet. Deny still works.";
     const label = document.createElement("span");
     label.className = "opt-label";
     label.textContent = option.label; // textContent: model-authored text.
@@ -518,6 +836,8 @@ function closeApproval() {
   dom.apprCard.hidden = true;
   dom.apprOptions.replaceChildren();
   dom.apprOptions.hidden = true;
+  dom.apprOptionsWhy.hidden = true;
+  dom.apprCount.hidden = true;
   dom.btnApprYes.hidden = false;
   dom.apprNoteInput.value = "";
   applyFaceVisibility();
@@ -530,9 +850,27 @@ function closeApproval() {
  * twice, from two surfaces, seconds apart.
  */
 function syncApprovalButtons() {
-  const blocked = currentLink().stale || state.busy;
-  dom.btnApprYes.disabled = blocked;
+  // `deciding`, not `busy`: `busy` is the capture box's flag (see its own
+  // note), so the old `stale || busy` left Approve and Deny live-looking while
+  // a decision was on its way - a second click silently swallowed by the
+  // latch - and greyed them for no reason while a note was being filed. The
+  // quickbar has always used `stale || deciding`.
+  const link = currentLink();
+  const blocked = link.stale || state.deciding;
+  // A cut-off request cannot be approved - see the quickbar's twin.
+  dom.btnApprYes.disabled = blocked || Boolean(state.approval && state.approval.cutOff);
   dom.btnApprNo.disabled = blocked;
+  paintApprovalClock();
+  // And say why, on the card. Two grey buttons and nothing else was all the
+  // widget showed while the queue could not be confirmed.
+  const why = link.stale
+    ? `${linkWords(link).short} — the approval queue cannot be confirmed, so nothing can be answered from here.`
+    : state.deciding
+      ? "That decision is on its way."
+      : "";
+  dom.apprWhy.hidden = !why;
+  dom.apprWhy.textContent = why;
+  dom.apprWhy.dataset.tone = link.stale ? "bad" : "";
   // Not `= blocked`: `renderOptions` leaves these permanently disabled (see
   // its own comment), and `= blocked` would re-enable them once the stream
   // stopped being stale.
@@ -548,8 +886,34 @@ function syncApprovalButtons() {
   dom.btnApprNoteSend.disabled = noteBlocked;
 }
 
+/**
+ * The risk line, plus how long the card has left or why Approve is off for a
+ * request that was cut off. Re-painted every second, and only this line.
+ */
+function paintApprovalClock() {
+  const approval = state.approval;
+  if (!approval) return;
+  const parts = [riskLine(approval.risk)];
+  if (approval.cutOff) {
+    parts.push("Cut off before it reached this card, so it cannot be approved here - deny it and ask Jarvis for a shorter plan.");
+  }
+  const clock = expiryWords(approval.expiresAt);
+  if (clock) parts.push(clock);
+  const text = parts.join(" · ");
+  if (dom.apprRisk.textContent !== text) dom.apprRisk.textContent = text;
+}
+setInterval(() => {
+  if (state.approval && !dom.apprCard.hidden) paintApprovalClock();
+}, 1000);
+
 async function decide(approved, optionId = null) {
   if (!state.approval || state.deciding) return;
+  // App lock on: this window approves nothing (see `applyAppLock`). Nor,
+  // lock or not, an email: all of it is read in the Jarvis bar first.
+  if (approved && (state.appLock || isEmailCard(state.approval))) {
+    await approveInBar();
+    return;
+  }
   // The id latch the spotlight has and this window did not. `deciding` is
   // released in `finally`, but the card only closes when the backend
   // broadcasts the resolution — so between those two moments a second click
@@ -563,6 +927,8 @@ async function decide(approved, optionId = null) {
   // in-flight decision silently swallowed Enter in the capture field.
   state.deciding = true;
   syncApprovalButtons();
+  // The same words the quickbar uses, so the grey buttons have a reason.
+  flash(approved ? "Approving…" : "Denying…");
 
   try {
     await decideOnBackend(state.approval.id, approved, optionId);
@@ -578,7 +944,8 @@ async function decide(approved, optionId = null) {
     // stays. Releasing in `finally` instead would release it on SUCCESS too,
     // which is the whole thing the latch exists to prevent.
     if (!handled) state.decided = null;
-    flash(handled ? "Already handled elsewhere." : `${message} — nothing was decided.`,
+    flash(handled ? "Already handled elsewhere."
+      : /^Nothing was approved\./.test(message) ? message : `${message} — nothing was decided.`,
           handled ? null : "bad");
   } finally {
     state.deciding = false;
@@ -593,11 +960,44 @@ async function decide(approved, optionId = null) {
 function setCaptureTarget(target) {
   state.captureTarget = target;
   dom.captureTarget.dataset.target = target;
-  dom.captureTarget.textContent = target === "joplin" ? "#jop" : "#log";
-  dom.captureTarget.title =
-    target === "joplin"
-      ? "Filing to the Joplin vault — click to switch"
-      : "Filing to the Logseq journal — click to switch";
+  dom.captureTarget.textContent = (TARGETS[target] || TARGETS.logseq).prefix;
+  const where = {
+    logseq: "the Logseq journal",
+    joplin: "Joplin",
+    obsidian: "today's Obsidian daily note",
+  }[target] || targetName(target);
+  const more = readyTargets().length > 1;
+  dom.captureTarget.title = `Filing to ${where}${more ? " — click to switch" : ""}`;
+  dom.captureTarget.setAttribute("aria-label",
+    `Capture target: ${where}.${more ? " Activate to switch to the next note app." : ""}`);
+}
+
+/** The note apps the PC said are set up - empty while that is not known. */
+function readyTargets() {
+  return state.noteTargets.known ? state.noteTargets.targets : [];
+}
+
+/**
+ * Shows a button and a capture target only for a note app the PC is set up
+ * for. None set up, or the PC could not be asked: no capture field, and one
+ * line saying which.
+ */
+function syncNoteTargets() {
+  const ready = readyTargets();
+  dom.btnLog.hidden = !ready.includes("logseq");
+  dom.btnJoplin.hidden = !ready.includes("joplin");
+  dom.btnObs.hidden = !ready.includes("obsidian");
+  dom.captureRow.hidden = ready.length === 0;
+  dom.noteTargetsLine.hidden = ready.length > 0;
+  if (!ready.length) dom.noteTargetsLine.textContent = noTargetsLine(state.noteTargets);
+  if (ready.length) {
+    setCaptureTarget(ready.includes(state.captureTarget) ? state.captureTarget : ready[0]);
+  }
+}
+
+async function refreshNoteTargets() {
+  state.noteTargets = await loadTargets(invokeStrict);
+  syncNoteTargets();
 }
 
 let flashTimer = null;
@@ -649,25 +1049,23 @@ async function sendCapture() {
   flash("Filing…");
 
   try {
-    // What comes back is the model's own account of what it did, not a receipt.
-    // `/api/chat` runs a chat turn whose system message ASKS for
-    // `append_logseq_journal`; a model can decline it, not have it, or answer
-    // in prose, and HTTP 200 covers all three. This used to say "Appended to
-    // Logseq." on any 200 — a confident claim about a file the desktop has
-    // never seen and cannot check.
-    const reply = String((await invokeStrict("capture_note", {
-      target: state.captureTarget,
-      text,
-    })) || "").trim();
-    dom.captureInput.value = "";
-    const where = state.captureTarget === "joplin" ? "Joplin" : "Logseq";
-    const first = reply.split("\n").find((l) => l.trim()) || "";
-    flash(
-      first ? `Sent to ${where} — ${clip(first, 70)}` : `Sent to ${where}.`,
-      "ok",
-      `Jarvis was asked to file this in ${where}. What it says it did is above; ` +
-        `the desktop has no way to confirm the note landed.`
-    );
+    // The PC's own answer, not a model's account (note-capture.js): "Filed"
+    // only once the backend has written the note and read it back. This used
+    // to ask a model to call a tool that did not exist and could only say
+    // "Sent". While an approval card waits, the field is free again - the
+    // result arrives in the flash when the card is answered.
+    const target = state.captureTarget;
+    let first = true;
+    await fileNote(invokeStrict, target, text, (said) => {
+      if (first) {
+        dom.captureInput.value = "";
+        first = false;
+        state.busy = false;
+        dom.captureInput.disabled = false;
+        dom.btnCaptureSend.disabled = false;
+      }
+      flash(clip(said.text, 90), said.tone, said.text);
+    });
   } catch (error) {
     flash(String((error && error.message) || error), "bad");
   } finally {
@@ -698,12 +1096,9 @@ async function sendNote() {
   try {
     await amendOnBackend(id, note);
     dom.apprNoteInput.value = "";
-    flash(
-      "Sent — waiting for a new proposal.",
-      "ok",
-      "Jarvis will read this note and propose again for the same request; " +
-        "nothing has been approved or denied."
-    );
+    // task-control.patch keeps the note WITH the card; it does not re-plan
+    // on its own. The model reads it together with the owner's answer.
+    flash("Note kept with this card.", "ok", "Nothing was approved or denied, and the card is unchanged. Jarvis reads your note together with your answer - to have it plan differently, deny the card.");
   } catch (error) {
     flash(String((error && error.message) || error), "bad");
   } finally {
@@ -737,14 +1132,19 @@ function syncTaskControls() {
   dom.btnTaskStop.disabled = state.taskActionBusy;
   dom.taskNoteInput.disabled = state.taskNoteBusy;
   dom.btnTaskNoteSend.disabled = state.taskNoteBusy;
+  // App lock covers task notes too (the owner's decision of 2026-09-26),
+  // like the card's note: a note steers what Jarvis does next, so it waits
+  // for the unlocked Jarvis bar. Rust refuses it from this window as well.
+  const taskNoteRow = dom.taskNoteInput.closest(".task-note-row");
+  if (taskNoteRow) taskNoteRow.hidden = state.appLock;
 }
 
 /**
  * Sends a pause, resume, or stop request for whatever Jarvis is running
- * right now. DRAFT: `pause_task`/`resume_task`/`stop_task` may not exist as
- * Rust commands yet - same situation `amend_approval` was in before it got
- * one - so a rejected invoke surfaces its real error rather than pretending
- * the task's state changed.
+ * right now, through `backend/task-control.patch`'s routes. A rejected
+ * invoke (no route on this backend, nothing running, a stale link for
+ * Resume) surfaces its real error rather than pretending the task's state
+ * changed.
  *
  * Deliberately does not touch `state.taskActivity` on success. An invoke
  * that resolves only means the IPC round trip completed, not that Jarvis
@@ -765,13 +1165,15 @@ async function sendTaskAction(kind) {
           "Jarvis itself reports it has actually paused.");
     } else if (kind === "resume") {
       await resumeTask();
-      flash("Resume requested — sent.", "ok",
-        "Jarvis was asked to resume. This button will only say Pause again " +
-          "once Jarvis itself reports it has actually resumed.");
+      // Resume only ASKS (task-control.patch): the server raises an
+      // approval card listing the steps left, and nothing runs until that
+      // card is approved. Saying "resumed" here would be untrue.
+      flash("Resume asks first — see the card.", "ok",
+        "Resume sent. Nothing runs yet: Jarvis shows an approval card listing the steps that are left, and continues only if you approve it.");
     } else {
       await stopTask();
-      flash("Stop requested — sent.", "ok",
-        "Jarvis was asked to stop. The desktop has no way to confirm it actually did.");
+      flash("Stop sent.", "ok",
+        "Stop sent. Jarvis stops before its next step; steps already done stay done. The buttons change when Jarvis reports it has stopped.");
     }
   } catch (error) {
     flash(String((error && error.message) || error), "bad");
@@ -788,7 +1190,7 @@ async function sendTaskAction(kind) {
  */
 async function sendTaskNote() {
   const note = dom.taskNoteInput.value.trim();
-  if (!note || state.taskNoteBusy) return;
+  if (!note || state.taskNoteBusy || state.appLock) return;
 
   state.taskNoteBusy = true;
   syncTaskControls();
@@ -800,8 +1202,8 @@ async function sendTaskNote() {
     flash(
       "Sent — applies to what Jarvis does next.",
       "ok",
-      "This does not change the step already running, and the desktop has " +
-        "no way to confirm Jarvis read it."
+      "Jarvis reads it when the current step finishes. It changes no step " +
+        "you already approved."
     );
   } catch (error) {
     flash(String((error && error.message) || error), "bad");
@@ -820,6 +1222,7 @@ dom.btnPin.addEventListener("click", () => setPinned(!state.alwaysOnTop));
 
 dom.btnLog.addEventListener("click", () => invoke("prefill_quickbar", { target: "logseq" }));
 dom.btnJoplin.addEventListener("click", () => invoke("prefill_quickbar", { target: "joplin" }));
+dom.btnObs.addEventListener("click", () => invoke("prefill_quickbar", { target: "obsidian" }));
 
 dom.btnApprYes.addEventListener("click", () => decide(true));
 dom.btnApprNo.addEventListener("click", () => decide(false));
@@ -842,9 +1245,12 @@ dom.taskNoteInput.addEventListener("keydown", (event) => {
   }
 });
 
-dom.captureTarget.addEventListener("click", () =>
-  setCaptureTarget(state.captureTarget === "logseq" ? "joplin" : "logseq")
-);
+dom.captureTarget.addEventListener("click", () => {
+  // The next note app that is set up, round and round.
+  const ready = readyTargets();
+  if (ready.length < 2) return;
+  setCaptureTarget(ready[(ready.indexOf(state.captureTarget) + 1) % ready.length]);
+});
 dom.btnCaptureSend.addEventListener("click", sendCapture);
 dom.offlineRetry.addEventListener("click", async () => {
   dom.offlineText.textContent = "Reconnecting…";
@@ -920,7 +1326,15 @@ listen("approval-resolved", (event) => {
 
 (async () => {
   setCaptureTarget("logseq");
+  syncNoteTargets();
+  refreshNoteTargets();
+  // Asked again each time the widget is focused, so an app set up since shows.
+  window.addEventListener("focus", () => refreshNoteTargets());
   syncTaskControls();
+
+  // App lock first, so a card already waiting is never drawn in full.
+  applyAppLock(await readAppLock());
+  listen("security-changed", (event) => applyAppLock(event.payload && event.payload.appLock));
 
   // Restore the mode the user left the widget in.
   const prefs = await invoke("get_widget_prefs");
@@ -934,6 +1348,13 @@ listen("approval-resolved", (event) => {
   followZoom(() => syncSize());
 startLink();
 
+  // Focus session: read once now, again on every `focus` event and when the
+  // link comes back; counted down here once a second in between.
+  onEvent((frame) => {
+    if (frame && frame.kind === "focus") loadFocus();
+  });
+  loadFocus();
+
   onLink((link) => {
     // A held-open event stream is a stronger liveness signal than a probe that
     // succeeded a moment ago, so the lane pill follows it directly.
@@ -941,13 +1362,17 @@ startLink();
 
     // Offline used to be reported and never acted on: the dot went red, the
     // pill said OFFLINE, and there was nothing anywhere in this window to do
-    // about it.
-    dom.offline.hidden = link.connected;
-    if (!link.connected) {
-      dom.offlineText.textContent = link.error
-        ? clip(`Not answering: ${link.error}`, 90)
-        : "Jarvis is not answering.";
+    // about it. And connected-but-stale showed nothing at all, while Approve
+    // and Deny quietly went grey. Both now say what is wrong, in the same
+    // words every window uses (linkWords), red for offline, amber for stale.
+    const words = linkWords(link);
+    dom.offline.hidden = words.canAct;
+    if (!words.canAct) {
+      dom.offlineText.textContent = clip(words.text, 110);
+      dom.offlineText.title = link.error || "";
+      dom.offline.dataset.tone = words.tone;
     }
+    postFace();
 
     // Live progress — docs/AUTONOMY-PROPOSALS.md §3c. Only shown while
     // something is actually reported in progress; offline already has its
@@ -970,6 +1395,8 @@ startLink();
     syncTaskControls();
 
     syncApprovalButtons();
+    syncFocusButtons();
+    if (link.connected && !focus.readOnce) loadFocus();
     syncSize();
   });
 
@@ -977,7 +1404,20 @@ startLink();
     const open = queue.items[0] || null;
     if (open) openApproval(open);
     else if (state.approval) closeApproval();
+    // "1 of 3", the quickbar's wording. A number only - nothing here acts on
+    // more than the one card on screen.
+    const total = queue.items.length;
+    dom.apprCount.hidden = !open || total < 2;
+    dom.apprCount.textContent = open && total > 1 ? `1 of ${total}` : "";
+    postFace();
   });
+
+  // The face frame: posted to when it loads and whenever what it shows
+  // changes. Read once from Jarvis (so a phone change arrives), then from
+  // memory on every change.
+  if (dom.faceFrame) dom.faceFrame.addEventListener("load", postFace);
+  listen("appearance-changed", () => readFaceAppearance(false));
+  readFaceAppearance(true);
 
   // Ollama and the LiteLLM proxy are not on the bus, so their dots still need
   // one probe. Once, at boot — there is no timer here any more.

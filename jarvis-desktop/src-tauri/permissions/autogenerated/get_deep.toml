@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-deep"
+description = "Enables the get_deep command without any pre-configured scope."
+commands.allow = ["get_deep"]
+
+[[permission]]
+identifier = "deny-get-deep"
+description = "Denies the get_deep command without any pre-configured scope."
+commands.deny = ["get_deep"]

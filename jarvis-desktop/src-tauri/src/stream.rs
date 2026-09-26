@@ -93,6 +93,12 @@ pub struct LinkState {
     /// Activity: `idle`, `listening`, `thinking`, `speaking`, `working`,
     /// `error`. What Jarvis is doing. The visual spec binds colour to this one.
     pub activity: String,
+    /// What it is doing, in words - "Using calculator..." - when the backend
+    /// said, from the same `activity` event (`value.detail`). jarvis-link.js
+    /// reads this as `activity_detail` for the progress line; nothing carried
+    /// it before, so that line could never show.
+    #[serde(default)]
+    pub activity_detail: Option<String>,
     /// How many approvals are waiting on a human. Not the digest count —
     /// see [`crate::attention::Attention::pending`] for that one.
     pub approvals: usize,
@@ -118,6 +124,7 @@ impl Default for LinkState {
             power: "active".to_string(),
             power_set_by: None,
             activity: "idle".to_string(),
+            activity_detail: None,
             approvals: 0,
             attention: crate::attention::Attention::default(),
             error: None,
@@ -139,6 +146,15 @@ pub struct StreamState {
     /// launch for five decisions the owner may have parked days ago. The first
     /// read establishes the baseline and says nothing.
     seeded: std::sync::atomic::AtomicBool,
+    /// True only while the queue on screen came from a successful read of
+    /// `/api/pending` made on THIS connection. Reset to false every time a
+    /// connection opens, set by [`refresh_pending`] on each read.
+    ///
+    /// The `hello` branch needs it: the queue is read once just before the
+    /// hello frame arrives, and a failure there used to be forgotten - a
+    /// following `hello {stale: false}` then cleared `stale` and re-enabled
+    /// Approve and Deny over the last run's queue.
+    queue_read: std::sync::atomic::AtomicBool,
 }
 
 impl StreamState {
@@ -182,6 +198,7 @@ fn same_link(a: &LinkState, b: &LinkState) -> bool {
         && a.power == b.power
         && a.power_set_by == b.power_set_by
         && a.activity == b.activity
+        && a.activity_detail == b.activity_detail
         && a.approvals == b.approvals
         && a.attention == b.attention
         && a.error == b.error
@@ -261,6 +278,25 @@ pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut backoff = BASE_BACKOFF;
         loop {
+            // An address the owner configured that is refused (off their own
+            // networks - CLAUDE.md, 2026-09-26) is never connected to, and
+            // never quietly swapped for another: the link stays offline with
+            // the reason, which every window shows like any other connection
+            // error, until Settings saves an address (which kicks this loop).
+            if let Some(problem) = commands::base_problem(&app) {
+                publish_link(&app, |link| {
+                    link.base = String::new();
+                    link.connected = false;
+                    link.stale = true;
+                    link.error = Some(problem);
+                });
+                tokio::select! {
+                    _ = tokio::time::sleep(MAX_BACKOFF) => {}
+                    _ = wake().notified() => {}
+                }
+                backoff = BASE_BACKOFF;
+                continue;
+            }
             let base = commands::jarvis_base(&app);
             publish_link(&app, |link| {
                 link.base = base.clone();
@@ -322,6 +358,9 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
         // instead, which is the only thing that can tell a healthy idle stream
         // from a dead one.
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("unable to build the stream client: {e}"))?;
 
@@ -347,10 +386,20 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
         .send()
         .await
         .map_err(|e| {
+            // Plain words first, the technical part after: the tray and the
+            // quickbar show only the first sentence (tray.rs first_sentence,
+            // jarvis-link.js linkWords), and Settings shows the whole thing.
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}. Is it running?")
+                format!(
+                    "Jarvis is not running at {base}. Start it, or check the \
+                     address in Settings. Technical detail: could not reach the \
+                     Jarvis server at {base}."
+                )
             } else {
-                format!("the event stream could not be opened: {e}")
+                format!(
+                    "Could not connect to Jarvis. Technical detail: the event \
+                     stream could not be opened: {e}"
+                )
             }
         })?;
 
@@ -361,15 +410,23 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
         return Err(match status.as_u16() {
             // The server's own words for these two, so the message names the
             // fix rather than the symptom.
-            401 => "the server refused the event stream: bad or missing token. \
-                    Set it in Jarvis Desktop's settings."
+            401 => "Jarvis refused this app's token. Open Settings, then \
+                    Connection, and paste the token again. Technical detail: the \
+                    server refused the event stream (HTTP 401, bad or missing token)."
                 .to_string(),
-            403 => "the server refused the event stream as cross-origin. The \
-                    desktop client sends X-Jarvis-Client: hud, so this means \
-                    JARVIS_HUD_ORIGINS does not cover this client."
+            403 => "Jarvis refused this app. Technical detail: the server refused \
+                    the event stream as cross-origin. The desktop client sends \
+                    X-Jarvis-Client: hud, so this means JARVIS_HUD_ORIGINS does \
+                    not cover this client."
                 .to_string(),
-            code if body.is_empty() => format!("the event stream answered HTTP {code}"),
-            code => format!("the event stream answered HTTP {code}: {body}"),
+            code if body.is_empty() => format!(
+                "Jarvis answered with an error. Technical detail: the event \
+                 stream answered HTTP {code}."
+            ),
+            code => format!(
+                "Jarvis answered with an error. Technical detail: the event \
+                 stream answered HTTP {code}: {body}"
+            ),
         });
     }
 
@@ -385,10 +442,18 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
     // Same reasoning for the queue: `note()` only publishes on change, so a
     // client that connects while three approvals are already waiting hears
     // nothing at all until a fourth arrives.
-    // Result ignored deliberately: this is the initial prime, and
-    // `refresh_pending` has already set `stale` itself if it failed. There is
-    // no `stale = false` here to guard.
-    let _ = refresh_pending(app, base).await;
+    //
+    // The result is recorded in `queue_read` rather than returned here,
+    // because the decision it feeds is made later, when `hello` arrives. It
+    // used to be thrown away (`let _ =`), with a comment saying there was no
+    // `stale = false` to guard - but there was one, in the `hello` branch, and
+    // a clean `hello {stale: false}` after a failed read here cleared `stale`
+    // over the previous run's queue. The phone never had this gap: it clears
+    // `stale` only after a successful re-read (JarvisRuntime.onOpen).
+    app.state::<StreamState>()
+        .queue_read
+        .store(false, std::sync::atomic::Ordering::Relaxed);
+    refresh_pending(app, base).await;
 
     let mut frame = Frame::default();
     // Lines are cut from raw bytes so a multi-byte character split across two
@@ -403,10 +468,18 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
                     // The server ends the stream after an hour by design.
                     return Ok("the server closed the stream; reconnecting".to_string());
                 }
-                Ok(Err(e)) => return Err(format!("the event stream broke: {e}")),
+                Ok(Err(e)) => {
+                    return Err(format!(
+                        "The connection to Jarvis dropped. Technical detail: the \
+                         event stream broke: {e}"
+                    ))
+                }
                 Err(_) => {
                     return Err(format!(
-                        "no keepalive for {}s; treating the event stream as dead",
+                        "Jarvis went quiet: nothing heard for {} seconds. \
+                         Technical detail: no keepalive for {}s, so the event \
+                         stream is treated as dead.",
+                        SILENCE_TIMEOUT.as_secs(),
                         SILENCE_TIMEOUT.as_secs()
                     ))
                 }
@@ -448,7 +521,10 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 link.last_id = id;
             }
         });
-        save_resume(app, false);
+        // A `schedule` event is written at once, not within five seconds:
+        // an alarm that went off must not be replayed - and ring again -
+        // after only this app restarts (bug audit 2026-09-26, #4).
+        save_resume(app, event.name == "schedule");
     }
 
     match event.name.as_str() {
@@ -469,11 +545,17 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 println!("[jarvis] the event bus restarted; resetting the resume point");
             }
 
-            // `stale` is cleared only once the re-read below has landed. It
-            // used to be cleared here unconditionally, which enabled Approve
-            // and Deny for two network round-trips against a queue that had
-            // just been declared untrustworthy.
-            let settled = !(stale || renumbered);
+            // `stale` is cleared only once the queue has actually been read
+            // on this connection - see `hello_may_clear_stale`. It used to be
+            // cleared here unconditionally, which enabled Approve and Deny for
+            // two network round-trips against a queue that had just been
+            // declared untrustworthy; and after that, on `!stale` alone, which
+            // did the same whenever the read just before hello had failed.
+            let queue_read = app
+                .state::<StreamState>()
+                .queue_read
+                .load(std::sync::atomic::Ordering::Relaxed);
+            let settled = hello_may_clear_stale(stale, renumbered, queue_read);
             publish_link(app, |link| {
                 link.connected = true;
                 link.error = None;
@@ -493,6 +575,8 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 // Everything local is suspect — re-read it, do not replay.
                 println!("[jarvis] resume point unusable; re-reading all state");
                 prime_from_version(app, base).await;
+                // An `appearance` event may be among the ones missed.
+                crate::appearance::refresh_from_server(app).await;
                 let reread = refresh_pending(app, base).await;
                 crate::attention::refresh(app, base).await;
                 // Only if the queue actually came back. This used to clear
@@ -513,6 +597,11 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 }
                 crate::emit_all(app, crate::events::JARVIS_RESYNC, ());
             } else {
+                // A clean hello, but the queue read just before it failed.
+                // Try once more now; `stale` stays set unless it lands.
+                if !settled && refresh_pending(app, base).await {
+                    publish_link(app, |link| link.stale = false);
+                }
                 // A clean resume still needs one read. The `attention` event
                 // only fires on a change, so a desktop that connects to a
                 // quiet system would sit on `known: false` — and therefore on
@@ -533,16 +622,27 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
 
         // The doorbell. §3 rule 1: the event says something changed, so read
         // the thing that changed — once, here, not once per window.
-        // Same here: nothing downstream clears `stale` on the strength of
-        // this call, and a failure has already set it.
+        // A failure has already set `stale`. A success while connected (that
+        // is, after this connection's hello) is exactly what "the queue is
+        // confirmed live" means, so it may clear a `stale` left by an earlier
+        // failed read - the same rule the phone's watchdog follows. Without
+        // this, one failed read left the buttons disabled until the stream
+        // happened to reconnect.
         "approval" => {
-            let _ = refresh_pending(app, base).await;
+            let read = refresh_pending(app, base).await;
+            if read && app.state::<StreamState>().link().connected {
+                publish_link(app, |link| link.stale = false);
+            }
         }
 
         "activity" => {
-            if let Some(state) = event.data["state"].as_str() {
+            if let Some(state) = activity_state(&event.data) {
                 let state = state.to_string();
-                publish_link(app, |link| link.activity = state.clone());
+                let detail = activity_detail(&event.data);
+                publish_link(app, |link| {
+                    link.activity = state.clone();
+                    link.activity_detail = detail.clone();
+                });
             }
         }
 
@@ -556,6 +656,100 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 // has to come from /api/version. Cheap, and only on a change.
                 prime_from_version(app, base).await;
             }
+        }
+
+        // The phone (or another window) saved a face or state colours. The
+        // event is a doorbell - `appearance.patch` publishes it on every
+        // save - so read the document once, here, and let `adopt` repaint
+        // the tray, every window and the HUD. Without this a face chosen on
+        // the phone reached the desktop only when a window was reopened or
+        // the app restarted. `refresh_from_server` never writes back, so a
+        // save on this machine does not echo into a loop.
+        "appearance" => {
+            crate::appearance::refresh_from_server(app).await;
+        }
+
+        // A deep question finished (backend/big-model.patch): `{"id",
+        // "state": "done"|"failed"}` and nothing else - never the question or
+        // the answer. Nothing here reads anything for it: the only window
+        // that shows deep questions is the Brain, and it holds the one
+        // command that can (`get_deep`, brain-deep). It is fanned out below
+        // like everything else, and brain.js reads `GET /api/deep` on it
+        // (ARCHITECTURE.md section 6: the handler ships with the event).
+        "deep" => {}
+
+        // Facts saved without a card (JARVIS-API.md section 19): `{"ids":
+        // [...]}` and never the words. The Brain shows "Jarvis remembered 2
+        // things" from it - but the Brain is destroyed when it is closed, so
+        // a save that came while it was closed would never be counted. Rust
+        // keeps the ids for it (brain/auto_learn.rs), and the frame is fanned
+        // out below as well, for a Brain that is open.
+        "memory_saved" => crate::brain::auto_learn::note_saved(&event.data),
+
+        // A timer, an alarm or a reminder went off, or Coming up changed
+        // (backend/schedule.patch): `{"id", "kind", "state": "fired" |
+        // "changed", "late"?}` and never the words. On "fired" the words
+        // are read by id and a Windows toast is shown - on its own task, so
+        // a slow read never holds the stream up - with only the kind's
+        // lock-screen words while App lock is on or the private lists are
+        // hidden (brain/schedule.rs toast_fired). The frame is fanned out
+        // below as well; the Brain reads Coming up again on it.
+        "schedule" if event.data["state"].as_str() == Some("fired") => {
+            tauri::async_runtime::spawn(crate::brain::schedule::toast_fired(
+                app.clone(),
+                base.to_string(),
+                crate::brain::schedule::with_event_id(&event.data, event.id),
+            ));
+        }
+
+        // A job changed - snoozed, deleted or done on the phone, by voice or
+        // in the Brain: its "went off" toast goes, and a ringing alarm stops
+        // (brain/schedule.rs on_changed). Fanned out below too.
+        "schedule" if event.data["state"].as_str() == Some("changed") => {
+            crate::brain::schedule::on_changed(&event.data);
+        }
+
+        // A morning briefing is put together (backend/briefing.patch):
+        // `{"id", "kind": "briefing", "state": "ready"}`. The toast says
+        // only "Jarvis: your morning briefing is ready." - never a line of
+        // it (brain/briefing.rs toast_ready). Fanned out below too; the
+        // Brain reads the briefing again on it.
+        "schedule" if event.data["state"].as_str() == Some("ready") => {
+            tauri::async_runtime::spawn(crate::brain::briefing::toast_ready(
+                app.clone(),
+                base.to_string(),
+                event.data.clone(),
+            ));
+        }
+
+        // A "tell me when" matched (backend jarvis_tellme.py): `{"id",
+        // "kind": "tellme", "state": "matched", "urgent"}` - never a word.
+        // The toast reads the job's `alert` by id ("An email from Alex
+        // arrived."), says only the generic words while App lock is on or
+        // the private lists are hidden, and keeps ringing until dismissed
+        // when it is urgent (brain/schedule.rs toast_matched). It only
+        // tells: nothing here acts. Fanned out below too; the Brain reads
+        // Coming up again on it.
+        "schedule" if event.data["state"].as_str() == Some("matched") => {
+            tauri::async_runtime::spawn(crate::brain::schedule::toast_matched(
+                app.clone(),
+                base.to_string(),
+                crate::brain::schedule::with_event_id(&event.data, event.id),
+            ));
+        }
+
+        // A focus session has a line to say (backend/focus.patch):
+        // `{"state": "callout", "seq"}` - a number, never words. The sound is
+        // fetched from THIS PC only and played by the Jarvis bar
+        // (brain/focus.rs play_callout); the words name what was in front,
+        // so they never travel. Fanned out below too; the Brain and the
+        // widget read the session again on every `focus` event.
+        "focus" if event.data["state"].as_str() == Some("callout") => {
+            tauri::async_runtime::spawn(crate::brain::focus::play_callout(
+                app.clone(),
+                base.to_string(),
+                event.data.clone(),
+            ));
         }
 
         // finding | persona | model | voice — nothing here consumes them, and
@@ -574,57 +768,60 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
     crate::push_to_hud(app, "event", &frame);
 }
 
-/// Reads `GET /api/version` for the activity state, which nothing else carries.
-async fn prime_from_version(app: &AppHandle, base: &str) {
-    let Ok(client) = reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(FETCH_TIMEOUT)
-        .no_proxy()
-        .build()
-    else {
-        return;
-    };
-    let Ok(headers) = commands::jarvis_headers(app) else {
-        return;
-    };
-    let body: serde_json::Value = match client
-        .get(format!("{base}/api/version"))
-        .headers(headers)
-        .send()
-        .await
-    {
-        Ok(response) => {
-            let status = response.status();
-            if !status.is_success() {
-                // A 401 body parses fine and would have left the tray sitting
-                // on the idle colour through an entire conversation.
-                eprintln!("[jarvis] /api/version answered HTTP {}", status.as_u16());
-                return;
-            }
-            match response.json().await {
-                Ok(body) => body,
-                Err(err) => {
-                    eprintln!("[jarvis] /api/version returned something unreadable: {err}");
-                    return;
-                }
-            }
-        }
-        Err(err) => {
-            eprintln!("[jarvis] /api/version unavailable: {err}");
-            return;
-        }
-    };
+/// The state out of an `activity` event. Two shapes: the state at the top
+/// level, or the rebuilt bus's `note()` shape, `{key, value: {state,
+/// detail}}` (backend/rebuilt/jarvis_events.py `set_activity`). Reading only
+/// the first left the tray on "idle" through every turn on the second.
+fn activity_state(data: &serde_json::Value) -> Option<&str> {
+    data["state"]
+        .as_str()
+        .or_else(|| data["value"]["state"].as_str())
+}
 
-    let activity = body["activity"].as_str().unwrap_or("idle").to_string();
-    // The power mode rides in the capabilities block rather than at the top
-    // level: `capabilities.power` is `jarvis_power.status()`, and `false` when
-    // the module is not installed at all.
-    let power = body["capabilities"]["power"]["mode"]
+/// The sentence out of an `activity` event, if it has one: `value.detail` on
+/// the rebuilt bus (`set_activity`), or a top-level `detail` /
+/// `activity_detail`. Blank means nothing to say. Capped at 500 characters,
+/// the same cap jarvis-link.js applies.
+fn activity_detail(data: &serde_json::Value) -> Option<String> {
+    let text = data["value"]["detail"]
         .as_str()
-        .map(str::to_string);
-    let set_by = body["capabilities"]["power"]["set_by"]
-        .as_str()
-        .map(str::to_string);
+        .or_else(|| data["detail"].as_str())
+        .or_else(|| data["activity_detail"].as_str())?
+        .trim();
+    (!text.is_empty()).then(|| text.chars().take(500).collect())
+}
+
+/// Reads the activity state and the power mode at connect time (and again
+/// on every `power` event, whose payload is only the mode string).
+///
+/// `GET /api/version` first. It did not carry either: the rebuilt
+/// `jarvis_events.hello()` had no top-level `activity`, and
+/// `capabilities.power` was a bare `true`, so `["power"]["mode"]` was always
+/// absent and the desktop sat on "active" through quiet hours until the mode
+/// next changed. `hello()` now sends both (backend/rebuilt/jarvis_events.py),
+/// but the owner's server may be older - so anything still missing is read
+/// from `GET /api/status`, which reports the power mode and is what the phone
+/// reads (`StatusInfo.power`). Nothing here is guessed: absent stays absent.
+async fn prime_from_version(app: &AppHandle, base: &str) {
+    let Some(version) = fetch_json(app, base, "/api/version").await else {
+        return;
+    };
+    let mut activity = version["activity"].as_str().map(str::to_string);
+    let mut power = power_mode(&version["capabilities"]["power"]);
+    let mut set_by = power_set_by(&version["capabilities"]["power"]);
+
+    if activity.is_none() || power.is_none() {
+        if let Some(status) = fetch_json(app, base, "/api/status").await {
+            if activity.is_none() {
+                activity = status["activity"].as_str().map(str::to_string);
+            }
+            if power.is_none() {
+                power = power_mode(&status["power"]);
+                set_by = power_set_by(&status["power"]).or_else(|| power_set_by(&status));
+            }
+        }
+    }
+    let activity = activity.unwrap_or_else(|| "idle".to_string());
     publish_link(app, |link| {
         link.activity = activity;
         if let Some(power) = power {
@@ -632,6 +829,89 @@ async fn prime_from_version(app: &AppHandle, base: &str) {
             link.power_set_by = set_by.clone();
         }
     });
+}
+
+/// One authenticated GET, as JSON. `None` (and a line on stderr) on any
+/// failure: a 401 body parses fine and would otherwise be read as state.
+async fn fetch_json(app: &AppHandle, base: &str, path: &str) -> Option<serde_json::Value> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(FETCH_TIMEOUT)
+        .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .ok()?;
+    let headers = commands::jarvis_headers(app).ok()?;
+    match client
+        .get(format!("{base}{path}"))
+        .headers(headers)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status = response.status();
+            if !status.is_success() {
+                eprintln!("[jarvis] {path} answered HTTP {}", status.as_u16());
+                return None;
+            }
+            match response.json().await {
+                Ok(body) => Some(body),
+                Err(err) => {
+                    eprintln!("[jarvis] {path} returned something unreadable: {err}");
+                    None
+                }
+            }
+        }
+        Err(err) => {
+            eprintln!("[jarvis] {path} unavailable: {err}");
+            None
+        }
+    }
+}
+
+/// The power mode out of either shape a server sends: the mode string itself
+/// (`/api/status`'s `power`), or `jarvis_power.status()`'s dict with `mode`
+/// (`/api/version`'s `capabilities.power`). A bare `true`/`false` - "the
+/// module is installed" - carries no mode, and is `None`.
+fn power_mode(value: &serde_json::Value) -> Option<String> {
+    value
+        .as_str()
+        .or_else(|| value["mode"].as_str())
+        .filter(|m| !m.is_empty())
+        .map(str::to_string)
+}
+
+/// Who put Jarvis in its current mode, in the words `tray.rs` understands:
+/// "override" (a person), "schedule" (quiet hours), "idle" (the idle timer)
+/// or "standby_schedule" (the standby schedule, a job on the scheduler).
+///
+/// `set_by` if the server sends it. `jarvis_power.status()` does not - it
+/// has `why`, a sentence ("the owner, from this PC", "startup", ...) - so the
+/// word is derived from that, and from `quiet_hours`, which is how the mode
+/// can read "quiet" while the stored mode is still "active". Anything else is
+/// `None`, which the tray shows as nothing rather than a guess.
+fn power_set_by(value: &serde_json::Value) -> Option<String> {
+    if let Some(explicit) = value["set_by"].as_str().filter(|s| !s.is_empty()) {
+        return Some(explicit.to_string());
+    }
+    let why = value["why"].as_str().unwrap_or("").to_ascii_lowercase();
+    // The standby schedule (backend jarvis_standby_schedule.py) records
+    // itself as "the standby schedule" - not a person, and not quiet hours.
+    if why == "the standby schedule" {
+        return Some("standby_schedule".to_string());
+    }
+    if why.starts_with("the owner") {
+        return Some("override".to_string());
+    }
+    if why.contains("idle") {
+        return Some("idle".to_string());
+    }
+    if value["quiet_hours"].as_bool() == Some(true) && value["mode"].as_str() == Some("quiet") {
+        return Some("schedule".to_string());
+    }
+    None
 }
 
 /// Re-reads the approval queue and hands the same list to all three surfaces.
@@ -653,6 +933,9 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(FETCH_TIMEOUT)
         .no_proxy()
+        // Never follow a redirect: reqwest would carry X-Jarvis-Token to
+        // wherever it points (apps security audit L1).
+        .redirect(reqwest::redirect::Policy::none())
         .build()
     else {
         return false;
@@ -681,21 +964,21 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
                     status.as_u16()
                 );
                 // Not knowing is not the same as knowing there is nothing.
-                publish_link(app, |link| link.stale = true);
+                mark_queue_unread(app);
                 return false;
             }
             match response.json().await {
                 Ok(body) => body,
                 Err(err) => {
                     eprintln!("[jarvis] /api/pending returned something unreadable: {err}");
-                    publish_link(app, |link| link.stale = true);
+                    mark_queue_unread(app);
                     return false;
                 }
             }
         }
         Err(err) => {
             eprintln!("[jarvis] /api/pending unavailable: {err}");
-            publish_link(app, |link| link.stale = true);
+            mark_queue_unread(app);
             return false;
         }
     };
@@ -707,12 +990,23 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     // installed — which is not the same as an empty queue, and the API spec
     // says a false capability means hide the UI, not show an empty one.
     let available = body["available"].as_bool().unwrap_or(true);
-    let items: Vec<serde_json::Value> = body["pending"]
+    let mut items: Vec<serde_json::Value> = body["pending"]
         .as_array()
         .or_else(|| body["items"].as_array())
         .or_else(|| body.as_array())
         .cloned()
         .unwrap_or_default();
+    // Turn `expires_in` (seconds left, approval-expiry.patch) into a deadline
+    // NOW, at the moment of the read. The windows may render this list much
+    // later (a window opening reads the cached queue), and "150 s left" read
+    // then would be wrong by however long it sat here.
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    for item in items.iter_mut() {
+        stamp_expiry(item, now_ms);
+    }
 
     let state = app.state::<StreamState>();
     let seeded = state
@@ -723,19 +1017,20 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
             .pending
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let known: std::collections::HashSet<String> = slot
-            .iter()
-            .filter_map(|item| item["id"].as_str().map(str::to_owned))
-            .collect();
+        let known: std::collections::HashSet<String> =
+            slot.iter().filter_map(approval_id).collect();
         let fresh = items
             .iter()
-            .filter(|item| item["id"].as_str().is_some_and(|id| !known.contains(id)))
+            .filter(|item| approval_id(item).is_some_and(|id| !known.contains(&id)))
             .cloned()
             .collect();
         *slot = items.clone();
         fresh
     };
     publish_link(app, |link| link.approvals = items.len());
+    state
+        .queue_read
+        .store(true, std::sync::atomic::Ordering::Relaxed);
 
     // The ping. A gate that arrives while the owner is in another window
     // produced nothing they could perceive without looking: the tray icon went
@@ -752,6 +1047,9 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     // The toast says what wants a decision and never offers one. There is no
     // action on it, because an action on a notification is a decision made
     // without the risk line, the `raised` block or the source in front of you.
+    // Read once for this batch: while App lock is on, a toast says the
+    // card's title only (`toast_words`).
+    let app_lock = seeded && !arrived.is_empty() && crate::lock::current(app).app_lock;
     for item in arrived.iter().filter(|_| seeded) {
         // `notice` is built server-side by jarvis_gate.notice_for, from the
         // action name and the risk table — it never reads `detail`, `prompt`
@@ -760,35 +1058,16 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         // waiting decision two different ways.
         let notice = &item["notice"];
 
-        // "weight: 'heavy' interrupts; 'normal' waits to be found" -
-        // docs/ARCHITECTURE.md's own rule 1 for any client reading this
-        // contract. This used to toast for every arrival regardless of
-        // weight, with a comment claiming "the weight is still honoured: a
-        // heavy item gets the tray's attention state" - which was true of
-        // EVERY pending item, heavy or not (tray.rs escalates on
-        // `link.approvals > 0`, not on weight), so the one field that exists
-        // to let a person tell "needs you now" from "can wait" was computed
-        // server-side and read nowhere. Missing `weight` (an older backend)
-        // defaults to interrupting, same as the missing-notice fallback
-        // below already assumes the more attention-worthy case rather than
-        // the quieter one.
-        if notice["weight"].as_str() == Some("normal") {
-            continue;
-        }
-
-        let (title, body) = match (notice["title"].as_str(), notice["body"].as_str()) {
-            (Some(t), Some(b)) => (t.to_string(), b.to_string()),
-            // A backend without approval-notice.patch. The old wording, which
-            // is worse but not wrong — better than a toast that says nothing
-            // because a field it wanted was missing.
-            _ => {
-                let what = item["action"].as_str().unwrap_or("an action");
-                (
-                    "Jarvis is waiting on you".to_string(),
-                    format!("{what} — nothing runs until you decide."),
-                )
-            }
-        };
+        // Every card gets a toast; the weight decides only whether it makes
+        // a sound (docs/ARCHITECTURE.md §3, rule 1: "heavy" interrupts,
+        // "normal" arrives silently and waits to be found). A normal card -
+        // most settings, which raise one when a button in Settings is
+        // pressed - used to get NO toast at all, only the tray's colour, and
+        // sat unseen until it expired (the creativity audit, 2026-09-25). The
+        // phone already posts a normal card to its quiet channel; this is the
+        // same rule. Missing `weight` (an older backend) is read as heavy.
+        let silent = notice["weight"].as_str() == Some("normal");
+        let (title, body) = toast_words(item, app_lock);
 
         // `action_type_id` is accepted by tauri-plugin-notification's builder
         // but the DESKTOP implementation (notify_rust, win7_notifications)
@@ -806,11 +1085,14 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         // and it is correct for it to stay unconditional.
         #[cfg(windows)]
         {
-            let id = item["id"].as_str().unwrap_or_default();
-            crate::winrt_toast::notify_approval(app, &title, &body, id);
+            let id = approval_id(item).unwrap_or_default();
+            crate::winrt_toast::notify_approval(app, &title, &body, &id, silent);
         }
         #[cfg(not(windows))]
-        crate::commands::notify(app, &title, &body);
+        {
+            let _ = silent;
+            crate::commands::notify(app, &title, &body);
+        }
     }
 
     crate::emit_all(
@@ -819,6 +1101,111 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         serde_json::json!({ "count": items.len(), "items": items, "available": available }),
     );
     true
+}
+
+/// What a card's toast says: the notice's title and body, built by the PC
+/// from its own tables (`jarvis_gate.notice_for`, never `detail` or
+/// `prompt`). While App lock is on, the title only - as on the widget, whose
+/// locked card shows the notice's title and nothing more. A row without a
+/// notice (a backend older than approval-notice.patch) gets the same
+/// fallback title every window builds from the action's name
+/// (card-words.js `fallbackTitle`).
+pub(crate) fn toast_words(item: &serde_json::Value, app_lock: bool) -> (String, String) {
+    let notice = &item["notice"];
+    let title = notice["title"]
+        .as_str()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| fallback_title(item["action"].as_str().unwrap_or("")));
+    if app_lock {
+        return (title, String::new());
+    }
+    let body = notice["body"]
+        .as_str()
+        .map(str::trim)
+        .filter(|b| !b.is_empty())
+        .unwrap_or("Nothing runs until you decide.")
+        .to_string();
+    (title, body)
+}
+
+/// The PC's title for an action it has no phrase for, letter for letter
+/// `jarvis_card_words.title_for`'s fallback and card-words.js's
+/// `fallbackTitle` (tests/fixtures/card-words-cases.json, `fallback`).
+pub(crate) fn fallback_title(action: &str) -> String {
+    let cleaned: String = action
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { ' ' })
+        .collect();
+    let words = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    let words: String = words.chars().take(60).collect();
+    let words = words.trim();
+    if words.is_empty() {
+        "Jarvis is asking for your approval".to_string()
+    } else {
+        format!("Jarvis wants your OK for \"{words}\"")
+    }
+}
+
+/// An approval row's id, as text. The gate's ids are strings today, but a
+/// number is accepted too: reading only strings meant a numeric id was never
+/// "seen", so it was never toasted and never counted as known - every
+/// re-read looked like nothing had arrived. `jarvis-link.js` already turns a
+/// number into a string (`String(row.id)`), so this is the same id the
+/// windows answer with.
+pub(crate) fn approval_id(item: &serde_json::Value) -> Option<String> {
+    match &item["id"] {
+        serde_json::Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+/// Longest `expires_in` read as a real countdown. The shipped gate waits 180
+/// seconds; anything over a day is a wrong unit or a bug, and showing no
+/// countdown beats showing a wrong one.
+const MAX_EXPIRES_IN_SECS: f64 = 24.0 * 3600.0;
+
+/// Adds `expires_at_ms` (this machine's clock) to a row that carries
+/// `expires_in` and no deadline of its own. Leaves every other row alone.
+fn stamp_expiry(item: &mut serde_json::Value, now_ms: u64) {
+    if item.get("expires_at_ms").is_some_and(|v| v.is_number()) {
+        return;
+    }
+    let Some(secs) = item.get("expires_in").and_then(|v| v.as_f64()) else {
+        return;
+    };
+    if !secs.is_finite() || !(0.0..=MAX_EXPIRES_IN_SECS).contains(&secs) {
+        return;
+    }
+    if let Some(obj) = item.as_object_mut() {
+        obj.insert(
+            "expires_at_ms".to_string(),
+            serde_json::json!(now_ms + (secs * 1000.0) as u64),
+        );
+    }
+}
+
+/// A read of `/api/pending` failed: the queue on screen is the last one we
+/// knew, not the current one. Every failure path goes through here so none of
+/// them can set `stale` and forget `queue_read`, or the other way round.
+fn mark_queue_unread(app: &AppHandle) {
+    app.state::<StreamState>()
+        .queue_read
+        .store(false, std::sync::atomic::Ordering::Relaxed);
+    publish_link(app, |link| link.stale = true);
+}
+
+/// Whether a `hello` frame may clear `stale` on its own.
+///
+/// Only when the server says we are caught up (`hello_stale` false), the bus
+/// has not been renumbered by a backend restart, AND the approval queue was
+/// actually read on this connection. The last condition is the one that was
+/// missing: `hello {stale: false}` says the EVENT ring is intact, not that we
+/// hold the current queue.
+fn hello_may_clear_stale(hello_stale: bool, renumbered: bool, queue_read: bool) -> bool {
+    !(hello_stale || renumbered) && queue_read
 }
 
 /// Applies a link change and, if anything moved, tells every window and repaints
@@ -830,6 +1217,9 @@ pub(crate) fn publish_link<F: FnOnce(&mut LinkState)>(app: &AppHandle, edit: F) 
     };
     crate::emit_all(app, crate::events::JARVIS_LINK, next.clone());
     crate::push_to_hud(app, "link", &next);
+    // A first launch built the HUD before the backend wrote its token; the
+    // link changing is when that token certainly exists. No-op if unchanged.
+    crate::configure_hud(app);
     crate::tray::on_link_changed(app, &next);
 }
 
@@ -849,6 +1239,12 @@ fn load_resume(app: &AppHandle) -> u64 {
 /// Writes the resume point, at most every [`RESUME_SAVE_INTERVAL`] unless
 /// `force` (which the disconnect path passes, because the next thing that
 /// happens may be the process going away).
+/// Writes the resume point now: called when the app exits, so a restart
+/// does not replay events this run already handled.
+pub(crate) fn save_resume_now(app: &AppHandle) {
+    save_resume(app, true);
+}
+
 fn save_resume(app: &AppHandle, force: bool) {
     use tauri_plugin_store::StoreExt;
     static LAST: Mutex<Option<Instant>> = Mutex::new(None);
@@ -874,12 +1270,199 @@ fn save_resume(app: &AppHandle, force: bool) {
 }
 
 #[cfg(test)]
+mod power_prime_tests {
+    use super::{power_mode, power_set_by};
+    use serde_json::json;
+
+    /// The shape the rebuilt hello() sends now: jarvis_power.status().
+    #[test]
+    fn the_mode_is_read_from_the_power_status_dict() {
+        let caps = json!({"mode": "quiet", "why": "startup", "quiet_hours": true});
+        assert_eq!(power_mode(&caps).as_deref(), Some("quiet"));
+        assert_eq!(power_set_by(&caps).as_deref(), Some("schedule"));
+        let by_timetable = json!({"mode": "standby", "why": "the standby schedule"});
+        assert_eq!(
+            power_set_by(&by_timetable).as_deref(),
+            Some("standby_schedule")
+        );
+    }
+
+    /// The shape it used to send, and still does on an older server: a bare
+    /// flag. No mode in it - so the caller falls back to /api/status.
+    #[test]
+    fn a_bare_flag_has_no_mode() {
+        assert_eq!(power_mode(&json!(true)), None);
+        assert_eq!(power_mode(&json!(false)), None);
+        assert_eq!(power_set_by(&json!(true)), None);
+    }
+
+    /// /api/status's shape: the mode string itself.
+    #[test]
+    fn the_status_route_s_plain_string_is_read() {
+        assert_eq!(power_mode(&json!("standby")).as_deref(), Some("standby"));
+    }
+
+    #[test]
+    fn who_set_it_is_derived_from_why() {
+        let by_hand = json!({"mode": "quiet", "why": "the owner, from this PC"});
+        assert_eq!(power_set_by(&by_hand).as_deref(), Some("override"));
+        let idle = json!({"mode": "quiet", "why": "idle for 30 minutes"});
+        assert_eq!(power_set_by(&idle).as_deref(), Some("idle"));
+        let explicit = json!({"mode": "quiet", "set_by": "override"});
+        assert_eq!(power_set_by(&explicit).as_deref(), Some("override"));
+        // CONTROL: an ordinary startup says nothing rather than guessing.
+        let startup = json!({"mode": "active", "why": "startup", "quiet_hours": false});
+        assert_eq!(power_set_by(&startup), None);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The toast's title is the one every window shows: the notice's, else
+    /// the PC's own fallback - held to the shared card-words file.
+    #[test]
+    fn a_toast_says_the_cards_title_the_same_as_every_window() {
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/card-words-cases.json"))
+                .expect("card-words-cases.json");
+        for c in cases["fallback"].as_array().expect("fallback") {
+            let action = c["action"].as_str().unwrap_or("");
+            assert_eq!(
+                fallback_title(action),
+                c["title"].as_str().unwrap(),
+                "{action}"
+            );
+            let row = serde_json::json!({ "id": "x", "action": action });
+            assert_eq!(toast_words(&row, false).0, c["title"].as_str().unwrap());
+        }
+        for c in cases["titles"].as_array().expect("titles") {
+            let row = serde_json::json!({ "id": "x", "action": c["action"],
+                "notice": { "title": c["title"], "body": "Why. Nothing has happened yet." } });
+            assert_eq!(toast_words(&row, false).0, c["title"].as_str().unwrap());
+        }
+    }
+
+    /// App lock: the title only, never the body.
+    #[test]
+    fn under_app_lock_a_toast_is_the_title_only() {
+        let row = serde_json::json!({ "id": "x", "action": "send_email",
+            "notice": { "title": "Jarvis wants to send an email", "body": "There is no unsend." } });
+        assert_eq!(
+            toast_words(&row, true),
+            ("Jarvis wants to send an email".to_string(), String::new())
+        );
+        assert_eq!(toast_words(&row, false).1, "There is no unsend.");
+    }
 
     /// The default must be stale: before the first hello nothing is known, and
     /// a UI that enables approve/deny on launch would be answering a queue it
     /// has not read.
+    #[test]
+    fn activity_state_reads_both_shapes() {
+        let flat = serde_json::json!({"state": "thinking"});
+        let noted = serde_json::json!({"key": "activity",
+            "value": {"state": "working", "detail": "Using calculator..."}});
+        assert_eq!(activity_state(&flat), Some("thinking"));
+        assert_eq!(activity_state(&noted), Some("working"));
+        assert_eq!(activity_state(&serde_json::json!({})), None);
+    }
+
+    /// The reconnect case from the audit: the queue read made just before the
+    /// hello frame failed (backend restarting, 503), then `hello {stale:
+    /// false}` arrived. Approve and Deny must stay disabled.
+    #[test]
+    fn a_clean_hello_after_a_failed_queue_read_stays_stale() {
+        assert!(!hello_may_clear_stale(false, false, false));
+    }
+
+    #[test]
+    fn a_clean_hello_after_a_good_queue_read_clears_stale() {
+        assert!(hello_may_clear_stale(false, false, true));
+    }
+
+    #[test]
+    fn a_stale_or_renumbered_hello_never_clears_stale_by_itself() {
+        // Those two re-read everything first and clear `stale` only if the
+        // re-read lands; the hello alone never does.
+        assert!(!hello_may_clear_stale(true, false, true));
+        assert!(!hello_may_clear_stale(false, true, true));
+        assert!(!hello_may_clear_stale(true, true, false));
+    }
+
+    #[test]
+    fn a_fresh_state_has_not_read_the_queue() {
+        let state = StreamState::default();
+        assert!(!state.queue_read.load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    #[test]
+    fn an_approval_id_may_be_a_string_or_a_number() {
+        assert_eq!(
+            approval_id(&serde_json::json!({"id": "a1"})),
+            Some("a1".to_string())
+        );
+        assert_eq!(
+            approval_id(&serde_json::json!({"id": 12})),
+            Some("12".to_string())
+        );
+        assert_eq!(approval_id(&serde_json::json!({"id": ""})), None);
+        assert_eq!(approval_id(&serde_json::json!({"id": null})), None);
+        assert_eq!(approval_id(&serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn expires_in_becomes_a_deadline_at_read_time() {
+        let mut row = serde_json::json!({"id": "a1", "expires_in": 150});
+        stamp_expiry(&mut row, 1_000_000);
+        assert_eq!(row["expires_at_ms"], serde_json::json!(1_150_000u64));
+
+        // A deadline the server already sent is kept.
+        let mut kept = serde_json::json!({"expires_at_ms": 5, "expires_in": 150});
+        stamp_expiry(&mut kept, 1_000_000);
+        assert_eq!(kept["expires_at_ms"], serde_json::json!(5));
+
+        // Absent, negative, or absurd: no countdown rather than a wrong one.
+        for bad in [
+            serde_json::json!({}),
+            serde_json::json!({"expires_in": -1}),
+            serde_json::json!({"expires_in": "150"}),
+            serde_json::json!({"expires_in": 90_000_000}),
+        ] {
+            let mut row = bad.clone();
+            stamp_expiry(&mut row, 1_000_000);
+            assert!(row.get("expires_at_ms").is_none(), "{bad}");
+        }
+    }
+
+    /// The `activity` events the real bus sends, captured by
+    /// backend/test_chat_stream_contract.py from rebuilt jarvis_events.py's
+    /// own `set_activity`.
+    #[test]
+    fn activity_detail_is_read_from_the_real_event() {
+        let doc: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/chat-stream-cases.json"))
+                .unwrap();
+        let events = doc["activity_events"].as_array().expect("activity_events");
+        assert!(!events.is_empty());
+        for case in events {
+            let data = &case["data"];
+            assert_eq!(
+                activity_state(data),
+                case["expect"]["state"].as_str(),
+                "{}",
+                case["name"]
+            );
+            assert_eq!(
+                activity_detail(data).as_deref(),
+                case["expect"]["detail"].as_str(),
+                "{}",
+                case["name"]
+            );
+        }
+    }
+
     #[test]
     fn starts_stale() {
         let link = LinkState::default();

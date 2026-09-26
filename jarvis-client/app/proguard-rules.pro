@@ -76,3 +76,11 @@
 -keep class * extends androidx.room.RoomDatabase {
     <init>();
 }
+
+# ONNX Runtime (the "hey Jarvis" spotter). Its native library looks Java
+# classes, constructors and fields up BY NAME from C++ (OnnxTensor, OrtSession
+# and its Result, OrtException, the OnnxValue types) - calls R8 cannot see, so
+# without this it renames or strips them and the first wake-word model load
+# fails at runtime in the minified release build only. The 1.22.0 AAR ships no
+# consumer rules of its own (checked by unzipping it: no proguard.txt).
+-keep class ai.onnxruntime.** { *; }

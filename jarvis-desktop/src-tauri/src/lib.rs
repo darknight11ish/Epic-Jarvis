@@ -4,8 +4,9 @@
 //! defines the running application:
 //!
 //! * plugin registration — global shortcut, clipboard manager, notifications;
-//! * the four global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`,
-//!   `Alt+Shift+N`);
+//! * the global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`,
+//!   `Alt+Shift+N`, `Alt+Shift+W`, and "Stop everything" on `Alt+Shift+X`;
+//!   all rebindable, [`hotkeys`]);
 //! * the notification-area tray icon ([`tray::create_tray`]);
 //! * window vibrancy and focus-loss auto-hide ([`windows::setup_windows`]).
 //!
@@ -16,22 +17,37 @@
 //! | `quickbar` | 750×80 frameless transparent spotlight bar, always on top    |
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
+pub mod aec;
 pub mod appearance;
+pub mod asks_first;
 pub mod attention;
 pub mod autostart;
 pub mod brain;
 pub mod commands;
+pub mod email_sending;
+pub mod folders;
+pub mod hardware;
 pub mod hotkeys;
+pub mod hud_proxy;
+pub mod lock;
 pub mod logfile;
+pub mod plain_errors;
 pub mod proctree;
+pub mod reach;
 pub mod sidecar;
 pub mod spec;
 pub mod spec_drift;
 pub mod sse;
 pub mod stream;
+pub mod system_theme;
+pub mod token_store;
 pub mod tray;
 pub mod update;
+pub mod vision;
 pub mod voice;
+pub mod voice_flow;
+pub mod voice_training;
+pub mod web_search;
 pub mod windows;
 #[cfg(windows)]
 pub mod winrt_toast;
@@ -88,8 +104,10 @@ pub mod events {
     /// surfaces on screen together never disagree about which palette is in
     /// force.
     pub const THEME_CHANGED: &str = "theme-changed";
-    /// Payload: none. Show the approval gate. The queue lives in the quickbar,
-    /// which is the surface that renders the risk line and the `raised` block.
+    /// Payload: the id of the card to show, or null for the first one
+    /// waiting ("Open the card", `open_approval_in_quickbar`). Show the
+    /// approval gate. The queue lives in the quickbar, which is the surface
+    /// that renders the risk line and the `raised` block.
     pub const SHOW_APPROVAL: &str = "show-approval";
     /// Payload: none. Open the daily brief. Sent by the tray's waiting row and
     /// by the widget — the panel itself lives in the quickbar, because the HUD
@@ -124,6 +142,35 @@ pub mod events {
     /// still playing, this is the moment to stop it, before the finished
     /// utterance (`VOICE_HEARD`, above) is anywhere close to ready.
     pub const VOICE_SPEECH_STARTED: &str = "voice-speech-started";
+    /// Payload: none. Sent to the quickbar only, by
+    /// [`crate::voice::summon_push_to_talk`] (the HUD's mic button): put
+    /// focus on the mic and say how to talk. Starts no recording.
+    pub const VOICE_SUMMON: &str = "voice-summon";
+    /// Payload: [`crate::voice::ListenInfo`]. "Hey Jarvis" listening changed
+    /// how it hears while still on: the echo-cancelled microphone stopped
+    /// and it carries on through the ordinary one (`note` says so).
+    pub const VOICE_LISTENING: &str = "voice-listening";
+    /// Payload: [`crate::voice_flow::BargeOnset`]. "Hey Jarvis" listening
+    /// heard half a second of speech in one utterance: if a reply is
+    /// playing, the Jarvis bar may pause it and ask for the utterance to be
+    /// checked (`judge_barge_in`). See voice_flow.rs.
+    pub const VOICE_BARGE_ONSET: &str = "voice-barge-onset";
+    /// Payload: [`crate::voice_flow::BargeVerdict`]. The PC's answer for an
+    /// utterance the Jarvis bar asked about: stop the reply, or carry on.
+    pub const VOICE_BARGE_VERDICT: &str = "voice-barge-verdict";
+    /// Payload: [`crate::lock::Security`] - the Security settings changed
+    /// (Settings' Windows Hello section). The Brain re-reads its memory
+    /// lists, which may now be hidden or shown.
+    pub const SECURITY_CHANGED: &str = "security-changed";
+    /// Payload: none. Sent to the Brain only: the owner was away longer than
+    /// "Lock again after", so a Show on the private lists has ended and they
+    /// are read again, hidden.
+    pub const PRIVATE_HIDDEN: &str = "private-hidden";
+    /// Payload: `{ uri }` - a `data:audio/wav` URI. Sent to the quickbar
+    /// only, by [`crate::brain::focus::play_callout`]: one focus-session
+    /// line ("YouTube can wait."), fetched as SOUND from this PC's backend,
+    /// to play. The words never reach any window.
+    pub const FOCUS_CALLOUT: &str = "focus-callout";
 
     // ---- the fanned-out event stream -----------------------------------
     //
@@ -147,6 +194,10 @@ pub mod events {
     /// the server's 512-event ring: everything on screen is suspect and must be
     /// re-read rather than patched up.
     pub const JARVIS_RESYNC: &str = "jarvis-resync";
+    /// Payload: none. "Stop everything" (the hotkey): every window that
+    /// speaks stops its speech now, before the backend is even asked. See
+    /// [`crate::commands::stop_everything_now`].
+    pub const STOP_EVERYTHING: &str = "stop-everything";
 }
 
 /// Cancellation handle for the one chat stream the spotlight may have running.
@@ -210,6 +261,14 @@ pub fn emit_quickbar<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, 
 }
 
 /// Emits an event to every window.
+///
+/// Which windows HEAR it is decided by their capabilities, not here: in
+/// Tauri 2.11 a page's global `listen()` registers with the target `Any`,
+/// and `match_any_or_filter` (tauri `event/listener.rs`) lets an `Any`
+/// listener through every filter - so even `emit_to` one window reaches a
+/// global listener in any other. The Faces and first-run windows, which
+/// must not hear the approval queue, hold no `core:event:allow-listen`
+/// (bug audit 2026-09-26, #6; `tests/security.mjs`).
 pub fn emit_all<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
     if let Err(err) = app.emit(event, payload) {
         eprintln!("[jarvis] unable to broadcast `{event}`: {err}");
@@ -218,12 +277,16 @@ pub fn emit_all<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, paylo
 
 /// Pushes a value into the HUD page by evaluating a call to its feed.
 ///
-/// The HUD is the one window that cannot receive a Tauri event. `jarvis_hud
-/// .html` carries its own Content-Security-Policy meta tag whose `connect-src`
-/// lists the backend's loopback origins and nothing else, and Tauri's IPC on
-/// Windows is a fetch to `http://ipc.localhost` — so `listen` and `invoke` are
-/// both refused inside that page before the request leaves the webview. An
-/// `eval` from the host is not a fetch and is not subject to the page's policy.
+/// Why a feed and not a Tauri event: this comment used to say `listen` and
+/// `invoke` are both refused inside the HUD, because `jarvis_hud.html`'s own
+/// Content-Security-Policy does not list `http://ipc.localhost`. That was
+/// wrong (apps security audit M2): when that fetch is refused, Tauri's
+/// `ipc-protocol.js` falls back to `window.ipc.postMessage`, which no CSP
+/// governs, so IPC works from the HUD - it is how the mic button's
+/// `summon_push_to_talk` and the page's reads (`hud_proxy.rs`) reach Rust.
+/// What limits the HUD is its capability file, `capabilities/hud.json`.
+/// The feed stays because it was here first and delivers the shell's one
+/// event stream to the page's `EventSource` shim without a second listener.
 ///
 /// `serde_json` is what makes it safe: the payload is a JSON literal, escaped
 /// by the serialiser, spliced into a call to a function the initialisation
@@ -242,6 +305,39 @@ pub fn push_to_hud<S: serde::Serialize>(app: &AppHandle, channel: &str, payload:
         format!("if (window.__jarvisFeed) {{ window.__jarvisFeed({channel}, {payload}); }}");
     if let Err(err) = hud.eval(&script) {
         eprintln!("[jarvis] unable to push `{channel}` to the HUD: {err}");
+    }
+}
+
+/// Gives the HUD page the current base, if it holds a different one - and
+/// never a token.
+///
+/// The page used to be given the pairing token here and in the bootstrap,
+/// so any script running in it could call the whole API (apps security
+/// audit M2). Now its requests go through `hud_proxy.rs`, which adds the
+/// token in Rust, and the page is configured with an EMPTY token, on every
+/// page load and every link change, so a token some earlier version or a
+/// browser session left in the page is wiped too. The base is still set:
+/// the page builds its URLs from it, and the bootstrap's `fetch` shim reads
+/// the path back out of them.
+pub fn configure_hud(app: &AppHandle) {
+    let Some(hud) = app.get_webview_window(HUD_LABEL) else {
+        return;
+    };
+    let base = commands::jarvis_base(app);
+    let Ok(base) = serde_json::to_string(&base) else {
+        return;
+    };
+    // `typeof` guards the reference rather than `window.JARVIS`, because a
+    // top-level `const` is a global *lexical* binding and never a property of
+    // `window`.
+    let script = format!(
+        "if (typeof JARVIS !== 'undefined' && JARVIS && typeof JARVIS.set === 'function' \
+         && (JARVIS.base !== {base} || JARVIS.token !== '')) {{ \
+         if (typeof JARVIS.forget === 'function') JARVIS.forget(); \
+         JARVIS.set({base}, '', false); }}"
+    );
+    if let Err(err) = hud.eval(&script) {
+        eprintln!("[jarvis] unable to configure the HUD page: {err}");
     }
 }
 
@@ -412,7 +508,10 @@ const HUD_BOOTSTRAP: &str = include_str!("hud_bootstrap.js");
 #[cfg(windows)]
 fn launched_by_deny() -> bool {
     let argv: Vec<String> = std::env::args().collect();
+    // A Snooze on a timer's or reminder's toast (2026-09-25) is the same kind
+    // of launch: it answers from the toast and puts no window up.
     winrt_toast::deny_id_from_argv(&argv).is_some()
+        || winrt_toast::snooze_id_from_argv(&argv).is_some()
 }
 
 /// Always false off Windows: no toast, no Deny action, no such launch.
@@ -444,20 +543,15 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     }
 
     let base = commands::jarvis_base(app);
-    let token = commands::jarvis_token_for(app).unwrap_or_default();
-    // `serde_json` is what makes this safe: the base and token are values a
-    // user typed into a settings field, and they are spliced into JavaScript.
-    // Serialising them as JSON string literals is exactly the escaping that
-    // needs, quotes and backslashes included.
-    let script = HUD_BOOTSTRAP
-        .replace(
-            "__JARVIS_BASE__",
-            &serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
-        )
-        .replace(
-            "__JARVIS_TOKEN__",
-            &serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".into()),
-        );
+    // `serde_json` is what makes this safe: the base is a value a user typed
+    // into a settings field, and it is spliced into JavaScript. Serialising
+    // it as a JSON string literal is exactly the escaping that needs, quotes
+    // and backslashes included. No token: the page does not get one (apps
+    // security audit M2; hud_proxy.rs makes its requests).
+    let script = HUD_BOOTSTRAP.replace(
+        "__JARVIS_BASE__",
+        &serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
+    );
 
     // Started by hand, the HUD is what you came for, so it opens focused.
     // Started by Windows at login it must not: a 1280x820 window taking focus
@@ -477,6 +571,11 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     // Hidden, exactly as for a login start: fully built and warm, reachable
     // from the tray or the hotkey the moment the owner does want it.
     let hidden = at_login || launched_by_deny();
+    // App lock on: a restart starts locked (lock.rs), and the HUD is covered
+    // (apps security audit M3), so it is built hidden and shown through the
+    // lock below - Windows Hello first. Not at login or on a Deny launch,
+    // where it stays hidden anyway.
+    let lock_first = !hidden && lock::current(app).app_lock;
 
     tauri::WebviewWindowBuilder::new(
         app,
@@ -492,17 +591,25 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     .always_on_top(false)
     .skip_taskbar(false)
     .resizable(true)
-    .visible(!hidden)
-    .focused(!hidden)
+    .visible(!hidden && !lock_first)
+    .focused(!hidden && !lock_first)
     .shadow(true)
     .theme(Some(tauri::Theme::Dark))
     .initialization_script(&script)
     .build()
     .map_err(|e| format!("{e}"))?;
 
+    if lock_first {
+        if let Err(err) = windows::show_hud(app) {
+            eprintln!("[jarvis] the HUD could not be shown through the lock: {err}");
+        }
+    }
+
     logfile::log(&format!(
         "[jarvis] HUD window created for {base}{}",
-        if at_login {
+        if lock_first {
+            " (hidden until Windows Hello: App lock is on)"
+        } else if at_login {
             " (hidden: started at login)"
         } else if hidden {
             " (hidden: launched by a notification Deny, which must not open the app)"
@@ -543,11 +650,22 @@ pub fn run() {
                 winrt_toast::decide_denied_detached(app, id);
                 return;
             }
+            // A Snooze on a toast for a timer, alarm or reminder that went
+            // off (brain/schedule.rs toast_fired): the same shape - answered
+            // from the toast, no window.
+            #[cfg(windows)]
+            if let Some(id) = winrt_toast::snooze_id_from_argv(&_argv) {
+                logfile::log(&format!(
+                    "[jarvis] Snooze reached from a notification relaunch: {id}"
+                ));
+                winrt_toast::snooze_detached(app, id);
+                return;
+            }
             logfile::log("[jarvis] second launch folded into the running instance");
-            if let Some(hud) = app.get_webview_window(HUD_LABEL) {
-                let _ = hud.show();
-                let _ = hud.unminimize();
-                let _ = hud.set_focus();
+            // Through the app lock, like every other way to the HUD (apps
+            // security audit M3): with it on, Windows Hello is asked first.
+            if let Err(err) = windows::show_hud(app) {
+                eprintln!("[jarvis] second launch: HUD unavailable: {err}");
             }
         }));
     }
@@ -578,8 +696,20 @@ pub fn run() {
         .manage(hotkeys::HotkeyState::default())
         .manage(update::UpdateState::default())
         .manage(appearance::AppearanceState::default())
+        .manage(system_theme::AppliedTheme::default())
         .manage(voice::VoiceCaptureState::default())
         .manage(voice::AutoListenState::default())
+        // Settings' voice recordings, held in memory until sent (voice_training.rs).
+        .manage(voice_training::SampleState::default())
+        // Windows Hello: when the owner was last here, and whether the
+        // Brain's private lists are shown (lock.rs).
+        .manage(lock::LockState::default())
+        // The HUD's own chat stream, apart from the Jarvis bar's (hud_proxy.rs).
+        .manage(hud_proxy::HudChatState::default())
+        // Every window's focus changes reach the app lock: a Jarvis bar,
+        // Brain or Settings window focused again after the owner was away is
+        // hidden and asks Windows Hello (lock.rs `on_window_event`).
+        .on_window_event(lock::on_window_event)
         .invoke_handler(tauri::generate_handler![
             // Eight commands used to be registered here with no caller in any
             // window: capture_screen, is_quickbar_pinned, notify_user,
@@ -591,8 +721,17 @@ pub fn run() {
             // benefit. The command bodies remain in commands.rs for the paths
             // that will want them; they are simply not exposed until then.
             commands::stream_chat,
+            commands::temporary_chat_available,
             commands::cancel_chat,
             commands::decide_approval,
+            // The HUD page's requests, made in Rust so the page holds no
+            // token (apps security audit M2; hud_proxy.rs).
+            hud_proxy::hud_get,
+            hud_proxy::hud_chat,
+            hud_proxy::hud_chat_cancel,
+            // App lock and the widget (apps security audit M3).
+            commands::get_app_lock,
+            commands::open_approval_in_quickbar,
             // The five `jarvis-link.js` has invoked since before they
             // existed. Without these lines every task-control button and the
             // approval note failed at the Tauri boundary, which reads to the
@@ -617,11 +756,39 @@ pub fn run() {
             brain::brain_remove_skill,
             brain::brain_memory_decide,
             brain::brain_memory_forget,
+            brain::brain_memory_erase,
             brain::brain_memory_edit,
             brain::brain_memory_learning,
             brain::brain_memory_sleep_time,
+            brain::brain_memory_keep_both,
             brain::brain_memory_export,
             brain::brain_memory_as_of,
+            brain::auto_learn::brain_memory_learning_status,
+            brain::auto_learn::brain_memory_auto_list,
+            brain::auto_learn::brain_memory_learning_auto,
+            brain::auto_learn::brain_memory_learning_sensitive,
+            brain::auto_learn::brain_memory_saved_unseen,
+            brain::profile::brain_memory_profile,
+            brain::profile::brain_memory_pin,
+            brain::schedule::brain_schedule,
+            brain::schedule::brain_schedule_act,
+            brain::schedule::brain_schedule_add_todo,
+            brain::schedule::brain_schedule_add_standby,
+            brain::schedule::brain_schedule_clear_list,
+            brain::focus::focus_status,
+            brain::focus::focus_start,
+            brain::focus::focus_act,
+            brain::briefing::brain_briefing,
+            brain::briefing::brain_briefing_now,
+            brain::briefing::get_briefing_setup,
+            brain::briefing::set_briefing,
+            brain::briefing::stop_briefing,
+            brain::briefing::set_briefing_senders,
+            brain::used::memory_used,
+            brain::history::brain_history_list,
+            brain::history::brain_history_open,
+            brain::history::brain_history_delete,
+            brain::history::brain_history_settings,
             brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,
@@ -631,11 +798,44 @@ pub fn run() {
             sidecar::stop_backend,
             commands::get_theme,
             commands::set_theme,
+            commands::get_theme_prefs,
+            commands::set_theme_follow_system,
+            commands::open_faces,
+            commands::mark_answer,
             commands::finish_onboarding,
             commands::get_api_settings,
             commands::set_api_settings,
+            commands::reveal_pairing_token,
+            commands::get_second_card,
+            commands::set_second_card,
+            commands::get_backend_capabilities,
+            commands::get_big_model,
+            commands::set_big_model,
+            hardware::get_hardware,
+            hardware::apply_hardware,
+            hardware::hardware_step,
+            hardware::measure_hardware,
+            web_search::get_web_search,
+            web_search::set_web_search,
+            web_search::test_web_search,
+            web_search::save_search_key,
+            web_search::forget_search_key,
+            reach::get_reach,
+            asks_first::get_asks_first,
+            asks_first::set_asks_first,
+            asks_first::set_lights_without_card,
+            email_sending::get_email_sending,
+            folders::get_folders,
+            folders::add_folder,
+            folders::remove_folder,
+            folders::import_notion,
+            plain_errors::get_manner,
+            plain_errors::set_manner,
+            plain_errors::open_fix_place,
             appearance::get_appearance,
             appearance::set_appearance,
+            appearance::appearance_snapshot,
+            appearance::appearance_colours,
             update::update_status,
             update::check_for_update,
             update::set_update_check_on_start,
@@ -651,6 +851,14 @@ pub fn run() {
             commands::get_widget_prefs,
             commands::prefill_quickbar,
             commands::capture_note,
+            commands::capture_note_status,
+            commands::note_targets,
+            commands::wiki_status,
+            commands::wiki_ingest,
+            commands::wiki_ingest_status,
+            commands::wiki_open_folder,
+            commands::get_deep,
+            commands::ask_deep,
             commands::check_server_health,
             commands::hide_quickbar,
             commands::resize_quickbar,
@@ -667,6 +875,38 @@ pub fn run() {
             voice::start_automatic_listening,
             voice::stop_automatic_listening,
             voice::speak_reply,
+            // Interrupting by talking and "One moment." (voice_flow.rs).
+            voice_flow::judge_barge_in,
+            voice_flow::get_voice_flow,
+            voice_flow::get_voice_moment,
+            voice::summon_push_to_talk,
+            voice::get_voice_status,
+            voice::set_wake_word,
+            // Settings -> Voice: training on this PC, the voice-check settings,
+            // the guided test and custom voices (voice_training.rs).
+            voice_training::start_voice_sample,
+            voice_training::voice_sample_level,
+            voice_training::stop_voice_sample,
+            voice_training::cancel_voice_sample,
+            voice_training::discard_voice_samples,
+            voice_training::send_voice_training,
+            voice_training::cancel_voice_training,
+            voice_training::measure_voice,
+            voice_training::set_voice_setting,
+            voice_training::check_voice_with_someone_else,
+            voice_training::propose_voice_threshold,
+            voice_training::get_custom_voices,
+            voice_training::create_custom_voice,
+            voice_training::set_active_voice,
+            voice_training::delete_custom_voice,
+            voice_training::set_better_voice,
+            voice_training::set_voice_speed,
+            vision::local_model_vision,
+            // Windows Hello (lock.rs): Settings reads and changes the four
+            // Security settings; the Brain's Show button.
+            lock::get_security_settings,
+            lock::set_security_settings,
+            lock::reveal_private_answers,
         ]);
 
     // The global-shortcut plugin owns a single handler for every accelerator we
@@ -713,6 +953,10 @@ pub fn run() {
                                 eprintln!("[jarvis] widget toggle failed: {err}");
                             }
                         }
+                        // Never held: not by a stale link, not by App lock,
+                        // not by a waiting card. Stopping only makes Jarvis
+                        // do less (backend/jarvis_stop_all.py).
+                        "stop_everything" => commands::stop_everything_now(app),
                         other => eprintln!("[jarvis] no handler for hotkey action `{other}`"),
                     }
                 })
@@ -742,23 +986,21 @@ pub fn run() {
             return;
         }
         let app = webview.app_handle();
-        let base = commands::jarvis_base(app);
-        let token = commands::jarvis_token_for(app).unwrap_or_default();
-        let script = format!(
-            "if (typeof JARVIS !== 'undefined' && JARVIS && typeof JARVIS.set === 'function' \
-             && !JARVIS.base) {{ JARVIS.forget(); JARVIS.set({}, {}, false); }}",
-            serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
-            serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".into()),
-        );
-        if let Err(err) = webview.eval(&script) {
-            eprintln!("[jarvis] unable to configure the HUD page: {err}");
-        }
+        // Re-sends the base and token whenever the page's differ - not only
+        // when it has no base, which it always has. See `configure_hud`.
+        configure_hud(app);
 
         // A HUD that loads (or reloads) mid-session has heard nothing yet: the
         // stream only speaks on change, and it may have connected minutes ago.
         // Push the current state once, now, so the page is not a frame behind.
         let link = app.state::<stream::StreamState>().link();
         push_to_hud(app, "link", &link);
+
+        // Same reason, for the face its reactor wears. The page waits a
+        // moment for this before loading any face, so the owner's choice is
+        // the first one drawn rather than a swap after the default.
+        let appearance = app.state::<appearance::AppearanceState>().snapshot();
+        push_to_hud(app, "appearance", &appearance);
     });
 
     let app = builder
@@ -782,6 +1024,12 @@ pub fn run() {
             if autostart::launched_at_login() {
                 logfile::log("[jarvis] started by Windows at login");
             }
+
+            // Before anything reads the token (the HUD bootstrap, the backend
+            // it may start): a token an older version kept in the settings
+            // file as plain text moves into Windows Credential Manager, once.
+            // Any failure leaves it where it was - see token_store.rs.
+            commands::migrate_plain_token(&handle);
 
             // Claims this process's AUMID before the first approval toast can
             // possibly fire - see winrt_toast.rs's own doc for why an
@@ -850,6 +1098,11 @@ pub fn run() {
             // online pill — is fed from here and nowhere else.
             stream::spawn(handle.clone());
 
+            // Windows Hello's app lock: hides the Jarvis bar, the Brain and
+            // Settings once the owner has been away longer than "Lock again
+            // after" (lock.rs). Does nothing while the lock is off.
+            lock::spawn_watch(handle.clone());
+
             // A Deny clicked on a toast while Jarvis was CLOSED. The
             // single-instance callback above only fires when a process is
             // already running, so this launch is the only place a cold-start
@@ -859,6 +1112,9 @@ pub fn run() {
             // that itself. See winrt_toast.rs.
             #[cfg(windows)]
             winrt_toast::decide_denied_at_startup(&handle);
+            // And a Snooze clicked while Jarvis was closed - the same wait.
+            #[cfg(windows)]
+            winrt_toast::snooze_at_startup(&handle);
 
             // One outbound GET, if the owner left it on, and nothing is
             // installed by it. Spawned and forgotten: a slow endpoint must not
@@ -874,6 +1130,12 @@ pub fn run() {
             // The owner's face, before the tray's first paint. Local read only:
             // a network fetch here would hold the icon behind a socket timeout.
             appearance::adopt_at_startup(&handle);
+
+            // "Match Windows light or dark mode". Reads Windows' own setting
+            // every couple of seconds and holds a switch while Jarvis is busy
+            // or an approval is waiting - see system_theme.rs for why this
+            // is not `prefers-color-scheme` in the pages.
+            system_theme::start(&handle);
 
             // Bind the accelerators. A failure here is not fatal: another
             // application may already own a combination, and Jarvis still works
@@ -948,13 +1210,20 @@ pub fn run() {
             // and kill the process tree if it is still there. Blocking here is
             // deliberate; the alternative is exiting with a model still
             // resident and no window left to say so.
+            // The last event id seen, forced: without it a restart of this
+            // app alone replays the last few seconds of events, and an alarm
+            // that already rang rings again (bug audit 2026-09-26, #4).
+            stream::save_resume_now(app);
             sidecar::stop_on_exit(app);
         }
 
         // A last line of defence for the paths that reach `Exit` without an
         // `ExitRequested` we saw. Stopping twice is a no-op: the owned child is
         // taken out of the state by whichever call gets there first.
-        tauri::RunEvent::Exit => sidecar::stop_on_exit(app),
+        tauri::RunEvent::Exit => {
+            stream::save_resume_now(app);
+            sidecar::stop_on_exit(app);
+        }
 
         _ => {}
     });

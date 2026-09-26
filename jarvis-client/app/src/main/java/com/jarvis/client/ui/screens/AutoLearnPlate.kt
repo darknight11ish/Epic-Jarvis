@@ -1,0 +1,430 @@
+package com.jarvis.client.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.net.ApiError
+import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.AutoLearn
+import com.jarvis.client.net.MemoryErase
+import com.jarvis.client.net.MemoryProfile
+import com.jarvis.client.ui.parts.Gap
+import com.jarvis.client.ui.parts.Pill
+import com.jarvis.client.ui.parts.Plate
+import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.liveStatus
+import com.jarvis.client.ui.theme.LocalChrome
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
+
+/**
+ * The two automatic-learning switches ([AutoLearn], docs/JARVIS-API.md
+ * section 19), drawn inside "What Jarvis remembers" under the learning
+ * switch, where the desktop puts them too (Brain -> Memory).
+ *
+ * Turning either ON raises one approval card on the PC and reads "Waiting
+ * for your approval" while that card is in the queue - found by its action,
+ * so a card raised on the desktop counts too. ON is greyed while the link is
+ * down or stale, and the runtime refuses it again ([JarvisRuntime.setAutoLearn]).
+ * OFF always goes - including while an ON card waits, which withdraws that
+ * card ([JarvisRuntime.autoWithdrawn]). Never a second ON while one waits,
+ * and nothing before the PC has said which way a switch is.
+ *
+ * @param learningOn the background learning switch above these, which
+ *   "Learn automatically" depends on.
+ * @param refresh goes up when the plate's own Refresh is pressed.
+ */
+@Composable
+internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: Int) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var reads by remember { mutableIntStateOf(0) }
+    var status by remember { mutableStateOf<AutoLearn.Status?>(null) }
+    var unsupported by remember { mutableStateOf(false) }
+    var readError by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf<AutoLearn.Which?>(null) }
+    var said by remember { mutableStateOf<String?>(null) }
+
+    val queue by JarvisRuntime.pending.collectAsState()
+    val withdrawn by JarvisRuntime.autoWithdrawn.collectAsState()
+    val cards = queue.map { it.id to it.action }
+    val autoCard = AutoLearn.cardWaiting(cards, AutoLearn.Which.AUTO, withdrawn)
+    val sensitiveCard = AutoLearn.cardWaiting(cards, AutoLearn.Which.SENSITIVE, withdrawn)
+    // A card leaving the queue (approved, denied or expired) reads the
+    // switches again, so the lines say what really happened.
+    var seen by remember { mutableStateOf(false to false) }
+    LaunchedEffect(autoCard, sensitiveCard) {
+        val left = (seen.first && !autoCard) || (seen.second && !sensitiveCard)
+        seen = autoCard to sensitiveCard
+        if (left) reads += 1
+    }
+    LaunchedEffect(reads, refresh) {
+        when (val r = JarvisRuntime.autoLearnSettings()) {
+            is ApiResult.Ok -> {
+                status = AutoLearn.status(r.value)
+                unsupported = false
+                readError = null
+            }
+            is ApiResult.Failed -> {
+                // The list's answer carries the two switches too, so they can
+                // still say which way they are.
+                when (val l = JarvisRuntime.autoFacts(limit = 1)) {
+                    is ApiResult.Ok -> {
+                        status = AutoLearn.statusFromList(l.value)
+                        unsupported = false
+                        readError = null
+                    }
+                    is ApiResult.Failed -> {
+                        unsupported = r.error == ApiError.NotFound && l.error == ApiError.NotFound
+                        readError = if (unsupported) null else
+                            AutoLearn.readFailure(r.error) ?: JarvisRuntime.noticeFor(r.error)
+                    }
+                }
+            }
+        }
+    }
+
+    if (unsupported) {
+        Text(
+            "Your PC's Jarvis does not have automatic learning yet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textLo,
+        )
+        return
+    }
+    for (which in AutoLearn.Which.entries) {
+        val cardInQueue = if (which == AutoLearn.Which.AUTO) autoCard else sensitiveCard
+        val switch = AutoLearn.switchState(status, which, cardInQueue)
+        Gap(8)
+        SwitchRow(
+            title = which.title,
+            detail = which.under,
+            // Waiting shows the switch in the position it was asked for, so
+            // it can be turned OFF - which takes the request back. The line
+            // under it says it is only waiting, never that it is on.
+            checked = switch == AutoLearn.Switch.ON || switch == AutoLearn.Switch.WAITING,
+            enabled = busy == null && when (switch) {
+                AutoLearn.Switch.ON, AutoLearn.Switch.WAITING -> true
+                AutoLearn.Switch.OFF -> canAct
+                AutoLearn.Switch.UNKNOWN -> false
+            },
+            onChange = { want ->
+                // Never a second ON while one waits.
+                if (AutoLearn.mayPress(switch, want)) {
+                    busy = which
+                    said = null
+                    scope.launch {
+                        try {
+                            said = JarvisRuntime.setAutoLearn(which, want)
+                        } finally {
+                            busy = null
+                            reads += 1
+                        }
+                    }
+                }
+            },
+        )
+        Text(
+            if (busy == which) "Asking your PC…" else
+                AutoLearn.stateLine(which, switch, learningOn, status?.auto),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (switch == AutoLearn.Switch.WAITING) chrome.warnInk else chrome.textMid,
+        )
+        AutoLearn.lastLine(status?.last(which), switch)?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        AutoLearn.lastDetail(status?.last(which), switch)?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        // The PC's own words when its settings file is damaged (both
+        // switches then read off) - under "Learn automatically", once.
+        if (which == AutoLearn.Which.AUTO) {
+            AutoLearn.whyLine(status)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+            }
+        }
+    }
+    readError?.let {
+        Text("Couldn't read these switches: $it", style = MaterialTheme.typography.labelSmall,
+            color = chrome.warnInk)
+    }
+    said?.let {
+        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+            modifier = Modifier.liveStatus())
+    }
+}
+
+/**
+ * "Saved automatically" on Mind - every fact Jarvis saved without a card,
+ * newest first, with "Load older", a small "said aloud" mark for voice, and
+ * a Forget on each. Forget asks first ([AutoLearn.FORGET_CONFIRM], one
+ * wording for both apps), and is held while the link is down or stale, like
+ * the desktop's. Beside it, "Erase the words" (the owner's decision,
+ * 2026-09-24; [MemoryErase]): the fact's words wiped from the PC for good,
+ * its dates kept - asked first in both apps' words, held the same way. One
+ * line under the title says History's Delete does not forget a fact
+ * ([AutoLearn.HISTORY_NOTE]). First on each row, Pin or Unpin ("Always keep
+ * in mind", [MemoryProfile], 2026-09-24): no confirm - the owner's own tap,
+ * which Unpin takes back - held on a stale link like the other two, and
+ * shown only once the PC has said which facts are pinned
+ * ([JarvisRuntime.pinnedIds]).
+ *
+ * Read from the PC when Mind shows it, on Refresh, after a Forget, and on
+ * every `memory_saved` event ([JarvisRuntime.autoTick]) - a read again keeps
+ * the older pages "Load older" brought in ([AutoLearn.refreshed]). Nothing
+ * of it is kept on the phone.
+ *
+ * "Hide memory lists and chat history" (Security) replaces it with
+ * [HiddenSection] until Show is confirmed, like Mind's other memory lists.
+ */
+@Composable
+internal fun SavedAutomaticallySection(
+    canAct: Boolean,
+    privateHidden: Boolean,
+    showPrivateBusy: Boolean,
+    onShowPrivate: () -> Unit,
+) {
+    if (privateHidden) {
+        HiddenSection(AutoLearn.TITLE, busy = showPrivateBusy, onShow = onShowPrivate)
+        return
+    }
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    val zone = remember { ZoneId.systemDefault() }
+    val today = LocalDate.now(zone)
+    val tick by JarvisRuntime.autoTick.collectAsState()
+    var reads by remember { mutableIntStateOf(0) }
+    var facts by remember { mutableStateOf<List<AutoLearn.Fact>?>(null) }
+    var mayHaveOlder by remember { mutableStateOf(false) }
+    var readError by remember { mutableStateOf<String?>(null) }
+    var loadingOlder by remember { mutableStateOf(false) }
+    var confirmId by remember { mutableStateOf<Long?>(null) }
+    var confirmEraseId by remember { mutableStateOf<Long?>(null) }
+    var busyId by remember { mutableStateOf<Long?>(null) }
+    // Which of the three the busy row is doing, for its label.
+    var erasing by remember { mutableStateOf(false) }
+    var pinning by remember { mutableStateOf(false) }
+    // "Always keep in mind": which facts are pinned, as the PC last said.
+    val pinned by JarvisRuntime.pinnedIds.collectAsState()
+    val profileTick by JarvisRuntime.profileTick.collectAsState()
+    var said by remember { mutableStateOf<String?>(null) }
+    // "Learn automatically", as the list's own answer says it: the empty
+    // list says so when it is off.
+    var autoOn by remember { mutableStateOf<Boolean?>(null) }
+
+    // Read here as well as in its own section: that one may be off screen
+    // (not composed), and these rows still need to say Pin or Unpin.
+    LaunchedEffect(reads, profileTick) {
+        JarvisRuntime.memoryProfile()
+    }
+
+    LaunchedEffect(reads, tick) {
+        when (val r = JarvisRuntime.autoFacts()) {
+            is ApiResult.Ok -> {
+                val page = AutoLearn.page(r.value)
+                // Pages already brought in by "Load older" stay (the
+                // desktop's refreshRows): a new fact must not cost them.
+                val (rows, more) = AutoLearn.refreshed(facts, page, mayHaveOlder)
+                facts = rows
+                mayHaveOlder = more
+                autoOn = page.status.auto
+                readError = null
+            }
+            is ApiResult.Failed -> readError = AutoLearn.listFailure(r.error) ?: JarvisRuntime.noticeFor(r.error)
+        }
+    }
+
+    Section(AutoLearn.TITLE, trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
+        Plate {
+            val shown = facts
+            val err = readError
+            Text(AutoLearn.HISTORY_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Gap(6)
+            when {
+                shown == null -> Text(
+                    if (err != null) "Couldn't read what was saved: $err" else "Reading…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (err != null) chrome.warnInk else chrome.textLo,
+                )
+                shown.isEmpty() -> Text(AutoLearn.emptyLine(autoOn), style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid)
+            }
+            if (shown != null && err != null) {
+                Text("Couldn't read it again: $err", style = MaterialTheme.typography.labelSmall,
+                    color = chrome.warnInk)
+            }
+            said?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                    modifier = Modifier.liveStatus())
+            }
+            if (!shown.isNullOrEmpty() && !canAct) {
+                Text(
+                    "Not connected to the desktop, so Pin, Forget and Erase wait until the link is back.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo,
+                )
+            }
+            shown.orEmpty().forEach { fact ->
+                Gap(10)
+                Column(Modifier.fillMaxWidth()) {
+                    Text(fact.text, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(AutoLearn.rowLine(fact, zone, today), style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo)
+                        if (fact.aloud) Pill(AutoLearn.VOICE_MARK)
+                    }
+                    if (confirmId == fact.id) {
+                        Text(AutoLearn.FORGET_CONFIRM, style = MaterialTheme.typography.bodySmall,
+                            color = chrome.warnInk)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Quiet(
+                                "Yes, forget it",
+                                color = chrome.badInk,
+                                enabled = canAct && busyId == null,
+                                onClick = {
+                                    confirmId = null
+                                    busyId = fact.id
+                                    said = null
+                                    scope.launch {
+                                        try {
+                                            val (gone, sentence) = JarvisRuntime.forgetAutoFact(fact.id)
+                                            if (gone) facts = facts?.filterNot { it.id == fact.id }
+                                            said = sentence
+                                        } finally {
+                                            busyId = null
+                                        }
+                                    }
+                                },
+                            )
+                            Quiet("Keep it", onClick = { confirmId = null })
+                        }
+                    } else if (confirmEraseId == fact.id) {
+                        Text(MemoryErase.CONFIRM, style = MaterialTheme.typography.bodySmall,
+                            color = chrome.warnInk)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Quiet(
+                                MemoryErase.YES,
+                                color = chrome.badInk,
+                                enabled = canAct && busyId == null,
+                                onClick = {
+                                    confirmEraseId = null
+                                    busyId = fact.id
+                                    erasing = true
+                                    said = null
+                                    scope.launch {
+                                        try {
+                                            val (gone, sentence) = JarvisRuntime.eraseAutoFact(fact.id)
+                                            if (gone) facts = facts?.filterNot { it.id == fact.id }
+                                            said = sentence
+                                        } finally {
+                                            busyId = null
+                                            erasing = false
+                                        }
+                                    }
+                                },
+                            )
+                            Quiet("Keep it", onClick = { confirmEraseId = null })
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            pinned?.let { ids ->
+                                val on = fact.id in ids
+                                Quiet(
+                                    when {
+                                        busyId == fact.id && pinning ->
+                                            if (on) MemoryProfile.UNPINNING else MemoryProfile.PINNING
+                                        on -> MemoryProfile.UNPIN
+                                        else -> MemoryProfile.PIN
+                                    },
+                                    enabled = canAct && busyId == null,
+                                    onClick = {
+                                        confirmId = null
+                                        confirmEraseId = null
+                                        busyId = fact.id
+                                        pinning = true
+                                        said = null
+                                        scope.launch {
+                                            try {
+                                                said = JarvisRuntime.pinFact(fact.id, pinned = !on).second
+                                            } finally {
+                                                busyId = null
+                                                pinning = false
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                            Quiet(
+                                if (busyId == fact.id && !erasing && !pinning) "Forgetting…" else "Forget",
+                                color = chrome.badInk,
+                                enabled = canAct && busyId == null,
+                                onClick = { confirmEraseId = null; confirmId = fact.id },
+                            )
+                            Quiet(
+                                if (busyId == fact.id && erasing) MemoryErase.BUSY else MemoryErase.LABEL,
+                                color = chrome.badInk,
+                                enabled = canAct && busyId == null,
+                                onClick = { confirmId = null; confirmEraseId = fact.id },
+                            )
+                        }
+                    }
+                }
+            }
+            if (shown != null && mayHaveOlder && shown.isNotEmpty()) {
+                Gap(6)
+                Quiet(
+                    if (loadingOlder) "Loading…" else "Load older",
+                    enabled = !loadingOlder,
+                    onClick = {
+                        val before = AutoLearn.olderThan(shown)
+                        if (before == null) {
+                            mayHaveOlder = false
+                        } else {
+                            loadingOlder = true
+                            scope.launch {
+                                try {
+                                    when (val r = JarvisRuntime.autoFacts(before)) {
+                                        is ApiResult.Ok -> {
+                                            val page = AutoLearn.page(r.value)
+                                            val had = facts.orEmpty()
+                                            val next = AutoLearn.append(had, page.facts)
+                                            facts = next
+                                            // No progress means no more to load.
+                                            mayHaveOlder = page.mayHaveOlder && next.size > had.size
+                                            readError = null
+                                        }
+                                        is ApiResult.Failed -> readError =
+                                            AutoLearn.listFailure(r.error) ?: JarvisRuntime.noticeFor(r.error)
+                                    }
+                                } finally {
+                                    loadingOlder = false
+                                }
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
