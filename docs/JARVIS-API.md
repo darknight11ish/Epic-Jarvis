@@ -5169,6 +5169,7 @@ one scheduler (section 21), kind `"tellme"`, loaded by
 |---|---|---|
 | **An email from a named sender** | `{"source": "email", "sender": "Alex"}` (a name, 1-60 plain characters, or an address) | ONE connection to the mail server `jarvis_email.plan()` names: LOGIN, EXAMINE (read-only), `UID SEARCH UID <n>:*`, `UID FETCH <new uids> (BODY.PEEK[HEADER.FIELDS (FROM)])`, CLOSE, LOGOUT. The From line only, of mail that arrived since the last look (at most 50), with PEEK so nothing is marked as read. The first look only notes where the mailbox is. The name is matched ON THIS PC (every word of it a whole word of the sender's name or address; an address compared whole) and never sent to the server. |
 | **A Home Assistant device reaching a state** | `{"source": "home", "entity": "switch.washing_machine", "say": "finishes" \| "opens" \| "closes" \| "turns on" \| "turns off"}` or `"states": ["off"]`, and `"name"?` (the owner's word for it) | `jarvis_home.plan_states([entity])`: one GET of one entity. It matches when the state CHANGES into a wanted one - already there when the watch starts is not a match; `unavailable` / `unknown` are skipped. "finishes" = off, idle, finished, complete(d), done, stopped or standby; "opens" = on, open, opening or unlocked; "closes" = off, closed, closing or locked. |
+| **A web page's text changing** (I67, added 2026-09-27) | `{"source": "page", "url": "https://example.com/product"}` | ONE plain GET of `url` - never a link on the page, never anywhere else - and a SHA-256 fingerprint of the bytes read is kept (reusing the same column a device's state uses); a match is "the fingerprint changed", never a diff or a quote of the page. Refused - at setup, and again immediately before every GET - if `url` resolves, by a real DNS lookup, to this PC or a private network address (`jarvis_local_http.private_fetch_problem`; see `docs/ARCHITECTURE.md` §4's new egress row). |
 
 Both add `"urgent"?: bool` (default false) and `"once"?: bool` (default
 true: tell once, then end; false: every time until the end date).
@@ -5176,29 +5177,34 @@ true: tell once, then end; false: every time until the end date).
 **How often, and until when.** Email every 5 minutes at most often (each
 look is one sign-in; mail apps check every 5-15 minutes, and providers slow
 down accounts that sign in much more often); Home Assistant every minute at
-most often (one small request on the owner's own network). Up to every 60
-minutes. These floors are for this kind only: the generic rule check still
-refuses "every N minutes", so every other repeat keeps the hourly floor
-(`MIN_EVERY_HOURS`). It ends 30 days later by default (the same clock time),
-90 days at most, or at the first match when it tells once. At most 10 at
-once, 5 of them watching email.
+most often (one small request on the owner's own network); a web page every
+30 minutes at most often (it is someone else's server, not the owner's own
+account) - up to once a day, its own ceiling, unlike email/home's shared
+60-minute one. These floors are for this kind only: the generic rule check
+still refuses "every N minutes", so every other repeat keeps the hourly
+floor (`MIN_EVERY_HOURS`). It ends 30 days later by default (the same clock
+time), 90 days at most, or at the first match when it tells once. At most
+10 at once, 5 of them watching email, 5 watching a web page.
 
-**Each look goes through the gate**, as `email_read` or `home_read` - the
-same actions as the model's reads - and runs only at tier `"auto"` (the
-shipped tier). `"ask"` would be a card every few minutes and `"notify"` a
-"Jarvis read your email" message every few minutes, so with either,
-setting one up is refused with the reason ("Your settings ask for a yes each
-time Jarvis reads email, and a "tell me when" cannot ask you every 5
-minutes - so it cannot watch email."), and a look that meets it later is
-skipped and says so under Coming up. The source must be set up for Jarvis
-on the PC (`JARVIS_IMAP_HOST` and `email_check`; `JARVIS_HOME_URL` and
-`home_read` in `[tools].enabled`) or setting one up is refused.
+**Each look goes through the gate**, as `email_read`, `home_read` or
+`page_read` - the same actions as the model's reads (a web page has no
+model tool, so `page_read` is only ever asked here) - and runs only at
+tier `"auto"` (the shipped tier). `"ask"` would be a card every few minutes
+and `"notify"` a "Jarvis read your email" message every few minutes, so
+with any of the three, setting one up is refused with the reason ("Your
+settings ask for a yes each time Jarvis reads email, and a "tell me when"
+cannot ask you every 5 minutes - so it cannot watch email."), and a look
+that meets it later is skipped and says so under Coming up. Email and Home
+Assistant must be set up for Jarvis on the PC first (`JARVIS_IMAP_HOST` and
+`email_check`; `JARVIS_HOME_URL` and `home_read` in `[tools].enabled`) or
+setting one up is refused; a web page needs no account, so only its tier
+is checked.
 
 ### 30.2 Setting one up: ONE card
 
 | Route | Body | Answers |
 |---|---|---|
-| `POST /api/schedule/add` | `{"kind": "tellme", "source": "email", "sender", "urgent"?, "once"?, "days"?, "minutes"?}` or `{"kind": "tellme", "source": "home", "entity", "say" \| "states", "name"?, ...}` | **202** `{"ok": true, "waiting": true, "job", "said"}`; 400 a bad watch (a sentence); **409** the source is not set up or its reads ask each time, or too many (a sentence) |
+| `POST /api/schedule/add` | `{"kind": "tellme", "source": "email", "sender", "urgent"?, "once"?, "days"?, "minutes"?}` or `{"kind": "tellme", "source": "home", "entity", "say" \| "states", "name"?, ...}` or `{"kind": "tellme", "source": "page", "url", ...}` | **202** `{"ok": true, "waiting": true, "job", "said"}`; 400 a bad watch, or a page address that resolves to a private network address (a sentence); **409** the source is not set up or its reads ask each time, or too many (a sentence) |
 | `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete"}` | as 21.2 - immediate, no card. Deleting while the card waits withdraws it. |
 | `GET /api/schedule` / `?id=` | - | as 21.2 |
 
@@ -5234,6 +5240,30 @@ in your home is changed." and "It matches when the state CHANGES to: off,
 idle, finished, complete, completed, done, stopped, standby." Its detail
 says `leaves_this_pc: true` (each look asks the owner's own server). Once
 approved, the first look is at once.
+
+A page's card says instead "Watching for: https://example.com/product -
+when its text changes.", "How: every 30 minutes, Jarvis fetches that
+address (a plain GET, never a link on the page - it never follows anything
+else there) and compares a short fingerprint of its text to the one from
+the look before. The page's actual words are never shown, kept, or sent to
+the AI model - only whether the fingerprint changed." and "Refused if that
+address turns out to lead to this PC or a private network address, checked
+again on every look (never only when you add it), so a web address can
+never become a way to reach your own network."
+
+### 30.3.1 "Tell me when this page changes" - the news feed's sibling
+
+Both this and §44 (news headlines) fetch an address the owner typed,
+meant to be on the open internet, so both share the same private-address
+guard: `jarvis_local_http.private_fetch_problem(url)` resolves the host by
+a REAL DNS lookup (never spelling) and refuses it if any answer falls in a
+private, loopback or link-local range, or in this PC's own networks
+(`docs/ARCHITECTURE.md` §4's new egress row). It is checked when the watch
+is added (`jarvis_tellme.add`, before any card is raised) and again by
+`_look_page` immediately before every GET - DNS can answer differently
+later (rebinding), so "checked once at setup" would not be enough. A
+redirect is followed only where the same check would allow it
+(`_PageRedirect`).
 
 ### 30.3 A match only notifies
 
@@ -5308,6 +5338,11 @@ and sets nothing up. Such an answer counts as having read Home Assistant
 "closes", "starts" or "stops", a name that is no device (or Home Assistant
 not set up) goes to the model instead: "tell me when the shop opens" is as
 often a question as a request.
+
+"tell me when https://example.com/product changes" (I67) sets up the page
+source above - the address must be typed out in full (`http://` or
+`https://`); "tell me when this page changes" with no address is not
+matched (Jarvis has no page in mind for "this") and goes to the model.
 
 **The model has no tool for this.** A web page or an email cannot set one
 up.
@@ -7143,3 +7178,199 @@ different depths); every other backup route is `deliberate`
   restore card; approving it still needs Windows Hello at the backend
   (`jarvis_owner_check`). Step 1's known limits (`docs/ARCHITECTURE.md`
   section 3) apply.
+---
+
+## 46. News headlines in the morning briefing (added 2026-09-27)
+
+The owner's decision (`CLAUDE.md`, feasibility I49; design source
+`docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md`, question 2): "News
+headlines and 'tell me when this page changes': yes, the safe version - one
+card per address the owner adds, read-only, never follows links elsewhere,
+never acts on what it reads." §30.3.1 covers the page-change half; this
+section is the news feed half.
+
+`backend/jarvis_news.py`, shipped whole, `news.patch` adds three routes at
+start-up the same way `documents.patch` (§35) does. Feeds are RSS or Atom
+addresses the owner names; only each item's TITLE is ever read - never an
+article's own page, which Jarvis has no code to fetch at all.
+
+### 46.1 The list - empty by default, no dedicated settings screen
+
+There is **no add/remove settings screen in either app** for this: like
+"tell me when" (§30), a feed is added and removed by the owner's own words,
+`jarvis_quick.py`'s fast path, so both apps get it for free from the one
+shared chat pipeline:
+
+- **"add this feed: `<url>`"**, "follow this feed `<url>`", "add `<url>` as
+  a news feed" - raises the one card below.
+- **"remove that feed: `<url>`"** - at once, no card.
+- **"what news feeds do I have?"** / "list my news feeds" - the addresses,
+  without the model.
+- **"read me the news"** / "the news" / "what's in the news" - today's
+  headlines from every listed feed, without the model (44.4).
+
+The three routes below exist so a settings screen can be added later
+without changing `jarvis_news.py` - `jarvis_quick.py`'s fast path calls the
+exact same `request_add`/`request_remove` functions.
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/news` | - | **200** `{"available": true, "title", "detail", "feeds": [{"id", "url", "title", "added"}], "empty", "why", "can_add": true, "max": 10, "waiting", "waiting_words", "last", "remove_label"}` |
+| `POST /api/news/add` | `{"url"}` | **202** `{"ok": true, "waiting": true, "view", "message"}` while ONE approval card waits; **200** `changed: false` if already listed; **400** a bad address, or one that resolves (real DNS, checked again on every later fetch) to this PC or a private network address; **409** the list is full (10) or a card is already waiting |
+| `POST /api/news/remove` | `{"url"}` or `{"id"}` | **200** `{"ok": true, "changed", "view", "message"}` - at once, no card, either app; withdraws a waiting card for the same address |
+
+### 46.2 The card
+
+Action `change_own_config` (tier `ask` only - the shape of every setting
+that lets Jarvis reach one more thing), the same action folders (§35) uses
+for adding a folder:
+
+```
+Let Jarvis show headlines from this feed?
+
+Feed: https://example.com/rss.xml
+
+From now on, Jarvis's morning briefing (and "read me the news") can show
+this feed's headlines. It reads only the feed itself, on a plain schedule -
+never an article's own page, and never any other link on the feed. The
+article text is never read, only each item's title.
+
+Refused if that address turns out to lead to this PC or a private network
+address, checked again on every read, in case that changes.
+
+Headlines are outside text: a headline can say anything, so it is never
+learned as a fact about you, and it marks the conversation as having read
+outside text, exactly like a calendar title.
+
+Removing the feed from the list is instant, from either app.
+
+If you did not just do this, say no.
+
+If you say no: nothing changes.
+```
+
+### 46.3 Reading a feed - never a link, never the article
+
+One plain GET of the feed address only, through `jarvis_local_http.opener`
+(no proxy) with a redirect followed only where
+`jarvis_local_http.private_fetch_problem` would allow it. `jarvis_news.parse_headlines`
+reads `<item><title>` (RSS) or `<entry><title>` (Atom), at most 5 per feed,
+each capped at 200 characters; a document that declares a `DOCTYPE` or an
+`ENTITY` is refused outright and parsed no further (a real feed never needs
+either - this is how the parser stays out of XML's entity tricks without a
+second dependency such as `defusedxml`). Each fetch is gated as `news_read`
+(§4's new egress row) and runs only at tier `"auto"` or `"notify"` - the
+same two tiers the briefing's weather and calendar reads accept, since this
+runs about once a day, not every few minutes like a "tell me when" look.
+
+### 46.4 In the briefing, and "read me the news"
+
+`jarvis_briefing.py`'s `sources()` gains a `"news"` key, the same shape as
+`"weather"`: `"on"` only when at least one feed is listed and its tier
+allows an unattended read, else `"off"` (none listed) or `"asks"` (said
+under `not_included`). A News section (`state`, `summary`, `items` - one
+line per headline, `"<feed's own title>: <headline>"`) is added to the
+built briefing when `"on"`, and every headline is OUTSIDE TEXT (a feed can
+say anything): a briefing that shows one lists `news_read` in the turn's
+`read`, exactly as a calendar title does.
+
+The briefing's last line, when weather and/or news are missing, is now one
+of four (all still non-blank, so an older app's own hard-coded fallback
+text is never wrongly shown when the PC has something to say):
+
+| Weather | News | Last line |
+|---|---|---|
+| off | off | `OUTSIDE_LINE` (unchanged wording, for an older PC too) |
+| on | off | `NEWS_LINE` - "News: not available. No news feeds are listed ..." |
+| off | on | `WEATHER_LINE` - "Weather: not available. It can come only from your own Home Assistant ..." |
+| on | on | `BOTH_INCLUDED_LINE` - "Weather and news are both included above." |
+
+Both apps' Settings, "What it includes" (`sourceLines`/its Kotlin
+equivalent) now read a fourth key, `"news"`, alongside `calendar`, `email`
+and `weather` - one line each, unchanged elsewhere.
+
+"Read me the news" (`jarvis_quick.py`, without the model) reads every
+listed feed and answers with the same headlines, marking the turn's `read`
+with `news_read` only when a headline was really said (nothing listed:
+`read` stays empty).
+
+### 46.5 Egress
+
+A new named way out of the PC: `docs/ARCHITECTURE.md` §4 has the row -
+`private_fetch_problem`'s real-DNS guard, shared with §30.3.1's page watch.
+
+---
+
+## 47. Music and video control on this PC (added 2026-09-27)
+
+The owner's decision (`CLAUDE.md`, feasibility I91): "Music/video control
+on the PC: no card, only from the owner's own words." Read literally, on
+purpose: unlike "Lights, plugs and fans without a card" (§33), CLAUDE.md
+gives this feature no on/off setting at all, so none is built - it is
+always available, from words alone, never from the AI model's own
+initiative and never from outside text (there is no model tool for it to
+misuse).
+
+`backend/jarvis_media.py`, shipped whole, `media.patch` adds two routes at
+start-up the same way `stop-all.patch` and `documents.patch` do. Windows'
+own media session (`GlobalSystemMediaTransportControlsSessionManager`,
+reached from Python through `winrt-Windows.Media.Control`, PyPI, MIT) is
+asked for whatever session Windows itself judges "current" right now - the
+same one the hardware media keys on a keyboard would reach.
+
+### 47.1 The fast path - both apps, the same chat pipeline
+
+`jarvis_quick.py`, without the model, from either app (a spoken command is
+already transcribed to text on this PC before it reaches here - CLAUDE.md:
+"A client must not do speech-to-text" - so the desktop's typed words and a
+phone's spoken words arrive the same way): "pause the music", "play the
+song", "resume the video", "next song", "skip this track", "skip it",
+"previous track", "what's playing", "now playing", "what song is this".
+Bare "pause"/"resume" alone are left to the focus session's own words while
+one is running (§26); a media command here always names the music, song,
+track, video, media or playback, so the two never collide.
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/media` | - | **200** `{"ok": bool, "said"}` - "what's playing" |
+| `POST /api/media/control` | `{"action": "play" \| "pause" \| "next" \| "previous"}` | **200** `{"ok": true, "said"}`; **503** `{"ok": false, "said"}` when Windows' media controls could not be reached, nothing is playing, or Windows refused; **400** an action off the four |
+
+**Never a card, whatever `jarvis-framework.toml` says**: `jarvis_media.py`
+does not import `jarvis_gate` at all (`test_media.py` checks the source),
+so there is no action name to give a tier to and nothing here can be made
+to ask.
+
+### 47.2 What it never does
+
+Seek, change the volume, change shuffle or repeat, open an app, or choose
+WHICH app's session to control - always "the current session". Song titles
+and artist names are read only for "what's playing", never learned as a
+fact, never saved: the answer marks the turn's `read` with `media_now_playing`
+only when a real title or artist was said (nothing playing, or the call
+failed: `read` stays empty) - the same reasoning a calendar title's outside
+text gets.
+
+### 47.3 Windows-only, and graceful without it
+
+`winrt-Windows.Media.Control` is Windows-only and every import of it is
+inside a function, never at module load, so the module imports cleanly
+without it (Linux, or a Windows PC that has not run `apply-patches.ps1`'s
+install step yet); calling `control()`/`now_playing()` then says plainly
+why it could not reach Windows' media controls, the same shape every other
+optional tool in this backend uses (MarkItDown, Windows' own OCR).
+
+### 47.4 One code path, not two
+
+The design research (`docs/CUTTING-EDGE-2026-09-26-capabilities.md`, idea
+7) flagged that the desktop's `windows` crate could reach the same Windows
+API directly, in Rust. It is not wired up: every command - typed on the
+desktop or spoken on the phone - already reaches the SAME backend route
+through the SAME chat pipeline (rule: "A client must not do speech-to-text"
+already means neither app can act on words without the backend seeing them
+first), so a second, Rust-native implementation would duplicate this
+module's logic for no capability either app gains. The `Media_Control`
+Cargo feature was checked (`jarvis-desktop/src-tauri/Cargo.toml`) and is
+not enabled, for the same reason: nothing in the Rust side needs it, and
+this is not a `docs/ARCHITECTURE.md` §8 "one-sided" decision at all - both
+apps reach the feature identically, through words, with no Rust or Kotlin
+code calling a route directly.

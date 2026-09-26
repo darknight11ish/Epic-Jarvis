@@ -749,6 +749,19 @@ def _match(text, now: float) -> Optional[Intent]:
     if _WEATHER.fullmatch(s):
         return Intent("weather_now")
 
+    # --- "read me the news" (jarvis_news.py, I49) -------------------------------
+    if _NEWS_ASK.fullmatch(s):
+        return Intent("news_read")
+    m = _NEWS_ADD.fullmatch(s)
+    if m:
+        url = m.group("url") or m.group("url2") or m.group("url3")
+        return Intent("news_add", {"url": _restore(text, url)})
+    m = _NEWS_REMOVE.fullmatch(s)
+    if m:
+        return Intent("news_remove", {"url": _restore(text, m.group("url"))})
+    if _NEWS_LIST.fullmatch(s):
+        return Intent("news_list")
+
     # --- the morning briefing (jarvis_briefing.py) ------------------------------
     got = _briefing(s, now)
     if got is not None:
@@ -766,6 +779,11 @@ def _match(text, now: float) -> Optional[Intent]:
     # --- "what can you reach?" (jarvis_reach.py) -----------------------------------
     if _REACH.fullmatch(s):
         return Intent("reach_list")
+
+    # --- music and video control on this PC (jarvis_media.py, I91) -------------------
+    got = _media(s)
+    if got is not None:
+        return got
 
     # --- "tell me when ..." (jarvis_tellme.py) ------------------------------------------
     got = _tellme(s, text, now)
@@ -1188,6 +1206,10 @@ _DEV = re.compile(r"(?:the\s+|my\s+|our\s+)?(?P<dev>[a-z0-9][a-z0-9 ._'-]{0,59}?
                   + "|".join(f"(?:{p})" for p, _ in _DEV_VERBS) + r")")
 _ENTITY_STATE = re.compile(r"(?P<dev>[a-z0-9_]+\.[a-z0-9_]+)\s+(?:is|becomes|reaches|goes\s+to"
                            r"|changes\s+to|turns|is\s+now)\s+(?P<st>[a-z0-9_]{1,30})")
+#: "Tell me when this page changes" (jarvis_tellme.py "page" source, I67):
+#: only a literal address the owner typed - "tell me when it changes" (no
+#: address) goes to the model, since Jarvis has no page in mind for "it".
+_PAGE_CHANGE = re.compile(r"(?P<url>https?://\S+?)\s+changes?")
 #: Not a device - and not a sender: "tell me when it's done" is the model's.
 _NOT_A_THING = frozenset(("it", "this", "that", "they", "you", "he", "she", "we", "something",
                           "timer", "alarm", "reminder", "everything", "anything", "one",
@@ -1296,6 +1318,9 @@ def _tellme(s: str, original, now: float) -> Optional[Intent]:
             if who in _ANYONE or not who:
                 return Intent("tellme_help", {"why": "who"})
             return Intent("tellme_email", dict(f, who=_restore(original, who)))
+    mm = _PAGE_CHANGE.fullmatch(what)
+    if mm:
+        return Intent("tellme_page", dict(f, url=_restore(original, mm.group("url"))))
     mm = _ENTITY_STATE.fullmatch(what)
     if mm:
         return Intent("tellme_home", dict(f, entity=mm.group("dev"), name="",
@@ -1354,6 +1379,8 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
     if n == "tellme_email":
         watch = {"source": "email", "sender": f["who"], "urgent": f["urgent"],
                  "once": f["once"]}
+    elif n == "tellme_page":
+        watch = {"source": "page", "url": f["url"], "urgent": f["urgent"], "once": f["once"]}
     else:
         entity, name = f.get("entity") or "", f.get("name") or ""
         if not entity:
@@ -1410,6 +1437,32 @@ _WEATHER = re.compile(
     + _WWHEN
     + r"|(?:give|tell)\s+me\s+the\s+" + _WFOR + _WWHEN
     + r"|(?:the\s+)?" + _WFOR + r"(?:\s+(?:today|now|please|tomorrow))?")
+
+#: "Read me the news" (jarvis_news.py, I49, 2026-09-27): answered from the
+#: owner's own listed feeds, without the model. Whole sentences only:
+#: "what's new with you" goes to the model.
+_NEWS_ASK = re.compile(
+    r"(?:read\s+me\s+|give\s+me\s+|tell\s+me\s+)?(?:the\s+|my\s+|today'?s\s+)?news"
+    r"(?:\s+headlines)?(?:\s+please)?"
+    r"|what'?s\s+(?:in\s+|going\s+on\s+in\s+)?the\s+news(?:\s+today)?"
+    r"|any\s+news(?:\s+today)?")
+
+#: "Add this feed: <url>" (jarvis_news.py, I49) - a literal address, exactly
+#: like "tell me when <url> changes": the owner names it, one card. Whole
+#: sentences only.
+_NEWS_ADD = re.compile(
+    r"add\s+(?:this\s+|a\s+|the\s+)?(?:news\s+)?feed[:\s]+(?P<url>https?://\S+)"
+    r"|(?:follow|watch|subscribe\s+to)\s+(?:this\s+|the\s+)?(?:news\s+)?feed[:\s]+"
+    r"(?P<url2>https?://\S+)"
+    r"|add\s+(?P<url3>https?://\S+)\s+as\s+a\s+news\s+feed")
+#: "Remove/stop that feed: <url>" - at once, no card, like "tell me when"'s remove.
+_NEWS_REMOVE = re.compile(
+    r"(?:remove|delete|stop|unfollow)\s+(?:this\s+|that\s+|the\s+)?(?:news\s+)?feed[:\s]+"
+    r"(?P<url>https?://\S+)")
+#: "What news feeds do I have?" / "list my news feeds".
+_NEWS_LIST = re.compile(
+    r"(?:what|which)\s+news\s+feeds\s+(?:do\s+i\s+have|are\s+there|are\s+listed)"
+    r"|(?:list|show)\s+(?:me\s+)?(?:my\s+)?news\s+feeds")
 
 #: "the briefing", "my morning briefing", "today's briefing", "briefing".
 _BRIEF = r"(?:(?:my|the|a|today'?s|this\s+morning'?s)\s+)?(?:morning\s+|daily\s+)?briefing"
@@ -1554,6 +1607,65 @@ def _run_reach(intent: Intent) -> Result:
         return Result(REACH_MISSING, intent.name)
 
 
+# --------------------------------------------------------------------------
+#   Music and video control on this PC (jarvis_media.py, feasibility I91,
+#   the owner's decision of 2026-09-27: "no card, only from the owner's own
+#   words") - play, pause, next, previous and "what's playing", never a
+#   model tool: the AI model cannot ask for this on its own initiative, and
+#   it never appears from outside text (a web page, an email). Whole
+#   sentences only, and each requires the media word ("pause", bare, is the
+#   focus session's while one is running, checked above this in _match).
+# --------------------------------------------------------------------------
+
+_MEDIA_OBJ = r"(?:this\s+|the\s+)?(?:music|song|track|video|media|playback)"
+_MEDIA_PAUSE = re.compile(r"pause\s+" + _MEDIA_OBJ)
+_MEDIA_PLAY = re.compile(r"(?:play|resume|unpause|continue)\s+" + _MEDIA_OBJ)
+_MEDIA_NEXT = re.compile(r"(?:skip|next)\s+(?:this\s+|the\s+)?(?:song|track|video)"
+                         r"|skip\s+(?:it|this|that)|play\s+the\s+next\s+(?:song|track)"
+                         r"|next\s+(?:song|track)\s+please")
+_MEDIA_PREV = re.compile(r"(?:previous|last|go\s+back\s+a)\s+(?:song|track|video)"
+                         r"|play\s+the\s+previous\s+(?:song|track)")
+_MEDIA_NOW = re.compile(r"(?:what'?s|what\s+is)\s+playing(?:\s+(?:right\s+)?now)?"
+                        r"|now\s+playing|what\s+(?:song|track)\s+is\s+(?:this|playing|on)")
+
+
+def _media(s: str) -> Optional[Intent]:
+    if _MEDIA_PAUSE.fullmatch(s):
+        return Intent("media_pause")
+    if _MEDIA_PLAY.fullmatch(s):
+        return Intent("media_play")
+    if _MEDIA_NEXT.fullmatch(s):
+        return Intent("media_next")
+    if _MEDIA_PREV.fullmatch(s):
+        return Intent("media_previous")
+    if _MEDIA_NOW.fullmatch(s):
+        return Intent("media_now")
+    return None
+
+
+MEDIA_MISSING = ("Your PC's Jarvis cannot control music or video yet - run apply-patches.ps1 "
+                 "on the PC.")
+
+
+def _run_media(intent: Intent) -> Result:
+    """Play/pause/next/previous act at once, no card (the owner's own
+    words are the only permission this needs); "what's playing" says the
+    title and artist, which are OUTSIDE TEXT - whatever app is playing put
+    them there, not the owner - so `read` marks them, exactly as a
+    briefing's calendar titles do."""
+    n = intent.name
+    try:
+        import jarvis_media as MEDIA
+    except Exception:
+        return Result(MEDIA_MISSING, n)
+    if n == "media_now":
+        out = MEDIA.now_playing()
+        return Result(str(out.get("said") or ""), n, read=list(out.get("read") or []))
+    out = MEDIA.control({"media_play": "play", "media_pause": "pause", "media_next": "next",
+                         "media_previous": "previous"}[n])
+    return Result(str(out.get("said") or ""), n)
+
+
 def _run_search(intent: Intent) -> Result:
     """Explained from jarvis_search's own words (the same both apps show),
     or the provider switched - immediately, as from either app's Settings.
@@ -1659,12 +1771,22 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_briefing(intent, sched, now)
     if n == "weather_now":
         return _run_weather(now)
+    if n == "news_read":
+        return _run_news()
+    if n == "news_add":
+        return _run_news_add(f["url"])
+    if n == "news_remove":
+        return _run_news_remove(f["url"])
+    if n == "news_list":
+        return _run_news_list()
     if n.startswith("search_"):
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
     if n == "sayable_help":
         return _run_sayable(intent)
+    if n.startswith("media_"):
+        return _run_media(intent)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
     if n.startswith("focus_"):
@@ -2082,6 +2204,70 @@ def _run_weather(now: float) -> Optional[Result]:
     except Exception:
         return None
     return Result(str(got.get("text") or ""), "weather_now", read=list(got.get("read") or []))
+
+
+def _run_news() -> Optional[Result]:
+    """"Read me the news" - the owner's own listed feeds
+    (jarvis_news.sentence), no model. Headlines are outside text, so `read`
+    marks the conversation as having read a news feed."""
+    try:
+        import jarvis_news as NEWS
+    except Exception:
+        return None
+    try:
+        got = NEWS.sentence()
+    except Exception:
+        return None
+    return Result(str(got.get("said") or ""), "news_read", read=list(got.get("read") or []))
+
+
+NEWS_MISSING = "Your PC's Jarvis cannot show news feeds yet - run apply-patches.ps1 on the PC."
+
+
+def _run_news_add(url: str) -> Optional[Result]:
+    """"Add this feed: <url>" - ONE approval card (jarvis_news.request_add),
+    the same shape as "tell me when" setting up a watch. Only the owner's
+    own words: a pasted or shared address still raises this same one card,
+    since news feeds are never learned from outside text either way."""
+    try:
+        import jarvis_news as NEWS
+    except Exception:
+        return Result(NEWS_MISSING, "news_add")
+    try:
+        code, out = NEWS.request_add({"url": url})
+    except Exception as exc:
+        return Result(f"Jarvis could not add that feed ({type(exc).__name__}).", "news_add")
+    if code == 200:
+        return Result(str(out.get("message") or "That feed is already listed."), "news_add")
+    if code in (400, 409, 503):
+        return Result(str(out.get("error") or "That address could not be added."), "news_add")
+    return Result("That needs your yes on the approval card, which shows the address in full. "
+                  "Then your morning briefing (and \"read me the news\") can show its "
+                  "headlines - never the article text.", "news_add")
+
+
+def _run_news_remove(url: str) -> Optional[Result]:
+    """"Remove that feed: <url>" - at once, no card."""
+    try:
+        import jarvis_news as NEWS
+    except Exception:
+        return Result(NEWS_MISSING, "news_remove")
+    try:
+        _code, out = NEWS.request_remove({"url": url})
+    except Exception as exc:
+        return Result(f"Jarvis could not remove that feed ({type(exc).__name__}).", "news_remove")
+    return Result(str(out.get("message") or ""), "news_remove")
+
+
+def _run_news_list() -> Optional[Result]:
+    try:
+        import jarvis_news as NEWS
+    except Exception:
+        return Result(NEWS_MISSING, "news_list")
+    listed = NEWS.feeds()
+    if not listed:
+        return Result(NEWS.EMPTY, "news_list")
+    return Result("\n".join(f"- {u}" for u in listed), "news_list")
 
 
 def _run_briefing(intent: Intent, sched, now: float) -> Result:

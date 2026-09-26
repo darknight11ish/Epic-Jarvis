@@ -74,6 +74,7 @@ THIRD_PARTY = {
     "soundfile": "soundfile",
     "cryptography": "cryptography",
     "ddgs": "ddgs",
+    "winrt": "winrt-Windows.Media.Control",
 }
 
 # Packages in requirements.txt that no shipped module imports BY NAME,

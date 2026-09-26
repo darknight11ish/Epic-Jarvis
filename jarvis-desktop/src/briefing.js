@@ -225,7 +225,7 @@ export function setupLine(job) {
 export function sourceLines(sources) {
   const s = sources && typeof sources === "object" ? sources : {};
   const out = [];
-  for (const key of ["calendar", "email", "weather"]) {
+  for (const key of ["calendar", "email", "weather", "news"]) {
     const said = s[key] && typeof s[key].said === "string" ? s[key].said : "";
     if (said) out.push(said);
   }

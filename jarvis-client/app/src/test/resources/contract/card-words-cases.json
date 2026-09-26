@@ -163,12 +163,20 @@
       "title": "Jarvis wants to change its own code"
     },
     {
+      "action": "news_read",
+      "title": "Jarvis wants to read a news feed you added"
+    },
+    {
       "action": "notes_search",
       "title": "Jarvis wants to search your notes"
     },
     {
       "action": "open_public_tunnel",
       "title": "Jarvis wants to open this PC to the internet"
+    },
+    {
+      "action": "page_read",
+      "title": "Jarvis wants to fetch a web page you're watching"
     },
     {
       "action": "post_to_external_service",

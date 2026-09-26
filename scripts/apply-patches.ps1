@@ -546,6 +546,25 @@ $PATCHES = @(
     # after both - last, like every new patch. Needs jarvis_backup.py copied
     # in; without it, or on any error, the routes say so.
     'backup.patch'
+    # Music and video control on this PC (the owner's decision, 2026-09-27,
+    # feasibility I91: "no card, only from the owner's own words"): GET
+    # /api/media ("what's playing") and POST /api/media/control - never a
+    # card, never jarvis_gate, for either route; the fast path itself is in
+    # the shipped jarvis_quick.py, not this patch. Its jarvis_hud.py context
+    # is backup.patch's own install block (merged in after it, 2026-09-27),
+    # so it goes after it - last, like every new patch. Needs
+    # jarvis_media.py copied in; without it, or on any error, the banner
+    # says so and the routes answer 503.
+    'media.patch'
+    # News headlines in the morning briefing (the owner's decision,
+    # 2026-09-27, feasibility I49: "one card per address the owner adds,
+    # read-only, never follows links elsewhere, never acts on what it
+    # reads"): GET /api/news, POST /api/news/add (ONE approval card, from
+    # either app) and /api/news/remove (at once). Its context is media's
+    # own banner block, so it goes after it - last, like every new patch.
+    # Needs jarvis_news.py copied in; without it, or on any error, the
+    # banner says so and the routes answer 503.
+    'news.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -663,6 +682,11 @@ $SHIPPED = @(
     'jarvis_sayable.py'          # sayable.patch: the fixed list of real sentences Jarvis answers without the model
     # --- Backups (2026-09-27, backup.patch) ---
     'jarvis_backup.py'           # one locked backup file with a recovery code shown once; restore is one card plus Windows Hello
+    # --- music and video control (2026-09-27, media.patch) ---
+    'jarvis_media.py'            # media.patch: play/pause/next/previous and "what's playing", no card, no model tool
+    # --- "tell me when this page changes" (a source of jarvis_tellme.py, no patch of its own) is IN jarvis_tellme.py above
+    # --- news headlines in the morning briefing (2026-09-27, news.patch) ---
+    'jarvis_news.py'             # news.patch: RSS/Atom feed addresses the owner adds, headlines only, one card per feed
 )
 
 # The settings file. Installed only where none exists; never overwritten.

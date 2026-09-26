@@ -349,6 +349,24 @@
        "says": "Never - your settings file switches it off",
        "tier": "never",
        "title": "Open this PC to the internet"
+      },
+      {
+       "action": "news_read",
+       "fixed": false,
+       "id": "news_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a news feed you added"
+      },
+      {
+       "action": "page_read",
+       "fixed": false,
+       "id": "page_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch a web page you're watching"
       }
      ],
      "title": "The internet"
@@ -1086,6 +1104,24 @@
        "says": "Never - your settings file switches it off",
        "tier": "never",
        "title": "Open this PC to the internet"
+      },
+      {
+       "action": "news_read",
+       "fixed": false,
+       "id": "news_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a news feed you added"
+      },
+      {
+       "action": "page_read",
+       "fixed": false,
+       "id": "page_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch a web page you're watching"
       }
      ],
      "title": "The internet"
@@ -1823,6 +1859,24 @@
        "says": "Never - your settings file switches it off",
        "tier": "never",
        "title": "Open this PC to the internet"
+      },
+      {
+       "action": "news_read",
+       "fixed": false,
+       "id": "news_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a news feed you added"
+      },
+      {
+       "action": "page_read",
+       "fixed": false,
+       "id": "page_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch a web page you're watching"
       }
      ],
      "title": "The internet"
@@ -2569,6 +2623,24 @@
        "says": "Never - your settings file switches it off",
        "tier": "never",
        "title": "Open this PC to the internet"
+      },
+      {
+       "action": "news_read",
+       "fixed": false,
+       "id": "news_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a news feed you added"
+      },
+      {
+       "action": "page_read",
+       "fixed": false,
+       "id": "page_read",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch a web page you're watching"
       }
      ],
      "title": "The internet"

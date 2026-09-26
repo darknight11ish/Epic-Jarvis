@@ -168,6 +168,12 @@ SHIPPED = (
     # Backups: one locked backup file, a recovery code shown once, restore
     # with a card plus Windows Hello (backup.patch)
     "jarvis_backup.py",
+    # music and video control on this PC: play/pause/next/previous and
+    # "what's playing", never a card, never a model tool (media.patch)
+    "jarvis_media.py",
+    # news headlines in the morning briefing: RSS/Atom feed addresses the
+    # owner adds, headlines only, one card per feed (news.patch)
+    "jarvis_news.py",
 )
 
 

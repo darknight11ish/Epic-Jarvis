@@ -92,6 +92,19 @@ email_read                = "auto"
 notes_search              = "auto"
 home_read                 = "auto"
 home_control              = "ask"
+# News headlines in the morning briefing (jarvis_news.py, the owner's
+# decision of 2026-09-27, feasibility I49): reading a feed the owner
+# already approved with its own card. Must be "auto" or "notify" for the
+# briefing to show the section at all - a stricter tier just leaves it out
+# and says why, the same as the reads above; it never blocks adding a feed
+# (that is its own card, action change_own_config, always "ask").
+news_read                 = "auto"
+# "Tell me when this page changes" (a source of jarvis_tellme.py, the
+# owner's decision of 2026-09-27, feasibility I67): fetching the one
+# address the owner already approved with its own card (schedule_repeat).
+# Must be "auto", exactly like email_read/home_read above, or a look every
+# 30 minutes would mean a card every 30 minutes.
+page_read                 = "auto"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval
