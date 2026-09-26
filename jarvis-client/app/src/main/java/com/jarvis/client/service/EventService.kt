@@ -355,6 +355,9 @@ class EventService : Service() {
 
         val notification: Notification =
             NotificationCompat.Builder(this, CHANNEL_ID)
+                // Never copied to a paired watch or other device (Android bridges
+                // notifications by default): what Jarvis says stays on this phone.
+                .setLocalOnly(true)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(getString(R.string.app_name))
                 .setContentText(text)
