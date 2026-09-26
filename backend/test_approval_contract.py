@@ -86,14 +86,42 @@ def _added_block(patch: str, first_line_prefix: str) -> str:
     return "\n".join(out)
 
 
+#: One _RISK entry on a patch line: added (+), removed (-) or context ( ). The "why" may hold escaped quotes
+#: (\"tell me when\"), so it is matched as a Python string literal, not [^"]*.
+_RISK_LINE = re.compile(r'^([ +-])\s*"(\w+)":\s*\("(\w+)",\s*"(\w+)",\s*("(?:[^"\\]|\\.)*")\),?\s*$')
+
+
 def _risk_table() -> dict:
-    """_RISK entries as the patches write them: {action: (reversible, reach, why)}."""
-    table = {}
-    for patch in HERE.glob("*.patch"):
-        for m in re.finditer(r'"(\w+)":\s*\("(\w+)",\s*"(\w+)",\s*"([^"]*)"\)',
-                             patch.read_text(encoding="utf-8")):
-            table[m.group(1)] = (m.group(2), m.group(3), m.group(4))
+    """_RISK entries as the patch stack leaves them: {action: (reversible,
+    reach, why)}. Patches are read in apply-patches.ps1's order: a context
+    line is the owner's own file, an added line sets the entry and a removed
+    one takes it away, so a later patch's wording replaces an earlier one's -
+    never the other way round, and never a line a patch removed.
+    An added _RISK-looking line this cannot read fails loudly (UNREAD)
+    instead of quietly leaving the older wording in place."""
+    import ast
+    order = re.findall(r"'([\w-]+\.patch)'", APPLY.read_text(encoding="utf-8"))
+    table, unread = {}, []
+    for name in order:
+        patch = HERE / name
+        if not patch.exists():
+            continue
+        for line in patch.read_text(encoding="utf-8").splitlines():
+            m = _RISK_LINE.match(line)
+            if m:
+                entry = (m.group(3), m.group(4), ast.literal_eval(m.group(5)))
+                if m.group(1) == "-":
+                    if table.get(m.group(2)) == entry:
+                        del table[m.group(2)]   # the + line after it, if any, puts it back
+                else:
+                    table[m.group(2)] = entry   # context lines are the owner's own file
+            elif re.match(r'^[ +-]\s*"\w+":\s*\("(yes|no|partly)",\s*"\w+",', line):
+                unread.append(f"{name}: {line[:80]}")
+    UNREAD.extend(unread)
     return table
+
+
+UNREAD: list = []
 
 
 RISK = _risk_table()
@@ -186,6 +214,14 @@ def build_fixture() -> dict:
 
 
 # ------------------------------------------------------------------ tests --
+
+def t_the_risk_table_reads_the_newest_wording_of_every_entry():
+    check("every added _RISK line in the stack is read (none left behind silently)",
+          UNREAD == [], UNREAD)
+    why = RISK.get("schedule_repeat", ("", "", ""))[2]
+    check("schedule_repeat has asks-first.patch's wording, quotes and all - not an older patch's",
+          '"tell me when"' in why and "morning briefing" in why, why)
+
 
 def t_the_expiry_patch_applies_on_top_of_approval_notice():
     exp = EXPIRY_PATCH.read_text(encoding="utf-8").splitlines()
@@ -347,7 +383,8 @@ if __name__ == "__main__":
         FIXTURE.parent.mkdir(parents=True, exist_ok=True)
         FIXTURE.write_text(json.dumps(build_fixture(), indent=2) + "\n", encoding="utf-8")
         print(f"wrote {FIXTURE}")
-    for fn in (t_the_expiry_patch_applies_on_top_of_approval_notice,
+    for fn in (t_the_risk_table_reads_the_newest_wording_of_every_entry,
+               t_the_expiry_patch_applies_on_top_of_approval_notice,
                t_expires_in_counts_down_from_created_and_never_guesses,
                t_the_fixture_is_what_the_producer_makes_today,
                t_notice_is_built_from_the_action_and_never_the_payload,
