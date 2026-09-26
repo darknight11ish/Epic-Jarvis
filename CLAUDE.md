@@ -329,6 +329,14 @@ Decided 2026-09-26, after the memory research
 - **Searching the owner's own past chat words waits** until 1-4 are built
   and measured; it changes a written rule (ARCHITECTURE section 5).
 
+Decided 2026-09-26, after the approvals build:
+- **The screen is called "Brain" in both apps** (the phone's "Mind" is
+  renamed to match the PC).
+- **Everyday facts about people are treated as normal everywhere**, not
+  only when saving: they may be read aloud and do not make a web search ask
+  first. Their health, money, address, contact details, debts and secrets
+  stay sensitive everywhere.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
