@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -38,38 +39,44 @@ import com.jarvis.client.R
  * more, later, on the PC, and needs no card. The locked screen's version
  * ([locked]) has no action at all.
  *
- * Ids from 0x3100 to 0x31FF, round and round: below [ApprovalNotifier]'s
- * range, whose restore() cancels anything of ours it finds at or above
- * 0x4B00, and below the two services' own.
+ * ONE notification id, 0x3100, told apart by a TAG - the job's key (its id,
+ * or `id#match@...` for a "tell me when" match). Android keys a
+ * notification by (tag, id), so each job has its own, the same after the
+ * app process restarts: a new alarm never replaces one still showing, and a
+ * Snooze or Stop pressed on a notification from before a restart still
+ * finds its own (bug audit 2026-09-26, #3 - the numbers used to be handed
+ * out in memory and started again from the first after a restart). Below
+ * [ApprovalNotifier]'s range, whose restore() cancels anything of ours it
+ * finds at or above 0x4B00, and below the two services' own. Each
+ * notification's buttons carry the key as their intent's data, so two
+ * notifications' PendingIntents are never taken for the same one.
  */
 object ScheduleNotifier {
     private const val TAG = "ScheduleNotifier"
-    private const val FIRST_ID = 0x3100
-    private const val SLOTS = 0x100
 
-    private val assigned = LinkedHashMap<String, Int>()
-    private var next = 0
-
-    @Synchronized
-    private fun idFor(jobId: String): Int {
-        assigned[jobId]?.let { return it }
-        val id = FIRST_ID + (next++ % SLOTS)
-        assigned[jobId] = id
-        if (assigned.size > SLOTS) assigned.remove(assigned.keys.first())
-        return id
-    }
+    /** The one id every schedule notification has; its tag tells them apart. */
+    const val NOTIFICATION_ID = 0x3100
 
     /** The kinds that carry a Snooze (jarvis_schedule.SNOOZABLE). */
-    private val SNOOZABLE = setOf("timer", "alarm", "reminder")
+    private val SNOOZABLE = com.jarvis.client.net.Schedule.SNOOZABLE
 
     /** The job id a Snooze action carries. */
     const val EXTRA_JOB_ID = "com.jarvis.client.extra.JOB_ID"
 
-    /** Takes one job's notification away (after a Snooze went through). */
+    /** The notification's tag a Stop carries. */
+    const val EXTRA_TAG = "com.jarvis.client.extra.NOTIFICATION_TAG"
+
+    /**
+     * Takes one job's "went off" notification away: after a Snooze went
+     * through, and when the PC says the job changed - snoozed, deleted or
+     * done somewhere else (bug audit #1). A ringing one stops with it.
+     */
     fun cancel(context: Context, jobId: String) {
-        val id = synchronized(this) { assigned[jobId] } ?: return
-        runCatching { NotificationManagerCompat.from(context).cancel(id) }
+        runCatching { NotificationManagerCompat.from(context).cancel(jobId, NOTIFICATION_ID) }
     }
+
+    /** Distinct per key, so no two notifications share a PendingIntent. */
+    private fun keyData(key: String): Uri = Uri.fromParts("jarvis-schedule", key, null)
 
     private fun allowed(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
@@ -101,14 +108,19 @@ object ScheduleNotifier {
         ring: Boolean = false,
         /** Several notices for one job ("every time"): one each, not one replacing the last. */
         key: String = jobId,
+        /**
+         * Heard more than ten minutes after it went off (the owner's decision
+         * of 2026-09-26): no sound, no ringing and no Snooze - a notice of
+         * when it was missed ([com.jarvis.client.net.Schedule.missedWords]).
+         */
+        quiet: Boolean = false,
     ) {
         if (!allowed(context)) {
             Log.w(TAG, "POST_NOTIFICATIONS is not granted, so a $kind that went off is not shown")
             return
         }
-        val notificationId = idFor(key)
-        if (ring) {
-            postRinging(context, notificationId, jobId, kind, title, text, lockScreen, openBriefing)
+        if (ring && !quiet) {
+            postRinging(context, key, jobId, kind, title, text, lockScreen, openBriefing)
             return
         }
         val n = NotificationCompat.Builder(context, ApprovalNotifier.CHANNEL_ID)
@@ -123,18 +135,19 @@ object ScheduleNotifier {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(locked(context, lockScreen))
             .setAutoCancel(true)
-            .setContentIntent(open(context, notificationId, openBriefing))
+            .setSilent(quiet)
+            .setContentIntent(open(context, key, openBriefing))
             .apply {
-                if (kind in SNOOZABLE && !openBriefing) {
+                if (kind in SNOOZABLE && !openBriefing && !quiet) {
                     addAction(
                         R.drawable.ic_notification,
                         com.jarvis.client.net.Schedule.SNOOZE,
-                        snoozeIntent(context, jobId, notificationId),
+                        snoozeIntent(context, jobId, key),
                     )
                 }
             }
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(notificationId, n) }
+        runCatching { NotificationManagerCompat.from(context).notify(key, NOTIFICATION_ID, n) }
             .onFailure { Log.w(TAG, "could not post a $kind that went off", it) }
     }
 
@@ -153,7 +166,7 @@ object ScheduleNotifier {
      */
     private fun postRinging(
         context: Context,
-        notificationId: Int,
+        key: String,
         jobId: String,
         kind: String,
         title: String,
@@ -172,43 +185,43 @@ object ScheduleNotifier {
             .setPublicVersion(locked(context, lockScreen))
             .setOngoing(true)
             .setAutoCancel(true)
-            .setContentIntent(open(context, notificationId, openBriefing))
-            .addAction(0, STOP, stopIntent(context, notificationId))
+            .setContentIntent(open(context, key, openBriefing))
+            .addAction(0, STOP, stopIntent(context, key))
             .apply {
                 if (kind in SNOOZABLE && !openBriefing) {
                     addAction(
                         R.drawable.ic_notification,
                         com.jarvis.client.net.Schedule.SNOOZE,
-                        snoozeIntent(context, jobId, notificationId),
+                        snoozeIntent(context, jobId, key),
                     )
                 }
             }
             .build()
         n.flags = n.flags or Notification.FLAG_INSISTENT
-        runCatching { NotificationManagerCompat.from(context).notify(notificationId, n) }
+        runCatching { NotificationManagerCompat.from(context).notify(key, NOTIFICATION_ID, n) }
             .onFailure { Log.w(TAG, "could not post a ringing $kind", it) }
     }
 
     /** Stop: to [EventService], which cancels this one notification - nothing else. */
-    private fun stopIntent(context: Context, notificationId: Int): PendingIntent =
+    private fun stopIntent(context: Context, key: String): PendingIntent =
         PendingIntent.getService(
             context,
-            notificationId,
+            0,
             Intent(context, EventService::class.java)
                 .setAction(EventService.ACTION_STOP_RINGING)
-                .putExtra(EXTRA_NOTIFICATION_ID, notificationId),
+                .setData(keyData(key))
+                .putExtra(EXTRA_TAG, key),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-    /** Stops one ringing notification (the Stop button). Only ids this object hands out. */
-    fun stopRinging(context: Context, notificationId: Int) {
-        if (notificationId !in FIRST_ID until FIRST_ID + SLOTS) return
-        runCatching { NotificationManagerCompat.from(context).cancel(notificationId) }
+    /** Stops one ringing notification (the Stop button): the one with this tag, nothing else. */
+    fun stopRinging(context: Context, tag: String?) {
+        if (tag.isNullOrEmpty()) return
+        runCatching { NotificationManagerCompat.from(context).cancel(tag, NOTIFICATION_ID) }
     }
 
     /** The alarm channel (JarvisApp creates it): alarms and urgent "tell me when"s. */
     const val ALARM_CHANNEL_ID = "jarvis_alarm"
-    const val EXTRA_NOTIFICATION_ID = "com.jarvis.client.NOTIFICATION_ID"
     const val STOP = "Stop"
 
     private fun locked(context: Context, lockScreen: String): Notification =
@@ -219,25 +232,26 @@ object ScheduleNotifier {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
 
-    private fun snoozeIntent(context: Context, jobId: String, requestCode: Int): PendingIntent {
+    private fun snoozeIntent(context: Context, jobId: String, key: String): PendingIntent {
         val intent = Intent(context, EventService::class.java)
             .setAction(EventService.ACTION_SNOOZE)
+            .setData(keyData(key))
             .putExtra(EXTRA_JOB_ID, jobId)
         return PendingIntent.getService(
             context,
-            requestCode,
+            0,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
-    private fun open(context: Context, requestCode: Int, openBriefing: Boolean): PendingIntent {
+    private fun open(context: Context, key: String, openBriefing: Boolean): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         if (openBriefing) intent.action = MainActivity.ACTION_OPEN_BRIEFING
         return PendingIntent.getActivity(
             context,
-            requestCode,
+            key.hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

@@ -80,17 +80,26 @@ class EventService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            linkWanted = false
             JarvisRuntime.stopStream()
             stopSelf()
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_STOP_RINGING) {
             // Stop on a ringing alarm or urgent "tell me when": silence and
-            // remove that one notification. Nothing is sent, nothing decided.
-            ScheduleNotifier.stopRinging(this, intent.getIntExtra(ScheduleNotifier.EXTRA_NOTIFICATION_ID, -1))
-            JarvisRuntime.startStream()
+            // remove that one notification. Nothing is sent, nothing decided -
+            // and the link is NOT started: Stop does not need it, and the
+            // owner may have switched it off (bug audit 2026-09-26, #4). A
+            // service woken only for this goes away again.
+            ScheduleNotifier.stopRinging(this, intent.getStringExtra(ScheduleNotifier.EXTRA_TAG))
+            if (!linkWanted) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
             return START_STICKY
         }
+        // Every other start runs the link.
+        linkWanted = true
         if (intent?.action == ACTION_DENY) {
             // The stream first, same as every other start. This branch used to
             // skip it, so a Deny tapped while the service was cold - after a
@@ -431,6 +440,14 @@ class EventService : Service() {
         @JvmStatic
         @Volatile
         var lastStartFailure: String? = null
+
+        /**
+         * Whether the link should be running in this process: set by every
+         * start but a ringing alarm's Stop, cleared when the owner switches
+         * the link off. A Stop tapped after that must not switch it back on.
+         */
+        @Volatile
+        private var linkWanted = false
 
         fun start(context: Context) {
             runCatching {

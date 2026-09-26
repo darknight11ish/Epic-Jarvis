@@ -1109,7 +1109,7 @@ object JarvisRuntime {
             // changed (`{"id", "kind", "state"}` only - a doorbell, never the
             // words). The list on Mind reads itself again; a job that went
             // off is read by id and shown as a notification.
-            com.jarvis.client.net.Schedule.EVENT -> onScheduleEvent(event.data)
+            com.jarvis.client.net.Schedule.EVENT -> onScheduleEvent(event.data, event.id)
             // A focus session started, changed (locked on, a drift began or
             // ended, paused...) or ended (`{"state"}` only, or a callout's
             // number - a doorbell, never what was in front). Mind's "Focus
@@ -3137,8 +3137,16 @@ object JarvisRuntime {
         val body = com.jarvis.client.net.Schedule.actBody(id, action)
             ?: return false to "That is not something one job can do."
         return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ACT_PATH, body)) {
-            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also { (changed, _) ->
                 _scheduleTick.update { n -> n + 1 }
+                // Snoozed, deleted or done here: its notification - ringing
+                // or not - goes at once (bug audit 2026-09-26, #1). The PC's
+                // `changed` event does the same, for a change made anywhere.
+                if (changed && action in setOf("snooze", "delete", "done")) {
+                    appContext?.let { ctx ->
+                        runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(ctx, id) }
+                    }
+                }
             }
             is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
         }
@@ -3197,32 +3205,49 @@ object JarvisRuntime {
         }
     }
 
-    private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?) {
+    private fun onScheduleEvent(data: kotlinx.serialization.json.JsonElement?, eventId: String? = null) {
         _scheduleTick.update { it + 1 }
         val obj = data as? JsonObject
         if (com.jarvis.client.net.Briefing.isAbout(obj)) {
             _briefingTick.update { it + 1 }
             // A briefing is announced when it is READY, never when its time
             // comes: it takes a moment to put together.
-            com.jarvis.client.net.Briefing.readyFrom(obj)?.let { onBriefingReady(it) }
+            com.jarvis.client.net.Briefing.readyFrom(obj)?.let { onBriefingReady(it, eventId) }
+            return
+        }
+        // A job changed on the PC - snoozed, deleted or done there, by voice
+        // or in Coming up: a notification still showing for it, ringing or
+        // not, goes (bug audit 2026-09-26, #1). Never a "tell me when"
+        // match's: its job ends the moment it matched to tell only once.
+        com.jarvis.client.net.Schedule.changedFrom(obj)?.let { (id, kind) ->
+            if (com.jarvis.client.net.Schedule.cancelsOnChange(kind)) {
+                appContext?.let { ctx ->
+                    runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(ctx, id) }
+                }
+            }
             return
         }
         // A "tell me when" matched: it only tells - the alert is read by id,
         // and an urgent one rings until seen.
         com.jarvis.client.net.Schedule.matchedFrom(obj)?.let { (id, urgent) ->
-            onTellMeMatched(id, urgent)
+            onTellMeMatched(id, urgent, eventId)
             return
         }
         val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(obj) ?: return
         val context = appContext ?: return
+        // Written at once, not within two seconds: if the process is killed
+        // now, a restart must not replay this event and ring it again.
+        flushResumePoint()
+        val arrived = System.currentTimeMillis()
         scope.launch {
             val job = when (val r = api.scheduleJob(id)) {
                 is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
                 is ApiResult.Failed -> null
             }
             // Once per job going off: a replayed event after a reconnect
-            // must not ring twice.
-            val key = id + "@" + (job?.firedAt?.toLong() ?: 0L)
+            // must not ring twice. A job that could not be read is told apart
+            // by its event, not taken for every other unreadable firing.
+            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.firedAt, eventId, arrived)
             val fresh = synchronized(scheduleShown) {
                 if (scheduleShown.size > 500) scheduleShown.clear()
                 scheduleShown.add(key)
@@ -3235,10 +3260,17 @@ object JarvisRuntime {
             val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
             val lockScreen = job?.lockScreen?.takeIf { it.isNotEmpty() }
                 ?: com.jarvis.client.net.Schedule.lockScreen(kind)
-            // An alarm keeps ringing until seen (2026-09-25).
+            // Heard more than ten minutes after it went off (the phone was
+            // out of reach, or restarted): a silent "Missed at 07:00." notice,
+            // never an alarm ringing as if it were now (the owner, 2026-09-26).
+            val late = com.jarvis.client.net.Schedule.heardLate(job?.firedAt, arrived / 1000.0)
             com.jarvis.client.service.ScheduleNotifier.post(
-                context, id, kind, title, text, lockScreen,
+                context, id, kind, title,
+                if (late) com.jarvis.client.net.Schedule.missedWords(job?.wentOffAt.orEmpty(), text) else text,
+                lockScreen,
+                // An alarm keeps ringing until seen (2026-09-25).
                 ring = com.jarvis.client.net.Schedule.rings(kind, urgent = false),
+                quiet = late,
             )
         }
     }
@@ -3251,15 +3283,17 @@ object JarvisRuntime {
      * match, even when a reconnect replays the event. It only tells: nothing
      * here acts.
      */
-    private fun onTellMeMatched(id: String, urgent: Boolean) {
+    private fun onTellMeMatched(id: String, urgent: Boolean, eventId: String? = null) {
         val context = appContext ?: return
         val kind = com.jarvis.client.net.Schedule.TELLME
+        flushResumePoint()
+        val arrived = System.currentTimeMillis()
         scope.launch {
             val job = when (val r = api.scheduleJob(id)) {
                 is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
                 is ApiResult.Failed -> null
             }
-            val key = id + "#match@" + (job?.alertAt?.toLong() ?: 0L)
+            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.alertAt, eventId, arrived, "#match@")
             val fresh = synchronized(scheduleShown) {
                 if (scheduleShown.size > 500) scheduleShown.clear()
                 scheduleShown.add(key)
@@ -3407,15 +3441,17 @@ object JarvisRuntime {
     suspend fun stopBriefing(id: String): Pair<Boolean, String> =
         scheduleAct(id, "delete").also { _briefingTick.update { n -> n + 1 } }
 
-    private fun onBriefingReady(id: String) {
+    private fun onBriefingReady(id: String, eventId: String? = null) {
         val context = appContext ?: return
+        val arrived = System.currentTimeMillis()
         scope.launch {
             val job = when (val r = api.scheduleJob(id)) {
                 is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
                 is ApiResult.Failed -> null
             }
-            // Once per run: a replayed event after a reconnect must not ring twice.
-            val key = id + "@" + (job?.firedAt?.toLong() ?: 0L)
+            // Once per run: a replayed event after a reconnect must not ring
+            // twice - and an unreadable job is told apart by its event.
+            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.firedAt, eventId, arrived)
             val fresh = synchronized(briefingShown) {
                 if (briefingShown.size > 200) briefingShown.clear()
                 briefingShown.add(key)

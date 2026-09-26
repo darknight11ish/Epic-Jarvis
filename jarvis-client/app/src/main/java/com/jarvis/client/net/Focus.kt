@@ -49,6 +49,9 @@ object Focus {
 
     const val MINUTES_LABEL = "Minutes"
     const val ON_LABEL = "On what (optional)"
+
+    /** The "On:" line while "Hide memory lists and chat history" hides what it is on. */
+    const val INTENT_HIDDEN = "On: hidden until you confirm it is you."
     const val START = "Start"
     const val PAUSE = "Pause"
     const val RESUME = "Resume"

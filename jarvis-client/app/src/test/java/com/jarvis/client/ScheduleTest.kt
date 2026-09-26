@@ -301,4 +301,54 @@ class ScheduleTest {
         assertFalse(Schedule.rings("timer", urgent = true))
         assertFalse(Schedule.rings("reminder", urgent = false))
     }
+
+    @Test
+    fun aJobChangedOnThePcTakesItsRingingNotificationAway() {
+        // The PC's own shape (jarvis_schedule._changed): snoozed, deleted or
+        // done there, by voice or in Coming up (bug audit 2026-09-26, #1).
+        assertEquals("s0000000001" to "alarm",
+            Schedule.changedFrom(obj("""{"id":"s0000000001","kind":"alarm","state":"changed"}""")))
+        assertNull(Schedule.changedFrom(obj("""{"id":"s0000000001","kind":"alarm","state":"fired"}""")))
+        assertNull(Schedule.changedFrom(obj("""{"id":"all","kind":"alarm","state":"changed"}""")))
+        assertTrue(Schedule.cancelsOnChange("alarm"))
+        assertTrue(Schedule.cancelsOnChange("timer"))
+        assertTrue(Schedule.cancelsOnChange("reminder"))
+        // A "tell me when" ends (a changed event) the moment it matched to
+        // tell once: its notification must stay until it is seen.
+        assertFalse(Schedule.cancelsOnChange("tellme"))
+        assertTrue(Schedule.isFiredTag("s0000000001", "s0000000001"))
+        assertFalse(Schedule.isFiredTag("s0000000001#match@170", "s0000000001"))
+    }
+
+    @Test
+    fun aJobHeardMoreThanTenMinutesLateIsAQuietMissedNotice() {
+        val went = 1_700_000_000.0
+        assertFalse(Schedule.heardLate(went, went + 600))
+        assertTrue(Schedule.heardLate(went, went + 601))
+        assertFalse("unread: shown as before", Schedule.heardLate(null, went))
+        assertFalse(Schedule.heardLate(went, went - 5))
+        assertEquals("Missed at 07:00. Wake up", Schedule.missedWords("07:00", "Wake up"))
+        assertEquals("Missed earlier. Jarvis: alarm.", Schedule.missedWords("", "Jarvis: alarm."))
+        // The desktop's words, word for word.
+        val rs = listOf(java.io.File("../../jarvis-desktop/src-tauri/src/brain/schedule.rs"),
+            java.io.File("../jarvis-desktop/src-tauri/src/brain/schedule.rs"))
+            .firstOrNull { it.isFile }?.readText()
+        if (rs != null) {
+            assertTrue(rs.contains("pub(crate) const LATE_RING_LIMIT_S: i64 = 10 * 60;"))
+            assertTrue(rs.contains("\"Missed earlier.\""))
+            assertTrue(rs.contains("format!(\"Missed at {at}.\")"))
+        }
+    }
+
+    @Test
+    fun anUnreadableJobIsToldApartByItsEvent() {
+        // Bug audit #6: two failed reads used to both be "id@0", and the
+        // second firing of a repeating job was dropped.
+        assertEquals("s0000000001@1700000000", Schedule.shownKey("s0000000001", 1_700_000_000.5, "41", 9L))
+        val monday = Schedule.shownKey("s0000000001", null, "41", 9L)
+        val tuesday = Schedule.shownKey("s0000000001", null, "97", 10L)
+        assertTrue(monday != tuesday)
+        assertEquals("s0000000001@t10", Schedule.shownKey("s0000000001", null, null, 10L))
+        assertEquals("s0000000001#match@ev3", Schedule.shownKey("s0000000001", 0.0, "3", 1L, "#match@"))
+    }
 }

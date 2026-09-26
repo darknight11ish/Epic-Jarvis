@@ -200,7 +200,9 @@ fun BrainScreen(
     /**
      * "Hide memory lists and chat history" (Security) is on and not yet shown: the memory
      * review list, "Saved automatically", "What did I believe on this
-     * date?" and the wiki's list are replaced by [HiddenSection] until [onShowPrivate] is confirmed.
+     * date?", the wiki's list and the deep questions are replaced by [HiddenSection] until
+     * [onShowPrivate] is confirmed; Coming up, the briefing and a focus session's "On:" line
+     * hide their words in place.
      */
     privateHidden: Boolean = false,
     /** Asks for the fingerprint or PIN, then shows them. */
@@ -396,7 +398,7 @@ fun BrainScreen(
             // (FocusPlate.kt) - the desktop's Brain -> Work -> Focus session.
             // Watching what is in front happens on the PC only.
             item(key = "focus") {
-                FocusSection(canAct = canAct)
+                FocusSection(canAct = canAct, privateHidden = privateHidden)
             }
 
             // "Morning briefing" (the owner's decisions of 2026-09-25): the
@@ -503,7 +505,16 @@ fun BrainScreen(
             item(key = "big-model") {
                 BigModelSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
             }
-            item(key = "deep-questions") { DeepQuestionsSection(canAct = canAct) }
+            // The questions and answers are the owner's own words: hidden with
+            // the memory lists and chat history, like the wiki (the desktop's
+            // get_deep takes them out in Rust the same way).
+            if (privateHidden) {
+                item(key = "deep-questions-hidden") {
+                    HiddenSection("Deep questions", busy = showPrivateBusy, onShow = onShowPrivate)
+                }
+            } else {
+                item(key = "deep-questions") { DeepQuestionsSection(canAct = canAct) }
+            }
 
             item(key = "attention") {
                 Section("Attention budget") { AttentionPlate(attention) }
