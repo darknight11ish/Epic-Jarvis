@@ -680,7 +680,7 @@ def _turn(calls, *, gate=APPROVE, provenance="typed", tainted=False, app_system=
     if app_system:
         req.insert(0, {"role": "system", "content": "clipboard: something"})
     saved = (AG._conversation_tainted, AG._tier_of)
-    AG._conversation_tainted = lambda cid: tainted
+    AG._conversation_tainted = lambda cid, messages=None: tainted
     AG._tier_of = lambda a: tier if a == SEND.ACTION else saved[1](a)
     try:
         summary = AG.run_local_turn(

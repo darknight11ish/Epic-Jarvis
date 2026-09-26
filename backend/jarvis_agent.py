@@ -2489,16 +2489,33 @@ def outside_flags(text: str) -> dict:
     return out
 
 
-def _conversation_tainted(conversation_id) -> bool:
+def _conversation_tainted(conversation_id, messages=None) -> bool:
     """jarvis_chat_log's answer: has an earlier turn of this conversation
-    read outside text? False when that module is not here. Never raises."""
-    if not isinstance(conversation_id, str) or not conversation_id:
-        return False
+    read outside text? `messages`: the request's, as they arrived - for a
+    conversation the backend has not met since it started, which is tainted
+    unless the history database vouches for every earlier turn (security
+    review G1, 2026-09-26: this used to forget across a restart).
+
+    Never raises, and fails CLOSED: when jarvis_chat_log is missing or
+    breaks, a request that carries earlier turns counts as tainted - the
+    note-write, web-search and lights-without-a-card checks ask rather than
+    trust what this PC cannot vouch for. Only a request with no earlier turn
+    at all (a new conversation) is clean without it."""
     try:
         import jarvis_chat_log
-        return bool(jarvis_chat_log.conversation_tainted(conversation_id))
+        return bool(jarvis_chat_log.conversation_tainted(conversation_id, messages))
     except Exception:
-        return False
+        return _has_earlier_turn(messages)
+
+
+def _has_earlier_turn(messages) -> bool:
+    """True unless `messages` is a list whose only user or assistant message
+    is the newest one. Not a list: True (it cannot be told)."""
+    if not isinstance(messages, list):
+        return True
+    turns = [m for m in messages if isinstance(m, dict)
+             and m.get("role") in ("user", "assistant", "tool")]
+    return len(turns) > 1 or any(m.get("role") != "user" for m in turns)
 
 
 def _text_of(content) -> str:
@@ -2586,7 +2603,7 @@ class _TurnWatch:
             _text_of(m.get("content")) for m in users
             if _provenance(m) in OWN_WORDS).lower()
         self.tainted = (bool(tainted) if tainted is not None
-                        else _conversation_tainted(req.get("conversation_id")))
+                        else _conversation_tainted(req.get("conversation_id"), raw))
         # Saved memories recalled into this turn by the chat route - read off
         # `messages`, which carry the server's own system turns (the FACTS
         # block), not off the request as the app sent it.

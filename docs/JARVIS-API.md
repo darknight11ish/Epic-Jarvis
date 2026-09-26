@@ -795,7 +795,9 @@ the PC, no app change needed:
 - **A card says what shaped it.** When a tool is proposed after a reading
   tool ran in this answer, or in a conversation that read outside text
   earlier (`jarvis_chat_log.conversation_tainted`, from the request's
-  `conversation_id`), or when the newest message's `provenance` is
+  `conversation_id`; after a backend restart, or for a conversation pushed
+  out of the newest 200, it is tainted unless the history database vouches
+  for every earlier turn - it fails closed, security review G1), or when the newest message's `provenance` is
   `pasted`, `shared` or `clipboard`, the card's `detail.text` ends with:
 
   ```
@@ -2923,7 +2925,12 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    request whether or not chat history is on: per live user message, a hash
    of its words (never the words), its provenance, the voice check's facts,
    the conversation id, the app, and whether a tool ran in that turn. The
-   newest 200 turns; a backend restart forgets them.
+   newest 200 turns; a backend restart forgets them. The conversation's
+   TAINT is not forgotten (security review G1, 2026-09-26): a conversation
+   the backend meets for the first time since it started, with earlier
+   turns in the request, is tainted unless the history database holds every
+   one of those turns and none read outside text - so after a restart its
+   next turns are "the conversation read outside text", a card.
    - a turn it did not see arrive (re-sent or made-up history, or older than
      the registry): "from a message this PC did not see arrive ..."
    - no valid `conversation_id` on the request: "the app did not say which

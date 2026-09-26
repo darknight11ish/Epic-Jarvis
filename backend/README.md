@@ -7264,6 +7264,18 @@ the old rule did not catch them.
   control token was not checked; they are removed anyway.
 - The one system line and the labels are a weak defence on their own
   (AgentDojo measured little gain from labels alone). They cost nothing.
+- **A tainted conversation stays tainted after a restart** (fixed
+  2026-09-26, security review G1). Until then "this conversation read
+  outside text" lived only in the backend's memory: after a restart, or once
+  200 newer conversations had pushed it out, the same chat counted as clean,
+  and note writes, web searches with saved facts and "lights without a card"
+  stopped asking. Now a conversation the backend has not met since it
+  started counts as tainted whenever the request carries earlier turns,
+  unless the chat history database holds every one of them and none read
+  outside text. With history off, after a restart every continuing chat
+  counts as tainted until a new one is started. Any error means tainted.
+  `test_chat_log.py`'s `t_taint_*` tests fail against the modules as they
+  were before.
 
 ## Test it
 

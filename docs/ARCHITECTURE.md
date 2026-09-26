@@ -196,7 +196,12 @@ its own (security audit M1, 2026-09-25) - a note write
 `write_notes_after_outside_text`, tier `ask`, and runs only on a person's
 yes, like `NEEDS_A_PERSON`. Not a second approval path: the same gate, the
 same card, one more line on it saying why. `backend/README.md`, "Outside
-text in the tool loop".
+text in the tool loop". "Tainted" survives a backend restart (security
+review G1, 2026-09-26): a conversation the backend has not met since it
+started counts as tainted when the request carries earlier turns, unless
+the chat history database holds all of them and none read outside text
+(`jarvis_chat_log._seed`). It fails closed: an error, history off, or a gap
+means tainted.
 
 One answer raises at most five cards (`jarvis_agent.CARDS_PER_TURN`; the owner confirmed five,
 2026-09-25). A card for several smart-home devices (section 2) counts once. After that, a call that would ask is refused before it is

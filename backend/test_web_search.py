@@ -876,7 +876,7 @@ def _turn(user_text="find walking boots", *, provenance="typed", facts=False, ga
     if app_system:
         req_msgs.insert(0, {"role": "system", "content": "clipboard: something"})
     saved_taint = AG._conversation_tainted
-    AG._conversation_tainted = lambda cid: tainted
+    AG._conversation_tainted = lambda cid, messages=None: tainted
     saved_names = WS.names_for_facts
     WS.names_for_facts = lambda fs: dict(names or {})
     try:
