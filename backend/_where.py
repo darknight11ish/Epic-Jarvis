@@ -157,6 +157,8 @@ SHIPPED = (
     "jarvis_ocr.py",
     # plug-in programs (MCP): read-only tools from programs on this PC, through more_tools
     "jarvis_mcp.py",
+    # the crisis help line: the word check, the fixed US help message, the note to the model
+    "jarvis_wellbeing.py",
 )
 
 

@@ -1125,6 +1125,22 @@ html[data-state="error"] .pulse {
   color: var(--bad);
 }
 
+/* The crisis help line (jarvis_wellbeing.py, 2026-09-27; docs/JARVIS-API.md
+   section 38): a calm, plain panel instead of an ordinary answer, drawn
+   whenever the server's `X-Jarvis-Route` carries `wellbeing: "crisis"` -
+   the numbers read large; nothing else about the layout changes, and no
+   button or control is added here. */
+.markdown.wellbeing-crisis {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgb(var(--accent-rgb) / 0.06);
+  border: 1px solid var(--hairline);
+}
+
+.markdown.wellbeing-crisis strong {
+  font-size: 1.35em;
+}
+
 /* --------------------------------------------------------------------------
    Note-target chip
    --------------------------------------------------------------------------

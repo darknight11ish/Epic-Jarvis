@@ -125,6 +125,7 @@ on a throwaway copy instead.
 | `email-send.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Sending email, one approval card per email** (the owner's decision, 2026-09-25, after the Muse audit). Adds `GET /api/email/sending` (whether sending is set up - the Settings line in both apps, never the password), and in the gate the notice's words for `send_email`, `send_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Its context is `web-search.patch`'s route block and gate lines and `note-capture.patch`'s `_TOOL_ACTIONS` lines. Needs `jarvis_email_send.py` - see "Sending email", at the very end. |
 | `manner.patch` | `jarvis_hud.py` | **How Jarvis talks: warm and brief, or plain** (the owner's decision, 2026-09-25). Adds `GET` and `POST /api/manner` - one change at a time, **no approval card either way** (it changes only how answers are worded). Its context is `web-search.patch`'s route blocks. Needs `jarvis_manner.py` - see "How Jarvis talks, and errors in plain words", at the very end. |
 | `documents.patch` | `jarvis_hud.py` | **Folders Jarvis may look in** (the owner's decisions of 2026-09-26: asking about PDFs and Word files, and the Notion import). One call at start-up, `jarvis_documents.install(Handler, ...)`, answers `GET /api/folders` and `POST /api/folders/add` (this PC only, one approval card), `/remove` (at once) and `/import` (a Notion export, this PC only). Last in the list; its context is `stop-all.patch`'s banner lines. Needs `jarvis_documents.py` - see "Documents & email", at the very end. |
+| `wellbeing.patch` | `jarvis_hud.py` | **The crisis help line's one cosmetic flag** (the owner's decision of 2026-09-27). Sets `route_header["wellbeing"] = "crisis"` on `/api/chat` so both apps can draw a calm panel; the safety behaviour itself (no tools, the note, the help message) is in `jarvis_agent.py` and `jarvis_intake.py`, not here. **Unlike every other patch in this table, not verified against a real `jarvis_hud.py`** - see "The crisis help line", at the very end, before relying on it. Needs `jarvis_wellbeing.py`. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -11382,3 +11383,124 @@ python3 backend/test_mcp_wiring.py   # the bridge inside the chat's tool loop
   refused with a message saying so.
 - **Whether an 8B model uses plug-in tools well** is unmeasured; the tool
   test (part 1) is the place to measure it once a program is set up.
+
+---
+
+# The crisis help line: `jarvis_wellbeing.py`, `wellbeing.patch` (2026-09-27)
+
+**What it is for.** CLAUDE.md, "Decided 2026-09-27, the owner's answers":
+"Crisis help line: United States - 988 (Suicide & Crisis Lifeline) and
+911." and "Crisis messages are never learned from and never counted." The
+research (`docs/CUTTING-EDGE-2026-09-26-round4-wellbeing.md` section 1)
+drafted UK/Ireland numbers as its own guess, since it did not know where the
+owner lives; the owner is in the US, so this uses 988 and 911 only.
+
+**Checked against the file, not the report's old line numbers** (its own
+docstring warns they "moved 52 lines once"). Before this, nothing in the
+backend answered a mention of suicide or self-harm specially -
+`jarvis_sensitive.py`'s health list already matches the plain English ways
+of saying it (`self[- ]harm\w*`, `suicid\w*`, the "tried/wanted to kill/hurt
+myself" family, "feel(ing) ... suicidal/hopeless"), but only to decide
+whether a fact about to be SAVED needs an approval card - nothing read it to
+change what Jarvis says. **Said plainly, because the report overstated
+this**: only jarvis_sensitive.py's ENGLISH health list has this phrasing;
+its Spanish, French, German, Italian, Portuguese, Dutch and Polish sections
+hold general health words only. So `jarvis_wellbeing.py`'s own check is
+English only, same as the report's own worked phrase list - a crisis
+mentioned in another language is not caught.
+
+## What it does
+
+- `jarvis_wellbeing.crisis(text)`: True for plain English self-harm/suicide
+  phrasing on the owner's OWN newest words (never a picture caption, a
+  paste, a share, or anything read from outside), False for a curated
+  false-alarm list checked first ("this bug is killing me", "kill the
+  process", "Suicide Squad", "I'm dying to see it", "dead tired", and more
+  of the same shape - masked out before the crisis patterns ever see the
+  text, the same "blank the harmless bits first" approach
+  `jarvis_sensitive.py` uses for its own false alarms). Never writes to
+  disk, never logs anything, never keeps a count.
+- The fixed texts (`REPLY`, `REPLY_SPOKEN` - numbers said as digits, "nine
+  eight eight" - `REPEAT`, `REPEAT_SPOKEN`, `NOTE`), served to both apps
+  from one place the same way `jarvis_manner.view()` does, so they cannot
+  drift (`view()`, `GET /api/wellbeing` - see the API doc's caveat on this
+  route below).
+- Wired into `jarvis_agent.run_local_turn` (already shipped whole, already
+  wired into `/api/chat` by `tool-calling-wiring.patch` - **no new patch
+  needed for the safety behaviour itself**): the note to the model, placed
+  like `CUT_OFF_NOTE` and nearer the question than every other note; no
+  tools offered that turn; the help message appended after the model's own
+  answer, or sent ALONE (no error object) when the model fails or times
+  out; the short repeat line instead of the whole message once a
+  conversation has already shown it once, found by looking for the first
+  message's own marker text in an earlier assistant turn - nothing new is
+  stored to answer that.
+- Wired into `jarvis_intake.owner_turns` (`wellbeing_skip`): a crisis
+  message is skipped the same way a scheduler command already is, so it
+  can never reach the extractor, whether or not it also matches
+  `jarvis_sensitive.py`'s health words.
+- **No off switch, and no card, ever** - the owner's own instruction. It
+  only adds words to an answer; it never approves or acts (rule 4).
+
+## `wellbeing.patch` - the one piece that is NOT confirmed
+
+Every other patch in the table above was checked against real, cited lines
+of `jarvis_hud.py`. This one could not be: this repository never had a copy
+of it to check against (see the top of this file - `backend/` holds patches
+against a backend that lives outside this repository), and the one place
+this patch had genuine, cited context to build from - the end of
+`schedule.patch`'s own quick-answer block - turned out to be rewritten
+again by `briefing.patch`, which inserts its own lines in the same few
+lines for an unrelated reason (`tools_ran` on a quick reply). So the exact
+text `wellbeing.patch` expects to find is not confirmed to exist any more,
+and it is written down here rather than guessed at twice.
+
+**What it would add, if it applies**: one field on the chat route's
+existing `X-Jarvis-Route` header, `"wellbeing": "crisis"`, computed by
+calling `jarvis_wellbeing.crisis()` on the owner's newest message a second
+time (the first is inside `run_local_turn`, which is what actually acts on
+it) - only so both apps can draw a calm panel instead of an ordinary chat
+bubble. **Nothing about safety depends on it.** Without it, the owner still
+gets the exact right help message, with the real US numbers, as ordinary
+answer text - `wellbeing.patch` only decides whether that text is ALSO
+drawn as a distinct panel.
+
+It is still in `scripts/apply-patches.ps1`'s `$PATCHES` list (every `.patch`
+file here must be, or the script refuses to run at all), because the
+script's own rehearsal step is built for exactly this: it dry-runs the
+whole list on a throwaway copy first, and a patch that will not apply stops
+the run and changes nothing, printing the reason. If that happens here, it
+almost certainly means `jarvis_hud.py` has moved on since this was written
+(again) - send the reason back so the patch can be regenerated against the
+real file, the same as any other patch that stops applying. It should not
+be edited by hand from a guess.
+
+## Test it
+
+```
+python3 backend/test_wellbeing.py
+```
+
+122 checks, no model and no network: the crisis phrases and the false-alarm
+list, the fixed texts (the US numbers only, no invented feeling), the note
+never first and the rules block staying first, no tools offered, the help
+message following the model's answer and sent alone on a failure, the
+repeat line on a second mention, the learner exclusion, and that the module
+itself never opens a file, a socket or a log.
+
+## Not checked, said plainly
+
+- **`wellbeing.patch` is not confirmed to apply** - see above.
+- **Only English.** `jarvis_sensitive.py`'s other seven languages have no
+  suicide/self-harm phrasing of their own to reuse; a crisis in another
+  language is not caught by anything here.
+- **A word check will miss things: it is a floor, not a guarantee.** An
+  indirect question that never names the topic (Moore et al., Stanford
+  FAccT 2025: a therapy bot asked about bridge heights right after "I just
+  lost my job", and some answered with a list) gets past this completely.
+- **How well an 8B model follows the note (NOTE)** - staying calm, asking
+  one gentle question, never listing self-harm methods even if asked
+  indirectly - is not measured here; that needs the real local model, on
+  the owner's PC.
+- **`GET /api/wellbeing` is proposed, not confirmed wired** - the same
+  caveat as the route flag, for the same reason (see `wellbeing.patch`).

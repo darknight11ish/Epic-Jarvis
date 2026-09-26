@@ -221,6 +221,13 @@ def owner_turns(messages: Iterable, origin: str) -> list[dict]:
         # owner's decision, 2026-09-25: a reminder is not learned as a fact).
         if schedule_command(text):
             continue
+        # A crisis turn (jarvis_wellbeing.py) is never learned from and
+        # never counted (CLAUDE.md, 2026-09-27) - skipped the same way a
+        # scheduler command is, above, so it can never become a "remember
+        # this?" card, whether or not it also matches jarvis_sensitive.py's
+        # health words.
+        if wellbeing_skip(text):
+            continue
         out.append({"role": "user", "content": text})
     return out
 
@@ -239,6 +246,18 @@ def schedule_command(text) -> bool:
     try:
         import jarvis_schedule
         return jarvis_schedule.was_command(text)
+    except Exception:
+        return False
+
+
+def wellbeing_skip(text) -> bool:
+    """Is this the owner's newest message a crisis mention (jarvis_wellbeing.
+    crisis()) - never learned from, never counted (CLAUDE.md, 2026-09-27)?
+    False when jarvis_wellbeing.py is not there: the learner then reads it,
+    as it did before this module existed."""
+    try:
+        import jarvis_wellbeing
+        return bool(jarvis_wellbeing.crisis(text))
     except Exception:
         return False
 

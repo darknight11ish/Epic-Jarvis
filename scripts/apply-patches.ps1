@@ -469,6 +469,20 @@ $PATCHES = @(
     # every new patch. Needs jarvis_documents.py copied in; without it the
     # banner says so and the routes are not there.
     'documents.patch'
+    # The crisis help line's ONE cosmetic flag (the owner's decision of
+    # 2026-09-27): route_header["wellbeing"] = "crisis", so both apps can
+    # draw a calm panel instead of an ordinary chat bubble. The safety
+    # behaviour itself - no tools on a crisis turn, the note to the model,
+    # the help message appended or sent alone on failure, never learned -
+    # is complete without this patch, in jarvis_agent.py and
+    # jarvis_intake.py below, which this script always copies in. UNLIKE
+    # every other patch here, this one was written with no real
+    # jarvis_hud.py to check it against (see backend/README.md's own
+    # section, "The crisis help line", for exactly what that means and
+    # why); if the rehearsal above says it will not apply, that almost
+    # certainly means this file has moved since it was written - send the
+    # reason back rather than editing it by hand.
+    'wellbeing.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -577,6 +591,8 @@ $SHIPPED = @(
     'jarvis_ocr.py'              # reads the words in a picture with Windows' own text recognition, on this PC; jarvis_agent.py marks them as outside text; no patch
     # --- plug-in programs (MCP), reached only through more_tools("plugins") ---
     'jarvis_mcp.py'              # read-only tools from programs on this PC you list under [mcp]; stdio only; every call asks
+    # --- the crisis help line (2026-09-27) ---
+    'jarvis_wellbeing.py'        # the word check, the fixed US help message, the note to the model; jarvis_agent.py and jarvis_intake.py call it, no patch needed for the safety behaviour itself
 )
 
 # The settings file. Installed only where none exists; never overwritten.

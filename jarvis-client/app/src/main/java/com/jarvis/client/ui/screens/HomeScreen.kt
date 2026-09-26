@@ -337,6 +337,15 @@ data class HomeState(
      */
     val answerNote: String? = null,
     /**
+     * The crisis help line (`jarvis_wellbeing.py`, the owner's decision of
+     * 2026-09-27; docs/JARVIS-API.md section 38): true only while the
+     * answer on screen is Jarvis's help message after the owner mentioned
+     * wanting to hurt themselves, so [Reply] draws it as a calm, plain
+     * panel instead of an ordinary bubble. See
+     * [com.jarvis.client.net.ChatSession.crisis].
+     */
+    val crisisAnswer: Boolean = false,
+    /**
      * Whether the quick-note field is open - the home-screen widget's Note
      * button opens it. See [QuickNotePlate].
      */
@@ -1039,6 +1048,7 @@ private fun ConversationList(
                 onNewConversation = actions.onNewConversation,
                 waiting = state.chatWaiting,
                 note = state.answerNote,
+                crisis = state.crisisAnswer,
                 used = UsedAnswer(
                     ids = state.usedIds,
                     canAct = state.link == LinkState.CONNECTED && !state.stale,
@@ -1936,6 +1946,11 @@ private fun Reply(
     waiting: String? = null,
     note: String? = null,
     used: UsedAnswer? = null,
+    // The crisis help line (jarvis_wellbeing.py, 2026-09-27): draws this
+    // answer as a calm, plain panel instead of an ordinary bubble. Wording,
+    // the word check and never learning from it all happen on the PC;
+    // this only changes how the words already decided are shown.
+    crisis: Boolean = false,
 ) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
@@ -1978,6 +1993,23 @@ private fun Reply(
                         style = MaterialTheme.typography.bodyLarge,
                         color = if (waiting != null) chrome.textMid else chrome.textHi,
                     )
+                }
+            } else if (crisis && !streaming) {
+                // The crisis help line (jarvis_wellbeing.py, 2026-09-27): a
+                // calm, plain panel, reusing the same Plate every other
+                // grouped surface on this screen uses - larger text, and
+                // the answer's own "**...**" emphasis (there is no
+                // markdown renderer here, so it would otherwise show as
+                // literal asterisks) dropped rather than shown raw.
+                Plate(tone = chrome.surface2) {
+                    text.split(PARAGRAPH_BREAK).forEachIndexed { index, paragraph ->
+                        if (index > 0) Gap(10)
+                        Text(
+                            paragraph.replace("**", ""),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = chrome.textHi,
+                        )
+                    }
                 }
             } else {
                 // Identity by position is right here: paragraphs are only

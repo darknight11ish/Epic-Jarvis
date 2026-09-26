@@ -2781,6 +2781,20 @@ class _TurnWatch:
         # takes when the answer starts. None - a watch made outside a turn -
         # is never stopped.
         self.stop_mark = None
+        # The crisis help line (jarvis_wellbeing.py; CLAUDE.md, 2026-09-27):
+        # checked on the owner's own newest words only - never a picture
+        # caption, a paste, a share, or anything read from outside - the
+        # same field note_needs_a_person and LIGHTS_WITHOUT_CARD already use
+        # for "is this really what the owner just said". A missing module or
+        # anything odd about the text answers False, never raises: this
+        # check must never be the reason an ordinary turn fails.
+        self.crisis = False
+        if self.newest_own_words:
+            try:
+                import jarvis_wellbeing
+                self.crisis = bool(jarvis_wellbeing.crisis(self.newest_own_words))
+            except Exception:
+                self.crisis = False
 
     # -- Stop everything -----------------------------------------------------
     def stopped(self) -> bool:
@@ -3902,6 +3916,72 @@ def with_cut_off_note(msgs: list, said: str) -> list:
     return list(msgs[:at]) + [note] + list(msgs[at:])
 
 
+
+# --------------------------------------------------------------------------
+#   The crisis help line (2026-09-27)
+# --------------------------------------------------------------------------
+#
+# CLAUDE.md, "Decided 2026-09-27, the owner's answers": "Crisis help line:
+# United States - 988 (Suicide & Crisis Lifeline) and 911." jarvis_wellbeing.py
+# has the word check (crisis()) and the fixed words (NOTE, reply()); this is
+# where they meet run_local_turn - see _TurnWatch.crisis (set from the
+# owner's own newest words only, never outside text) and offered_tools
+# below (no tools that turn).
+#
+# Placed exactly like CUT_OFF_NOTE - just before the newest user message,
+# never first - and, since it is applied after with_cut_off_note in
+# one_round, nearer the question than every other note: the most important
+# thing the model can be told this turn.
+
+
+def crisis_message() -> Optional[dict]:
+    """The system message for a crisis turn (jarvis_wellbeing.NOTE), or None
+    without jarvis_wellbeing.py."""
+    try:
+        import jarvis_wellbeing
+        return {"role": "system", "content": jarvis_wellbeing.NOTE}
+    except Exception:
+        return None
+
+
+def with_crisis_note(msgs: list, active: bool) -> list:
+    """A new list: `msgs` with jarvis_wellbeing.NOTE just before the newest
+    user message - never first, the same placing as with_cut_off_note.
+    `msgs` itself is not changed; nothing to add (not a crisis turn, no user
+    message, or no jarvis_wellbeing.py) returns a plain copy."""
+    note = crisis_message() if active else None
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if note is None or not users:
+        return list(msgs)
+    at = users[-1]
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, note] + list(msgs)
+    return list(msgs[:at]) + [note] + list(msgs[at:])
+
+
+def crisis_reply(*, repeat: bool = False, spoken: bool = False) -> str:
+    """The words Jarvis appends after its own answer on a crisis turn (the
+    full help message, or the short repeat line - jarvis_wellbeing.reply()),
+    or "" without jarvis_wellbeing.py. Never raises."""
+    try:
+        import jarvis_wellbeing
+        return jarvis_wellbeing.reply(repeat=repeat, spoken=spoken)
+    except Exception:
+        return ""
+
+
+def crisis_shown_before(messages) -> bool:
+    """True when an earlier assistant turn in `messages` already carried
+    the full crisis help message - see jarvis_wellbeing.shown_before(). A
+    missing module answers False: the fuller message is sent again rather
+    than risk the short line on what is really a first mention."""
+    try:
+        import jarvis_wellbeing
+        return bool(jarvis_wellbeing.shown_before(messages))
+    except Exception:
+        return False
+
+
 def keep_rules_first(msgs: list) -> list:
     """A new list whose first message is the Jarvis rules block.
 
@@ -4043,7 +4123,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     watch.lane = cur
     # Set below, once the keepalives are running (with_picture_text).
     picture_text = None
-    names = [] if cur["feature"] == "vision" else offered_tools(enabled_tools)
+    # A crisis turn (jarvis_wellbeing.py): whether the full help message or
+    # the short repeat line goes out (crisis_reply, below), decided once,
+    # from the conversation as it was BEFORE this turn adds anything to it -
+    # never from `convo`, which the tool loop is about to change.
+    crisis_repeat = crisis_shown_before(messages) if watch.crisis else False
+    # No tools offered on a crisis turn: the owner's decision that nothing
+    # act, and the report's own worry made concrete - a web search for "the
+    # tallest bridges near me" is not a turn Jarvis should let itself take.
+    names = [] if (cur["feature"] == "vision" or watch.crisis) else offered_tools(enabled_tools)
     if names and _model_can_use_tools(cur["url"], cur["model"]) is False:
         names = []
         if announce is not None:
@@ -4144,6 +4232,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         if watch.cut_off:
             room -= estimate_tokens({"role": "system", "content": CUT_OFF_NOTE.format(
                 said=watch.cut_off)})
+        if watch.crisis:
+            crisis_msg = crisis_message()
+            if crisis_msg is not None:
+                room -= estimate_tokens(crisis_msg)
         body = {"model": cur["model"], "messages": fit_messages(msgs, room),
                 "stream": True, **PROMPT_USAGE, **opts}
         if manner_msg is not None:
@@ -4156,7 +4248,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         if watch.cut_off:
             # The owner cut the last spoken answer off: said, never first.
             body["messages"] = with_cut_off_note(body["messages"], watch.cut_off)
-        # Last, after trimming and the spoken note: the rules stay first.
+        if watch.crisis:
+            # The crisis help line (jarvis_wellbeing.py): nearest the
+            # question of every note here, never first.
+            body["messages"] = with_crisis_note(body["messages"], True)
+        # Last, after trimming and every note above: the rules stay first.
         body["messages"] = keep_rules_first(body["messages"])
         if not _reasoning_field_refused:
             body.update(REASONING_OFF)
@@ -4368,6 +4464,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                                      f"which has room for long web pages")
                         except Exception:
                             pass
+        if watch.crisis:
+            # W1 (or the short repeat line), after the model's own answer -
+            # never counted as a tool call, never asked for, always said.
+            tell_owner(crisis_reply(repeat=crisis_repeat, spoken=watch.spoken))
         finish = (last.finish if last else None) or ("stop" if last and last.ended else None)
         if finish == "tool_calls":
             # The last round asked for a tool anyway, after tools were taken
@@ -4388,7 +4488,22 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     except ClientGone:
         pass
     except UpstreamError as exc:
-        fail(str(exc))
+        if watch.crisis:
+            # "W1 is appended after the model's answer, and sent alone if
+            # the model fails or times out" (CLAUDE.md, 2026-09-27): the
+            # owner never sees a bare error on the one turn where a bare
+            # error is the worst possible answer. No fail() here - this
+            # replaces the error, it does not sit beside it.
+            try:
+                tell_owner(crisis_reply(repeat=crisis_repeat, spoken=watch.spoken))
+                finish = "stop"
+                if out.sse:
+                    out.send(_sse(_chunk(cid, created, cur["model"], {}, "stop")))
+                    out.send(_sse("[DONE]"))
+            except ClientGone:
+                pass
+        else:
+            fail(str(exc))
     finally:
         if sa is not None:
             try:
@@ -4420,6 +4535,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             "answer": "".join(answer),
             "tools_ran": ran,
             "outside_flags": sorted(watch.flags),
+            "crisis": watch.crisis,
             "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}
 
 

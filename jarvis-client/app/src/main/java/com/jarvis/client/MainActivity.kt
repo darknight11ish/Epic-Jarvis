@@ -742,6 +742,9 @@ class MainActivity : FragmentActivity() {
         // only) - docs/JARVIS-API.md sections 18.1 and 4, 2026-09-25.
         val temporaryChat by chat.temporary.collectAsState()
         val usedIds by chat.usedIds.collectAsState()
+        // The crisis help line (jarvis_wellbeing.py, 2026-09-27): whether
+        // the answer on screen is shown as a calm, plain panel.
+        val crisisAnswer by chat.crisis.collectAsState()
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
         val face = remember(faceId) { Faces.byId(faceId) }
@@ -1847,6 +1850,7 @@ class MainActivity : FragmentActivity() {
                             updateLine = updateState.newerLine.takeIf { updateChecks },
                             temporary = temporaryChat,
                             usedIds = usedIds,
+                            crisisAnswer = crisisAnswer,
                             memoryHidden = privateHidden,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,

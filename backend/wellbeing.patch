@@ -1,0 +1,27 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2891,6 +2891,20 @@
+             except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
+                 pass
+             return
++        # wellbeing.patch: the crisis help line (jarvis_wellbeing.py; the
++        # owner's decision of 2026-09-27). The check itself runs again,
++        # inside jarvis_agent.run_local_turn below, which is what actually
++        # acts on it (no tools offered, the note to the model, the help
++        # message appended or sent alone on failure) - this earlier, second
++        # look only lets both apps draw a calm panel instead of an ordinary
++        # chat bubble, because the header has to go out before run_local_turn
++        # is even called. Absent on every other turn. Never raises: a
++        # missing module changes nothing here.
++        try:
++            import jarvis_wellbeing
++            _wb_newest = next((m.get("content") for m in reversed(messages)
++                               if isinstance(m, dict) and m.get("role") == "user"
++                               and isinstance(m.get("content"), str)), "")
++            if jarvis_wellbeing.crisis(_wb_newest):
++                route_header["wellbeing"] = "crisis"
++        except Exception:
++            pass
+         # Times this answer: first word, total, words and tokens per second.
+         # Numbers only, to a file on this PC - speed-record.patch and
+         # jarvis_speed.py. None if that module is not there, and every use

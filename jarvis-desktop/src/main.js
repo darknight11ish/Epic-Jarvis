@@ -578,6 +578,16 @@ function paint({ immediate = false } = {}) {
     lastPaintAt = performance.now();
 
     dom.answer.innerHTML = renderMarkdown(state.buffer);
+    // The crisis help line (jarvis_wellbeing.py, 2026-09-27): a calm, plain
+    // panel - larger numbers, nothing else about the layout - instead of an
+    // ordinary answer, the moment the server's own flag says so
+    // (`X-Jarvis-Route`'s `wellbeing: "crisis"` - see docs/JARVIS-API.md
+    // section 38; not yet confirmed sent by every backend, so this is a
+    // no-op, and the words still show as an ordinary answer, until it is).
+    dom.answer.classList.toggle(
+      "wellbeing-crisis",
+      Boolean(state.turnRoute && state.turnRoute.wellbeing === "crisis")
+    );
     // `.fresh` marks a block that has just appeared. It used to be added to
     // `lastElementChild` on every paint — but `innerHTML` destroys and
     // recreates that element each time, so the 260ms animation restarted every
@@ -723,6 +733,7 @@ function syncPrimer() {
 function closeCard() {
   dom.card.hidden = true;
   dom.answer.innerHTML = "";
+  dom.answer.classList.remove("wellbeing-crisis");
   dom.cardStat.textContent = "";
   paintProblem(null, "");
   dom.cursor.hidden = true;
@@ -2620,6 +2631,7 @@ async function send(promptText, provenance = "typed") {
   dom.cursor.hidden = false;
   dom.stop.hidden = false;
   dom.answer.innerHTML = "";
+  dom.answer.classList.remove("wellbeing-crisis");
   dom.cardStat.textContent = "";
 
   // Stay open while the answer streams, even if focus wanders.

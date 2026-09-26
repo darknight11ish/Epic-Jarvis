@@ -6141,3 +6141,109 @@ model: 8 core tools and `more_tools`, which opens a named group for the
 rest of that conversation. Nothing an app sends or reads changes; a group
 opened after outside text is named on the next card ("Jarvis asked for more
 tools (...) after reading outside text.").
+
+## 38. The crisis help line (added 2026-09-27)
+
+CLAUDE.md, "Decided 2026-09-27, the owner's answers": "Crisis help line:
+United States - 988 (Suicide & Crisis Lifeline) and 911." and "Crisis
+messages are never learned from and never counted."
+`backend/jarvis_wellbeing.py`, `docs/CUTTING-EDGE-2026-09-26-round4-wellbeing.md`
+section 1 (research; this section is what was actually built, with the
+report's UK/Ireland numbers swapped for the US ones above - not the
+report's own guess).
+
+**What exists.** A word check (`jarvis_wellbeing.crisis(text)`) on the
+owner's newest message only - typed or said, never a picture caption, a
+paste, a share, or anything read from outside - for plain English
+self-harm/suicide phrasing. **English only, said plainly**: the report
+drafted this as reusing "the multi-language suicide/self-harm word patterns
+already in jarvis_sensitive.py", but checking the real file (not its old
+line numbers, which had already moved once) found explicit self-harm/
+suicide phrasing only in `jarvis_sensitive.py`'s ENGLISH health list; its
+Spanish, French, German, Italian, Portuguese, Dutch and Polish sections hold
+general health and mental-health words only, nothing to reuse for this. A
+crisis mentioned in another language is not caught. This is a floor, not a
+guarantee - a euphemism, a spelling mistake, or an indirect question that
+never names the topic (Moore et al., Stanford FAccT 2025: a therapy bot
+asked about bridge heights after "I just lost my job" and some answered
+with a list) gets past it completely.
+
+**No new route for the safety behaviour.** Everything that actually happens
+on a crisis turn lives in `jarvis_agent.run_local_turn` (already wired into
+`/api/chat` by `tool-calling-wiring.patch`) and `jarvis_intake.owner_turns`,
+both shipped whole - so this works the moment `jarvis_wellbeing.py` and the
+updated `jarvis_agent.py`/`jarvis_intake.py` are copied in, with no new
+patch needed at all:
+
+- **The note to the model** (`jarvis_wellbeing.NOTE`) is added to the
+  request for this PC's model only - placed exactly like `CUT_OFF_NOTE`
+  (never first; the Jarvis rules block stays first, `keep_rules_first` runs
+  after it), and nearer the question than the manner line, the spoken-style
+  note and the cut-off note, since it is applied last of the four. Never
+  sent to a cloud model.
+- **No tools are offered that turn** (`offered_tools` is not even called -
+  `run_local_turn` forces the offered list to empty), so a crisis turn
+  cannot end in "the tallest bridges near me" through `web_search` or
+  anything else.
+- **The help message is appended after the model's own words** - the full
+  message (`jarvis_wellbeing.REPLY`, or `REPLY_SPOKEN` for a voice turn) the
+  first time in a conversation, then the short `REPEAT`/`REPEAT_SPOKEN`
+  line ("The number is still here: 988.") every time after, decided by
+  looking for the first message's own marker text in an earlier assistant
+  turn - nothing is stored anywhere new to answer that.
+- **Sent ALONE when the model fails or times out** - no error object, the
+  help message (or the repeat line) replaces it entirely, with
+  `finish_reason: "stop"` as if the turn had ended normally. An ordinary
+  (non-crisis) failure is unaffected: it still gets today's plain error.
+- **`run_local_turn`'s own result carries `"crisis": true`** (alongside
+  `finish_reason`, `tools_ran`, ...) so a caller inside the backend can act
+  on it; this is not itself sent to either app (see below for what is).
+- **Never learned, never counted.** `jarvis_intake.owner_turns` skips a
+  crisis message the same way it already skips a scheduler command
+  (`schedule_command`) - it never reaches the extractor, so it can never
+  become a "remember this?" card, whether or not it also matches
+  `jarvis_sensitive.py`'s health words.
+- **No off switch.** The owner's own instruction: this is not a setting
+  either app can turn off, and no approval card is ever raised for it
+  (rule 4 - it only adds words to an answer, it never acts).
+- **`GET /api/wellbeing`** (proposed, `jarvis_wellbeing.handle_get`): the
+  fixed words (`view()` - the help and emergency numbers, `reply`,
+  `reply_spoken`, `repeat`, `repeat_spoken`), the same one-source-for-both-
+  apps pattern `GET /api/manner` uses (section 27), for a client that wants
+  to draw its own panel from the words rather than only from the chat
+  text. **Not confirmed wired into `jarvis_hud.py`** - see the note below.
+
+**The one cosmetic flag - status, said plainly.** For a calm, plain panel
+with the number shown large (rather than an ordinary chat bubble), the plan
+is one more field on the EXISTING `X-Jarvis-Route` header of the EXISTING
+`/api/chat` route - `"wellbeing": "crisis"`, absent on every other turn,
+the same shape `second_card` and `offer` already use. `backend/wellbeing.patch`
+drafts this, but **it was written with no real `jarvis_hud.py` to check it
+against** (backend/ holds patches against a backend that lives outside this
+repository), and `backend/briefing.patch` already rewrites the exact lines
+its context assumed - so it is not confirmed to apply, and is not in
+`scripts/apply-patches.ps1`'s `$PATCHES` list for that reason (see its own
+comment there). **Nothing above depends on it**: without the flag, the
+owner still sees the full, correct help message and the real US numbers, as
+ordinary answer text, the moment they update `jarvis_agent.py` -
+`wellbeing.patch` only decides whether that text also gets drawn as a
+distinct panel instead of a normal bubble. Both apps read the flag when it
+is there and fall back to plain text when it is not (see below).
+
+**Both apps.** Each renders a crisis turn's answer the same way it already
+renders another calm, plain, no-actions system message (desktop: the same
+panel style as a plain "Jarvis isn't running" notice, section 27's "errors
+in plain words"; phone: the same calm card style Brain's manner note uses) -
+large text for the "988" and "call 911" lines, no Approve/Deny, no other
+controls - when `X-Jarvis-Route` carries `"wellbeing": "crisis"`. Without
+that flag (today, until `wellbeing.patch` is confirmed and applied), the
+message still arrives and is shown as an ordinary answer, with its markdown
+(`**988**`, `**call 911**`) rendered the way any other bold text in an
+answer already is.
+
+**Rules.** Rule 1: the check, the fixed texts and the note all run and stay
+on this PC; nothing about a crisis turn is sent anywhere else. Rule 4:
+nothing here approves or acts - it only adds words to an answer, and no
+card is ever raised for it. `backend/test_wellbeing.py` proves the ordering,
+the no-tools behaviour, the failure path, the repeat line, and the
+learner exclusion, with no model and no network.
