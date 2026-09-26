@@ -101,6 +101,18 @@ await check("what each lock covers is said plainly, gaps included", async () => 
   assert.match(s.appLockDetail, /Deny still works from the widget/);
   assert.doesNotMatch(s.appLockDetail, /not locked/);
   assert.match(s.privateDetail, /memory lists/);
+  // Continuity audit 2026-09-26: it says everything it hides, in the
+  // phone's words exactly.
+  for (const hid of ["deep questions", "timers, reminders and lists", "morning briefing's lines",
+    "what a focus session is on", "Their notifications say only what kind of thing is due."]) {
+    assert.ok(s.privateDetail.includes(hid), `the description leaves out: ${hid}`);
+  }
+  const kt = readFileSync(join(HERE, "..", "..",
+    "jarvis-client/app/src/main/java/com/jarvis/client/data/Security.kt"), "utf8");
+  const m = kt.match(/const val PRIVATE_HIDES = ([\s\S]*?)\n\n/);
+  assert.ok(m, "the phone's PRIVATE_HIDES is gone");
+  const phone = [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]).join("");
+  assert.ok(s.privateDetail.startsWith(phone), `the two apps say it differently:\n${phone}\n${s.privateDetail}`);
   assert.match(s.privateDetail, /Galaxy picture and answers in the Jarvis bar are not hidden/);
   // Named for what it hides (one wording, 2026-09-24), in its status lines too.
   assert.match(s.all, /Windows Hello for memory lists and chat history/);

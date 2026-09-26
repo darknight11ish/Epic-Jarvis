@@ -149,10 +149,10 @@ fun SecurityScreen(
                     Plate {
                         SwitchRow(
                             title = "Hide memory lists and chat history",
-                            detail = "On Mind, what Jarvis wants to remember, what it saved " +
-                                "automatically, what it believed on a " +
-                                "date, the wiki's list of your notes and your chat history stay " +
-                                "hidden until you tap Show and confirm it is you.",
+                            // The desktop's words, word for word (SecurityRules.PRIVATE_HIDES).
+                            detail = SecurityRules.PRIVATE_HIDES + " Show, on the Brain screen, " +
+                                "asks for your fingerprint or PIN first. Screenshots of Jarvis " +
+                                "are blocked while this is on.",
                             checked = security.privateLists,
                             enabled = !busy,
                             onChange = { onChange(security.copy(privateLists = it)) },

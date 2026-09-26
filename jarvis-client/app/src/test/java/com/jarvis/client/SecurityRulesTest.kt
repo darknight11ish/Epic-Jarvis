@@ -328,4 +328,20 @@ class SecurityRulesTest {
         assertFalse(session.locked(on))
         assertTrue(SecurityRules.blockScreenCapture(on))
     }
+
+    @Test
+    fun theHiddenListsSettingSaysWhatItHidesInTheDesktopsWords() {
+        val says = SecurityRules.PRIVATE_HIDES
+        for (hid in listOf("deep questions", "timers, reminders and lists", "morning briefing's lines",
+            "what a focus session is on", "Their notifications say only what kind of thing is due.")) {
+            org.junit.Assert.assertTrue(hid, hid in says)
+        }
+        val js = listOf(java.io.File("../../jarvis-desktop/src/security-settings.js"),
+            java.io.File("../jarvis-desktop/src/security-settings.js"))
+            .firstOrNull { it.isFile }?.readText() ?: return
+        val m = Regex("""export const PRIVATE_HIDES = ([\s\S]*?);\n""").find(js)
+        org.junit.Assert.assertNotNull("the desktop's PRIVATE_HIDES is gone", m)
+        val desktop = Regex("\"([^\"]*)\"").findAll(m!!.groupValues[1]).joinToString("") { it.groupValues[1] }
+        org.junit.Assert.assertEquals(desktop, says)
+    }
 }
