@@ -52,6 +52,28 @@ class BriefingTest {
     }
 
     @Test
+    fun theLastLineIsThePcsOwnWithTheWeatherFromHomeAssistant() {
+        // An older PC sends no outside_line: the phone's own copy.
+        assertEquals(Briefing.OUTSIDE_LINE, Briefing.outsideLine(Briefing.parse(answer)!!.briefing!!))
+        val news = "News: not available. No news provider has been chosen, so Jarvis fetches " +
+            "nothing from the internet for this."
+        val withWeather = obj(
+            """{"available":true,"briefing":{"id":"b1","heading":"h","missed":"",
+              "sections":[{"key":"weather","title":"Weather","state":"ok",
+                           "summary":"Now 12 °C, partly cloudy.",
+                           "items":["Today: rain, 9 to 14 °C, 80% chance of rain"]}],
+              "not_included":[],"outside_line":"$news"}}""",
+        )
+        val b = Briefing.parse(withWeather)!!.briefing!!
+        assertEquals(news, Briefing.outsideLine(b))
+        assertEquals("Weather", b.sections[0].title)
+        // Its lines hide with the rest; the summary stays.
+        val hidden = Briefing.hide(Briefing.parse(withWeather)!!).briefing!!
+        assertTrue(hidden.sections[0].items.isEmpty())
+        assertEquals("Now 12 °C, partly cloudy.", hidden.sections[0].summary)
+    }
+
+    @Test
     fun hidingTakesEveryLineOutAndKeepsTheCounts() {
         val hidden = Briefing.hide(Briefing.parse(answer)!!)
         val b = hidden.briefing!!

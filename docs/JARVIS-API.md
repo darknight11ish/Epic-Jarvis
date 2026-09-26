@@ -3346,7 +3346,10 @@ against that file, not this summary.
             "monitor": bool|null, "uuid", "used": bool, "why_unused": str|null,
             "sources": [str], "desktop_share_gb", "desktop_share_how",
             "conversation_format": "q8_0"|"f16"|null, "best_effort": str|null,
-            "chat_first": bool, "words": str}],
+            "chat_first": bool, "words": str,
+            "health": {"temp_c", "power_w", "power_limit_w", "fan_percent",
+                       "load_percent", "hot_slowdown": bool|null} | null,
+            "health_words": str|null}],
  "chat_card_why": str|null,        why chat goes on the card it does (two cards)
  "gap_gb": 0.75,                   the owner's decision 1
  "now": {"preset", "label", "model", "context", "format", "on_card_percent",
@@ -3370,6 +3373,28 @@ against that file, not this summary.
 role = {"model", "size", "context", "context_words", "format", "card", "card_key",
         "mode": "own"|"beside"|"swap"|"turns", "need_gib", "creates", "words"}
 ```
+
+**Every card's health** (the feasibility audit's I12, 2026-09-26; before
+the RTX 2060 goes in). `health` is each card's heat, power (drawn and its
+limit, in watts), fan and load right now, and `hot_slowdown` is the
+driver's own "slowing down because it is hot" (`null` when an older driver
+does not say). It comes from a second `nvidia-smi --query-gpu` of its own
+(`jarvis_hardware.HEALTH_FIELDS`; an older driver's
+`clocks_throttle_reasons`, then no reasons at all, are tried in turn, so a
+refused field can never cost the card list), read at most every 5 seconds,
+and matched to its card by the `GPU-...` id. `health_words` is the same in
+one line - "84 °C, using 247 of 250 watts, fan at 78%, 99% busy. It is
+slowing itself down because it is hot." - and both apps show it under the
+card as "Now: ..." (desktop Settings -> Hardware and models; phone Brain ->
+Hardware). A card `nvidia-smi` does not see (AMD, Intel) has `null`. Read on
+this PC only; nothing is sent anywhere, and there is no "card is hot"
+notification (the feasibility audit's Overwhelm guardrail). The desktop's
+widget reads `nvidia-smi` itself every 3 seconds (`commands.rs`
+`parse_gpu_lines`): since 2026-09-26 it reads EVERY card, not only the
+first line, lists each on its own line once there are two, and its
+collapsed glance shows the hottest card's temperature. Field names and the
+thermal-slowdown values ("Active" / "Not Active") are from NVIDIA's
+documentation, not checked on the owner's driver.
 
 **Not a model catalogue** (CLAUDE.md). The phone gets three setups worked
 out on the PC for the PC's own cards, as words. It shows no list of models
@@ -3912,14 +3937,24 @@ asleep. Only what Jarvis can already read on this PC, in this order:
 | Approvals (`approvals`) | How many approval cards wait - "Open Jarvis to answer." Never an Approve. | Never. |
 | Email (`email`) | **How many** unread emails, and **who the newest five are from** (the owner's decision of 2026-09-25): the summary "3 unread emails." and one line, "From Alex, Your Bank and GitHub" (or "The newest 5 are from ..." when there are more). `jarvis_email.senders()`: ONE connection, the mailbox opened read-only, SEARCH UNSEEN, then `FETCH <id> (BODY.PEEK[HEADER.FIELDS (FROM)])` for the newest five only - the From line, never a subject or any text, and PEEK so nothing is marked as read. Each name is decoded (RFC 2047), stripped of control and direction characters, capped at 60 characters, with any one-time code or sign-in link hidden (section 25), and listed once; a sender with no name shows the whole address (`noreply@github.com` - the part before the @ alone is "noreply" or "info" as often as not). With "Show who new emails are from" off (22.2): the number only, through `jarvis_email.count()` (no message fetched), as before. | Not set up (`JARVIS_IMAP_HOST` unset, or `email_check` not in `[tools].enabled`) - then it is not mentioned at all; or `email_read` is not `auto`/`notify` - then it says why. |
 
-Then always: "Weather and news: not available. No provider has been chosen,
-so Jarvis fetches nothing from the internet for this."
+| Weather (`weather`, first; added 2026-09-26, the feasibility audit's I75 - the owner's choice) | From the owner's **own Home Assistant only**, which already fetches a forecast for its weather device, so Jarvis opens no connection to any weather service. The summary "Now 12 °C, partly cloudy." and a line for today and for tomorrow - "Today: rain, 9 to 14 °C, 80% chance of rain". Built from numbers and HA's own list of conditions only (an unknown condition, and every free-text field such as the device's name, is left out). `jarvis_home.plan_forecast()`: exactly two fixed requests to ONE weather device - `GET /api/states/<device>` and `POST /api/services/weather/get_forecasts?return_response` with the body `{"entity_id", "type": "daily"}` - never a service call through `home_control`, and `run()` refuses a weather plan whose requests are anything else (`test_home_control.py` tampers with it seven ways). The device is `JARVIS_HOME_WEATHER` on the PC, or HA's usual `weather.forecast_home`; no screen sets it. | Not set up (`JARVIS_HOME_URL` unset, or `home_read` not in `[tools].enabled`) - then the last line says so; or `home_read` is not `auto`/`notify` - then it is not read, **no card is raised**, and the briefing says why. HA without that device: "Not read: Home Assistant has no device called weather.forecast_home. Set JARVIS_HOME_WEATHER ...". |
+
+Then always the PC's own last line, `outside_line`: with the weather in it,
+"News: not available. No news provider has been chosen, so Jarvis fetches
+nothing from the internet for this."; without it, "Weather and news: not
+available. The weather can come only from your own Home Assistant, and no
+news provider has been chosen, so Jarvis fetches nothing from the internet
+for this." (Both apps show `outside_line`, and their own copy of the second
+line from a PC that sends none.)
 
 Each read that leaves the PC (the calendar to the owner's CalDAV server, or
-to Google through the private calendar link - section 22.8 - and the count
-and senders to the owner's IMAP server) goes through `jarvis_gate.check()`
-as its own action (`calendar_read`, `email_read`), exactly as the model's
-tools do, and runs only if the gate says `allowed`. The senders are
+to Google through the private calendar link - section 22.8 - the count
+and senders to the owner's IMAP server, and the weather to the owner's Home
+Assistant) goes through `jarvis_gate.check()` as its own action
+(`calendar_read`, `email_read`, `home_read`), exactly as the model's
+tools do, and runs only if the gate says `allowed`. The forecast is
+**outside text** (Home Assistant says whatever its weather device says), so
+a briefing that shows it lists `home_read` in `read`. The senders are
 **outside text** - anyone can write anything in a From line - so, like
 calendar titles, they are lines (`items`), never a summary, and a briefing
 that shows them lists `email_check` in `read` (below). Together they get 25 seconds
@@ -3930,7 +3965,7 @@ failure says so without quoting the server.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `GET /api/briefing` | - | 200 `{"available": true, "briefing": briefing \| null, "building": bool, "setups": [job], "sources": {"calendar", "email", "weather": {"state", "said"}}, "senders": {"on", "waiting", "last", "why"}, "title", "lock_screen", "empty"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_briefing.py` | Token + origin. `setups`: the briefing jobs (section 21's job shape). `sources`: what a briefing would include, worked out without reading anything - `state` is `on`, `off`, `asks` or `not_available`; `email` also has `senders` (bool) and says "Included: how many unread emails you have, and who the newest 5 are from." or "... (the number only)." `senders`: the setting below - `last` is `{"outcome", "message", "why", "at"}` of the last ON card, or null. A PC from before it sends no `senders`, and both apps then offer no switch. |
+| `GET /api/briefing` | - | 200 `{"available": true, "briefing": briefing \| null, "building": bool, "setups": [job], "sources": {"calendar", "email", "weather": {"state", "said"}}, "senders": {"on", "waiting", "last", "why"}, "title", "lock_screen", "empty"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_briefing.py` | Token + origin. `setups`: the briefing jobs (section 21's job shape). `sources`: what a briefing would include, worked out without reading anything - `state` is `on`, `off` or `asks` (a PC from before 2026-09-26 says `not_available` for the weather); `email` also has `senders` (bool) and says "Included: how many unread emails you have, and who the newest 5 are from." or "... (the number only)." `senders`: the setting below - `last` is `{"outcome", "message", "why", "at"}` of the last ON card, or null. A PC from before it sends no `senders`, and both apps then offer no switch. |
 | `POST /api/briefing/senders` | `{"enabled": bool}` | 200 `{"ok": true, "waiting": false, "senders", "message"}` (OFF, done; or ON when it is already on); **202** `{"ok": true, "waiting": true, "senders", "message"}` (ON: ONE card is up; nothing has changed); 400 not true/false; **503** `change_own_config` is not tier `ask` (no card is raised - a config line is not a person's yes); 500 the setting could not be saved | "Show who new emails are from" (on by default). OFF is immediate, never a card, and withdraws a waiting ON card (approving it later changes nothing, `last.outcome` `"withdrawn"`). ON is ONE approval card, action `change_own_config` - the one the voice settings use to show or say more - and only tier `ask` with outcome `approved` turns it on; `last.outcome` becomes `enabled`, `denied`, `timed_out`, `refused`, `withdrawn` or `failed`, with a plain `message`. Kept on this PC in `briefing.json` in the settings folder (`{"senders": bool, "changed": epoch}`); no file reads as on, a damaged one as off (and `why` says so). Both apps hold ON on a stale link and let OFF through (desktop `set_briefing_senders`, Settings only; phone `JarvisRuntime.setBriefingSenders`). |
 | `POST /api/briefing/now` | `{}` · `{"missed": true}` ("What did I miss?", 22.9) | 200 `{"ok": true, "briefing"}`; 400 not an object; 500 `{"ok": false, "error": <exception name>}` | One put together now, and kept as the latest. It only READS, asks no card and changes nothing, so **neither app holds it on a stale link** (like every read). Up to about 25 seconds with a slow calendar or mail server. |
 
@@ -3954,7 +3989,8 @@ A `briefing`:
  "sections": [{"key", "title", "state": "ok" | "empty" | "failed" | "refused" | "slow",
                "summary": "2 events today.", "items": ["09:30 Dentist", ...]}],
  "not_included": ["Not included: your calendar is not set up for Jarvis on this PC."],
- "read": ["calendar_read", "email_check"] | [],   outside text in the lines (below)
+ "read": ["calendar_read", "email_check", "home_read"] | [],   outside text in the lines (below)
+ "outside_line": "News: not available. ..." | "Weather and news: not available. ...",
  "lock_screen": "Jarvis: your morning briefing is ready.",
  "text": the whole of it as plain lines (the chat answer)}
 ```
@@ -3969,10 +4005,12 @@ when, the next three times - and, in place of "Nothing is sent anywhere.",
 what each run reads: "Each time, Jarvis puts together a short list on this
 PC, without the AI model: ... how many unread emails you have and who the
 newest are from (the number only, if you turned that off), if email is set
-up ... It only reads. It changes nothing and approves nothing." and "Reading your calendar and email is a request to your own
-calendar and mail servers, the same as asking Jarvis to read them, under the
-same settings. Nothing else is sent anywhere, and nothing goes to the AI
-model."
+up - the weather, from your own Home Assistant, if it is set up for Jarvis
+... It only reads. It changes nothing and approves nothing." and "Reading
+your calendar, email and Home Assistant is a request to your own calendar,
+mail server and Home Assistant, the same as asking Jarvis to read them,
+under the same settings. Nothing else is sent anywhere, and nothing goes to
+the AI model."
 
 When its time comes the scheduler rings `schedule` `fired` as for any job,
 then the briefing is put together on its own thread, then `schedule`
@@ -3989,7 +4027,7 @@ so it is late.)".
   inside it, whatever App lock or the privacy settings say. The words of the
   briefing are read in the app, behind the token.
 - **The briefing**: the heading, each section's summary and its lines, the
-  weather-and-news line, what was left out, and "Kept on your PC until
+  PC's last line (`outside_line`), what was left out, and "Kept on your PC until
   Jarvis restarts." While the private lists are hidden (the desktop's
   "Windows Hello for memory lists and chat history", taken out in Rust; the
   phone's "Hide memory lists and chat history") the lines go and the
@@ -4029,6 +4067,16 @@ so it is late.)".
 | Set up | "brief me every weekday at 7" (a card), "brief me every day at 6:30am", "set up a morning briefing every weekday morning at 7", "brief me on mondays and fridays at 8", "brief me tomorrow at 7" (once, no card) |
 | Stop | "stop my briefing" (with two set up it asks which and deletes nothing); "cancel all my briefings" is refused like every bulk change |
 | When | "when is my briefing" |
+
+**"What's the weather?"** (2026-09-26) is answered here too, from the same
+read as the briefing's Weather section (`jarvis_briefing.weather_now`):
+"Now 12 °C, partly cloudy. Today: rain, 9 to 14 °C, 80% chance of rain.
+Tomorrow: sunny, 11 to 18 °C. (From your own Home Assistant.)" - only the
+plain question ("what's the weather", "how's the weather tomorrow", "what's
+the forecast", "weather"); "what's the weather in Paris" or "this weekend"
+go to the model. Without Home Assistant it says there is none and looks
+nothing up. Not private, but the record of the turn says `home_read` ran, so
+the conversation counts as having read outside text.
 
 "Brief me on the project" and the like go to the model. The answer to "brief
 me now" is the briefing itself, with `X-Jarvis-Route` `"quick":
@@ -4866,6 +4914,19 @@ web search is on and a provider is chosen). It never calls `/api/approve`,
 `/api/deny`, `/api/power`, a model route or `/api/stop_all`. It also asks a
 list of addresses that must never serve a file (the settings file, the
 databases, the token) and fails loudly if one does.
+
+**Home Assistant** (added 2026-09-26, the feasibility audit's I81): when
+`JARVIS_HOME_URL` and `JARVIS_HOME_TOKEN` are set, it asks the owner's own
+Home Assistant two things that read nothing of the house - `GET /api/`
+(does it accept the token?) and `POST /api/template` with the constant
+`{"template": "ok"}`, which Home Assistant renders only for an
+ADMINISTRATOR's token (`jarvis_home.check_token`). An administrator's token
+is a WARN pointing to `backend/README.md`, "Home Assistant: a user of its
+own for Jarvis"; a plain user's is a PASS. With `--with-reads` it also reads
+the weather once and prints only how many days came back. Both go straight
+to the owner's Home Assistant with its own token (never to the Jarvis
+server), never through a proxy for plain `http://`, and never onto a
+redirect.
 
 `GET /api/version` now also carries `started` (epoch seconds: when the
 server process started), which the preflight compares with each shipped

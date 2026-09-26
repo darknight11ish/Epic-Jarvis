@@ -9,7 +9,11 @@
  * only when email is set up - how many unread emails and who the newest are
  * from (the owner's decision of 2026-09-25), or the number only when the
  * owner turns "Show who new emails are from" off.
- * Weather and news are not available: no provider has been chosen.
+ * The weather comes only from the owner's own Home Assistant, when it is set
+ * up for Jarvis on the PC (2026-09-26, the feasibility audit's I75) - a
+ * section of its own, in the PC's words; news is not available. The last
+ * line is the PC's (`outside_line`); an older PC sends none, and OUTSIDE_LINE
+ * is shown instead.
  *
  * Two places use this module:
  *  - the Brain's Work tab (brain.js): the latest briefing and "Brief me now"
@@ -58,10 +62,18 @@ export const MISSED_MISSING =
 export const LOCK_SCREEN = "Jarvis: your morning briefing is ready.";
 export const TOAST_TITLE = "Morning briefing";
 
-/** The line weather and news get (jarvis_briefing.OUTSIDE_LINE). */
+/**
+ * The last line when the weather is not in the briefing
+ * (jarvis_briefing.OUTSIDE_LINE) - shown when the PC sends no `outside_line`.
+ */
 export const OUTSIDE_LINE =
-  "Weather and news: not available. No provider has been chosen, so Jarvis fetches nothing " +
-  "from the internet for this.";
+  "Weather and news: not available. The weather can come only from your own Home Assistant, " +
+  "and no news provider has been chosen, so Jarvis fetches nothing from the internet for this.";
+
+/** The last line of a briefing: the PC's own, or OUTSIDE_LINE from an older PC. */
+export function outsideLine(briefing) {
+  return briefing && briefing.outsideLine ? briefing.outsideLine : OUTSIDE_LINE;
+}
 
 /** Settings. */
 export const SETUP_DETAIL =
@@ -139,6 +151,7 @@ export function readBriefing(answer) {
       sections: Array.isArray(b.sections) ? b.sections.filter((s) => s && typeof s === "object")
         .map(readSection) : [],
       notIncluded: Array.isArray(b.not_included) ? b.not_included.filter((n) => typeof n === "string") : [],
+      outsideLine: text(b.outside_line),
       hidden: b.hidden === true,
     } : null,
     setups: available ? setups.map((j) => ({

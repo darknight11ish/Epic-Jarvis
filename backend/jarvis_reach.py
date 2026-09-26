@@ -495,7 +495,8 @@ def _home_read(ctx: Ctx) -> dict:
     return _tool_row(
         "home_read", "Home Assistant (reading)", "home_read", ctx, configured=bool(url),
         where=where_words(host_of(url)),
-        on_line="Reads the state of things in your home (lights, sensors, locks). Changes nothing.",
+        on_line=("Reads the state of things in your home (lights, sensors, locks), and the "
+                 "weather forecast your Home Assistant already has. Changes nothing."),
         not_set_up="Home Assistant is not set up on this PC.",
         off_line=_enable_line("home_read"))
 

@@ -853,7 +853,7 @@ class Live:
 
     def __init__(self, *, port=None, http=None, stream_head=None, ollama=None,
                  ollama_post=None, ollama_base=None, tokens=None, backend=None, repo=None, env=None, with_reads=False,
-                 with_chat=False, log_dir=None, token_store=None, reads=None):
+                 with_chat=False, log_dir=None, token_store=None, reads=None, home=None):
         self.env = os.environ if env is None else env
         p = port or (self.env.get("JARVIS_HUD_PORT") or "").strip() or DEFAULT_PORT
         try:
@@ -877,6 +877,7 @@ class Live:
         self.log_dir = log_dir
         self.token_store = token_store  # target -> store, for the Credential Manager check
         self.reads = reads              # {"email": fn, "calendar": fn} stand-ins
+        self.home = home                # {"check": fn, "weather": fn} stand-ins
         self.token = None
         self.token_where = None
         self.up = False
@@ -1605,6 +1606,74 @@ def _read_once(live: Live, kind: str, name: str) -> tuple:
     return (FAIL, f"{name} is set up but reading failed",
             f"{reason}. This window's settings were used; if Jarvis's differ, check "
             f"Settings -> What Jarvis can reach.")
+
+
+#: The guide the admin-token WARN points to (backend/README.md).
+HOME_USER_GUIDE = "backend/README.md, \"Home Assistant: a user of its own for Jarvis\""
+
+
+@preflight_check("home", "Home Assistant: is Jarvis's token a plain user's, and does the "
+                         "weather work?")
+def pf_home(live: Live) -> list:
+    """The feasibility audit's I81 (2026-09-26): WARN when Jarvis's Home
+    Assistant token is an administrator's. Two requests to the owner's own
+    Home Assistant that read nothing of the house (jarvis_home.check_token).
+    The weather is read once only with --with-reads, as a number of days -
+    never the forecast itself. This window's settings are used."""
+    fns = live.home or {}
+    try:
+        import jarvis_home as HOME
+    except Exception as exc:
+        return [(WARN, "jarvis_home.py is not in the backend folder",
+                 f"{type(exc).__name__}. Run apply-patches.ps1.")]
+    try:
+        got = (fns.get("check") or HOME.check_token)()
+    except Exception as exc:
+        return [(FAIL, "the Home Assistant token check broke", type(exc).__name__)]
+    state, why = got.get("state"), str(got.get("why") or "")
+    if state == "not_set_up":
+        return [(SKIP, "Home Assistant is not set up on this PC")]
+    rows = []
+    if state == "admin":
+        rows.append((WARN, "Jarvis's Home Assistant token belongs to an administrator",
+                     "A leaked administrator's token can also use Home Assistant's admin-only "
+                     "parts (templates, every event in the house, the error log). Make a user "
+                     "just for Jarvis with Administrator off, and give Jarvis that user's "
+                     f"token: {HOME_USER_GUIDE}. Nothing else changes; Jarvis never needs "
+                     "the admin parts."))
+    elif state == "user":
+        rows.append((PASS, "Jarvis's Home Assistant token is a plain user's, not an "
+                           "administrator's"))
+    elif state == "refused":
+        rows.append((FAIL, "Home Assistant does not accept Jarvis's token",
+                     "Make a new long-lived access token (your Jarvis user's profile page in "
+                     f"Home Assistant, Security) and set JARVIS_HOME_TOKEN again: "
+                     f"{HOME_USER_GUIDE}."))
+        return rows
+    elif state == "insecure":
+        rows.append((FAIL, "Jarvis will not send its Home Assistant token to that address", why))
+        return rows
+    else:
+        rows.append((WARN, "Home Assistant did not answer the token check", why))
+        return rows
+    if not live.with_reads:
+        rows.append((PASS, "the weather is not read here (add --with-reads to read it once)"))
+        return rows
+    try:
+        if fns.get("weather") is not None:
+            out = fns["weather"]()
+        else:
+            out = HOME.run(HOME.plan_forecast(), approved=True)
+    except Exception as exc:
+        rows.append((FAIL, "the weather read broke", type(exc).__name__))
+        return rows
+    if isinstance(out, dict) and out.get("ok"):
+        rows.append((PASS, f"the weather works ({len(out.get('days') or [])} day(s) of forecast "
+                           f"from {out.get('entity_id')})"))
+    else:
+        rows.append((FAIL, "Home Assistant is set up, but the weather read failed",
+                     str((out or {}).get("reason") or "no reason given")[:200]))
+    return rows
 
 
 @preflight_check("credentials", "Is Windows Credential Manager reachable?")

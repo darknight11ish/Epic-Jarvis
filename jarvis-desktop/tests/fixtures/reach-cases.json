@@ -659,7 +659,7 @@
     {
      "asks": "No",
      "id": "home_read",
-     "line": "Reads the state of things in your home (lights, sensors, locks). Changes nothing.",
+     "line": "Reads the state of things in your home (lights, sensors, locks), and the weather forecast your Home Assistant already has. Changes nothing.",
      "name": "Home Assistant (reading)",
      "on": true,
      "state": "on",

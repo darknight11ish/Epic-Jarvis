@@ -214,7 +214,7 @@ def _rows(rows, key):
 def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
     want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
-            "gate", "stop_all", "scheduler", "events", "voice", "reach", "credentials"]
+            "gate", "stop_all", "scheduler", "events", "voice", "reach", "home", "credentials"]
     check("every check the owner asked for is registered, in order", keys == want, keys)
     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
     try:
@@ -531,6 +531,38 @@ def t_reads_and_search():
     _run(live, only={"backend", "reach"})
     check("no provider chosen: nothing searched",
           fake.posts().count("/api/search/test") == before)
+
+
+def t_home_assistant_token_and_weather():
+    """I81 (2026-09-26): a WARN when Jarvis's Home Assistant token is an
+    administrator's; the weather read once only with --with-reads."""
+    weather = []
+    home = {"check": lambda: {"state": "admin", "why": "the token belongs to an administrator"},
+            "weather": lambda: weather.append(1) or {"ok": True, "days": [1, 2, 3],
+                                                     "entity_id": "weather.forecast_home"}}
+    live, _f, _o = _live(home=home)
+    _p, f, w, _s, rows, text = _run(live, only={"home"})
+    got = _rows(rows, "home")
+    check("an administrator's token: a WARN that says what to do, and points to the guide",
+          got[0][0] == S.WARN and "administrator" in got[0][1] and S.HOME_USER_GUIDE in got[0][2]
+          and f == 0, got)
+    check("... and the weather is not read without --with-reads", not weather
+          and any("--with-reads" in what for _st, what, _d in got))
+    home["check"] = lambda: {"state": "user", "why": ""}
+    live, _f, _o = _live(home=home, with_reads=True)
+    _p, f, w, _s, rows, _t = _run(live, only={"home"})
+    got = _rows(rows, "home")
+    check("a plain user's token: PASS, no WARN", got[0][0] == S.PASS and w == 0, got)
+    check("--with-reads: the weather once, as a number of days", weather == [1]
+          and any("3 day(s)" in what for _st, what, _d in got), got)
+    home["check"] = lambda: {"state": "refused", "why": ""}
+    live, _f, _o = _live(home=home)
+    _p, f, _w, _s, rows, _t = _run(live, only={"home"})
+    check("a token Home Assistant refuses: FAIL", f == 1, _rows(rows, "home"))
+    home["check"] = lambda: {"state": "not_set_up", "why": ""}
+    live, _f, _o = _live(home=home)
+    _p, f, _w, s, rows, _t = _run(live, only={"home"})
+    check("no Home Assistant: skipped", s == 1 and f == 0)
 
 
 def t_desktop_version_and_a_broken_check():

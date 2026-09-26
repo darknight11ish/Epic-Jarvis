@@ -739,6 +739,10 @@ def _match(text, now: float) -> Optional[Intent]:
                     r"|what\s+time\s+is\s+my\s+alarm(?:\s+set\s+for)?|any\s+alarms(?:\s+set)?", s):
         return Intent("alarm_list", {})
 
+    # --- the weather, from the owner's own Home Assistant (2026-09-26) -----------
+    if _WEATHER.fullmatch(s):
+        return Intent("weather_now")
+
     # --- the morning briefing (jarvis_briefing.py) ------------------------------
     got = _briefing(s, now)
     if got is not None:
@@ -1307,6 +1311,19 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
                   f"{tail}.{urgent}", n, [j["id"]], read=read)
 
 
+#: "What's the weather?" (the feasibility audit's I75, 2026-09-26): only the
+#: plain question, today or tomorrow - "what's the weather in Paris" or
+#: "this weekend" go to the model. Answered from the owner's own Home
+#: Assistant (jarvis_briefing.weather_now), or it says why there is none.
+_WFOR = r"(?:weather|forecast|weather\s+forecast)"
+_WWHEN = r"(?:\s+(?:today|now|right\s+now|outside|this\s+morning|tomorrow|for\s+today|for\s+tomorrow))?"
+_WEATHER = re.compile(
+    r"(?:what's|what\s+is|whats|how's|how\s+is|hows)\s+the\s+" + _WFOR + r"(?:\s+like)?" + _WWHEN
+    + r"|(?:what's|what\s+is|whats)\s+the\s+weather\s+(?:going\s+to\s+be|gonna\s+be)(?:\s+like)?"
+    + _WWHEN
+    + r"|(?:give|tell)\s+me\s+the\s+" + _WFOR + _WWHEN
+    + r"|(?:the\s+)?" + _WFOR + r"(?:\s+(?:today|now|please|tomorrow))?")
+
 #: "the briefing", "my morning briefing", "today's briefing", "briefing".
 _BRIEF = r"(?:(?:my|the|a|today'?s|this\s+morning'?s)\s+)?(?:morning\s+|daily\s+)?briefing"
 
@@ -1530,6 +1547,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_lists(intent, sched)
     if n.startswith("briefing_"):
         return _run_briefing(intent, sched, now)
+    if n == "weather_now":
+        return _run_weather(now)
     if n.startswith("search_"):
         return _run_search(intent)
     if n == "reach_list":
@@ -1934,6 +1953,23 @@ def _briefing_words(j: dict, now: float) -> str:
     if j.get("due") is None:
         return "a briefing"
     return S.when_words(j["due"], now)
+
+
+def _run_weather(now: float) -> Optional[Result]:
+    """"What's the weather?" from the owner's own Home Assistant - the
+    briefing's own read (jarvis_briefing.weather_now), no model. Not
+    private (nothing of the owner's is in it), but the forecast is outside
+    text, so `read` marks the conversation as having read Home Assistant.
+    A PC without the briefing module hands the question to the model."""
+    try:
+        import jarvis_briefing as B
+    except Exception:
+        return None
+    try:
+        got = B.weather_now(now=now)
+    except Exception:
+        return None
+    return Result(str(got.get("text") or ""), "weather_now", read=list(got.get("read") or []))
 
 
 def _run_briefing(intent: Intent, sched, now: float) -> Result:

@@ -220,7 +220,7 @@ class Query:
 
 @dataclass
 class Plan:
-    kind: str                    # "get_states" | "call_service"
+    kind: str                    # "get_states" | "call_service" | "get_forecast"
     queries: list = field(default_factory=list)
     heavy: bool = False
     if_refused: str = ""
@@ -491,10 +491,190 @@ def everyday_problem(p: Plan) -> str:
     return ""
 
 
+# --------------------------------------------------------------------------
+#   The weather forecast - a third, tiny shape, READ ONLY (2026-09-26)
+# --------------------------------------------------------------------------
+#
+# The owner chose "briefing weather from the owner's own Home Assistant"
+# (CLAUDE.md, the cutting-edge decision; the feasibility audit's I75). Home
+# Assistant already fetches a forecast for its weather device (many
+# installs have "Forecast Home", from met.no); Jarvis asks HA for it, so
+# Jarvis itself opens no new connection to any weather service.
+#
+# HA hands a forecast out only through a SERVICE CALL,
+# `POST /api/services/weather/get_forecasts?return_response` - the same
+# address shape that ACTS (turns a light on). So this is NOT plan_service
+# and never goes through home_control or its card: plan_forecast() builds
+# exactly two requests, both fixed here - one GET of the weather device's
+# state (for "now" and the temperature unit) and one POST to that one
+# service with a body of exactly {"entity_id", "type"} - and run() refuses a
+# "get_forecast" plan unless its requests are exactly those, rebuilt from
+# the plan's own entity (FORECAST_URL_TAIL, _forecast_problem). No other
+# domain, service, body key or query can be reached through it, and
+# test_home_control.py proves that with tampered plans. It is a read at tier
+# `auto`, under the same gate action as every Home Assistant read
+# (`home_read`), and the forecast is OUTSIDE TEXT: whoever reads it marks
+# the conversation as having read Home Assistant.
+#
+# Which device: JARVIS_HOME_WEATHER on the PC (a Windows user setting, like
+# JARVIS_HOME_URL), or HA's usual "weather.forecast_home" when it is not
+# set. There is no screen for it in either app (the feasibility audit's
+# Overwhelm guardrail: "no weather source setting").
+
+WEATHER_ENV = "JARVIS_HOME_WEATHER"
+WEATHER_DEFAULT = "weather.forecast_home"
+FORECAST_TYPES = ("daily", "twice_daily", "hourly")
+#: The one service address a forecast plan may use, after the base URL.
+FORECAST_URL_TAIL = "/api/services/weather/get_forecasts?return_response"
+_WEATHER_ID_RE = re.compile(r"^weather\.[a-z0-9_]+$")
+#: HA's weather conditions (its `weather` integration's own list), in plain
+#: words. Anything else is left out, not shown: a condition is text from
+#: outside, and a word this list does not know says nothing useful.
+CONDITIONS = {
+    "clear-night": "clear", "cloudy": "cloudy", "exceptional": "unusual weather",
+    "fog": "foggy", "hail": "hail", "lightning": "thunderstorms",
+    "lightning-rainy": "thunderstorms and rain", "partlycloudy": "partly cloudy",
+    "pouring": "heavy rain", "rainy": "rain", "snowy": "snow", "snowy-rainy": "sleet",
+    "sunny": "sunny", "windy": "windy", "windy-variant": "windy and cloudy",
+}
+_MAX_DAYS = 7
+
+
+def weather_entity() -> str:
+    """The weather device Jarvis reads: JARVIS_HOME_WEATHER, or HA's usual
+    one. Not checked here - plan_forecast refuses one that is not
+    `weather.<name>`."""
+    return os.environ.get(WEATHER_ENV, "").strip() or WEATHER_DEFAULT
+
+
+def _forecast_queries(base: str, entity_id: str, kind: str) -> list:
+    b = base.rstrip("/")
+    return [
+        Query(url=f"{b}/api/states/{urllib.parse.quote(entity_id, safe='')}", method="GET",
+              why=f"read the weather now, from {entity_id}", entity_id=entity_id),
+        Query(url=b + FORECAST_URL_TAIL, method="POST",
+              why=f"read the {kind.replace('_', ' ')} forecast of {entity_id}",
+              entity_id=entity_id, body={"entity_id": entity_id, "type": kind}),
+    ]
+
+
+def plan_forecast(entity_id: Optional[str] = None, kind: str = "daily") -> Plan:
+    """The weather now and the forecast, from ONE named weather device.
+    Two fixed requests, nothing else. Opens no socket."""
+    entity_id = str(entity_id if entity_id is not None else weather_entity()).strip()
+    if_refused = "the weather is not read; the briefing says it is not available"
+
+    def refused(why: str) -> Plan:
+        return Plan(kind="get_forecast", if_refused=if_refused,
+                    authenticated=authenticated(), reason_empty=why)
+
+    if not _WEATHER_ID_RE.match(entity_id):
+        return refused(f"{entity_id!r} is not a Home Assistant weather device "
+                       f"(weather.<name>) - check {WEATHER_ENV}")
+    if kind not in FORECAST_TYPES:
+        return refused(f"{kind!r} is not a kind of forecast Home Assistant gives")
+    base = os.environ.get(URL_ENV, "").strip()
+    if not base:
+        return refused(f"{URL_ENV} is not set - there is no Home Assistant to read")
+    insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")
+    if insecure:
+        return refused(insecure)
+    queries = _forecast_queries(base, entity_id, kind)
+    return Plan(kind="get_forecast", queries=queries, if_refused=if_refused,
+                authenticated=authenticated(), digest=_digest(queries))
+
+
+def _forecast_problem(p: Plan) -> str:
+    """"" when this get_forecast plan holds exactly the two requests
+    plan_forecast makes for its own weather device, and nothing else - else
+    why not. So no other service, body or address can ride on it."""
+    if not isinstance(p, Plan) or p.kind != "get_forecast" or len(p.queries) != 2:
+        return "not a weather plan"
+    get, post = p.queries
+    eid = str(get.entity_id or "")
+    if not _WEATHER_ID_RE.match(eid) or post.entity_id != eid:
+        return "not a weather device"
+    body = post.body if isinstance(post.body, dict) else None
+    if body is None or set(body) != {"entity_id", "type"} or body.get("entity_id") != eid \
+            or body.get("type") not in FORECAST_TYPES:
+        return "not the forecast request"
+    base = os.environ.get(URL_ENV, "").strip()
+    want = _forecast_queries(base, eid, body["type"]) if base else []
+    if not want or [(q.method, q.url, q.body) for q in p.queries] != \
+            [(q.method, q.url, q.body) for q in want]:
+        return "not the two weather requests"
+    if not p.digest or p.digest != _digest(p.queries):
+        return "the plan's requests are not the ones it was made with"
+    return ""
+
+
+def _number(v) -> Optional[float]:
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return float(v) if v == v and abs(v) < 1e6 else None
+
+
+def _forecast_rows(raw, entity_id: str) -> list:
+    """The forecast entries HA returned, tidied: date (YYYY-MM-DD, as HA
+    wrote it), condition (plain words or ""), high, low, rain chance."""
+    resp = raw.get("service_response") if isinstance(raw, dict) else None
+    if not isinstance(resp, dict):
+        resp = raw if isinstance(raw, dict) else {}
+    one = resp.get(entity_id) if isinstance(resp.get(entity_id), dict) else {}
+    out = []
+    for e in (one.get("forecast") or [])[:_MAX_DAYS * 2]:
+        if not isinstance(e, dict):
+            continue
+        day = str(e.get("datetime") or "")[:10]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+            continue
+        rain = _number(e.get("precipitation_probability"))
+        out.append({"date": day,
+                    "condition": CONDITIONS.get(str(e.get("condition") or ""), ""),
+                    "high": _number(e.get("temperature")),
+                    "low": _number(e.get("templow")),
+                    "rain_chance": int(round(rain)) if rain is not None and 0 <= rain <= 100
+                    else None})
+    return out[:_MAX_DAYS]
+
+
+def _run_forecast(p: Plan, getter) -> dict:
+    problem = _forecast_problem(p)
+    if problem:
+        return {"ok": False, "reason": f"{problem}, so nothing was sent"}
+    get, post = p.queries
+    try:
+        state = getter(get)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return {"ok": False, "reason": f"Home Assistant has no device called {get.entity_id}. "
+                                           f"Set {WEATHER_ENV} on this PC to your weather "
+                                           "device's id"}
+        return {"ok": False, "reason": f"Home Assistant answered {exc.code} to the weather read"}
+    except Exception as exc:
+        return {"ok": False, "reason": f"the weather read failed: {type(exc).__name__}"}
+    try:
+        raw = getter(post)
+    except urllib.error.HTTPError as exc:
+        return {"ok": False, "reason": (f"Home Assistant answered {exc.code} to the forecast "
+                                        "request; an older Home Assistant cannot hand out "
+                                        "forecasts this way")}
+    except Exception as exc:
+        return {"ok": False, "reason": f"the forecast read failed: {type(exc).__name__}"}
+    attrs = state.get("attributes") if isinstance(state, dict) else None
+    attrs = attrs if isinstance(attrs, dict) else {}
+    unit = attrs.get("temperature_unit")
+    unit = unit if unit in ("°C", "°F") else "°"
+    now = {"condition": CONDITIONS.get(str((state or {}).get("state") or ""), ""),
+           "temp": _number(attrs.get("temperature"))}
+    return {"ok": True, "entity_id": get.entity_id, "unit": unit, "now": now,
+            "days": _forecast_rows(raw, get.entity_id)}
+
+
 def describe(p: Plan) -> str:
     """The card text. Every URL and body in full - never a summary."""
     if p.reason_empty:
-        verb = "read" if p.kind == "get_states" else "control"
+        verb = "read" if p.kind in ("get_states", "get_forecast") else "control"
         return f"Jarvis would like to {verb} Home Assistant, but {p.reason_empty}. Nothing would be sent."
 
     auth_line = (
@@ -514,6 +694,20 @@ def describe(p: Plan) -> str:
         ]
         for i, q in enumerate(p.queries, 1):
             lines += [f"  {i}. GET {q.url}", f"     why: {q.why}", ""]
+    elif p.kind == "get_forecast":
+        lines = [
+            f"Jarvis would like to read the weather from Home Assistant's "
+            f"{p.queries[0].entity_id} - the forecast Home Assistant already has. "
+            "It changes nothing.",
+            "",
+            auth_line,
+            "",
+        ]
+        for i, q in enumerate(p.queries, 1):
+            lines += [f"  {i}. {q.method} {q.url}", f"     why: {q.why}"]
+            if q.body is not None:
+                lines.append(f"     body: {json.dumps(q.body, ensure_ascii=False)}")
+            lines.append("")
     elif len(p.queries) > 1:
         n = len(p.queries)
         action = p.queries[0].why.split(" on ", 1)[0].replace("call ", "", 1)
@@ -660,6 +854,12 @@ def run(p: Plan, *, fetch: Optional[Callable[[Query], dict]] = None,
             })
         return {"ok": True, "states": states}
 
+    if p.kind == "get_forecast":
+        # Read only: exactly the two fixed weather requests, or nothing.
+        return _run_forecast(p, getter)
+    if p.kind != "call_service":
+        return {"ok": False, "reason": "not a plan this module makes, so nothing was sent"}
+
     # call_service - exactly the requests the card listed, and nothing else.
     if not p.queries or not p.digest or p.digest != _digest(p.queries):
         return {"ok": False,
@@ -689,3 +889,82 @@ def run(p: Plan, *, fetch: Optional[Callable[[Query], dict]] = None,
         out["reason"] = (f"{len(failed)} of {len(results)} did not work: "
                          + ", ".join(failed))
     return out
+
+
+# --------------------------------------------------------------------------
+#   Is Jarvis's token an administrator's? (the feasibility audit's I81)
+# --------------------------------------------------------------------------
+#
+# A token made by a separate, NON-administrator "Jarvis" user in Home
+# Assistant cannot use HA's admin-only parts - templates, the stream of
+# every event in the house, firing events, the error log - so a leaked
+# token can do less. (It can still switch every device: HA gives every user
+# that. This narrows the damage; it does not remove it.) The live preflight
+# (selftest.py --preflight) warns when the token is an administrator's;
+# backend/README.md, "Home Assistant: a user of its own for Jarvis", says
+# how to make one.
+#
+# How it tells, with two requests that read nothing of the house:
+#   GET  /api/           "API running." for any token HA accepts;
+#   POST /api/template   {"template": "ok"} - HA renders templates for an
+#                        administrator's token only (HA's api/__init__.py,
+#                        read by the 2026-09-26 research; not checked on the
+#                        owner's HA). The constant text "ok" reads nothing.
+# Only the preflight calls this; Jarvis's own reads never do.
+
+ADMIN_PROBE_TAIL = "/api/template"
+ADMIN_PROBE_BODY = {"template": "ok"}
+
+
+def _default_probe(method: str, url: str, body: Optional[dict]) -> int:
+    """The HTTP status HA answers - through the same opener as every other
+    request here: never a proxy for plain http, never a redirect."""
+    token = os.environ.get(TOKEN_ENV, "")
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = None
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    opener = jarvis_local_http.opener_for(url, _RefuseRedirect)
+    try:
+        with opener.open(req, timeout=10.0) as r:
+            r.read(4096)
+            return int(r.status)
+    except urllib.error.HTTPError as exc:
+        return int(exc.code)
+
+
+def check_token(*, probe: Optional[Callable] = None) -> dict:
+    """{"state", "why"}: "not_set_up", "insecure", "refused" (HA does not
+    accept the token), "unreachable", "user" (a plain user's - good) or
+    "admin" (an administrator's). Never the token itself. Never raises."""
+    base = os.environ.get(URL_ENV, "").strip()
+    if not base or not authenticated():
+        return {"state": "not_set_up", "why": "Home Assistant is not set up on this PC"}
+    insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")
+    if insecure:
+        return {"state": "insecure", "why": insecure}
+    ask = probe or _default_probe
+    b = base.rstrip("/")
+    try:
+        first = ask("GET", b + "/api/", None)
+    except Exception as exc:
+        return {"state": "unreachable",
+                "why": f"Home Assistant did not answer ({type(exc).__name__})"}
+    if first in (401, 403):
+        return {"state": "refused", "why": "Home Assistant does not accept Jarvis's token"}
+    if first != 200:
+        return {"state": "unreachable", "why": f"Home Assistant answered {first}"}
+    try:
+        second = ask("POST", b + ADMIN_PROBE_TAIL, dict(ADMIN_PROBE_BODY))
+    except Exception as exc:
+        return {"state": "unreachable",
+                "why": f"Home Assistant did not answer ({type(exc).__name__})"}
+    if second == 200:
+        return {"state": "admin", "why": "the token belongs to an administrator"}
+    if second in (401, 403):
+        return {"state": "user", "why": "the token belongs to a user who is not an administrator"}
+    return {"state": "unreachable", "why": f"Home Assistant answered {second} to the check"}

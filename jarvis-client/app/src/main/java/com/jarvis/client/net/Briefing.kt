@@ -20,7 +20,11 @@ import kotlinx.serialization.json.doubleOrNull
  * owner turns "Show who new emails are from" off ([SENDERS_LABEL]: OFF at
  * once, ON through ONE approval card on the PC, held on a stale link). The
  * senders are LINES of the email section, so [hide] takes them out too.
- * Weather and news are not available: no provider has been chosen.
+ * The weather comes only from the owner's own Home Assistant, when it is set
+ * up for Jarvis on the PC (2026-09-26, the feasibility audit's I75) - a
+ * section of its own, in the PC's words; news is not available. The last
+ * line is the PC's ([Brief.outsideLine]); an older PC sends none, and
+ * [OUTSIDE_LINE] is shown instead ([outsideLine]).
  *
  * It is a kind of job on the PC's one scheduler, so it also shows in Coming
  * up. A briefing that repeats is set up with the scheduler's own route
@@ -76,10 +80,16 @@ object Briefing {
     /** All a notification ever says (jarvis_briefing.LOCK_SCREEN). */
     const val LOCK_SCREEN = "Jarvis: your morning briefing is ready."
 
-    /** The line weather and news get (jarvis_briefing.OUTSIDE_LINE). */
+    /**
+     * The last line when the weather is not in the briefing
+     * (jarvis_briefing.OUTSIDE_LINE) - shown when the PC sends no `outside_line`.
+     */
     const val OUTSIDE_LINE =
-        "Weather and news: not available. No provider has been chosen, so Jarvis fetches nothing " +
-            "from the internet for this."
+        "Weather and news: not available. The weather can come only from your own Home Assistant, " +
+            "and no news provider has been chosen, so Jarvis fetches nothing from the internet for this."
+
+    /** The last line of a briefing: the PC's own, or [OUTSIDE_LINE] from an older PC. */
+    fun outsideLine(b: Brief): String = b.outsideLine.ifBlank { OUTSIDE_LINE }
 
     /** Setting it up - the desktop's Settings, Morning briefing. */
     const val SETUP_TITLE = "When it arrives"
@@ -133,6 +143,8 @@ object Briefing {
         val sections: List<Section>,
         val notIncluded: List<String>,
         val hidden: Boolean,
+        /** The PC's own last line (weather and news); "" from an older PC. */
+        val outsideLine: String = "",
     )
 
     data class Setup(
@@ -203,6 +215,7 @@ object Briefing {
                         (n as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull
                     } ?: emptyList(),
                     hidden = it.flag("hidden") == true,
+                    outsideLine = it.text("outside_line") ?: "",
                 )
             },
             building = body.flag("building") == true,
