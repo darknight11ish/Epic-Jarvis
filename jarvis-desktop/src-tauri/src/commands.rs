@@ -2238,7 +2238,9 @@ async fn answer_approval(
     if approved {
         match from {
             AnsweredFrom::Window(window) => {
-                let send = crate::lock::check_approval(&app, window, id, APPROVAL_TIMEOUT).await?;
+                let send = crate::lock::check_approval(&app, window, id, APPROVAL_TIMEOUT)
+                    .await
+                    .map_err(|e| crate::lock::not_approved_words(&e))?;
                 if send.backend_may_ask {
                     wait = send.wait;
                     crate::lock::let_backend_prompt_forward();
@@ -2280,7 +2282,7 @@ async fn answer_approval(
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
     if let Some(said) = owner_check_refusal(status.as_u16(), &body) {
-        return Err(said);
+        return Err(crate::lock::not_approved_words(&said));
     }
     if !status.is_success() {
         return Err(format!(
@@ -2445,11 +2447,42 @@ pub fn stop_everything_now(app: &AppHandle) {
 pub const STOP_EVERYTHING_TITLE: &str = "Stop everything";
 
 async fn post_stop_all(app: &AppHandle) -> Result<serde_json::Value, String> {
-    post_task_control(app, "/api/stop_all", serde_json::json!({})).await
+    const PATH: &str = "/api/stop_all";
+    let base = jarvis_base(app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .post(format!("{base}{PATH}"))
+        .headers(jarvis_headers(app)?)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        // The plain words both apps use for a PC that did not answer - never
+        // the address or the library's text (continuity audit 2026-09-26).
+        .map_err(|e| crate::plain_errors::unreachable_words(e.is_connect(), e.is_timeout()))?;
+    let status = response.status();
+    let detail = response.text().await.unwrap_or_default();
+    if status.is_success() {
+        return Ok(serde_json::from_str(&detail).unwrap_or(serde_json::Value::Null));
+    }
+    if status.as_u16() == 404 {
+        return Err(format!(
+            "this Jarvis backend has no `{PATH}` route - apply the backend \
+             patches (task-control.patch) to turn it on"
+        ));
+    }
+    Err(server_sentence(status.as_u16(), PATH, &detail))
 }
+
+/// Always true by the time the PC answers: speech stopped here first. The
+/// phone's `StopEverything.SPEECH` - the same words.
+pub const STOP_SPEECH: &str = "Stopped speaking.";
+/// The PC answered without a sentence of its own (`StopEverything.PC_SILENT`).
+pub const STOP_PC_SILENT: &str = "Jarvis stopped what it was doing.";
+/// The PC could not be asked (`StopEverything.NOT_REACHED`); why follows.
+pub const STOP_NOT_REACHED: &str = "Nothing else could be stopped.";
 
 /// What the notification says: speech is always stopped (that happened
 /// here), then the PC's own sentence - or why the PC could not be asked.
+/// The same sentences as the phone's button (`StopEverything.kt`).
 pub fn stop_everything_words(result: Result<serde_json::Value, String>) -> String {
     match result {
         Ok(v) => {
@@ -2458,17 +2491,29 @@ pub fn stop_everything_words(result: Result<serde_json::Value, String>) -> Strin
                 .and_then(|m| m.as_str())
                 .map(str::trim)
                 .filter(|m| !m.is_empty())
-                .unwrap_or("Jarvis stopped what it was doing.");
-            format!("Stopped speaking. {said}")
+                .unwrap_or(STOP_PC_SILENT);
+            format!("{STOP_SPEECH} {said}")
         }
         Err(e) if e.contains("has no `/api/stop_all` route") => {
-            "Stopped speaking. This PC's Jarvis cannot stop anything else yet - run \
-             apply-patches.ps1 on the PC (stop-all.patch). The Stop button on a running \
-             task still works."
-                .to_string()
+            format!(
+                "{STOP_SPEECH} This PC's Jarvis cannot stop anything else yet - run \
+                 apply-patches.ps1 on the PC (stop-all.patch). The Stop button on a running \
+                 task still works."
+            )
         }
         Err(e) => {
-            format!("Stopped speaking. Jarvis could not be reached to stop anything else: {e}")
+            let why = e.trim();
+            let mut why = why.to_string();
+            if let Some(first) = why.get(0..1) {
+                let upper = first.to_uppercase();
+                why.replace_range(0..1, &upper);
+            }
+            if !why.is_empty() && !why.ends_with(['.', '!', '?']) {
+                why.push('.');
+            }
+            format!("{STOP_SPEECH} {STOP_NOT_REACHED} {why}")
+                .trim_end()
+                .to_string()
         }
     }
 }
@@ -5660,11 +5705,20 @@ mod stop_everything_tests {
         ));
         assert!(old.contains("stop-all.patch"), "{old}");
         assert!(old.starts_with("Stopped speaking."), "{old}");
-        let down = stop_everything_words(Err(
-            "could not reach the Jarvis server at http://127.0.0.1:4719".to_string(),
-        ));
-        assert!(down.contains("could not be reached"), "{down}");
-        assert!(down.starts_with("Stopped speaking."), "{down}");
+        let down = stop_everything_words(Err(crate::plain_errors::unreachable_words(true, false)));
+        assert_eq!(
+            down,
+            format!(
+                "Stopped speaking. Nothing else could be stopped. {}",
+                crate::plain_errors::unreachable_words(true, false)
+            )
+        );
+        assert!(!down.contains("127.0.0.1"), "{down}");
+        let refused = stop_everything_words(Err("jarvis's address is refused".to_string()));
+        assert!(
+            refused.ends_with("Nothing else could be stopped. Jarvis's address is refused."),
+            "{refused}"
+        );
     }
 
     #[test]

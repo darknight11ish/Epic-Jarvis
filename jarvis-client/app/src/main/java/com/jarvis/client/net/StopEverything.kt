@@ -31,8 +31,23 @@ object StopEverything {
     /** Always true by the time the PC answers: the phone stopped its own speech first. */
     const val SPEECH = "Stopped speaking."
 
-    /** The PC sent no words of its own. */
-    const val PC_SILENT = "The PC stopped what it was doing."
+    /** The PC sent no words of its own. The desktop's `STOP_PC_SILENT`. */
+    const val PC_SILENT = "Jarvis stopped what it was doing."
+
+    /** The PC could not be asked; the plain reason follows. The desktop's `STOP_NOT_REACHED`. */
+    const val NOT_REACHED = "Nothing else could be stopped."
+
+    /**
+     * The PC could not be reached: the plain words every other failure uses
+     * (PlainErrors - "Your PC isn't answering. ..."), after [SPEECH] and
+     * [NOT_REACHED], with their one button (Try again, or Check the
+     * connection settings). Null for any other failure.
+     */
+    fun problem(error: ApiError?): PlainErrors.Shown? {
+        if (error !is ApiError.Unreachable) return null
+        val plain = PlainErrors.forApiError(error)
+        return plain.copy(says = "$SPEECH $NOT_REACHED ${plain.says}".trim())
+    }
 
     /**
      * What the phone says after a press: [SPEECH], then the PC's own
@@ -48,8 +63,7 @@ object StopEverything {
                 ApiError.BadToken ->
                     "$SPEECH The PC refused this phone's token, so nothing else was stopped. " +
                         "Pair the phone again from the desktop's Settings."
-                is ApiError.Unreachable ->
-                    "$SPEECH The PC could not be reached to stop anything else: ${error.detail}."
+                is ApiError.Unreachable -> problem(error)?.text ?: "$SPEECH $NOT_REACHED"
                 else -> "$SPEECH The PC could not be asked to stop anything else."
             }
         }

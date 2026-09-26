@@ -889,7 +889,8 @@ async function decide(approved, optionId = null) {
     // stays. Releasing in `finally` instead would release it on SUCCESS too,
     // which is the whole thing the latch exists to prevent.
     if (!handled) state.decided = null;
-    flash(handled ? "Already handled elsewhere." : `${message} — nothing was decided.`,
+    flash(handled ? "Already handled elsewhere."
+      : /^Nothing was approved\./.test(message) ? message : `${message} — nothing was decided.`,
           handled ? null : "bad");
   } finally {
     state.deciding = false;

@@ -1907,6 +1907,9 @@ async function decideApproval(approved, optionId = null) {
     const handled = /409|already/i.test(message);
     dom.approvalHint.textContent = handled
       ? "Already handled somewhere else."
+      // "Nothing was approved. Windows Hello is not set up ..." (lock/rules.rs
+      // not_approved_words) already says what happened and what to do.
+      : /^Nothing was approved\./.test(message) ? message
       : `${message} — nothing was decided. Try again.`;
     // Release the latch. It exists to stop a SECOND decision racing a
     // successful first one; a decision that never reached the server is not a

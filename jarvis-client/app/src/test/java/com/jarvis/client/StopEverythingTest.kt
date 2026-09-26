@@ -49,9 +49,32 @@ class StopEverythingTest {
         val old = StopEverything.describe(null, ApiError.NotFound)
         assertTrue(old, old.startsWith("Stopped speaking.") && "stop-all.patch" in old)
         val down = StopEverything.describe(null, ApiError.Unreachable("timeout"))
-        assertTrue(down, down.startsWith("Stopped speaking.") && "could not be reached" in down)
+        assertTrue(down, down.startsWith("Stopped speaking. Nothing else could be stopped."))
         val token = StopEverything.describe(null, ApiError.BadToken)
         assertTrue(token, "nothing else was stopped" in token)
+    }
+
+    @Test
+    fun anUnreachablePcIsSaidInPlainWordsWithItsButton() {
+        // The audit's case: the raw "Failed to connect to /100.101.1.2 ..." and
+        // the PC's private address on screen. Now the plain words and Try again.
+        val raw = "Failed to connect to /100.101.1.2 (port 8765) from /100.64.3.4 (port 45678) after 10000ms"
+        val e = ApiError.Unreachable(raw, "connect_timeout")
+        val said = StopEverything.describe(null, e)
+        assertEquals(
+            "Stopped speaking. Nothing else could be stopped. Your PC isn't answering. It may be " +
+                "asleep or switched off, or Tailscale or NordVPN Meshnet may be off at one end. Wake " +
+                "the PC, check the private network on both, then try again.",
+            said,
+        )
+        assertTrue(said, "100.101" !in said)
+        val p = StopEverything.problem(e)!!
+        assertEquals(said, p.text)
+        assertEquals("Try again", p.button)
+        // No address saved at all: the "not connected to a PC yet" words.
+        val unpaired = StopEverything.problem(ApiError.Unreachable("No desktop address set", "not_paired"))!!
+        assertEquals("Check the connection settings", unpaired.button)
+        assertTrue(StopEverything.problem(ApiError.NotFound) == null)
     }
 
     @Test
@@ -65,5 +88,14 @@ class StopEverythingTest {
             assertTrue(hotkeys.readText().contains("label: \"${StopEverything.LABEL}\""))
         }
         assertEquals("Stop everything", StopEverything.LABEL)
+        val commands = listOf(File("../../jarvis-desktop/src-tauri/src/commands.rs"),
+            File("../jarvis-desktop/src-tauri/src/commands.rs"),
+            File("jarvis-desktop/src-tauri/src/commands.rs")).firstOrNull { it.isFile }
+        if (commands != null) {
+            val rs = commands.readText()
+            for (words in listOf(StopEverything.SPEECH, StopEverything.PC_SILENT, StopEverything.NOT_REACHED)) {
+                assertTrue(words, rs.contains("\"$words\""))
+            }
+        }
     }
 }

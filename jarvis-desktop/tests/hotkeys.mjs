@@ -53,6 +53,44 @@ await check("every bindable action is listed", async () => {
   assert.equal(stop.key, "Alt + Shift + X");
 });
 
+await check("Stop everything is in the tray menu too, the same command, never greyed", async () => {
+  // Continuity audit 2026-09-26: a mouse, or a key another program holds.
+  const tray = read("src-tauri/src/tray.rs");
+  assert.match(tray, /ID_STOP_EVERYTHING => commands::stop_everything_now\(app\)/);
+  const row = tray.slice(tray.indexOf("let stop_everything = MenuItem::with_id("));
+  assert.match(row.slice(0, 300), /"Stop everything",\s*true,\s*accel\(app, "stop_everything"\)/);
+  const menu = tray.slice(tray.indexOf("let menu = Menu::with_items"), tray.indexOf("app.state::<TrayHandles>"));
+  assert.match(menu, /&stop_everything,/, "the row is built but not in the menu");
+  // It is never disabled afterwards either.
+  assert.doesNotMatch(tray, /stop_everything\.set_enabled/);
+  // And Settings' promise about the tray is true of what it names.
+  const html = read("src/settings.html");
+  assert.doesNotMatch(html, /Everything here is also in the tray menu/);
+  assert.match(html.replace(/\s+/g, " "), /Summon Jarvis, the widget and Stop everything are also in the tray menu\./);
+  for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything"]) {
+    assert.match(tray, new RegExp(`accel\\(app, "${id}"\\)`), `${id} has no tray row`);
+  }
+});
+
+await check("Stop everything says the same sentences as the phone's button", async () => {
+  // Continuity audit 2026-09-26, #5: they had drifted apart ("Jarvis" / "The
+  // PC", and the phone put the raw network text on screen).
+  const rs = read("src-tauri/src/commands.rs");
+  const kt = readFileSync(join(HERE, "..", "..",
+    "jarvis-client/app/src/main/java/com/jarvis/client/net/StopEverything.kt"), "utf8");
+  for (const [rust, kotlin] of [["STOP_SPEECH", "SPEECH"], ["STOP_PC_SILENT", "PC_SILENT"],
+    ["STOP_NOT_REACHED", "NOT_REACHED"]]) {
+    const a = rs.match(new RegExp(`pub const ${rust}: &str = "([^"]+)";`));
+    const b = kt.match(new RegExp(`const val ${kotlin} = "([^"]+)"`));
+    assert.ok(a && b, `${rust} / ${kotlin} not found`);
+    assert.equal(a[1], b[1], `${rust} differs from the phone's ${kotlin}`);
+  }
+  // The PC not answering: the plain words, never the address or the library's text.
+  const post = rs.slice(rs.indexOf("async fn post_stop_all("));
+  assert.match(post.slice(0, post.indexOf("\n}\n")), /plain_errors::unreachable_words\(e\.is_connect\(\), e\.is_timeout\(\)\)/);
+  assert.match(kt, /is ApiError\.Unreachable -> problem\(error\)\?\.text/);
+});
+
 await check("the Rust list and this stand-in agree", async () => {
   // hotkeys.rs ACTIONS is the truth; the stand-in above is what every
   // Settings test renders. A new action added to one and not the other

@@ -2653,6 +2653,12 @@ object JarvisRuntime {
     suspend fun stopEverything(): ApiResult<JsonObject> {
         if (::voice.isInitialized) voice.stopSpeaking()
         val result = api.stopEverything()
+        // A PC that could not be reached: the plain words and their button
+        // (Try again, or Check the connection settings), like every failure.
+        val problem = (result as? ApiResult.Failed)?.let {
+            com.jarvis.client.net.StopEverything.problem(it.error)
+        }
+        if (problem != null) _problem.value = problem
         _notice.value = when (result) {
             is ApiResult.Ok -> com.jarvis.client.net.StopEverything.describe(result.value, null)
             is ApiResult.Failed -> com.jarvis.client.net.StopEverything.describe(null, result.error)

@@ -423,7 +423,7 @@ class JarvisApi(
     suspend fun stopEverything(): ApiResult<JsonObject> =
         withContext(Dispatchers.IO) {
             val target = url("/api/stop_all") ?: return@withContext ApiResult.Failed(
-                noAddress(""),
+                noAddress(),
             )
             val body = "{}".toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -439,7 +439,7 @@ class JarvisApi(
                         else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     suspend fun injectTaskNote(note: String): ApiResult<Unit> =
@@ -945,7 +945,7 @@ class JarvisApi(
                 return@withContext ApiResult.Failed(ApiError.Malformed("not a focus route"))
             }
             val target = url(path) ?: return@withContext ApiResult.Failed(
-                noAddress(""),
+                noAddress(),
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
@@ -960,7 +960,7 @@ class JarvisApi(
                         ApiResult.Ok(Focus.Reply(resp.code, obj))
                     }
                 }
-            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
     /** A test search waits for the provider (up to 15 seconds on the PC). */

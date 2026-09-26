@@ -46,6 +46,33 @@ pub const NOT_SET_UP: &str = "Windows Hello is not set up on this PC, and a lock
 pub const NO_HELLO_NO_RISKY: &str = "Windows Hello is not set up on this PC, so Jarvis cannot \
      check it is you, and risky approvals are refused until it is. Set up Windows Hello in \
      Windows Settings (Accounts, Sign-in options) to approve risky actions - a PIN is enough";
+/// How the refusal starts on screen, as on the phone (`SecurityRules.
+/// NO_SCREEN_LOCK` starts "Nothing was approved."; continuity audit
+/// 2026-09-26, #6). Not part of [`NO_HELLO_NO_RISKY`] itself, which is the
+/// backend's sentence word for word (`jarvis_owner_check.NOT_SET_UP`).
+pub const NOTHING_APPROVED: &str = "Nothing was approved.";
+
+/// A refused approval's sentence as the windows show it: "no lock, no
+/// risky approval" - whether this app or the backend refused - is led by
+/// [`NOTHING_APPROVED`] and ends with a full stop, the phone's shape; any
+/// other sentence is passed on as it is.
+pub fn not_approved_words(said: &str) -> String {
+    let lead = NO_HELLO_NO_RISKY
+        .split(", and")
+        .next()
+        .unwrap_or(NO_HELLO_NO_RISKY);
+    let said = said.trim();
+    if !said.starts_with(lead) {
+        return said.to_string();
+    }
+    let end = if said.ends_with(['.', '!', '?']) {
+        ""
+    } else {
+        "."
+    };
+    format!("{NOTHING_APPROVED} {said}{end}")
+}
+
 /// Turning a lock ON with nothing to check against would lock the owner out:
 /// loosening needs Windows Hello, so there would be no way back.
 pub const TURN_ON_NEEDS_HELLO: &str = "Windows Hello is not set up on this PC, so this lock \
@@ -419,6 +446,16 @@ pub fn redact_private(section: &str, body: serde_json::Value) -> serde_json::Val
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_lock_no_risky_approval_reads_like_the_phone() {
+        let shown = not_approved_words(NO_HELLO_NO_RISKY);
+        assert!(shown.starts_with("Nothing was approved. Windows Hello is not set up"));
+        assert!(shown.ends_with("a PIN is enough."), "{shown}");
+        // Any other refusal is passed on as it is.
+        assert_eq!(not_approved_words(NOT_CONFIRMED), NOT_CONFIRMED);
+        assert_eq!(not_approved_words(NOT_SET_UP), NOT_SET_UP);
+    }
 
     #[test]
     fn a_note_from_the_widget_waits_for_the_unlocked_bar() {
