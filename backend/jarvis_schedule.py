@@ -286,7 +286,9 @@ KINDS: dict = {}
 #: imports each one before the loop first runs, so a job of that kind that
 #: is already due - missed while the PC was off - finds its on_fire there.
 #: A module that is missing is skipped: its jobs still go off, as a doorbell.
-KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme")
+#: jarvis_focus (2026-09-25): the end of a focus session - not listed in
+#: Coming up (the focus panel counts down), and it tells nobody.
+KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,

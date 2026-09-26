@@ -22,6 +22,7 @@ import {
   currentLink,
   decide as decideOnBackend,
   injectTaskNote,
+  onEvent,
   onLink,
   onQueue,
   pauseTask,
@@ -38,6 +39,16 @@ import {
 import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./note-capture.js";
 import { EMAIL_APPROVE, EMAIL_DETAIL, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
+import {
+  actionsOf as focusActionsOf,
+  clock as focusClock,
+  HELD_WHEN_STALE as FOCUS_HELD,
+  LABELS as FOCUS_LABELS,
+  leftNow as focusLeftNow,
+  LOCK_TITLE as FOCUS_LOCK_TITLE,
+  readFocus,
+  toneOf as focusToneOf,
+} from "./focus.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -85,6 +96,13 @@ const dom = {
   tray: $("widget-tray"),
   faceWrap: $("face-wrap"),
   faceFrame: $("face-frame"),
+
+  focusStrip: $("focus-strip"),
+  focusClock: $("focus-clock"),
+  focusWord: $("focus-word"),
+  focusPause: $("focus-pause"),
+  focusLock: $("focus-lock"),
+  focusStop: $("focus-stop"),
 
   netDot: $("net-dot"),
   offline: $("widget-offline"),
@@ -228,6 +246,110 @@ function syncSize() {
 
 if (typeof ResizeObserver !== "undefined") {
   new ResizeObserver(syncSize).observe(dom.shell);
+}
+
+/* ==========================================================================
+   Focus session (focus.js; JARVIS-API.md section 31)
+
+   A countdown under the bar while a session runs, tinted when the owner is
+   off target, with Pause / Resume, Lock on and Stop - ONE thing per tap, no
+   card. Resume and Lock on wait while the link is stale (Rust refuses them
+   too); Pause and Stop do not. Never what was in front: the PC sends only
+   booleans and counts, and says the distraction out loud through the Jarvis
+   bar (focus.rs play_callout), not here.
+   ========================================================================== */
+
+const focus = { view: null, readAt: 0, timer: null, loading: false, again: false, readOnce: false };
+const FOCUS_WORDS = { drift: "off target", paused: "paused", settling: "settling in",
+  on: "on target" };
+
+async function loadFocus() {
+  if (!IS_TAURI) return;
+  if (focus.loading) {
+    focus.again = true;
+    return;
+  }
+  focus.loading = true;
+  try {
+    const got = await invoke("focus_status");
+    if (got) {
+      focus.view = readFocus(got);
+      focus.readAt = Date.now();
+      focus.readOnce = true;
+    }
+  } finally {
+    focus.loading = false;
+  }
+  if (focus.again) {
+    focus.again = false;
+    await loadFocus();
+    return;
+  }
+  paintFocus();
+}
+
+function focusTickOnce() {
+  const v = focus.view;
+  if (!v || !v.on) return;
+  const left = focusLeftNow(v, Date.now() - focus.readAt);
+  dom.focusClock.textContent = focusClock(left);
+  if (left <= 0 && !focus.loading) loadFocus();
+}
+
+function syncFocusButtons() {
+  if (!dom.focusStrip) return;
+  const canAct = linkWords(currentLink()).canAct;
+  for (const b of [dom.focusPause, dom.focusLock, dom.focusStop]) {
+    const held = FOCUS_HELD.has(b.dataset.action) && !canAct;
+    b.disabled = held || b.dataset.busy === "true";
+  }
+}
+
+function paintFocus() {
+  if (!dom.focusStrip) return;
+  const v = focus.view;
+  const on = Boolean(v && v.available && v.on);
+  dom.focusStrip.hidden = !on;
+  if (on) {
+    const tone = focusToneOf(v);
+    dom.focusStrip.dataset.tone = tone;
+    dom.focusWord.textContent = v.excused && v.drifting ? "research" : FOCUS_WORDS[tone] || "";
+    dom.focusClock.textContent = focusClock(focusLeftNow(v, Date.now() - focus.readAt));
+    const [first] = focusActionsOf(v, "widget");
+    dom.focusPause.textContent = FOCUS_LABELS[first];
+    dom.focusPause.dataset.action = first;
+    dom.focusLock.dataset.action = "lock";
+    dom.focusLock.title = FOCUS_LOCK_TITLE;
+    dom.focusStop.dataset.action = "stop";
+    syncFocusButtons();
+  }
+  const ticking = on && !v.paused;
+  if (ticking && !focus.timer) focus.timer = setInterval(focusTickOnce, 1000);
+  if (!ticking && focus.timer) {
+    clearInterval(focus.timer);
+    focus.timer = null;
+  }
+  syncSize();
+}
+
+async function focusAct(button) {
+  const action = button.dataset.action;
+  if (!action) return;
+  button.dataset.busy = "true";
+  syncFocusButtons();
+  try {
+    const out = await invokeStrict("focus_act", { action, minutes: null });
+    announce(String((out && out.said) || "Done."));
+  } catch (error) {
+    announce(String(error && error.message ? error.message : error));
+  } finally {
+    button.dataset.busy = "false";
+  }
+  await loadFocus();
+}
+
+for (const b of [dom.focusPause, dom.focusLock, dom.focusStop]) {
+  if (b) b.addEventListener("click", () => focusAct(b));
 }
 
 /* ==========================================================================
@@ -1164,6 +1286,13 @@ listen("approval-resolved", (event) => {
   followZoom(() => syncSize());
 startLink();
 
+  // Focus session: read once now, again on every `focus` event and when the
+  // link comes back; counted down here once a second in between.
+  onEvent((frame) => {
+    if (frame && frame.kind === "focus") loadFocus();
+  });
+  loadFocus();
+
   onLink((link) => {
     // A held-open event stream is a stronger liveness signal than a probe that
     // succeeded a moment ago, so the lane pill follows it directly.
@@ -1204,6 +1333,8 @@ startLink();
     syncTaskControls();
 
     syncApprovalButtons();
+    syncFocusButtons();
+    if (link.connected && !focus.readOnce) loadFocus();
     syncSize();
   });
 

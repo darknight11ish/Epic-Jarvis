@@ -41,6 +41,19 @@ import {
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
 import {
+  actionsOf as focusActionsOf,
+  BAD_MINUTES as FOCUS_BAD_MINUTES,
+  clock as focusClock,
+  driftWords,
+  FOCUS_MISSING,
+  LABELS as FOCUS_LABELS,
+  LAST_TITLE as FOCUS_LAST_TITLE,
+  leftNow as focusLeftNow,
+  minutesOf as focusMinutesOf,
+  readFocus,
+  toneOf as focusToneOf,
+} from "./focus.js";
+import {
   actionsOf,
   addPlaceholder,
   anyTicking,
@@ -288,6 +301,12 @@ const dom = {
   memoryAbout: $("memory-about"),
   jobs: $("jobs"),
   undo: $("undo"),
+  focus: $("focus"),
+  focusForm: $("focus-form"),
+  focusMinutes: $("focus-minutes"),
+  focusOn: $("focus-on"),
+  focusStart: $("focus-start"),
+  focusReport: $("focus-report"),
   comingUp: $("coming-up"),
   todoList: $("todo-list"),
   todoForm: $("todo-form"),
@@ -664,6 +683,7 @@ function render(name) {
       renderHistory();
       break;
     case "work":
+      renderFocus();
       renderComingUp();
       renderBriefing();
       renderJobs();
@@ -3458,6 +3478,160 @@ function whenNoticed(f) {
    ========================================================================== */
 
 /* ==========================================================================
+   Focus session (the owner's decision of 2026-09-25; JARVIS-API.md section
+   26; focus.js, brain/focus.rs).
+
+   Start one (minutes, and optionally what it is on), then the countdown -
+   counted down here once a second from what the PC last said - the PC's own
+   line, the drift count, and Pause / Resume, +10 minutes and Stop: ONE
+   thing per tap, no card. Start, Resume and +10 minutes are held on a stale
+   link (greyed here, refused in Rust); Pause and Stop are not. After a
+   session, its report card. The PC never sends what was in front. The
+   `focus` event (a state word, or a callout's number) reads it again.
+   ========================================================================== */
+
+const fx = { view: null, error: "", loading: false, again: false, at: 0, readAt: 0, timer: null };
+const FOCUS_READ_MS = 15000;
+
+async function loadFocus() {
+  if (!IS_TAURI) return;
+  if (fx.loading) {
+    fx.again = true;
+    return;
+  }
+  fx.loading = true;
+  try {
+    fx.view = readFocus(await invoke("focus_status"));
+    fx.error = "";
+    fx.readAt = Date.now();
+  } catch (error) {
+    fx.error = errorText(error);
+  } finally {
+    fx.loading = false;
+    fx.at = Date.now();
+  }
+  if (fx.again) {
+    fx.again = false;
+    await loadFocus();
+    return;
+  }
+  if (state.view === "work") paintFocus();
+}
+
+async function focusAct(action) {
+  try {
+    const out = await invoke("focus_act", { action, minutes: null });
+    toast(String((out && out.said) || "Done."), "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadFocus();
+}
+
+async function focusStart() {
+  const minutes = focusMinutesOf(dom.focusMinutes && dom.focusMinutes.value);
+  if (minutes === null) {
+    toast(FOCUS_BAD_MINUTES, "bad");
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("focus_start", { minutes, on: dom.focusOn ? dom.focusOn.value : "" });
+    toast(String((out && out.said) || "Started."), "ok");
+    if (dom.focusOn) dom.focusOn.value = "";
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadFocus();
+}
+
+function focusTick() {
+  if (state.view !== "work" || !fx.view || !fx.view.on || fx.view.paused) return;
+  const clockNode = dom.focus && dom.focus.querySelector(".focus-clock");
+  if (!clockNode) return;
+  const left = focusLeftNow(fx.view, Date.now() - fx.readAt);
+  clockNode.textContent = focusClock(left);
+  // The PC says when it ended; read again once the count reaches zero.
+  if (left <= 0 && !fx.loading && Date.now() - fx.at > 2000) loadFocus();
+}
+
+function paintFocus() {
+  const box = dom.focus;
+  if (!box) return;
+  const v = fx.view;
+  if (dom.focusReport) dom.focusReport.replaceChildren();
+  if (!v) {
+    const line = el("p", "empty", fx.error ? `Could not read the focus session: ${fx.error}` : "Reading…");
+    if (fx.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadFocus));
+    }
+    box.replaceChildren(line);
+    if (dom.focusForm) dom.focusForm.hidden = true;
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || FOCUS_MISSING));
+    if (dom.focusForm) dom.focusForm.hidden = true;
+    return;
+  }
+  if (dom.focusForm) dom.focusForm.hidden = v.on;
+  if (!v.on) {
+    box.replaceChildren(el("p", "empty", v.line || "No focus session."));
+    if (v.report && dom.focusReport) {
+      const card = el("div", "focus-report");
+      card.append(el("h3", "subhead", FOCUS_LAST_TITLE));
+      const title = el("p", "focus-report-title", v.report.title);
+      if (v.report.clean) title.dataset.state = "ok";
+      card.append(title);
+      for (const line of v.report.lines) card.append(el("p", "note", line));
+      dom.focusReport.replaceChildren(card);
+    }
+  } else {
+    const wrap = el("div", "focus-now");
+    wrap.dataset.tone = focusToneOf(v);
+    wrap.append(el("span", "focus-clock mono", focusClock(focusLeftNow(v, Date.now() - fx.readAt))));
+    if (v.intent) wrap.append(el("p", "note", `On: ${v.intent}`));
+    wrap.append(el("p", "focus-line", v.line));
+    wrap.append(el("p", "note", driftWords(v.drifts)));
+    if (v.note) wrap.append(el("p", "note", v.note));
+    const actions = el("div", "row-actions");
+    for (const a of focusActionsOf(v, "brain")) {
+      actions.append(button(FOCUS_LABELS[a], () => focusAct(a),
+        { live: a === "resume" || a === "extend", danger: a === "stop" }));
+    }
+    wrap.append(actions);
+    box.replaceChildren(wrap);
+  }
+  if (fx.error) box.prepend(el("p", "empty failed", `Could not read it again: ${fx.error}`));
+  const ticking = v.on && !v.paused;
+  if (ticking && !fx.timer) fx.timer = setInterval(focusTick, 1000);
+  if (!ticking && fx.timer) {
+    clearInterval(fx.timer);
+    fx.timer = null;
+  }
+}
+
+function renderFocus() {
+  paintFocus();
+  if (IS_TAURI && !fx.loading && Date.now() - fx.at > FOCUS_READ_MS) loadFocus();
+}
+
+if (dom.focusForm) {
+  dom.focusForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    focusStart();
+  });
+}
+if (dom.focusStart) {
+  liveButtons.add(dom.focusStart);
+  syncLiveButton(dom.focusStart);
+}
+
+/* ==========================================================================
    Coming up - timers, alarms, reminders and the to-do list (the owner's
    decisions of 2026-09-25; JARVIS-API.md section 21; coming-up.js).
 
@@ -5476,6 +5650,13 @@ onEvent((frame) => {
   // A timer, alarm or reminder went off, or Coming up changed (`{id, kind,
   // state}` only - a doorbell): read the list again. The toast itself is
   // Rust's (brain/schedule.rs toast_fired), so it shows with the Brain shut.
+  // A focus session started, changed or ended, or has a line to say
+  // (`{state}` or `{state: "callout", seq}` - never what was in front): read
+  // it again. The line itself is played by the Jarvis bar, fetched by Rust.
+  if (kind === "focus") {
+    fx.at = 0;
+    if (state.view === "work") loadFocus();
+  }
   if (kind === "schedule") {
     upL.at = 0;
     if (state.view === "work") loadComingUp();

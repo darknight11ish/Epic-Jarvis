@@ -181,6 +181,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
 | `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on Mind; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
 | `schedule` | A timer, alarm or reminder went off, or Coming up changed: `{"id", "kind", "state": "fired" \| "changed" \| "ready", "late"?}` only, never the words (`jarvis_schedule.py`, section 21). On `fired` the Rust reads the job by id and shows a Windows toast (`brain/schedule.rs` `toast_fired`, only the kind's lock-screen words while App lock or hiding is on) - except for a briefing, whose toast comes on `ready` (`brain/briefing.rs` `toast_ready`, always only "Jarvis: your morning briefing is ready.", section 22); the Brain reads Coming up again, and the briefing too for kind `briefing` (`brain.js`) | Mind's Coming up reads itself again; on `fired` the job is read by id and shown as a notification, the lock screen showing only the kind (`JarvisRuntime.onScheduleEvent`, `ScheduleNotifier`). For kind `briefing`: Mind's Morning briefing reads itself again, and on `ready` (not `fired`) a notification with only the fixed words, which opens Mind (`JarvisRuntime.onBriefingReady`) |
+| `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | Mind's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
@@ -4975,9 +4976,9 @@ private). The phone does not say timers aloud (ARCHITECTURE section 8).
   a server that sends no UIDNEXT falls back to `UID SEARCH ALL` once.
 - **The phone hears of a match only while connected** (21.1). An urgent
   alert while the phone is out of reach of the PC rings on the PC only.
-- **Snooze on the ringing notification is not built**: Stop (phone) and
-  Dismiss (desktop) only; snooze on the scheduler was being built
-  separately.
+- **A ringing ALARM also has Snooze** (the everyday quick wins, section 21):
+  beside Stop on the phone and Dismiss on the PC. An urgent "tell me when"
+  has Stop / Dismiss only - there is nothing to snooze.
 - **Every look writes one line to the gate's audit log** (email every 5
   minutes, a device every minute).
 - A paused watch that is resumed reports what happened while it was
@@ -4991,3 +4992,188 @@ private). The phone does not say timers aloud (ARCHITECTURE section 8).
   in the owner's own backend files, which this repository does not hold,
   and a GitHub source would need a key and a new way out of the PC. Left
   for later.
+
+## 31. Focus sessions (added 2026-09-25)
+
+The owner's decision of 2026-09-25 (`CLAUDE.md`, after the "Build Your Own
+Jarvis" prompt pack): "Focus sessions, off unless started: a timer plus
+Quiet; Jarvis watches which app/site is in front ON THE PC ONLY, names the
+distraction out loud ('Instagram can wait') but never stores what it saw
+(only counts), waits until the owner settles before locking on, and ends
+with a report card. Snooze, 'I'm doing research', pause and stop by voice.
+Nothing leaves the PC." `backend/jarvis_focus.py` (shipped whole),
+`backend/focus.patch` (the routes), the fast path in `backend/jarvis_quick.py`.
+
+### 31.1 What happens, in order
+
+1. **Started** by "focus for 30 minutes (on the essay)", or Start in either
+   app. Nothing is watched before, or after it ends.
+2. **Quiet**: if Jarvis was Active it goes Quiet, through
+   `jarvis_power_switch.set_mode` (`power_manage`, `auto` as shipped), with
+   `why` "the focus session". Quiet or Standby already: left alone.
+3. **The timer** is ONE job of kind `focus` on the one scheduler
+   (`jarvis_schedule.register_kind`; section 21) - not listed in Coming up
+   (the focus panel counts down) and `notify: false`. Pause takes it off;
+   Resume and +10 minutes put a new one on.
+4. **Once a second** (while it runs, not paused) the PC reads, fresh, which
+   program's window is in front and - for Chrome, Edge, Brave, Vivaldi,
+   Opera or Firefox - the SITE of the front tab (the host, e.g.
+   `docs.google.com`; the address is cut to the host where it is read and
+   never kept). Both become salted fingerprints (a random key per session,
+   never written) and are compared, then thrown away.
+5. **Settling**: Jarvis's own windows are home base and never count;
+   Windows' own surfaces (the desktop, the taskbar, Alt+Tab, the lock
+   screen) count as nothing. The same program (and site) in front for two
+   looks in a row is where the owner works: Jarvis locks on and says
+   "Locked on." A browser whose site cannot be read is locked as a whole
+   only after 45 seconds, and it says so ("Locked on the browser as a
+   whole - I could not read which site, so any site in it counts."). It
+   never guesses from a window that is not in front.
+6. **Drifts**: away for longer than the grace (0.8 s - in practice, still
+   away at the next look) is a drift. Jarvis says a canned line out loud
+   ON THE PC (never the AI model): three tiers of four lines, firmer with
+   each drift, named ("YouTube can wait.") from a table of big sites, the
+   bare domain ("example.com can wait.") or the program's name; the first
+   one uses the owner's "on what" ("YouTube doesn't look like the essay to
+   me."). While one drift lasts it speaks again every minute ("call me out
+   every 30 seconds" changes that, 20 seconds to 10 minutes). Going to
+   Jarvis in the middle of a drift neither counts nor splits it.
+7. **The end**: the scheduler's job goes off; the report card is said on
+   the PC and shown in both apps; Active again ONLY if focus set Quiet and
+   `jarvis_power.status()["why"]` still says so (the owner choosing a mode
+   meanwhile wins - the same rule as the standby schedule, 21.8).
+
+### 31.2 Routes (`focus.patch`)
+
+Every route checks the origin and the token.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/focus` | - | 200 the status (below); 503 `{"available": false}` without `jarvis_focus.py` | A read, not held on a stale link. Both apps. |
+| `POST /api/focus/start` | `{"minutes": 1-240, "on"?: "<the owner's words, 60 characters>"}` | 200 `{"ok": true, "said", "focus": status}`; 400 minutes out of range; **409** one is already running (`error` says how long is left) | No approval card (31.4). Both apps hold it on a stale link. |
+| `POST /api/focus/act` | `{"do": "pause" \| "resume" \| "stop" \| "extend" \| "snooze" \| "research" \| "relief" \| "lock", "minutes"?}` or `{"do": "nag", "seconds"}` | 200 `{"ok": true, "said", "focus"}`; **409** `"No focus session is running."`; 400 anything else | ONE thing, at once, no card. `extend` default 10 minutes; `snooze` default 5 (up to 30); `nag`'s `seconds` is how often to speak during one drift (20 to 600). Both apps: pause, resume, extend, stop. The desktop's widget also: lock. Resume, extend and lock are held on a stale link; pause and stop are let through - they only make Jarvis do less. |
+| `GET /api/focus/diag` | - | 200 booleans and counts | For "it didn't notice" / "it locked the wrong thing": is the front window readable, is it Jarvis, a browser, is its site readable, deferred, settle ticks, is there an app target / a site target, on target, drifting, is the look thread alive, the knobs. Never what was in front. Neither app shows it; read it on the PC (31.6). |
+| `GET /api/focus/callout?seq=N` | - | 200 `audio/wav`; **403** from any address but this PC's own (loopback); 404 `{"reason": "no_line"}` nothing waiting (said, or older than 8 seconds); 503 no voice on this PC | The one waiting spoken line, made into sound by the voice in use (`jarvis_speech._synthesise` - the "One moment." path: nothing remembered, no question window, no microphone) and ERASED as it is read. The words never leave the backend. The desktop's Rust asks for it on the `focus` event (`brain/focus.rs` `play_callout`); the phone never does (ARCHITECTURE section 8). |
+
+The status (`jarvis_focus.Engine.status()`), a whitelist:
+
+```
+{"available": true, "title", "detail", "phone_note",   the words both apps show
+ "on": bool, "paused": bool, "state": "off"|"settling"|"locked"|"paused",
+ "minutes": planned, "left_s": seconds, "ends_at": epoch|null, "intent": the owner's own "on what",
+ "deferred": bool (waiting to lock on), "locked": bool, "lock": "app"|"app_and_site"|"",
+ "on_target": bool|null, "drifting": bool, "excused": bool,
+ "drifts", "on_target_s", "adrift_s", "excused_s", "quiet_left_s",   counts (0 when off)
+ "set_quiet": bool, "timer_on_scheduler": bool, "watching": bool,
+ "line": "24 minutes left - on target.", "note": "No callouts for 4 minutes - drifts still count.",
+ "report": {"title", "lines": [...], "spoken", "completed", "clean", "streak", "percent",
+            "planned_min", "active_min", "on_target_min", "adrift_min", "excused_min", "drifts", "at"} | null,
+ "streak": int}
+```
+
+**The report card** is built from the ledger row, so it can only say
+numbers: "Focus session done." / "Focus session stopped early.", "On target:
+27 of 30 minutes.", "Drifted twice, 3 minutes in all.", "Research: 4
+minutes, not counted against you.", "90% focused.", "Streak: 3 clean
+sessions in a row." A session is **clean** at 85% or more of its watched time
+on target, run to the end; the streak counts clean sessions in a row.
+
+### 31.3 Said or typed - without the model
+
+`jarvis_quick.py`, the owner's own words only (section 21.5's rule). Always:
+"focus for 30 minutes (on the essay)", "start a focus session" (25 minutes),
+"let's focus for an hour", "a 45 minute focus session", "30 minutes of
+focus", "focus on the essay for 25 minutes", "stop focus", "pause focus",
+"resume focus", "extend focus by 10 minutes", "add 15 minutes to my focus
+session", "how's my focus going", "focus status". **Only while a session
+runs** (otherwise they go on to the rest of the grammar, then the model):
+"pause", "resume", "I'm back", "extend it by 5 minutes", "snooze" / "snooze
+for 10 minutes" / "give me fifteen seconds", "I need a minute" / "give me a
+minute" / "no Jarvis, I need to do something important" (no nudges for 3
+minutes), "I'm doing research" / "it's okay, I'm doing research" / "this is
+research" (the trip now - or one that ended in the last 90 seconds - does not
+count, and nothing is said until back on target; said in advance, the next
+trip), "lock on this" / "keep me in this tab" / "okay, I'm gonna need you to
+keep me in this tab" / "this is the app I'm working in", "how am I doing?",
+"how long is left" (a running timer answers first), "call me out every 30
+seconds". Never "stop" alone (that is the stop word). "Focus on the
+positives" and the like go to the model.
+
+"Lock on this": what is in front NOW becomes the target, and the trip that
+got there does not count. If Jarvis's own window is in front (the widget's
+Lock on, or typing it to Jarvis) it locks on where the owner lands next,
+and says "Go to it - I'll lock on where you land."
+
+### 31.4 No approval card - why
+
+Reading what is on screen sits under the computer-control rules: there,
+READING a window is `jarvis_ui_control_plan`, tier `auto` (read-only,
+`ui-control-wiring.patch`), and only ACTING (`control_computer`) asks. A
+focus session reads less than that (the front window's program and one
+site name, not its controls), sends no input, keeps only counts, is local,
+and runs only because the owner asked that moment. Going Quiet is
+`power_manage` (`auto`); an owner who set `power_manage` to `ask` gets that
+card for the Quiet part, and the session runs either way.
+
+### 31.5 The event
+
+`focus`: `{"state": "started" | "changed" | "ended"}` or `{"state":
+"callout", "seq": N}` - a word or a number, **never what was in front**.
+`changed` is sent when Jarvis locks on, a drift starts or ends, and on
+pause, resume, extend, snooze, research and lock - not every second.
+
+| | Desktop | Phone |
+|---|---|---|
+| any `focus` | The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`) | Mind's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`) |
+| `callout` | Rust fetches `GET /api/focus/callout?seq=` from this PC only (loopback) and hands the sound to the Jarvis bar, which plays it unless Jarvis is talking; "stop" silences it (`brain/focus.rs` `play_callout`, `main.js` `playFocusCallout`) | Nothing - the line is the PC's alone |
+
+### 31.6 What is kept, and where
+
+- **Nothing of what was in front.** Not in the status, the diag, the report
+  card, the ledger, the audit log (`focus.start`, `focus.locked`,
+  `focus.act`, `focus.end`: counts and words of Jarvis's own), an event, the
+  scheduler's file (the job has no words), the chat history's answer to "how
+  am I doing?", or the engine's memory once a line was said or 8 seconds
+  old. `backend/test_focus.py` drives drifts to a made-up program and site
+  and proves their names reach the spoken line and nowhere else.
+- **The ledger**, `focus_ledger.json` in the Jarvis settings folder (the last
+  200 sessions): `at`, `planned_min`, `active_min`, `on_target_min`,
+  `adrift_min`, `excused_min`, `drifts`, `percent`, `completed`, `clean` -
+  numbers and true/false only; its writer turns every value into one.
+- **The owner's "on what"** is kept in memory for the session (both apps
+  show it) and in no file.
+
+To see the diag on the PC (one line; prints to the window):
+
+```
+$t = (py -3 jarvis_token_store.py show).Trim(); (Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:4719/api/focus/diag -Headers @{"X-Jarvis-Token"=$t; "X-Jarvis-Client"="hud"}).Content
+```
+
+(run it in the backend folder, where `jarvis_token_store.py` is; 4719 is the
+backend's usual port - use yours if you changed `JARVIS_HUD_PORT`. The answer
+prints in the same window.)
+
+### 31.7 Known gaps, said plainly
+
+- **Not run on Windows.** Every test uses a stand-in for "what is in front".
+  Reading the front program (`GetForegroundWindow` ->
+  `QueryFullProcessImageNameW`, ctypes) is documented Windows behaviour and
+  believed reliable. Reading a browser's SITE (UI Automation, the
+  `uiautomation` package, the address box inside the browser's toolbar -
+  Firefox's by its id `urlbar-input`) is **assumed** from how those browsers
+  show their toolbars, and must be tried: if it fails, every browser is
+  locked as a whole after 45 seconds, and the diag says
+  `front_site_readable: false`.
+- **The spoken line needs the desktop app running**, with the Jarvis bar
+  loaded (it is, hidden, from start-up). Without it the session still
+  counts, and the widget has no countdown. A line that arrives while Jarvis
+  is talking is dropped - the next one comes at the next nag.
+- **A backend restart forgets the session** (it is kept in memory on
+  purpose); its scheduler job then goes off later and does nothing, and the
+  power mode comes back Active as after any restart.
+- **The manner setting** ("warm" / "plain", section 27) chooses the lines:
+  `jarvis_focus.MANNER_SOURCE` reads `jarvis_manner.current` each time.
+- **Stop everything** (section 28) PAUSES a running session - its stopper
+  is registered as "focus", and it says "The focus session was paused." -
+  and the desktop's `stopSpeaking` silences a callout (`stopFocusCallout`).
+- English only, like the rest of the fast path.

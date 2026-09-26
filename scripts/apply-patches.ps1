@@ -441,6 +441,12 @@ $PATCHES = @(
     # lines, so it goes after it. Needs jarvis_stop_all.py copied in;
     # without it the route is not there and the banner says so.
     'stop-all.patch'
+    # Focus sessions (the owner's decision of 2026-09-25): GET /api/focus,
+    # /api/focus/diag and /api/focus/callout (this PC only), POST
+    # /api/focus/start and /api/focus/act. Its context is manner's GET block
+    # and power-mode's POST block, so it goes after both. Needs
+    # jarvis_focus.py copied in; without it the routes answer 503.
+    'focus.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -538,6 +544,8 @@ $SHIPPED = @(
     # --- Stop everything (2026-09-25) ---
     'jarvis_stop_all.py'         # stop-all.patch: POST /api/stop_all, and the hook other features register with
     'jarvis_tellme.py'           # "tell me when ..." (an email from someone, a device changing): a kind of job on the one scheduler, no patch; NOT a model tool
+    # --- focus sessions (focus.patch) ---
+    'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
 )
 
 # The settings file. Installed only where none exists; never overwritten.

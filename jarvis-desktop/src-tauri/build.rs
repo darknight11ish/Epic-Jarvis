@@ -276,6 +276,13 @@ fn main() {
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",
+            // Focus sessions (backend/focus.patch): read one, start one
+            // (Brain only, held on a stale link), and ONE thing to it -
+            // pause, resume, +10 minutes, stop, and the widget's Lock on
+            // (resume, extend and lock held on a stale link). No card.
+            "focus_status",
+            "focus_start",
+            "focus_act",
             // The morning briefing (backend/briefing.patch): read the latest
             // one and "Brief me now" (a read, not held on a stale link) -
             // Brain only; and its setup - read it, set one up that repeats

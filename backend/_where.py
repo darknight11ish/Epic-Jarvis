@@ -147,6 +147,8 @@ SHIPPED = (
     "jarvis_stop_all.py",
     # "tell me when ..." - a kind of job on the one scheduler (not a tool)
     "jarvis_tellme.py",
+    # focus sessions (focus.patch): a kind of job on the one scheduler
+    "jarvis_focus.py",
 )
 
 

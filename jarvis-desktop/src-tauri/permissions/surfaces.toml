@@ -596,6 +596,29 @@ permissions = [
   "allow-brain-schedule-clear-list",
 ]
 
+# Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
+# timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
+# is a read. ONE thing per call to the running session - pause, resume, +10
+# minutes, stop, and the widget's Lock on - no card (jarvis_focus.py says
+# why); resume, extend and lock are held on a stale link in Rust, pause and
+# stop are not (they only make Jarvis do less). Starting one is its own set,
+# the Brain's alone: the widget shows and steers a session, it does not start
+# one.
+[[set]]
+identifier = "focus"
+description = "Read the focus session (a countdown, booleans and counts - never what was in front) and do ONE thing to it: pause, resume, +10 minutes, stop, or lock on where the owner lands. No card; resume, extend and lock are held on a stale link."
+permissions = [
+  "allow-focus-status",
+  "allow-focus-act",
+]
+
+[[set]]
+identifier = "focus-start"
+description = "Start a focus session (minutes, and optionally what it is on). No card. Held on a stale link."
+permissions = [
+  "allow-focus-start",
+]
+
 # The morning briefing (backend/briefing.patch; the owner's decisions of
 # 2026-09-25): read the latest one, and "Brief me now". Both only READ - the
 # PC puts it together without the model and reads the calendar and the

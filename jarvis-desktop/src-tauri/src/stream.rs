@@ -709,6 +709,20 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             ));
         }
 
+        // A focus session has a line to say (backend/focus.patch):
+        // `{"state": "callout", "seq"}` - a number, never words. The sound is
+        // fetched from THIS PC only and played by the Jarvis bar
+        // (brain/focus.rs play_callout); the words name what was in front,
+        // so they never travel. Fanned out below too; the Brain and the
+        // widget read the session again on every `focus` event.
+        "focus" if event.data["state"].as_str() == Some("callout") => {
+            tauri::async_runtime::spawn(crate::brain::focus::play_callout(
+                app.clone(),
+                base.to_string(),
+                event.data.clone(),
+            ));
+        }
+
         // finding | persona | model | voice — nothing here consumes them, and
         // nothing here should: they are fanned out below like everything else,
         // and the surface that renders one owns what it means.

@@ -19,6 +19,7 @@
     "approvals",
     "task-control",
     "widget-surface",
-    "appearance-read"
+    "appearance-read",
+    "focus"
   ]
 }

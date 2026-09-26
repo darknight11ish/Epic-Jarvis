@@ -164,6 +164,11 @@ pub mod events {
     /// "Lock again after", so a Show on the private lists has ended and they
     /// are read again, hidden.
     pub const PRIVATE_HIDDEN: &str = "private-hidden";
+    /// Payload: `{ uri }` - a `data:audio/wav` URI. Sent to the quickbar
+    /// only, by [`crate::brain::focus::play_callout`]: one focus-session
+    /// line ("YouTube can wait."), fetched as SOUND from this PC's backend,
+    /// to play. The words never reach any window.
+    pub const FOCUS_CALLOUT: &str = "focus-callout";
 
     // ---- the fanned-out event stream -----------------------------------
     //
@@ -760,6 +765,9 @@ pub fn run() {
             brain::schedule::brain_schedule_add_todo,
             brain::schedule::brain_schedule_add_standby,
             brain::schedule::brain_schedule_clear_list,
+            brain::focus::focus_status,
+            brain::focus::focus_start,
+            brain::focus::focus_act,
             brain::briefing::brain_briefing,
             brain::briefing::brain_briefing_now,
             brain::briefing::get_briefing_setup,

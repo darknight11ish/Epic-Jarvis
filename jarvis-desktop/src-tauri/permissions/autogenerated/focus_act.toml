@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-focus-act"
+description = "Enables the focus_act command without any pre-configured scope."
+commands.allow = ["focus_act"]
+
+[[permission]]
+identifier = "deny-focus-act"
+description = "Denies the focus_act command without any pre-configured scope."
+commands.deny = ["focus_act"]
