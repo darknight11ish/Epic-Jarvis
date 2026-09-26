@@ -355,6 +355,15 @@ current fix pass, and keep researching:
 Also fixed without asking: a model that cannot use tools gets a true error
 message, and `OLLAMA_NO_CLOUD=1` as a second lock behind rule 1.
 
+Decided 2026-09-26: **reading phone notifications is added as an option**
+(queued after the four cutting-edge groups and the security audit). The
+safe version only: off by default, turning it on raises an approval card,
+turning it off is immediate; only apps the owner chooses (never banking);
+one-time codes hidden before anything reaches the model; treated as
+outside text - never makes Jarvis act and is never saved as a fact; shown
+or summarised only when the owner asks; nothing leaves the owner's own
+devices. Never text messages (SMS), and Jarvis never replies or sends.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
