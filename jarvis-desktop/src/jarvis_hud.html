@@ -458,7 +458,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   border-radius:10px; padding:12px 14px;
 }
 .appr .hdr{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
-.appr .who{ font-weight:650; letter-spacing:.01em; }
+.appr .who{ font-weight:650; letter-spacing:.01em; margin:0 0 6px; }
 .appr .tier{
   font:600 10px/1 "IBM Plex Mono",monospace; text-transform:uppercase;
   letter-spacing:.12em; padding:3px 7px; border-radius:5px;
@@ -2009,9 +2009,11 @@ function apprCardHtml(p, now){
   try{ detail = JSON.stringify(JSON.parse(detail), null, 2); }catch(e){}
   const raised = apprRaised(p.raised);
   const risk = p.risk && typeof p.risk === "object" ? p.risk : null;
+  // One card on every screen (card-words.js): the label, then the PC's own
+  // title for it - never the code name, and no tier word ("ask") to decode.
   let html =
-    `<div class="hdr"><span class="who">Jarvis wants to: ${apprEscape(p.action)}</span>`
-    + `<span class="tier">${apprEscape(p.tier)}</span></div>`;
+    `<div class="hdr"><span class="tier">Needs your OK</span></div>`
+    + `<div class="who">${apprEscape(apprTitle(p))}</div>`;
   if(raised){
     html += `<div class="raised"><b>${apprEscape(raised.text
               || "Tier raised - something Jarvis read tried to rush you")}</b>`
@@ -2025,10 +2027,25 @@ function apprCardHtml(p, now){
     html += `<div class="risk">This request was cut off before it reached this card, `
       + `so it cannot be approved here. Deny it and ask Jarvis for a shorter plan.</div>`;
   }
+  // Deny on the left, Approve on the right: the same order on every screen.
   html += `<div class="left"></div>`
-    + `<div class="btns"><button class="yes">Approve</button>`
-    + `<button class="no">Deny</button></div>`;
+    + `<div class="btns"><button class="no">Deny</button>`
+    + `<button class="yes">Approve</button></div>`;
   return html;
+}
+
+/* The card's title: the PC's own words (notice.title, from
+ * backend/jarvis_card_words.py), else the PC's fallback for a name it has no
+ * phrase for - letter for letter card-words.js's fallbackTitle
+ * (tests/approvals-contract.mjs holds the two together). Never from
+ * `prompt` or `detail`. */
+function apprTitle(p){
+  const n = p && p.notice && typeof p.notice.title === "string" ? p.notice.title.trim() : "";
+  if(n) return n;
+  const w = String(p && typeof p.action === "string" ? p.action : "")
+    .replace(/_/g, " ").replace(/[^A-Za-z0-9 ]+/g, " ")
+    .split(" ").filter(Boolean).join(" ").slice(0, 60).trim();
+  return w ? `Jarvis wants your OK for "${w}"` : "Jarvis is asking for your approval";
 }
 
 /* `raised` in every shape the backend has used - an object, true, or JSON

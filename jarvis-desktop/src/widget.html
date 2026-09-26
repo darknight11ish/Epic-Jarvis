@@ -207,15 +207,17 @@
           <!-- Same reasoning as the quickbar: no modality, no focus trap, so
                no `alertdialog`. Announced through the shared live region
                instead, which also fixes writing to a hidden region. -->
+          <!-- One card on every screen (card-words.js): the label, then the
+               PC's own title for it (notice.title) - never the code name. -->
           <div class="approval-header">
-            <span class="warn-badge">APPROVAL REQUIRED</span>
-            <span class="action-name mono" id="appr-action">--</span>
+            <span class="warn-badge" id="appr-kicker">Needs your OK</span>
             <!-- Which of how many, as in the quickbar. The next card replacing
                  the answered one under the cursor, with no sign more were
                  waiting, is how a click lands on a card nobody read. Display
                  only: there is no control here that acts on more than one. -->
             <span class="appr-count mono" id="appr-count" hidden></span>
           </div>
+          <p class="appr-title" id="appr-action">Jarvis is asking for your approval</p>
           <!-- Outside text tried to rush the reader and the tier went up.
                The chip and the quote; the surrounding context stays on the
                quickbar's card, because this window is 320px wide and a
@@ -271,9 +273,11 @@
           <!-- Why the two buttons are grey, when they are: the queue cannot be
                confirmed, or a decision is already on its way. -->
           <p class="appr-why" id="appr-why" role="status" hidden></p>
+          <!-- Deny on the left, Approve on the right - the same order on every
+               screen, the phone's included (docs/ARCHITECTURE.md §3). -->
           <div class="approval-actions">
-            <button class="btn btn-approve" id="btn-appr-yes">Approve</button>
             <button class="btn btn-deny" id="btn-appr-no">Deny</button>
+            <button class="btn btn-approve" id="btn-appr-yes">Approve</button>
           </div>
           <p class="appr-hint">Nothing runs until you decide.</p>
         </section>

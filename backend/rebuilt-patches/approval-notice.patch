@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -319,6 +319,75 @@
+@@ -319,6 +319,87 @@
      }
  
  
@@ -39,11 +39,23 @@
 +    r = risk_for(action)
 +    raised = bool(item.get("raised"))
 +
-+    # Humanised from the identifier rather than from a second table of phrases.
-+    # The action names were written to be read - "send_email", "run_shell_on_
-+    # host" - and a parallel table of prose would be one more thing to fall out
-+    # of step with the first.
-+    phrase = action.replace("_", " ").strip() or "an action"
++    # The title from jarvis_card_words.TITLES: a plain phrase for every action
++    # the gate knows ("Jarvis wants to switch to a different AI model"). It
++    # used to be the identifier with its underscores taken out, on the theory
++    # that the names were written to be read - and it read "Jarvis wants to
++    # learning enable" (creativity audit, 2026-09-25). The table is ours and
++    # reads only the action NAME, so the notice stays safe by construction;
++    # backend/test_card_words.py keeps it in step with _RISK. Without the
++    # module (an older copy), the name is still quoted as a name, never
++    # dropped into a sentence it cannot finish.
++    try:
++        import jarvis_card_words
++        title = jarvis_card_words.title_for(item.get("action"))
++    except Exception:
++        _words = " ".join("".join(c if c.isascii() and c.isalnum() else " "
++                                  for c in str(item.get("action") or "")).split())[:60].strip()
++        title = (f'Jarvis wants your OK for "{_words}"' if _words
++                 else "Jarvis is asking for your approval")
 +
 +    # Heavy means "interrupt them". Any one of three things earns it: it cannot
 +    # be undone, it leaves the machine, or outside text pushed the tier up.
@@ -61,7 +73,7 @@
 +    bits.append("nothing has happened yet")
 +
 +    return {
-+        "title": f"Jarvis wants to {phrase}",
++        "title": title,
 +        "body": ". ".join(b.strip(". ") for b in bits if b).strip() + ".",
 +        "weight": "heavy" if heavy else "normal",
 +        # Refusing something you have not read costs you a retry. Approving
@@ -76,7 +88,7 @@
  # Strictness order. A prompt that matches several patterns is judged by the
  # strongest one, never the weakest.
  _RANK = {"auto": 0, "notify": 1, "ask": 2, "never": 3}
-@@ -750,7 +819,7 @@
+@@ -750,7 +831,7 @@
          # broker. An ntfy.sh topic is a URL with no authentication: anyone who
          # knows or guesses the string reads every message. On this tier there
          # is no human in the loop at all, so nothing else was going to catch it.
@@ -85,7 +97,7 @@
          return Verdict(True, tier, action, "tier is notify; you were told after",
                         outcome="notify")
  
-@@ -788,8 +857,14 @@
+@@ -788,8 +869,14 @@
      # approval event follows. `prompt` is the human-readable request text and
      # can quote an email body or a file path; the fallback to it was the wider
      # of the two leaks, because it is prose rather than a dict of keys.
@@ -102,7 +114,7 @@
  
      deadline = time.time() + (APPROVAL_TIMEOUT if timeout is None else timeout)
      # One connection for the whole wait rather than one per poll.
-@@ -1075,6 +1150,10 @@
+@@ -1075,6 +1162,10 @@
      for r in rows:
          d = dict(r)
          d["risk"] = risk_for(d.get("action", ""))

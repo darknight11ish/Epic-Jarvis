@@ -15,8 +15,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
@@ -32,7 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.data.CheckMethod
@@ -69,6 +73,7 @@ import com.jarvis.client.ui.NavBackHandler
 import com.jarvis.client.ui.NavScreens
 import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.approval.BiometricGate
+import com.jarvis.client.ui.approval.CardWaitingLine
 import com.jarvis.client.ui.rememberNavState
 import com.jarvis.client.ui.screens.AppearanceScreen
 import com.jarvis.client.ui.screens.BrainScreen
@@ -2025,6 +2030,29 @@ class MainActivity : FragmentActivity() {
                         },
                         modifier = root,
                     )
+                }
+                // "Open the card" (CardWaitingLine): on every screen but Home
+                // while a card waits - one a button on this screen raised, or
+                // any other. It only opens Home on that card; approving there
+                // is still a deliberate tap. An empty Box lets touches through
+                // to the screen underneath.
+                if (screen != Screen.HOME && pending.isNotEmpty()) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.systemBars)
+                            .padding(12.dp),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        CardWaitingLine(
+                            pending = pending,
+                            onOpen = { id ->
+                                nav.resetTo(Screen.HOME)
+                                focusApproval.value = id
+                                scope.launch { JarvisRuntime.refreshPending() }
+                            },
+                        )
+                    }
                 }
             }
         }

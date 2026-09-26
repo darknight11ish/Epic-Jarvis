@@ -510,6 +510,7 @@ $SHIPPED = @(
     'jarvis_reach.py'            # reach.patch: "What Jarvis can reach", written from the settings, never by the model
     'jarvis_owner_check.py'      # owner-check.patch: Windows Hello for risky approvals from this PC, and the approval stamp
     'jarvis_manner.py'           # manner.patch: warm and brief, or plain - the wording of answers only
+    'jarvis_card_words.py'       # approval-notice.patch: every approval card's plain title, and what Jarvis says aloud about a card
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

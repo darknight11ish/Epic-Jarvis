@@ -242,6 +242,57 @@ def t_the_app_hears_from_the_pc_while_a_card_waits():
     check("the answer still arrives whole", text_of(body) == "It is 4.")
 
 
+def t_after_a_card_the_app_hears_how_it_ended():
+    """A spoken question says a card is waiting, and then what happened
+    (jarvis_card_words.VOICE). The PC says how the card ended right after
+    the "approval" line - the gate's own outcome word, nothing else."""
+    for allowed, word in ((True, b"approved"), (False, b"denied")):
+        opener, _ = opener_for([calc_call(), ("done", "stop")],
+                               [("content", "Done."), ("done", "stop")])
+        body, _ = turn(opener, enabled_tools={"calculator"},
+                       gate_check=Gate(allowed=allowed, wait=0.3),
+                       keepalive_seconds=1000, status_delay=0.05)
+        line = b": jarvis-status " + word + b"\n\n"
+        check(f"a card that was {word.decode()}: the app is told, once, after 'approval'",
+              body.count(line) == 1
+              and body.index(b": jarvis-status approval\n\n") < body.index(line), repr(body))
+        check(f"... before the answer's words ({word.decode()})",
+              body.index(line) < body.index(b"data:"), repr(body))
+
+
+def t_a_timed_out_card_is_said_too_and_nothing_else_is_an_outcome():
+    class TimedOut:
+        def __init__(self):
+            self.asked = []
+
+        def __call__(self, action, detail, prompt):
+            self.asked.append(action)
+            time.sleep(0.3)
+
+            class V:
+                allowed = False
+                reason = "nobody answered in time"
+                outcome = "timed_out"
+            return V()
+    opener, _ = opener_for([calc_call(), ("done", "stop")],
+                           [("content", "No."), ("done", "stop")])
+    body, _ = turn(opener, enabled_tools={"calculator"}, gate_check=TimedOut(),
+                   status_delay=0.05)
+    check("timed_out is said after 'approval'",
+          b": jarvis-status timed_out\n\n" in body, repr(body))
+    check("only the gate's three outcome words are ever sent as an outcome",
+          AG.CARD_OUTCOME_WORDS == ("approved", "denied", "timed_out"))
+
+
+def t_no_outcome_for_a_card_the_app_was_never_told_about():
+    opener, _ = opener_for([calc_call(), ("done", "stop")],
+                           [("content", "4"), ("done", "stop")])
+    body, _ = turn(opener, enabled_tools={"calculator"}, status_delay=0.5)
+    check("a gate that answered before the 'approval' line: no outcome line either",
+          b"jarvis-status approved" not in body and b"jarvis-status approval" not in body,
+          repr(body))
+
+
 def t_a_gate_that_answers_at_once_never_says_waiting():
     opener, _ = opener_for([calc_call(), ("done", "stop")],
                            [("content", "4"), ("done", "stop")])

@@ -155,7 +155,7 @@ class ApiContractTest {
                 "pending":[{"id":"a1","action":"send_email","tier":"ask",
                             "detail":"{\"to\": \"dana@example.com\"}",
                             "prompt":"Send the email to Dana",
-                            "notice":{"title":"Jarvis wants to send email",
+                            "notice":{"title":"Jarvis wants to send an email",
                                       "body":"there is no unsend. nothing has happened yet.",
                                       "weight":"heavy","deny_ok":true,"approve_ok":false},
                             "risk":{"why":"leaves this machine","swipe_ok":false},
@@ -167,7 +167,7 @@ class ApiContractTest {
         val items = (out as ApiResult.Ok).value
         assertEquals(1, items.size)
         assertEquals("a1", items[0].id)
-        assertEquals("Jarvis wants to send email", items[0].title)
+        assertEquals("Jarvis wants to send an email", items[0].title)
         assertEquals("Send the email to Dana", items[0].summary)
         assertTrue(items[0].expiresAtMs != null)
     }

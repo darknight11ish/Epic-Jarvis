@@ -39,6 +39,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
+import { mountCardLink } from "./card-link.js";
 import {
   actionsOf,
   addPlaceholder,
@@ -5426,6 +5427,8 @@ followZoom(() => {
 /* ---- The one stream ------------------------------------------------------ */
 
 startLink();
+// "Open the card": one line while an approval card waits (card-link.js).
+mountCardLink(document.getElementById("card-link"));
 
 onLink((link) => {
   // The same words as every other window. "stream live · stale" used to sit

@@ -42,6 +42,7 @@ import {
   THEMES,
 } from "./jarvis-link.js";
 import { BARGE_IN_KEY, describeBargeIn, loadBargeIn, saveBargeIn } from "./barge-in.js";
+import { mountCardLink } from "./card-link.js";
 import {
   describeHeard,
   describeMoment,
@@ -650,6 +651,8 @@ $("open-faces").addEventListener("click", async () => {
 });
 
 startLink();
+// "Open the card": one line while an approval card waits (card-link.js).
+mountCardLink(document.getElementById("card-link"));
 
 onLink((link) => {
   // The same words every other window uses (jarvis-link.js linkWords), plus

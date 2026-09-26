@@ -154,6 +154,10 @@
             <button class="btn ghost" type="button" id="refresh">Refresh</button>
           </div>
         </header>
+        <!-- "Open the card" (card-link.js): shown while an approval card waits -
+             one raised by a button in this window, or anywhere else. Its button
+             opens the Jarvis bar on the card; it decides nothing. -->
+        <div class="card-link" id="card-link" hidden></div>
 
         <!-- How old what is on screen is. The panes are read when they open
              and on a few events, so "live" over a pane read an hour ago was

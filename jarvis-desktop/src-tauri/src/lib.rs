@@ -101,8 +101,10 @@ pub mod events {
     /// surfaces on screen together never disagree about which palette is in
     /// force.
     pub const THEME_CHANGED: &str = "theme-changed";
-    /// Payload: none. Show the approval gate. The queue lives in the quickbar,
-    /// which is the surface that renders the risk line and the `raised` block.
+    /// Payload: the id of the card to show, or null for the first one
+    /// waiting ("Open the card", `open_approval_in_quickbar`). Show the
+    /// approval gate. The queue lives in the quickbar, which is the surface
+    /// that renders the risk line and the `raised` block.
     pub const SHOW_APPROVAL: &str = "show-approval";
     /// Payload: none. Open the daily brief. Sent by the tray's waiting row and
     /// by the widget — the panel itself lives in the quickbar, because the HUD

@@ -33,16 +33,19 @@
       Jarvis Desktop — settings.
 
       The only window here that can change where Jarvis is and whether this
-      app may start it. Laid out the way the phone's Appearance screen was
-      reworked after the owner found it too long: the things someone opens
-      Settings for stay open (Connection, Appearance, Updates, Shortcuts),
-      and what is rarely touched sits behind a closed "More options".
+      app may start it. One long page of cards, Connection first. Only the face tuning is
+      folded away; there is no "More options" section (the creativity
+      audit, 2026-09-25, found this comment promising one).
     -->
     <main class="page">
       <header class="page-head">
         <h1>Jarvis Desktop</h1>
         <p class="sub" id="version">settings</p>
       </header>
+      <!-- "Open the card" (card-link.js): shown while an approval card waits -
+           one raised by a button in this window, or anywhere else. Its button
+           opens the Jarvis bar on the card; it decides nothing. -->
+      <div class="card-link" id="card-link" hidden></div>
 
       <section class="card">
         <h2>Connection</h2>
@@ -604,7 +607,7 @@
            on through ONE approval card on the PC, held on a stale link. -->
       <section class="card" id="briefing-settings">
         <h2>Morning briefing</h2>
-        <p class="note">Choose when your briefing arrives. It repeats, so Jarvis asks you once with an approval card that lists the next three times; nothing is set up until you say yes. Stopping it is immediate. You can also say "brief me every weekday at 7", or "brief me now" at any time.</p>
+        <p class="note">Choose when your briefing arrives. It repeats, so Jarvis asks you once with an approval card that lists the next three times; nothing is set up until you approve the card. Stopping it is immediate. You can also say "brief me every weekday at 7", or "brief me now" at any time.</p>
 
         <p class="state" id="br-state" role="status">Checking your briefing…</p>
 

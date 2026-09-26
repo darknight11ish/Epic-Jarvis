@@ -44,10 +44,21 @@ class SpeechAhead<C>(
     private val play: suspend (String, C) -> Unit,
     /** What is said instead of a private answer. */
     private val privateLine: String = PrivateAloud.ON_SCREEN,
+    /**
+     * A line in Jarvis's own fixed words - "I need your OK for that..."
+     * ([CardVoice]) - never the answer's: said whatever the private-answer
+     * rule says, because it carries nothing from the answer or the card.
+     */
+    private val fixedLine: (String) -> Boolean = { false },
 ) {
 
     /** One sentence with its sound already made; [isPrivateLine] when it is [privateLine]. */
-    private class Line<C>(val text: String, val clip: C, val isPrivateLine: Boolean)
+    private class Line<C>(
+        val text: String,
+        val clip: C,
+        val isPrivateLine: Boolean,
+        val fixed: Boolean = false,
+    )
 
     /**
      * Speaks what arrives on [sentences], in order, until it is closed and
@@ -71,7 +82,7 @@ class SpeechAhead<C>(
                     // ...and the private-answer rule, too: a tool may have
                     // started, or the event stream dropped, since this
                     // sentence's sound was asked for. Its sound is dropped.
-                    if (!mayRead()) {
+                    if (!line.fixed && !mayRead()) {
                         sayPrivateLine()
                         break
                     }
@@ -98,6 +109,7 @@ class SpeechAhead<C>(
     private suspend fun next(sentences: ReceiveChannel<String>): Line<C>? {
         val sentence = sentences.receiveCatching().getOrNull() ?: return null
         if (stopped()) return null
+        if (fixedLine(sentence)) return Line(sentence, fetch(sentence), isPrivateLine = false, fixed = true)
         if (!mayRead()) return Line(privateLine, fetch(privateLine), isPrivateLine = true)
         return Line(sentence, fetch(sentence), isPrivateLine = false)
     }

@@ -47,8 +47,8 @@ class PendingRowsContractTest {
 
     @Test
     fun `the card says what Jarvis wants, from the notice`() {
-        assertEquals("Jarvis wants to send email", byId("a1").title)
-        assertEquals("Jarvis wants to run shell on host", byId("12").title)
+        assertEquals("Jarvis wants to send an email", byId("a1").title)
+        assertEquals("Jarvis wants to run a command on this PC", byId("12").title)
         // Never the old default.
         read.items.forEach { assertFalse(it.title == "Approval required") }
     }

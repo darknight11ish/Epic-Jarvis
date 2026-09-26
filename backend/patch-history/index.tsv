@@ -4,6 +4,8 @@
 appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a23a	2026-09-15T03:11:39+00:00	Three honesty fixes: /api/visual-spec, the HUD proposal handler, INSTALL
 appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30+00:00	I invented a NameError, then reported it twice as a finding
 appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27+00:00	The backend route, written against the real jarvis_hud.py
+approval-expiry.patch	approval-expiry/ba8799f.patch	ba8799f4c6df6486a22a93b38d079fa9a66ed520	2026-09-24T00:01:50+00:00	Approvals: a countdown on every card, rush and risk on the HUD, one row shape
+approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b644c3c2491cc	2026-09-15T17:29:34+00:00	Approval notifications you can act on, and fix the CRLF that broke all 20 patches
 auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23+00:00	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
 auto-learn.patch	auto-learn/6ad4a3c.patch	6ad4a3cfab9caeba68578c0f3bc1cb60b80542be	2026-09-24T21:28:10+00:00	Merge the rebuilt sensitive-topic check; "Remember:" no longer waits on the chat thread
 auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e0353	2026-09-24T20:51:14+00:00	Automatic learning: the audits' backend findings, and injected_sensitive on the chat route
@@ -59,5 +61,6 @@ web-search.patch	web-search/7c82046.patch	7c820464c4b614c3305ce54d126772b7e6e09d
 web-search.patch	web-search/4312b46.patch	4312b4686e51299212f51077097d4a49e380ced2	2026-09-25T06:02:46+00:00	Web search in both apps: Settings (desktop) and Mind (phone); docs
 web-search.patch	web-search/22cf8a5.patch	22cf8a5d8dd1f89daab77e7ab81062886118a66b	2026-09-25T05:46:04+00:00	Web search: jarvis_search.py (four providers), the web_search tool, web-search.patch
 wiki.patch	wiki/9aaab08.patch	9aaab08a9cdea55259a23a50ee9b1b2e990921fd	2026-09-24T03:29:14+00:00	Wiki builder: jarvis_wiki.py, wiki.patch, and its tests
+rebuilt-patches/approval-notice.patch	rebuilt-patches/approval-notice/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
 rebuilt-patches/bitemporal.patch	rebuilt-patches/bitemporal/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
 rebuilt-patches/extraction-wiring.patch	rebuilt-patches/extraction-wiring/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild

@@ -157,15 +157,30 @@ export const RAISED = {
   source: "tool:browser_navigate", from_tier: "auto", to_tier: "ask", count_today: 4,
 };
 
+/**
+ * The approval card's words, as the PC writes them (backend/jarvis_card_words.py,
+ * through tools/gen_card_words_cases.py) - so the sample rows below carry the
+ * same `notice.title` a real /api/pending row does.
+ */
+export const CARD_WORDS = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "fixtures", "card-words-cases.json"), "utf8"));
+/** The PC's title for a gate action. */
+export const cardTitleFor = (action) =>
+  CARD_WORDS.titles.find((t) => t.action === action).title;
+
 export const APPROVAL_PLAIN = {
   id: "a2", action: "switch_model", tier: "ask", created: 1,
   detail: JSON.stringify({ ref: "qwen3:8b" }), prompt: "Switch the active model?",
   risk: RISK_LOCAL, raised: null,
+  notice: { title: cardTitleFor("switch_model"), weight: "normal", deny_ok: true,
+            approve_ok: false, body: "Nothing has happened yet." },
 };
 export const APPROVAL_RAISED = {
   id: "a1", action: "send_email", tier: "ask", created: 1,
   detail: JSON.stringify({ to: "supplier@example.com", subject: "Order 4471" }),
   prompt: "Send the reply?", risk: RISK_OUTBOUND, raised: RAISED,
+  notice: { title: cardTitleFor("send_email"), weight: "heavy", deny_ok: true,
+            approve_ok: false, body: "There is no unsend. Nothing has happened yet." },
 };
 
 // docs/AUTONOMY-PROPOSALS.md §3a - a plan with more than one concrete option.

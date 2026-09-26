@@ -241,6 +241,12 @@ class ChatSession(
         onRoute: ((String?) -> Unit)? = null,
         provenance: String = Provenance.TYPED,
         shared: String? = null,
+        /**
+         * Each `: jarvis-status` word of THIS answer, as it arrives - a
+         * call-local callback like [onDelta]. The voice loop uses it to say
+         * a card is waiting, and then how it ended (voice/CardVoice.kt).
+         */
+        onStatus: ((String) -> Unit)? = null,
     ): String? {
         cancel()
         _reply.value = ""
@@ -492,6 +498,10 @@ class ChatSession(
                                 if (call === c && acc.isEmpty()) {
                                     _waiting.value = WAITING[result.word]
                                 }
+                                // Every word, words or not: a card can be raised
+                                // after the answer has started. Not guarded, like
+                                // `onDelta`: it belongs to this call alone.
+                                onStatus?.invoke(result.word)
                                 false
                             }
                             is ChatChunkParser.Result.Failed -> {

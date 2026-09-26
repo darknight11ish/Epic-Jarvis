@@ -13,6 +13,7 @@
     "core:webview:default",
     "core:window:default",
     "jarvis-link",
+    "open-card",
     "theme-write",
     "settings-surface",
     "external-links",

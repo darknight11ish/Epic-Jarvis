@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.ui.parts.Affirm
 import com.jarvis.client.ui.parts.Meter
@@ -284,6 +285,14 @@ fun ApprovalCard(
         // 250dp of a ~350dp card, which left the title a ~100dp column and
         // one word per line (a11y-11). A line of its own costs one row of
         // height at 100% and fixes every size above it.
+        // One card on every screen (CardWords): the label, then the PC's own
+        // title for it - "Jarvis wants to search the web", never a code name.
+        Text(
+            text = CardWords.KICKER,
+            style = MaterialTheme.typography.labelMedium,
+            color = chrome.textMid,
+        )
+        Spacer(Modifier.height(2.dp))
         Text(
             text = item.title,
             style = MaterialTheme.typography.titleMedium,
@@ -459,9 +468,14 @@ fun ApprovalCard(
         // #cbc4ac against #b9ae83, a difference of 1.2 on an axis that was
         // 99.7 wide. Shape survives that, and survives a photograph, a still
         // frame and peripheral vision with it.
+        //
+        // Deny on the left, Approve on the right - the same order on every
+        // screen, the desktop's included (CardWords.BUTTONS,
+        // docs/ARCHITECTURE.md §3). It is also where this card's swipe goes:
+        // right approves, left denies.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Affirm("Approve", enabled = canApprove, onClick = approve)
-            Refuse("Deny", enabled = canDecide, onClick = deny)
+            Refuse(CardWords.BUTTONS[0], enabled = canDecide, onClick = deny)
+            Affirm(CardWords.BUTTONS[1], enabled = canApprove, onClick = approve)
         }
         if (showFooter) {
             Spacer(Modifier.height(8.dp))

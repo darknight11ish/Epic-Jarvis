@@ -988,6 +988,9 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     // The toast says what wants a decision and never offers one. There is no
     // action on it, because an action on a notification is a decision made
     // without the risk line, the `raised` block or the source in front of you.
+    // Read once for this batch: while App lock is on, a toast says the
+    // card's title only (`toast_words`).
+    let app_lock = seeded && !arrived.is_empty() && crate::lock::current(app).app_lock;
     for item in arrived.iter().filter(|_| seeded) {
         // `notice` is built server-side by jarvis_gate.notice_for, from the
         // action name and the risk table — it never reads `detail`, `prompt`
@@ -996,35 +999,16 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         // waiting decision two different ways.
         let notice = &item["notice"];
 
-        // "weight: 'heavy' interrupts; 'normal' waits to be found" -
-        // docs/ARCHITECTURE.md's own rule 1 for any client reading this
-        // contract. This used to toast for every arrival regardless of
-        // weight, with a comment claiming "the weight is still honoured: a
-        // heavy item gets the tray's attention state" - which was true of
-        // EVERY pending item, heavy or not (tray.rs escalates on
-        // `link.approvals > 0`, not on weight), so the one field that exists
-        // to let a person tell "needs you now" from "can wait" was computed
-        // server-side and read nowhere. Missing `weight` (an older backend)
-        // defaults to interrupting, same as the missing-notice fallback
-        // below already assumes the more attention-worthy case rather than
-        // the quieter one.
-        if notice["weight"].as_str() == Some("normal") {
-            continue;
-        }
-
-        let (title, body) = match (notice["title"].as_str(), notice["body"].as_str()) {
-            (Some(t), Some(b)) => (t.to_string(), b.to_string()),
-            // A backend without approval-notice.patch. The old wording, which
-            // is worse but not wrong — better than a toast that says nothing
-            // because a field it wanted was missing.
-            _ => {
-                let what = item["action"].as_str().unwrap_or("an action");
-                (
-                    "Jarvis is waiting on you".to_string(),
-                    format!("{what} — nothing runs until you decide."),
-                )
-            }
-        };
+        // Every card gets a toast; the weight decides only whether it makes
+        // a sound (docs/ARCHITECTURE.md §3, rule 1: "heavy" interrupts,
+        // "normal" arrives silently and waits to be found). A normal card -
+        // most settings, which raise one when a button in Settings is
+        // pressed - used to get NO toast at all, only the tray's colour, and
+        // sat unseen until it expired (the creativity audit, 2026-09-25). The
+        // phone already posts a normal card to its quiet channel; this is the
+        // same rule. Missing `weight` (an older backend) is read as heavy.
+        let silent = notice["weight"].as_str() == Some("normal");
+        let (title, body) = toast_words(item, app_lock);
 
         // `action_type_id` is accepted by tauri-plugin-notification's builder
         // but the DESKTOP implementation (notify_rust, win7_notifications)
@@ -1043,10 +1027,13 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         #[cfg(windows)]
         {
             let id = approval_id(item).unwrap_or_default();
-            crate::winrt_toast::notify_approval(app, &title, &body, &id);
+            crate::winrt_toast::notify_approval(app, &title, &body, &id, silent);
         }
         #[cfg(not(windows))]
-        crate::commands::notify(app, &title, &body);
+        {
+            let _ = silent;
+            crate::commands::notify(app, &title, &body);
+        }
     }
 
     crate::emit_all(
@@ -1055,6 +1042,51 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         serde_json::json!({ "count": items.len(), "items": items, "available": available }),
     );
     true
+}
+
+/// What a card's toast says: the notice's title and body, built by the PC
+/// from its own tables (`jarvis_gate.notice_for`, never `detail` or
+/// `prompt`). While App lock is on, the title only - as on the widget, whose
+/// locked card shows the notice's title and nothing more. A row without a
+/// notice (a backend older than approval-notice.patch) gets the same
+/// fallback title every window builds from the action's name
+/// (card-words.js `fallbackTitle`).
+pub(crate) fn toast_words(item: &serde_json::Value, app_lock: bool) -> (String, String) {
+    let notice = &item["notice"];
+    let title = notice["title"]
+        .as_str()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| fallback_title(item["action"].as_str().unwrap_or("")));
+    if app_lock {
+        return (title, String::new());
+    }
+    let body = notice["body"]
+        .as_str()
+        .map(str::trim)
+        .filter(|b| !b.is_empty())
+        .unwrap_or("Nothing runs until you decide.")
+        .to_string();
+    (title, body)
+}
+
+/// The PC's title for an action it has no phrase for, letter for letter
+/// `jarvis_card_words.title_for`'s fallback and card-words.js's
+/// `fallbackTitle` (tests/fixtures/card-words-cases.json, `fallback`).
+pub(crate) fn fallback_title(action: &str) -> String {
+    let cleaned: String = action
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { ' ' })
+        .collect();
+    let words = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    let words: String = words.chars().take(60).collect();
+    let words = words.trim();
+    if words.is_empty() {
+        "Jarvis is asking for your approval".to_string()
+    } else {
+        format!("Jarvis wants your OK for \"{words}\"")
+    }
 }
 
 /// An approval row's id, as text. The gate's ids are strings today, but a
@@ -1222,6 +1254,42 @@ mod power_prime_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The toast's title is the one every window shows: the notice's, else
+    /// the PC's own fallback - held to the shared card-words file.
+    #[test]
+    fn a_toast_says_the_cards_title_the_same_as_every_window() {
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/card-words-cases.json"))
+                .expect("card-words-cases.json");
+        for c in cases["fallback"].as_array().expect("fallback") {
+            let action = c["action"].as_str().unwrap_or("");
+            assert_eq!(
+                fallback_title(action),
+                c["title"].as_str().unwrap(),
+                "{action}"
+            );
+            let row = serde_json::json!({ "id": "x", "action": action });
+            assert_eq!(toast_words(&row, false).0, c["title"].as_str().unwrap());
+        }
+        for c in cases["titles"].as_array().expect("titles") {
+            let row = serde_json::json!({ "id": "x", "action": c["action"],
+                "notice": { "title": c["title"], "body": "Why. Nothing has happened yet." } });
+            assert_eq!(toast_words(&row, false).0, c["title"].as_str().unwrap());
+        }
+    }
+
+    /// App lock: the title only, never the body.
+    #[test]
+    fn under_app_lock_a_toast_is_the_title_only() {
+        let row = serde_json::json!({ "id": "x", "action": "send_email",
+            "notice": { "title": "Jarvis wants to send an email", "body": "There is no unsend." } });
+        assert_eq!(
+            toast_words(&row, true),
+            ("Jarvis wants to send an email".to_string(), String::new())
+        );
+        assert_eq!(toast_words(&row, false).1, "There is no unsend.");
+    }
 
     /// The default must be stale: before the first hello nothing is known, and
     /// a UI that enables approve/deny on launch would be answering a queue it

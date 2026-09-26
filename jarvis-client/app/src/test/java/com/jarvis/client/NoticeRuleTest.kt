@@ -37,13 +37,13 @@ class NoticeRuleTest {
         val it = item(
             """
             {"id":"a","title":"row title","summary":"row prose",
-             "notice":{"title":"Jarvis wants to send email",
+             "notice":{"title":"Jarvis wants to send an email",
                        "body":"This leaves your machine. Nothing has happened yet.",
                        "weight":"heavy","deny_ok":true,"approve_ok":false}}
             """.trimIndent(),
         )
         val n = requireNotNull(it.notice)
-        assertEquals("Jarvis wants to send email", n.title)
+        assertEquals("Jarvis wants to send an email", n.title)
         assertEquals("heavy", n.weight)
         assertTrue(n.denyOk)
         assertFalse("approve_ok must never arrive true, and is ignored either way", n.approveOk)

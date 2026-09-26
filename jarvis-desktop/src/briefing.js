@@ -66,7 +66,7 @@ export const OUTSIDE_LINE =
 /** Settings. */
 export const SETUP_DETAIL =
   "Choose when your briefing arrives. It repeats, so Jarvis asks you once with an approval " +
-  "card that lists the next three times; nothing is set up until you say yes. Stopping it is " +
+  "card that lists the next three times; nothing is set up until you approve the card. Stopping it is " +
   "immediate. You can also say \"brief me every weekday at 7\", or \"brief me now\" at any time.";
 export const SETUP_NONE = "No briefing is set up.";
 export const SET_LABEL = "Set up";
