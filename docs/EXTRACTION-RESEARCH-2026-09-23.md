@@ -2,7 +2,7 @@
 
 **Short answer.** About half of the pasted list was right. The rest was only partly true, wrong, or out of date. All four modules are worth building, and none of them lets anything act without your approval card. But two of them (skills and MCP) each have a real hole that must be fixed first. I found those holes by running the code, not just by reading it. Nothing has run on Windows yet. Nobody has seen your real `jarvis_gate.py` either, because it is not in the repo, so every design guesses its answer fields from `backend/gate-outcome.patch:67-87`.
 
-Nothing in `/home/user/Epic-Jarvis` was changed. All design files are in `/tmp/claude-0/research/out/`.
+Nothing in `/home/user/Epic-Jarvis` was changed. The design files were in `/tmp/claude-0/research/out/` (gone); the unbuilt ones are kept in `docs/designs/`.
 
 ---
 

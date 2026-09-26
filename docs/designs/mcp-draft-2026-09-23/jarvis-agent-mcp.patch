@@ -1,0 +1,38 @@
+--- a/jarvis_agent.py
++++ b/jarvis_agent.py
+@@ -743,11 +743,17 @@
+             else:
+                 lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
+                 action_name = lookup_name
+-                try:
+-                    import jarvis_gate
+-                    action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
+-                except Exception:
+-                    pass
++                # `gate_direct` tools (jarvis_mcp.py) already carry their exact
++                # gate action - one per outside tool, "mcp__<server>__<tool>".
++                # action_for_tool() would fold every one of them into
++                # "unclassified_tool", so the card could not say which tool,
++                # and one tier line in jarvis-framework.toml would cover all.
++                if not getattr(tool, "gate_direct", False):
++                    try:
++                        import jarvis_gate
++                        action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
++                    except Exception:
++                        pass
+                 # prepare() inside the try, like execute() below. It used
+                 # to sit outside every handler in this function, so a
+                 # prepare-time raise - a tool validating its own arguments,
+@@ -775,6 +781,12 @@
+                     if announce:
+                         announce(f"Using {name}...")
+                     kwargs = {"announce": announce} if tool.needs_announce else {}
++                    # A tool that must know HOW it was allowed - a human
++                    # approval, or only tier notify/auto with nobody asked -
++                    # gets the verdict itself. `allowed` alone cannot say
++                    # which (docs/ARCHITECTURE.md section 3).
++                    if getattr(tool, "needs_verdict", False):
++                        kwargs["verdict"] = verdict
+                     try:
+                         result = tool.execute(args, state, **kwargs)
+                     except Exception as exc:
