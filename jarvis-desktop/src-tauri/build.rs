@@ -171,6 +171,15 @@ fn main() {
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.
             "get_reach",
+            // Settings' "What asks first" (backend/asks-first.patch): every
+            // action and whether it asks, in the PC's words; "Ask me first"
+            // on ONE action of the short safe list (stricter at once, never
+            // held; looser is one card plus Windows Hello on the PC, held on
+            // a stale link); and "Lights, plugs and fans without a card" (ON
+            // is one card, held; OFF at once). Settings window only.
+            "get_asks_first",
+            "set_asks_first",
+            "set_lights_without_card",
             // Settings' "Sending email" (backend/email-send.patch): whether
             // sending is set up - from which address, through which server -
             // in the PC's own words. A read; never the password. Settings

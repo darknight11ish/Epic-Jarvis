@@ -39,9 +39,9 @@ import kotlinx.serialization.json.doubleOrNull
  *
  * THE STANDBY SCHEDULE (backend `jarvis_standby_schedule.py`, 2026-09-25):
  * Standby - the same Standby as the buttons under Doing - on a timetable,
- * every day. Two times and Set up ([standbyBody]); the PC raises ONE
- * approval card (it repeats) and sets nothing up until it is approved. It
- * then sits in the list like any repeating job, kind "standby", where Pause
+ * every day. Two times and Set up ([standbyBody]); since 2026-09-26 the PC
+ * sets it up at once, with no card (the owner's decision after the
+ * approvals audit). It sits in the list like any repeating job, kind "standby", where Pause
  * skips it and Delete turns it off. Its going off tells nobody: the event
  * says `"notify": false`, and [firedFrom] then shows no notification.
  *
@@ -78,7 +78,8 @@ object Schedule {
     const val TITLE = "Coming up"
     const val UNDER =
         "Timers, alarms and reminders, kept on your PC. They go off on both apps " +
-            "while they are connected. Anything that repeats waits for your yes on an approval card."
+            "while they are connected. A repeating reminder or alarm is set up at once, with no " +
+            "card; a repeating briefing or \"tell me when\" waits for your yes on an approval card."
     const val TODO_TITLE = "To-do list"
 
     /** Nothing on a list. */
@@ -160,7 +161,7 @@ object Schedule {
             "schedule put it on standby: if you chose Standby yourself, it stays on until you choose " +
             "Active. Standby unloads its models and frees the graphics card; waking loads the chat " +
             "model again, so the first answer is quick. Timers and reminders still go off. Setting " +
-            "it up asks once with an approval card."
+            "it up needs no approval card, and Delete turns it off at once."
     const val STANDBY_START_LABEL = "Standby at"
     const val STANDBY_END_LABEL = "Wake at"
     const val STANDBY_ADD = "Set up"

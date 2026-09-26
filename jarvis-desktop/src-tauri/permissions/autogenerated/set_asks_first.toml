@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-asks-first"
+description = "Enables the set_asks_first command without any pre-configured scope."
+commands.allow = ["set_asks_first"]
+
+[[permission]]
+identifier = "deny-set-asks-first"
+description = "Denies the set_asks_first command without any pre-configured scope."
+commands.deny = ["set_asks_first"]

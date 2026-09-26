@@ -20,10 +20,10 @@
 //! * [`brain_schedule_add_standby`] - `POST /api/schedule/add {"kind":
 //!   "standby", "repeat": {"every": "day", "at", "until"}}`: the standby
 //!   schedule (backend `jarvis_standby_schedule.py`) - Standby, the same one
-//!   as the tray's Change power mode, on a timetable. It repeats, so the PC
-//!   raises ONE approval card (`schedule_repeat`) and sets nothing up until
-//!   it is approved. Held on a stale link. Turning it off is Delete on its
-//!   row, like any job.
+//!   as the tray's Change power mode, on a timetable. Since 2026-09-26 (the
+//!   owner's decision after the approvals audit) the PC sets it up at once,
+//!   with no card, and says the next night. Held on a stale link. Turning it
+//!   off is Delete on its row, like any job.
 //!
 //! * [`brain_schedule_clear_list`] - `POST /api/schedule/act {"do":
 //!   "clear_list", "list", "count"}` (2026-09-25): every item on ONE named
@@ -621,8 +621,7 @@ pub async fn brain_schedule_clear_list(
 }
 
 /// The standby schedule: every day from `start` to `end` ("HH:MM"). The PC
-/// raises one approval card; nothing is set up until it is approved. Held
-/// on a stale link.
+/// sets it up at once, with no card (2026-09-26). Held on a stale link.
 #[tauri::command]
 pub async fn brain_schedule_add_standby(
     app: AppHandle,

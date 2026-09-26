@@ -3010,12 +3010,22 @@ ALL of these, or it stays a card. The words in quotes are what the card's
      English, Spanish, French, German, Italian, Portuguese, Dutch and Polish
      (accents ignored); the shapes of codes near a lock word, "<service> is
      <token>", card, account and ID numbers, money amounts, postcodes and
-     street addresses; and **any fact about another person** - a relation
-     word, a common first name, a title or "he"/"she" ("My sister likes
-     jazz" is a card too; a famous name as a taste, a pet's name and the
-     owner's own name are not);
+     street addresses; and **another person** - a relation word, a common
+     first name, a title or "he"/"she" (a famous name as a taste, a pet's
+     name and the owner's own name are not). Since 2026-09-26 (the owner's
+     decision after the approvals audit) another person on their own is
+     NOT a card: "my sister likes jazz" goes to the model below, told that
+     an everyday fact about someone is not sensitive, and only its clear
+     "not sensitive" saves it. Anything private about them still is a card
+     whatever the model says: their health, money, address or contact
+     details (their own topics), a break-up, a death, a secret, a debt or
+     trouble ("my brother owes me money", the private-life words),
+     "<Name>'s address / salary / diagnosis ...", and passwords, PINs,
+     account and ID numbers. `patterns()` and `topic()` still see the
+     other person, so a recalled fact about someone still counts as
+     sensitive for reading aloud and for web search (section 23);
    - **the learner's own local model**, asked only when the patterns find
-     nothing, for a one-line JSON verdict. Its "unsure", an answer that is
+     nothing (or only another person, above), for a one-line JSON verdict. Its "unsure", an answer that is
      not that JSON, no answer within 8 seconds, Ollama not reachable, no
      model known, or a model that is not on this PC or is a cloud model: a
      card (fail closed).
@@ -3236,8 +3246,10 @@ wait for your yes, even with this on."
   rewords ("prefers" for "likes better") is not grounded; a conversation
   with one pasted message, one shared text, one tool run or one voice turn at
   the balanced voice setting makes every later pass of that conversation
-  cards; and the sensitive-topic check flags any fact about another person,
-  and asks the local model about everything else (a card when it is unsure
+  cards; and the sensitive-topic check flags anything private about another
+  person (an everyday fact about someone saves since 2026-09-26, but only
+  on the local model's clear "no"), and asks the local model about
+  everything else (a card when it is unsure
   or does not answer in 8 seconds).
 - **The registry is in memory.** After a backend restart, the rest of an
   ongoing conversation is cards (the earlier turns are "not seen arrive"). An
@@ -3379,6 +3391,18 @@ shared scheduler come first; a timer or a one-time reminder needs no approval
 card, anything that repeats asks once with a card that lists the next run
 times; simple commands like timers are answered without the AI model.
 
+**Changed 2026-09-26** (the owner's decision after the approvals audit,
+`docs/APPROVALS-AUDIT-2026-09-26.md`): a plain repeating reminder or alarm,
+and the standby schedule, need **no card**. Only the owner's own words or
+taps can set one, and deleting is instant. They are set up at once, and
+the answer says the next three times (`jarvis_schedule.repeat_set_words`):
+"Reminder set up, every weekday (Monday to Friday) at 07:00. Next: 07:00 on
+Monday, 07:00 on Tuesday and 07:00 on Wednesday. Delete it under Coming up
+to stop it." Coming up shows each one's next time. The morning briefing
+(section 22) and "tell me when" (section 30) keep their ONE card: they read
+email or the calendar. A kind added later asks by default
+(`Kind.plain_repeat` is off unless it says so).
+
 `backend/schedule.patch`, `backend/jarvis_schedule.py` (the scheduler) and
 `backend/jarvis_quick.py` (the answers without the model), and since
 2026-09-25 the first kind that plugs in, the standby schedule
@@ -3411,7 +3435,7 @@ repeating job then moves to its next time - never once per missed time.
 |---|---|---|---|
 | `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "went_off": [job], "lists": [{"name", "title", "open"}], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items of every list, oldest first (each with its `list`). Since 2026-09-25 (21.9): `went_off` - timers, alarms and reminders that went off in the last hour and are not snoozed, newest first, at most five; `lists` - the named lists with open items. An older PC sends neither. |
 | `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
-| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}`; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat; 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once. A repeat raises ONE card and is set up only on its yes. Both apps add only a to-do item here, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
+| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add only a to-do item here, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
 | `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. |
 
 A `job`:
@@ -3442,7 +3466,14 @@ characters of words, 100 timers and reminders, 300 open to-do items, a
 timer up to 24 hours, a time up to a year ahead - each said in a sentence
 when reached.
 
-### 21.3 The card for anything that repeats
+### 21.3 The card for a repeat that reads (the briefing, "tell me when")
+
+Since 2026-09-26 only the repeats that read email or the calendar have this
+card: a repeating morning briefing and "tell me when". A plain repeating
+alarm or reminder and the standby schedule are set up at once (above) and
+do not read this action's tier. The example below is what the card looked
+like for a repeating reminder until then; a briefing's card has the same
+shape.
 
 Action **`schedule_repeat`**, tier `ask` (the shipped toml has the line; a
 toml without it asks too; any other tier is refused and nothing is set up -
@@ -3467,12 +3498,12 @@ If you say no: nothing is set up.
 ```
 
 Its notice (the lock screen's words) comes from `jarvis_gate`'s table like
-every other card: "sets up something that repeats on this PC - a reminder,
-an alarm, a morning briefing or a standby schedule; setting it up sends
-nothing anywhere, and deleting it is immediate" (`briefing.patch`,
-2026-09-25; `schedule.patch` alone says "sets up a reminder, an alarm or a
-standby schedule that repeats, on this PC; nothing is sent anywhere, and
-deleting it is immediate"). A briefing's card replaces the "It runs on this
+every other card: since 2026-09-26 "sets up a morning briefing or a \"tell
+me when\" that repeats on this PC; setting it up sends nothing anywhere, and
+deleting it is immediate" (`asks-first.patch`; before it, `briefing.patch`
+said "... - a reminder, an alarm, a morning briefing or a standby schedule
+...", and `schedule.patch` alone "sets up a reminder, an alarm or a standby
+schedule that repeats, on this PC ..."). A briefing's card replaces the "It runs on this
 PC... Nothing is sent anywhere." paragraph with its own lines on what each
 run reads (section 22.3). Denied, timed out
 or refused: the job is removed, and a `schedule` event says the list
@@ -3721,11 +3752,15 @@ found together, going off ONCE late - agrees: it is after 07:00, so awake.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/schedule/add` | `{"kind": "standby", "repeat": {"every": "day", "at": "HH:MM", "until": "HH:MM"}}` | **202** `{"ok": true, "waiting": true, "job", "said"}`; 400 bad times or no `repeat`; **409** there is already one ("delete it first to set a different one") | ONE `schedule_repeat` card (21.3). Desktop: `brain_schedule_add_standby` (Brain window only, held on a stale link). Phone: `JarvisRuntime.addStandbySchedule` (held on a stale link). |
+| `POST /api/schedule/add` | `{"kind": "standby", "repeat": {"every": "day", "at": "HH:MM", "until": "HH:MM"}}` | 200 `{"ok": true, "waiting": false, "job", "said"}` - set up at once, no card, since 2026-09-26 ("Standby schedule set up, every day from 01:00 to 07:00. Next: Saturday 26 September, 01:00 to 07:00. Delete it under Coming up to stop it."); until then **202** and ONE `schedule_repeat` card; 400 bad times or no `repeat`; **409** there is already one ("delete it first to set a different one") | No card since 2026-09-26 (the owner's decision after the approvals audit). Desktop: `brain_schedule_add_standby` (Brain window only, held on a stale link). Phone: `JarvisRuntime.addStandbySchedule` (held on a stale link). |
 | `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete"}` | as 21.2 | Pause skips it, Delete turns it off - immediate, no card. **Neither wakes Jarvis**; Active does that. |
 | `GET /api/schedule` | - | as 21.2 | Listed with the others: `repeat` "every day from 01:00 to 07:00", `when` "on standby at 01:00 tomorrow" or "awake at 07:00 today, if the schedule put it on standby", `note` how the last end went, `notify: false`. |
 
-The card (21.3's action and tier, its own words):
+Until 2026-09-26 it was set up by a card (21.3's action and tier, its own
+words, below). Since then it has none: the answer's `said` names the next
+night instead, and both apps' Standby schedule section says "Setting it up
+needs no approval card, and Delete turns it off at once." The card's lines
+about each end are still true, and are kept here as the reference:
 
 ```
 Set up a standby schedule.
@@ -5177,3 +5212,194 @@ prints in the same window.)
   is registered as "focus", and it says "The focus session was paused." -
   and the desktop's `stopSpeaking` silences a callout (`stopFocusCallout`).
 - English only, like the rest of the fast path.
+
+## 32. What asks first (added 2026-09-26)
+
+The owner's decision of 2026-09-26, after the approvals audit
+(`docs/APPROVALS-AUDIT-2026-09-26.md`, `CLAUDE.md`): **a "What asks first"
+page in both apps lists every action and whether it asks, in plain words,
+with "make stricter" switches. On the PC only, the owner may also loosen a
+short safe list - one card plus Windows Hello per change. Nothing outside
+that list can be loosened from an app.**
+
+`backend/asks-first.patch` (the routes, last in `$PATCHES`),
+`backend/jarvis_asks_first.py` (shipped whole). Desktop: Settings, "What asks
+first" (`asks-first.js`, `asks-first-settings.js`, `asks_first.rs`:
+`get_asks_first`, `set_asks_first`, `set_lights_without_card`, Settings
+window only). Phone: Mind, "What asks first" (`AsksFirstPlate.kt`,
+`net/AsksFirst.kt`). Both read `tests/fixtures/asks-first-cases.json` /
+`contract/asks-first-cases.json`, written by `tools/gen_asks_first_cases.py`
+from the real `view()`. `tools/check_parity.py` records all three routes as
+`ported`; loosening is the desktop's only (ARCHITECTURE section 8).
+
+### 32.1 Routes
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/asks_first` | - | 200 the page (32.2); 503 `{"available": false, "error"}` without `jarvis_asks_first.py` | Token + origin. A read: never held. `can_loosen` is true only for a request from this PC (`jarvis_owner_check.from_this_pc`: loopback, the PC's own addresses, or anything that cannot be placed). |
+| `POST /api/asks_first/tier` | `{"action", "ask": true}` | 200 `{"ok", "changed", "message", "view"}` | **Stricter**, from either app, at once, never a card, never held on a stale link: the action's line becomes `"ask"`. Also withdraws a waiting loosening card for the same action. |
+| `POST /api/asks_first/tier` | `{"action", "ask": false}` | **202** `{"ok", "waiting": true, "message", "view"}` while its card waits; 200 `changed: false` if it already goes ahead; **403** `{"error", "pc_only": true}` from any device but this PC; **403** for an action off the list; **409** "never" in the file, or another loosening card already waits; **503** the backend cannot ask Windows Hello itself (`owner-check.patch` not armed), or `loosen_what_asks_first` is not tier `ask` | **Looser**: the desktop only, held on a stale link. ONE approval card, action **`loosen_what_asks_first`** (32.3). Only a person's "approved" writes the line back to the shipped tier (32.4). |
+| `POST /api/asks_first/lights` | `{"enabled": bool}` | as the briefing's senders switch (section 22): OFF 200 at once; ON **202** while ONE card waits; 503 if `change_own_config` is not `ask` | Section 33. |
+
+### 32.2 The page
+
+```
+{"available": true, "title": "What asks first", "detail": <the sentence under it>,
+ "switch_label": "Ask me first", "can_loosen": bool,
+ "switchable": [the seven actions of 32.4],
+ "groups": [{"title": "Reading your own things",
+             "rows": [{"id": "calendar_read", "action": "calendar_read",
+                       "title": "Read your calendar",          the card's own words (jarvis_card_words)
+                       "tier": "auto"|"notify"|"ask"|"never",
+                       "says": "Does it without asking",       the tier in plain words
+                       "note": <one line>, "fixed": false,
+                       "switch": {"asks": bool, "loose": "auto"|"notify", "can_loosen": bool}}]}, ...],
+ "waiting": {"action", "title", "said"}|null,     a loosening card that waits
+ "last": {"outcome", "action", "message", "why", "at"}|null,
+ "lights": {"on", "waiting", "last", "why", "label", "detail"}}
+```
+
+The tiers in plain words: `auto` "Does it without asking", `notify` "Does it,
+then tells you", `ask` "Asks you first, every time", `never` "Never - your
+settings file switches it off". An action that only runs on a person's yes
+(NEEDS_A_PERSON's, and every "Must stay 'ask'" line) says "Always asks. This
+cannot be changed from an app."; set looser in the file it says "Refused - it
+only runs on your yes, so its line must say "ask"". Anything else not on the
+short list says "Only your settings file (jarvis-framework.toml) changes this
+one." Three rows have no tier (`"fixed": true`): timers and one-off
+reminders, plain repeats and the standby schedule (both "Does it without
+asking", section 21), and "Switch lights, plugs and fans you name" (section
+33). Every action an approval card can name (`jarvis_card_words.TITLES`) is
+on the page, in ten groups; a line in the owner's file that no group names is
+added under "Other", never hidden.
+
+### 32.3 The loosening card
+
+```
+Let Jarvis read your calendar without asking you first?
+
+From now on Jarvis will read your calendar without an approval card. This
+changes one line of your settings file on this PC (jarvis-framework.toml):
+calendar_read = "auto". Nothing else in it changes.
+
+A chat where it reads something still counts as having read outside text,
+so a later web search or note in that chat still asks.
+
+Approving it needs Windows Hello on this PC. You can make it ask again at
+any time from either app, and that is instant.
+
+If you did not just do this, say no.
+
+If you say no: nothing changes - it keeps asking first.
+```
+
+Its title: "Jarvis wants to let one action go ahead without asking you
+first". Its risk entry (`asks-first.patch`, `jarvis_gate._RISK`): local,
+undoable. **It is approved on the PC only, always with Windows Hello**:
+`jarvis_owner_check.PC_ONLY_ACTIONS` refuses its approval from any other
+device (403 `owner_check: "pc_only"`) and asks Windows Hello for it from the
+PC whether it is risky or not; no Windows Hello, no approval. The phone
+shows the card with Deny only and "Approve this one on the PC - it needs
+Windows Hello there. Deny still works here." A "no" proposes no standing
+rule (`_NO_RULE_FROM_DENIAL`).
+
+### 32.4 The short safe list, and the settings file
+
+`calendar_read`, `email_read`, `notes_search`, `home_read` (loosened back to
+`auto`), `append_obsidian_daily`, `append_logseq_journal` (`auto`) and
+`create_joplin_note` (`notify`). The backend refuses every other action,
+and never anything in NEEDS_A_PERSON or its hard-limit list (anything that
+leaves the PC, deletes, sends, spends, moves a lock or door, touches secrets
+or loosens a security or privacy setting); `backend/test_asks_first.py`
+checks the two lists never meet.
+
+**The wiki is not on it, said plainly.** The owner's list named it, but
+since the security audit (L1) `jarvis_wiki.py` writes the wiki only on a
+person's yes whatever `wiki_update` says, so a looser line would switch "Add
+to wiki" off rather than stop it asking. Its row says so. (The shipped
+toml's comment that said "you may lower it" was wrong and is corrected.)
+
+Making a read stricter also leaves it out of the morning briefing and "tell
+me when" (they cannot stop to ask); a note write made stricter asks in every
+turn, and after outside text it asks anyway (section 19's rule, unchanged).
+
+**Writing the file** (`set_tier`): only the one `<action> = "<tier>"` line
+under `[autonomy.tiers]` changes - its value, its comment kept - or, when the
+file has no line for it, one line is added after the table's last line
+(`calendar_read = "ask"  # set in the app's "What asks first" page`). Every
+other byte is kept: comments, spacing, CRLF line endings, a byte-order mark.
+The new text is parsed and must be exactly the old settings with that one
+tier changed, or nothing is written; it is written to a temporary file
+beside the old one and moved into place in one step. A file written some
+other way (the table twice, the key twice, an inline table, not UTF-8, a
+mistake in it) is refused with a sentence saying to edit it by hand. The
+backend reads the file again on its next check (`jarvis_framework` notices
+the change), so no restart is needed.
+
+### 32.5 Known gaps, said plainly
+
+- **Not run on Windows.** The Windows Hello prompt for the loosening card is
+  the approval gap's step 1 machinery (section 3 of ARCHITECTURE), which is
+  itself untested on Windows.
+- **A program already on the PC** that holds the token can make things
+  stricter (harmless) and can raise a loosening card; approving it still
+  needs Windows Hello at the backend. Step 1's known limits apply.
+- The desktop asks Windows Hello a second time for this card only if the
+  owner chose "Every approval" in Security (the desktop's own check, then
+  the backend's).
+
+## 33. Lights, plugs and fans without a card (added 2026-09-26)
+
+The owner's decision of 2026-09-26, after the approvals audit: **"Lights,
+plugs and fans: a setting, off by default, lets Jarvis switch devices the
+owner names without a card. Turning it on raises a card; turning it off is
+immediate. Never after outside text in the turn. Locks, doors, alarms and
+covers always keep a card of their own."**
+
+The switch is on the "What asks first" page in both apps, in the "Your smart
+home" group: **"Lights, plugs and fans without a card"** - "When you name a
+light, plug or fan yourself - "turn off the kitchen light" - Jarvis switches
+it without an approval card. Locks, doors, alarms, covers and garage doors
+always ask, each with a card of its own, and so does everything after
+Jarvis has read outside text in the chat. Turning this on shows you an
+approval card first; turning it off happens at once."
+
+**The setting** (`POST /api/asks_first/lights {"enabled"}`): the shape of
+every setting that trusts more (the briefing's senders, automatic
+learning). OFF is immediate and withdraws a waiting ON card. ON is ONE card,
+action `change_own_config` (tier `ask` only; anything else 503), and nothing
+changes before a person's "approved". Kept in
+`<config folder>/asks_first.json` (`{"lights": bool, "changed"}`); no file
+is off, a damaged file is off and says why. Both apps hold ON on a stale
+link and let OFF through.
+
+**When a home change runs without a card** (`jarvis_agent`
+LIGHTS_WITHOUT_CARD, `jarvis_asks_first.lights_without_card`,
+`jarvis_home.everyday_problem`) - every one of these, or it is a card
+exactly as before:
+- the setting is on;
+- nothing from outside shaped the turn: no reading tool ran, the chat is not
+  tainted, the newest message was typed or said by the owner (not pasted,
+  shared, from the clipboard, a picture's caption, or a voice this PC could
+  not check), and the app sent no text of its own;
+- every request is `light`, `switch` or `fan`'s own `turn_on`, `turn_off` or
+  `toggle` (never the `homeassistant` domain, which forwards to anything), on
+  an entity of the same domain, with no `data` but brightness, colour and fan
+  speed keys;
+- none of them stands alone: a lock, alarm, cover, valve, siren, camera,
+  scene, script, automation or button, or an id with door, gate, garage,
+  lock, alarm, security, safe, siren or valve in it ("switch.garage_door" is
+  a door);
+- every device was named in the owner's newest message: each word of its id,
+  after the domain and the device words (light, lamp, plug, fan...), is
+  there ("light.kitchen" by "turn off the kitchen light"; "light.kitchen_
+  ceiling" needs "ceiling" too; "all the lights" names none).
+
+Such a change is not an approval and raises nothing: the audit log records
+`asks_first.lights.no_card` with the devices and the service. `home_control`
+stays in NEEDS_A_PERSON, and "What Jarvis can reach" says "Yes, every time -
+except the lights, plugs and fans you name yourself (your setting)" while it
+is on. A card for lights (the setting off, or a condition failed) is still
+unclassified in the gate, so it still asks Windows Hello from the PC - the
+safe side (the audit's item 7: no risk entry was added for `home_control`,
+so locks keep theirs).

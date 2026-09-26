@@ -3791,9 +3791,10 @@ function paintNamedLists(v) {
 }
 
 /**
- * The standby schedule: two times, one card on the PC (schedule_repeat). It
- * then sits in the list above like any repeating job. Held on a stale link,
- * like every change here; Rust refuses it too.
+ * The standby schedule: two times, set up at once on the PC with no card
+ * (since 2026-09-26; the PC's answer says the next night). It then sits in
+ * the list above like any repeating job. Held on a stale link, like every
+ * change here; Rust refuses it too.
  */
 async function addStandby() {
   const times = standbyTimes(dom.standbyStart && dom.standbyStart.value,
@@ -3809,7 +3810,7 @@ async function addStandby() {
   try {
     const out = await invoke("brain_schedule_add_standby", { start: times.at, end: times.until });
     if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
-    else toast(String((out && out.said) || "Waiting for your yes on the approval card."), "ok");
+    else toast(String((out && out.said) || "Done."), "ok");
   } catch (error) {
     toast(errorText(error), "bad");
   }
