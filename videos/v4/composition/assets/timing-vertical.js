@@ -1,0 +1,2 @@
+// One timing table for picture and score; keep the .json identical.
+window.TIMING = {"bpm": 120, "dur": 15, "hits": {"ignite": 0.0, "edge": 0.2, "focus": 1.2, "focusSay": 1.25, "focusCard": 1.5, "distract": 2.2, "report": 3.0, "tell": 4.0, "tellSay": 4.05, "tellCard": 4.5, "tellOk": 5.0, "ring": 5.4, "ring2": 5.9, "stop": 6.3, "stopEnd": 6.8, "toast": 6.8, "phoneStop": 7.3, "asks": 8.0, "mailCard": 8.1, "asksLine": 8.3, "finger": 9.6, "ok": 10.3, "outro": 11.2, "o1": 11.4, "pc": 11.9, "rules": 12.4, "logo": 13.4, "end": 15.0}};
