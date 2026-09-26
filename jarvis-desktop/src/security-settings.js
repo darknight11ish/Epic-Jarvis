@@ -119,7 +119,8 @@ export function appLockDetail() {
   return "Opening the Jarvis bar, the Brain, Settings or the HUD window needs " +
     "Windows Hello. The widget stays on the desktop, but while this is on it " +
     "shows only a short title for an approval, and its Approve opens the " +
-    "Jarvis bar to approve there. Deny still works from the widget.";
+    "Jarvis bar to approve there. Notes to Jarvis are added in the Jarvis bar " +
+    "too. Deny still works from the widget.";
 }
 
 export function relockNote(settings) {

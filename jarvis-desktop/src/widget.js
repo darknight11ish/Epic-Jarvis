@@ -630,6 +630,7 @@ function applyAppLock(on) {
   // Repaint the card on screen under the new rule. Same id, so nothing is
   // announced again and a half-typed note is kept.
   if (state.approval) openApproval(state.approval);
+  syncTaskControls();
 }
 
 /** Whether App lock is on. Fails closed: a read that fails is treated as on,
@@ -1075,6 +1076,11 @@ function syncTaskControls() {
   dom.btnTaskStop.disabled = state.taskActionBusy;
   dom.taskNoteInput.disabled = state.taskNoteBusy;
   dom.btnTaskNoteSend.disabled = state.taskNoteBusy;
+  // App lock covers task notes too (the owner's decision of 2026-09-26),
+  // like the card's note: a note steers what Jarvis does next, so it waits
+  // for the unlocked Jarvis bar. Rust refuses it from this window as well.
+  const taskNoteRow = dom.taskNoteInput.closest(".task-note-row");
+  if (taskNoteRow) taskNoteRow.hidden = state.appLock;
 }
 
 /**
@@ -1128,7 +1134,7 @@ async function sendTaskAction(kind) {
  */
 async function sendTaskNote() {
   const note = dom.taskNoteInput.value.trim();
-  if (!note || state.taskNoteBusy) return;
+  if (!note || state.taskNoteBusy || state.appLock) return;
 
   state.taskNoteBusy = true;
   syncTaskControls();

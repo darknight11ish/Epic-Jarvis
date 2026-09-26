@@ -521,7 +521,10 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 link.last_id = id;
             }
         });
-        save_resume(app, false);
+        // A `schedule` event is written at once, not within five seconds:
+        // an alarm that went off must not be replayed - and ring again -
+        // after only this app restarts (bug audit 2026-09-26, #4).
+        save_resume(app, event.name == "schedule");
     }
 
     match event.name.as_str() {
@@ -695,7 +698,7 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             tauri::async_runtime::spawn(crate::brain::schedule::toast_fired(
                 app.clone(),
                 base.to_string(),
-                event.data.clone(),
+                crate::brain::schedule::with_event_id(&event.data, event.id),
             ));
         }
 
@@ -724,7 +727,7 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             tauri::async_runtime::spawn(crate::brain::schedule::toast_matched(
                 app.clone(),
                 base.to_string(),
-                event.data.clone(),
+                crate::brain::schedule::with_event_id(&event.data, event.id),
             ));
         }
 
@@ -1229,6 +1232,12 @@ fn load_resume(app: &AppHandle) -> u64 {
 /// Writes the resume point, at most every [`RESUME_SAVE_INTERVAL`] unless
 /// `force` (which the disconnect path passes, because the next thing that
 /// happens may be the process going away).
+/// Writes the resume point now: called when the app exits, so a restart
+/// does not replay events this run already handled.
+pub(crate) fn save_resume_now(app: &AppHandle) {
+    save_resume(app, true);
+}
+
 fn save_resume(app: &AppHandle, force: bool) {
     use tauri_plugin_store::StoreExt;
     static LAST: Mutex<Option<Instant>> = Mutex::new(None);

@@ -125,6 +125,13 @@ await check("CONTROL: Rust holds what makes Jarvis watch, fetches the line as so
     "the line is asked for from a backend that is not this PC");
   assert.match(play, /b"RIFF"/, "anything but a WAV could be handed on");
   assert.match(play, /emit_quickbar\(/);
+  // "Stop everything" while the sound was being made drops it (bug audit
+  // 2026-09-26, #1): the count is taken before asking, checked before handing on.
+  assert.ok(play.indexOf("stops_so_far()") < play.indexOf(".send()"), "the stop count is not noted first");
+  assert.ok(play.indexOf("still_wanted(") < play.indexOf("emit_quickbar("), "a stopped line is handed on");
+  const stopNow = read("src-tauri/src/commands.rs");
+  const sn = stopNow.slice(stopNow.indexOf("pub fn stop_everything_now("));
+  assert.match(sn.slice(0, sn.indexOf("\n}\n")), /brain::focus::note_stop_everything\(\)/);
   assert.match(read("src-tauri/src/stream.rs"),
     /"focus" if event\.data\["state"\]\.as_str\(\) == Some\("callout"\) => \{\s*tauri::async_runtime::spawn\(crate::brain::focus::play_callout\(/);
   const main = read("src/main.js");
@@ -276,6 +283,23 @@ await check("widget, stale link: Resume and Lock on wait, Stop does not", async 
     (bs) => bs.map((b) => [b.textContent, b.disabled]));
   await page.close();
   assert.deepEqual(states, [["Resume", true], ["Lock on", true], ["Stop", false]]);
+});
+
+await check("Jarvis bar: a line that arrives just after Stop everything is not played", async () => {
+  const page = await K.open(browser, base, "index.html", {});
+  await page.evaluate(() => {
+    window.__audios = [];
+    const Real = window.Audio;
+    window.Audio = function (src) { window.__audios.push(src); const a = new Real(); a.play = () => Promise.resolve(); return a; };
+  });
+  const wav = "data:audio/wav;base64,UklGRiQAAABXQVZF";
+  await page.evaluate(() => window.__emit("stop-everything", null));
+  await page.waitForTimeout(100);
+  await page.evaluate((uri) => window.__emit("focus-callout", { uri }), wav);
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => window.__audios.length);
+  await page.close();
+  assert.equal(after, 0, "a focus line played right after Stop everything");
 });
 
 await browser.close();

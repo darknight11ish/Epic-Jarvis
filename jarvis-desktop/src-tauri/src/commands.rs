@@ -2393,6 +2393,9 @@ pub async fn stop_task(app: AppHandle) -> Result<serde_json::Value, String> {
 /// opposite), not by App lock, not by a waiting card. It approves nothing
 /// and starts nothing; the route cannot either.
 pub fn stop_everything_now(app: &AppHandle) {
+    // First: a focus line still being made on the PC is dropped when it
+    // arrives (brain/focus.rs `play_callout`).
+    crate::brain::focus::note_stop_everything();
     crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
     // The HUD window is the backend's own page and speaks through the
     // browser's speech engine; a fixed line, no payload.
@@ -2443,8 +2446,29 @@ pub fn stop_everything_words(result: Result<serde_json::Value, String>) -> Strin
 }
 
 #[tauri::command]
-pub async fn inject_task_note(app: AppHandle, note: String) -> Result<serde_json::Value, String> {
+pub async fn inject_task_note(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    note: String,
+) -> Result<serde_json::Value, String> {
+    refuse_widget_note_when_locked(&app, &window)?;
     post_task_control(&app, "/api/task/note", serde_json::json!({ "note": note })).await
+}
+
+/// App lock covers notes too (the owner's decision of 2026-09-26): the
+/// widget sits outside the lock, and a note steers what Jarvis does next,
+/// so with App lock on a note - to a running task or kept with a card - is
+/// added in the Jarvis bar, which asks Windows Hello first. Checked here,
+/// in the command, not only by the widget hiding its note rows.
+fn refuse_widget_note_when_locked(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+) -> Result<(), String> {
+    let from_widget = window.label() == windows::WIDGET_LABEL;
+    if crate::lock::widget_note_refused(from_widget, crate::lock::current(app).app_lock) {
+        return Err(crate::lock::WIDGET_NOTES_IN_BAR.to_string());
+    }
+    Ok(())
 }
 
 /// Asks the backend to switch power mode - `POST /api/power`
@@ -2508,9 +2532,11 @@ fn encode_path_segment(raw: &str) -> String {
 #[tauri::command]
 pub async fn amend_approval(
     app: AppHandle,
+    window: tauri::WebviewWindow,
     id: String,
     note: String,
 ) -> Result<serde_json::Value, String> {
+    refuse_widget_note_when_locked(&app, &window)?;
     let encoded = encode_path_segment(&id);
     post_task_control(
         &app,

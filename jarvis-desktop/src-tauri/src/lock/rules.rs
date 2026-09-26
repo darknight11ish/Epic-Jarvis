@@ -55,6 +55,17 @@ pub const TURN_ON_NEEDS_HELLO: &str = "Windows Hello is not set up on this PC, s
 /// M3). No "already" in it (see above), and it says what happens instead.
 pub const WIDGET_APPROVES_IN_BAR: &str = "App lock is on, so approvals are made in the Jarvis \
      bar, not the widget. The Jarvis bar is opening - approve it there";
+/// Why the widget did not send a note while App lock is on (the owner's
+/// decision of 2026-09-26: App lock covers task notes too, like approval
+/// notes). A note steers what Jarvis does next, so it waits for the unlocked
+/// Jarvis bar.
+pub const WIDGET_NOTES_IN_BAR: &str = "App lock is on, so notes to Jarvis are added in the \
+     Jarvis bar, not the widget. Open the Jarvis bar and confirm it is you to add one";
+/// Whether a note (to a running task, or kept with a card) is refused
+/// because it came from the widget while App lock is on.
+pub fn widget_note_refused(from_widget: bool, app_lock: bool) -> bool {
+    from_widget && app_lock
+}
 pub const PRIVATE_STILL_HIDDEN: &str = "What Jarvis remembers about you is hidden. Press Show \
      on the Brain's Memory tab and confirm it is you with Windows Hello first.";
 
@@ -408,6 +419,17 @@ pub fn redact_private(section: &str, body: serde_json::Value) -> serde_json::Val
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_note_from_the_widget_waits_for_the_unlocked_bar() {
+        assert!(widget_note_refused(true, true));
+        assert!(!widget_note_refused(true, false));
+        assert!(
+            !widget_note_refused(false, true),
+            "the Jarvis bar is behind the lock itself"
+        );
+        assert!(WIDGET_NOTES_IN_BAR.starts_with("App lock is on"));
+    }
     use serde_json::json;
 
     fn classified(reach: &str, reversible: &str) -> serde_json::Value {

@@ -283,6 +283,40 @@ pub fn notify_alarm(app: &AppHandle, title: &str, body: &str, snooze: Option<(&s
     }
 }
 
+/// The XML of a toast without a sound and without buttons: an alarm or
+/// reminder heard about more than ten minutes after it went off
+/// (`brain/schedule.rs` `heard_late`, the owner's decision of 2026-09-26).
+pub(crate) fn quiet_xml(title: &str, body: &str) -> String {
+    format!(
+        r#"<toast activationType="foreground" launch="jarvis-open">
+  <visual>
+    <binding template="ToastGeneric">
+      <text>{title}</text>
+      <text>{body}</text>
+    </binding>
+  </visual>
+  <audio silent="true"/>
+</toast>"#,
+        title = escape_xml(title),
+        body = escape_xml(body),
+    )
+}
+
+/// Shows [`quiet_xml`], or the plugin's plain toast - which makes its one
+/// usual sound - on an uninstalled build or if anything here fails.
+pub fn notify_quiet(app: &AppHandle, title: &str, body: &str) {
+    if is_uninstalled_build() {
+        crate::commands::notify(app, title, body);
+        return;
+    }
+    if let Err(e) = try_show(&quiet_xml(title, body)) {
+        crate::logfile::log(&format!(
+            "[jarvis] quiet toast failed, falling back to a plain one: {e}"
+        ));
+        crate::commands::notify(app, title, body);
+    }
+}
+
 fn try_show(xml: &str) -> windows::core::Result<()> {
     let doc = XmlDocument::new()?;
     doc.LoadXml(&HSTRING::from(xml))?;
@@ -319,14 +353,59 @@ pub fn decide_denied_detached(app: &AppHandle, id: &str) {
     let app = app.clone();
     let id = id.to_string();
     tauri::async_runtime::spawn(async move {
+        // The same wait as a cold start (bug audit 2026-09-26, #2): a Deny
+        // clicked while the link is reconnecting - after the PC wakes, or
+        // the backend restarts, exactly when an old toast is likely to be
+        // clicked - used to be refused and only logged. The toast has gone
+        // by then, so the owner believed the card was denied.
+        if !link_came_up(&app).await {
+            crate::logfile::log(&format!(
+                "[jarvis] notification Deny for {id} not sent: the event stream stayed stale"
+            ));
+            crate::commands::notify(&app, "Jarvis", &deny_not_sent_words(LINK_NEVER_CAME));
+            return;
+        }
         // No option: a toast Deny names no plan, and denying never needs to -
         // refusing all of them is one answer however many there are.
-        if let Err(e) = crate::commands::deny_from_notification(app, id.clone()).await {
+        if let Err(e) = crate::commands::deny_from_notification(app.clone(), id.clone()).await {
             crate::logfile::log(&format!(
                 "[jarvis] notification Deny for {id} did not go through: {e}"
             ));
+            crate::commands::notify(&app, "Jarvis", &deny_not_sent_words(&e));
         }
     });
+}
+
+/// Why a toast's button did nothing when the link never came back.
+const LINK_NEVER_CAME: &str = "Jarvis's live link did not come back within 45 seconds";
+
+/// What the toast says when a notification Deny could not be sent: that it
+/// was NOT denied, why, and where the card still is. The reason is this
+/// app's own sentence (`answer_approval`'s refusals, or the link wait above),
+/// never the card's words.
+pub fn deny_not_sent_words(why: &str) -> String {
+    let why = why.trim().trim_end_matches('.');
+    if why.is_empty() {
+        return "Not denied. The card is still waiting in the Jarvis bar.".to_string();
+    }
+    format!("Not denied: {why}. The card is still waiting in the Jarvis bar.")
+}
+
+/// Waits for the event stream to be live, up to [`STARTUP_DENY_WAIT`]:
+/// every decision or change is refused while it is stale (rule 4), and a
+/// toast button is most often pressed right after a wake or a restart,
+/// while the link is still coming back. `true` once it is live.
+async fn link_came_up(app: &AppHandle) -> bool {
+    let deadline = std::time::Instant::now() + STARTUP_DENY_WAIT;
+    loop {
+        if !app.state::<crate::stream::StreamState>().link().stale {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
 }
 
 /// How long a cold-start Deny waits for the event stream before giving up.
@@ -369,27 +448,9 @@ pub fn decide_denied_at_startup(app: &AppHandle) {
     let Some(id) = deny_id_from_argv(&argv) else {
         return;
     };
-    let id = id.to_string();
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let deadline = std::time::Instant::now() + STARTUP_DENY_WAIT;
-        loop {
-            if !app.state::<crate::stream::StreamState>().link().stale {
-                crate::logfile::log(&format!("[jarvis] Deny reached from a cold start: {id}"));
-                decide_denied_detached(&app, &id);
-                return;
-            }
-            if std::time::Instant::now() >= deadline {
-                crate::logfile::log(&format!(
-                    "[jarvis] Deny for {id} arrived on a cold start, but the event \
-                     stream never came up - nothing was answered, and the approval \
-                     is still waiting in the app"
-                ));
-                return;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        }
-    });
+    crate::logfile::log(&format!("[jarvis] Deny reached from a cold start: {id}"));
+    // Waits for the link itself, and says so in a toast if it never comes.
+    decide_denied_detached(app, id);
 }
 
 /// A timer, alarm or reminder that went off, with a "Snooze 10 minutes"
@@ -457,6 +518,9 @@ pub fn snooze_detached(app: &AppHandle, id: &str) {
     let app = app.clone();
     let id = id.to_string();
     tauri::async_runtime::spawn(async move {
+        // The same wait as Deny. On a link that never comes back,
+        // `snooze_from_toast` still refuses, and its toast says so.
+        let _ = link_came_up(&app).await;
         crate::brain::schedule::snooze_from_toast(app, id).await;
     });
 }
@@ -469,31 +533,33 @@ pub fn snooze_at_startup(app: &AppHandle) {
     let Some(id) = snooze_id_from_argv(&argv) else {
         return;
     };
-    let id = id.to_string();
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let deadline = std::time::Instant::now() + STARTUP_DENY_WAIT;
-        loop {
-            if !app.state::<crate::stream::StreamState>().link().stale {
-                crate::logfile::log(&format!("[jarvis] Snooze reached from a cold start: {id}"));
-                snooze_detached(&app, &id);
-                return;
-            }
-            if std::time::Instant::now() >= deadline {
-                crate::logfile::log(&format!(
-                    "[jarvis] Snooze for {id} arrived on a cold start, but the event stream \
-                     never came up - nothing was snoozed"
-                ));
-                return;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        }
-    });
+    crate::logfile::log(&format!("[jarvis] Snooze reached from a cold start: {id}"));
+    snooze_detached(app, id);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missed_alarm_is_shown_without_a_sound_or_a_button() {
+        let xml = quiet_xml("Alarm", "Missed at 07:00. Wake <up>");
+        assert!(xml.contains(r#"<audio silent="true"/>"#));
+        assert!(!xml.contains("<action"));
+        assert!(!xml.contains("Looping"));
+        assert!(xml.contains("Wake &lt;up&gt;"));
+    }
+
+    #[test]
+    fn a_deny_that_did_not_go_out_says_so_and_where_the_card_is() {
+        let said = deny_not_sent_words("the event stream is stale.");
+        assert_eq!(
+            said,
+            "Not denied: the event stream is stale. The card is still waiting in the Jarvis bar."
+        );
+        assert!(deny_not_sent_words("  ").starts_with("Not denied."));
+        assert!(deny_not_sent_words(LINK_NEVER_CAME).contains("45 seconds."));
+    }
 
     #[test]
     fn a_snooze_click_yields_one_job_id_and_nothing_else_does() {

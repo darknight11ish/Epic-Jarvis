@@ -1196,13 +1196,20 @@ pub fn run() {
             // and kill the process tree if it is still there. Blocking here is
             // deliberate; the alternative is exiting with a model still
             // resident and no window left to say so.
+            // The last event id seen, forced: without it a restart of this
+            // app alone replays the last few seconds of events, and an alarm
+            // that already rang rings again (bug audit 2026-09-26, #4).
+            stream::save_resume_now(app);
             sidecar::stop_on_exit(app);
         }
 
         // A last line of defence for the paths that reach `Exit` without an
         // `ExitRequested` we saw. Stopping twice is a no-op: the owned child is
         // taken out of the state by whichever call gets there first.
-        tauri::RunEvent::Exit => sidecar::stop_on_exit(app),
+        tauri::RunEvent::Exit => {
+            stream::save_resume_now(app);
+            sidecar::stop_on_exit(app);
+        }
 
         _ => {}
     });
