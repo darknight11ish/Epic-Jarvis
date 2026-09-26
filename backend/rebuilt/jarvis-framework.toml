@@ -1315,3 +1315,26 @@ star_floor = 25        # ...but never fewer than this many
 # Always reported regardless of the above, because each one changes whether
 # you can use the thing at all: a licence change, being archived, a new
 # release, a changed description.
+
+
+# ------------------------------------------------------------------------
+# TOOLS - which ones the model is offered at all
+# ------------------------------------------------------------------------
+# jarvis_agent.offered_tools() offers the model only a tool named here -
+# see that module's own docstring, and backend/README.md's "What each one
+# needs in jarvis_gate.py and jarvis-framework.toml" for the full list and
+# how to add more. A tool left out of this list still works everywhere
+# else (its settings, its "which search should I use?"-style fast paths),
+# it is simply never put in front of the model. This changes nothing about
+# what asks first - that is still [autonomy.tiers] - only whether the
+# model is offered the tool at all.
+#
+# `web_search` ships ON (the owner's decision of 2026-09-25, "Web search
+# with a choice of providers", reconfirmed 2026-09-27, "Web search ships
+# switched on"): SearXNG was already the chosen default provider, so a
+# fresh install that could not search the web despite that was this file,
+# not the owner, still saying no. Nothing else here is on by that decision
+# - send_email, browser_control, my_files and the rest stay opt-in, each
+# for the reasons its own row of backend/README.md gives.
+[tools]
+enabled = ["web_search"]

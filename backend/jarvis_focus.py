@@ -30,7 +30,11 @@ IN PLAIN WORDS, WHAT HAPPENS
      Lines get firmer with each drift (three tiers, four lines each), and it
      repeats every minute while one drift lasts.
   6. At the end it goes back to Active (only if focus set Quiet) and gives a
-     report card: minutes on target out of the plan, drifts, and a streak.
+     report card: minutes on target out of the plan, and drifts. (It still
+     counts clean sessions in a row internally - `streak_of()` - but the
+     card itself does not say so: the owner's answer of 2026-09-27 to the
+     feasibility audit's question 13 was "keep the report card, drop the
+     streak line.")
 
 THE PRIVACY LAW - enforced by the shape of the code, and tested
   * WHAT IT SAW IS NEVER KEPT. The reader turns the program name and the
@@ -678,7 +682,15 @@ def left_words(seconds: float) -> str:
 
 
 def report_from(row: dict, streak: int) -> dict:
-    """The report card - built from a ledger row, so it can only say numbers."""
+    """The report card - built from a ledger row, so it can only say numbers.
+
+    `streak` is still counted (streak_of()) and still returned in the
+    dict - other code reads it - but no line of the CARD itself says so any
+    more. The owner's answer of 2026-09-27 to the feasibility audit's
+    question 13 ("the report card shows 'Streak: N clean sessions in a
+    row'") was "keep the report card, drop the streak line"; research says
+    streaks make assistants naggy, and the owner asked for a report card,
+    not a streak."""
     r = ledger_row(row)
     done = r["completed"]
     title = "Focus session done." if done else "Focus session stopped early."
@@ -698,15 +710,9 @@ def report_from(row: dict, streak: int) -> dict:
         lines.append("Jarvis never locked on, so there is no score.")
     else:
         lines.append(f"{r['percent']}% focused.")
-    if r["clean"]:
-        lines.append(f"Streak: {_plural(streak, 'clean session', 'clean sessions')} in a row.")
-    else:
-        lines.append(f"The streak starts again: a clean session is {CLEAN_PCT}% or more, "
-                     f"run to the end.")
     drift_said = "no drifts" if d == 0 else ("one drift" if d == 1 else f"{d} drifts")
     spoken = (f"{title} {on} of {_plural(planned if done else active, 'minute', 'minutes')} "
-              f"on target, {drift_said}."
-              + (f" Streak: {streak}." if r["clean"] else ""))
+              f"on target, {drift_said}.")
     return {"completed": done, "planned_min": planned, "active_min": active,
             "on_target_min": on, "adrift_min": adrift, "excused_min": r["excused_min"],
             "drifts": d, "percent": (None if r["percent"] < 0 else r["percent"]),

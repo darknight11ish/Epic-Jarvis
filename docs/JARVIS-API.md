@@ -5441,9 +5441,13 @@ you." instead: the words are the owner's own, like a reminder's. (2026-09-26.)
 **The report card** is built from the ledger row, so it can only say
 numbers: "Focus session done." / "Focus session stopped early.", "On target:
 27 of 30 minutes.", "Drifted twice, 3 minutes in all.", "Research: 4
-minutes, not counted against you.", "90% focused.", "Streak: 3 clean
-sessions in a row." A session is **clean** at 85% or more of its watched time
-on target, run to the end; the streak counts clean sessions in a row.
+minutes, not counted against you.", "90% focused." A session is **clean**
+at 85% or more of its watched time on target, run to the end, and
+`streak` (in the status JSON, `report.streak` and the top-level `streak`)
+still counts clean sessions in a row - but since the owner's answer of
+2026-09-27 to the feasibility audit's question 13, the card itself has no
+streak line: "keep the report card, drop the streak line" (research says
+streaks make assistants naggy).
 
 ### 31.3 Said or typed - without the model
 
