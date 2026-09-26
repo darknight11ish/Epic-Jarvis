@@ -43,6 +43,18 @@ answers, both graphics cards' health, and similar.
 - **a. Add them to the queue after your four groups** (recommended)
 - b. Only the four groups for now
 
+## Memory (memory review, `docs/MEMORY-REVIEW-2026-09-27.md`)
+
+**4b. "Erase the words" and the chat it came from.** Erase wipes a fact from
+memory, but the conversation where you said it stays in chat history.
+- **a. Offer "Also delete the chat it came from" on the same screen** (recommended)
+- b. Only fix the wording to say the chat stays until you delete it
+
+**4c. May the re-ranker also drop weak facts?** Today questions Jarvis
+cannot answer still get 1-2 wrong facts each.
+- **a. Yes, but only if the PC test shows it helps** (recommended)
+- b. Keep it only re-ordering
+
 ## Looks (UI audit)
 
 **5. Build the UI audit's "do first" list?** The desktop face moves with the
