@@ -515,6 +515,16 @@ $PATCHES = @(
     # like every new patch. Needs jarvis_email_draft.py copied in; without
     # it, or on any error, the route says so.
     'draft-email.patch'
+    # "Things you can say" (already approved as feasibility I116; the
+    # ease-of-use audit's do-first table, row 4, 2026-09-27): GET
+    # /api/sayable - the fixed list of real sentences Jarvis answers
+    # without the model, read by the empty Jarvis bar/Home screen, the
+    # walkthrough and Help in both apps. Fixed text, not a setting, so no
+    # approval card either way, the same shape as reach.patch and
+    # manner.patch. Its context is draft-email's own new route block, so it
+    # goes after it - last, like every new patch. Needs jarvis_sayable.py
+    # copied in; without it, or on any error, the route says so.
+    'sayable.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -628,6 +638,8 @@ $SHIPPED = @(
     'jarvis_wellbeing.py'        # the word check, the fixed US help message, the note to the model; jarvis_agent.py and jarvis_intake.py call it, no patch needed for the safety behaviour itself
     # --- the smartwatch notifications setting (2026-09-27) ---
     'jarvis_watch_notify.py'     # off by default; ON is one approval card, watch_notifications_enable; OFF is instant
+    # --- "Things you can say" (2026-09-27, sayable.patch) ---
+    'jarvis_sayable.py'          # sayable.patch: the fixed list of real sentences Jarvis answers without the model
 )
 
 # The settings file. Installed only where none exists; never overwritten.

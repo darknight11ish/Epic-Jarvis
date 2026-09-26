@@ -288,38 +288,22 @@
              learn the hotkeys was to already know one. This block is the
              inverse: present when nothing else is, gone the moment the card,
              a gate or the brief takes the space. -->
-        <!-- The four global combinations below are placeholders for first
-             paint. `main.js` replaces them with the LIVE bindings, because
-             they are configurable now and a hardcoded list goes stale the
-             moment someone rebinds one — which is the same class of bug this
-             block was added to fix. -->
+        <!-- "Things you can say" (jarvis_sayable.py; the ease-of-use audit's
+             do-first table, row 4): replaces the old 10-row list of kbd
+             combinations here (Alt+Space and the rest still work - they are
+             just no longer taught here, since Settings -> Shortcuts already
+             teaches them, live, and does so more accurately than a primer
+             that had to be told about every rebind). The note-app prefixes
+             (#log, #joplin, #obs) stay: they are not keyboard shortcuts, and
+             this is still their only in-app explanation. sayable.js fills
+             #sayable-list from its own fixed words (see that module's own
+             comment for why this list is hardcoded, not fetched). Tapping a
+             line calls fillFromSayable (main.js), which only fills #prompt -
+             it never sends. -->
         <section class="primer" id="primer" aria-label="What you can do here">
           <h2 class="sr-only">What you can do here</h2>
+          <div id="sayable-list"></div>
           <ul class="primer-list">
-            <li>
-              <span class="primer-keys" data-hotkey="toggle_quickbar"><kbd>Alt</kbd>+<kbd>Space</kbd></span>
-              <span>Show or hide the Jarvis bar, from anywhere</span>
-            </li>
-            <li>
-              <span class="primer-keys" data-hotkey="capture_screen"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></span>
-              <span>Attach a screen capture to the next question</span>
-            </li>
-            <li>
-              <span class="primer-keys" data-hotkey="ingest_clipboard"><kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd></span>
-              <span>Attach whatever is on the clipboard</span>
-            </li>
-            <li>
-              <span class="primer-keys" data-hotkey="quick_note"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span>
-              <span>Open the Jarvis bar ready to file a note (Logseq, or the first note app that is set up)</span>
-            </li>
-            <li>
-              <span class="primer-keys" data-hotkey="toggle_widget"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></span>
-              <span>Show or hide the desktop widget</span>
-            </li>
-            <li>
-              <span class="primer-keys" data-hotkey="stop_everything"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></span>
-              <span>Stop everything: Jarvis stops talking and stops anything it is doing, at once</span>
-            </li>
             <!-- Only the note apps the PC says are set up are shown (main.js
                  syncNotePrimer). Until it answers, none are - and the last
                  row says why. -->
@@ -338,10 +322,6 @@
             <li id="note-targets-line">
               <span class="primer-keys"><code>#</code></span>
               <span>Checking which note apps are set up on your PC…</span>
-            </li>
-            <li>
-              <span class="primer-keys"><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd></span>
-              <span>Bigger or smaller text, everywhere. <kbd>Ctrl</kbd>+<kbd>0</kbd> resets</span>
             </li>
           </ul>
           <!-- This used to end "and nothing leaves this machine." It is the

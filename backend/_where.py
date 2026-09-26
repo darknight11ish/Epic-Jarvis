@@ -162,6 +162,9 @@ SHIPPED = (
     "jarvis_wellbeing.py",
     # the smartwatch notifications setting (watch-notifications.patch)
     "jarvis_watch_notify.py",
+    # "Things you can say": the fixed list of real sentences answered without
+    # the model (sayable.patch)
+    "jarvis_sayable.py",
 )
 
 

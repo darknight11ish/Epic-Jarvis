@@ -90,6 +90,23 @@
   .demo .dot.thinking { background: var(--state-thinking); box-shadow: 0 0 8px var(--state-thinking); }
   .demo .dot.waiting { background: var(--state-approval); box-shadow: 0 0 8px var(--state-approval); }
   .demo .dot.resting { background: var(--accent); box-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.6); }
+  /* "Things you can say" (jarvis_sayable.py): 3 examples, this screen only. */
+  .sayable-examples-intro { margin: 0 0 6px; font-size: var(--text-sm); }
+  .sayable-examples {
+    margin: 0 0 12px;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 4px;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  .sayable-examples li {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: rgba(255, 255, 255, 0.03);
+  }
   .foot {
     display: flex;
     align-items: center;
@@ -163,6 +180,18 @@
         no setting anywhere that makes Jarvis stop asking and start
         approving things on its own.
       </p>
+      <!-- 3 of jarvis_sayable.WALKTHROUGH_EXAMPLES, word for word - the
+           ease-of-use audit's do-first table, row 4: "3 examples on
+           walkthrough screen 2" (this screen, next to Alt+Space; never
+           screen 1 or 3). Held to sayable-cases.json by tests/sayable.mjs. -->
+      <p class="sayable-examples-intro">
+        A few things Jarvis already answers without waiting on the AI model:
+      </p>
+      <ul class="sayable-examples">
+        <li>“Set a timer for 10 minutes.”</li>
+        <li>“What did I miss?”</li>
+        <li>“Remind me to call Mom at 6pm.”</li>
+      </ul>
     </section>
 
     <section class="screen" id="screen-3" data-n="3" hidden>

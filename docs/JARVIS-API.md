@@ -6490,3 +6490,122 @@ to configure for an account that can already read its mail.
 - A program already on the PC could approve a card with the pairing token,
   without Windows Hello - the known limit in `docs/ARCHITECTURE.md` section
   3, which applies to a draft's card as to every other.
+
+## 41. "Things you can say" (added 2026-09-27)
+
+Already approved as feasibility idea I116 ("Served by the PC; fills the box,
+never sends") and picked up by the ease-of-use audit's own do-first table,
+row 4 (`docs/EASE-OF-USE-AUDIT-2026-09-27.md`): "about 5-8 real sentences
+Jarvis already understands without the AI model ... They replace the 10
+shortcut rows in the empty Jarvis bar, with one line 'More: right-click the
+Jarvis icon by the clock.' Also one 'what can you do?' command answered from
+the same list, 3 examples on walkthrough screen 2, and a Help answer in both
+apps. Tapping a line fills the box and never sends." The audit's own critic
+(`docs/ease-audit-2026-09-27/critic.md` section 3.3) scoped the fuller
+original design (a searchable, grouped "/" command palette,
+`docs/CUTTING-EDGE-2026-09-26-round2-experience.md` section 3) down to this:
+one flat list, in fewer places. `backend/jarvis_sayable.py` (shipped whole),
+`backend/sayable.patch` (one read-only route).
+
+### 41.1 The list, and how it was picked
+
+Seven sentences, each checked against `jarvis_quick.py`'s own grammar by
+`backend/test_sayable.py` (it calls the real `match()` on every one, byte for
+byte as it is served, and fails if any comes back `None`):
+
+| Sentence | Answered by |
+|---|---|
+| "Set a timer for 10 minutes." | `timer_set` |
+| "What did I miss?" | `missed` (`jarvis_briefing.build_missed`, §17-adjacent) |
+| "Tell me when an email from Alex arrives." | `tellme_email` (`jarvis_tellme.py`, §30) |
+| "Focus for 30 minutes." | `focus_start` (`jarvis_focus.py`, §31) |
+| "Remind me to call Mom at 6pm." | `reminder_set` |
+| "Add milk to the shopping list." | `todo_add` (a named list) |
+| "Brief me now." | `briefing_now` (`jarvis_briefing.py`) |
+
+Chosen to show the spread the audit's own examples named (timers, "what did
+I miss?", "tell me when ...", focus) plus three more real ones - not every
+sentence `jarvis_quick.py` can answer, most of which need state a first-time
+reader does not have yet (a timer already running, a list already started,
+a focus session already on). "Tell me when an email from Alex arrives."
+still raises its own one approval card (§30) the moment it is sent - that is
+`tellme_email`'s own design, unchanged, and is still "no model": the card
+comes from the scheduler, never from the AI.
+
+### 41.2 The route
+
+Fixed text, not a setting - the same shape as `jarvis_manner.py` (§27) and
+`jarvis_reach.py`: **no approval card either way**, because nothing is
+trusted, shown or sent any differently either way. Needs the pairing token
+and passes the origin check.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/sayable` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_sayable.py` | Fixed text: no setting is read or written. |
+
+```
+{"available": true,
+ "title": "Things you can say",
+ "detail": "Real sentences Jarvis already answers without the AI model. Tap one to put it in the box - it does not send.",
+ "sentences": [<the 7, in order>],
+ "footer": "More: right-click the Jarvis icon by the clock.",
+ "walkthrough_examples": [<3 of the 7, for a walkthrough screen 2>],
+ "help_title": "What can I say?",
+ "help_body": <the Help/FAQ paragraph, naming every sentence>,
+ "written_by": "code"}
+```
+
+Both apps hold a plain, hardcoded copy of these words (`jarvis-desktop/src/sayable.js`,
+`jarvis-client/.../net/Sayable.kt`) rather than fetching them live: the list
+has to be shown before either app has necessarily connected to anything -
+the desktop's empty Jarvis bar is the first thing painted, often before the
+backend answers at all. `tools/gen_sayable_cases.py` writes both
+apps' copies of the words to a shared fixture
+(`sayable-cases.json`) from the real `jarvis_sayable.py`, and the desktop's
+`tests/sayable.mjs` and the phone's `SayableContractTest` both hold their
+hardcoded copy to it - the same "one source, both apps read it" pattern
+`gen_card_words_cases.py` uses for approval-card words - so the two apps
+cannot carry a different list.
+
+### 41.3 "What can you do?"
+
+`jarvis_quick.py`'s grammar answers "what can you do?", "what can I say?",
+"what can I ask you?", "what are your commands?", "help" and close phrasings
+(intent `sayable_help`) with one sentence naming every entry in the list and
+the footer line - no model, from `jarvis_sayable.sentence()`. Only the
+owner's own typed or spoken words trigger it, like every other fast-path
+sentence (§ "Quick answers, no model" throughout this file); pasted or
+shared text goes to the model as before.
+
+### 41.4 In the apps
+
+- **Desktop**: the Jarvis bar's empty-state primer (`index.html` `#primer`)
+  shows the 7 sentences as tappable buttons, each filling `#prompt` and never
+  sending, plus the footer line - in place of the old 10 rows of hotkey
+  chips and the zoom hint (the note-app prefixes, `#log`/`#joplin`/`#obs`,
+  stay: they are not keyboard shortcuts, and this is still their only in-app
+  explanation). The rebindable hotkeys the primer used to mirror live now,
+  unduplicated, in Settings -> Shortcuts, which is where the footer line
+  points. 3 of the 7 (`WALKTHROUGH_EXAMPLES`) are on the walkthrough's screen
+  2 (`onboarding.html`), next to its Alt+Space mention - never screen 1 or 3.
+  Settings -> FAQ has a "What can I say?" entry with the Help paragraph.
+- **Phone**: `Sayable.kt` carries the same words, held to the same fixture,
+  and `FaqScreen.kt` has the same "What can I say?" entry. "What can you
+  do?" is answered the same way, through ordinary chat. **The phone has no
+  primer or 3-screen walkthrough to put the tappable list or the 3 examples
+  on** - see `docs/ARCHITECTURE.md` §8, "One-sided on purpose" (the entry
+  this feature added there). `Sayable.WALKTHROUGH_EXAMPLES` still exists on
+  the phone so a screen that wants them later does not have to invent its
+  own three, but nothing puts them on screen today.
+
+### 41.5 Known gaps, said plainly
+
+- **The phone shows no equivalent of the desktop's empty-bar primer.** Its
+  Home screen has no empty first-run state the way the desktop's Jarvis bar
+  does (verified against `HomeScreen.kt`: no empty-chat state, no `#log`-
+  style prefix list rendered as an always-visible primer), so there is
+  nothing there to replace with the tappable list, and this piece of work
+  did not invent one - see §41.4.
+- **The desktop's list is fixed at build time**, not editable from either
+  app or the settings file; changing it means editing `jarvis_sayable.py`
+  and running `tools/gen_sayable_cases.py`.

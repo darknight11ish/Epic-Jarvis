@@ -2187,6 +2187,51 @@ html[data-state="approval"] .pulse {
   color: var(--text-faint);
 }
 
+/* "Things you can say" (sayable.js): a tappable line per sentence. A
+   <button>, not a link or a plain row, because it does something on click -
+   fills #prompt, never sends - and a button says that to a screen reader
+   without extra markup. */
+.sayable-list {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.sayable-item {
+  display: block;
+  width: 100%;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color 140ms var(--ease),
+    border-color 140ms var(--ease),
+    background 140ms var(--ease);
+}
+
+.sayable-item:hover,
+.sayable-item:focus-visible {
+  color: var(--text);
+  border-color: var(--hairline);
+  background: rgb(var(--sheen-rgb) / 0.05);
+}
+
+.sayable-foot {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
 /* The way out of an offline state. Mirrors `.parked` — same thin bar, same
    place in the stack — because they are the same kind of thing: a one-line
    statement of something unresolved, with the action that resolves it. */

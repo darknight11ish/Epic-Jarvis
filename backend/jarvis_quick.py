@@ -68,6 +68,12 @@ items 6 and 7):
   * "What did I miss?": jarvis_briefing.build_missed - since the owner's
     previous message to Jarvis from either app (answer_turn notes the time
     of every one, jarvis_briefing.touch).
+"WHAT CAN YOU DO?" (jarvis_sayable.py; the ease-of-use audit's "Things you
+can say", 2026-09-27, feasibility I116) is here too: "what can you do?",
+"what can I say?", "what can I ask you?" and close phrasings are answered
+from jarvis_sayable.py's own fixed list - the same one both apps show in
+place of the Jarvis bar's old shortcut rows. No model, no state read.
+
 "TELL ME WHEN ..." (jarvis_tellme.py, 2026-09-25) is here too: "tell me
 when an email from Alex arrives", "let me know when the washing machine
 finishes", "urgently tell me when the front door opens", "tell me every
@@ -752,6 +758,10 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _web_search(s)
     if got is not None:
         return got
+
+    # --- "what can you do?" (jarvis_sayable.py) --------------------------------------
+    if _SAYABLE.fullmatch(s):
+        return Intent("sayable_help")
 
     # --- "what can you reach?" (jarvis_reach.py) -----------------------------------
     if _REACH.fullmatch(s):
@@ -1488,6 +1498,16 @@ def _web_search(s: str) -> Optional[Intent]:
 SEARCH_MISSING = ("Your PC's Jarvis does not have web search yet - run apply-patches.ps1 "
                   "on the PC.")
 
+#: "What can you do?" and close phrasings (jarvis_sayable.py, the ease-of-use
+#: audit's "Things you can say", 2026-09-27). Whole sentences only: "what can
+#: you do about the weather" goes to the model.
+_SAYABLE = re.compile(
+    r"what\s+can\s+(?:you|i|jarvis)\s+(?:do|say|ask(?:\s+you)?|tell\s+you)(?:\s+here)?"
+    r"|what\s+(?:should|do)\s+i\s+(?:say|ask|type)(?:\s+to\s+you)?"
+    r"|what\s+(?:are|were)\s+(?:your|jarvis'?s?)\s+commands"
+    r"|(?:show|list|tell)\s+me\s+what\s+(?:i\s+can\s+say|you\s+can\s+do)"
+    r"|help(?:\s+me)?")
+
 #: "What can you reach?" and close phrasings (the Muse audit, 2026-09-25):
 #: answered from jarvis_reach.py's list - the PC's settings, not the model.
 #: Whole sentences only: "what can you reach on the top shelf" goes to the
@@ -1509,6 +1529,19 @@ _REACH = re.compile(
 
 REACH_MISSING = ("Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 "
                  "on the PC.")
+
+SAYABLE_MISSING = ("Your PC's Jarvis cannot list things you can say yet - run "
+                   "apply-patches.ps1 on the PC.")
+
+
+def _run_sayable(intent: Intent) -> Result:
+    """"Things you can say" (jarvis_sayable.py), said in one answer for "what
+    can you do?" and close phrasings. No model, reads no state."""
+    try:
+        import jarvis_sayable
+        return Result(jarvis_sayable.sentence(), intent.name)
+    except Exception:
+        return Result(SAYABLE_MISSING, intent.name)
 
 
 def _run_reach(intent: Intent) -> Result:
@@ -1630,6 +1663,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n == "sayable_help":
+        return _run_sayable(intent)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
     if n.startswith("focus_"):

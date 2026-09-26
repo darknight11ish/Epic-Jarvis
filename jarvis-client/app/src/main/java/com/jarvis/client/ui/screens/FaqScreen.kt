@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.BuildConfig
+import com.jarvis.client.net.Sayable
 import com.jarvis.client.ui.Chevron
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalAccent
@@ -109,6 +110,13 @@ private val FAQS = listOf(
             "The talk button on Home appears once your voice is trained and " +
             "the desktop can turn speech into text; the same card says which " +
             "of those is still missing.",
+    ),
+    Faq(
+        // Words held to Sayable.kt by SayableContractTest, so this can never
+        // drift from what "what can you do?" answers, or from the desktop's
+        // own FAQ entry (settings.html, "What can I say?").
+        Sayable.HELP_TITLE,
+        Sayable.HELP_BODY,
     ),
     Faq(
         "Why can't I approve everything waiting for me in one tap?",

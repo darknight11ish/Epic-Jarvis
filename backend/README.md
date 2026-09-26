@@ -129,6 +129,7 @@ on a throwaway copy instead.
 | `games-temporary.patch` | `jarvis_hud.py` | **Games and role-play run in a temporary chat automatically** (the owner's decision, 2026-09-27; CLAUDE.md, `docs/OWNER-QUESTIONS-2026-09-27.md` Q19). No new route: `_temporary_chat(body)` now also returns true once the owner's own words, anywhere in the conversation, start a game or role-play (`jarvis_intake.game_or_roleplay`), and the two lines in the chat turn's `finally` block that used to read `body.get("temporary")` directly now go through that same function - so a detected game gets no recall, no "Remember:", no chat history and no learning, exactly like a manually-started temporary chat, with no card and no setting. Last in the list; its context is `temporary-chat.patch`'s `_temporary_chat()` function and the two `finally`-block lines. Needs `jarvis_intake.py` (already shipped for `memory-intake.patch`) - without it, or on any error, nothing is detected and chat works exactly as before this patch. See "Games and role-play", at the very end. |
 | `watch-notifications.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Smartwatch notifications, off by default** (the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17). Adds `GET`/`POST /api/notifications/watch` - ON is one approval card (`watch_notifications_enable`), OFF is instant - wrapped round the running server's handler at start-up, like `documents.patch`, rather than an inline route; `jarvis_gate.py` gains the action on `_NO_RULE_FROM_DENIAL` and `_RISK` (a denial of this switch's card proposes no standing rule, and the notice says it stays on this PC). Android's own, already-built-in notification bridging does the actual copying to a paired watch; there is no Jarvis watch app. Last in the list; its `jarvis_hud.py` context is `documents.patch`'s banner lines, and its `jarvis_gate.py` context is `asks-first.patch`'s `_NO_RULE_FROM_DENIAL` and `_RISK` additions. Needs `jarvis_watch_notify.py` - without it, or on any error, the banner says so and the route is not there. See "Smartwatch notifications", at the very end. |
 | `draft-email.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Email drafts, one approval card per draft** (the owner's decision, 2026-09-27). Adds `GET /api/email/drafting` (whether saving a draft is set up - the same shape as sending's Settings line, never the password), and in the gate the notice's words for `draft_email`, `draft_email` in `_TOOL_ACTIONS`, and "a no proposes no memory rule" for it. Same shape as `email-send.patch`, right beside its own lines. Its context is `email-send.patch`'s three blocks; last in the list. Needs `jarvis_email_draft.py` - see "Email drafts", at the very end. |
+| `sayable.patch` | `jarvis_hud.py` | **"Things you can say"** (already approved as feasibility I116; the ease-of-use audit's do-first table, row 4, 2026-09-27). Adds `GET /api/sayable` - fixed text, not a setting, **no approval card either way**, the same shape as `manner.patch` and `reach.patch`. Its context is `draft-email.patch`'s own new route block; last in the list. Needs `jarvis_sayable.py` - see "Things you can say", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -11804,3 +11805,64 @@ server on 127.0.0.1, written here with the standard library (LOGIN, LIST
 with and without a server-flagged Drafts mailbox, APPEND, a refused login,
 a dropped connection), proves what is saved and where without ever
 reaching a real account.
+
+# Things you can say: `jarvis_sayable.py`, `sayable.patch` (2026-09-27)
+
+Already approved as feasibility idea I116 ("Served by the PC; fills the
+box, never sends") and picked up by the ease-of-use audit's own do-first
+table, row 4 (`docs/EASE-OF-USE-AUDIT-2026-09-27.md`): about 5-8 real
+sentences Jarvis already answers **without the AI model**, in one place
+both apps read from, replacing the Jarvis bar's old 10 rows of keyboard
+shortcuts.
+
+**The list.** Seven sentences ("Set a timer for 10 minutes.", "What did I
+miss?", "Tell me when an email from Alex arrives.", "Focus for 30 minutes.",
+"Remind me to call Mom at 6pm.", "Add milk to the shopping list.", "Brief me
+now."), each checked by `test_sayable.py` against `jarvis_quick.py`'s real
+grammar - byte for byte as it is served - so a sentence that stopped
+matching cannot silently stay on the list. Fixed text, not a setting:
+`GET /api/sayable` needs the token and the origin check like every route,
+but **there is no `POST`** and **no approval card either way**, the same
+shape as `manner.patch` and `reach.patch`.
+
+**"What can you do?"** `jarvis_quick.py`'s grammar answers that (and "what
+can I say?", "help", and close phrasings) from the same list, with one
+sentence naming every entry and the footer line - still no model.
+
+**Both apps carry a hardcoded copy, not a live fetch.** Unlike
+`jarvis_reach.py`'s per-PC settings list, this one has no settings behind
+it, and it has to be shown before either app has necessarily connected to
+anything (the desktop's empty Jarvis bar is the very first thing painted).
+So `jarvis-desktop/src/sayable.js` and the phone's `Sayable.kt` each hold a
+plain copy of the words, and `tools/gen_sayable_cases.py` writes both apps'
+test fixtures from the real `jarvis_sayable.py` - the same "one source,
+both apps read it" pattern `gen_card_words_cases.py` already uses for
+approval-card wording - so the two apps cannot drift apart.
+
+**In the apps.** Desktop: the Jarvis bar's empty-state primer shows the 7
+sentences as tappable buttons (fills the input, never sends) plus the
+footer line, in place of the old kbd-chip rows and the zoom hint - the
+note-app prefixes (`#log`/`#joplin`/`#obs`) stay, since they are not
+keyboard shortcuts and have no other home; the rebindable hotkeys the old
+rows used to mirror live now, unduplicated, in Settings -> Shortcuts, which
+the footer line points to. 3 of the 7 are on the walkthrough's screen 2,
+next to its Alt+Space mention. Settings -> FAQ has a "What can I say?"
+entry. Phone: `Sayable.kt` and a matching FAQ entry; "what can you do?"
+answers the same way, through ordinary chat. **The phone has no equivalent
+of the desktop's empty-bar primer to put a tappable list on** (verified
+against `HomeScreen.kt`: it has no empty first-run state), and no 3-screen
+walkthrough either - see `docs/ARCHITECTURE.md` §8, "One-sided on purpose",
+for the reason, added with this feature.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_sayable.py
+```
+
+No pytest, no network, no model: every served sentence is run through the
+real `jarvis_quick.match()`/`run()` against a throwaway scheduler, the
+served view is checked for fixed-text shape (no card, no gate, no setting
+written), and `sayable.patch` is rehearsed against the whole patch stack
+that comes before it and reversed, the same way `test_reach.py` rehearses
+`reach.patch`.

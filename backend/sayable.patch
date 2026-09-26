@@ -1,0 +1,27 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1608,6 +1608,24 @@
+                 # The exception's NAME only: its message could quote a setting.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+
++        if path == "/api/sayable":
++            # sayable.patch - "Things you can say" (jarvis_sayable.py; the
++            # ease-of-use audit's do-first table, row 4, 2026-09-27, already
++            # approved as feasibility I116): the fixed list of real sentences
++            # Jarvis answers without the model. Fixed text, not a setting -
++            # like reach.patch and manner.patch, no approval card either way.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_sayable
++                code, out = jarvis_sayable.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote a setting.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+         if path == "/api/reach":
+             # reach.patch - "What Jarvis can reach" (jarvis_reach.py; the Muse
+             # audit, 2026-09-25): every way Jarvis can reach something outside
