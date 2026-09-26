@@ -353,30 +353,57 @@ def ndcg(got: list, answers: set, k: int) -> float:
     return dcg([1 if g in answers else 0 for g in got], k) / ideal if ideal else 0.0
 
 
-def _entity_search(st):
-    """Does this jarvis_memory.py have the entity layer (search(entities=))?"""
+def _takes(fn, name: str) -> bool:
     import inspect
     try:
-        return "entities" in inspect.signature(st.search).parameters
+        return name in inspect.signature(fn).parameters
     except (TypeError, ValueError):
         return False
 
 
-def _score(M, P, st, qs: list, gid: dict, now: float) -> dict:
+def _entity_search(st):
+    """Does this jarvis_memory.py have the entity layer (search(entities=))?"""
+    return _takes(st.search, "entities")
+
+
+class StandInReranker:
+    """NOT the real re-ranker. A stand-in for where the model cannot be
+    downloaded (this repository's container): it scores a fact by the share
+    of the question's content words it holds. It proves the wiring - the
+    pool, the re-order, k kept, the timing hook - and says NOTHING about
+    how much the real cross-encoder helps. Only a run with the real model
+    (on the PC, `--reranker auto`) measures that."""
+
+    name = "stand-in: word overlap (not the real model)"
+
+    def __init__(self, M):
+        self._words = M._words
+
+    def score(self, query, texts):
+        want = self._words(query)
+        return [len(want & self._words(t)) / (1.0 + len(self._words(t)) ** 0.5)
+                for t in texts]
+
+
+def _score(M, P, st, qs: list, gid: dict, now: float, rerank: bool = False) -> dict:
     """Every question once, as chat recall asks it. Returns per-question
     rows. Whether the entity layer is on is M._ENTITY_RECALL, set by the
-    caller (jarvis_past.recall asks for it; the flag switches it)."""
+    caller (jarvis_past.recall asks for it; the flag switches it). Whether
+    a re-ranker is loaded is the caller's too (jarvis_memory.set_reranker):
+    jarvis_past.recall asks for it whenever one is; `rerank` asks for it on
+    the other questions, as that call does."""
     rows = []
     ent = _entity_search(st)
+    rr = {"rerank": True} if rerank and _takes(st.search, "rerank") else {}
     for q in qs:
         if q["type"] in ("past", "time"):
             res = P.recall(st, q["q"], k=K, now=now)
         elif q["type"] == "belief":
             res = st.search(q["q"], k=K, known_at=_day(q["known_at"]))
         elif ent:
-            res = st.search(q["q"], k=K, entities=True)
+            res = st.search(q["q"], k=K, entities=True, **rr)
         else:
-            res = st.search(q["q"], k=K)
+            res = st.search(q["q"], k=K, **rr)
         got = [gid.get(r["id"], "filler") for r in res]
         ans = set(q["answers"])
         first = next((i for i, g in enumerate(got) if g in ans), None)
@@ -450,9 +477,12 @@ def _hits_total(rows: dict, split: str) -> int:
     return sum(r["hit5"] for r in rows.values() if r["split"] == split)
 
 
-def _timings(st, qs: list, reps: int = 3, entities: bool = False) -> dict:
+def _timings(st, qs: list, reps: int = 3, entities: bool = False,
+             rerank: bool = False) -> dict:
     lat = []
     kw = {"entities": True} if entities and _entity_search(st) else {}
+    if rerank and _takes(st.search, "rerank"):
+        kw["rerank"] = True
     for _ in range(reps):
         for q in qs:
             t0 = time.perf_counter()
@@ -493,9 +523,31 @@ def _db_bytes(path: Path) -> int:
 
 # ------------------------------------------------------------ the run --
 
+def _pick_reranker(M, how: str):
+    """(re-ranker or None, what was used or why not). `how`: "auto" - the
+    real model if fastembed can load it here (it may download it once), "off",
+    or "stand-in" (StandInReranker)."""
+    if how == "off":
+        return None, "off (--reranker off)"
+    if not hasattr(M, "set_reranker"):
+        return None, "this jarvis_memory.py has no re-ranker"
+    if how == "stand-in":
+        return StandInReranker(M), StandInReranker.name
+    m = M.reranker(wait=True)
+    if m is None:
+        return None, "the real model could not be loaded: " + str(
+            M.reranker_status().get("why") or "unknown")
+    return m, getattr(m, "name", "the real model")
+
+
 def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
-        ollama="http://127.0.0.1:11434") -> dict:
+        ollama="http://127.0.0.1:11434", reranker: str = "auto") -> dict:
     M, P = _load_memory(scratch)
+    rr_model, rr_what = _pick_reranker(M, reranker)
+    if hasattr(M, "set_reranker"):
+        # Every number below is taken WITHOUT a re-ranker except the
+        # "reranked" line, so they stay comparable with the runs before it.
+        M.set_reranker(None)
     facts = _read_jsonl(EVAL / "golden_facts.jsonl")
     qs = _read_jsonl(EVAL / "golden_questions.jsonl")
     now = _day(EVAL_NOW_TEXT)
@@ -554,6 +606,20 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
                     level["misses_entities"] = sorted(
                         r["id"] for r in rows.values() if r["answerable"] and not r["hit5"])
                     level["entities"]["linked_entities"] = st.status().get("entities")
+                    if rr_model is not None:
+                        # Memory idea 1: the same, with the re-ranker on - the
+                        # way a chat turn recalls once it has loaded.
+                        M.set_reranker(rr_model)
+                        try:
+                            rows = _score(M, P, st, qs, gid, now, rerank=True)
+                            level["reranked"] = _summary(rows)
+                            level["reranked"].update(
+                                _timings(st, timed, entities=True, rerank=True))
+                            level["misses_reranked"] = sorted(
+                                r["id"] for r in rows.values()
+                                if r["answerable"] and not r["hit5"])
+                        finally:
+                            M.set_reranker(None)
                 finally:
                     M._ENTITY_RECALL = False
             level["db_bytes"] = _db_bytes(db)
@@ -588,6 +654,8 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
                   + (f" -> {ent['dont_know_facts_avg']}" if ent else ""), flush=True)
     M._ENTITY_RECALL = entities_configured
     out["entities_available"] = has_entities
+    out["reranker"] = rr_what
+    out["reranker_measured"] = rr_model is not None
     out["word_floor_configured"] = configured_floor
     out["max_distance_configured"] = configured_distance
     out["word_floor_choice"] = choose_floor(out["floor_sweep"])
@@ -726,6 +794,36 @@ def markdown(res: dict) -> str:
                 f"| {a['multi_any_found']}/{a['multi_questions']} "
                 f"| {a['time_found']}/{a['time_questions']} | {a['time_wrong_version']} "
                 f"| {a['dont_know_facts_avg']} | {a['dont_know_none_pct']}% |")
+    rr_rows = [lv for lv in res["levels"] if lv.get("reranked")]
+    if rr_rows:
+        lines += [
+            "",
+            f"**The re-ranker** (memory idea 1): {res['reranker']}. The same questions as "
+            "a chat turn recalls, without -> with it re-ordering the top "
+            "facts before five are kept.",
+            "",
+            "| Filler | Facts | Recall@1 | Recall@5 | MRR | Two facts: all found "
+            "| Time: found / wrong | Don't know: facts per question | Search p50/p95 ms |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for lv in rr_rows:
+            a, r = lv.get("entities") or lv["after"], lv["reranked"]
+            lines.append(
+                f"| {lv['filler'].replace('_', '-')} | {lv['facts']:,} "
+                f"| {a['recall_at_1']}% -> {r['recall_at_1']}% "
+                f"| {a['recall_at_5']}% -> {r['recall_at_5']}% | {a['mrr']} -> {r['mrr']} "
+                f"| {a['multi_all_found']} -> {r['multi_all_found']}/{r['multi_questions']} "
+                f"| {a['time_found']}/{a['time_wrong_version']} -> "
+                f"{r['time_found']}/{r['time_wrong_version']} "
+                f"| {a['dont_know_facts_avg']} -> {r['dont_know_facts_avg']} "
+                f"| {a.get('search_p50_ms')}/{a.get('search_p95_ms')} -> "
+                f"{r['search_p50_ms']}/{r['search_p95_ms']} |")
+        if "stand-in" in str(res.get("reranker")):
+            lines += ["", "These re-ranker numbers are from a STAND-IN (word overlap), not "
+                      "the real model: they show the wiring works, not what the model "
+                      "gains. Run the self-test on the PC with fastembed to measure that."]
+    elif "reranker" in res:
+        lines += ["", f"The re-ranker (memory idea 1): not measured - {res['reranker']}."]
     if "learner" in res:
         import eval_learner
         lines += eval_learner.markdown(res["learner"])
@@ -792,6 +890,10 @@ def main(argv=None) -> int:
                          "with this local Ollama model (needs JARVIS_BACKEND pointing at "
                          "the backend folder, for jarvis_extract.py). Off by default: the "
                          "default run needs no model")
+    ap.add_argument("--reranker", choices=("auto", "off", "stand-in"), default="auto",
+                    help="auto (default): measure the real re-ranker if fastembed can load "
+                         "it here - it downloads about 80 MB once; stand-in: a word-overlap "
+                         "stand-in that proves the wiring only; off")
     ap.add_argument("--ollama", default="http://127.0.0.1:11434",
                     help="this PC's Ollama, for --learner-model (loopback only)")
     a = ap.parse_args(argv)
@@ -803,7 +905,7 @@ def main(argv=None) -> int:
     t0 = time.time()
     try:
         res = run(sizes, a.words_only, scratch, learner_model=a.learner_model,
-                  ollama=a.ollama)
+                  ollama=a.ollama, reranker=a.reranker)
     finally:
         if not a.keep:
             shutil.rmtree(scratch, ignore_errors=True)

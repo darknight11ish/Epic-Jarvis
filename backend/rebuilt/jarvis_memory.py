@@ -95,6 +95,7 @@ import os
 import re
 import sqlite3
 import struct
+import sys
 import threading
 import zlib
 import time
@@ -443,6 +444,209 @@ def _make_embedder():
         return FastEmbedder()
     except Exception:
         return HashEmbedder()
+
+
+# --------------------------------------------------------------------------
+#   The re-ranker (memory idea 1, docs/MEMORY-RESEARCH-2026-09-26.md)
+# --------------------------------------------------------------------------
+#
+# Search makes three lists - words, meaning, people - and merges them by
+# rank (RRF, in search()). A re-ranker reads the question and each
+# candidate fact TOGETHER and scores how well the fact answers it, which a
+# rank formula cannot do. Chat recall (jarvis_past.recall) asks for it: the
+# top RERANK_POOL facts search found are re-ordered, and the first k go to
+# the model as before. It never adds a fact, never drops one that would
+# have been in the pool, never changes k or either floor, and never touches
+# find_one(), corrections or anything that writes.
+#
+# The model is fastembed's cross-encoder `Xenova/ms-marco-MiniLM-L-6-v2`
+# (Apache-2.0, about 80 MB, English only - like the meaning model), the
+# default of Hindsight (MIT). Jarvis already uses fastembed for meaning
+# search. It runs on the processor, on this PC; fastembed downloads it once,
+# the way it downloads the meaning model.
+#
+# FAILS SOFT, NEVER BLOCKS A CHAT. The model is loaded on a background
+# thread the first time recall asks - never on the chat's own thread - and
+# until it is ready, recall is exactly what it was. If it cannot load (no
+# fastembed, a fastembed too old to have re-rankers, no download), recall
+# stays as it was for good, and that is said ONCE (the audit log and the
+# backend's window, and status()). A re-rank that takes longer than
+# RERANK_BUDGET_S seconds is not waited for: that question gets the merged
+# order. JARVIS_MEMORY_RERANK=0 turns it off.
+
+RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
+
+
+def _env_int(name: str, default: int, lo: int, hi: int) -> int:
+    try:
+        return max(lo, min(hi, int(os.environ.get(name) or default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_float(name: str, default: float, lo: float, hi: float) -> float:
+    try:
+        v = float(os.environ.get(name) or default)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, v)) if math.isfinite(v) else default
+
+
+#: How many of search's facts the re-ranker re-orders ("the top ~20").
+RERANK_POOL = _env_int("JARVIS_MEMORY_RERANK_POOL", 20, 1, 100)
+#: The longest a question waits for the re-ranker, in seconds.
+RERANK_BUDGET_S = _env_float("JARVIS_MEMORY_RERANK_BUDGET", 1.5, 0.05, 10.0)
+_RERANK_ON = os.environ.get("JARVIS_MEMORY_RERANK", "1").strip().lower() not in (
+    "0", "off", "false", "no")
+
+
+class Reranker:
+    """The shape the store relies on: `name`, and score(query, texts) - one
+    number per text, in order, higher = answers the question better."""
+
+    name = "base"
+
+    def score(self, query: str, texts: list) -> list:
+        raise NotImplementedError
+
+
+class FastReranker(Reranker):
+    """fastembed's cross-encoder. Imported lazily and on purpose."""
+
+    def __init__(self, model: str = RERANK_MODEL) -> None:
+        from fastembed.rerank.cross_encoder import TextCrossEncoder
+        self._m = TextCrossEncoder(model_name=model)
+        self.name = model
+        list(self._m.rerank("probe", ["probe"]))      # load it now, not on a question
+
+    def score(self, query: str, texts: list) -> list:
+        return [float(x) for x in self._m.rerank(query, list(texts))]
+
+
+_rr_lock = threading.Lock()
+_rr_busy = threading.Lock()
+_rr: dict = {"state": "not started", "model": None, "why": "", "said": False,
+             "slow": 0, "used": 0}
+
+
+def _rr_say_once(why: str) -> None:
+    """Said once per process: in the audit log and the backend's window.
+    Recall carries on as it was."""
+    if _rr["said"]:
+        return
+    _rr["said"] = True
+    try:
+        if fw is not None:
+            fw.audit_log("memory.rerank_off", {"why": why[:200]})
+    except Exception:
+        pass
+    try:
+        print(f"  memory     the re-ranker is off ({why}); recall works as before",
+              file=sys.stderr)
+    except Exception:
+        pass
+
+
+def _rr_load(factory) -> None:
+    """Load it; only a load still wanted ("loading") changes the state, so a
+    set_reranker() made meanwhile is never overwritten."""
+    try:
+        m = factory()
+        with _rr_lock:
+            if _rr["state"] == "loading":
+                _rr.update(state="ready", model=m, why="")
+    except Exception as exc:
+        why = (f"{type(exc).__name__}: fastembed is not installed or has no re-ranker"
+               if isinstance(exc, ImportError) else
+               f"{type(exc).__name__}: the re-ranking model could not be loaded")
+        with _rr_lock:
+            if _rr["state"] != "loading":
+                return
+            _rr.update(state="off", model=None, why=why)
+        _rr_say_once(why)
+
+
+def reranker(*, wait: bool = False):
+    """The loaded re-ranker, or None. The first call starts loading it on a
+    background thread and returns None at once (`wait=True`, for the
+    self-test, loads it on this thread instead)."""
+    if not _RERANK_ON:
+        return None
+    with _rr_lock:
+        st = _rr["state"]
+        if st == "ready":
+            return _rr["model"]
+        if st != "not started":
+            return None
+        _rr["state"] = "loading"
+    if wait:
+        _rr_load(FastReranker)
+        return _rr["model"]
+    threading.Thread(target=_rr_load, args=(FastReranker,), daemon=True,
+                     name="jarvis-memory-reranker").start()
+    return None
+
+
+def set_reranker(model) -> None:
+    """Use this re-ranker (a Reranker, or None for none at all). For the
+    self-test's stand-in and the tests; the backend never calls it."""
+    with _rr_lock:
+        if model is None:
+            _rr.update(state="off", model=None, why="switched off here")
+        else:
+            _rr.update(state="ready", model=model, why="")
+
+
+def reranker_status() -> dict:
+    """{"state": "on" | "loading" | "off" | "not started", "model", "why",
+    "used", "slow"} - for status(). Never the words of anything."""
+    if not _RERANK_ON:
+        return {"state": "off", "model": None, "why": "JARVIS_MEMORY_RERANK=0", "used": 0}
+    with _rr_lock:
+        st = _rr["state"]
+        out = {"state": "on" if st == "ready" else st,
+               "model": getattr(_rr["model"], "name", None), "why": _rr["why"],
+               "used": _rr["used"]}
+        if _rr["slow"]:
+            out["slow"] = _rr["slow"]
+        return out
+
+
+def _rerank(query: str, facts: list) -> Optional[list]:
+    """`facts` re-ordered by the re-ranker, best first - or None, meaning
+    "keep the merged order": no re-ranker (yet), one still busy with an
+    earlier question, a failure, or no answer within RERANK_BUDGET_S."""
+    rr = reranker()
+    if rr is None or len(facts) < 2:
+        return None
+    if not _rr_busy.acquire(blocking=False):
+        return None
+    box: dict = {}
+
+    def work():
+        try:
+            box["scores"] = rr.score(query, [f["text"] for f in facts])
+        except Exception as exc:
+            box["error"] = exc
+        finally:
+            _rr_busy.release()
+    t = threading.Thread(target=work, daemon=True, name="jarvis-memory-rerank")
+    t.start()
+    t.join(RERANK_BUDGET_S)
+    if t.is_alive():
+        with _rr_lock:
+            _rr["slow"] += 1
+        return None
+    scores = box.get("scores")
+    if not isinstance(scores, list) or len(scores) != len(facts) or not all(
+            isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+            for x in scores):
+        return None
+    with _rr_lock:
+        _rr["used"] += 1
+    # Stable: equal scores keep the merged order.
+    order = sorted(range(len(facts)), key=lambda i: (-scores[i], i))
+    return [facts[i] for i in order]
 
 
 # --------------------------------------------------------------------------
@@ -1208,7 +1412,7 @@ class MemoryStore:
                at: Optional[float] = None, include_retired: bool = False,
                known_at: Optional[float] = None,
                word_floor: Optional[float] = None,
-               entities: bool = False) -> list[dict]:
+               entities: bool = False, rerank: bool = False) -> list[dict]:
         """Words and meaning, fused with reciprocal rank fusion.
 
         at          VALID time: only facts true at that moment (default now).
@@ -1229,6 +1433,11 @@ class MemoryStore:
                     No model is asked. k and both floors are unchanged, and
                     a link can only add a candidate. JARVIS_MEMORY_ENTITIES=0
                     turns it off.
+        rerank      the re-ranker (memory idea 1, above; chat recall asks for
+                    it, through jarvis_past.recall): the first RERANK_POOL
+                    facts that pass every filter are re-ordered by it before
+                    the first k are kept. Without a loaded re-ranker, or on
+                    any failure, the merged order - exactly as without it.
         """
         at_given = at is not None
         query = " ".join(str(query).split())
@@ -1352,9 +1561,13 @@ class MemoryStore:
             # moment it takes a date. Same rule in both places.
             f["current"] = f["valid_to"] is None or f["valid_to"] > at
             out.append(f)
-            if len(out) >= k:
+            if len(out) >= (max(k, RERANK_POOL) if rerank else k):
                 break
-        return out
+        if rerank:
+            ranked = _rerank(query, out)
+            if ranked is not None:
+                out = ranked
+        return out[:k]
 
     def get(self, fact_id: int) -> Optional[dict]:
         """One fact by id, retired or not. None if it is not there."""
@@ -1474,7 +1687,7 @@ class MemoryStore:
                "retired": total - current,
                "embedder": self.embedder.name, "semantic": self.embedder.semantic,
                "vector_search": self._vec_ok, "unembedded": pending,
-               "erased": erased, "entities": ents}
+               "erased": erased, "entities": ents, "reranker": reranker_status()}
         if self._entity_errors:
             out["entity_errors"] = self._entity_errors
         if self._bad_vectors:

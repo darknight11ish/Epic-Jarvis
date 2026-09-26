@@ -212,6 +212,19 @@ LightRAG (HKUDS), MIT - https://github.com/HKUDS/LightRAG
   Licensed under the MIT License, whose full text is the one given for
   browser-use above.
 
+Memory ideas 1 and 4 (2026-09-26, docs/MEMORY-RESEARCH-2026-09-26.md). No
+  code is copied from either project; the ideas are credited here.
+  Hindsight (vectorize-io), MIT - https://github.com/vectorize-io/hindsight :
+  re-ranking the top recalled facts with a small local cross-encoder
+  (backend/rebuilt/jarvis_memory.py, "The re-ranker"). The model itself,
+  Xenova/ms-marco-MiniLM-L-6-v2 (Apache-2.0), is downloaded on the PC by
+  fastembed (Apache-2.0) the first time it is needed; it is not
+  redistributed with Jarvis.
+  Graphiti (above), Apache-2.0: "older news never replaces newer news" -
+  graphiti_core/utils/maintenance/edge_operations.py's ordering of a new
+  fact against the one it would invalidate by their valid-from dates
+  (backend/rebuilt/jarvis_memory.py, add()).
+
 WEB SEARCH (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 ddgs (deedy5), MIT - https://github.com/deedy5/ddgs

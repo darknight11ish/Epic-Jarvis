@@ -275,9 +275,10 @@ def _propose(M, I, A, case, ask, store) -> dict:
     import jarvis_extract as X      # the owner's file: JARVIS_BACKEND must hold it
     for text in case.get("stored", []):
         store.add(text, source="eval")
-    said = I.owner_turns(case["messages"], I.ORIGIN_OWNER)
-    out = I.propose(X, said, ask, source="conversation", when=_day(case["at"]),
-                    store=store) or []
+    import jarvis_intake
+    said = jarvis_intake.owner_turns(case["messages"], jarvis_intake.ORIGIN_OWNER)
+    out = jarvis_intake.propose(X, said, ask, source="conversation", when=_day(case["at"]),
+                                store=store) or []
     texts = [str(r.get("text") or "") for r in out if isinstance(r, dict)]
     found = [any(_has(t, want) for t in texts) for want in case.get("want", [])]
     leaked = [w for w in case.get("never", []) if any(w.lower() in t.lower() for t in texts)]
