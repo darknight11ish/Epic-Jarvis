@@ -40,7 +40,7 @@ HEAD = '''<!doctype html>
 # Each station is laid out in its own frame of the strip; `pos` is where it
 # sits (left for landscape, top for upright), filled in per cut.
 
-def col(part, hour, say=None, reply=None, sid="", later=False):
+def col(part, hour, say=None, reply=None, sid="", later=None):
     s = f'''            <div class="col">
               <div class="part">{part}</div>
               <div class="hour">{hour}</div>
@@ -50,7 +50,7 @@ def col(part, hour, say=None, reply=None, sid="", later=False):
               <div class="say" id="{sid}-say">{say}</div>
 '''
     if later:
-        s += f'''              <div class="who later" id="later">A minute later</div>
+        s += f'''              <div class="who later" id="{sid}-later">{later}</div>
 '''
     if reply:
         s += f'''              <div class="who" id="{sid}-jw">Jarvis</div>
@@ -81,12 +81,12 @@ def station(sid, pos, axis, body, night=False):
 # Drawn Android phone, unlocked (a locked phone shows only "Jarvis: something
 # you asked to be told about happened."). Every word is jarvis-client's own:
 # Schedule.kt TELLME_TITLE "Tell me when", the backend's "An email from Alex
-# arrived." and ScheduleNotifier.kt's "Stop" action on the "Alarms and urgent
-# alerts" channel.
+# arrived." and ScheduleNotifier.kt's one "Stop" action. Android shows the app
+# name and the time in the header, not the channel's name.
 PHONE = '''              <div class="phone" id="phone">
                 <div class="ringw" id="ring-a"></div><div class="ringw" id="ring-b"></div>
                 <div class="scr"><div class="sb"><span>15:47</span><i class="cam"></i><span>▾ ▮</span></div>
-                  <div class="notif" id="notif"><div class="app"><b>Jarvis</b> · Alarms and urgent alerts</div>
+                  <div class="notif" id="notif"><div class="app"><b>Jarvis</b> · now</div>
                     <div class="ti">Tell me when</div><div class="tx">An email from Alex arrived.</div><div class="act">Stop</div></div>
                 </div>
               </div>
@@ -114,16 +114,16 @@ PHONE_NIGHT = '''              <div class="phone night" id="phone-n">
 TEXT = {
     "title": "A day with Jarvis.",
     "sub": "An AI assistant that lives on your own PC.",
-    "brief_say": "Brief me now.",
-    "brief_claim": "Made on your PC <b>without the AI model</b>. Email shows who wrote, not what they wrote.",
-    "focus_say": "Focus for 30 minutes.",
+    "brief_say": "Brief me now.”",
+    "brief_claim": "Made on your PC, <b>without the AI model</b>. Shows who emailed, not what they wrote.",
+    "focus_say": "Focus for 30 minutes.”",
     "focus_reply": "YouTube can wait.",
-    "focus_claim": "It watches which app is in front, <b>on your PC only</b>, and keeps counts, never what it saw.",
-    "tell_say": "Tell me when an email from Alex arrives. Urgently.",
+    "focus_claim": "Watches which app is in front, <b>on your PC only</b>. Keeps counts, never what it saw.",
+    "tell_say": "Tell me when an email from Alex arrives. Urgently.”",
     "tell_claim": "<b>One yes</b> sets it up. Your phone rings until you look. It never replies.",
-    "learn_say": "I've started learning Spanish.",
+    "learn_say": "I've started learning Spanish.”",
     "learn_claim": "It learns from <b>your own words only</b>. Every fact has Forget and Erase the words.",
-    "standby_claim": "<b>One tap</b> on your phone. Standby frees the graphics card; the next answer takes 5-15 seconds.",
+    "standby_claim": "<b>One tap</b>: Standby frees the graphics card. The next answer takes about 5-15 seconds.",
     "end1": "Your day.", "end2": "Your PC.", "end3": "<i>Your rules.</i>",
     "small": "Made for a Windows PC with an 8 GB NVIDIA graphics card · Android phone app · No subscription",
 }
@@ -139,13 +139,13 @@ def stations_landscape():
     out += station("brief", W, ax, col("Morning", "7:30", T["brief_say"], None, "brief")
                    + shot("brief", [("brief-card", "brief-rows.png")], where="Brain › Work › Morning briefing")
                    + claim("brief", T["brief_claim"]))
-    out += station("focus", 2 * W, ax, col("Morning", "9:00", T["focus_say"], T["focus_reply"], "focus")
+    out += station("focus", 2 * W, ax, col("Morning", "9:00", T["focus_say"], T["focus_reply"], "focus", later="Ten minutes in")
                    + shot("focus", [("focus-run", "focus-running-box.png"), ("focus-drift", "focus-drifting-box.png")], where="Brain › Work › Focus session")
                    + claim("focus", T["focus_claim"]))
-    out += station("tell", 3 * W, ax, col("Afternoon", "15:00", T["tell_say"], None, "tell")
-                   + shot("tell", [("tell-card", "tellme-card.png")], '              <div class="pressring" id="tell-press"></div>\n' + PHONE, where="The approval card on the PC")
+    out += station("tell", 3 * W, ax, col("Afternoon", "15:00", T["tell_say"], None, "tell", later="When Alex writes")
+                   + shot("tell", [("tell-card", "tellme-card-top.png")], PHONE, where="The approval card on the PC")
                    + claim("tell", T["tell_claim"]))
-    out += station("learn", 4 * W, ax, col("Evening", "19:30", T["learn_say"], None, "learn", later=True)
+    out += station("learn", 4 * W, ax, col("Evening", "19:30", T["learn_say"], None, "learn", later="A little later")
                    + shot("learn", [("learn-card", "memory-saved.png")], '              <div class="pressring" id="learn-press"></div>\n', where="Brain › Memory")
                    + claim("learn", T["learn_claim"]), night=True)
     out += station("standby", 5 * W, ax, col("Night", "23:00", None, None, "standby")
@@ -167,11 +167,11 @@ def stations_vertical():
     out += station("dawn", 0, ax, f'''            <div class="title" id="title">{T["title"]}</div>
             <div class="subtitle" id="sub">{T["sub"]}</div>
 ''')
-    out += station("focus", W, ax, col("Morning", "9:00", T["focus_say"], T["focus_reply"], "focus")
+    out += station("focus", W, ax, col("Morning", "9:00", T["focus_say"], T["focus_reply"], "focus", later="Ten minutes in")
                    + shot("focus", [("focus-run", "focus-running-box.png"), ("focus-drift", "focus-drifting-box.png")], where="Brain › Work › Focus session")
                    + claim("focus", T["focus_claim"]))
-    out += station("tell", 2 * W, ax, col("Afternoon", "15:00", T["tell_say"], None, "tell")
-                   + shot("tell", [("tell-card", "tellme-card.png")], '              <div class="pressring" id="tell-press"></div>\n' + PHONE, where="The approval card on the PC")
+    out += station("tell", 2 * W, ax, col("Afternoon", "15:00", T["tell_say"], None, "tell", later="When Alex writes")
+                   + shot("tell", [("tell-card", "tellme-card-top.png")], PHONE, where="The approval card on the PC")
                    + claim("tell", T["tell_claim"]))
     out += station("end", 3 * W, ax, f'''            <div class="end">
               <div class="big"><span id="e1">{T["end1"]}</span><br /><span id="e2">{T["end2"]}</span><br /><span id="e3">{T["end3"]}</span></div>
@@ -219,7 +219,6 @@ SCENES = r'''      (function () {
               r.style.left = (x + b.x * im.offsetWidth - pad) + "px"; r.style.top = (y + b.y * im.offsetHeight - pad) + "px";
               r.style.width = (b.w * im.offsetWidth + 2 * pad) + "px"; r.style.height = (b.h * im.offsetHeight + 2 * pad) + "px";
             }
-            ring("tell-press", "tell-card", __APPROVE__);
             ring("learn-press", "learn-card", __ERASE__);
             A($("title"), t, H.title, { d: 0.9, dy: 18, blur: 8, out: T.stations[0].at[1] + 0.1, outD: 0.5 });
             if ($("sub")) A($("sub"), t, H.sub, { d: 0.7, dy: 12, out: T.stations[0].at[1] + 0.1, outD: 0.5 });
@@ -239,13 +238,12 @@ SCENES = r'''      (function () {
             A($("brief-claim"), t, H.briefClaim, { d: 0.5, dy: 14 });
             // Tell me when: the real card, Approve, then the phone rings.
             A($("tell-shot"), t, H.tellCard, { d: 0.6, dy: 40, e: DAY.E.back });
-            h.press($("tell-press"), t, H.approve);
-            A($("phone"), t, H.ring - 0.4, { d: 0.5, dy: 140 });
+            A($("phone"), t, H.ring - 0.3, { d: 0.3, dy: 120 });
             A($("notif"), t, H.ring, { d: 0.35, dy: -24, e: DAY.E.back });
             ["ring-a", "ring-b"].forEach(function (id, i) {
               var el = $(id); if (!el) return;
               var d = t - (i ? H.ring2 : H.ring);
-              el.style.opacity = d < 0 || d > 0.8 ? "0" : (0.9 * (1 - d / 0.8)).toFixed(3);
+              el.style.opacity = d < 0 || d > 0.8 ? "0" : (0.6 * (1 - d / 0.8)).toFixed(3);
               el.style.transform = "scale(" + (0.6 + 0.8 * h.clamp(d / 0.8, 0, 1)).toFixed(3) + ")";
             });
             A($("tell-claim"), t, H.tellClaim, { d: 0.5, dy: 14 });
@@ -253,7 +251,9 @@ SCENES = r'''      (function () {
             A($("learn-shot"), t, H.saved, { d: 0.6, dy: 40, e: DAY.E.back });
             h.press($("learn-press"), t, H.erase);
             A($("learn-claim"), t, H.learnClaim, { d: 0.5, dy: 14 });
-            A($("later"), t, H.saved - 0.3, { d: 0.4, dy: 8 });
+            A($("learn-later"), t, H.saved - 0.3, { d: 0.4, dy: 8 });
+            A($("focus-later"), t, H.drift - 0.3, { d: 0.3, dy: 8 });
+            A($("tell-later"), t, H.ring - 0.35, { d: 0.3, dy: 8 });
             // Night: one tap on the phone's Standby. The Power field flips when the
             // desktop reports the new mode, a moment after the tap.
             if ($("phone-n")) {
@@ -303,10 +303,10 @@ def build(kind):
                   [H["focusSay"], "listening"], [H["focusCard"], "idle"], [H["drift"], "speaking"], [H["drift"] + 1.0, "idle"],
                   [H["tellSay"], "listening"], [H["tellCard"], "approval"], [H["approve"] + 0.2, "idle"],
                   [H["end"] - 0.3, "idle"]]
-        sun = {"dx": 400, "dy": -120, "s": 1.9}
+        sun = {"dx": 489, "dy": -120, "s": 1.9}
         extra = '    <link rel="stylesheet" href="assets/vertical.css" />\n'
     boxes = {k: (ROOT / "assets" / "ui" / f).read_text().strip() for k, f in
-             (("__APPROVE__", "tellme-card-approve.json"), ("__ERASE__", "memory-saved-erase.json"))}
+             (("__ERASE__", "memory-saved-erase.json"),)}
     script = SCENES
     for k, v in boxes.items():
         script = script.replace(k, v)

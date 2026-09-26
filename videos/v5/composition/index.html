@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="assets/day.css" />
   </head>
   <body class="landscape">
-    <div id="root" data-composition-id="jarvis-v5" data-width="1920" data-height="1080" data-start="0" data-duration="30">
+    <div id="root" data-composition-id="jarvis-v5" data-width="1920" data-height="1080" data-start="0" data-duration="34">
       <div id="stage">
         <div id="sky" class="layer"></div>
         <div id="halo"></div>
@@ -28,20 +28,21 @@
               <div class="part">Morning</div>
               <div class="hour">7:30</div>
               <div class="who" id="brief-you">You</div>
-              <div class="say" id="brief-say">Brief me now.</div>
+              <div class="say" id="brief-say">Brief me now.”</div>
             </div>
             <div class="shot" id="brief-shot">
               <div class="where">Brain › Work › Morning briefing</div>
               <img id="brief-card" src="assets/ui/brief-rows.png" alt="" />
             </div>
-            <div class="claim" id="brief-claim">Made on your PC <b>without the AI model</b>. Email shows who wrote, not what they wrote.</div>
+            <div class="claim" id="brief-claim">Made on your PC, <b>without the AI model</b>. Shows who emailed, not what they wrote.</div>
           </section>
           <section class="station" id="st-focus" style="left: 3840px">
             <div class="col">
               <div class="part">Morning</div>
               <div class="hour">9:00</div>
               <div class="who" id="focus-you">You</div>
-              <div class="say" id="focus-say">Focus for 30 minutes.</div>
+              <div class="say" id="focus-say">Focus for 30 minutes.”</div>
+              <div class="who later" id="focus-later">Ten minutes in</div>
               <div class="who" id="focus-jw">Jarvis</div>
               <div class="reply" id="focus-reply">YouTube can wait.</div>
             </div>
@@ -50,23 +51,23 @@
               <img id="focus-run" src="assets/ui/focus-running-box.png" alt="" />
               <img id="focus-drift" src="assets/ui/focus-drifting-box.png" alt="" />
             </div>
-            <div class="claim" id="focus-claim">It watches which app is in front, <b>on your PC only</b>, and keeps counts, never what it saw.</div>
+            <div class="claim" id="focus-claim">Watches which app is in front, <b>on your PC only</b>. Keeps counts, never what it saw.</div>
           </section>
           <section class="station" id="st-tell" style="left: 5760px">
             <div class="col">
               <div class="part">Afternoon</div>
               <div class="hour">15:00</div>
               <div class="who" id="tell-you">You</div>
-              <div class="say" id="tell-say">Tell me when an email from Alex arrives. Urgently.</div>
+              <div class="say" id="tell-say">Tell me when an email from Alex arrives. Urgently.”</div>
+              <div class="who later" id="tell-later">When Alex writes</div>
             </div>
             <div class="shot" id="tell-shot">
               <div class="where">The approval card on the PC</div>
-              <img id="tell-card" src="assets/ui/tellme-card.png" alt="" />
-              <div class="pressring" id="tell-press"></div>
+              <img id="tell-card" src="assets/ui/tellme-card-top.png" alt="" />
               <div class="phone" id="phone">
                 <div class="ringw" id="ring-a"></div><div class="ringw" id="ring-b"></div>
                 <div class="scr"><div class="sb"><span>15:47</span><i class="cam"></i><span>▾ ▮</span></div>
-                  <div class="notif" id="notif"><div class="app"><b>Jarvis</b> · Alarms and urgent alerts</div>
+                  <div class="notif" id="notif"><div class="app"><b>Jarvis</b> · now</div>
                     <div class="ti">Tell me when</div><div class="tx">An email from Alex arrived.</div><div class="act">Stop</div></div>
                 </div>
               </div>
@@ -78,8 +79,8 @@
               <div class="part">Evening</div>
               <div class="hour">19:30</div>
               <div class="who" id="learn-you">You</div>
-              <div class="say" id="learn-say">I've started learning Spanish.</div>
-              <div class="who later" id="later">A minute later</div>
+              <div class="say" id="learn-say">I've started learning Spanish.”</div>
+              <div class="who later" id="learn-later">A little later</div>
             </div>
             <div class="shot" id="learn-shot">
               <div class="where">Brain › Memory</div>
@@ -107,7 +108,7 @@
                 </div>
               </div>
             </div>
-            <div class="claim" id="standby-claim"><b>One tap</b> on your phone. Standby frees the graphics card; the next answer takes 5-15 seconds.</div>
+            <div class="claim" id="standby-claim"><b>One tap</b>: Standby frees the graphics card. The next answer takes about 5-15 seconds.</div>
           </section>
           <section class="station night" id="st-end" style="left: 11520px">
             <div class="end">
@@ -120,7 +121,7 @@
         <div id="sun-wrap"><canvas id="sun" width="340" height="340"></canvas></div>
         <div id="fade"></div>
       </div>
-      <audio id="score" src="assets/music/score.mp3" data-start="0" data-duration="30" data-track-index="20" data-volume="1"></audio>
+      <audio id="score" src="assets/music/score.mp3" data-start="0" data-duration="34" data-track-index="20" data-volume="1"></audio>
     </div>
     <script src="assets/day.js"></script>
     <script>
@@ -131,7 +132,7 @@
           id: "jarvis-v5", dur: T.dur, H: H, axis: "x", stride: 1920, stations: T.stations, drift: 22,
           nightFrom: [18.6, 19.8],
           // The reactor's state, from the app's own state names.
-          hero: [[0, "idle"], [2.6, "listening"], [3.2, "speaking"], [5.2, "idle"], [7.6, "listening"], [8.1, "idle"], [9.4, "speaking"], [10.4, "idle"], [12.6, "listening"], [13.2, "approval"], [14.399999999999999, "idle"], [17.6, "listening"], [18.2, "idle"], [23.2, "standby"]],
+          hero: [[0, "idle"], [3.8, "listening"], [4.2, "speaking"], [5.3, "idle"], [8.8, "listening"], [9.2, "idle"], [10.6, "speaking"], [11.6, "idle"], [13.8, "listening"], [14.2, "approval"], [15.2, "idle"], [18.8, "listening"], [19.8, "idle"], [24.9, "standby"]],
           caps: [],
           sunPath: function (t) {
             var k = DAY.prog(t, H.end - 0.6, 1.6, DAY.E.io);
@@ -146,12 +147,6 @@
               r.style.left = (x + b.x * im.offsetWidth - pad) + "px"; r.style.top = (y + b.y * im.offsetHeight - pad) + "px";
               r.style.width = (b.w * im.offsetWidth + 2 * pad) + "px"; r.style.height = (b.h * im.offsetHeight + 2 * pad) + "px";
             }
-            ring("tell-press", "tell-card", {
-  "x": 0.879324030748663,
-  "y": 0.8795309168443497,
-  "w": 0.10195939171122995,
-  "h": 0.06609808102345416
-});
             ring("learn-press", "learn-card", {
   "x": 0.8249815088757396,
   "y": 0.636896046852123,
@@ -176,13 +171,12 @@
             A($("brief-claim"), t, H.briefClaim, { d: 0.5, dy: 14 });
             // Tell me when: the real card, Approve, then the phone rings.
             A($("tell-shot"), t, H.tellCard, { d: 0.6, dy: 40, e: DAY.E.back });
-            h.press($("tell-press"), t, H.approve);
-            A($("phone"), t, H.ring - 0.4, { d: 0.5, dy: 140 });
+            A($("phone"), t, H.ring - 0.3, { d: 0.3, dy: 120 });
             A($("notif"), t, H.ring, { d: 0.35, dy: -24, e: DAY.E.back });
             ["ring-a", "ring-b"].forEach(function (id, i) {
               var el = $(id); if (!el) return;
               var d = t - (i ? H.ring2 : H.ring);
-              el.style.opacity = d < 0 || d > 0.8 ? "0" : (0.9 * (1 - d / 0.8)).toFixed(3);
+              el.style.opacity = d < 0 || d > 0.8 ? "0" : (0.6 * (1 - d / 0.8)).toFixed(3);
               el.style.transform = "scale(" + (0.6 + 0.8 * h.clamp(d / 0.8, 0, 1)).toFixed(3) + ")";
             });
             A($("tell-claim"), t, H.tellClaim, { d: 0.5, dy: 14 });
@@ -190,7 +184,9 @@
             A($("learn-shot"), t, H.saved, { d: 0.6, dy: 40, e: DAY.E.back });
             h.press($("learn-press"), t, H.erase);
             A($("learn-claim"), t, H.learnClaim, { d: 0.5, dy: 14 });
-            A($("later"), t, H.saved - 0.3, { d: 0.4, dy: 8 });
+            A($("learn-later"), t, H.saved - 0.3, { d: 0.4, dy: 8 });
+            A($("focus-later"), t, H.drift - 0.3, { d: 0.3, dy: 8 });
+            A($("tell-later"), t, H.ring - 0.35, { d: 0.3, dy: 8 });
             // Night: one tap on the phone's Standby. The Power field flips when the
             // desktop reports the new mode, a moment after the tap.
             if ($("phone-n")) {

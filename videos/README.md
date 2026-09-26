@@ -2,7 +2,7 @@
 
 Every version is kept. The newest is at the top. Tap a picture to watch.
 
-## v5 — "A day with Jarvis" (30 s, plus a 15 s upright cut)
+## v5 — "A day with Jarvis" (34 s, plus a 16 s upright cut)
 
 [![Jarvis launch video v5](v5/jarvis-launch-v5.jpg)](v5/jarvis-launch-v5.mp4)
 
@@ -21,7 +21,7 @@ drawn with the app's own words, and `v5/brag-plan.md` lists where each claim
 is in the code. The music is new too: a relaxed, warm groove that follows the
 day.
 
-For a phone held upright: [the 15-second cut](v5/jarvis-launch-v5-vertical.mp4).
+For a phone held upright: [the 16-second cut](v5/jarvis-launch-v5-vertical.mp4).
 
 ## v4 — "Cutting-edge. And it still asks first." (30 s, plus a 15 s upright cut)
 

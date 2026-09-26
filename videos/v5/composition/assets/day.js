@@ -42,8 +42,8 @@
     [8.0, "#b6d0e8", "#f6e7d3", "#fff0c8"],
     [12.0, "#a9cbe8", "#f4efe6", "#fff6d8"],
     [15.5, "#b9cde0", "#f4e2c4", "#ffe3a8"],
-    [18.0, "#7f82b3", "#e3a489", "#ffb07a"],
-    [19.5, "#34386a", "#8e5f7e", "#ff9aa0"],
+    [18.0, "#6f73a6", "#d0917f", "#ffb07a"],
+    [19.5, "#2a2e5c", "#5e4263", "#ff9aa0"],
     [21.0, "#161c3a", "#2e3163", "#9fb8ff"],
     [24.0, "#0a0e1f", "#171a36", "#8aa6ff"]
   ];
@@ -108,7 +108,7 @@
     var DRIFT = cfg.drift || 22;
     var keys = [];
     ST.forEach(function (s, i) {
-      keys.push([s.at[0], i * STRIDE - DRIFT, i === 0 ? E.lin : E.io]);
+      keys.push([s.at[0], i * STRIDE - DRIFT, i === 0 ? E.lin : E.soft]);
       keys.push([s.at[1], i * STRIDE + DRIFT, E.lin]);
     });
     function camAt(t) {
@@ -202,6 +202,7 @@
       var n = E.soft(clamp((h - NIGHT[0]) / (NIGHT[1] - NIGHT[0]), 0, 1));
       root.style.setProperty("--ink", mixHex("#1d1a17", "#f4ecdf", n));
       root.style.setProperty("--ink2", mixHex("#5a524a", "#b9b3c9", n));
+      root.style.setProperty("--warm", mixHex("#a4561f", "#f2a66b", n));
       root.style.setProperty("--rule", n > 0.5 ? "rgba(244,236,223,.35)" : "rgba(29,26,23,.28)");
       world.style.transform = X ? "translate3d(0," + (-p).toFixed(1) + "px,0)" : "translate3d(" + (-p).toFixed(1) + "px,0,0)";
       // An hour label gives way as it passes under the reactor.

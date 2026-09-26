@@ -8,9 +8,9 @@ Non-commercial, for one owner.
 
 [![Jarvis launch video v5: a day with Jarvis](videos/v5/jarvis-launch-v5.jpg)](videos/v5/jarvis-launch-v5.mp4)
 
-**Tap the picture to watch v5** (30 seconds, sound on; every spoken line is on
+**Tap the picture to watch v5** (34 seconds, sound on; every spoken line is on
 screen). It opens the video file, and GitHub plays it in the browser. On a
-phone held upright, watch [the 15-second cut](videos/v5/jarvis-launch-v5-vertical.mp4).
+phone held upright, watch [the 16-second cut](videos/v5/jarvis-launch-v5-vertical.mp4).
 
 One day with Jarvis, from the morning briefing to Standby at night, in one
 continuous shot: a focus session, a "Tell me when" alert that rings your phone,

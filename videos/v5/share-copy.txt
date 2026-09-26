@@ -1,10 +1,10 @@
 Jarvis v5: a day with Jarvis. An AI assistant that lives on your own PC.
 
 - 7:30 "Brief me now." Your briefing is put together on your PC without the AI model. Email shows who wrote, not what they wrote.
-- 9:00 "Focus for 30 minutes." Jarvis watches which app is in front, on your PC only, says "YouTube can wait." out loud, and keeps counts, never what it saw.
+- 9:00 "Focus for 30 minutes." Jarvis watches which app is in front, on your PC only, says something like "YouTube can wait." out loud, and keeps counts, never what it saw.
 - 15:00 "Tell me when an email from Alex arrives. Urgently." One yes sets it up. Your phone rings until you look. It never replies.
-- 19:30 It learns from your own words only, a minute or so after you say something. Every fact has Forget and "Erase the words".
-- 23:00 One tap on your phone puts it on Standby, which frees the graphics card. The next answer takes 5-15 seconds while the model loads back in.
+- 19:30 It learns from your own words only, shortly after the conversation goes quiet. Every fact has Forget and "Erase the words".
+- 23:00 One tap on your phone puts it on Standby, which frees the graphics card. The next answer takes about 5-15 seconds while the model loads back in.
 - Also answered without the AI model: timers, reminders, and lists like "add oat milk to the shopping list".
 
 Your email, files and memories are handled only by the AI on your PC. Your phone reaches it over your own private network, never a public tunnel. Made for a Windows PC with an 8 GB NVIDIA graphics card. Android phone app. No subscription.

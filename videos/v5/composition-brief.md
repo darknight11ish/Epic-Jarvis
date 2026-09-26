@@ -2,8 +2,8 @@
 
 ## Output
 
-- `composition/index.html` → `jarvis-launch-v5.mp4`: 1920×1080, 30 fps, 30 s.
-- `composition/vertical.html` → `jarvis-launch-v5-vertical.mp4`: 1080×1920, 30 fps, 15 s. Render it with `npx hyperframes render -c vertical.html`.
+- `composition/index.html` → `jarvis-launch-v5.mp4`: 1920×1080, 30 fps, 34 s.
+- `composition/vertical.html` → `jarvis-launch-v5-vertical.mp4`: 1080×1920, 30 fps, 16.25 s. Render it with `npx hyperframes render -c vertical.html`.
 - `jarvis-launch-v5.jpg`: the poster.
 
 ## Creative contract

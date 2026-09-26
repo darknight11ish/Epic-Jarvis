@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="assets/vertical.css" />
   </head>
   <body class="vertical">
-    <div id="root" data-composition-id="jarvis-v5-vertical" data-width="1080" data-height="1920" data-start="0" data-duration="15">
+    <div id="root" data-composition-id="jarvis-v5-vertical" data-width="1080" data-height="1920" data-start="0" data-duration="16.25">
       <div id="stage">
         <div id="sky" class="layer"></div>
         <div id="halo"></div>
@@ -29,7 +29,8 @@
               <div class="part">Morning</div>
               <div class="hour">9:00</div>
               <div class="who" id="focus-you">You</div>
-              <div class="say" id="focus-say">Focus for 30 minutes.</div>
+              <div class="say" id="focus-say">Focus for 30 minutes.”</div>
+              <div class="who later" id="focus-later">Ten minutes in</div>
               <div class="who" id="focus-jw">Jarvis</div>
               <div class="reply" id="focus-reply">YouTube can wait.</div>
             </div>
@@ -38,23 +39,23 @@
               <img id="focus-run" src="assets/ui/focus-running-box.png" alt="" />
               <img id="focus-drift" src="assets/ui/focus-drifting-box.png" alt="" />
             </div>
-            <div class="claim" id="focus-claim">It watches which app is in front, <b>on your PC only</b>, and keeps counts, never what it saw.</div>
+            <div class="claim" id="focus-claim">Watches which app is in front, <b>on your PC only</b>. Keeps counts, never what it saw.</div>
           </section>
           <section class="station" id="st-tell" style="top: 3840px">
             <div class="col">
               <div class="part">Afternoon</div>
               <div class="hour">15:00</div>
               <div class="who" id="tell-you">You</div>
-              <div class="say" id="tell-say">Tell me when an email from Alex arrives. Urgently.</div>
+              <div class="say" id="tell-say">Tell me when an email from Alex arrives. Urgently.”</div>
+              <div class="who later" id="tell-later">When Alex writes</div>
             </div>
             <div class="shot" id="tell-shot">
               <div class="where">The approval card on the PC</div>
-              <img id="tell-card" src="assets/ui/tellme-card.png" alt="" />
-              <div class="pressring" id="tell-press"></div>
+              <img id="tell-card" src="assets/ui/tellme-card-top.png" alt="" />
               <div class="phone" id="phone">
                 <div class="ringw" id="ring-a"></div><div class="ringw" id="ring-b"></div>
                 <div class="scr"><div class="sb"><span>15:47</span><i class="cam"></i><span>▾ ▮</span></div>
-                  <div class="notif" id="notif"><div class="app"><b>Jarvis</b> · Alarms and urgent alerts</div>
+                  <div class="notif" id="notif"><div class="app"><b>Jarvis</b> · now</div>
                     <div class="ti">Tell me when</div><div class="tx">An email from Alex arrived.</div><div class="act">Stop</div></div>
                 </div>
               </div>
@@ -72,18 +73,18 @@
         <div id="sun-wrap"><canvas id="sun" width="340" height="340"></canvas></div>
         <div id="fade"></div>
       </div>
-      <audio id="score" src="assets/music/score-vertical.mp3" data-start="0" data-duration="15" data-track-index="20" data-volume="1"></audio>
+      <audio id="score" src="assets/music/score-vertical.mp3" data-start="0" data-duration="16.25" data-track-index="20" data-volume="1"></audio>
     </div>
     <script src="assets/day.js"></script>
     <script>
       (function () {
         var T = window.TIMING, H = T.hits;
-        var SUN = {"dx": 400, "dy": -120, "s": 1.9};
+        var SUN = {"dx": 489, "dy": -120, "s": 1.9};
         DAY.run({
           id: "jarvis-v5-vertical", dur: T.dur, H: H, axis: "y", stride: 1920, stations: T.stations, drift: 22,
           nightFrom: [18.6, 19.8],
           // The reactor's state, from the app's own state names.
-          hero: [[0, "idle"], [2.6, "listening"], [3.0, "idle"], [4.2, "speaking"], [5.2, "idle"], [7.55, "listening"], [8.0, "approval"], [9.0, "idle"], [10.95, "idle"]],
+          hero: [[0, "idle"], [2.55, "listening"], [2.9, "idle"], [4.4, "speaking"], [5.4, "idle"], [7.55, "listening"], [7.9, "approval"], [8.7, "idle"], [12.2, "idle"]],
           caps: [],
           sunPath: function (t) {
             var k = DAY.prog(t, H.end - 0.6, 1.6, DAY.E.io);
@@ -98,12 +99,6 @@
               r.style.left = (x + b.x * im.offsetWidth - pad) + "px"; r.style.top = (y + b.y * im.offsetHeight - pad) + "px";
               r.style.width = (b.w * im.offsetWidth + 2 * pad) + "px"; r.style.height = (b.h * im.offsetHeight + 2 * pad) + "px";
             }
-            ring("tell-press", "tell-card", {
-  "x": 0.879324030748663,
-  "y": 0.8795309168443497,
-  "w": 0.10195939171122995,
-  "h": 0.06609808102345416
-});
             ring("learn-press", "learn-card", {
   "x": 0.8249815088757396,
   "y": 0.636896046852123,
@@ -128,13 +123,12 @@
             A($("brief-claim"), t, H.briefClaim, { d: 0.5, dy: 14 });
             // Tell me when: the real card, Approve, then the phone rings.
             A($("tell-shot"), t, H.tellCard, { d: 0.6, dy: 40, e: DAY.E.back });
-            h.press($("tell-press"), t, H.approve);
-            A($("phone"), t, H.ring - 0.4, { d: 0.5, dy: 140 });
+            A($("phone"), t, H.ring - 0.3, { d: 0.3, dy: 120 });
             A($("notif"), t, H.ring, { d: 0.35, dy: -24, e: DAY.E.back });
             ["ring-a", "ring-b"].forEach(function (id, i) {
               var el = $(id); if (!el) return;
               var d = t - (i ? H.ring2 : H.ring);
-              el.style.opacity = d < 0 || d > 0.8 ? "0" : (0.9 * (1 - d / 0.8)).toFixed(3);
+              el.style.opacity = d < 0 || d > 0.8 ? "0" : (0.6 * (1 - d / 0.8)).toFixed(3);
               el.style.transform = "scale(" + (0.6 + 0.8 * h.clamp(d / 0.8, 0, 1)).toFixed(3) + ")";
             });
             A($("tell-claim"), t, H.tellClaim, { d: 0.5, dy: 14 });
@@ -142,7 +136,9 @@
             A($("learn-shot"), t, H.saved, { d: 0.6, dy: 40, e: DAY.E.back });
             h.press($("learn-press"), t, H.erase);
             A($("learn-claim"), t, H.learnClaim, { d: 0.5, dy: 14 });
-            A($("later"), t, H.saved - 0.3, { d: 0.4, dy: 8 });
+            A($("learn-later"), t, H.saved - 0.3, { d: 0.4, dy: 8 });
+            A($("focus-later"), t, H.drift - 0.3, { d: 0.3, dy: 8 });
+            A($("tell-later"), t, H.ring - 0.35, { d: 0.3, dy: 8 });
             // Night: one tap on the phone's Standby. The Power field flips when the
             // desktop reports the new mode, a moment after the tap.
             if ($("phone-n")) {
