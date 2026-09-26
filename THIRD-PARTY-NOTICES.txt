@@ -300,6 +300,24 @@ Leon (leon-ai/leon), MIT - https://github.com/leon-ai/leon
   text is the one given for browser-use above with this copyright line in
   place of that one.
 
+READING DOCUMENTS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+MarkItDown (Microsoft), MIT - https://github.com/microsoft/markitdown
+  Used by backend/jarvis_documents.py, in a separate program, to turn PDF,
+  Word, Excel and PowerPoint files in "Folders Jarvis may look in" into
+  text. Installed on the PC by pip from backend/requirements.txt
+  (markitdown[pdf,docx,xlsx,pptx]==0.1.8 - the document parts only; its
+  audio and YouTube parts are never installed); not shipped here and none
+  of its code is copied. Version 0.1.8's wheel on PyPI was read on
+  2026-09-26: its metadata says "License-Expression: MIT" (the wheel
+  carries no licence file); the MIT text is the one given for browser-use
+  above. It brings, also by pip, under their own licences - named here as
+  their installed packages' metadata names them (read 2026-09-26), their
+  licence files not read: pdfminer.six and pdfplumber (MIT), mammoth
+  (BSD-2-Clause), python-pptx and openpyxl (MIT), pandas (BSD 3-Clause),
+  magika (Apache-2.0), beautifulsoup4 and markdownify (MIT), defusedxml
+  (PSFL) and charset-normalizer (MIT).
+
 FONTS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Chakra Petch (The Chakra Petch Project Authors), IBM Plex Sans and IBM Plex

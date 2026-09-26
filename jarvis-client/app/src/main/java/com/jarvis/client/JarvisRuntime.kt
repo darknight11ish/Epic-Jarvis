@@ -1548,6 +1548,25 @@ object JarvisRuntime {
      */
     suspend fun emailSending(): ApiResult<JsonObject> = api.emailSending()
 
+    /** "Folders Jarvis may look in" - `GET /api/folders` ([com.jarvis.client.net.Folders]). */
+    suspend fun folders(): ApiResult<JsonObject> = api.folders()
+
+    /**
+     * Take ONE folder off "Folders Jarvis may look in". At once, never held
+     * on a stale link: it only lets Jarvis see less (the desktop's
+     * `remove_folder`). @return the sentence to show.
+     */
+    suspend fun removeFolder(path: String): String =
+        when (val r = api.removeFolder(path)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Folders.said(r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.Folders.missing(r.error)) {
+                    com.jarvis.client.net.Folders.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+
     /**
      * ONE web search setting, with [body] from [com.jarvis.client.net.WebSearch]'s
      * providerBody / addressBody / askBody. Held on a stale link ([actionBlocker],

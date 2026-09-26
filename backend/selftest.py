@@ -1483,6 +1483,68 @@ def pf_scheduler(live: Live) -> list:
              "Jarvis; if it stays, send backend.log back.")]
 
 
+@preflight_check("folders", "Folders Jarvis may look in, and reading documents")
+def pf_folders(live: Live) -> list:
+    """documents.patch and jarvis_documents.py: on, how many folders, and
+    whether PDF and Word reading is installed (MarkItDown) - a line when a
+    package is missing, never a download (feasibility guardrail 9)."""
+    if not live.up:
+        return _needs_backend(live, "Folders Jarvis may look in")
+    try:
+        code, body, _r, _h = live.get("/api/folders")
+    except Exception as exc:
+        return [(WARN, "/api/folders did not answer", type(exc).__name__)]
+    if code == 404 or not isinstance(body, dict) or body.get("available") is False:
+        return [(WARN, "Folders Jarvis may look in is not on",
+                 "Run apply-patches.ps1 (documents.patch and jarvis_documents.py), then "
+                 "restart Jarvis.")]
+    n = len(body.get("folders") or [])
+    rows = [(PASS, f"on, with {n} folder(s) listed" if n else
+             "on, with no folders listed (Jarvis looks in none of your files)")]
+    gone = [f.get("path") for f in body.get("folders") or [] if f.get("exists") is False]
+    if gone:
+        rows.append((WARN, f"{len(gone)} listed folder(s) are not on this PC any more",
+                     "Remove them in Settings, Folders Jarvis may look in."))
+    docs = body.get("documents") if isinstance(body.get("documents"), dict) else {}
+    if docs.get("ready") is True:
+        rows.append((PASS, "PDF, Word, Excel and PowerPoint files can be read"))
+    else:
+        rows.append((WARN, "off: MarkItDown is not installed, so PDF and Word files cannot be "
+                           "read", "Run apply-patches.ps1, which installs it from "
+                                   "backend\\requirements.txt."))
+    return rows
+
+
+@preflight_check("instant_email", "Is the instant email watch connected?")
+def pf_instant_email(live: Live) -> list:
+    """A "tell me when" for email keeps one connection open (jarvis_tellme,
+    IMAP IDLE). A connection that died quietly looks exactly like "no new
+    mail", so its own line under the watch is shown here."""
+    if not live.up:
+        return _needs_backend(live, "the instant email watch")
+    try:
+        code, body, _r, _h = live.get("/api/schedule")
+    except Exception as exc:
+        return [(WARN, "/api/schedule did not answer", type(exc).__name__)]
+    if code != 200 or not isinstance(body, dict):
+        return [(SKIP, "no scheduler, so no \"tell me when\"")]
+    notes = [str(j.get("note") or "") for j in body.get("jobs") or []
+             if j.get("kind") == "tellme" and j.get("watches") == "email"
+             and j.get("state") == "active"]
+    if not notes:
+        return [(SKIP, "no \"tell me when\" is watching email right now")]
+    if any("Instant: " in n for n in notes):
+        return [(PASS, "connected: your mail server tells Jarvis the moment mail arrives")]
+    said = next((n[n.index("Instant watch not connected"):] for n in notes
+                 if "Instant watch not connected" in n), "")
+    if said:
+        return [(WARN, "the instant connection is down - looking every few minutes instead",
+                 said)]
+    return [(WARN, "not instant right now - looking every few minutes",
+             "On standby, after Stop everything, or a mail server without IMAP IDLE: the "
+             "line under the watch in Coming up says which.")]
+
+
 @preflight_check("events", "Does the event stream deliver?")
 def pf_events(live: Live) -> list:
     if not live.up:

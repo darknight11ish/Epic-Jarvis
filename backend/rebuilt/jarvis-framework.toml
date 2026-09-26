@@ -92,6 +92,10 @@ email_read                = "auto"
 notes_search              = "auto"
 home_read                 = "auto"
 home_control              = "ask"
+# Reading files: the file_read tool, and since 2026-09-26 the my_files tool
+# too (finding, searching and reading files ONLY in "Folders Jarvis may look
+# in", which is empty until you add a folder on the PC with an approval
+# card). "ask" gives a card for every look.
 read_files_readonly       = "auto"
 # Saving an email draft (not built yet; I53, "saving drafts to your Drafts
 # folder"). A draft goes up to the mail provider's servers, so it asks

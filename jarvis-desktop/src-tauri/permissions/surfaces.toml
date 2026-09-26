@@ -374,6 +374,16 @@ permissions = [
   # which server (GET /api/email/sending). A read: it sends nothing and
   # never carries the password. Each email is its own approval card.
   "allow-get-email-sending",
+  # "Folders Jarvis may look in" (backend/documents.patch, 2026-09-26): the
+  # list (a read); adding ONE folder through the Windows folder picker - the
+  # PC raises one approval card, held on a stale link in Rust; removing one
+  # at once; bringing in a Notion export through the Windows file picker,
+  # held on a stale link. The pickers run in Rust: this window gets no file
+  # system of its own, only the path the owner chose.
+  "allow-get-folders",
+  "allow-add-folder",
+  "allow-remove-folder",
+  "allow-import-notion",
   # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain.
   # Wording only; no card either way; held on a stale link in Rust.
   "allow-get-manner",

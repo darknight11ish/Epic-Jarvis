@@ -214,7 +214,8 @@ def _rows(rows, key):
 def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
     want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
-            "gate", "stop_all", "scheduler", "events", "voice", "reach", "credentials"]
+            "gate", "stop_all", "scheduler", "folders", "instant_email", "events", "voice",
+            "reach", "credentials"]
     check("every check the owner asked for is registered, in order", keys == want, keys)
     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
     try:
@@ -472,6 +473,37 @@ def t_scheduler_events_voice():
     check("voice not installed: a WARN, never a FAIL",
           any(st == S.WARN for st, *_ in voice) and not any(st == S.FAIL for st, *_ in voice),
           voice)
+
+
+def t_folders_and_instant_email():
+    fake = FakeJarvis()
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "folders", "instant_email"})
+    check("no documents.patch: a WARN saying how, never a FAIL",
+          _rows(rows, "folders")[0][0] == S.WARN and f == 0, _rows(rows, "folders"))
+    check("no email watch: the instant check is skipped", _rows(rows, "instant_email")[0][0]
+          == S.SKIP)
+    fake.routes[("GET", "/api/folders")] = (200, {"available": True, "folders": [
+        {"path": "C:\\Docs", "exists": True}, {"path": "C:\\Gone", "exists": False}],
+        "documents": {"ready": False}})
+    job = {"kind": "tellme", "watches": "email", "state": "active",
+           "note": "Until Friday. Instant watch not connected (the connection dropped "
+                   "(ConnectionError)) - looking every few minutes instead."}
+    fake.routes[("GET", "/api/schedule")] = (200, {"available": True, "running": True,
+                                                   "jobs": [job]})
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "folders", "instant_email"})
+    folders = _rows(rows, "folders")
+    check("two folders listed, one gone from the PC, MarkItDown missing: PASS, WARN, WARN",
+          [st for st, *_ in folders] == [S.PASS, S.WARN, S.WARN]
+          and "MarkItDown is not installed" in folders[2][1], folders)
+    inst = _rows(rows, "instant_email")
+    check("an email watch whose connection is down: a WARN with its own line",
+          inst[0][0] == S.WARN and "connection dropped" in inst[0][2], inst)
+    job["note"] = "Until Friday. Instant: your mail server tells Jarvis the moment mail arrives."
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "instant_email"})
+    check("connected: PASS", _rows(rows, "instant_email")[0][0] == S.PASS)
 
 
 def t_chat_waits_for_tools():

@@ -5101,6 +5101,74 @@ private). The phone does not say timers aloud (ARCHITECTURE section 8).
   and a GitHub source would need a key and a new way out of the PC. Left
   for later.
 
+### 30.7 Instant email, and "hasn't replied by ..." (added 2026-09-26)
+
+The owner's decision (`CLAUDE.md`, cutting-edge research, "Documents &
+email": "instant 'tell me when' for email"), and I68/I69 of
+`docs/FEASIBILITY-AUDIT-2026-09-26.md`. No new route, card, setting or
+event: the same kind, the same ONE card, the same notification.
+
+**Instant.** While at least one email watch is on (not paused, not waiting
+for its card), `jarvis_tellme.py` keeps ONE connection open to the same mail
+server and asks it to say when mail arrives (IMAP IDLE). It sends only
+LOGIN, CAPABILITY, EXAMINE (read-only), IDLE, DONE and LOGOUT - nothing is
+fetched over it. When the server says new mail arrived, every email watch
+does its ordinary look at once (30.1, through the gate as `email_read`), so
+a match is told within seconds. While it is connected the regular looks
+skip the sign-in, except one full look every 30 minutes in case a nudge was
+missed.
+- The connection is put to the gate as `email_read` each time it opens
+  (tier `"auto"` only, like every look).
+- It is renewed every 9 minutes (the IMAP standard lets a server drop an
+  idle client after 29; Gmail's own limit was not checked).
+- It closes when Jarvis goes on **Standby**, when the owner presses **Stop
+  everything** (its stopper says "The instant email watch closed its
+  connection to your mail server; your "tell me when"s still look every
+  few minutes."), and when the last email watch ends, is paused or
+  deleted. After Standby or Stop everything it opens again at a watch's
+  next regular look: the watch the owner approved carries on.
+- On a drop it tries again after 30 seconds, then longer (up to 30
+  minutes). Meanwhile the looks every 5 minutes carry on as before.
+- A server that does not offer IDLE is asked again 6 hours later.
+- The certificate and name of the mail server are checked
+  (`jarvis_email.tls_context`; since 2026-09-26 every email read does).
+
+The line under an email watch (`note`, both apps show it as it is) ends
+with one of: "Instant: your mail server tells Jarvis the moment mail
+arrives." / "Instant watch not connected (<why, in fixed words>) - looking
+every few minutes instead." / "Jarvis is on standby, so it looks every few
+minutes, not instantly." / "Stop everything closed the instant connection;
+it opens again at the next look." / "Your mail server does not offer
+instant notice, so Jarvis looks every few minutes." The preflight shows the
+same (`instant_email`).
+
+**"Tell me if Alex hasn't replied by Friday".** `POST /api/schedule/add
+{"kind": "tellme", "source": "email", "sender": "Alex", "missing": true,
+"by": <epoch>, "urgent"?}`, or said or typed: "tell me if Alex hasn't
+replied by Friday", "let me know if Dr Patel doesn't reply by tomorrow at
+9am", "tell me if there's no email from Sam within 2 days", "tell me if I
+haven't heard back from Priya by tonight". "By Friday" with no time is
+Friday at 17:00; the answer and the card say the time. The same ONE card,
+which says: "Watching for: an email from Alex, until Friday 2 October at
+17:00. If none has arrived by then, Jarvis tells you. If one arrives
+first, the watch ends quietly." Coming up lists it as "no email from Alex
+by Friday 2 October at 17:00".
+- An email from Alex first: the watch ends, with no notification; its line
+  says "Alex wrote at 14:02 today - nothing to tell you."
+- None by the time: ONE `schedule` event `{"id", "kind": "tellme", "state":
+  "matched", "urgent"}`, and `alert` "No email from Alex arrived by Friday
+  2 October at 17:00." - the owner's words and the time, never the email's.
+- The PC was off at the time: it tells when it is next on, up to a day
+  later, and does NOT ring (the owner's rule: more than 10 minutes late,
+  nothing rings). If it cannot look at the time (the mail server does not
+  answer), it tries again at each look rather than saying "no email".
+
+**Known gaps, said plainly.** Not run against a real mail server: the IDLE
+conversation was checked against a stand-in server on this PC's loopback
+that records every command, pushes "new mail" and drops the connection.
+A late look after the time counts an email that arrived after the time,
+but before the PC came back, as a reply (nothing is told).
+
 ## 31. Focus sessions (added 2026-09-25)
 
 The owner's decision of 2026-09-25 (`CLAUDE.md`, after the "Build Your Own
@@ -5550,3 +5618,120 @@ treated only `valid_to IS NULL` as "still in use", so a fact that ends in
 the future could not be forgotten, corrected or reworded. They now use
 `valid_to IS NULL OR valid_to > now`, like every reader (§6 Forget and the
 "stop using this fact?" card now work on such a fact).
+
+## 35. Folders Jarvis may look in: PDFs, Word files and a Notion export (added 2026-09-26)
+
+The owner's decisions (`CLAUDE.md`, 2026-09-26): "Documents & email: asking
+about PDFs and Word files" and "Bring in my Notion export: the export
+(Markdown pages and CSV tables) goes into a folder Jarvis searches ...
+Imported notes are outside text: they are never learned as facts, and every
+note Jarvis writes back after reading them asks first". The feasibility
+audit (`docs/FEASIBILITY-AUDIT-2026-09-26.md`, section 4, guardrail 1): ONE
+"Folders Jarvis may look in" list, PC only, empty by default, for file names
+(I39), documents (I40) and the Notion import.
+
+`backend/jarvis_documents.py`, shipped whole; `documents.patch` adds one call
+at start-up that answers the four routes (after the server's own origin and
+token checks), the same shape as `stop-all.patch`.
+
+### 35.1 Routes
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/folders` | - | **200** the view below. A read, never held. |
+| `POST /api/folders/add` | `{"path": "<a folder on the PC>"}` | **202** `{"ok", "waiting": true, "view", "message"}` and ONE approval card; **200** `changed: false` when it is already on the list or inside a listed folder; **400** a refused folder (a sentence); **403** `pc_only: true` from any device but the PC; **409** a card already waits, or 20 folders; **503** `change_own_config` is not `"ask"` |
+| `POST /api/folders/remove` | `{"path"}` | **200** `{"ok", "changed", "view", "message"}`. At once, no card, from either app. Withdraws a waiting card for the same folder. |
+| `POST /api/folders/import` | `{"zip": "<the .zip Notion made>", "into": "<a listed folder>"}` | **200** `{"ok", "folder", "files", "skipped", "failed", "said", "view"}`; **400** "Nothing was brought in: <why>."; **403** `pc_only: true` from any device but the PC. No card (35.4). |
+
+The view: `{"available": true, "title", "detail", "folders": [{"path",
+"name", "added", "exists"}], "empty", "why", "can_add", "phone_add",
+"waiting": {"path"} | null, "waiting_words", "last": {"outcome", "message",
+"at"} | null, "max": 20, "documents": {"ready", "said"}, "notion": {"title",
+"detail", "can_import"}, "remove_label"}`. `can_add` and
+`notion.can_import` are true only for a request from the PC itself. `why`
+says when the list could not be read (a damaged file: no folders).
+`documents.ready` is false when MarkItDown is not installed ("Reading PDF,
+Word, Excel and PowerPoint files is off: MarkItDown is not installed on the
+PC. Notes and text files can still be read.").
+`tools/gen_folders_cases.py` writes the real answers for both apps.
+
+### 35.2 The list
+
+Kept in `folders.json` in the Jarvis settings folder. Refused outright: a
+path that is not a full path on this PC (a network share included), a
+drive's top, the whole user folder, Windows' and the programs' folders
+(`Windows`, `Program Files`, `ProgramData`, `AppData`, ...), and any place
+`file_read` refuses (`jarvis_agent._protected_path` - keys, saved passwords,
+browser data, Jarvis's own data; the ONE list, never a copy). Adding is ONE
+card, action `change_own_config` (tier `"ask"` only), naming the folder in
+full; only a person's "approved" adds it.
+
+### 35.3 What the model may do - the `my_files` tool
+
+Offered only while the list has a folder in it and `my_files` is in
+`[tools].enabled`; decided under `file_read`'s action (`read_files_readonly`)
+- one line on "What asks first" for reading files. Its description costs
+about 240 tokens a turn by `jarvis_agent.estimate_tokens` (about 3% of the
+8 GB card's ~8,000), and nothing while no folder is listed.
+
+| action | does | limits |
+|---|---|---|
+| `find` | file NAMES with every word, in the listed folders | 20 names; a walk of at most 100,000 entries and 4 seconds, said when it stops early |
+| `search` | words inside `.md`, `.txt` and `.csv` files | 8 results, 240-character snippets, 5,000 files, 256 KB of each |
+| `read` | ONE part of ONE file: PDF, Word (`.docx`), Excel (`.xlsx`), PowerPoint (`.pptx`), Markdown, text or CSV, with its list of parts | a part is at most 1,200 tokens, split at headings (never cut short: the rest is further parts); at most 2 parts per answer (`FILES_PARTS_PER_TURN`); 50 MB per document |
+
+Every path is checked after links are followed: inside a listed folder,
+never in a hidden folder, never a protected place. It never writes, moves or
+deletes anything, and never opens a web address. Notion's long ids are
+hidden from the names it shows ("Trip plan.md"), not from the files.
+
+**Outside text.** Its results mark the turn and the chat as having read
+outside text (`_TurnWatch.took_in`), so a note written afterwards asks first
+(`write_notes_after_outside_text`) and a web search afterwards asks first,
+and nothing in them is learned as a fact (learning takes only the owner's
+own typed or said words).
+
+**The converter.** `markitdown[pdf,docx,xlsx,pptx]==0.1.8` (never `[all]`:
+its audio part sends sound to Google, its YouTube part fetches from
+YouTube), with only its four document converters switched on, in a separate
+program (`python -I`, `jarvis_child_env`'s allowlist - no token, no
+password, no key - a 120-second limit, the text capped). The text is kept
+in memory for the last 4 files only. A scanned PDF has no text layer: "no
+text was found in it. A scanned letter or bill is a picture of the page".
+
+### 35.4 The Notion import
+
+From the PC only; no card - the owner picked the file and the folder on the
+PC, the folder is already on the list, and nothing leaves the PC. Unzipped
+into a NEW folder "Notion export <date>" inside the listed folder, never over
+anything: only notes, tables, documents and pictures are written; a name
+with "..", an absolute path or a drive letter, and a link, are skipped;
+Windows' reserved names and characters are replaced; at most 20,000 files
+and 1 GB, counted as they are written (not as the zip claims), 200 MB per
+file; one level of zip inside the zip (Notion's "Part-1.zip"). Written to a
+hidden folder first and moved into place, so a refused import leaves
+nothing behind. Nothing from the zip is ever run.
+
+### 35.5 In the apps
+
+Desktop: Settings, Folders Jarvis may look in (`folders.rs`): the list,
+Remove, "Add a folder…" (the Windows folder picker, then the card - held on
+a stale link) and "Bring in a Notion export" (a listed folder, then the
+Windows file picker - held on a stale link). Phone: Brain, Folders Jarvis
+may look in (`FoldersPlate.kt`): the list and Remove, and the PC's line
+saying adding is on the PC (ARCHITECTURE section 8). Asking about the files
+works from either app.
+
+### 35.6 Known gaps, said plainly
+
+- **Not run on the owner's PC.** The Windows folder and file pickers were
+  compiled for Windows but not opened; MarkItDown converted a small PDF and
+  a small Word file here (Linux, Python 3.11), not on the owner's Python
+  3.12.
+- **Everything's `es.exe` is not used**, although the feasibility audit
+  named it for "where's that file?": it needs a separate install, and could
+  not be tried here. A walk of the listed folders (100,000 entries, 4
+  seconds) is used instead; a very big folder may be cut short, and says so.
+- **PDFs and Word files are not searched inside** - only by name, then read
+  part by part. A search index over them (I41) is later.
+- Text inside pictures (a scanned PDF) is not read.

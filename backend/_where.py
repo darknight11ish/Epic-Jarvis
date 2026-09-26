@@ -151,6 +151,8 @@ SHIPPED = (
     "jarvis_focus.py",
     # "What asks first" and "Lights, plugs and fans without a card" (asks-first.patch)
     "jarvis_asks_first.py",
+    # "Folders Jarvis may look in" and the my_files tool (documents.patch)
+    "jarvis_documents.py",
 )
 
 

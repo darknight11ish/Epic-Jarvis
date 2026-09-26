@@ -224,8 +224,9 @@ import imaplib as _imaplib
 class _FakeIMAP:
     made = []
 
-    def __init__(self, host, port, timeout=None):
+    def __init__(self, host, port, timeout=None, ssl_context=None):
         self.calls = [("connect", host, port, timeout)]
+        self.ssl_context = ssl_context
         _FakeIMAP.made.append(self)
 
     def login(self, user, password):
@@ -268,6 +269,15 @@ with with_env(host="imap.example.com", user="me@example.com", password="pw"):
     conn = _FakeIMAP.made[-1] if _FakeIMAP.made else None
     calls = conn.calls if conn else []
     check("ONE connection", len(_FakeIMAP.made) == 1, len(_FakeIMAP.made))
+    import ssl as _ssl
+    ctx = conn.ssl_context if conn else None
+    check("the mail server's certificate and name are checked (imaplib alone checks "
+          "neither)", ctx is not None and ctx.verify_mode == _ssl.CERT_REQUIRED
+          and ctx.check_hostname is True, ctx)
+    local = E.tls_context("127.0.0.1")
+    check("... except a mail program on this PC itself (a bridge's own certificate)",
+          local.verify_mode == _ssl.CERT_NONE and E.tls_context("imap.example.com").verify_mode
+          == _ssl.CERT_REQUIRED)
     check("the mailbox is opened read-only", ("select", "INBOX", True) in calls, calls)
     fetches = [c for c in calls if c[0] == "fetch"]
     check("only the newest five, newest first",

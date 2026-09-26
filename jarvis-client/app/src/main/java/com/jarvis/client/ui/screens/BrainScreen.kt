@@ -452,6 +452,15 @@ fun BrainScreen(
                 EmailSendingSection()
             }
 
+            // "Folders Jarvis may look in" (the owner's decisions of
+            // 2026-09-26): the folders on the PC Jarvis may find, search and
+            // read files in, in the PC's words, with Remove at once
+            // (FoldersPlate.kt) - the desktop's Settings -> Folders Jarvis may
+            // look in. Adding a folder and the Notion import are the PC's.
+            item(key = "folders") {
+                FoldersSection()
+            }
+
             // "How Jarvis talks" (the owner's decision of 2026-09-25): warm
             // and brief, or plain, with the PC's words (MannerPlate.kt) - the
             // desktop's Settings -> How Jarvis talks. No card either way.
