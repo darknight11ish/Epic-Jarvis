@@ -843,6 +843,43 @@ class JarvisApi(
      */
     suspend fun reach(): ApiResult<JsonObject> = probe(Reach.PATH)
 
+    /**
+     * `GET /api/focus`: the focus session - its countdown, booleans and counts
+     * and the last report card ([Focus.parse]). Never what was in front on
+     * the PC: the PC does not send it. A read.
+     */
+    suspend fun focus(): ApiResult<JsonObject> = probe(Focus.PATH)
+
+    /**
+     * `POST /api/focus/start` or `/api/focus/act`, with a body made by
+     * [Focus.startBody] or [Focus.actBody]. Any other path is refused here,
+     * before anything is sent. The status and body come back whole
+     * ([Focus.Reply]): a 409 carries the PC's own sentence.
+     */
+    suspend fun focusWrite(path: String, json: String): ApiResult<Focus.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != Focus.START_PATH && path != Focus.ACT_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a focus route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Focus.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
     /** A test search waits for the provider (up to 15 seconds on the PC). */
     private val webSearchTestCall: OkHttpClient by lazy {
         client.newBuilder()

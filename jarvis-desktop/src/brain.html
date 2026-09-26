@@ -422,6 +422,21 @@
         <section class="view view-panes" id="view-work" role="tabpanel"
                  aria-labelledby="tab-work" hidden>
           <div class="panes">
+            <div class="card card-wide" id="focus-card">
+              <h2>Focus session</h2>
+              <p class="note">A timer plus Quiet. On the PC, Jarvis watches which app or site is in front and says so when you drift - out loud, on the PC only. It keeps counts, never what it saw, and nothing leaves the PC. Off unless you start it.</p>
+              <div id="focus"></div>
+              <form id="focus-form" class="todo-form focus-form" autocomplete="off" hidden>
+                <label class="standby-time">Minutes
+                  <input id="focus-minutes" class="field" type="number" min="1" max="240" value="25" required>
+                </label>
+                <input id="focus-on" class="field todo-text" type="text" maxlength="60"
+                       placeholder="On what (optional)" aria-label="What the session is on (optional)">
+                <button id="focus-start" class="btn small" type="submit">Start</button>
+              </form>
+              <p class="note">Or say "focus for 30 minutes". While one runs: "lock on this", "snooze", "I'm doing research", "I need a minute", "pause", "how am I doing?".</p>
+              <div id="focus-report"></div>
+            </div>
             <div class="card card-wide" id="coming-up-card">
               <h2>Coming up</h2>
               <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. Anything that repeats waits for your yes on an approval card.</p>

@@ -78,6 +78,20 @@
         </div>
       </header>
 
+      <!-- ── Focus session (focus.js) ──────────────────────────────────────
+           Shown only while a focus session runs, in both the pill and the
+           card, so the countdown is always on the desktop. Tinted while the
+           owner is off target. Never what was in front: the PC sends only
+           booleans and counts. Lock on: Jarvis's own window is in front when
+           it is pressed, so the PC locks on where the owner lands next. -->
+      <div class="focus-strip" id="focus-strip" data-tone="on" hidden>
+        <span class="focus-clock mono" id="focus-clock" aria-label="Focus time left">0:00</span>
+        <span class="focus-word" id="focus-word">Focus</span>
+        <button class="btn btn-quiet" type="button" id="focus-pause">Pause</button>
+        <button class="btn btn-quiet" type="button" id="focus-lock">Lock on</button>
+        <button class="btn btn-quiet" type="button" id="focus-stop">Stop</button>
+      </div>
+
       <!-- ── Expanded tray: telemetry, gates, capture ───────────────────── -->
       <main class="widget-tray" id="widget-tray" hidden>
         <!-- Jarvis's live face — the same renderer as the Faces window, in

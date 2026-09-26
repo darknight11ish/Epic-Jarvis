@@ -119,6 +119,7 @@ on a throwaway copy instead.
 | `briefing.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The morning briefing, and fewer nagging offers** (the owner's decisions, 2026-09-25). Adds `GET /api/briefing`, `POST /api/briefing/now` and `POST /api/briefing/senders` ("Show who new emails are from": off at once, on through one approval card), makes "Not now" on the overnight-tidy card a real answer (`{"not_now": true}` on `/api/memory/sleep_time`: quiet for 1 day, then 7, then 30), notes the time of each chat message for the back-off, marks a briefing answer that quotes the calendar as having read outside text, and names the briefing in `schedule_repeat`'s notice. Last in the list; its context is `schedule.patch`'s blocks and `learning-asks.patch`'s sleep_time lines. Needs `jarvis_briefing.py` and `jarvis_backoff.py` - see "The morning briefing", at the very end. |
 | `web-search.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Web search with a choice of five providers** (the owner's decisions, 2026-09-25). Adds `GET /api/search` and `POST /api/search/settings` and `/api/search/test`, and the approval notice's words for `search_the_web` (one search's card) and `stop_asking_before_every_web_search`. Its context is `hardware.patch`'s and `schedule.patch`'s route blocks and gate lines. Needs `jarvis_search.py` - see "Web search", at the very end. |
 | `owner-check.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The approval gap, step 1** (docs/APPROVAL-GAP-DESIGN.md, the owner's decisions of 2026-09-25). `POST /api/approve` asks Windows Hello itself - showing the card's own title - before it accepts a RISKY approval that comes from this PC, refuses one on a PC with no Windows Hello, and stamps every approval it accepts; the gate believes no "approved" row this running backend did not stamp, so "approved" written straight into `approvals.db` is refused. Last in the list; its context is `gate-outcome.patch`'s approved branches and `log-scrub.patch`'s banner line. Needs `jarvis_owner_check.py` - without it EVERY approval is refused. See "The approval gap, step 1", at the very end. |
+| `focus.patch` | `jarvis_hud.py` | **Focus sessions** (the owner's decision of 2026-09-25). Adds `GET /api/focus` (the countdown, booleans and counts, the report card), `/api/focus/diag` (booleans only) and `/api/focus/callout` (the spoken line as sound, to this PC only), and `POST /api/focus/start` and `/api/focus/act`. No approval card. Last in the list; its context is `reach.patch`'s GET block and `power-mode.patch`'s POST block. Needs `jarvis_focus.py` - see "Focus sessions", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -9379,3 +9380,99 @@ off Windows.
   of `127.0.0.1`, you are asked twice (once by the app, once by the
   backend): the app leaves the asking to the backend only when it talks to
   it on loopback.
+
+
+# Focus sessions: `jarvis_focus.py`, `focus.patch` (2026-09-25)
+
+The owner's decision of 2026-09-25 (`CLAUDE.md`): "Focus sessions, off
+unless started: a timer plus Quiet; Jarvis watches which app/site is in
+front ON THE PC ONLY, names the distraction out loud ('Instagram can wait')
+but never stores what it saw (only counts), waits until the owner settles
+before locking on, and ends with a report card. Snooze, 'I'm doing
+research', pause and stop by voice. Nothing leaves the PC."
+`docs/JARVIS-API.md` section 26 has the routes, the words and the known gaps.
+
+## In plain words
+
+Say "focus for 30 minutes" (or press Start - Brain -> Work on the desktop,
+Mind on the phone). Jarvis goes Quiet and starts a timer. Go to what you are
+working on; after two seconds there it says "Locked on." Switch to YouTube
+and, a second or two later, the PC says "YouTube can wait." - and firmer
+lines if you keep drifting. "I'm doing research" makes that trip not count;
+"snooze" or "I need a minute" quiets it; "lock on this" moves the target to
+what is in front; "pause focus" and "stop focus" do what they say. At the
+end you hear a report card ("Focus session done. 27 of 30 minutes on target,
+one drift. Streak: 3.") and Jarvis goes back to Active if the session had
+made it Quiet. The desktop widget shows a small countdown that turns amber
+while you are off target.
+
+What it keeps: counts only - minutes on target, drifts, a streak - in
+`focus_ledger.json` in the Jarvis settings folder. Never the name of an app,
+a site, an address or a window title: those are turned into throw-away
+fingerprints, compared, and dropped, once a second.
+
+## Owner steps (one line each, in PowerShell)
+
+1. Copy the new module in and apply the new patch (the same line as always,
+   from the folder this repository is cloned into):
+
+```
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+   It copies `jarvis_focus.py` beside `jarvis_hud.py` and applies
+   `focus.patch`.
+
+2. Restart the backend, then say or type "focus for 5 minutes" to Jarvis.
+
+Nothing to install: it uses the `uiautomation` package already in
+`requirements.txt` (for reading which site a browser is on).
+
+## What the code does
+
+- `jarvis_focus.py` - the engine: the one-second look (the reader), the
+  deferred lock, drifts, the canned lines, the report card and the
+  numbers-only ledger, the five route handlers, and a kind of job (`focus`)
+  on the one scheduler for the end. Every knob is a named constant at the
+  top (`TICK_S`, `GRACE_S`, `SETTLE_TICKS`, `APP_ONLY_AFTER_S`,
+  `NAG_EVERY_S`, `SNOOZE_S`, `RELIEF_S`, `CLEAN_PCT`, `CALLOUT_TTL_S`,
+  `NAMING`...).
+- `focus.patch` - `GET /api/focus`, `/api/focus/diag` and
+  `/api/focus/callout` (this PC only), `POST /api/focus/start` and
+  `/api/focus/act`, all behind the token, in `jarvis_hud.py`.
+- `jarvis_quick.py` - the spoken and typed commands, without the AI model.
+- `jarvis_schedule.py` - `KIND_MODULES` also loads `jarvis_focus`, so a
+  session's end is known to the scheduler from the first tick.
+- No card to start one: reading which window is in front is a READ, like
+  `jarvis_ui_control_plan` (tier `auto`), and the session exists only
+  because you asked; Quiet is `power_manage` (`auto`). The module's header,
+  "WHY THERE IS NO APPROVAL CARD", has the reasoning.
+
+## Test it
+
+```
+python3 backend/test_focus.py
+```
+
+(in the dev container; on the PC, `py -3 backend\test_focus.py` from the
+repository folder). It includes the privacy test: a made-up program and site
+drive real drifts, and the test proves their names reach the spoken line and
+nothing else - the status, the diag, the report, the ledger, the audit log,
+the events, the scheduler's file and the engine's memory.
+
+On the PC, with the backend running, `GET /api/focus/diag` (JARVIS-API
+26.6 has the one line) says what the reader sees - as true/false only.
+
+## Not checked, said plainly
+
+- **Nothing here has run on Windows.** The front window's program is read
+  with documented Windows calls (ctypes, no package); the browser's SITE is
+  read with UI Automation from the address box in the browser's toolbar,
+  which is assumed, not seen. If it cannot read the site, it locks on the
+  whole browser after 45 seconds and says so; the diag's
+  `front_site_readable` says which.
+- The spoken line is played by the desktop app. Without the desktop app
+  running, nothing is said (the counts still work).
+- The manner setting (warm / plain) and the "stop everything" hotkey were
+  built at the same time; the hooks are `jarvis_focus.MANNER_SOURCE` and
+  `Engine.stop_everything()`.

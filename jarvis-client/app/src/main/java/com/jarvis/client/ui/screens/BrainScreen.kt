@@ -391,6 +391,14 @@ fun BrainScreen(
                 )
             }
 
+            // "Focus session" (the owner's decision of 2026-09-25): start and
+            // stop one, the countdown, the counts and the report card
+            // (FocusPlate.kt) - the desktop's Brain -> Work -> Focus session.
+            // Watching what is in front happens on the PC only.
+            item(key = "focus") {
+                FocusSection(canAct = canAct)
+            }
+
             // "Morning briefing" (the owner's decisions of 2026-09-25): the
             // latest one, "Brief me now", and when it arrives
             // (BriefingPlate.kt) - the desktop's Brain -> Work and Settings.

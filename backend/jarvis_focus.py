@@ -513,8 +513,10 @@ def _address_box_value(hwnd, family: str) -> str:
     seen = [0]
 
     def value_of(c) -> str:
+        # GetPattern(PatternId.ValuePattern) works on any control - the same
+        # call jarvis_ui_control._default_act uses for a "read" step.
         try:
-            p = c.GetValuePattern()
+            p = c.GetPattern(auto.PatternId.ValuePattern)
             return str(p.Value or "") if p is not None else ""
         except Exception:
             return ""
@@ -886,7 +888,7 @@ class Engine:
         try:
             minutes = float(DEFAULT_MINUTES if minutes in (None, "") else minutes)
         except (TypeError, ValueError):
-            return 400, {"ok": False, "error": "How many minutes? (a number)"}
+            return 400, {"ok": False, "error": "Say how many minutes, as a number."}
         if minutes != minutes or minutes < MIN_MINUTES or minutes > MAX_MINUTES:
             return 400, {"ok": False, "error": f"A focus session is {MIN_MINUTES} to "
                                                f"{MAX_MINUTES} minutes long."}
@@ -1044,6 +1046,8 @@ class Engine:
     def _judge(self, look: Look, now: float, dt: float) -> str:
         """Everything a look changes. Returns a line to say, or ""."""
         with self._lock:
+            if not self.on or self.paused:
+                return ""       # it ended or paused while the look was being taken
             self.front = look.flags()
             if not look.readable or look.neutral:
                 self.on_target = None
@@ -1178,12 +1182,14 @@ class Engine:
                          "focus": self.status()}
         return None
 
-    def act(self, do: str, minutes=None, by: str = "") -> tuple:
+    def act(self, do: str, amount=None, by: str = "") -> tuple:
+        """ONE thing. `amount`: minutes for extend and snooze, SECONDS for
+        nag (how often to speak during one drift); ignored otherwise."""
         do = str(do or "").strip().lower()
         fn = {"pause": self.pause, "resume": self.resume, "stop": self.stop,
-              "extend": lambda: self.extend(minutes), "snooze": lambda: self.snooze(minutes),
+              "extend": lambda: self.extend(amount), "snooze": lambda: self.snooze(amount),
               "research": self.excuse, "relief": self.relief, "lock": self.lock_on_this,
-              "nag": lambda: self.nag(minutes)}.get(do)
+              "nag": lambda: self.nag(amount)}.get(do)
         if fn is None:
             return 400, {"ok": False, "error": "do is one of: pause, resume, stop, extend, "
                                                "snooze, research, relief, lock, nag"}
@@ -1225,7 +1231,7 @@ class Engine:
         try:
             m = float(EXTEND_DEFAULT_MIN if minutes in (None, "") else minutes)
         except (TypeError, ValueError):
-            return "By how many minutes?"
+            return "Say how many minutes, for example \"extend by 10 minutes\"."
         with self._lock:
             total = (self.planned_s / 60.0) + m
             if m <= 0 or total > MAX_MINUTES:
@@ -1264,7 +1270,7 @@ class Engine:
         try:
             s = float(seconds)
         except (TypeError, ValueError):
-            return "How often? Say, for example, every 30 seconds."
+            return "Say how often, for example \"call me out every 30 seconds\"."
         s = max(NAG_MIN_S, min(NAG_MAX_S, s))
         with self._lock:
             self.nag_every = s
@@ -1281,6 +1287,8 @@ class Engine:
         ended) is refunded, and nothing is said until back on target."""
         with self._lock:
             now = self.now()
+            if self.drifting and self.excused:
+                return "Already noted - this trip doesn't count."
             if self.drifting and not self.excused:
                 self._refund(self.excursion_s, self.drift_counted)
                 self.drift_counted = False
@@ -1573,9 +1581,12 @@ def handle_start(body, *, by: str = "") -> tuple:
 
 
 def handle_act(body, *, by: str = "") -> tuple:
+    """{"do", "minutes"?} - or, for "nag", {"do": "nag", "seconds"}."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "need a JSON object"}
-    return ENGINE.act(body.get("do"), body.get("minutes"), by=by)
+    do = str(body.get("do") or "").strip().lower()
+    amount = body.get("seconds") if do == "nag" else body.get("minutes")
+    return ENGINE.act(do, amount, by=by)
 
 
 def from_this_pc(peer) -> bool:

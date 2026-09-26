@@ -27,6 +27,8 @@
     "brain-deep",
     "brain-schedule",
     "brain-briefing",
-    "brain-history"
+    "brain-history",
+    "focus",
+    "focus-start"
   ]
 }

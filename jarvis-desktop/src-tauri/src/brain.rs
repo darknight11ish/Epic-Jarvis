@@ -37,6 +37,7 @@ use crate::commands;
 
 pub mod auto_learn;
 pub mod briefing;
+pub mod focus;
 pub mod history;
 pub mod profile;
 mod routes;

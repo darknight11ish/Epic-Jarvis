@@ -422,6 +422,43 @@ def t_snooze_relief_research():
           [x for x in w.said if x != F.LOCKED_LINE])
 
 
+def t_found_in_the_audit():
+    w = World()
+    w.start()
+    w.lock_on_work()
+    w.at(YOUTUBE, ticks=4)
+    w.e.act("research")
+    code, out = w.e.act("research")
+    check("\"I'm doing research\" said twice on one trip refunds nothing more",
+          out["said"] == "Already noted - this trip doesn't count.", out)
+    saved = F.ENGINE
+    F.ENGINE = w.e
+    try:
+        code, out = F.handle_act({"do": "nag", "seconds": 45})
+        check("the route's nag takes SECONDS", code == 200 and w.e.nag_every == 45, out)
+        code, out = F.handle_act({"do": "extend", "minutes": 5})
+        check("... and extend takes minutes", code == 200 and w.e.status()["minutes"] == 35, out)
+    finally:
+        F.ENGINE = saved
+
+    # A look that was being taken when the session ended changes nothing.
+    w = World()
+    w.start()
+    w.lock_on_work()
+
+    def ends_mid_look():
+        w.e.finish(completed=False, speak=False)
+        return dict(YOUTUBE)
+    w.e.probe = ends_mid_look
+    w.clock.t += 1
+    w.e.tick()
+    w.clock.t += 1
+    w.e.tick()
+    st = w.e.status()
+    check("a session that ended during a look is not drifted, spoken to or counted",
+          not st["on"] and st["report"]["drifts"] == 0 and w.e._mail is None, st)
+
+
 def t_lock_on_this():
     w = World()
     w.start()
@@ -813,6 +850,9 @@ def t_no_socket_no_model_no_microphone():
           "and not say() (which opens the window after a question)",
           not re.search(r"\.hear\(|set_wake_enabled|_open_awake|_note_said|jarvis_speech\.say\(",
                         code))
+    check("no answer it gives ends with a question, so the phone's \"keep listening after "
+          "a question\" never opens its microphone because of one",
+          not re.search(r"\?\"\s*[,)\]]|\?\"$", code, re.M), re.findall(r".{30}\?\"", code))
     check("it sends no input: no clicks, no keys", not re.search(
         r"SendKeys|\.Click\(|SendInput|keybd_event|mouse_event", code))
 

@@ -1081,6 +1081,12 @@ object JarvisRuntime {
             // words). The list on Mind reads itself again; a job that went
             // off is read by id and shown as a notification.
             com.jarvis.client.net.Schedule.EVENT -> onScheduleEvent(event.data)
+            // A focus session started, changed (locked on, a drift began or
+            // ended, paused...) or ended (`{"state"}` only, or a callout's
+            // number - a doorbell, never what was in front). Mind's "Focus
+            // session" reads itself again. The spoken line is the PC's
+            // alone: the phone is refused it, and does not ask.
+            "focus" -> _focusTick.update { it + 1 }
             // Face and bindings changed on another device. Each device renders
             // its own face and the server is only the sync channel, so this
             // just re-reads the shared document; nothing here redraws
@@ -3065,6 +3071,55 @@ object JarvisRuntime {
             com.jarvis.client.service.ScheduleNotifier.post(context, id, kind, title, text, lockScreen)
         }
     }
+
+    // ------------------------------------------------- Focus sessions ----
+    // The owner's decision of 2026-09-25 - see [com.jarvis.client.net.Focus]
+    // and ui/screens/FocusPlate.kt. A timer plus Quiet; the PC watches which
+    // app or site is in front and speaks on the PC only. This phone starts and
+    // stops a session and shows the countdown, the counts and the report card.
+
+    private val _focusTick = MutableStateFlow(0)
+
+    /** Goes up on every `focus` event and after every change made from this phone. */
+    val focusTick: StateFlow<Int> = _focusTick.asStateFlow()
+
+    /** `GET /api/focus`. A read: never held. */
+    suspend fun focus(): ApiResult<JsonObject> = api.focus()
+
+    /**
+     * Start a session of [minutes], optionally "on" something. Held on a
+     * stale link (rule 4): it makes Jarvis watch. No approval card - the
+     * owner asked, and the PC reads only which app or site is in front and
+     * keeps only counts (docs/JARVIS-API.md section 26).
+     */
+    suspend fun focusStart(minutes: Int, on: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Focus.startBody(minutes, on)
+            ?: return false to com.jarvis.client.net.Focus.BAD_MINUTES
+        return focusPost(com.jarvis.client.net.Focus.START_PATH, body)
+    }
+
+    /**
+     * ONE thing to the running session: pause, resume, extend or stop.
+     * Resume and extend are held on a stale link; pause and stop are let
+     * through - they only make Jarvis do less.
+     */
+    suspend fun focusAct(action: String): Pair<Boolean, String> {
+        if (action in com.jarvis.client.net.Focus.HELD_WHEN_STALE) {
+            actionBlocker()?.let { return false to it }
+        }
+        val body = com.jarvis.client.net.Focus.actBody(action)
+            ?: return false to "That is not something the phone can do to a focus session."
+        return focusPost(com.jarvis.client.net.Focus.ACT_PATH, body)
+    }
+
+    private suspend fun focusPost(path: String, body: String): Pair<Boolean, String> =
+        when (val r = api.focusWrite(path, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Focus.said(r.value).also {
+                _focusTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
 
     // ------------------------------------------------ Morning briefing ----
     // The owner's decisions of 2026-09-25 - see [com.jarvis.client.net.Briefing]

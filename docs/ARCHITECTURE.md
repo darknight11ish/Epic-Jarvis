@@ -646,7 +646,7 @@ reads from on its own. Three things about it are invariants:
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
 changes from it and from nowhere else. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
-`deep`, `memory_saved`, `schedule`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
+`deep`, `memory_saved`, `schedule`, `focus`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
 and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.
 `deep` is a deep question finishing, `{"id", "state"}` only -
@@ -673,7 +673,13 @@ neither app shows a toast or a notification. Since 2026-09-25 it also says
 `"ready"` for a morning briefing that has been put together
 (`jarvis_briefing.py`); both apps notify a briefing on `ready`, not `fired`,
 with only "Jarvis: your morning briefing is ready.", and read the briefing
-itself from `GET /api/briefing`. JARVIS-API §21 and §22.)
+itself from `GET /api/briefing`. JARVIS-API §21 and §22.
+`focus` is a focus session starting, changing or ending, `{"state"}`, or a
+line waiting to be said, `{"state": "callout", "seq"}` - never what was in
+front on the PC - `jarvis_focus.py`; added 2026-09-25. Both apps read `GET
+/api/focus` again on it; on `callout` only the desktop's Rust fetches the
+line, as sound, from the PC itself (the phone is refused it). JARVIS-API
+§26.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. That includes `activity`'s sentence: while Jarvis drives a
@@ -871,6 +877,7 @@ backend routes, in both directions; the rest are listed here only.
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily or Brave key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |
 | The backend's own Windows Hello check before a risky approval (`owner-check.patch`, the approval gap's step 1, 2026-09-25) | Written with the feature. It checks approvals that come FROM the PC, where the desktop is; the phone keeps checking its own fingerprint in the app, as before, and the backend lets a phone approval through without a PC prompt. The phone's half - a key in the phone's Keystore that needs a fresh fingerprint for every risky approval, checked by the backend - is step 2, built with "more devices" (`docs/APPROVAL-GAP-DESIGN.md`). Both apps share the stamp (every approval) and "no lock, no risky approval". |
+| Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (Mind, Focus session; Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | **Update notice** | **Undecided - the owner's call.** The desktop checks GitHub for a newer version and says so in Settings (`update.rs`; it never installs on its own). The phone has no such notice: a new APK is published to the `client-latest` release and installed with adb. Whether the phone should say "a newer version exists" has not been decided. |
 
 **On the phone, kept off the desktop:**

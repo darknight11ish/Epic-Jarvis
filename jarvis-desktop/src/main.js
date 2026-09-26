@@ -3129,6 +3129,7 @@ async function playClip(dataUri, generation, text = "") {
  *  starts talking again, on either listening mode, and when the card
  *  closes. The next `send()` lets Jarvis speak again. */
 function stopSpeaking() {
+  stopFocusCallout();
   speechMuted = true;
   speechGeneration += 1;
   interrupt.replyEnded();
@@ -3153,6 +3154,42 @@ function stopSpeaking() {
   }
   speaking = false;
 }
+
+/* ── Focus session callouts ────────────────────────────────────────────────
+   One line of a focus session ("YouTube can wait."), sent by Rust as SOUND
+   (brain/focus.rs play_callout fetches it from this PC's backend - the words
+   never reach this window). Played on its own element, never through the
+   answer's queue, and never over Jarvis talking: a line that arrives while
+   an answer is being spoken is dropped - the next drift says it again.
+   "Stop" (stopSpeaking) silences it too. It opens no microphone.
+
+   STOP-EVERYTHING HOOK: the "stop everything" hotkey, built at the same
+   time as this, can call stopFocusCallout() (stopSpeaking already does). */
+let focusAudio = null;
+
+function stopFocusCallout() {
+  if (!focusAudio) return;
+  focusAudio.onended = null;
+  focusAudio.pause();
+  focusAudio = null;
+}
+
+function playFocusCallout(payload) {
+  const uri = payload && typeof payload.uri === "string" ? payload.uri : "";
+  if (!uri.startsWith("data:audio/wav;base64,")) return;
+  if (jarvisTalking() || focusAudio) return;
+  const audio = new Audio(uri);
+  focusAudio = audio;
+  audio.onended = () => {
+    if (focusAudio === audio) focusAudio = null;
+  };
+  audio.play().catch((error) => {
+    console.info("[quickbar] focus callout could not play:", error);
+    if (focusAudio === audio) focusAudio = null;
+  });
+}
+
+listen("focus-callout", (event) => playFocusCallout(event.payload));
 
 /** Whether Jarvis is talking: a clip is being made or played, or more are
  *  queued behind it. */

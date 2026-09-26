@@ -258,6 +258,13 @@ fn main() {
             "brain_schedule_act",
             "brain_schedule_add_todo",
             "brain_schedule_add_standby",
+            // Focus sessions (backend/focus.patch): read one, start one
+            // (Brain only, held on a stale link), and ONE thing to it -
+            // pause, resume, +10 minutes, stop, and the widget's Lock on
+            // (resume, extend and lock held on a stale link). No card.
+            "focus_status",
+            "focus_start",
+            "focus_act",
             // The morning briefing (backend/briefing.patch): read the latest
             // one and "Brief me now" (a read, not held on a stale link) -
             // Brain only; and its setup - read it, set one up that repeats

@@ -1205,6 +1205,42 @@ body {
   flex-wrap: wrap;
 }
 
+/* Focus session (focus.js): the countdown, tinted while the owner is off
+   target - the same warn colour the widget's countdown uses. */
+.focus-form {
+  flex-wrap: wrap;
+}
+
+.focus-form #focus-minutes {
+  width: 5em;
+}
+
+.focus-now {
+  padding: 8px 10px;
+  border-left: 2px solid var(--ok);
+  border-radius: 4px;
+}
+
+.focus-now[data-tone="drift"] {
+  border-left-color: var(--warn);
+  background: var(--warn-faint);
+}
+
+.focus-now[data-tone="paused"],
+.focus-now[data-tone="settling"] {
+  border-left-color: var(--border);
+}
+
+.focus-clock {
+  display: block;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.focus-report-title[data-state="ok"] {
+  color: var(--ok);
+}
+
 .standby-time {
   display: inline-flex;
   gap: 6px;

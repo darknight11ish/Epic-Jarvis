@@ -407,7 +407,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, appLock, hardware, schedule, briefing, focus }) {
   const listeners = {};
   window.__calls = [];
   // App lock on or off, for get_app_lock (apps security audit M3).
@@ -1288,6 +1288,36 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             br.setups.push(job);
             return { ok: true, waiting: true, job, said: "It repeats, so it waits for your yes on the card." };
           }
+          // brain/focus.rs (focus sessions). `window.__focus` is null - a PC
+          // without them, answered as `null` like any unknown command - unless
+          // the scenario names `focus: {status}` (a real GET /api/focus answer
+          // from fixtures/focus-cases.json). Acts are recorded; resume, extend
+          // and lock are refused on a stale link, as Rust does.
+          case "focus_status": {
+            const f = window.__focus;
+            if (!f) return null;
+            f.reads += 1;
+            return JSON.parse(JSON.stringify(f.status));
+          }
+          case "focus_act": {
+            window.__focusCalls.push({ cmd, ...args });
+            if (state.stale && ["resume", "extend", "lock"].includes(args.action)) {
+              throw new Error("the event stream is stale");
+            }
+            const f = window.__focus;
+            if (args.action === "pause") f.status = { ...f.status, paused: true };
+            if (args.action === "resume") f.status = { ...f.status, paused: false };
+            if (args.action === "stop") f.status = { ...f.status, on: false };
+            return { ok: true, said: { pause: "Paused.", resume: "Resumed.", stop: "Stopped.",
+              lock: "Go to it - I'll lock on where you land.", extend: "Extended." }[args.action] };
+          }
+          case "focus_start": {
+            window.__focusCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const f = window.__focus;
+            f.status = { ...f.status, on: true, minutes: args.minutes, left_s: args.minutes * 60 };
+            return { ok: true, said: `Focus for ${args.minutes} minutes.` };
+          }
           case "brain_schedule_add_todo": {
             window.__scheduleCalls.push({ cmd, ...args });
             const sc = window.__schedule;
@@ -1568,6 +1598,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__schedule = schedule ? JSON.parse(JSON.stringify({
     jobs: [], todo: [], reads: 0, fails: null, ...schedule })) : null;
   window.__scheduleCalls = [];
+  window.__focus = focus ? JSON.parse(JSON.stringify({ reads: 0, ...focus })) : null;
+  window.__focusCalls = [];
   window.__briefing = briefing ? JSON.parse(JSON.stringify({
     briefing: null, setups: [], sources: {}, reads: 0, fails: null, ...briefing })) : null;
   window.__briefingCalls = [];

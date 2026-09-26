@@ -148,6 +148,42 @@ body {
   background: var(--warn-faint);
 }
 
+/* Focus session (focus.js): a countdown under the bar, tinted while the owner
+   is off target - the warn colour, as the Brain's. */
+.focus-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 6px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--ok);
+  border-radius: var(--radius-chip, 4px);
+  background: var(--surface-raised);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.focus-strip[data-tone="drift"] {
+  border-left-color: var(--warn);
+  background: var(--warn-faint);
+  color: var(--text);
+}
+
+.focus-strip[data-tone="paused"],
+.focus-strip[data-tone="settling"] {
+  border-left-color: var(--hairline-strong);
+}
+
+.focus-strip .focus-clock {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.focus-strip .focus-word {
+  flex: 1;
+  min-width: 0;
+}
+
 /* A button that is an offer, not an emphasis: the emphatic control in this
    window is Approve, and nothing else may compete with it. */
 .btn-quiet {
