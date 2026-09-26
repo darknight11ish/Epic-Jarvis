@@ -54,6 +54,19 @@ class HardwareContractTest {
     }
 
     @Test
+    fun `every card's health is its own line, in the PC's words - the second card too`() {
+        val pair = status("planned_pair")
+        assertEquals(
+            "Now: 84 °C, using 247 of 250 watts, fan at 78%, 99% busy. " +
+                "It is slowing itself down because it is hot.",
+            Hardware.healthLine(pair.cards[0]),
+        )
+        assertEquals("Now: 38 °C, using 10 of 184 watts, 0% busy.", Hardware.healthLine(pair.cards[1]))
+        // Built-in graphics nvidia-smi does not see: nothing is said.
+        assertNull(Hardware.healthLine(status("today_one_card").cards[1]))
+    }
+
+    @Test
     fun `today's PC - names and memory, Custom, and the recommended setup with its reason`() {
         val s = status("today_one_card")
         assertEquals("NVIDIA GeForce RTX 2080 SUPER, 8 GB", Hardware.cardLine(s.cards[0]))

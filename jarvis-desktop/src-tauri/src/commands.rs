@@ -2646,40 +2646,85 @@ pub struct DesktopTelemetry {
     pub gpu_util_percent: Option<u32>,
     pub vram_used_mb: Option<u64>,
     pub vram_total_mb: Option<u64>,
+    /// EVERY card `nvidia-smi` lists, in its order (I12, 2026-09-26). The
+    /// four `gpu_*`/`vram_*` fields above are the first card's, for the
+    /// meters; the widget lists each card on its own line when there are
+    /// two or more, so the second card is never hidden behind the first.
+    pub gpus: Vec<GpuSample>,
     /// `"local"` or `"cloud"`, mirroring the quickbar's route badge.
     pub route_lane: Option<String>,
     pub sampled_at: u128,
 }
 
-/// What `nvidia-smi` reports, with each field absent when the driver omits it.
-#[derive(Debug, Clone, Copy, Default)]
-struct GpuSample {
-    temp_c: Option<u32>,
-    util_percent: Option<u32>,
-    vram_used_mb: Option<u64>,
-    vram_total_mb: Option<u64>,
+/// What `nvidia-smi` reports for one card, with each field absent when the
+/// driver omits it (`[N/A]`, `[Not Supported]`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuSample {
+    pub index: Option<u32>,
+    pub name: String,
+    pub temp_c: Option<u32>,
+    pub util_percent: Option<u32>,
+    pub vram_used_mb: Option<u64>,
+    pub vram_total_mb: Option<u64>,
+    pub power_w: Option<u32>,
+}
+
+/// The fields asked for. `name` is LAST so a name could never shift the
+/// numbers: everything after the sixth comma is the name.
+const GPU_QUERY: &str =
+    "--query-gpu=index,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,name";
+
+/// Every card's line of `nvidia-smi --query-gpu=GPU_QUERY`, in order. A line
+/// that is not a card (no index) is skipped, never guessed at. It used to read
+/// only the FIRST line, so a second card was never shown at all (the
+/// feasibility audit, I12).
+pub fn parse_gpu_lines(text: &str) -> Vec<GpuSample> {
+    let mut out = Vec::new();
+    for row in text.lines() {
+        let fields: Vec<&str> = row.splitn(7, ',').map(|f| f.trim()).collect();
+        if fields.len() < 7 {
+            continue;
+        }
+        let Ok(index) = fields[0].parse::<u32>() else {
+            continue;
+        };
+        let power = fields[5]
+            .parse::<f64>()
+            .ok()
+            .filter(|w| w.is_finite() && *w >= 0.0)
+            .map(|w| w.round() as u32);
+        out.push(GpuSample {
+            index: Some(index),
+            name: fields[6].to_string(),
+            temp_c: fields[1].parse().ok(),
+            util_percent: fields[2].parse().ok(),
+            vram_used_mb: fields[3].parse().ok(),
+            vram_total_mb: fields[4].parse().ok(),
+            power_w: power,
+        });
+    }
+    out
 }
 
 /// Set to false the first time `nvidia-smi` is missing, so a machine without an
 /// NVIDIA GPU does not pay for a failed process spawn every few seconds.
 static GPU_PROBE_ENABLED: AtomicBool = AtomicBool::new(true);
 
-/// Reads temperature, utilisation and VRAM from `nvidia-smi`.
+/// Reads temperature, utilisation, VRAM and power from `nvidia-smi`, for
+/// every card.
 ///
 /// A process spawn rather than a crate: NVML bindings would add a dependency
-/// and a runtime DLL requirement to read four numbers that the driver already
+/// and a runtime DLL requirement to read a few numbers that the driver already
 /// prints. `CREATE_NO_WINDOW` matters — without it a console window flashes on
 /// every sample, which on a 3-second timer is unusable.
-fn sample_gpu() -> Option<GpuSample> {
+fn sample_gpus() -> Vec<GpuSample> {
     if !GPU_PROBE_ENABLED.load(Ordering::Relaxed) {
-        return None;
+        return Vec::new();
     }
 
     let mut command = std::process::Command::new("nvidia-smi");
-    command.args([
-        "--query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total",
-        "--format=csv,noheader,nounits",
-    ]);
+    command.args([GPU_QUERY, "--format=csv,noheader,nounits"]);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -2696,32 +2741,23 @@ fn sample_gpu() -> Option<GpuSample> {
     let Some(output) = run_with_deadline(command, GPU_PROBE_TIMEOUT) else {
         // Timed out and was killed. Do NOT latch: a driver that is busy now is
         // usually fine on the next tick.
-        return None;
+        return Vec::new();
     };
     let output = match output {
         Ok(output) if output.status.success() => output,
         // The binary is not here. That is permanent, so stop asking.
         Err(_) => {
             GPU_PROBE_ENABLED.store(false, Ordering::Relaxed);
-            return None;
+            return Vec::new();
         }
         // It ran and failed. `nvidia-smi` exits non-zero transiently — a
         // driver reload, `GPU is lost`, an ECC state, a query timed out on a
         // saturated card — and latching on one of those killed GPU telemetry
         // for the rest of the session.
-        Ok(_) => return None,
+        Ok(_) => return Vec::new(),
     };
 
-    let text = String::from_utf8_lossy(&output.stdout);
-    let row = text.lines().next()?;
-    let mut fields = row.split(',').map(|f| f.trim());
-
-    Some(GpuSample {
-        temp_c: fields.next().and_then(|v| v.parse().ok()),
-        util_percent: fields.next().and_then(|v| v.parse().ok()),
-        vram_used_mb: fields.next().and_then(|v| v.parse().ok()),
-        vram_total_mb: fields.next().and_then(|v| v.parse().ok()),
-    })
+    parse_gpu_lines(&String::from_utf8_lossy(&output.stdout))
 }
 
 /// How long `nvidia-smi` gets before it is treated as not answering.
@@ -2779,7 +2815,7 @@ fn run_with_deadline(
     }
 }
 
-/// Samples CPU, RAM and (when present) the GPU.
+/// Samples CPU, RAM and (when present) every GPU.
 ///
 /// The [`System`] handle is reused across calls because `sysinfo` derives CPU
 /// percentages from the delta between two refreshes; a fresh one every tick
@@ -2791,18 +2827,58 @@ pub fn sample_telemetry(
     system.refresh_cpu_usage();
     system.refresh_memory();
 
-    let gpu = sample_gpu().unwrap_or_default();
+    let gpus = sample_gpus();
+    let first = gpus.first().cloned().unwrap_or_default();
 
     DesktopTelemetry {
         cpu_percent: system.global_cpu_usage(),
         ram_used_mb: system.used_memory() / (1024 * 1024),
         ram_total_mb: system.total_memory() / (1024 * 1024),
-        gpu_temp_c: gpu.temp_c,
-        gpu_util_percent: gpu.util_percent,
-        vram_used_mb: gpu.vram_used_mb,
-        vram_total_mb: gpu.vram_total_mb,
+        gpu_temp_c: first.temp_c,
+        gpu_util_percent: first.util_percent,
+        vram_used_mb: first.vram_used_mb,
+        vram_total_mb: first.vram_total_mb,
+        gpus,
         route_lane,
         sampled_at: now_ms(),
+    }
+}
+
+#[cfg(test)]
+mod gpu_lines_tests {
+    use super::parse_gpu_lines;
+
+    /// Two cards, in `nvidia-smi --format=csv,noheader,nounits` form (made up):
+    /// the RTX 2080 SUPER busy, the RTX 2060 idle with no power reading.
+    const TWO: &str = "0, 71, 93, 6120, 8192, 201.35, NVIDIA GeForce RTX 2080 SUPER\n\
+                       1, 38, 0, 310, 12288, [N/A], NVIDIA GeForce RTX 2060\n";
+
+    #[test]
+    fn every_card_is_read_not_only_the_first_line() {
+        let got = parse_gpu_lines(TWO);
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].name, "NVIDIA GeForce RTX 2080 SUPER");
+        assert_eq!(got[0].temp_c, Some(71));
+        assert_eq!(got[0].power_w, Some(201));
+        assert_eq!(got[1].index, Some(1));
+        assert_eq!(got[1].name, "NVIDIA GeForce RTX 2060");
+        assert_eq!(got[1].vram_total_mb, Some(12288));
+        assert_eq!(got[1].power_w, None, "[N/A] is no reading, not zero");
+    }
+
+    #[test]
+    fn a_line_that_is_not_a_card_is_skipped() {
+        assert!(parse_gpu_lines("No devices were found\n").is_empty());
+        assert!(parse_gpu_lines("").is_empty());
+        let got = parse_gpu_lines(&format!("garbage\n{TWO}"));
+        assert_eq!(got.len(), 2);
+    }
+
+    #[test]
+    fn a_comma_in_a_name_cannot_move_the_numbers() {
+        let got = parse_gpu_lines("0, 50, 10, 100, 8192, 90.0, Card, with a comma\n");
+        assert_eq!(got[0].name, "Card, with a comma");
+        assert_eq!(got[0].vram_total_mb, Some(8192));
     }
 }
 

@@ -218,6 +218,63 @@ def t_status_today():
           "ROCm" in drop["cards"][1]["why_unused"] and "integrated" in drop["cards"][2]["why_unused"])
 
 
+def t_every_cards_health():
+    """I12 (2026-09-26): heat, power, fan, load and "slowing down because
+    hot" for EVERY card, not only the first nvidia-smi line."""
+    rows = H.parse_health(G.HEALTH_PAIR)
+    check("health: both cards are read, not only the first line", [r["index"] for r in rows] == [0, 1]
+          and rows[1]["uuid"] == G.U_2060, rows)
+    check("health: '[N/A]' is no reading, never a zero", rows[1]["fan_percent"] is None
+          and rows[1]["temp_c"] == 38 and rows[1]["power_w"] == 9.8)
+    check("health: the driver's thermal slow-down reason is read",
+          rows[0]["hot_slowdown"] is True and rows[1]["hot_slowdown"] is False)
+    old = G.HEALTH_PAIR
+    oldest = "0, GPU-x, 55, 100.0, 40, 50\n"
+    check("health: an older driver's shape without the reasons says 'not told', not 'no'",
+          H.parse_health(oldest, H.HEALTH_FIELDS_OLDEST)[0]["hot_slowdown"] is None)
+    check("health: a line that does not parse is skipped",
+          H.parse_health("garbage\n" + old) == rows)
+    # A driver that refuses the new field name gets the old one, then none.
+    asked = []
+
+    def smi(args):
+        asked.append(args[0])
+        if args[0] == f"--query-gpu={H.HEALTH_FIELDS_OLD}":
+            return G.HEALTH_PAIR
+        return None
+    saved = CP._run_smi
+    CP._run_smi = smi
+    H._reset_for_tests()
+    try:
+        got = H._read_health()
+    finally:
+        CP._run_smi = saved
+        H._reset_for_tests()
+    check("health: an older driver ('clocks_throttle_reasons') is asked next",
+          asked[:2] == [f"--query-gpu={H.HEALTH_FIELDS}", f"--query-gpu={H.HEALTH_FIELDS_OLD}"]
+          and len(got) == 2, asked)
+    check("health words: one plain line, the same both apps show",
+          H.health_words(rows[1]) == "38 °C, using 10 of 184 watts, 0% busy.", H.health_words(rows[1]))
+    check("health words: a hot card that slows itself says so",
+          H.health_words(rows[0]).endswith("It is slowing itself down because it is hot."))
+    check("health words: nothing read, nothing said", H.health_words(None) is None
+          and H.health_words({"temp_c": None, "hot_slowdown": None}) is None)
+    # Matched by the card's own id - never by position alone when ids exist.
+    swapped = [dict(rows[1], index=0), dict(rows[0], index=1)]
+    check("health is matched to its card by the GPU- id, not the line order",
+          H.health_for({"uuid": G.U_2060, "index": 1}, swapped)["temp_c"] == 38)
+    check("a card nvidia-smi does not see (AMD, Intel) has no health",
+          H.health_for({"uuid": "", "index": None}, rows) is None)
+    data = json.loads(G.DESKTOP.read_text(encoding="utf-8"))["cases"]
+    pair = data["planned_pair"]["cards"]
+    check("GET /api/hardware: BOTH cards of the planned pair carry their health and its words",
+          [c["health"]["temp_c"] for c in pair] == [84, 38]
+          and all(c["health_words"] for c in pair), [c.get("health_words") for c in pair])
+    uhd = data["today_one_card"]["cards"][1]
+    check("... and built-in graphics nvidia-smi does not see has none",
+          uhd["health"] is None and uhd["health_words"] is None)
+
+
 def t_nothing_changes_until_chosen():
     with G.World(smi=G.SMI_2080S, log=LOG1, reg=G.reg_text([G.REG_2080S]),
                  user_env=G.TODAY_ENV) as w:

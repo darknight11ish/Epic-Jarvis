@@ -145,6 +145,11 @@ function cardItem(card) {
   }
   if (card.best_effort) bits.push(`Best effort, not tested: ${card.best_effort}.`);
   if (bits.length) li.append(node("span", "sc-gpu-role", bits.join(" ")));
+  // Its heat, power, fan and load right now, in the PC's own words - every
+  // card, not only the first (I12, 2026-09-26). The phone shows the same line.
+  if (typeof card.health_words === "string" && card.health_words) {
+    li.append(node("span", "sc-gpu-role hw-health", `Now: ${card.health_words}`));
+  }
   return li;
 }
 

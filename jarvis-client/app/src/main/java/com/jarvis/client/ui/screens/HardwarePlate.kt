@@ -122,6 +122,10 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
                 for (card in status.cards) {
                     Gap(2)
                     Text(Hardware.cardLine(card), style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+                    // Every card's heat, power, fan and load, in the PC's words (I12).
+                    Hardware.healthLine(card)?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                    }
                 }
 
                 // 2. What runs now.

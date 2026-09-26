@@ -102,6 +102,24 @@ await check("today's PC: every card, 'Custom (your own setup)', calculated over 
   noRaw(s.all);
 });
 
+await check("both cards' health: heat, power, fan and load under EVERY card, in the PC's words (I12)", async () => {
+  const page = await open({ status: HW.planned_pair });
+  await settle(page);
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.cards.length, 2);
+  assert.match(s.cards[0], /Now: 84 °C, using 247 of 250 watts, fan at 78%, 99% busy\. It is slowing itself down because it is hot\./);
+  assert.match(s.cards[1], /Now: 38 °C, using 10 of 184 watts, 0% busy\./);
+  noRaw(s.all);
+  // A card nvidia-smi does not see says nothing about its health.
+  const one = await open({ status: HW.today_one_card });
+  await settle(one);
+  const t = await section(one);
+  await one.close();
+  assert.match(t.cards[0], /Now: 67 °C/);
+  assert.doesNotMatch(t.cards[1], /Now:/);
+});
+
 await check("three setups, one (recommended) with why, each saying what is off and 'calculated, not measured'", async () => {
   const page = await open({ status: HW.today_one_card });
   await settle(page);
@@ -275,6 +293,37 @@ await check("CONTROL: a step's route comes from the backend, only four routes, a
   assert.match(rust, /STEP_ROUTES: \[&str; 4\] = \[\s*"\/api\/models\/install",\s*"\/api\/models\/switch",\s*"\/api\/hardware\/create",\s*"\/api\/second-card",\s*\]/);
   const apply = rust.slice(rust.indexOf("pub async fn apply_hardware("), rust.indexOf("pub async fn hardware_step("));
   assert.match(apply, /preset\.is_some\(\) && stale\(&app\)/, "forgetting a setup is held too, or choosing is not");
+});
+
+await check("the widget: with two cards, EVERY card gets a line, and the hottest one's heat is the glance (I12)", async () => {
+  const page = await K.open(browser, base, "widget.html", {}, { width: 360, height: 900 });
+  const telemetry = (gpus) => page.evaluate((g) => window.__emit("desktop-telemetry", {
+    cpuPercent: 20, ramUsedMb: 9000, ramTotalMb: 32000,
+    gpuTempC: g[0] ? g[0].tempC : null, gpuUtilPercent: g[0] ? g[0].utilPercent : null,
+    vramUsedMb: g[0] ? g[0].vramUsedMb : null, vramTotalMb: g[0] ? g[0].vramTotalMb : null,
+    gpus: g, routeLane: "local", sampledAt: 1,
+  }), gpus);
+  const read = () => page.evaluate(() => ({
+    hidden: document.getElementById("gpu-cards").hidden,
+    lines: [...document.querySelectorAll("#gpu-cards li")].map((li) => ({ text: li.innerText, cls: li.className })),
+    glance: document.getElementById("gpu-temp-compact").innerText,
+  }));
+  const A = { index: 0, name: "NVIDIA GeForce RTX 2080 SUPER", tempC: 64, utilPercent: 80, vramUsedMb: 6144, vramTotalMb: 8192, powerW: 180 };
+  const B = { index: 1, name: "NVIDIA GeForce RTX 2060", tempC: 88, utilPercent: 99, vramUsedMb: 10240, vramTotalMb: 12288, powerW: null };
+  await telemetry([A]);
+  let s = await read();
+  assert.equal(s.hidden, true, "one card: the meters say it all, no list");
+  assert.equal(s.glance, "64°");
+  await telemetry([A, B]);
+  s = await read();
+  assert.equal(s.hidden, false);
+  assert.deepEqual(s.lines.map((l) => l.text), [
+    "RTX 2080 SUPER · 64° · 80% · 6.0 / 8.0 GB · 180 W",
+    "RTX 2060 · 88° · 99% · 10.0 / 12.0 GB",
+  ]);
+  assert.match(s.lines[1].cls, /critical/, "the hot second card is marked");
+  assert.equal(s.glance, "88°", "the collapsed widget shows the hottest card, not only the first");
+  await page.close();
 });
 
 await browser.close();

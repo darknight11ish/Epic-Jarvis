@@ -339,6 +339,148 @@ def _smi_cards(fresh: bool = False) -> list:
         return []
 
 
+# --------------------------------------------------------------------------
+#   Each card's health: heat, power, fan, load, "slowing down because hot"
+# --------------------------------------------------------------------------
+#
+# (The feasibility audit's I12, 2026-09-26: "health readings for BOTH
+# graphics cards", needed before the RTX 2060 goes in.) A second nvidia-smi
+# query of its own, so a field an older driver refuses can never cost the
+# card list itself (query_cards above). Newer drivers call the slow-down
+# reasons `clocks_event_reasons`, older ones `clocks_throttle_reasons`; an
+# older one still refuses the WHOLE query for a field it does not know, so
+# each shape is tried in turn, the last with no reasons at all. Read on
+# this PC only; nothing is sent anywhere, and it never raises a card or a
+# notification (the feasibility audit's Overwhelm guardrail: "one line per
+# card; no new 'card is hot' notification").
+
+HEALTH_FIELDS = ("index,uuid,temperature.gpu,power.draw,power.limit,fan.speed,"
+                 "utilization.gpu,clocks_event_reasons.hw_thermal_slowdown,"
+                 "clocks_event_reasons.sw_thermal_slowdown")
+HEALTH_FIELDS_OLD = HEALTH_FIELDS.replace("clocks_event_reasons", "clocks_throttle_reasons")
+HEALTH_FIELDS_OLDEST = "index,uuid,temperature.gpu,power.draw,fan.speed,utilization.gpu"
+_HEALTH_SECONDS = 5.0
+_HEALTH: dict = {"at": -1e9, "rows": None}
+_HEALTH_LOCK = threading.Lock()
+
+
+def _smi_num(text) -> Optional[float]:
+    try:
+        v = float(str(text).strip())
+    except (TypeError, ValueError):
+        return None            # "[N/A]", "[Not Supported]", ""
+    return v if v == v and v not in (float("inf"), float("-inf")) else None
+
+
+def parse_health(text: str, fields: str = HEALTH_FIELDS) -> list:
+    """Rows of the health query as dicts: index, uuid, temp_c, power_w,
+    power_limit_w, fan_percent, load_percent, hot_slowdown (True / False /
+    None when the driver does not say). A line that does not parse is
+    skipped."""
+    names = fields.split(",")
+    out = []
+    for line in str(text or "").splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) != len(names):
+            continue
+        row = dict(zip(names, parts))
+        try:
+            index = int(row["index"])
+        except (KeyError, ValueError):
+            continue
+        uuid = row.get("uuid", "")
+
+        def whole(key):
+            v = _smi_num(row.get(key))
+            return int(round(v)) if v is not None and v >= 0 else None
+
+        def watts(key):
+            v = _smi_num(row.get(key))
+            return round(v, 1) if v is not None and v >= 0 else None
+
+        slow = [row[k].lower() for k in row if k.endswith("thermal_slowdown")]
+        hot = None
+        if slow and all(s in ("active", "not active") for s in slow):
+            hot = any(s == "active" for s in slow)
+        out.append({"index": index, "uuid": uuid if uuid.startswith("GPU-") else "",
+                    "temp_c": whole("temperature.gpu"), "power_w": watts("power.draw"),
+                    "power_limit_w": watts("power.limit"), "fan_percent": whole("fan.speed"),
+                    "load_percent": whole("utilization.gpu"), "hot_slowdown": hot})
+    return out
+
+
+def _read_health() -> list:
+    """Every card's health readings, cached for a few seconds. [] when
+    nvidia-smi is missing or refuses every shape. Never raises."""
+    now = time.monotonic()
+    with _HEALTH_LOCK:
+        if _HEALTH["rows"] is not None and now - _HEALTH["at"] < _HEALTH_SECONDS:
+            return list(_HEALTH["rows"])
+    rows: list = []
+    if compute is not None:
+        for fields in (HEALTH_FIELDS, HEALTH_FIELDS_OLD, HEALTH_FIELDS_OLDEST):
+            try:
+                text = compute._run_smi([f"--query-gpu={fields}",
+                                         "--format=csv,noheader,nounits"])
+            except Exception:
+                text = None
+            if text is None:
+                continue
+            try:
+                rows = parse_health(text, fields)
+            except Exception:
+                rows = []
+            if rows:
+                break
+    with _HEALTH_LOCK:
+        _HEALTH.update(at=now, rows=rows)
+    return list(rows)
+
+
+def health_for(row: dict, readings: list) -> Optional[dict]:
+    """The readings for one card row of detect(): by its GPU-... id, else by
+    nvidia-smi's own index. None for a card nvidia-smi does not see (an AMD
+    or Intel card, or no nvidia-smi)."""
+    uuid = str(row.get("uuid") or "").lower()
+    if uuid:
+        for h in readings:
+            if h.get("uuid") and h["uuid"].lower() == uuid:
+                return h
+    idx = row.get("index")
+    if isinstance(idx, int):
+        for h in readings:
+            if h.get("index") == idx and (not uuid or not h.get("uuid")):
+                return h
+    return None
+
+
+def health_words(h: Optional[dict]) -> Optional[str]:
+    """One plain line for a card's health, the same on both apps: "64 °C,
+    using 120 of 250 watts, fan at 40%, 30% busy." - and, when the driver
+    says so, "It is slowing itself down because it is hot." None when
+    nothing was read."""
+    if not h:
+        return None
+    bits = []
+    if h.get("temp_c") is not None:
+        bits.append(f"{h['temp_c']} °C")
+    if h.get("power_w") is not None:
+        if h.get("power_limit_w"):
+            bits.append(f"using {h['power_w']:.0f} of {h['power_limit_w']:.0f} watts")
+        else:
+            bits.append(f"using {h['power_w']:.0f} watts")
+    if h.get("fan_percent") is not None:
+        bits.append(f"fan at {h['fan_percent']}%")
+    if h.get("load_percent") is not None:
+        bits.append(f"{h['load_percent']}% busy")
+    if not bits and h.get("hot_slowdown") is None:
+        return None
+    line = (", ".join(bits) + ".") if bits else ""
+    if h.get("hot_slowdown") is True:
+        line = (line + " " if line else "") + "It is slowing itself down because it is hot."
+    return line[:1].upper() + line[1:] if line else None
+
+
 def _user_env(name: str) -> Optional[str]:
     """A Windows user setting (HKCU\\Environment). None elsewhere."""
     if os.name != "nt":
@@ -985,8 +1127,10 @@ def _restart_pending(settings: list, user: dict, log: Optional[dict]) -> Optiona
 #   status() - GET /api/hardware
 # --------------------------------------------------------------------------
 
-def _card_row(row: dict, planned: list, ranked_first: Optional[P.Card]) -> dict:
+def _card_row(row: dict, planned: list, ranked_first: Optional[P.Card],
+              readings: Optional[list] = None) -> dict:
     card = next((c for c in planned if c.key == row["key"]), None)
+    health = health_for(row, readings or [])
     share, how = (P.desktop_share(card) if card else (None, ""))
     if card is not None and card.share_gib is not None:
         how = f"measured ({card.share_source})"
@@ -1008,6 +1152,11 @@ def _card_row(row: dict, planned: list, ranked_first: Optional[P.Card]) -> dict:
         "best_effort": P.best_effort(card) if card else None,
         "chat_first": ranked_first is not None and card is ranked_first,
         "words": _card_words(row, card),
+        # I12 (2026-09-26): this card's heat, power, fan and load right now,
+        # and the same in one line both apps show under the card.
+        "health": ({k: v for k, v in health.items() if k not in ("index", "uuid")}
+                   if health else None),
+        "health_words": health_words(health),
     }
 
 
@@ -1124,6 +1273,7 @@ def status() -> dict:
 
 def _status() -> dict:
     det = detect()
+    readings = _read_health()
     planned = det["planned"]
     fp = cards_fingerprint(planned)
     ch = _choice()
@@ -1173,7 +1323,7 @@ def _status() -> dict:
         "available": True,
         "found": det["found"],
         "sources": det["sources"],
-        "cards": [_card_row(r, planned, first) for r in det["cards"]],
+        "cards": [_card_row(r, planned, first, readings) for r in det["cards"]],
         "chat_card_why": ranked[1] if len(planned) > 1 else None,
         "gap_gb": P.GAP_GIB,
         "ollama_version": ver,
@@ -1616,6 +1766,8 @@ def _run_measure(measure: Callable[[str, str], dict]) -> dict:
 
 
 def _reset_for_tests() -> None:
+    with _HEALTH_LOCK:
+        _HEALTH.update(at=-1e9, rows=None)
     with _PENDING_LOCK:
         _PENDING.clear()
         _LAST_ANY.clear()

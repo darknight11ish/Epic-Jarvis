@@ -208,6 +208,10 @@
             </div>
             <div class="meter-track"><i id="gpu-bar" style="transform: scaleX(0)"></i></div>
           </div>
+
+          <!-- Every graphics card, one line each, when there are two or more
+               (I12): the meters above are the first card's. -->
+          <ul class="gpu-cards mono" id="gpu-cards" aria-label="Graphics cards" hidden></ul>
         </section>
 
         <!-- Pending autonomy gate -->
