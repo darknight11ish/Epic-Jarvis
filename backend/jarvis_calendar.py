@@ -268,19 +268,28 @@ class Plan:
         return asdict(self)
 
 
-def plan(days_ahead: int = 7, *, now: Optional[datetime] = None) -> Plan:
+def plan(days_ahead: int = 7, *, now: Optional[datetime] = None,
+         end: Optional[datetime] = None) -> Plan:
     """Work out the one request that would read the next `days_ahead` days.
 
     Opens no socket - the request is built from the configured address and
     the current time only. `now` is injectable for exact, reproducible test
     ranges; real callers leave it as None and get the real current time.
+    `end`, when given, is where the read stops instead of `days_ahead` whole
+    24-hour days - the morning briefing reads "today" from local midnight to
+    local midnight, which is 23 or 25 hours on the days the clocks change.
     """
     days_ahead = max(1, min(90, int(days_ahead)))
     moment = now or datetime.now(timezone.utc)
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     start = moment
-    end = moment + timedelta(days=days_ahead)
+    if end is not None:
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        end = min(max(end, start + timedelta(minutes=1)), start + timedelta(days=90))
+    else:
+        end = moment + timedelta(days=days_ahead)
     start_s, end_s = _ics_stamp(start), _ics_stamp(end)
 
     feed = _feed_url()

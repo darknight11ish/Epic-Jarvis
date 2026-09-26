@@ -8,7 +8,33 @@ name: CI
 on:
   push:
     branches: ["**"]
+    # A push that changes ONLY these files runs nothing: no test reads them
+    # (checked 2026-09-26 - the suites read docs/*.md, backend/README.md and
+    # CHANGELOG.md, so those are NOT listed). Every changed file must be on
+    # this list for a run to be skipped; one other file and everything runs.
+    paths-ignore:
+      - "CLAUDE.md"
+      - "README.md"
+  # Pull requests into main only (every other branch is already checked by
+  # its push). No path filter here, so a required check on a pull request
+  # always reports instead of waiting for a run that never starts.
   pull_request:
+    branches: [main]
+
+# A newer push to the same branch (or pull request) stops the older run: its
+# result would be out of date before it finished.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
+# Every action is pinned to a full commit, like the other workflows (a tag can
+# be moved to different code after it was checked). The tag each commit stood
+# for on 2026-09-26, read from that action's own tag list, is beside it. All
+# of them run on Node 24 (Node 20 is being retired on GitHub's runners).
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,15 +44,19 @@ jobs:
     # The product is a Windows app. Checking it anywhere else would type-check
     # the wrong half of every `#[cfg(windows)]`.
     runs-on: windows-latest
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: jarvis-desktop/src-tauri
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      # Pinned to a commit, this action cannot read the toolchain from its
+      # ref, so it is named here (as in desktop-release.yml).
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch
         with:
+          toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: jarvis-desktop/src-tauri
       - run: cargo fmt --check
@@ -35,12 +65,13 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: jarvis-desktop
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "22"
       # No bundler and no test framework: the pages are plain ES modules, so a
@@ -95,15 +126,16 @@ jobs:
     # and the memory ones (fastembed, sqlite-vec) are left out on purpose -
     # the suites use a hash embedder and must pass without them.
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           # The WHOLE history, not the last commit: test_patch_history.py
           # rebuilds backend/patch-history from `git log` and fails if the
           # committed copy differs. In a shallow clone it has nothing to
           # read, and with CI set it fails rather than skip.
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         with:
           python-version: "3.12"
       - run: python -m pip install --disable-pip-version-check numpy sherpa-onnx onnxruntime cryptography
@@ -121,9 +153,10 @@ jobs:
     # real ctypes calls - write, read back, move an old file in, delete - on
     # real Windows, under a throwaway name, never a real token.
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         with:
           python-version: "3.12"
       - name: Token store, live against Credential Manager
@@ -138,11 +171,12 @@ jobs:
     # apply-patches.ps1 is actually RUN, in 5.1, against a stand-in backend,
     # to prove it copies what it ships and never overwrites a settings file.
     runs-on: windows-latest
+    timeout-minutes: 20
     defaults:
       run:
         shell: powershell
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Parse every .ps1 with Windows PowerShell 5.1
         run: |
           "PowerShell $($PSVersionTable.PSVersion)"
@@ -396,11 +430,23 @@ jobs:
 
   audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: jarvis-desktop/src-tauri
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@cargo-deny
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-deny
       - run: cargo deny check licenses advisories
+      # THIRD-PARTY-NOTICES.txt must name every Rust library the Windows
+      # build ships, with its copyright lines (DEPS audit B-22). After adding
+      # or updating a crate: python3 tools/gen_notices.py, and commit the file.
+      - name: Third-party notices are up to date
+        run: |
+          cargo fetch --locked
+          python3 ../../tools/gen_notices.py --check

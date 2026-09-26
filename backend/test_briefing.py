@@ -592,6 +592,40 @@ def t_calendar_lines():
           and not any("email" in n for n in b["not_included"]))
 
 
+def t_the_calendar_day_on_clock_change_days():
+    if not use_tz("Europe/London"):
+        return check("SKIP clock-change days: this platform cannot set the time zone", True)
+    asked = []
+
+    def cal(q):
+        asked.append(q.body)
+        return xml
+    # Clocks go back: 25 October 2026 is 25 hours long.
+    now = local(2026, 10, 25, 7, 0)
+    xml = calendar_xml(("Morning thing", "", "20261025T090000Z"),
+                       ("Late thing", "", "20261025T233000Z"))
+    w = World(now, name="dst-back")
+    b = B.build(sched=w.s, now=now, deps=deps(w, cal=cal, tools=("calendar_read",)))
+    sec = next(s for s in b["sections"] if s["key"] == "calendar")
+    check("25-hour day: the read runs midnight to midnight, 25 hours",
+          asked and 'start="20261024T230000Z" end="20261026T000000Z"' in asked[-1],
+          asked[-1] if asked else asked)
+    check("... and 23:30 is today's", sec["items"] == ["09:00 Morning thing", "23:30 Late thing"],
+          sec["items"])
+    # Clocks go forward: 28 March 2027 is 23 hours long.
+    now = local(2027, 3, 28, 7, 0)
+    xml = calendar_xml(("Brunch", "", "20270328T110000Z"),
+                       ("Tomorrow flight", "", "20270328T233000Z"))
+    w = World(now, name="dst-fwd")
+    b = B.build(sched=w.s, now=now, deps=deps(w, cal=cal, tools=("calendar_read",)))
+    sec = next(s for s in b["sections"] if s["key"] == "calendar")
+    check("23-hour day: the read stops at tonight's midnight, 23 hours",
+          'start="20270328T000000Z" end="20270328T230000Z"' in asked[-1], asked[-1])
+    check("... and tomorrow's 00:30 is not shown as today's",
+          sec["items"] == ["12:00 Brunch"] and sec["summary"] == "1 event today.",
+          (sec["items"], sec["summary"]))
+
+
 def t_what_decides_whether_the_calendar_is_read():
     use_tz("Europe/London")
     now = local(2026, 9, 25, 7, 0)

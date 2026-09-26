@@ -6,6 +6,7 @@ appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df17
 appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27+00:00	The backend route, written against the real jarvis_hud.py
 approval-expiry.patch	approval-expiry/ba8799f.patch	ba8799f4c6df6486a22a93b38d079fa9a66ed520	2026-09-24T00:01:50+00:00	Approvals: a countdown on every card, rush and risk on the HUD, one row shape
 approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b644c3c2491cc	2026-09-15T17:29:34+00:00	Approval notifications you can act on, and fix the CRLF that broke all 20 patches
+asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37+00:00	Backend: repeats without a card, lights setting, "What asks first"
 auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23+00:00	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
 auto-learn.patch	auto-learn/6ad4a3c.patch	6ad4a3cfab9caeba68578c0f3bc1cb60b80542be	2026-09-24T21:28:10+00:00	Merge the rebuilt sensitive-topic check; "Remember:" no longer waits on the chat thread
 auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e0353	2026-09-24T20:51:14+00:00	Automatic learning: the audits' backend findings, and injected_sensitive on the chat route

@@ -1,110 +1,130 @@
-# Epic-Jarvis
+# Jarvis
 
-A personal assistant that runs on your own Windows PC, with an Android app to
-reach it from your phone. Built on OpenJarvis and heavily extended.
-Non-commercial, for one owner.
+A personal assistant that runs on **your own Windows PC**, with a desktop app
+and an Android app to talk to it. The AI model runs on the PC's own graphics
+card, so your emails, files and memories never go to a company's servers.
 
-## How it fits together
+Version 0.2.0 ([what changed](CHANGELOG.md)). Made by darknight11ish.
+Free and non-commercial: installed by hand, never sold, never on Google Play.
 
-- **Backend.** A Python server on the PC. It does the work, and uses a local
-  model through Ollama on the PC's own graphics card.
-- **Desktop app** (`jarvis-desktop/`). A Windows 11 app built with Tauri. It
-  has a quick-ask bar (`Alt+Space`), a full HUD window, a desktop widget, and a
-  tray menu.
-- **Phone app** (`jarvis-client/`). An Android app that connects to the PC over
-  your private network, either Tailscale or NordVPN Meshnet.
+## The five rules
+
+1. **Private things stay on the PC.** Email, files, passwords and memories
+   are only ever handled by the model on your own PC.
+2. **No public tunnel.** Jarvis is reachable only over your own networks,
+   never opened up to the internet.
+3. **Keys are kept like passwords.** An API key is never logged, and is sent
+   only to the one service it belongs to.
+4. **Nothing is approved for you.** Jarvis asks, you decide - and it will
+   not act while the phone's or desktop's link to the PC is out of date.
+5. **Non-commercial.** Built for one owner, installed by hand.
 
 ## What it can do
 
-- **Chat** with the local model. Answers stream in as they are written.
-  Cloud models are optional, and never see anything private.
-- **Ask before acting.** Anything risky waits for your decision, and you can
-  approve or deny it on the PC or the phone. Nothing is ever auto-approved, and
-  there is no "approve all".
-- **Remember things.** Jarvis saves facts about you from your own words -
-  never from emails, web pages or files. Every saved fact is listed in both
-  apps with a Forget button. Health, money, passwords and other people's
-  private details wait for your yes. Old facts are retired rather than
-  deleted, so Jarvis knows both what is true now and what was true before.
-- **Stay quiet.** Jarvis may speak up on its own only a few times a day.
-  Anything else waits in a daily digest.
-- **Show what it is doing.** An animated reactor face shows its state:
-  listening, thinking, speaking, or waiting on you. There are 20 face designs,
-  and the faces and colours match on the PC and the phone.
-- **Take voice**, by push-to-talk on the phone. It checks it is your voice
-  before anything is transcribed.
-- **Look how you like.** You choose the theme, the face, the colours and the
-  layout. Appearance settings on the phone never change the desktop's
-  configuration.
+**Talk and listen**
+- Chat, with answers that appear as they are written.
+- Voice: push-to-talk, or say "Hey Jarvis" (on the PC and the phone).
+  Spoken questions get short, spoken-style answers; say "stop" to interrupt.
+- A choice of manner: warm and brief, or plain.
 
-## Ground rules
+**Remember**
+- Learns facts about you from **your own words only** - never from emails,
+  web pages or files - and lists every one, with Forget and "Erase the
+  words". Health, money, passwords and other sensitive topics wait for your
+  yes.
+- Keeps your chat history on the PC, encrypted (you can turn it off).
 
-1. Email, files, credentials and memory stay on the local model.
-2. No public tunnel. It is reachable only over your private network, and needs
-   a pairing token.
-3. API keys are allowed. They are never logged, and each one is sent only to
-   the service it belongs to.
-4. Nothing is auto-approved, and acting is blocked while the connection to the
-   PC is stale.
-5. The phone app is installed by hand (sideloaded), never through the Play
-   Store.
+**Keep time**
+- Timers, alarms, reminders and to-do lists, by voice or typing.
+- A morning briefing: today's calendar, new emails, what is coming up.
+- "What did I miss?" - what went off while you were away.
+- **"Tell me when ..."** an email from someone arrives, or the washing
+  machine finishes. Urgent ones keep ringing on the phone until you look.
+- **Focus sessions** on the PC: a timer, Quiet, and a nudge when a
+  distraction comes to the front. Nothing about what you were doing is kept.
 
-## Getting started
+**Do things, with your OK**
+- Read your email, calendar and notes, and write notes to Obsidian, Logseq
+  or Joplin.
+- **Send email** - one approval card per email, showing exactly who it goes
+  to and every word of it.
+- Search the web, with five providers to choose from.
+- Control lights and devices through Home Assistant. A setting (off by
+  default) lets it switch lights, plugs and fans you name without asking;
+  locks, doors and alarms always ask.
+- **Stop everything**: Alt+Shift+X on the PC, or the button on the phone.
 
-- **Set it up:** [`docs/INSTALL.md`](docs/INSTALL.md).
-- **Install the phone app:** download the APK from the
-  [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest).
-  Open it on the phone to install it, or run `adb install -r <file>.apk` from a
-  PC. Each new build installs over the last one - except once: builds from
-  before 19 Sep 2026 were signed with a different key, and the phone refuses
-  to update those in place. [`keystore/README.md`](keystore/README.md) says
-  what to do (uninstall once, install, pair again).
-- **The backend** lives on the PC, outside this repo. [`backend/`](backend/)
-  holds the patches applied to it, with a test for each one, and the modules
-  it needs. One script puts all of it in place:
-  `scripts/apply-patches.ps1` - [`docs/INSTALL.md`](docs/INSTALL.md) has the
-  exact command.
+**Stay in your control**
+- Anything that matters waits for your approval, on the PC or the phone.
+  There is no "approve all". Risky approvals need Windows Hello on the PC or
+  the screen lock on the phone.
+- **"What asks first"**: a page in both apps listing every action and
+  whether it asks you, with switches to make it stricter.
+- **Your own networks only**: the apps connect to Jarvis only on this PC,
+  your home network, Tailscale or NordVPN Meshnet. Anything else is refused.
+- A live check of the whole setup: `python backend\selftest.py --preflight`.
 
-There is one phone app to install: `jarvis-client`, from the release above.
-`jarvis-android/` is an older app kept only as source to borrow from. It
-speaks a protocol the backend never implemented, so it cannot talk to Jarvis
-at all, and it no longer publishes a release: two similarly named downloads
-where one silently cannot work is a trap, and installing the wrong one reads
-as "my phone is broken" rather than "wrong app". CI still builds it, as a run
-artifact, so it does not rot.
+**Look how you like**
+- An animated face shows what Jarvis is doing (20 designs), with themes and
+  colours that match on the PC and the phone.
 
-## Documents
+## Install it
 
-| document | what it covers |
+Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
+
+1. **The backend on the PC** - the Python program that does the work, plus
+   the model in Ollama. One script, `scripts/apply-patches.ps1`, puts this
+   repository's changes into it (INSTALL.md part 1 has the exact command).
+2. **The desktop app** - for now you build it yourself on the PC
+   (INSTALL.md part 2). A ready-made installer will appear under
+   [Releases](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest)
+   once the updater's signing key is set up
+   ([`jarvis-desktop/README.md`](jarvis-desktop/README.md), "Turning on
+   updates").
+3. **The phone app** - download the `.apk` from the
+   [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest)
+   and open it on the phone, or run `adb install -r <file>.apk` from the PC.
+   Then pair it with the PC (INSTALL.md part 3).
+
+Install only `jarvis-client`, from that release. The `jarvis-android` folder
+is an older app kept for reference: it speaks a connection method the
+backend never had, so it cannot talk to Jarvis at all. It no longer
+publishes a download, so the two cannot be mixed up - installing the wrong
+one would look like "my phone is broken" rather than "wrong app".
+
+## Where things are
+
+| Folder | What is in it |
 |---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **Read first.** How the pieces fit, the rules, and the one permission model. |
-| [`docs/INSTALL.md`](docs/INSTALL.md) | Getting it running. |
-| [`docs/JARVIS-API.md`](docs/JARVIS-API.md) | The API the apps talk to. |
-| [`docs/MODEL-TOPOLOGY.md`](docs/MODEL-TOPOLOGY.md) | Which model runs on the graphics card, and why. |
-| [`backend/README.md`](backend/README.md) | The backend patches: what each one fixes. |
-| [`docs/UI-AUDIT-2026-09-23.md`](docs/UI-AUDIT-2026-09-23.md) | The latest review of the phone app's design. |
-
-## Building
-
-The phone app is built by GitHub Actions. There is no Android build tooling in
-this repo. A build is published only after an emulator has installed and
-started it. Any branch that changes the phone app publishes to the same
-`client-latest` release, so its notes start with the branch and commit the
-APK was built from - check them before installing.
-
-The desktop app builds on Windows with `npm install` and `npm run tauri build`
-in `jarvis-desktop/`. See its [README](jarvis-desktop/README.md) for details.
-
-## Layout
-
-| folder | what is in it |
-|---|---|
-| `jarvis-desktop/` | The desktop app. Rust is in `src-tauri/`, the windows are in `src/`. |
+| `jarvis-desktop/` | The Windows app (Tauri). Rust in `src-tauri/`, the windows in `src/`. |
 | `jarvis-client/` | The Android app. |
-| `backend/` | Patches for the backend, and their tests. |
-| `docs/` | Design, install, API and audit documents. |
-| `scripts/`, `tools/` | Build and patch scripts. |
-| `keystore/` | How the app's signing key is restored in CI from a secret. The key itself is never committed. |
-| `jarvis-android/` | The older phone app, kept as source only (see above). |
+| `backend/` | Changes (patches) for the backend on the PC, the modules it needs, and a test for each. The backend itself lives on the PC, not here. |
+| `docs/` | How it all works. [`docs/README.md`](docs/README.md) says which documents are current. |
+| `scripts/`, `tools/` | The patch script, and tools that generate test data and notices. |
+| `keystore/` | How the phone app's signing key is restored on GitHub's build machines. The key itself is never committed. |
+| `jarvis-android/` | The older phone app, kept as source only. |
+| `server/` | An old server, not used by Jarvis (its README says so). |
 
-Licence: [`LICENSE`](LICENSE) and [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
+The documents to read first: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+(how the pieces fit, and the rules), [`docs/INSTALL.md`](docs/INSTALL.md),
+[`docs/JARVIS-API.md`](docs/JARVIS-API.md) (what the apps ask the PC), and
+[`backend/README.md`](backend/README.md) (what each backend change fixes).
+
+## How it is built
+
+- **Phone app:** GitHub builds it. A build is published to `client-latest`
+  only after an Android emulator has installed and started that exact file,
+  and only from `main` or the working branch - the release notes say which.
+- **Desktop app:** built on Windows with `npm install` and `npm run tauri build`
+  in `jarvis-desktop/`; GitHub also builds the installer.
+- **Every change** runs the tests on GitHub: the backend suites, every
+  desktop page test, the Rust checks, and PowerShell 5.1 running the patch
+  script.
+
+## Licence
+
+Jarvis is MIT-licensed ([`LICENSE`](LICENSE)). It is built with parts made by
+other people that keep their own licences, including wake-word models that
+are for non-commercial use only: see
+[`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt), and in the phone app,
+FAQ -> About -> Third-party notices.

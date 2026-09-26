@@ -1190,17 +1190,29 @@ class Scheduler:
             elif do == "resume":
                 if state != "paused":
                     return 409, {"ok": False, "error": "That is not paused."}
+                over = False
                 if kind == "timer":
                     due = now + float(row["left_s"] or 0.0)
                 elif row["rule"]:
-                    due = next_run(json.loads(row["rule"]), now)
+                    rule = json.loads(row["rule"])
+                    due = next_run(rule, now)
+                    # A rule with an end date ("tell me when") whose end
+                    # passed while it was paused, or comes before its next
+                    # run: it is over, not resumed for one more look.
+                    over = rule.get("ends") is not None and due > float(rule["ends"])
                 else:
                     # A one-off whose time passed while it was paused goes
                     # off now, once, as missed - not silently dropped.
                     due = row["due"]
-                c.execute("UPDATE jobs SET state = 'active', due = ?, left_s = NULL, "
-                          "changed = ? WHERE id = ?", (due, now, jid))
-                said = "Resumed."
+                if over:
+                    c.execute("UPDATE jobs SET state = 'fired', due = NULL, left_s = NULL, "
+                              "fired_at = ?, fired_due = NULL, late = 0, changed = ? "
+                              "WHERE id = ?", (now, now, jid))
+                    said = "Its end date has passed, so it has ended."
+                else:
+                    c.execute("UPDATE jobs SET state = 'active', due = ?, left_s = NULL, "
+                              "changed = ? WHERE id = ?", (due, now, jid))
+                    said = "Resumed."
             elif do == "add_time":
                 if kind != "timer":
                     return 409, {"ok": False, "error": "Time can only be added to a timer."}
@@ -1309,7 +1321,10 @@ class Scheduler:
         out = []
         for r in rows:
             k = KINDS.get(r["kind"])
-            if k is not None and (not k.notify or not k.owner_listed):
+            if k is not None and (not k.notify or not k.owner_listed or k.silent):
+                # A silent kind going off is a look, not news ("tell me
+                # when" checking the inbox): it did not "go off" for the
+                # owner. A match has its own event and alert.
                 continue
             if r["kind"] == "todo" and r["fired_due"] is None:
                 continue       # a to-do ticked off, not one that went off
@@ -1433,6 +1448,7 @@ class Scheduler:
             for row in rows:
                 late = (now - float(row["due"])) > LATE_AFTER
                 ended = False
+                past_end = False
                 if row["rule"]:
                     try:
                         rule = json.loads(row["rule"])
@@ -1440,8 +1456,18 @@ class Scheduler:
                         # A rule with an end date ("tell me when",
                         # jarvis_tellme.py): this is its last run when the
                         # next one would come after the end.
-                        if rule.get("ends") is not None and nxt > float(rule["ends"]):
-                            nxt = None
+                        if rule.get("ends") is not None:
+                            ends = float(rule["ends"])
+                            if nxt > ends:
+                                nxt = None
+                            # Found only after its end date (the PC slept
+                            # through it, or it was resumed with its next
+                            # time past the end): it is finished, and does
+                            # NOT run one more time - a look now could tell
+                            # the owner about something that happened after
+                            # the date the card promised.
+                            past_end = (float(row["due"]) > ends
+                                        or now > ends + LATE_AFTER)
                     except Exception:
                         nxt = None
                     ended = nxt is None
@@ -1463,16 +1489,22 @@ class Scheduler:
                     c.execute("UPDATE jobs SET state = 'fired', fired_at = ?, fired_due = ?, "
                               "late = ?, changed = ? WHERE id = ?",
                               (now, row["due"], int(late), now, row["id"]))
-                went.append((row["id"], row["kind"], late, ended))
+                went.append((row["id"], row["kind"], late, ended, past_end))
             # Housekeeping: what went off a day ago, and done to-dos a week old.
             c.execute("DELETE FROM jobs WHERE state = 'fired' AND fired_at < ?",
                       (now - FIRED_KEEP,))
             c.execute("DELETE FROM jobs WHERE state = 'done' AND fired_at < ?",
                       (now - DONE_KEEP,))
             c.execute("DELETE FROM commands WHERE at < ?", (now - 30 * 86400,))
-        for jid, kind, late, ended in went:
+        for jid, kind, late, ended, past_end in went:
             self.fired += 1
             k = KINDS.get(kind)
+            if past_end:
+                # Over before it could run again: the list is told it
+                # changed, and nothing goes off.
+                _audit("schedule.ended", {"id": jid, "kind": kind, "past_end": True})
+                self._changed(jid, kind)
+                continue
             if k is not None and k.silent:
                 # A look, not news ("tell me when" checking the inbox every
                 # five minutes): no doorbell, and no audit line per look -

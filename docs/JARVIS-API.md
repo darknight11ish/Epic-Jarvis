@@ -3498,9 +3498,13 @@ If you say no: nothing is set up.
 ```
 
 Its notice (the lock screen's words) comes from `jarvis_gate`'s table like
-every other card: since 2026-09-26 "sets up a morning briefing or a \"tell
-me when\" that repeats on this PC; setting it up sends nothing anywhere, and
-deleting it is immediate" (`asks-first.patch`; before it, `briefing.patch`
+every other card: since 2026-09-26 "sets up a morning briefing, which reads
+your calendar and email if they are set up, or a \"tell me when\", which looks
+at your own mail server or Home Assistant each time; the card says exactly
+what each run reads, what it finds goes only to your own apps, and deleting
+it is immediate" (`asks-first.patch`; it said "setting it up sends nothing
+anywhere" for a few hours on 2026-09-26, which contradicted a "tell me when"
+card's own "How:" line; before it, `briefing.patch`
 said "... - a reminder, an alarm, a morning briefing or a standby schedule
 ...", and `schedule.patch` alone "sets up a reminder, an alarm or a standby
 schedule that repeats, on this PC ..."). A briefing's card replaces the "It runs on this
@@ -4110,7 +4114,7 @@ What it lists, in this order, each a section in the briefing's own shape:
 
 | Section (`key`) | What |
 |---|---|
-| Went off (`went_off`) | Every timer, alarm, reminder, briefing and to-do due that went off since then (a repeating one: its latest time), "10:00 call the bank", "(late - the PC was off or asleep)". |
+| Went off (`went_off`) | Every timer, alarm, reminder, briefing and to-do due that went off since then (a repeating one: its latest time), "10:00 call the bank", "(late - the PC was off or asleep)". Not a "tell me when" look (a `silent` kind: looking at the inbox is not news - fixed 2026-09-26), and not the standby schedule. |
 | Approvals (`approvals`) | How many cards wait, and how many of them came up since then - "Open Jarvis to answer." Never an Approve. **Cards that expired while you were away are not listed**: the gate's record of past cards is in the owner's `jarvis_gate.py`, which this repository does not hold, so nothing reads it. |
 | Email (`email`) | Exactly as the briefing (22.1): unread count and the newest five senders, only when email is set up, through the same gate action and the same "Show who new emails are from" setting; `read` says email was read when senders are shown. |
 | Coming up (`next`) | The next three things on the list, "18:00 today: water the plants". |
@@ -4915,6 +4919,15 @@ on the scheduler). A match publishes `schedule` `{"id", "kind": "tellme",
 "state": "matched", "urgent": bool}` - no words - and, when it tells once,
 ends the job (kept readable by id for a day, like a job that went off).
 Nothing else happens: no reply, no action, no card, nothing to the model.
+
+**Past its end date, it does not look again** (fixed 2026-09-26). If the
+scheduler finds a look due only more than 2 minutes after the end date (the
+PC slept through it, or was off), or a paused watch is resumed after its end
+date (or so near it that no look is left), the watch simply ends: no sign-in,
+no read, no match - a look then could tell the owner about an email that
+arrived after the date the card promised. Resume answers "Its end date has
+passed, so it has ended." A look is never listed by "What did I miss?"
+(22.9): only a match is news.
 
 The job's view then carries `"alert"` - "An email from Alex arrived.", "2
 emails from Alex arrived.", "The washing machine finished.",

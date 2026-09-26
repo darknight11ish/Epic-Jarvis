@@ -604,16 +604,16 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
       <canvas id="galaxy"></canvas>
 
       <div class="brain-search">
-        <input id="gsearch" type="text" placeholder="search the brain…" autocomplete="off">
-        <button class="ghost" id="g-reset">reset view</button>
-        <button class="ghost" id="g-spin">pause spin</button>
+        <input id="gsearch" type="text" placeholder="Search the brain…" autocomplete="off">
+        <button class="ghost" id="g-reset">Reset view</button>
+        <button class="ghost" id="g-spin">Pause spin</button>
       </div>
 
       <div class="trace-bar off" id="trace-bar">
         <span class="q" id="trace-q">—</span>
         <span class="tally hit" id="trace-hits">0 recalled</span>
         <span class="tally near" id="trace-near">0 near</span>
-        <button class="ghost" id="trace-clear">clear</button>
+        <button class="ghost" id="trace-clear">Clear</button>
       </div>
 
       <div class="trace-list off" id="trace-list"></div>
@@ -629,7 +629,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
         <div class="meta" id="insp-meta"></div>
         <div class="detail" id="insp-detail"></div>
         <div class="links">
-          <button class="ghost" id="insp-ask">ask jarvis about this</button>
+          <button class="ghost" id="insp-ask">Ask Jarvis about this</button>
         </div>
       </div>
     </section>
@@ -1797,7 +1797,7 @@ document.addEventListener("keyup", e => {
 $("gsearch").addEventListener("input", e => galaxy.search(e.target.value));
 $("g-reset").addEventListener("click", () => { galaxy.reset(); $("gsearch").value=""; galaxy.search(""); });
 $("g-spin").addEventListener("click", e => {
-  e.target.textContent = galaxy.toggleSpin() ? "pause spin" : "resume spin";
+  e.target.textContent = galaxy.toggleSpin() ? "Pause spin" : "Resume spin";
 });
 $("insp-close").addEventListener("click", () => { galaxy.reset(); });
 $("trace-clear").addEventListener("click", () => showTrace(null));

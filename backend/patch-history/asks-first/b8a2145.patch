@@ -91,10 +91,10 @@
 -    "schedule_repeat": ("yes", "local", "sets up something that repeats on this PC - a reminder, an alarm, a morning briefing or a standby schedule; setting it up sends nothing anywhere, and deleting it is immediate"),
 +    # (a morning briefing or a "tell me when" - since 2026-09-26 a plain
 +    # repeating reminder, alarm or standby schedule has no card, asks-first.
-+    # patch). Setting it up sends nothing, but each run then reads the owner's
-+    # OWN calendar, mail server or Home Assistant, through that read's own
-+    # gate action - so the words say so, and deleting it is immediate.
-+    "schedule_repeat": ("yes", "local", "sets up a morning briefing, which reads your calendar and email if they are set up, or a \"tell me when\", which looks at your own mail server or Home Assistant each time; the card says exactly what each run reads, what it finds goes only to your own apps, and deleting it is immediate"),
++    # patch): it acts only on this PC, and deleting it is immediate. Without
++    # this line the action would be read as "unknown", and the notice would
++    # say it might leave the machine.
++    "schedule_repeat": ("yes", "local", "sets up a morning briefing or a \"tell me when\" that repeats on this PC; setting it up sends nothing anywhere, and deleting it is immediate"),
 +    # asks-first.patch (jarvis_asks_first.py, the owner's decision of
 +    # 2026-09-26). Loosening one line of [autonomy.tiers] from the desktop's
 +    # "What asks first" page, from a short safe list: it changes one line of

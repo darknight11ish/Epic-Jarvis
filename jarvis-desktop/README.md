@@ -183,8 +183,9 @@ then, and that is true.
 What is already done: the app's updater (`src-tauri/src/update.rs`), and a
 GitHub Actions workflow (`.github/workflows/desktop-release.yml`) that builds
 the Windows installer on GitHub's own Windows machine every time desktop code
-changes on `main` or on a `claude/...` working branch (the branch Claude
-pushes to - the same rule as the phone's app). Without a key it builds an unsigned installer, keeps it
+changes on `main` or on the working branch Claude pushes to
+(`claude/admiring-ritchie-5urg5h` - the same rule as the phone's app;
+other branches no longer publish, since 2026-09-26). Without a key it builds an unsigned installer, keeps it
 with the run for 14 days, and publishes nothing. With a key it signs the
 installer and publishes it, with the small `latest.json` file the app reads,
 to the release called **`desktop-latest`**.
@@ -248,7 +249,7 @@ published...", or why not).
 without the public key, so it cannot check, or accept, any update. Open the
 repository's **Releases** (right-hand column on the main page) →
 **Jarvis Desktop - latest** → download
-`jarvis-desktop_0.1.<number>_x64-setup.exe` and run it. From then on,
+`jarvis-desktop_0.2.<number>_x64-setup.exe` and run it. From then on,
 Settings → Updates shows "Check now", and each new build appears there.
 Installing is still the Install button, pressed by you.
 
@@ -256,7 +257,9 @@ If the run fails at "Publish" with a 403: the repository's **Settings** →
 **Actions** → **General** → **Workflow permissions** → **Read and write
 permissions** → **Save**, then run it again.
 
-**How versions work:** each published build is `0.1.<run number>`, so every
+**How versions work:** Jarvis has one version number, in the `VERSION` file
+at the top of the repository (0.2.0), shared by this app, the phone app and
+the backend files. Each published build is `0.2.<run number>`, so every
 build is newer than the one before. The updater only ever offers a higher
 number than the one installed.
 

@@ -555,6 +555,16 @@ def t_the_patch():
     check("the module is shipped: apply-patches.ps1 and _where.SHIPPED",
           "'jarvis_asks_first.py'" in ps1[ps1.index("$SHIPPED = @("):]
           and "jarvis_asks_first.py" in _where.SHIPPED)
+    # The notice (a card's bottom line, and the lock screen's words) must not
+    # contradict the card above it: a "tell me when" signs in to the owner's
+    # mail server every few minutes, and a briefing reads the calendar.
+    line = next((l for l in patch.splitlines()
+                 if l.startswith('+    "schedule_repeat": (')), "")
+    check("schedule_repeat's notice says each run reads the owner's own servers, "
+          "and never 'sends nothing anywhere'",
+          "sends nothing anywhere" not in line and "calendar and email" in line
+          and "own mail server or Home Assistant" in line
+          and "deleting it is immediate" in line, line)
     check("the route answers GET and POST", '"/api/asks_first"' in patch
           and '"/api/asks_first/tier"' in patch and '"/api/asks_first/lights"' in patch)
 

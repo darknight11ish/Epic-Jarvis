@@ -141,9 +141,9 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
     <div class="chips" id="fps"></div>
     <span class="lbl" style="margin-left:10px">All speeds</span>
     <div class="sp" style="max-width:200px"><input type="range" id="allspeed" min="0" max="100" value="50" aria-label="All speeds"><span class="v" id="allspeed-v">1.00×</span></div>
-    <button class="chip" id="randomise">randomise</button>
-    <button class="chip" id="reset">reset all</button>
-    <button class="chip" id="save">save</button>
+    <button class="chip" id="randomise">Randomise</button>
+    <button class="chip" id="reset">Reset all</button>
+    <button class="chip" id="save">Save</button>
     <span class="mono" id="save-state" style="margin-left:10px;color:var(--dim)">—</span>
   </div>
   <div class="row" style="padding-top:0">
@@ -166,9 +166,9 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
     <span class="mono" id="solo-read">—</span>
     <span class="spacer"></span>
     <div class="sp" style="max-width:210px"><input type="range" id="solo-speed" min="0" max="100" value="50" aria-label="Speed"><span class="v" id="solo-speed-v">1.00×</span></div>
-    <button class="chip" id="solo-cycle" aria-pressed="false">cycle states</button>
-    <button class="chip" id="solo-use">use this face</button>
-    <button class="chip" id="solo-close">close</button>
+    <button class="chip" id="solo-cycle" aria-pressed="false">Cycle states</button>
+    <button class="chip" id="solo-use">Use this face</button>
+    <button class="chip" id="solo-close">Close</button>
   </div>
   <div class="solo-stage"><canvas id="solo-canvas"></canvas></div>
 </div>
@@ -5297,7 +5297,7 @@ function syncFaceChoice() {
   const b = $("solo-use");
   if (!b) return;
   const chosen = SOLO_ON_SCREEN && SOLO_ON_SCREEN === SOLO_FACE;
-  b.textContent = chosen ? "✓ in use" : "use this face";
+  b.textContent = chosen ? "✓ In use" : "Use this face";
   b.setAttribute("aria-pressed", String(Boolean(chosen)));
 }
 
