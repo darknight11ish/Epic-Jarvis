@@ -24,8 +24,8 @@ WHAT IS IN IT - only what Jarvis can already read on this PC
     JARVIS_CALENDAR_ICS_SECRET_URL - Google Calendar's - and `calendar_read`
     in [tools].enabled), read through
     jarvis_calendar.py's one read-only request, and only when the gate lets
-    that read run without a person (tier "auto" or "notify", the shipped
-    "auto"). Tier "ask": it is left out and the briefing says why - a
+    that read run without a person (tier "auto" or "notify"; the shipped
+    rebuilt/jarvis-framework.toml says "auto" since 2026-09-26). Tier "ask": it is left out and the briefing says why - a
     briefing at 7 in the morning does not raise a card to read a calendar.
   * Today's alarms, reminders and timers still to come, and the open to-do
     items (jarvis_schedule.py).

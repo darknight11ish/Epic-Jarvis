@@ -273,6 +273,13 @@ and video (owner chose: build four ideas now):
   until the owner settles before locking on, and ends with a report card.
   Snooze, "I'm doing research", pause and stop by voice. Nothing leaves the PC.
 
+Decided 2026-09-26, after checking a Gemini audit finding:
+- **The apps accept a server address on the owner's own networks only:**
+  this PC, the home network (private addresses and `.local` names),
+  Tailscale and NordVPN Meshnet. Anything on the open internet - including
+  a public tunnel such as ngrok or Cloudflare - is refused with a plain
+  message saying why, so the pairing key never travels through one.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

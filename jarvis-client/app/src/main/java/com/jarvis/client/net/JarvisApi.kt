@@ -885,6 +885,8 @@ class JarvisApi(
      * PC without it ([EmailSending.missing]).
      */
     suspend fun emailSending(): ApiResult<JsonObject> = probe(EmailSending.PATH)
+
+    /**
      * `GET /api/focus`: the focus session - its countdown, booleans and counts
      * and the last report card ([Focus.parse]). Never what was in front on
      * the PC: the PC does not send it. A read.

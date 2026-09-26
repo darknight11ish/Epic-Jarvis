@@ -16,7 +16,7 @@ is built here from the same settings the rest of Jarvis reads:
     the chat's tool loop uses (read the way jarvis_briefing.py reads it);
   * whether each tool asks first: its gate action (jarvis_gate's own table
     when it is there, else the same names backend/README.md lists) and that
-    action's tier in [autonomy.tiers]; the six tools jarvis_agent.py only
+    action's tier in [autonomy.tiers]; the tools jarvis_agent.py only
     ever runs on a person's yes (NEEDS_A_PERSON) say "every time" whatever
     the tier;
   * which accounts are set up: the same environment variables each module
@@ -130,7 +130,8 @@ _FALLBACK_ACTIONS = {
 
 #: Tools jarvis_agent.py runs only on a person's yes, if it cannot be read.
 _NEEDS_A_PERSON = frozenset({"github_search", "browser_control", "control_computer",
-                             "control_phone", "shell_exec", "home_control"})
+                             "control_phone", "shell_exec", "home_control",
+                             "send_email"})
 _NOTE_WRITES = frozenset({"append_logseq_journal", "append_obsidian_daily",
                           "create_joplin_note"})
 
