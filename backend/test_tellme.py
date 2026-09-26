@@ -509,10 +509,12 @@ def t_sender_matching():
 def t_the_real_imap_conversation():
     """_default_email_look, against a fake imaplib: the commands sent."""
     sent = []
+    contexts = []
 
     class FakeIMAP:
-        def __init__(self, host, port, timeout=None):
+        def __init__(self, host, port, timeout=None, ssl_context=None):
             sent.append(("CONNECT", host, port))
+            contexts.append(ssl_context)
             self._resp = {}
 
         def login(self, u, p):
@@ -549,6 +551,10 @@ def t_the_real_imap_conversation():
         later = TM._default_email_look(p, 41, 7)
     finally:
         imaplib.IMAP4_SSL = real
+    import ssl
+    check("every look checks the mail server's certificate and name",
+          len(contexts) == 2 and all(c is not None and c.verify_mode == ssl.CERT_REQUIRED
+                                     and c.check_hostname for c in contexts), contexts)
     check("the first look notes the mailbox's position and reads no message",
           first == {"uidvalidity": 7, "base": 41, "new": [], "fresh": True}, first)
     check("a later look reads the From line of mail above the base only",
@@ -566,8 +572,17 @@ def t_the_real_imap_conversation():
           sent)
     src = (HERE / "jarvis_tellme.py").read_text(encoding="utf-8")
     import re
-    calls = set(re.findall(r"\bconn\.(\w+)\(", src))
+    look_src = src[src.index("def _default_email_look"):]
+    look_src = look_src[:look_src.index("\ndef ", 10)]
+    calls = set(re.findall(r"\bconn\.(\w+)\(", look_src))
     uid_verbs = set(re.findall(r"\bconn\.uid\(\"(\w+)\"", src))
+    # The instant watch's own connection (class _Imap): the words it can send.
+    sent_words = set(re.findall(r'command\(b"(\w+)', src)) | set(
+        re.findall(r'sendall\((?:tag \+ )?b"(?: )?(\w+)', src))
+    check("the instant watch sends only LOGIN, CAPABILITY, EXAMINE, IDLE, DONE and LOGOUT - "
+          "never FETCH, SEARCH, STORE or anything that reads or changes a message",
+          sent_words <= {"LOGIN", "CAPABILITY", "EXAMINE", "IDLE", "DONE", "J", "LOGOUT"}
+          and {"LOGIN", "EXAMINE", "IDLE", "DONE"} <= sent_words, sent_words)
     check("the module's IMAP calls are only login, select, response, uid, close, logout - "
           "and uid only SEARCH and FETCH (no STORE, COPY, MOVE, EXPUNGE)",
           calls <= {"login", "select", "response", "uid", "close", "logout"}
@@ -748,6 +763,358 @@ def t_the_fast_path_sets_one_up():
           Q.answer_turn(body, sched=w.s, now=now) is None)
     agent = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
     check("the model has no tool for it", "jarvis_tellme" not in agent and "tellme" not in agent)
+
+
+# --------------------------------------------------------------------------
+#   "Tell me if Alex hasn't replied by Friday" (I69)
+# --------------------------------------------------------------------------
+
+def t_no_reply_by_a_time():
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    by = local(2026, 9, 25, 17, 0)
+    w = World(now, name="noreply")
+    j = TM.add({"source": "email", "sender": "Alex", "missing": True, "by": by, "urgent": True})
+    prompt = w.cards[-1][2]
+    check("ONE card: the time, told only if none arrives, quiet if one does",
+          len(w.cards) == 1 and "Watching for: an email from Alex, until Friday 25 September "
+          "at 17:00. If none has arrived by then, Jarvis tells you." in prompt
+          and "If one arrives first, the watch ends quietly." in prompt
+          and "marked as missed" in prompt, prompt)
+    v = w.s.job(j["id"])
+    check("its words in Coming up", v["text"] == "no email from Alex by Friday 25 September "
+                                                 "at 17:00", v["text"])
+    w.s.tick()
+    for t in range(300, 5 * 3600, 300):
+        w.clock.t = now + t
+        w.s.tick()
+    check("nothing is told before its time", w.matched() == [])
+    w.clock.t = by + 60
+    w.s.tick()
+    m = w.matched()
+    check("none by then: ONE event, urgent (on time)", len(m) == 1 and m[0]["urgent"] is True
+          and m[0]["id"] == j["id"], m)
+    v = w.s.job(j["id"])
+    check("the notice, from the owner's words", v.get("alert") == "No email from Alex arrived "
+                                                              "by Friday 25 September at 17:00.",
+          v.get("alert"))
+    check("it ended", v["state"] == "fired")
+
+    w2 = World(now, name="noreply2")
+    j2 = TM.add({"source": "email", "sender": "Alex", "missing": True, "by": by})
+    w2.s.tick()
+    w2.mail.add(9, "Alex <alex@example.test>")
+    w2.clock.t = now + 600
+    w2.s.tick()
+    v = w2.s.job(j2["id"])
+    check("Alex wrote first: no event at all, the watch ended quietly",
+          w2.matched() == [] and v["state"] == "fired", (w2.matched(), v))
+    check("... and its line says so", "Alex wrote at 12:10 today - nothing to tell you."
+          in v.get("note", ""), v.get("note"))
+    w2.clock.t = by + 60
+    check("... and it never tells later", w2.s.tick() == [] and w2.matched() == [])
+
+    w3 = World(now, name="noreply3")
+    j3 = TM.add({"source": "email", "sender": "Alex", "missing": True, "by": by,
+                 "urgent": True})
+    w3.s.tick()
+    w3.clock.t = by + 3 * 3600          # the PC was off at 17:00
+    w3.s.tick()
+    m = w3.matched()
+    check("the PC was off at its time: told when it is back, as missed - and it does NOT ring",
+          len(m) == 1 and m[0]["urgent"] is False, m)
+    check("its end date is a day after its time, not 30 days",
+          json.loads(w3.s._row(w3.s._db(), j3["id"])["rule"])["ends"] == by + TM.NO_REPLY_GRACE)
+    check("a time too soon is refused", _raises(lambda: TM.add(
+        {"source": "email", "sender": "Alex", "missing": True, "by": now + 60}), ValueError,
+        "too soon"))
+    check("without a time it is refused", _raises(lambda: TM.check_watch(
+        {"source": "email", "sender": "Alex", "missing": True}), ValueError, "by when"))
+
+
+def t_no_reply_on_the_fast_path():
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)          # a Friday
+    fri = local(2026, 10, 2, 17, 0)
+    cases = {
+        "tell me if Alex hasn't replied by Friday": ("Alex", fri),
+        "let me know if Dr Patel doesn't reply by tomorrow at 9am": (
+            "Dr Patel", local(2026, 9, 26, 9, 0)),
+        "tell me if there's no email from Sam within 2 days": ("Sam", now + 2 * 86400),
+        "tell me if I haven't heard back from Priya by tonight": (
+            "Priya", local(2026, 9, 25, 20, 0)),
+        "urgently tell me if Alex has not replied by 5pm": ("Alex", local(2026, 9, 25, 17, 0)),
+    }
+    for text, (who, by) in cases.items():
+        got = Q.match(text, now)
+        check(f"understood: {text!r}", got is not None and got.name == "tellme_noreply"
+              and got.f.get("who") == who and got.f.get("by") == by, got)
+    got = Q.match("urgently tell me if Alex has not replied by 5pm", now)
+    check("... urgently", got is not None and got.f.get("urgent") is True)
+    got = Q.match("tell me if anyone hasn't replied by Friday", now)
+    check("'anyone' asks who", got is not None and got.name == "tellme_help")
+    w = World(now, name="noreplyq")
+    w.s._spawn = lambda fn: None
+    res = Q.answer("tell me if Alex hasn't replied by Friday", sched=w.s, now=now)
+    j = w.s.listed()[-1]
+    check("set up: waiting for its card, and the answer names the time, not the person",
+          j["kind"] == "tellme" and j["state"] == "waiting" and "approval card" in res.reply
+          and "Friday 2 October at 17:00" in res.reply and "Alex" not in res.reply, res.reply)
+
+
+# --------------------------------------------------------------------------
+#   Instant email: the IDLE connection, against a fake mail server
+# --------------------------------------------------------------------------
+
+class FakeImapServer:
+    """A mail server on 127.0.0.1 that speaks just enough IMAP: a greeting,
+    LOGIN, CAPABILITY, EXAMINE, IDLE/DONE and LOGOUT. It records every
+    command word, can tell a listening client "new mail", and can drop."""
+
+    def __init__(self, idle=True, password="p" + "w" + "\"x\\y"):
+        import socket
+        import threading
+        self.idle, self.password = idle, password
+        self.words, self.logins, self.conns = [], [], []
+        self.exists = 3
+        self.srv = socket.socket()
+        self.srv.bind(("127.0.0.1", 0))
+        self.srv.listen(5)
+        self.port = self.srv.getsockname()[1]
+        self.stop = False
+        threading.Thread(target=self._accept, daemon=True).start()
+
+    def _accept(self):
+        import threading
+        while not self.stop:
+            try:
+                c, _ = self.srv.accept()
+            except OSError:
+                return
+            self.conns.append(c)
+            threading.Thread(target=self._serve, args=(c,), daemon=True).start()
+
+    def _serve(self, c):
+        f = c.makefile("rb")
+        try:
+            c.sendall(b"* OK fake ready\r\n")
+            idle_tag = None
+            for raw in f:
+                line = raw.rstrip(b"\r\n")
+                if line == b"DONE":
+                    self.words.append("DONE")
+                    c.sendall(idle_tag + b" OK IDLE done\r\n")
+                    idle_tag = None
+                    continue
+                tag, _, rest = line.partition(b" ")
+                word = rest.split(b" ", 1)[0].upper().decode()
+                self.words.append(word)
+                if word == "LOGIN":
+                    self.logins.append(rest[6:])
+                    c.sendall(tag + b" OK logged in\r\n")
+                elif word == "CAPABILITY":
+                    caps = b"IMAP4rev1 IDLE" if self.idle else b"IMAP4rev1"
+                    c.sendall(b"* CAPABILITY " + caps + b"\r\n" + tag + b" OK\r\n")
+                elif word == "EXAMINE":
+                    c.sendall(b"* %d EXISTS\r\n* OK [UIDVALIDITY 7]\r\n" % self.exists
+                              + tag + b" OK [READ-ONLY] done\r\n")
+                elif word == "IDLE":
+                    idle_tag = tag
+                    c.sendall(b"+ idling\r\n")
+                elif word == "LOGOUT":
+                    c.sendall(b"* BYE\r\n" + tag + b" OK\r\n")
+                    return
+                else:
+                    c.sendall(tag + b" BAD not here\r\n")
+        except OSError:
+            pass
+
+    def new_mail(self):
+        self.exists += 1
+        for c in list(self.conns):
+            try:
+                c.sendall(b"* %d EXISTS\r\n" % self.exists)
+            except OSError:
+                pass
+
+    def drop(self):
+        import socket
+        for c in list(self.conns):
+            try:
+                c.shutdown(socket.SHUT_RDWR)   # close() alone waits for the reader's file
+                c.close()
+            except OSError:
+                pass
+        self.conns.clear()
+
+    def close(self):
+        self.stop = True
+        self.drop()
+        self.srv.close()
+
+
+def _wait(cond, seconds=5.0):
+    end = time.time() + seconds
+    while time.time() < end:
+        if cond():
+            return True
+        time.sleep(0.02)
+    return cond()
+
+
+def _fast_idle():
+    saved = {k: getattr(TM, k) for k in ("IDLE_TICK", "IDLE_DEBOUNCE", "IDLE_LIST_SECONDS",
+                                         "IDLE_BACKOFF", "IDLE_TIMEOUT")}
+    TM.IDLE_TICK, TM.IDLE_DEBOUNCE, TM.IDLE_LIST_SECONDS = 0.05, 0.05, 0.1
+    TM.IDLE_BACKOFF, TM.IDLE_TIMEOUT = (0.2,), 2.0
+    return saved
+
+
+def t_instant_email_idle():
+    import socket
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    saved = _fast_idle()
+    srv = FakeImapServer()
+    secret = srv.password
+    os.environ["JARVIS_IMAP_PASSWORD"] = secret
+    standby = [False]
+    try:
+        w = World(now, name="idle")
+        TM.DEPS.idle_connect = lambda p: TM._open(
+            TM._Imap(socket.create_connection(("127.0.0.1", srv.port), timeout=2)), p)
+        TM.DEPS.standby = lambda: standby[0]
+        TM.IDLE.stop("off")
+        TM.IDLE.join()
+        j = TM.add(dict(EMAIL))
+        w.s.tick()                                   # the first look: it opens
+        check("after an email watch's first look, the instant connection opens",
+              _wait(lambda: TM.IDLE.status()["state"] == "on"), TM.IDLE.status())
+        check("its line under the row says it is instant",
+              TM.IDLE_WORDS["on"] in (w.s.job(j["id"]).get("note") or ""),
+              w.s.job(j["id"]).get("note"))
+        check("the connection itself went through the gate as email_read",
+              w.reads.count("email_read") >= 2, w.reads)
+        calls = len(w.mail.calls)
+        w.clock.t = now + 300
+        w.s.tick()
+        check("while connected, the regular look does not sign in again",
+              len(w.mail.calls) == calls, w.mail.calls)
+        w.mail.add(8, "Alex <alex@example.test>")
+        srv.new_mail()
+        check("new mail: the look runs at once (not 5 minutes later) and tells",
+              _wait(lambda: len(w.matched()) == 1), w.matched())
+        check("the password went only to the server's LOGIN, correctly quoted",
+              srv.logins and srv.logins[0].endswith(b'"pw\\"x\\\\y"'), srv.logins)
+        check("only LOGIN, CAPABILITY, EXAMINE, IDLE, DONE (and LOGOUT) were ever sent - "
+              "never FETCH, SEARCH or STORE",
+              set(srv.words) <= {"LOGIN", "CAPABILITY", "EXAMINE", "IDLE", "DONE", "LOGOUT"},
+              srv.words)
+        # the watch told once and ended: the connection closes by itself
+        check("no email watch left: it closes", _wait(lambda: TM.IDLE.status()["state"]
+                                                      == "off"), TM.IDLE.status())
+
+        j2 = TM.add({"source": "email", "sender": "Sam"})
+        w.s.tick()
+        check("a new watch opens it again", _wait(lambda: TM.IDLE.status()["state"] == "on"))
+        srv.drop()
+        check("the server drops it: said under Coming up, and it tries again",
+              _wait(lambda: TM.IDLE.status()["state"] == "dropped")
+              and "not connected" in (w.s.job(j2["id"]).get("note") or ""),
+              (TM.IDLE.status(), w.s.job(j2["id"]).get("note")))
+        calls = len(w.mail.calls)
+        w.clock.t = now + 900
+        w.s.tick()
+        check("while dropped, the regular look signs in as before",
+              len(w.mail.calls) == calls + 1 or TM.IDLE.healthy(), w.mail.calls)
+        check("it reconnects by itself after the back-off",
+              _wait(lambda: TM.IDLE.status()["state"] == "on"), TM.IDLE.status())
+
+        import jarvis_stop_all as SA
+        said = SA.stop_all("this PC")
+        check("Stop everything closes it, and says so", TM.STOPPED_WORDS in said["stopped"]
+              and _wait(lambda: not TM.IDLE.healthy())
+              and TM.IDLE.status()["state"] == "stopped", said)
+        w.clock.t = now + 1200
+        w.s.tick()
+        check("... its next regular look opens it again (the watch carries on)",
+              _wait(lambda: TM.IDLE.status()["state"] == "on"), TM.IDLE.status())
+        standby[0] = True
+        check("Standby closes it", _wait(lambda: TM.IDLE.status()["state"] == "standby"),
+              TM.IDLE.status())
+        w.clock.t = now + 1500
+        w.s.tick()
+        time.sleep(0.2)
+        check("... and it does not open while on standby",
+              TM.IDLE.status()["state"] == "standby" and not TM.IDLE.healthy())
+        standby[0] = False
+        w.s.act(j2["id"], "delete")
+        blob = json.dumps(_AUDIT) + json.dumps(w.events) + json.dumps(TM.IDLE.status())
+        check("the password is never in the audit, the events or the status",
+              secret not in blob and "pw" not in json.dumps(_AUDIT))
+    finally:
+        TM.IDLE.stop("off")
+        TM.IDLE.join()
+        srv.close()
+        for k, v in saved.items():
+            setattr(TM, k, v)
+        os.environ.pop("JARVIS_IMAP_PASSWORD", None)
+
+
+def t_instant_email_needs_idle():
+    import socket
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    saved = _fast_idle()
+    srv = FakeImapServer(idle=False)
+    try:
+        w = World(now, name="noidle")
+        TM.DEPS.idle_connect = lambda p: TM._open(
+            TM._Imap(socket.create_connection(("127.0.0.1", srv.port), timeout=2)), p)
+        TM.DEPS.standby = lambda: False
+        TM.IDLE.stop("off")
+        TM.IDLE.join()
+        TM.IDLE.retry_at = 0.0
+        TM.add(dict(EMAIL))
+        w.s.tick()
+        check("a server without IDLE: said plainly, and the looks carry on",
+              _wait(lambda: TM.IDLE.status()["state"] == "unsupported"), TM.IDLE.status())
+        n = len(srv.words)
+        w.clock.t = now + 300
+        w.s.tick()
+        time.sleep(0.2)
+        check("... and it is not asked again at every look", srv.words[n:].count("LOGIN") == 0,
+              srv.words[n:])
+        check("a look that is faked never opens a real socket for it",
+              TM.Deps(email_look=lambda *a: {}).idle_connect is None)
+    finally:
+        TM.IDLE.stop("off")
+        TM.IDLE.join()
+        TM.IDLE.retry_at = 0.0
+        srv.close()
+        for k, v in saved.items():
+            setattr(TM, k, v)
+
+
+def t_the_imap_lines():
+    import socket
+    a, b = socket.socketpair()
+    conn = TM._Imap(a)
+    b.sendall(b"* 5 EXISTS\r\n* 1 RECENT\r\n")
+    got = conn.wait(0.5)
+    check("lines are read whole", got == [b"* 5 EXISTS", b"* 1 RECENT"], got)
+    conn.exists = 5
+    check("EXISTS going up is new mail", conn.new_mail([b"* 6 EXISTS"]))
+    check("EXISTS going down (a deletion) is not", not conn.new_mail([b"* 4 EXISTS"]))
+    b.sendall(b"* 7 FETCH (BODY[] {5}\r\nhello)\r\n")
+    got = conn.wait(0.5)
+    check("a literal is read into its line", got and got[0].endswith(b"hello)"), got)
+    check("a sign-in with a line break is refused before anything is sent",
+          _raises(lambda: TM._quote("a\r\nb"), TM.IdleRefused))
+    b.close()
+    check("the server closing is an error, not a hang", _raises(lambda: conn.line(0.5),
+                                                               ConnectionError))
+    a.close()
 
 
 # --------------------------------------------------------------------------

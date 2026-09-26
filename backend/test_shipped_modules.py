@@ -81,6 +81,9 @@ THIRD_PARTY = {
 INDIRECT = {
     "tzdata": "the standard library's zoneinfo reads it on Windows, which has no "
               "time-zone data of its own (jarvis_calendar.py's event times)",
+    "markitdown": "imported only by the separate converter program jarvis_documents.py "
+                  "starts (its _CHILD code), never by the backend itself - so a crafted "
+                  "PDF is read in a process with no passwords in its environment",
 }
 
 # Files in backend/ that are NOT shipped, on purpose. Tools run from this

@@ -460,6 +460,15 @@ $PATCHES = @(
     # jarvis_asks_first.py copied in; without it the routes answer 503 and
     # every change in the home still asks.
     'asks-first.patch'
+    # "Folders Jarvis may look in" (the owner's decisions of 2026-09-26:
+    # asking about PDFs and Word files, and bringing in a Notion export):
+    # GET /api/folders, POST /api/folders/add (this PC only, one approval
+    # card), /remove (at once) and /import (a Notion export, this PC only),
+    # wrapped round the server's handler at start-up like stop-all. Its
+    # context is stop-all's banner lines, so it goes after it - last, like
+    # every new patch. Needs jarvis_documents.py copied in; without it the
+    # banner says so and the routes are not there.
+    'documents.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -561,6 +570,8 @@ $SHIPPED = @(
     'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
     # --- what asks first (asks-first.patch) ---
     'jarvis_asks_first.py'       # "What asks first": every action and whether it asks; stricter from either app, looser on the PC only; lights without a card
+    # --- folders Jarvis may look in (documents.patch) ---
+    'jarvis_documents.py'        # "Folders Jarvis may look in": the list, the my_files tool (find, search, read PDFs and Word files in parts), the Notion import
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -100,6 +100,32 @@ _MAX_HEADER_CHARS = 300
 _MAX_PREVIEW_CHARS = 400
 
 
+#: A mail server on this PC itself - a "bridge" program, such as Proton Mail
+#: Bridge, which usually signs its connection with a certificate it made
+#: itself. Its traffic never leaves the PC.
+_THIS_PC = ("127.0.0.1", "::1", "localhost")
+
+
+def tls_context(host: str):
+    """The encryption settings for a connection to the owner's mail server.
+
+    The server's certificate and name are CHECKED against Windows' trusted
+    authorities (found 2026-09-26, with the instant "tell me when"): given no
+    settings, Python's imaplib.IMAP4_SSL checks neither - it encrypts, but to
+    whoever answers - so something in the middle of the network could have
+    posed as the mail server and been handed the password. jarvis_email_send
+    has always checked (ssl.create_default_context()). A server on this PC
+    itself is the one exception, as before: its traffic never leaves the PC,
+    and a local bridge's home-made certificate would otherwise be refused."""
+    import ssl
+    if str(host or "").strip().strip("[]").lower() in _THIS_PC:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+    return ssl.create_default_context()
+
+
 def _configured() -> bool:
     return bool(os.environ.get(HOST_ENV, "").strip())
 
@@ -209,7 +235,8 @@ def _default_fetch_messages(p: Plan) -> list:
     # A timeout, like the other IMAP calls here: without one, a mail server
     # that stops answering held the chat answer for ever (2026-09-26 bug
     # audit, finding 6).
-    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_FETCH_TIMEOUT)
+    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_FETCH_TIMEOUT,
+                             ssl_context=tls_context(p.host))
     try:
         conn.login(user, password)
         conn.select(p.mailbox, readonly=True)
@@ -333,7 +360,8 @@ def _default_count(p: Plan) -> int:
 
     user = os.environ.get(USER_ENV, "")
     password = os.environ.get(PASSWORD_ENV, "")
-    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_COUNT_TIMEOUT)
+    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_COUNT_TIMEOUT,
+                             ssl_context=tls_context(p.host))
     try:
         conn.login(user, password)
         conn.select(p.mailbox, readonly=True)
@@ -410,7 +438,8 @@ def _default_senders(p: Plan, newest: int) -> tuple:
 
     user = os.environ.get(USER_ENV, "")
     password = os.environ.get(PASSWORD_ENV, "")
-    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_COUNT_TIMEOUT)
+    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=_COUNT_TIMEOUT,
+                             ssl_context=tls_context(p.host))
     try:
         conn.login(user, password)
         conn.select(p.mailbox, readonly=True)

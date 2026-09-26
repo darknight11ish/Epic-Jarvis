@@ -486,6 +486,51 @@ def _run_notes_search(args: dict, plan_obj, **_) -> dict:
     return NOTES.run(plan_obj, approved=True)
 
 
+#: "Folders Jarvis may look in" (jarvis_documents.py; the owner's decisions of
+#: 2026-09-26: asking about PDFs and Word files, and the Notion import). ONE
+#: tool for finding, searching and reading the owner's files, only in the
+#: folders the owner listed on the PC. A read of the owner's own files, so it
+#: is decided under file_read's action (read_files_readonly) - one line on
+#: "What asks first" for reading files, not two. Offered only while the list
+#: has a folder in it (offered_tools), so an owner with none pays no tokens.
+FILES_TOOL = "my_files"
+#: One answer reads at most this many parts of documents - a part is at most
+#: jarvis_documents.PART_TOKENS (1,200), and the 8 GB card's whole working
+#: memory is about 8,000 tokens (docs/feasibility-2026-09-26/hardware.md).
+FILES_PARTS_PER_TURN = 2
+FILES_PARTS_REFUSED = ("refused: this answer has already read {n} parts of documents, which "
+                       "is as much as fits in Jarvis's working memory at once. Nothing more "
+                       "was read. Answer from what you have, and tell the owner they can ask "
+                       "about the next part in a new message.")
+
+
+def _prepare_my_files(args: dict):
+    try:
+        import jarvis_documents as DOCS
+    except Exception as exc:
+        return None, f"Look in your folders (unavailable: {type(exc).__name__})"
+    return None, DOCS.describe(args)
+
+
+def _run_my_files(args: dict, plan_obj, **_) -> dict:
+    try:
+        import jarvis_documents as DOCS
+    except Exception as exc:
+        return {"ok": False, "error": f"looking in folders is not available here "
+                                      f"({type(exc).__name__})"}
+    return DOCS.run_tool(args)
+
+
+def _folders_listed() -> bool:
+    """Does "Folders Jarvis may look in" hold a folder? False when it cannot
+    be read - then the tool is not offered."""
+    try:
+        import jarvis_documents as DOCS
+        return bool(DOCS.folders())
+    except Exception:
+        return False
+
+
 def _prepare_home_read(args: dict):
     try:
         import jarvis_home as HOME
@@ -842,6 +887,24 @@ TOOLS: dict = {
         instead={"memory_search": "For facts Jarvis remembers about the owner, "
                                   "use memory_search.",
                  "web_search": "For the public web, use web_search."}),
+    # Folders Jarvis may look in (jarvis_documents.py): find, search, read one
+    # part. Decided under file_read's action - see FILES_TOOL.
+    "my_files": Tool(
+        "my_files",
+        "Find and read the owner's own files, only in folders they listed on the PC. "
+        "find: file names with these words. search: words inside notes and text files. "
+        "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV) "
+        "and its list of parts.",
+        {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["find", "search", "read"]},
+            "words": {"type": "string", "description": "a few words; for read, picks the part"},
+            "path": {"type": "string", "description": "read: the full path find gave"},
+            "part": {"type": "integer", "description": "read: which part, from its list"}},
+         "required": ["action"]},
+        _prepare_my_files, _run_my_files,
+        gate_lookup_name=lambda args: "file_read",
+        instead={"notes_search": "For Obsidian or Joplin notes, use notes_search.",
+                 "file_read": "For a PDF or Word file, use this, not file_read."}),
     "home_read": Tool(
         "home_read",
         "Read the state of named Home Assistant entities. Read-only.",
@@ -2546,6 +2609,7 @@ class _TurnWatch:
         self.noted = False           # OUTSIDE_NOTE added to the turn
         self.reasked = False         # a round was asked again (Ollama)
         self.cards = 0               # approval cards this turn (CARDS_PER_TURN)
+        self.file_parts = 0          # document parts read this turn (FILES_PARTS_PER_TURN)
         self.secrets: list = []      # KINDS of password or key read, never values
         req = request if isinstance(request, dict) else {}
         # The apps' provenance comes off `messages` before this loop gets
@@ -2865,6 +2929,10 @@ def offered_tools(enabled_tools) -> list:
         # Its own module says why: page after page of history does not fit
         # the main card's 16K. Without the second lane it is not offered.
         wanted.discard("browser_control")
+    if FILES_TOOL in wanted and not _folders_listed():
+        # Nothing to look in: not offered, so its description costs no tokens
+        # (jarvis_documents.py - the list is empty by default).
+        wanted.discard(FILES_TOOL)
     return [n for n in TOOLS if n in wanted]
 
 
@@ -3858,6 +3926,17 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
             return
+    if name == FILES_TOOL and str(args.get("action") or "").strip().lower() == "read":
+        # Refused before the gate: what fits in the model's working memory
+        # (FILES_PARTS_PER_TURN). The model is told plainly, once per call.
+        if watch.file_parts >= FILES_PARTS_PER_TURN:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "error": FILES_PARTS_REFUSED
+                                                    .format(n=watch.file_parts)})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
+        watch.file_parts += 1
     lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
     action_name = lookup_name
     try:

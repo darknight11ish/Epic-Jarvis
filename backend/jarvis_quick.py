@@ -1182,6 +1182,52 @@ _ANYONE = frozenset(("anyone", "anybody", "someone", "somebody", "everyone", "th
                      "her", "it", "people"))
 
 
+#: "Tell me if Alex hasn't replied by Friday" (jarvis_tellme.py, I69): the same
+#: From-line match, told when NO email has come by a time.
+_NO_REPLY = re.compile(
+    r"(?:(?P<who>.+?)\s+(?:hasn'?t|has\s+not|haven'?t|have\s+not|doesn'?t|does\s+not"
+    r"|didn'?t|did\s+not)\s+(?:replied|reply|written|write|emailed|email|e-mailed|answered"
+    r"|responded|respond|got\s+back\s+to\s+me|get\s+back\s+to\s+me)(?:\s+(?:to\s+me|back))?"
+    r"|there'?s\s+(?:still\s+)?no\s+(?:e-?mail|reply|answer)\s+from\s+(?P<who2>.+?)"
+    r"|(?:i\s+)?(?:don'?t|do\s+not|haven'?t|have\s+not)\s+(?:get|got|had|hear|heard)"
+    r"\s+(?:an?\s+)?(?:e-?mail\s+|reply\s+|back\s+)?from\s+(?P<who3>.+?))"
+    r"\s+(?P<by>(?:by|before|within|in)\s+.+)")
+
+
+def _deadline(s: str, now: float) -> Optional[float]:
+    """"by Friday" -> Friday at 17:00 (no clock said: the end of a working
+    day - the answer and the card say the time, so it can be put right);
+    "by tomorrow at 9" -> then; "within 2 days" / "in 3 hours" -> that long
+    from now. None when it is not a time to come."""
+    s = s.strip()
+    m = re.fullmatch(r"(?:within|in)\s+(?:the\s+next\s+)?(.+)", s)
+    if m:
+        dm = re.fullmatch(r"(\d{1,3}|a|an|one|two|three|four|five|six|seven|ten|fourteen)\s+"
+                          r"(days?|weeks?)", m.group(1))
+        if dm:
+            n = int(dm.group(1)) if dm.group(1).isdigit() else _NUMS.get(dm.group(1), 1)
+            return now + n * (7 * 86400 if dm.group(2).startswith("week") else 86400)
+        d = parse_duration(m.group(1))
+        return now + d if d else None
+    m = re.fullmatch(r"(?:by|before)\s+(?:the\s+end\s+of\s+)?(.+)", s)
+    if not m:
+        return None
+    when = parse_when(m.group(1), now, "reminder")
+    if when is None or when.at is None or when.rule is not None:
+        return None
+    at = when.at
+    if when.default_time:
+        lt = time.localtime(at)
+        if lt.tm_hour == DEFAULT_HOUR[None]:
+            import jarvis_schedule as S
+            at = S.wall_to_epoch(lt.tm_year, lt.tm_mon, lt.tm_mday, NO_REPLY_HOUR, 0)
+    return at if at > now else None
+
+
+#: "By Friday", with no time said: the end of the working day.
+NO_REPLY_HOUR = 17
+
+
 def _tellme(s: str, original, now: float) -> Optional[Intent]:
     m = _TELL.fullmatch(s)
     if not m:
@@ -1189,6 +1235,22 @@ def _tellme(s: str, original, now: float) -> Optional[Intent]:
     what = m.group("what").strip()
     urgent = bool(m.group("urg") or m.group("urg2"))
     once = not m.group("every")
+    # "tell me if Alex hasn't replied by Friday" (jarvis_tellme, I69) - before
+    # the tails below, so "by tonight" is its time, not "for today".
+    probe, probe_urgent = what, urgent
+    u = _URGENT_TAIL.search(probe)
+    if u:
+        probe, probe_urgent = probe[:u.start()].strip(), True
+    mm = _NO_REPLY.fullmatch(probe)
+    if mm:
+        who = (mm.group("who") or mm.group("who2") or mm.group("who3") or "").strip()
+        if who in _ANYONE or not who:
+            return Intent("tellme_help", {"why": "who"})
+        by = _deadline(mm.group("by"), now)
+        if by is None:
+            return Intent("tellme_help", {"why": "when"})
+        return Intent("tellme_noreply", {"urgent": probe_urgent, "once": True, "ends": None,
+                                         "who": _restore(original, who), "by": by})
     ends = None
     for _ in range(3):
         u = _URGENT_TAIL.search(what)
@@ -1253,6 +1315,9 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
     import jarvis_schedule as S
     n, f = intent.name, intent.f
     if n == "tellme_help":
+        if f.get("why") == "when":
+            return Result("Say by when, like \"tell me if Alex hasn't replied by Friday\" or "
+                          "\"... within 2 days\".", n)
         return Result("Say who the email is from, like \"tell me when an email from Alex "
                       "arrives\".", n)
     try:
@@ -1260,6 +1325,18 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
     except Exception:
         return Result(TELLME_MISSING, n)
     read = []
+    if n == "tellme_noreply":
+        watch = {"source": "email", "sender": f["who"], "urgent": f["urgent"],
+                 "missing": True, "by": f["by"]}
+        try:
+            j = TM.add(watch, source="quick", sched=sched)
+        except (ValueError, OverflowError) as exc:
+            return Result(S._sentence(exc), n)
+        urgent = " It is marked urgent: your phone rings until you look." if f["urgent"] else ""
+        return Result(f"That needs your yes on the approval card, which shows exactly what is "
+                      f"watched. Then Jarvis tells you if no email from them has arrived by "
+                      f"{S.long_date(f['by'])}, and says nothing if one does.{urgent}", n,
+                      [j["id"]])
     if n == "tellme_email":
         watch = {"source": "email", "sender": f["who"], "urgent": f["urgent"],
                  "once": f["once"]}

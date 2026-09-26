@@ -519,8 +519,11 @@ def t_the_loop_switches_named_lights_without_a_card():
 
 def t_the_patch():
     order = _stack.order()
-    check("asks-first.patch is last in apply-patches.ps1's list", order[-1] == "asks-first.patch",
-          order[-3:])
+    # Last when it was written; documents.patch (2026-09-26) comes after it.
+    check("asks-first.patch comes after focus.patch in apply-patches.ps1's list",
+          "asks-first.patch" in order
+          and order.index("focus.patch") < order.index("asks-first.patch"), order[-3:])
+    order = order[:order.index("asks-first.patch") + 1]
     patch = (HERE / "asks-first.patch").read_text(encoding="utf-8")
     check("it patches jarvis_hud.py and jarvis_gate.py and nothing else",
           sorted(l[6:].strip() for l in patch.splitlines() if l.startswith("+++ b/"))

@@ -91,6 +91,50 @@ sentence above. Urgent: the phone rings and vibrates until the owner looks
 (an alarm-style notification); the PC shows an alarm toast whose sound
 loops until it is dismissed.
 
+INSTANT EMAIL - ONE CONNECTION THE MAIL SERVER NUDGES (IMAP IDLE; 2026-09-26)
+The owner chose instant "tell me when" for email (CLAUDE.md, cutting-edge
+decision, "Documents & email"). While at least one email watch is on, this
+module keeps ONE connection open to the owner's mail server and asks it
+(IMAP IDLE) to say the moment new mail arrives. It sends only LOGIN,
+CAPABILITY, EXAMINE (read-only), IDLE, DONE and LOGOUT - never FETCH,
+SEARCH or anything that changes the mailbox. A nudge ("new mail") only makes
+the ordinary look above happen straight away, through the gate as
+email_read, like every look; so a match is told within seconds instead of
+within 5 minutes, and still only NOTIFIES.
+  * Owned by this kind, not a service of its own: it opens when an email
+    watch's look runs and no connection is up, and closes when the last
+    email watch ends, is paused or deleted, when Jarvis goes on STANDBY, and
+    when the owner presses STOP EVERYTHING (a stopper registered with
+    jarvis_stop_all). After Standby or Stop everything it opens again only
+    at a watch's next regular look - the watch the owner approved carries
+    on; the open connection is how it looks, not a second permission.
+  * Renewed every IDLE_RENEW_SECONDS (9 minutes): the IMAP standard (RFC
+    2177) lets a server drop an idle client after 29 minutes, and a home
+    router may drop a quiet connection sooner. Gmail's own limit was not
+    checked.
+  * On any drop it says so under Coming up and tries again after
+    IDLE_BACKOFF (30 seconds, then longer, up to 30 minutes). Meanwhile - and
+    whenever it is not connected - the looks every 5 minutes carry on
+    exactly as before. While it IS connected, the regular looks skip the
+    sign-in, except one full look every SAFETY_MINUTES (30) in case a nudge
+    was missed.
+  * The password is read fresh from the environment for each connection,
+    sent only to the owner's mail server, and never logged, kept or put in
+    an error: a failure is said in fixed words. The server's certificate is
+    checked (jarvis_email.tls_context).
+  * Written by hand on a socket: the owner's Python 3.12 imaplib has no IDLE
+    (it arrived in 3.14), and a hand loop needs no new package.
+
+"TELL ME IF ALEX HASN'T REPLIED BY FRIDAY" (I69, 2026-09-26)
+The same From-line match, the other way round: {"missing": true, "by": a
+time}. An email from Alex before then ends the watch quietly ("Alex wrote at
+14:02 - nothing to tell you."); none by then, and the owner is told "No
+email from Alex arrived by Friday 26 September at 17:00." It looks every 5
+minutes (or instantly) until the time and once after it, and waits up to a
+day after it for a PC that was off: then it tells, marked as missed, and it
+does not ring (the owner's rule for anything more than 10 minutes late).
+Same ONE card, same list, same notification - it only notifies.
+
 WHAT IS KEPT
 The watch (the owner's words: a sender's name or a device) is in the job's
 rule in schedule.db, like a reminder's words. This module's own table,
@@ -104,6 +148,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import threading
 import time
 from dataclasses import dataclass
@@ -141,6 +186,22 @@ MAX_EMAIL_WATCHES = 5
 #: New messages whose From line one look reads, at most.
 MAX_NEW = 50
 MAX_NAME = 60
+#: "Hasn't replied by ...": how long after its time it still tells, for a PC
+#: that was off then (as missed, and without ringing).
+NO_REPLY_GRACE = 86400.0
+#: The owner's rule (2026-09-26): more than 10 minutes late, nothing rings.
+LATE_RING = 600.0
+
+#: Instant email (IMAP IDLE) - see the module docstring.
+IDLE_RENEW_SECONDS = 9 * 60
+IDLE_TICK = 5.0
+IDLE_LIST_SECONDS = 30.0
+IDLE_TIMEOUT = 30.0
+IDLE_DEBOUNCE = 2.0
+SAFETY_MINUTES = 30
+IDLE_BACKOFF = (30, 60, 120, 300, 600, 1200, 1800)
+#: A server with no IDLE is asked again this much later.
+NO_IDLE_RETRY = 6 * 3600.0
 
 EMAIL_ACTION = "email_read"
 EMAIL_TOOL = "email_check"
@@ -223,6 +284,12 @@ class Deps:
     #: jarvis_home.run's `fetch`
     home_fetch: Optional[Callable] = None
     sched: Optional[Callable[[], object]] = None
+    #: (plan) -> an open IDLE connection (_Imap). None: the real one - but
+    #: only when email_look is the real one too: a test that fakes the
+    #: looks never opens a real socket for the instant watch.
+    idle_connect: Optional[Callable] = None
+    #: Is Jarvis on standby? (jarvis_power)
+    standby: Optional[Callable[[], bool]] = None
 
 
 DEPS = Deps()
@@ -306,6 +373,15 @@ def check_watch(w) -> dict:
         if sender.casefold() in ("anyone", "anybody", "someone", "somebody", "everyone"):
             raise ValueError("say who the email is from, like \"tell me when an email from "
                              "Alex arrives\"")
+        if w.get("missing") is True:
+            # "Tell me if Alex hasn't replied by Friday" (I69): told when NO
+            # email from them has arrived by `by`. Always once.
+            by = w.get("by")
+            if not isinstance(by, (int, float)) or isinstance(by, bool):
+                raise ValueError("say by when, like \"tell me if Alex hasn't replied by "
+                                 "Friday\"")
+            return {"source": "email", "sender": sender, "urgent": urgent, "once": True,
+                    "missing": True, "by": float(by)}
         return {"source": "email", "sender": sender, "urgent": urgent, "once": once}
     if source == "home":
         entity = str(w.get("entity") or "").strip().lower()
@@ -358,14 +434,25 @@ def check_rule(rule, now: float) -> dict:
     if not isinstance(start, (int, float)) or isinstance(start, bool):
         start = now
     ends = rule.get("ends")
-    if ends is None:
+    if watch.get("missing"):
+        # The watch runs to its time and one look after it - and waits up to
+        # NO_REPLY_GRACE for a PC that was off then, so the owner is still
+        # told (as missed) rather than never.
+        by = float(watch["by"])
+        if by <= now + n * 60:
+            raise ValueError("that time is too soon - Jarvis could not look even once before "
+                             "it")
+        if by > days_later(now, MAX_DAYS) + 60:
+            raise ValueError(f"a \"tell me when\" can run for up to {MAX_DAYS} days")
+        ends = by + NO_REPLY_GRACE
+    elif ends is None:
         ends = days_later(now, DEFAULT_DAYS)
     if not isinstance(ends, (int, float)) or isinstance(ends, bool):
         raise ValueError("the end is a time")
     ends = float(ends)
     if ends <= now + n * 60:
         raise ValueError("that ends before it could look even once")
-    if ends > days_later(now, MAX_DAYS) + 60:
+    if ends > days_later(now, MAX_DAYS) + 60 + (NO_REPLY_GRACE if watch.get("missing") else 0):
         raise ValueError(f"a \"tell me when\" can run for up to {MAX_DAYS} days")
     return {"every": "minutes", "minutes": n, "start": float(start), "ends": ends,
             "watch": watch}
@@ -383,6 +470,8 @@ def what_words(watch: dict) -> str:
     """The job's words, in Coming up: "an email from Alex arrives", "the
     washing machine finishes", "sensor.washer is idle"."""
     if watch.get("source") == "email":
+        if watch.get("missing"):
+            return f"no email from {watch['sender']} by {S.long_date(float(watch['by']))}"
         return f"an email from {watch['sender']} arrives"
     subject = f"the {watch['name']}" if watch.get("name") else watch.get("entity", "")
     return f"{subject} {watch.get('say') or 'changes'}"
@@ -391,6 +480,9 @@ def what_words(watch: dict) -> str:
 def alert_words(watch: dict, count: int = 1) -> str:
     """What the notification says - from the owner's words only."""
     if watch.get("source") == "email":
+        if watch.get("missing"):
+            return (f"No email from {watch['sender']} arrived by "
+                    f"{S.long_date(float(watch['by']))}.")
         if count > 1:
             return f"{count} emails from {watch['sender']} arrived."
         return f"An email from {watch['sender']} arrived."
@@ -434,12 +526,24 @@ def card(rule: dict, text: str, now: float) -> str:
                 else "(no mail server is set up)"
         except Exception:
             where = "your mail server"
+        if w.get("missing"):
+            lines += [
+                f"Watching for: an email from {w['sender']}, until "
+                f"{S.long_date(float(w['by']))}. If none has arrived by then, Jarvis tells "
+                "you. If one arrives first, the watch ends quietly.",
+            ]
+        else:
+            lines += [f"Watching for: an email from {w['sender']}."]
         lines += [
-            f"Watching for: an email from {w['sender']}.",
             f"How: {every}, Jarvis signs in to your mail server ({where}) and reads only "
             "the From line of mail that arrived since it last looked - with PEEK, so nothing "
             "is marked as read. No subject, no text and no attachment is read, and nothing "
             "goes to the AI model.",
+            "Instantly, too: while Jarvis is running and not on standby, it keeps one "
+            "connection open to that server, which tells it the moment new mail arrives "
+            "(IMAP IDLE); it then reads the From line straight away, the same way. That "
+            "connection closes when Jarvis goes on standby or you press Stop everything, "
+            f"and if it drops, the looks {every} carry on.",
             f"It matches when the sender's name or address has \"{w['sender']}\" in it, as "
             "whole words. Your words stay on this PC: they are not sent to the mail server.",
         ]
@@ -457,10 +561,15 @@ def card(rule: dict, text: str, now: float) -> str:
             f"GET {url}. Nothing in your home is changed.",
             "It matches when the state CHANGES to: " + ", ".join(w["states"]) + ".",
         ]
+    if w.get("missing"):
+        until = ("Until: " + _end_words(float(w["by"]), now) + ". If the PC is off then, it "
+                 "tells you when it is next on, up to a day later, marked as missed.")
+    else:
+        until = ("Until: " + _end_words(float(rule["ends"]), now)
+                 + (", or the first time it happens - whichever comes first." if w["once"]
+                    else ". It tells you every time it happens until then."))
     lines += [
-        "Until: " + _end_words(float(rule["ends"]), now)
-        + (", or the first time it happens - whichever comes first." if w["once"]
-           else ". It tells you every time it happens until then."),
+        until,
         ("Urgent: yes. Your phone rings and vibrates until you look, and the PC plays an "
          "alarm sound until you dismiss it." if w["urgent"] else
          "Urgent: no. An ordinary notification on both apps."),
@@ -633,9 +742,12 @@ def _default_email_look(p, base_uid: Optional[int], uidvalidity: Optional[int]) 
     the mailbox is; later looks read the From line of mail that arrived
     since. Credentials read fresh from the environment, never kept."""
     import imaplib
+    import jarvis_email as MAIL
     user = os.environ.get("JARVIS_IMAP_USER", "")
     password = os.environ.get("JARVIS_IMAP_PASSWORD", "")
-    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=20.0)
+    # The certificate is checked (jarvis_email.tls_context): imaplib alone
+    # would hand the password to whoever answered.
+    conn = imaplib.IMAP4_SSL(p.host, p.port, timeout=20.0, ssl_context=MAIL.tls_context(p.host))
     try:
         conn.login(user, password)
         typ, _ = conn.select(p.mailbox, readonly=True)
@@ -728,13 +840,46 @@ def _look_home(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
     return (1 if (raw in wanted and before not in wanted) else 0), ""
 
 
-def look(job_id: str, *, deps: Optional[Deps] = None, sched=None) -> dict:
+_JOB_LOCKS: dict = {}
+_JOB_LOCKS_LOCK = threading.Lock()
+#: When each email watch last really signed in to look (this process only:
+#: a restart forgets, and the next look is a full one).
+_FULL: dict = {}
+
+
+def _job_lock(job_id: str):
+    with _JOB_LOCKS_LOCK:
+        lk = _JOB_LOCKS.get(job_id)
+        if lk is None:
+            lk = _JOB_LOCKS[job_id] = threading.Lock()
+        return lk
+
+
+def look(job_id: str, *, deps: Optional[Deps] = None, sched=None, nudged: bool = False) -> dict:
     """One look for one watch (the scheduler calls this on its own thread
-    when the job goes off). Only ever notifies: a match rings the doorbell
-    with the kind and a flag, and - if it was to tell once - ends the job.
-    Nothing else happens, whatever was read."""
+    when the job goes off; the instant watch calls it when the mail server
+    says new mail arrived - `nudged`). Only ever notifies: a match rings the
+    doorbell with the kind and a flag, and - if it was to tell once - ends
+    the job. Nothing else happens, whatever was read. One look per watch at
+    a time: a nudge and the regular look never both tell."""
     deps = deps or DEPS
     sched = sched or _sched()
+    with _job_lock(job_id):
+        out = _look(job_id, deps, sched, nudged)
+    try:
+        if _is_email_watch(job_id, sched):
+            IDLE.ensure(deps, sched)
+    except Exception:
+        pass
+    return out
+
+
+def _is_email_watch(job_id: str, sched) -> bool:
+    row, _rule, watch = _watch_of(job_id, sched)
+    return row is not None and (watch or {}).get("source") == "email"
+
+
+def _look(job_id: str, deps: Deps, sched, nudged: bool) -> dict:
     row, rule, watch = _watch_of(job_id, sched)
     if row is None or row["state"] not in ("active", "fired"):
         return {"ok": False, "why": "not on the list"}
@@ -753,13 +898,26 @@ def look(job_id: str, *, deps: Optional[Deps] = None, sched=None) -> dict:
         watch = check_watch(watch)
     except ValueError:
         return {"ok": False, "why": "not a watch"}
+    missing = bool(watch.get("missing"))
+    due = missing and now >= float(watch["by"])
+    if (watch["source"] == "email" and not nudged and not due
+            and st.get("base_uid") is not None and IDLE.healthy()
+            and time.time() - _FULL.get(job_id, 0.0) < SAFETY_MINUTES * 60):
+        # The instant watch is connected and would have said if mail had
+        # arrived: no sign-in this time (a full look still happens every
+        # SAFETY_MINUTES).
+        return {"ok": True, "matched": 0, "instant": True}
     ready = readiness(watch["source"], deps)
     if ready:
         n, said = 0, "Could not look: " + ready[0].lower() + ready[1:]
     elif watch["source"] == "email":
         n, said = _look_email(job_id, watch, st, deps, sched)
+        if not said:
+            _FULL[job_id] = time.time()
     else:
         n, said = _look_home(job_id, watch, st, deps, sched)
+    if missing:
+        return _missing_after(job_id, watch, st, n, said, now, deps, sched)
     _save(job_id, sched, looked_at=now, look_said=said)
     if n <= 0:
         return {"ok": True, "matched": 0}
@@ -771,6 +929,33 @@ def look(job_id: str, *, deps: Optional[Deps] = None, sched=None) -> dict:
     deps.publish("schedule", {"id": job_id, "kind": KIND, "state": "matched",
                               "urgent": bool(watch["urgent"])})
     return {"ok": True, "matched": n}
+
+
+def _missing_after(job_id: str, watch: dict, st: dict, n: int, said: str, now: float,
+                   deps: Deps, sched) -> dict:
+    """"Hasn't replied by ...": an email from them ends it quietly; none by
+    the time, and the owner is told - only told."""
+    if n > 0:
+        # They wrote: nothing to tell. The line under the row says so.
+        _save(job_id, sched, looked_at=now,
+              look_said=f"{watch['sender']} wrote at {S.when_words(now, now)} - nothing to "
+                        f"tell you.")
+        _audit("tellme.replied", {"id": job_id})
+        sched.end(job_id)
+        return {"ok": True, "matched": 0, "replied": True}
+    _save(job_id, sched, looked_at=now, look_said=said)
+    if said or now < float(watch["by"]):
+        # Not yet its time - or it could not look, so it cannot say "no email":
+        # it tries again at the next look (up to NO_REPLY_GRACE after).
+        return {"ok": True, "matched": 0}
+    late = now - float(watch["by"]) > LATE_RING
+    _save(job_id, sched, matched_at=now, matched_n=int(st.get("matched_n") or 0) + 1,
+          alert_count=1)
+    _audit("tellme.matched", {"id": job_id, "source": "email", "missing": True, "late": late})
+    sched.end(job_id)
+    deps.publish("schedule", {"id": job_id, "kind": KIND, "state": "matched",
+                              "urgent": bool(watch["urgent"]) and not late})
+    return {"ok": True, "matched": 1, "late": late}
 
 
 def _on_fire(job_id: str) -> None:
@@ -790,9 +975,14 @@ def note(job_id: str) -> str:
     now = sched.now()
     parts = []
     if row["state"] in ("active", "paused", "waiting"):
-        ends = float(rule.get("ends") or now)
-        parts.append(f"Until {S.long_date(ends)}"
-                     + (", or the first time it happens." if watch.get("once", True) else "."))
+        if watch.get("missing"):
+            parts.append(f"Until {S.long_date(float(watch.get('by') or now))}: tells you if "
+                         f"no email from {watch.get('sender', '')} has arrived by then.")
+        else:
+            ends = float(rule.get("ends") or now)
+            parts.append(f"Until {S.long_date(ends)}"
+                         + (", or the first time it happens." if watch.get("once", True)
+                            else "."))
     if watch.get("urgent"):
         parts.append("Urgent: rings until you look.")
     if st.get("matched_at"):
@@ -801,6 +991,10 @@ def note(job_id: str) -> str:
         parts.append(st["look_said"])
     elif st.get("looked_at"):
         parts.append(f"Last looked at {S.clock(float(st['looked_at']))} - nothing yet.")
+    if watch.get("source") == "email" and row["state"] == "active":
+        line = IDLE.note_words()
+        if line:
+            parts.append(line)
     return " ".join(parts)
 
 
@@ -865,7 +1059,7 @@ def add_route(body: dict) -> tuple:
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "Need a JSON object."}
     watch = {k: body.get(k) for k in ("source", "sender", "entity", "say", "states", "name",
-                                      "urgent", "once")}
+                                      "urgent", "once", "missing", "by")}
     ends = None
     days = body.get("days")
     if days is not None:
@@ -945,6 +1139,461 @@ def find_device(name: str, say: str, *, deps: Optional[Deps] = None) -> dict:
 def _not_found(out: dict) -> bool:
     why = str(out.get("reason") or "")
     return "404" in why or "Not Found" in why
+
+
+# --------------------------------------------------------------------------
+#   Instant email: ONE open connection the mail server nudges (IMAP IDLE)
+# --------------------------------------------------------------------------
+
+class IdleRefused(Exception):
+    """A reason in fixed words - never the server's own, which can quote the
+    sign-in name."""
+
+
+class NoIdle(Exception):
+    """The mail server does not offer IDLE."""
+
+
+def _quote(s: str) -> bytes:
+    """An IMAP quoted string, the way imaplib writes one."""
+    if any(c in s for c in "\r\n\x00"):
+        raise IdleRefused("the sign-in name or password cannot be sent that way")
+    try:
+        b = s.encode("ascii")
+    except UnicodeEncodeError:
+        raise IdleRefused("the sign-in name or password has letters the instant watch "
+                          "cannot send") from None
+    return b'"' + b.replace(b"\\", b"\\\\").replace(b'"', b'\\"') + b'"'
+
+
+_EXISTS = re.compile(rb"^\*\s+(\d{1,9})\s+EXISTS\b", re.I)
+_RECENT = re.compile(rb"^\*\s+(\d{1,9})\s+RECENT\b", re.I)
+
+
+class _Imap:
+    """The instant watch's whole conversation, by hand, on one socket: LOGIN,
+    CAPABILITY, EXAMINE (read-only), IDLE, DONE, LOGOUT. Never FETCH, SEARCH,
+    STORE or anything that reads or changes a message - a nudge only makes
+    the ordinary look run, through the gate."""
+
+    def __init__(self, sock):
+        self.sock = sock
+        self.buf = b""
+        self.n = 0
+        self.idle_tag = None
+        self.exists = 0
+
+    def _fill(self, deadline: float) -> bool:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return False
+        self.sock.settimeout(left)
+        try:
+            chunk = self.sock.recv(65536)
+        except socket.timeout:
+            return False
+        if not chunk:
+            raise ConnectionError("the mail server closed the connection")
+        self.buf += chunk
+        if len(self.buf) > 1 << 20:
+            raise ConnectionError("the mail server sent too much at once")
+        return True
+
+    def line(self, timeout: float) -> Optional[bytes]:
+        """One response line, or None when nothing came within `timeout`."""
+        deadline = time.monotonic() + timeout
+        while b"\r\n" not in self.buf:
+            if not self._fill(deadline):
+                return None
+        line, _, self.buf = self.buf.partition(b"\r\n")
+        m = re.search(rb"\{(\d{1,7})\}$", line)
+        if m:
+            # A literal: its bytes follow, then the rest of the line.
+            need = int(m.group(1))
+            hard = time.monotonic() + IDLE_TIMEOUT
+            while len(self.buf) < need:
+                if not self._fill(hard):
+                    raise ConnectionError("the mail server stopped half way")
+            line += b" " + self.buf[:need]
+            self.buf = self.buf[need:]
+            rest = self.line(IDLE_TIMEOUT)
+            if rest is None:
+                raise ConnectionError("the mail server stopped half way")
+            line += rest
+        return line
+
+    def command(self, words: bytes, what: str, timeout: float = IDLE_TIMEOUT) -> list:
+        self.n += 1
+        tag = b"J%d" % self.n
+        self.sock.sendall(tag + b" " + words + b"\r\n")
+        seen = []
+        while True:
+            got = self.line(timeout)
+            if got is None:
+                raise ConnectionError(f"the mail server did not answer ({what})")
+            if got.startswith(tag + b" "):
+                if got[len(tag) + 1:].split(b" ", 1)[0].upper() != b"OK":
+                    raise IdleRefused(what)
+                return seen
+            seen.append(got)
+
+    def greet(self) -> None:
+        got = self.line(IDLE_TIMEOUT)
+        if got is None or not got.upper().startswith((b"* OK", b"* PREAUTH")):
+            raise ConnectionError("the mail server did not say hello")
+
+    def login(self, user: str, password: str) -> None:
+        try:
+            self.command(b"LOGIN " + _quote(user) + b" " + _quote(password), "sign-in")
+        except IdleRefused as exc:
+            if str(exc) == "sign-in":
+                raise IdleRefused("the mail server refused the sign-in") from None
+            raise
+
+    def capable(self) -> bool:
+        seen = self.command(b"CAPABILITY", "CAPABILITY")
+        words = b" ".join(seen).upper().replace(b"]", b" ").split()
+        return b"IDLE" in words
+
+    def examine(self, mailbox: str) -> None:
+        seen = self.command(b"EXAMINE " + _quote(mailbox), "open the mailbox")
+        for got in seen:
+            m = _EXISTS.match(got)
+            if m:
+                self.exists = int(m.group(1))
+
+    def idle(self) -> None:
+        self.n += 1
+        tag = b"J%d" % self.n
+        self.sock.sendall(tag + b" IDLE\r\n")
+        while True:
+            got = self.line(IDLE_TIMEOUT)
+            if got is None:
+                raise ConnectionError("the mail server did not start listening")
+            if got.startswith(b"+"):
+                self.idle_tag = tag
+                return
+            if got.startswith(tag + b" "):
+                raise NoIdle()
+
+    def wait(self, timeout: float) -> list:
+        """The lines the server sent while listening, waiting at most
+        `timeout` for the first."""
+        out = []
+        got = self.line(timeout)
+        while got is not None:
+            out.append(got)
+            got = self.line(0.05)
+        return out
+
+    def done(self) -> list:
+        """Stop listening. The lines that came meanwhile."""
+        tag, self.idle_tag = self.idle_tag, None
+        self.sock.sendall(b"DONE\r\n")
+        seen = []
+        while True:
+            got = self.line(IDLE_TIMEOUT)
+            if got is None:
+                raise ConnectionError("the mail server did not answer (DONE)")
+            if tag is not None and got.startswith(tag + b" "):
+                return seen
+            seen.append(got)
+
+    def new_mail(self, lines: list) -> bool:
+        """Did these lines say new mail arrived? EXISTS going UP, or RECENT."""
+        news = False
+        for got in lines:
+            m = _EXISTS.match(got)
+            if m:
+                n = int(m.group(1))
+                if n > self.exists:
+                    news = True
+                self.exists = n
+            elif _RECENT.match(got) and int(_RECENT.match(got).group(1)) > 0:
+                news = True
+        return news
+
+    def close(self) -> None:
+        try:
+            if self.idle_tag is not None:
+                self.sock.sendall(b"DONE\r\n")
+            self.n += 1
+            self.sock.sendall(b"J%d LOGOUT\r\n" % self.n)
+        except Exception:
+            pass
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        try:
+            self.sock.close()
+        except Exception:
+            pass
+
+
+def _default_idle_connect(p) -> _Imap:
+    """Open, sign in, check IDLE is offered, open the mailbox read-only. The
+    password is read fresh and handed to the socket only."""
+    import jarvis_email as MAIL
+    raw = socket.create_connection((p.host, p.port), timeout=IDLE_TIMEOUT)
+    try:
+        sock = MAIL.tls_context(p.host).wrap_socket(raw, server_hostname=p.host)
+    except Exception:
+        raw.close()
+        raise
+    return _open(_Imap(sock), p)
+
+
+def _open(conn: _Imap, p) -> _Imap:
+    try:
+        conn.greet()
+        conn.login(os.environ.get("JARVIS_IMAP_USER", ""),
+                   os.environ.get("JARVIS_IMAP_PASSWORD", ""))
+        if not conn.capable():
+            raise NoIdle()
+        conn.examine(p.mailbox)
+        return conn
+    except BaseException:
+        conn.close()
+        raise
+
+
+def _default_standby() -> bool:
+    try:
+        import jarvis_power
+        return str(jarvis_power.current()) == "standby"
+    except Exception:
+        return False
+
+
+#: What the line under an email watch says about the instant watch.
+IDLE_WORDS = {
+    "on": "Instant: your mail server tells Jarvis the moment mail arrives.",
+    "standby": "Jarvis is on standby, so it looks every few minutes, not instantly.",
+    "stopped": "Stop everything closed the instant connection; it opens again at the next "
+               "look.",
+    "unsupported": "Your mail server does not offer instant notice, so Jarvis looks every "
+                   "few minutes.",
+}
+STOPPED_WORDS = ("The instant email watch closed its connection to your mail server; your "
+                 "\"tell me when\"s still look every few minutes.")
+
+
+def _email_jobs(sched) -> list:
+    """The ids of the email watches that are on (not paused, not waiting)."""
+    out = []
+    try:
+        for j in sched.listed():
+            if j.get("kind") != KIND or j.get("state") != "active":
+                continue
+            _r, _rule, w = _watch_of(j["id"], sched)
+            if (w or {}).get("source") == "email":
+                out.append(j["id"])
+    except Exception:
+        return []
+    return out
+
+
+class _IdleWatch:
+    """The one instant connection (module docstring, INSTANT EMAIL)."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.thread = None
+        self.ev = None
+        self.conn = None
+        self.state = "off"
+        self.why = ""
+        self.heard = 0.0
+        self.retry_at = 0.0
+
+    # -- what the rest of the module asks ------------------------------------
+    def healthy(self) -> bool:
+        with self.lock:
+            return (self.state == "on" and self.thread is not None and self.thread.is_alive()
+                    and time.time() - self.heard < IDLE_RENEW_SECONDS + 120)
+
+    def status(self) -> dict:
+        with self.lock:
+            return {"state": self.state, "why": self.why, "heard": self.heard}
+
+    def note_words(self) -> str:
+        st = self.status()
+        if st["state"] == "dropped":
+            return (f"Instant watch not connected ({st['why']}) - looking every few minutes "
+                    "instead.")
+        return IDLE_WORDS.get(st["state"], "")
+
+    def _set(self, ev, state: str, why: str = "") -> None:
+        with self.lock:
+            if ev is not self.ev and ev is not None:
+                return      # an older connection's thread: it is not the one shown
+            self.state, self.why = state, why
+
+    # -- starting and stopping -----------------------------------------------
+    def ensure(self, deps: Deps, sched) -> None:
+        """Open the connection if an email watch is on and nothing stops it.
+        Called after every email look, so it is also how it comes back after
+        Standby, Stop everything or a server with no IDLE."""
+        if deps.idle_connect is None and deps.email_look is not None:
+            return      # the looks are faked (a test): never a real socket
+        standby = deps.standby or _default_standby
+        with self.lock:
+            if self.thread is not None and self.thread.is_alive():
+                return
+            if time.time() < self.retry_at:
+                return
+        if standby():
+            self._set(None, "standby")
+            return
+        if not _email_jobs(sched) or readiness("email", deps):
+            self._set(None, "off")
+            return
+        ev = threading.Event()
+        t = threading.Thread(target=self._run, args=(deps, sched, ev),
+                             name="jarvis-tellme-idle", daemon=True)
+        with self.lock:
+            if self.thread is not None and self.thread.is_alive():
+                return
+            self.ev, self.thread = ev, t
+            self.state, self.why = "connecting", ""
+        t.start()
+
+    def stop(self, state: str = "stopped", why: str = "") -> Optional[str]:
+        """Close it now. The sentence Stop everything says, or None when
+        nothing was open."""
+        with self.lock:
+            running = self.thread is not None and self.thread.is_alive()
+            ev, conn = self.ev, self.conn
+            if ev is not None:
+                ev.set()
+            self.conn = None
+            if running:
+                self.state, self.why = state, why
+        if conn is not None:
+            conn.close()
+        return STOPPED_WORDS if running else None
+
+    def join(self, timeout: float = 5.0) -> None:
+        t = self.thread
+        if t is not None:
+            t.join(timeout)
+
+    # -- the connection ----------------------------------------------------------
+    def _run(self, deps: Deps, sched, ev) -> None:
+        import jarvis_email as MAIL
+        standby = deps.standby or _default_standby
+        fails = 0
+        while not ev.is_set():
+            if standby():
+                return self._set(ev, "standby")
+            if not _email_jobs(sched) or readiness("email", deps):
+                return self._set(ev, "off")
+            p = MAIL.plan(1, unread_only=False)
+            text = (f"Jarvis would like to keep one connection open to your mail server "
+                    f"({p.host}:{p.port}, mailbox \"{p.mailbox}\") so it hears the moment new "
+                    "mail arrives, for a \"tell me when\". It reads nothing over it: each new "
+                    "email's From line is then read the usual way, with PEEK.")
+            if not _ok_to_read(EMAIL_ACTION, "keep one connection open for new mail", text,
+                               deps):
+                return self._set(ev, "off")
+            self._set(ev, "connecting")
+            conn = None
+            try:
+                conn = (deps.idle_connect or _default_idle_connect)(p)
+                with self.lock:
+                    if ev.is_set():
+                        conn.close()
+                        return None
+                    self.conn = conn
+                conn.idle()
+                with self.lock:
+                    self.heard = time.time()
+                self._set(ev, "on")
+                fails = 0
+                self._listen(conn, deps, sched, ev, standby)
+                if not ev.is_set():
+                    return None     # it ended by itself: no watch left, or standby
+            except NoIdle:
+                with self.lock:
+                    self.retry_at = time.time() + NO_IDLE_RETRY
+                self._set(ev, "unsupported")
+                return None
+            except IdleRefused as exc:
+                why = str(exc)
+            except Exception as exc:
+                why = f"the connection dropped ({type(exc).__name__})"
+            else:
+                why = ""
+            finally:
+                if conn is not None:
+                    with self.lock:
+                        if self.conn is conn:
+                            self.conn = None
+                    conn.close()
+            if ev.is_set():
+                return None
+            fails += 1
+            self._set(ev, "dropped", why or "the connection dropped")
+            _audit("tellme.instant.dropped", {"fails": fails})
+            if ev.wait(IDLE_BACKOFF[min(fails, len(IDLE_BACKOFF)) - 1]):
+                return None
+        return None
+
+    def _listen(self, conn: _Imap, deps: Deps, sched, ev, standby) -> None:
+        renewed = listed = time.monotonic()
+        nudge_at = None
+        while not ev.is_set():
+            got = conn.wait(IDLE_TICK)
+            if got:
+                with self.lock:
+                    self.heard = time.time()
+            if conn.new_mail(got) and nudge_at is None:
+                nudge_at = time.monotonic()
+            if ev.is_set():
+                return
+            if standby():
+                self._set(ev, "standby")
+                return
+            if time.monotonic() - listed >= IDLE_LIST_SECONDS:
+                listed = time.monotonic()
+                if not _email_jobs(sched):
+                    self._set(ev, "off")
+                    return
+            if nudge_at is not None and time.monotonic() - nudge_at >= IDLE_DEBOUNCE:
+                conn.done()
+                nudge_at = None
+                self._nudge(deps, sched)
+                conn.idle()
+                renewed = time.monotonic()
+                with self.lock:
+                    self.heard = time.time()
+            elif time.monotonic() - renewed >= IDLE_RENEW_SECONDS:
+                if conn.new_mail(conn.done()):
+                    self._nudge(deps, sched)
+                conn.idle()
+                renewed = time.monotonic()
+                with self.lock:
+                    self.heard = time.time()
+
+    @staticmethod
+    def _nudge(deps: Deps, sched) -> None:
+        """New mail: every email watch looks now, the ordinary way."""
+        for jid in _email_jobs(sched):
+            try:
+                with _job_lock(jid):
+                    _look(jid, deps, sched, True)
+            except Exception:
+                pass
+
+
+IDLE = _IdleWatch()
+
+try:
+    import jarvis_stop_all as _STOP_ALL
+    _STOP_ALL.register("instant_email", lambda: IDLE.stop("stopped"))
+except Exception:  # pragma: no cover - shipped beside it on the PC
+    pass
 
 
 S.register_kind(KIND, NOUN, LOCK_SCREEN, has_text=True, owner_listed=True,

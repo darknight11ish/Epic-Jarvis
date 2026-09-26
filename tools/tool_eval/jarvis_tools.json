@@ -349,6 +349,41 @@
  {
   "type": "function",
   "function": {
+   "name": "my_files",
+   "description": "Find and read the owner's own files, only in folders they listed on the PC. find: file names with these words. search: words inside notes and text files. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV) and its list of parts. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "find",
+       "search",
+       "read"
+      ]
+     },
+     "words": {
+      "type": "string",
+      "description": "a few words; for read, picks the part"
+     },
+     "path": {
+      "type": "string",
+      "description": "read: the full path find gave"
+     },
+     "part": {
+      "type": "integer",
+      "description": "read: which part, from its list"
+     }
+    },
+    "required": [
+     "action"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "home_read",
    "description": "Read the state of named Home Assistant entities. Read-only. To change something, use home_control.",
    "parameters": {
