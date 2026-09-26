@@ -7,6 +7,7 @@ appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f
 approval-expiry.patch	approval-expiry/ba8799f.patch	ba8799f4c6df6486a22a93b38d079fa9a66ed520	2026-09-24T00:01:50+00:00	Approvals: a countdown on every card, rush and risk on the HUD, one row shape
 approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b644c3c2491cc	2026-09-15T17:29:34+00:00	Approval notifications you can act on, and fix the CRLF that broke all 20 patches
 asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37+00:00	Backend: repeats without a card, lights setting, "What asks first"
+auto-learn.patch	auto-learn/1f2f70f.patch	1f2f70f6654c9f70f2851848f65b3791868a9f7c	2026-09-24T23:00:16+00:00	Say what always waits for a yes: birthdays, phone numbers and email addresses too
 auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23+00:00	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
 auto-learn.patch	auto-learn/6ad4a3c.patch	6ad4a3cfab9caeba68578c0f3bc1cb60b80542be	2026-09-24T21:28:10+00:00	Merge the rebuilt sensitive-topic check; "Remember:" no longer waits on the chat thread
 auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e0353	2026-09-24T20:51:14+00:00	Automatic learning: the audits' backend findings, and injected_sensitive on the chat route
@@ -45,6 +46,7 @@ memory-pane.patch	memory-pane/c75a8bf.patch	c75a8bf0e80faea37ae80e6b7c0557dca2c8
 memory-pane.patch	memory-pane/2641f6d.patch	2641f6d676ed75ad47d45e453c350baf9b163eab	2026-09-15T02:33:18+00:00	Routes to read, edit, forget and export what Jarvis has learned
 memory-prefix.patch	memory-prefix/a7ed401.patch	a7ed401bdbf059e6b8a633844d657ad2365e0658	2026-09-15T00:53:01+00:00	backend: the recalled-facts block was also dropping the persona invariants
 memory-prefix.patch	memory-prefix/3040b3d.patch	3040b3dc0803600ff1ccd92e8ed6460c921d687c	2026-09-15T00:43:39+00:00	backend: recalled facts were at token 0, so every turn re-prefilled everything
+memory-safety.patch	memory-safety/3d8df73.patch	3d8df73437d50b3b98382c87bd41012e637e0cb4	2026-09-19T17:53:10+00:00	fix(backend): the audit's Python findings
 memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34+00:00	Master audit: the worst finding was a cloud lane nobody re-filtered
 memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51+00:00	Memory: stop the destructive paths, and start the event pump
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49+00:00	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
@@ -66,3 +68,4 @@ wiki.patch	wiki/9aaab08.patch	9aaab08a9cdea55259a23a50ee9b1b2e990921fd	2026-09-2
 rebuilt-patches/approval-notice.patch	rebuilt-patches/approval-notice/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
 rebuilt-patches/bitemporal.patch	rebuilt-patches/bitemporal/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
 rebuilt-patches/extraction-wiring.patch	rebuilt-patches/extraction-wiring/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild
+rebuilt-patches/memory-safety.patch	rebuilt-patches/memory-safety/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild

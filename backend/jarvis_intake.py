@@ -397,6 +397,15 @@ _NUMW = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
          "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
          "twelve": 12, "a couple of": 2, "couple of": 2}
 _NUM_RE = r"(\d{1,3}|a couple of|couple of|an|a|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+#: Words that make "in <n> <unit>" point ahead (B9, in ahead() below).
+_AHEAD = re.compile(
+    r"\b(?:is|are|am|will|shall|going to|gonna|due|exam|exams|trip|starts?|starting"
+    r"|begins?|ends?|finishes|leaves?|leaving|flies|flying|moving|arrives?|arriving"
+    r"|back|until|deadline|appointment|interview|wedding|holiday|birthday|party|meeting"
+    r"|test|operation|surgery|visit|visiting|coming|comes|launch|release|expires?|renewal"
+    r"|flights?|train|ferry|gig|concert|match|race|marathon|results|hearing|payday|dinner"
+    r"|lunch|date|move|holidays|course|term|school|job|contract|lease|tickets?"
+    r"|off to)\b|'ll\b", re.I)
 # Already dated by us (or by the model, in the same shape): leave it.
 _DATED_AFTER = re.compile(r"^\s*\((?:\d{4}|week of|weekend of|around)")
 
@@ -448,6 +457,17 @@ def _rules(today: _dt.date):
         return "around " + _iso(_span(today, m.group(2).lower(), -n))
 
     def ahead(m):
+        # "in two weeks" is a date only when the sentence points AHEAD
+        # ("my exam is in two weeks") - never a length of time: "I read the
+        # series in a month", "three times in a week", "finished it in a
+        # day" (the memory review of 2026-09-27, B9). Left undated is the
+        # safe side: the words stay exactly as said.
+        before = m.string[:m.start()]
+        clause = re.split(r"[,;.!?]", before)[-1].lower()
+        if re.search(r"\b(?:times?|once|twice|per|every|each)\s*$", clause):
+            return None
+        if re.search(r"\b[a-z]{3,}ed\b", clause) or not _AHEAD.search(m.string):
+            return None
         n = _count(m.group(1))
         if n is None:
             return None
@@ -648,7 +668,18 @@ def candidates(store, messages, k: int = CANDIDATES_K) -> list[dict]:
     if not query.strip():
         return []
     out = []
-    for h in store.search(query, k=k):
+    # word_floor=0, like find_one: the question here is the last six
+    # messages joined, and the recall floor weighs a fact against ALL their
+    # words - after three chatty messages "I don't live in York any more"
+    # shared too small a share with "Owner lives in York", the learner was
+    # told nothing was close, and the correction could be saved next to
+    # the old fact (the memory review, B3). Search's own ranking and k
+    # still decide which facts are shown.
+    try:
+        hits = store.search(query, k=k, word_floor=0.0)
+    except TypeError:
+        hits = store.search(query, k=k)       # a store from before the floor
+    for h in hits:
         if h.get("current", True) is False:
             continue
         out.append({"id": int(h["id"]), "text": " ".join(str(h["text"]).split())})
@@ -926,10 +957,20 @@ def _stem(w: str) -> str:
     return w
 
 
+#: For COMPARING only (the memory review, B10): the owner's own "I", "me",
+#: "my" are the learner's "Owner" / "Owner's" - so a "Remember: I live in
+#: Leeds", saved word for word, and the learner's "Owner lives in Leeds" are
+#: one fact, and saying it again counts. Nothing is saved in these words:
+#: the owner's words are kept as said.
+_OWNER_FORMS = {"i": "owner", "me": "owner", "myself": "owner", "my": "owner",
+                "mine": "owner"}
+
+
 def shape(text: str):
     """Everything two proposals must share to count as the same statement."""
     words, marks, nums, dates = [], set(), set(), set()
     for w in _tokens(text):
+        w = _OWNER_FORMS.get(w, w)
         if w in _STOP:
             continue
         if any(ch.isdigit() for ch in w) or w in _NUMWORDS:
@@ -1049,6 +1090,25 @@ def _says(fact: str, turn: str, A) -> bool:
     return not A.ungrounded(fact, [turn]) and not A.check_meaning(fact, [turn])
 
 
+def _same_dates(fact: str, turn: str, at) -> bool:
+    """Does the turn, dated to when IT was said, name the same days as the
+    fact (the memory review, I4)? "Owner started at the new office
+    yesterday (2026-09-23)" is not said again by "I started at the new
+    office yesterday" three days later - that yesterday is another day, a
+    new event. A fact with no dates of ours is always the same; "(as of
+    ...)" on an imported fact is when it was said, not what it says."""
+    want = {m.strip() for m in _ADDED.findall(str(fact or ""))
+            if not m.strip().startswith("(as of")}
+    if not want:
+        return True
+    try:
+        said = anchor_dates(str(turn or ""), at)
+    except Exception:
+        return False
+    have = {m.strip() for m in _ADDED.findall(said)}
+    return want <= have
+
+
 def _trusted(entry: Optional[dict], A) -> bool:
     if not isinstance(entry, dict):
         return False
@@ -1083,6 +1143,8 @@ def note_said_again(proposed, turns, store=None) -> int:
                         continue
                     entry = H.live_turn_any(turn)
                     if not _trusted(entry, A):
+                        continue
+                    if not _same_dates(str(fact["text"]), turn, entry.get("at")):
                         continue
                     if st.said_again(int(fact["id"]), entry.get("at"),
                                      entry.get("provenance")):

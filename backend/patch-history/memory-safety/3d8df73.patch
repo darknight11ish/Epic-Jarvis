@@ -296,7 +296,7 @@
  
  
  def _local_llm(prompt: str, model: Optional[str] = None, timeout: float = 60) -> Optional[str]:
-@@ -138,32 +148,84 @@
+@@ -138,32 +148,78 @@
              if not isinstance(f, dict):
                  continue
              text = " ".join(str(f.get("text", "")).split())
@@ -380,14 +380,8 @@
 +    supersedes = row.get("replaces_id")
 +    if supersedes:
 +        # It may have been retired by something else since it was queued.
-+        # "Still in use" is the rule every reader uses (and feedback.patch's
-+        # _accept_retire): no end date, or one still to come. `valid_to is
-+        # not None` alone left a fact that ENDS later (a lease to December)
-+        # in use when its correction card was kept (the memory review of
-+        # 2026-09-27, B12).
 +        still = store.get(int(supersedes))
-+        if not still or (still.get("valid_to") is not None
-+                         and float(still["valid_to"]) <= time.time()):
++        if not still or still.get("valid_to") is not None:
 +            supersedes = None
 +    fid = store.add_fact(row["text"], source="extracted", supersedes=supersedes,
 +                         meta={"confidence": row.get("confidence"),
@@ -395,7 +389,7 @@
      c.execute("UPDATE proposals SET state='accepted', decided=?, fact_id=? WHERE id=?",
                (time.time(), fid, row["id"]))
      return fid
-@@ -174,7 +236,8 @@
+@@ -174,7 +230,8 @@
      with closing(store._connect()) as c:
          _init(c)
          return [dict(r) for r in c.execute(
@@ -405,7 +399,7 @@
  
  
  def decide(proposal_id: int, accept: bool) -> Optional[int]:
-@@ -194,8 +257,29 @@
+@@ -194,8 +251,29 @@
  def setup_status() -> dict:
      return {"enabled": bool(_cfg("enabled", True)),
              "setup_complete": bool(_cfg("setup_complete", False)),

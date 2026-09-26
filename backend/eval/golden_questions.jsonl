@@ -139,13 +139,13 @@
 {"id": "q139", "q": "Which choir was I in in June?", "answers": ["f65"], "type": "time", "split": "tune", "stale": ["f64"]}
 {"id": "q140", "q": "Which choir was I in last year?", "answers": ["f64"], "type": "time", "split": "test", "stale": []}
 {"id": "q141", "q": "What phone did I have in June?", "answers": ["f67"], "type": "time", "split": "tune", "stale": ["f66"]}
-{"id": "q142", "q": "What phone did I have in March?", "answers": ["f66"], "type": "time", "split": "test", "stale": []}
+{"id": "q142", "q": "What phone did I have in March?", "answers": ["f66"], "type": "time", "split": "test", "stale": ["f67"]}
 {"id": "q143", "q": "Where was my team based back in March?", "answers": ["f69"], "type": "time", "split": "tune", "stale": ["f68"]}
-{"id": "q144", "q": "Where was my team based last year?", "answers": ["f68"], "type": "time", "split": "test", "stale": []}
+{"id": "q144", "q": "Where was my team based last year?", "answers": ["f68"], "type": "time", "split": "test", "stale": ["f69"]}
 {"id": "q145", "q": "Which allotment plot do I have?", "answers": ["f70"], "type": "time", "split": "tune", "stale": ["f71"]}
-{"id": "q146", "q": "Which allotment plot did I have in February?", "answers": ["f71"], "type": "time", "split": "test", "stale": []}
+{"id": "q146", "q": "Which allotment plot did I have in February?", "answers": ["f71"], "type": "time", "split": "test", "stale": ["f70"]}
 {"id": "q147", "q": "Where did I live in May?", "answers": ["f11"], "type": "time", "split": "tune", "stale": ["f10"]}
-{"id": "q148", "q": "Where did I live in February?", "answers": ["f10"], "type": "time", "split": "test", "stale": []}
+{"id": "q148", "q": "Where did I live in February?", "answers": ["f10"], "type": "time", "split": "test", "stale": ["f11"]}
 {"id": "q149", "q": "Who is my sister and where is her wedding?", "answers": ["f01", "f02"], "type": "multi", "split": "tune"}
 {"id": "q150", "q": "What's my partner's name and what does he do?", "answers": ["f03", "f04"], "type": "multi", "split": "test"}
 {"id": "q151", "q": "What instrument am I learning and who teaches me?", "answers": ["f23", "f24"], "type": "multi", "split": "tune"}

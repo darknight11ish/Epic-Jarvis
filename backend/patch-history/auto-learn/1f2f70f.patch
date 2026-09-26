@@ -309,10 +309,9 @@
  _UNKNOWN_RISK = ("no", "outbound",
 --- a/jarvis_extract.py
 +++ b/jarvis_extract.py
-@@ -343,10 +343,13 @@
+@@ -337,9 +337,12 @@
          still = store.get(int(supersedes))
-         if not still or (still.get("valid_to") is not None
-                          and float(still["valid_to"]) <= time.time()):
+         if not still or still.get("valid_to") is not None:
              supersedes = None
 -    fid = store.add_fact(row["text"], source="extracted", supersedes=supersedes,
 -                         meta={"confidence": row.get("confidence"),
@@ -326,7 +325,7 @@
      c.execute("UPDATE proposals SET state='accepted', decided=?, fact_id=? WHERE id=?",
                (time.time(), fid, row["id"]))
      return fid
-@@ -608,3 +611,67 @@
+@@ -602,3 +605,67 @@
                f"Nothing was sent there.", file=sys.stderr)
          return []
      return _propose_unchecked(*args, **kwargs)

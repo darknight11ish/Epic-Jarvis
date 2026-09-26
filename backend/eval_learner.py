@@ -39,7 +39,15 @@ The made-up conversations in backend/eval/learner_cases.jsonl, one per line:
   The one stand-in: the sensitive-topic check's SECOND layer asks the local
   model, and there is no model here. Its answer is replaced by "not
   sensitive", so the pattern layer and every other check are what is
-  measured. With no model at all the real check fails closed (a card).
+  measured - except in a case that says what a real model would answer
+  ("model": "health"): a private fact about someone the word lists see only
+  as "a person" is judged the way the PC's model would judge it (the
+  memory review of 2026-09-27, I5). With no model at all the real check
+  fails closed (a card).
+
+  Each gate case gets a fresh scratch store (World.fresh): whether a fact
+  contradicts one already saved is part of the gate now (the memory
+  review's B5), so only the facts a case lists as stored may decide it.
 
 WITH A MODEL (optional: --learner-model NAME, on the PC)
 
@@ -152,6 +160,19 @@ class World:
         sys.modules["jarvis_events"] = ev
         self.n = 0
 
+    def fresh(self) -> None:
+        """A new, empty scratch store for the next case (the chat log and
+        jarvis_extract stay). A gate case is judged against only the facts
+        it lists as stored: since the contradiction check (the memory
+        review, B5) looks at what is already saved, a fact another case
+        saved must not decide this one."""
+        self.n_stores = getattr(self, "n_stores", 0) + 1
+        self.store = self.M.MemoryStore(self.dir / f"memory-{self.n_stores}.db",
+                                        embedder=self.M.HashEmbedder())
+        self.M._store = self.store
+        with closing(self.store._connect()) as c:
+            _proposals_table(c)
+
     def conversation(self) -> str:
         self.n += 1
         return f"eval-learner-{self.n:04d}"
@@ -223,7 +244,21 @@ def _dates(w, I, case) -> dict:
     return {"ok": got == case["want"], "got": got}
 
 
+def _model_says(case):
+    """The stand-in for the sensitive-topic check's local model: "not
+    sensitive", unless the case says what a real model would answer
+    ("model": "health" - the memory review's I5, so a private fact about
+    someone is judged the way the PC's model would judge it)."""
+    cat = case.get("model")
+    if not cat:
+        return None
+    if cat == "none":
+        return lambda prompt: '{"sensitive": false, "category": "none"}'
+    return lambda prompt: json.dumps({"sensitive": True, "category": cat})
+
+
 def _gate(w, I, A, case) -> dict:
+    w.fresh()
     cid = w.conversation()
     history = []
     for turn in case["turns"]:
@@ -235,15 +270,33 @@ def _gate(w, I, A, case) -> dict:
     rid = None
     for text in case.get("stored", []):
         rid = w.store.add(text, source="eval")
-    q = w.queue(case["fact"], replaces_id=rid if case.get("correction") else None)
     turns = [t["text"] for t in case["turns"]]
-    res = A.after_pass([q], [{"role": "user", "content": t} for t in turns],
-                       conversation_id=cid, model="qwen3:8b", ollama=LOCAL,
-                       learning_on=True, extract=w.x, publish=lambda ids: None)
+    shown = None
+    if case.get("candidate"):
+        # What the learner's model is shown as "already stored, may be
+        # corrected" (jarvis_intake.candidates) for this conversation.
+        shown = [c["text"] for c in I.candidates(
+            w.store, [{"role": "user", "content": t} for t in turns])]
+    q = w.queue(case["fact"], replaces_id=rid if case.get("correction") else None)
+    import jarvis_sensitive as S
+    keep = S.ASK_MODEL
+    said = _model_says(case)
+    if said is not None:
+        S.ASK_MODEL = said
+    try:
+        res = A.after_pass([q], [{"role": "user", "content": t} for t in turns],
+                           conversation_id=cid, model="qwen3:8b", ollama=LOCAL,
+                           learning_on=True, extract=w.x, publish=lambda ids: None)
+    finally:
+        S.ASK_MODEL = keep
     how = "auto" if res.get("saved") else "card"
     why = next(iter((res.get("cards") or {}).values()), "")
     ok = how == case["want"] and (how == "auto" or case.get("why", "") in why)
-    return {"ok": ok, "got": {"decision": how, "why": why}}
+    got = {"decision": how, "why": why}
+    if shown is not None:
+        got["shown"] = shown
+        ok = ok and case["candidate"] in shown
+    return {"ok": ok, "got": got}
 
 
 def _said_again(w, I, A, case) -> dict:
@@ -268,7 +321,12 @@ def _said_again(w, I, A, case) -> dict:
     for turn in case.get("before", []):
         say(turn)
     time.sleep(0.005)
-    fid = w.store.add(case["stored"], source="eval")
+    stored = case["stored"]
+    if case.get("stored_days_ago"):
+        # The stored fact's relative date made real as the learner would
+        # have on that day: "started yesterday" said N days ago.
+        stored = I.anchor_dates(stored, time.time() - 86400 * float(case["stored_days_ago"]))
+    fid = w.store.add(stored, source="eval")
     if case.get("forget"):
         w.store.retire(fid)
     time.sleep(0.005)
@@ -482,8 +540,9 @@ def markdown(res: dict) -> list:
         lines.append(f"| {names.get(k, k)} | {v['right']}/{v['total']} |")
     lines += ["", f"Saved when it should be: {res['gate_auto'][0]}/{res['gate_auto'][1]}. "
               f"Kept a card when it should: {res['gate_card'][0]}/{res['gate_card'][1]}. "
-              "(The local model's sensitive-topic answer is a stand-in saying \"not "
-              "sensitive\" unless --learner-model is given.)"]
+              "(The local model's sensitive-topic answer is a stand-in: \"not sensitive\", "
+              "or - for a case that says what a real model would answer, such as a private "
+              "fact about someone - that answer.)"]
     wrong = [r for r in res["cases"] if not r["ok"]]
     if wrong:
         lines += ["", "Wrong: " + "; ".join(f"{r['id']} ({r['what']}): {r['got']}"

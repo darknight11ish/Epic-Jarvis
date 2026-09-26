@@ -169,7 +169,17 @@ def _run_memory_search(args: dict) -> dict:
         return {"ok": False, "error": f"memory is not available here: {exc}"}
     query = str(args.get("query", ""))
     k = max(1, min(20, int(args.get("k", 5) or 5)))
-    hits = jarvis_memory.store().search(query, k=k)
+    st = jarvis_memory.store()
+    # The same recall a chat turn uses (jarvis_past.recall): the people
+    # layer ("my sister" finds Priya), the re-ranker when it is loaded, and
+    # past facts - labelled - for a question about the past. It called
+    # store().search() directly, a weaker search than chat's (the memory
+    # review, B4). Without jarvis_past, the plain search as before.
+    try:
+        import jarvis_past
+        hits = jarvis_past.recall(st, query, k)
+    except ImportError:
+        hits = st.search(query, k=k)
     return {"ok": True, "facts": [{"id": h.get("id"), "text": h.get("text")} for h in hits]}
 
 

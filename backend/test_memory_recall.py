@@ -143,7 +143,19 @@ def t_frame_words_do_not_count():
     check("'before' is a frame word: the old address is not floored away for lacking it",
           "Owner lives in Harrogate" in texts(got), texts(got))
     check("a question made only of frame words keeps its hits (nothing to judge by)",
-          M._floor_terms(["name", "called", "2025", "june"]) == [])
+          M._floor_terms(["name", "called", "2025"]) == [])
+    # The memory review of 2026-09-27, B2: a month now counts towards the
+    # floor ("What phone did I have in June?" finds "... in June 2026"), but
+    # a question of frame words and a month alone still keeps every hit.
+    check("B2: a month is weighed by the floor", M._floor_terms(["phone", "june"])
+          == ["phone", "june"])
+    c = st._connect()
+    try:
+        rows = c.execute("SELECT id AS rowid FROM facts").fetchall()
+        check("B2: ... and frame words plus a month alone keep every hit",
+              len(st._word_floor(c, ["name", "june"], rows, 0.9)) == len(rows))
+    finally:
+        c.close()
 
 
 def t_find_one_keeps_its_own_rule():

@@ -210,7 +210,7 @@
 {"text": "I prefer dark mode in every editor", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
 {"text": "I'm learning Rust in the evenings", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
 {"text": "I'm on the frontend team", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
-{"text": "my manager approved the design", "sensitive": true, "category": "other_people", "lang": "en", "kind": "sibling"}
+{"text": "my manager approved the design", "sensitive": true, "category": "other_people", "lang": "en", "kind": "sibling", "everyday": true}
 {"text": "the server is down again", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
 {"text": "the database is locked during migrations", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
 {"text": "I finally beat the final boss", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
@@ -532,8 +532,8 @@
 {"text": "I volunteer at a food festival", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
 {"text": "the church down the road does a great Christmas fair", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
 {"text": "I work with the police on a data project", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
-{"text": "my boss is great", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
-{"text": "I call my mum every Sunday", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh"}
+{"text": "my boss is great", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh", "everyday": true}
+{"text": "I call my mum every Sunday", "sensitive": true, "category": "other_people", "lang": "en", "kind": "fresh", "everyday": true}
 {"text": "my hobby is genealogy", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
 {"text": "I like visiting old prisons as museums", "sensitive": false, "category": "none", "lang": "en", "kind": "harmless"}
 {"text": "me gusta el fútbol", "sensitive": false, "category": "none", "lang": "es", "kind": "harmless"}

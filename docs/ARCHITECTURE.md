@@ -589,7 +589,16 @@ by a fixed parser, never a model. "What did I tell you / believe ..." is
 searched on the *transaction* axis (`search(known_at=t)`, the same rule as
 `known_at()`); any other past question on the *valid* axis (true during
 that window). Every other question gets exactly the current-only search it
-always got. A bare month ("remind me in June") is not a past cue.
+always got. A bare month ("remind me in June") is not a past cue. Since
+the memory review of 2026-09-27: when the question names a time, a CURRENT
+fact that only became true after it is labelled too - "(true since
+<date>)" when the owner's words gave the date, "(known since <date>)" when
+it is only the day Jarvis was told (B1) - and **a forgotten fact never
+comes back**, not even for a question about the past: Forget (the route,
+or a "stop using this fact?" card) marks `meta.forgotten_at`, and past
+recall skips it (B15). A fact replaced by a correction, or that simply
+ended, is history and still recalled, labelled. Jarvis's own
+`memory_search` tool uses this same recall (B4).
 
 **"Always keep in mind": a few pinned facts, read with every question**
 (the owner's decision, 2026-09-24; `memory-profile.patch`,
@@ -713,10 +722,10 @@ The writers had it wrong too until 2026-09-26: `retire()`,
 `add(supersedes=...)` and `edit()` matched `valid_to IS NULL` only, so a
 fact that ends later could never be forgotten, corrected, reworded or
 retired by a "stop using this fact?" card (`test_memory_true_from.py`, the
-checks marked "the bug"). One copy of the old rule is still in the owner's
-own `jarvis_extract._accept` (memory-safety.patch): a correction CARD
-aimed at a fact that ends later is saved without retiring it - a later
-patch to that file, not done here.
+checks marked "the bug"). The last copy of the old rule, in the owner's
+own `jarvis_extract._accept` (memory-safety.patch), went with the memory
+review of 2026-09-27 (B12): keeping a correction card aimed at a fact that
+ends later now retires it, like every other writer.
 
 **Memory ideas 1-4** (the owner's decision of 2026-09-26, after
 docs/MEMORY-RESEARCH-2026-09-26.md; backend/README.md "Memory ideas 1-4"
@@ -762,6 +771,40 @@ fact_repeats  fact_id, said_at, how ("typed" | "voice")   "said again" - NO WORD
   the correction card says so first ("It sounds older than what Jarvis
   knows..."), in the reason line both apps already show. Corrections still
   always get a card; no model is involved.
+
+**The memory review of 2026-09-27** (docs/MEMORY-REVIEW-2026-09-27.md;
+backend/README.md "The memory review's fixes" has every number). Rules it
+added, each measured by the self-test before it was kept:
+
+- **A fact that would change a stored one is a card**, even when the
+  learner's model did not mark it as a correction (B5): the same slot with
+  a different value ("Owner lives in Leeds" / "... in York"), or a change
+  word ("now", "no longer", "moved", "quit") and two shared words. The card
+  names the fact it would replace (`replaces_id`), like any correction; it
+  never retires anything by itself.
+- **The learner's own-words check reads clauses and tense** (B6, B7): a
+  fact about the owner taken from the half of a sentence about someone
+  else ("Dana works at Google and I work at Apple"), or said only in the
+  past tense ("I lived in Paris") and saved as true now, is a card. Number
+  words and digits are the same number ("three cats" = "3 cats", I3).
+- **A sensitive topic stays with the fact** (B13). A fact saved after a
+  card held back for a sensitive topic, or under "Also remember sensitive
+  topics automatically", keeps that topic (`meta.sensitive`, a label -
+  never words); read-aloud and web search use it when the words alone look
+  everyday (`jarvis_sensitive.fact_topic`). Everyday facts about people stay
+  normal (the owner's decision of 2026-09-26) - nothing is kept with them.
+- **Other words for the same person, on lookup only** (I1): "boss" also
+  looks up "manager", "GP" "doctor", mum/mom/mother, dad/father,
+  flatmate/roommate/housemate, neighbour/neighbor - never partner, husband
+  or wife, and never when saving (an alias is always the owner's own word).
+- **One step out from a person** (I13): for a question that asks WHO
+  ("for whose wedding?"), the fact saying who the person in the top fact
+  is, at most two extra facts.
+- **"Said again" after Erase is a day, not a moment** (I12): an erased
+  fact's said-again times are rounded down to the day, the count kept.
+- **Both memory models live in Jarvis's own folder** (B17,
+  `~/.openjarvis/models`, or `FASTEMBED_CACHE_PATH`), not the temp folder a
+  disk clean-up empties.
 
 **Never compress facts or transcripts** with a keep/drop token dropper
 (LLMLingua and relatives). They are negation-blind, and this store is
@@ -1117,7 +1160,7 @@ backend routes, in both directions; the rest are listed here only.
 | The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
 | People and things (`/api/memory/entities`): the names under each fact, "About <name>", and the "are these the same?" card (memory wave 3, 2026-09-25) | The same rule: linking facts to the people and things they name, and joining two entries, is the memory graph, which stays off the phone (`CLAUDE.md`). The phone shows no names and never asks for the merge card (its pending list leaves out `?merge_cards=1`, so the card waits for the desktop). What the layer is for reaches the phone anyway: chat recall runs on the PC, so "where is my sister getting married?" finds Priya's wedding from either app. |
 | Rewording a stored fact (`/api/memory/edit`), and forgetting one from a list of every fact | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone calls it for facts in the "Saved automatically" list (JARVIS-API §19), and since 2026-09-25 for a fact shown under "Used in this answer" or "Jarvis remembered N things" - one the owner just saw Jarvis use or save, not a browse of the whole store. |
-| "Erase the words" beside Forget under "Used in this answer" and "Jarvis remembered N things" | The phone offers Erase in one place only, Brain → Saved automatically, for facts saved automatically that are still in use (the row below). A fact an answer used may be any fact, forgotten ones included (a question about the past recalls them), and erasing any fact at all is deep memory editing. On the phone those two lists offer Forget; the desktop offers both, as it does on every fact. |
+| "Erase the words" beside Forget under "Used in this answer" and "Jarvis remembered N things" | The phone offers Erase in one place only, Brain → Saved automatically, for facts saved automatically that are still in use (the row below). A fact an answer used may be any fact, history included (a question about the past recalls facts that were corrected or have ended - never forgotten ones, since the memory review of 2026-09-27, B15), and erasing any fact at all is deep memory editing. On the phone those two lists offer Forget; the desktop offers both, as it does on every fact. |
 | "Erase the words" (`/api/memory/erase`) on a fact that was already forgotten, or was never saved automatically | The same line as Forget, above: the phone lists only facts saved automatically that are still in use, and a list of every fact, forgotten ones included, is deep memory editing. The phone offers Erase wherever it offers Forget (Brain → Saved automatically), so the route itself is on both apps. |
 | Pinning a fact on "Always keep in mind" (`/api/memory/profile`) that was not saved automatically | The same line as Forget, above (2026-09-24): the phone's only list of current facts is "Saved automatically", so it pins from there, and a list of every fact is deep memory editing. The route and the "Always keep in mind" section - the pinned facts, "N of 1,200 characters used", Unpin on each - are on both apps, so a fact pinned on the desktop can be unpinned from the phone. |
 | Exporting all memory (`/api/memory/export`) | A copy of everything Jarvis knows does not belong on a phone that can be lost. |
