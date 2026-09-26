@@ -10,12 +10,10 @@ The reasons behind each question are in the linked report, not here.
 
 ## Memory and backup
 
-**1. The re-ranker.** Jarvis now has a small extra model that re-sorts the
-facts it finds, to put the best one first. Nobody has measured yet whether it
-helps: the build machine cannot download it. It is switched on today.
-- **a. Off until your PC's self-test shows it helps** (recommended - you
-  decided every memory change must be measured)
-- b. Leave it on
+**1. The re-ranker.** No longer a question: it is now OFF until your PC's
+self-test shows it helps (2026-09-26), because you decided every memory
+change must be measured first. `docs/MEMORY-SCOREBOARD.md` has the one line
+that runs the test, and the one line that turns it on if it wins.
 
 **2. Back up Jarvis's memory to NordLocker (or another cloud you pick).**
 Today this breaks rule 1 ("stored memory never leaves the PC"). A safe way

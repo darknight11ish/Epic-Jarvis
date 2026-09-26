@@ -10316,8 +10316,9 @@ section 5, "Memory ideas 1-4".
   history - the newer fact stays in use."
 - **Forget now works on a fact that ends later** (a bug, below).
 - **The re-ranker** you will not see - it only changes which five facts
-  reach the model, and in what order. Its first use downloads about 80 MB
-  (fastembed does this, like the meaning model).
+  reach the model, and in what order. **It is OFF until your PC's self-test
+  shows it helps** (your rule; changed 2026-09-26). The self-test downloads
+  it once, about 80 MB (fastembed does this, like the meaning model).
 
 ## The self-test numbers
 
@@ -10356,14 +10357,27 @@ After search finds its facts, a small model on the processor
 (`Xenova/ms-marco-MiniLM-L-6-v2`, Apache-2.0, English only) reads your
 question and each of the top 20 facts together and puts the best answers
 first; then the first 5 go to the model, as before. It only re-orders: it
-never adds a fact, never changes how many, never touches corrections. It
-never makes a chat wait: it loads in the background, and until it is ready,
-if it cannot load, or if it takes more than 1.5 seconds on a question,
-recall is exactly what it was - and the backend says once, in its window
-and the audit log, why it is off. To turn it off: set
-`JARVIS_MEMORY_RERANK=0`. It was on by default in this build because the
-brief said to use it when it loads; **if the self-test on your PC shows it
-does not help, say so and it goes off by default.**
+never adds a fact, never changes how many, never touches corrections.
+
+**It is off by default** (changed 2026-09-26, your rule that a memory change
+is kept only once the self-test shows it helps - so far it has only been
+measured as a stand-in). The self-test still measures the real model:
+`py -3 backend\eval_memory.py` loads it whatever the setting. If the
+"reranked" line in its report beats the line without it, turn it on with
+this one line, then restart Jarvis:
+
+```powershell
+[Environment]::SetEnvironmentVariable('JARVIS_MEMORY_RERANK', '1', 'User'); Write-Host 'Done. Quit Jarvis from the tray and start it again.'
+```
+
+(To turn it off again, the same line with `'0'`.)
+
+When it is on, a chat DOES wait for it, a little: up to 1.5 seconds per
+question once it is loaded (a question it cannot finish in that time gets
+the old order). It loads in the background - the first question after a
+start is not held up by the load - and if it cannot load, recall is exactly
+what it was, and the backend says once, in its window and the audit log,
+why it is off.
 
 ## 2. A bigger self-test
 

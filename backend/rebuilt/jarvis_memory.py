@@ -471,14 +471,21 @@ def _make_embedder():
 # search. It runs on the processor, on this PC; fastembed downloads it once,
 # the way it downloads the meaning model.
 #
-# FAILS SOFT, NEVER BLOCKS A CHAT. The model is loaded on a background
-# thread the first time recall asks - never on the chat's own thread - and
-# until it is ready, recall is exactly what it was. If it cannot load (no
-# fastembed, a fastembed too old to have re-rankers, no download), recall
-# stays as it was for good, and that is said ONCE (the audit log and the
-# backend's window, and status()). A re-rank that takes longer than
-# RERANK_BUDGET_S seconds is not waited for: that question gets the merged
-# order. JARVIS_MEMORY_RERANK=0 turns it off.
+# OFF BY DEFAULT (2026-09-26, the owner's rule: a change is kept only once
+# the memory self-test shows it helps). It has only been measured as a
+# word-overlap stand-in, which proves the wiring, not a gain, so the backend
+# does not load it until JARVIS_MEMORY_RERANK=1. The self-test
+# (`eval_memory.py --reranker auto`, the default) still loads the real
+# model and measures it, whatever the setting.
+#
+# FAILS SOFT. When it is on, the model is loaded on a background thread the
+# first time recall asks - never on the chat's own thread - and until it is
+# ready, recall is exactly what it was. If it cannot load (no fastembed, a
+# fastembed too old to have re-rankers, no download), recall stays as it
+# was for good, and that is said ONCE (the audit log and the backend's
+# window, and status()). Once it is loaded, a chat's recall WAITS for it,
+# up to RERANK_BUDGET_S seconds (1.5 s); a re-rank slower than that is not
+# waited for any longer and that question gets the merged order.
 
 RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
 
@@ -502,8 +509,11 @@ def _env_float(name: str, default: float, lo: float, hi: float) -> float:
 RERANK_POOL = _env_int("JARVIS_MEMORY_RERANK_POOL", 20, 1, 100)
 #: The longest a question waits for the re-ranker, in seconds.
 RERANK_BUDGET_S = _env_float("JARVIS_MEMORY_RERANK_BUDGET", 1.5, 0.05, 10.0)
-_RERANK_ON = os.environ.get("JARVIS_MEMORY_RERANK", "1").strip().lower() not in (
-    "0", "off", "false", "no")
+#: Off unless JARVIS_MEMORY_RERANK is 1/on/true/yes (see above).
+_RERANK_ON = os.environ.get("JARVIS_MEMORY_RERANK", "0").strip().lower() in (
+    "1", "on", "true", "yes")
+RERANK_OFF_WHY = ("off by default until the memory self-test on this PC shows it helps; "
+                  "JARVIS_MEMORY_RERANK=1 turns it on")
 
 
 class Reranker:
@@ -574,15 +584,14 @@ def _rr_load(factory) -> None:
 
 def reranker(*, wait: bool = False):
     """The loaded re-ranker, or None. The first call starts loading it on a
-    background thread and returns None at once (`wait=True`, for the
-    self-test, loads it on this thread instead)."""
-    if not _RERANK_ON:
-        return None
+    background thread and returns None at once (`wait=True` loads it on this
+    thread instead). Off (JARVIS_MEMORY_RERANK not 1): nothing is loaded,
+    and only one set with set_reranker() - the self-test's - is used."""
     with _rr_lock:
         st = _rr["state"]
         if st == "ready":
             return _rr["model"]
-        if st != "not started":
+        if st != "not started" or not _RERANK_ON:
             return None
         _rr["state"] = "loading"
     if wait:
@@ -606,10 +615,10 @@ def set_reranker(model) -> None:
 def reranker_status() -> dict:
     """{"state": "on" | "loading" | "off" | "not started", "model", "why",
     "used", "slow"} - for status(). Never the words of anything."""
-    if not _RERANK_ON:
-        return {"state": "off", "model": None, "why": "JARVIS_MEMORY_RERANK=0", "used": 0}
     with _rr_lock:
         st = _rr["state"]
+        if not _RERANK_ON and st != "ready":
+            return {"state": "off", "model": None, "why": RERANK_OFF_WHY, "used": _rr["used"]}
         out = {"state": "on" if st == "ready" else st,
                "model": getattr(_rr["model"], "name", None), "why": _rr["why"],
                "used": _rr["used"]}

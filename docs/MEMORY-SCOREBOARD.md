@@ -44,8 +44,11 @@ the PC run above.
 What is not known yet, and waits for the PC run:
 - **Whether the re-ranker helps at all.** On the build machine it could only
   run as a word-overlap stand-in, which proves that it is wired in, not that
-  it helps. It is switched on today; see the open question in
-  `docs/OWNER-QUESTIONS-2026-09-27.md`.
+  it helps. **It is OFF by default until the PC run shows it helps**
+  (2026-09-26, your rule). The self-test above measures it anyway (the
+  "reranked" line). If that line beats the one without it, turn it on with
+  one line, then restart Jarvis:
+  `[Environment]::SetEnvironmentVariable('JARVIS_MEMORY_RERANK', '1', 'User'); Write-Host 'Done. Quit Jarvis from the tray and start it again.'`
 - **How well the real 8B model picks facts out of a conversation.** The
   learner cases above use a stand-in for the model's one judgement call (is
   this a sensitive topic?). `--learner-model` runs the real one.

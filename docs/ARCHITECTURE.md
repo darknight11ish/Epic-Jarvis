@@ -737,11 +737,14 @@ fact_repeats  fact_id, said_at, how ("typed" | "voice")   "said again" - NO WORD
   (`Xenova/ms-marco-MiniLM-L-6-v2` through fastembed, Apache-2.0, English
   only) before the first `k` go to the model. It only re-orders - no fact
   added, `k` and both floors unchanged - and never touches `find_one()`,
-  corrections or anything that writes. Loaded on a background thread; until
-  it is ready, if it cannot load, or if one question takes longer than
-  1.5 s, recall is exactly what it was (said once, in the audit log and
-  `status()["reranker"]`). `JARVIS_MEMORY_RERANK=0` turns it off. Its gain
-  is measured only on the PC: the model cannot download in the container.
+  corrections or anything that writes. **Off by default** (2026-09-26: a
+  memory change is kept only once the PC's self-test shows it helps);
+  `JARVIS_MEMORY_RERANK=1` turns it on, and `eval_memory.py` measures it
+  whatever the setting. When on: loaded on a background thread; each chat's
+  recall waits for it up to 1.5 s; until it is ready, if it cannot load, or
+  if one question takes longer than 1.5 s, recall is exactly what it was
+  (said once, in the audit log and `status()["reranker"]`). Its gain is
+  measured only on the PC: the model cannot download in the container.
 - **"Said again"** (idea 3). When the owner says a fact Jarvis already
   keeps, the learner's proposal is still dropped, and one row is kept: the
   fact's id, when the PC saw the turn arrive, typed or voice. Only from the
