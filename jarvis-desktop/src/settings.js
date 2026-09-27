@@ -1556,6 +1556,12 @@ let scLast = null;
 let scReadSeq = 0;
 let scBusy = false;
 let scPollTimer = null;
+/** The switch id a toggle function is mid-request for, captured before it
+ * disables the checkbox - disabling it blurs it to <body> at once in
+ * Chromium, so by the time the repaint after the request runs,
+ * `document.activeElement` is already <body> and cannot say what to
+ * refocus. Read once by the next repaint's focus-restore, then cleared. */
+let scRestoreFocusId = null;
 /** When the gentle re-reading stops; 0 while no card waits. */
 let scPollUntil = 0;
 /** Switches with a card waiting at the last read, to say how each ended. */
@@ -1850,6 +1856,8 @@ async function scCombinedToggle(input) {
     return;
   }
   scBusy = true;
+  // Before disabling blurs it: see `scRestoreFocusId`.
+  scRestoreFocusId = input.id;
   input.disabled = true;
   const label = "\"One bigger model on both cards\"";
   report(sc.combinedStatus, turnOn ? `Asking to turn on ${label}…` : `Turning off ${label}…`);
@@ -1909,7 +1917,7 @@ function scPaintSuggest(status) {
     sc.suggestSignals.replaceChildren();
     return;
   }
-  const focused = document.activeElement && document.activeElement.id;
+  const focused = scRestoreFocusId || (document.activeElement && document.activeElement.id);
   sc.suggestSignals.replaceChildren(...suggest.signals.map(scSuggestRow));
   if (focused && focused.startsWith("sc-suggest-")) {
     const again = document.getElementById(focused);
@@ -1927,6 +1935,8 @@ async function scSuggestToggle(input) {
     return;
   }
   scBusy = true;
+  // Before disabling blurs it: see `scRestoreFocusId`.
+  scRestoreFocusId = input.id;
   input.disabled = true;
   try {
     await invoke("set_second_card_suggest", { signal, enabled: turnOn });
@@ -1986,7 +1996,7 @@ function scPaint(status) {
     needs: Array.isArray(f.needs) ? f.needs : [],
   })));
   // Keep the keyboard where it was across a repaint.
-  const focused = document.activeElement && document.activeElement.id;
+  const focused = scRestoreFocusId || (document.activeElement && document.activeElement.id);
   sc.switches.replaceChildren(...rows.map((sw) => scSwitchRow(sw, status, names)));
   if (focused && focused.startsWith("sc-switch-")) {
     const again = document.getElementById(focused);
@@ -1995,7 +2005,7 @@ function scPaint(status) {
 
   // "One bigger model on both cards": its own row, its own toggle.
   if (sc.combined) {
-    const focusedCombined = document.activeElement && document.activeElement.id;
+    const focusedCombined = scRestoreFocusId || (document.activeElement && document.activeElement.id);
     sc.combined.replaceChildren(scCombinedRow(status));
     if (focusedCombined === "sc-switch-combined") {
       const again = document.getElementById("sc-switch-combined");
@@ -2005,6 +2015,8 @@ function scPaint(status) {
 
   // "When to suggest the bigger model": its own subsection, no card either way.
   scPaintSuggest(status);
+  // One-shot: consumed by whichever block above matched it.
+  scRestoreFocusId = null;
 
   // The second Ollama.
   const lane = status.lane || {};
@@ -2095,6 +2107,8 @@ async function scToggle(sw, input) {
     return;
   }
   scBusy = true;
+  // Before disabling blurs it: see `scRestoreFocusId`.
+  scRestoreFocusId = input.id;
   input.disabled = true;
   report(sc.status, turnOn ? `Asking to turn on "${sw.name}"…` : `Turning off "${sw.name}"…`);
   try {
