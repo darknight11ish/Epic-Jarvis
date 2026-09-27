@@ -19,6 +19,7 @@ Or ask for several at once ("run the play testers and the scouts").
 | `phone-playtester` | Walks the Android app screen by screen through its code and CI's screenshots, as the owner would on the phone | No |
 | `newcomer-playtester` | Plays a first-time user: install, pair the phone, first chat, first voice command. Finds where a new person gets stuck | No |
 | `voice-playtester` | Walks every voice path (talk button, "Hey Jarvis", interruptions, read-aloud) for timing and trust problems | No |
+| `voice-casting-director` | Designs the voices you can choose from, and a fitting voice for each animal face, using only local voices whose licences allow it (and never a real person's voice) | No |
 | `competitor-scout` | Searches the web for closed-source assistants (ChatGPT, Gemini, Alexa+, Siri, Copilot, Muse...) and what they shipped lately | No |
 | `open-source-scout` | Reads GitHub projects (OpenClaw, Hermes, Home Assistant, Open WebUI...) for ideas Jarvis can safely borrow | No |
 | `integration-scout` | Looks on GitHub for code Jarvis can actually use (a library, a model, a module to adapt) in one area, checking the licence, whether it runs on Windows/Android, and privacy | No |
