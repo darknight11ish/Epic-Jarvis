@@ -211,12 +211,27 @@
    * The pose actually shown: the previous state's melting into the current
    * one over BLEND_S. Both keep moving while they blend, so a change of
    * state never freezes the panda for the length of the fade.
+   *
+   * `hist` is what the caller remembered at the moment of the change:
+   *   prevAmp - the loudness then. The previous state's pose is drawn with
+   *             it, not with the new state's: leaving `speaking`, the new
+   *             loudness is 0, and the mouth would shut in one frame.
+   *   prev2, gap - the state before the previous one, and how long the
+   *             previous state had been showing. If that was less than
+   *             BLEND_S, the previous state was itself still melting in, so
+   *             the "from" pose carries on that blend instead of jumping to
+   *             where it would have settled. One level is enough: a third
+   *             change inside the same half second is the only case left.
    */
-  function pose(state, prevState, since, t, amp, look) {
-    const cur = stateTargets(state, t, amp, look || {});
+  function pose(state, prevState, since, t, amp, look, hist) {
+    look = look || {};
+    hist = hist || {};
+    const cur = stateTargets(state, t, amp, look);
     const k = clamp(since / BLEND_S, 0, 1);
     if (k >= 1 || !prevState || prevState === state) return cur;
-    const prev = stateTargets(prevState, t, amp, look || {});
+    const prevAmp = typeof hist.prevAmp === "number" ? hist.prevAmp : amp;
+    const gap = typeof hist.gap === "number" ? hist.gap : 1e9;
+    const prev = pose(prevState, hist.prev2 || prevState, since + gap, t, prevAmp, look);
     const e = smooth(k), out = {};
     for (const key of KEYS) out[key] = prev[key] + (cur[key] - prev[key]) * e;
     return out;

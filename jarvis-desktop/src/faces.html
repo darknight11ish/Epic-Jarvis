@@ -2906,41 +2906,65 @@ const THEMES = [
   // All eight states, so the shell passes each one through instead of
   // borrowing. `sp` is the shell's spin rate; the panda barely uses it (only
   // the orb's swirl turns with PHASE) because a creature's breathing and
-  // blinking should not stop when a state's spin does. The colours are the
-  // unbound defaults; a binding replaces them like any other face's.
+  // blinking should not stop when a state's spin does. The four states other
+  // faces borrow for carry the rate of the movement they would borrow (idle
+  // .5, thinking 1.6), because that is what the phone's speedFor receives -
+  // so the orb swirls at the same pace on both. The colours are the unbound
+  // defaults; a binding replaces them like any other face's.
   st:{ idle:     {sp:.5, glow:"#1d6f8a", hot:"#7fe3ff"},
        listening:{sp:1,  glow:"#8a3a12", hot:"#ff8a3d"},
        thinking: {sp:1.6,glow:"#3a3490", hot:"#8f7bff"},
        speaking: {sp:.8, glow:"#2a7890", hot:"#9ff0ff"},
        approval: {sp:.5, glow:"#8a5a10", hot:"#ffc14d"},
-       standby:  {sp:.3, glow:"#3a4048", hot:"#9aa3ad"},
-       error:    {sp:.5, glow:"#8a1f35", hot:"#ff5a7a"},
-       banked:   {sp:.2, glow:"#444a52", hot:"#b0b6bf"} },
+       standby:  {sp:.5, glow:"#3a4048", hot:"#9aa3ad"},
+       error:    {sp:1.6, glow:"#8a1f35", hot:"#ff5a7a"},
+       banked:   {sp:.5, glow:"#444a52", hot:"#b0b6bf"} },
   // Which state each SURFACE last showed, and when it changed, so a change of
   // state melts over CritterPose.BLEND_S instead of cutting. Keyed by the
   // surface's own view object (VIEW is swapped per surface before each
   // draw): the grid card and the solo view can show this same face in two
   // different states at once, and must not fight over one memory.
+  //
+  // Timed in real seconds, not the face clock `t`, so the melt takes the
+  // same half second at any speed-slider setting - and matches the phone,
+  // whose FaceHost measures it the same way.
   mem: new WeakMap(),
-  track(t, st){
+  track(st, amp){
+    const now = performance.now() / 1000;
     let m = this.mem.get(VIEW);
-    if(!m){ m = { st, prev: st, at: -1e9 }; this.mem.set(VIEW, m); }
-    if(m.st !== st){ m.prev = m.st; m.st = st; m.at = t; }
-    // The clock can be reset under a face (a still render, a re-seeded
-    // surface); a change "in the future" is treated as long settled.
-    const since = t >= m.at ? t - m.at : 1e9;
-    return { prev: m.prev, since };
+    if(!m){
+      m = { st, prev: st, prev2: st, at: -1e9, gap: 1e9, prevAmp: amp, lastAmp: amp,
+            lookW: 0, lookAt: now };
+      this.mem.set(VIEW, m);
+    }
+    if(m.st !== st){
+      // What CritterPose.pose needs to carry on from what was on screen:
+      // the loudness at the change, and whether the state being left was
+      // itself still melting in.
+      m.prev2 = m.prev; m.gap = now - m.at; m.prevAmp = m.lastAmp;
+      m.prev = m.st; m.st = st; m.at = now;
+    }
+    m.lastAmp = amp;
+    return m;
   },
-  look(){
-    // The pointer, for a few seconds after it last moved over the face.
-    const age = (performance.now() - (TOUCH.at || -1e9)) / 1000;
-    const w = TOUCH.f ? 0 : Math.max(0, Math.min(1, 1 - (age - 2) / 1.5));
-    return { x: TOUCH.x, y: -TOUCH.y, w };
+  look(m){
+    // The pointer, for a few seconds after it last moved over the face. The
+    // weight is EASED, both ways: taken straight from the pointer it jumped
+    // from 0 to 1 on the first move after a pause, and to 0 on a click, and
+    // the head snapped round. Only the Faces window has a pointer; the
+    // Widget, HUD and floating face have none, so there it stays 0.
+    const now = performance.now() / 1000;
+    const age = now - (TOUCH.at || -1e12) / 1000;
+    const want = Math.max(0, Math.min(1, 1 - (age - 2) / 1.5));
+    const dt = Math.max(0, now - m.lookAt); m.lookAt = now;
+    m.lookW += (want - m.lookW) * (1 - Math.exp(-dt / 0.3));
+    return { x: TOUCH.x, y: -TOUCH.y, w: m.lookW };
   },
   pose(t, st, amp){
     if(typeof CritterPose === "undefined") return null;
-    const tr = this.track(t, st);
-    return CritterPose.pose(st, tr.prev, tr.since, t, amp, this.look());
+    const m = this.track(st, amp);
+    return CritterPose.pose(st, m.prev, performance.now() / 1000 - m.at, t, amp, this.look(m),
+                            { prev2: m.prev2, gap: m.gap, prevAmp: m.prevAmp });
   },
   gpu(g, w, h, t, st, amp, P){
     if(typeof GPU === "undefined" || GPU.dead || !GPUOK || !P) return false;

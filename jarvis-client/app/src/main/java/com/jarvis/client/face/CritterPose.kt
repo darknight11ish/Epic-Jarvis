@@ -231,6 +231,16 @@ object CritterPose {
         return p
     }
 
+    /**
+     * What the host remembered when the state changed - see the desktop's
+     * `pose()` for why each is needed.
+     *
+     * @param prev2 the state before the previous one (null: none).
+     * @param gap seconds the previous state had been showing when it ended.
+     * @param prevAmp the loudness at the change (NaN: use the current one).
+     */
+    data class Hist(val prev2: FaceState? = null, val gap: Float = 1e9f, val prevAmp: Float = Float.NaN)
+
     /** The pose shown: the previous state's melting into the current one. */
     fun pose(
         state: FaceState,
@@ -239,11 +249,13 @@ object CritterPose {
         t: Float,
         amp: Float,
         look: Look = Look(),
+        hist: Hist = Hist(),
     ): FloatArray {
         val cur = stateTargets(state, t, amp, look)
         val k = clamp(since / BLEND_S, 0f, 1f)
         if (k >= 1f || prevState == state) return cur
-        val prev = stateTargets(prevState, t, amp, look)
+        val prevAmp = if (hist.prevAmp.isNaN()) amp else hist.prevAmp
+        val prev = pose(prevState, hist.prev2 ?: prevState, since + hist.gap, t, prevAmp, look)
         val e = smooth(k)
         return FloatArray(N) { prev[it] + (cur[it] - prev[it]) * e }
     }

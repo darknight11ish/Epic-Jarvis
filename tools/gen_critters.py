@@ -84,6 +84,15 @@ def golden_cases():
     # the second at 4.568 s.
     for t in (1.0, 1.05, 1.1, 4.6):
         cases.append({"state": "idle", "prev": "idle", "since": 9.0, "t": t, "amp": 0.0, "look": {}})
+    # Carrying on from what was on screen: leaving speaking mid-word (the
+    # loudness at the change, not the new zero), and a second change 0.2 s
+    # after the first (the previous state was itself still melting in).
+    cases.append({"state": "idle", "prev": "speaking", "since": 0.1, "t": 3.3, "amp": 0.0, "look": {},
+                  "hist": {"prevAmp": 0.6}})
+    cases.append({"state": "thinking", "prev": "listening", "since": 0.05, "t": 5.1, "amp": 0.0, "look": {},
+                  "hist": {"prev2": "idle", "gap": 0.2, "prevAmp": 0.28}})
+    cases.append({"state": "approval", "prev": "error", "since": 0.3, "t": 8.4, "amp": 0.28,
+                  "look": {"x": -0.5, "y": 0.2, "w": 0.4}, "hist": {"prev2": "standby", "gap": 0.4}})
     return cases
 
 
@@ -93,7 +102,7 @@ const C = globalThis.CritterPose;
 const cases = JSON.parse(require('fs').readFileSync(0, 'utf8'));
 const out = cases.map(c => ({
   ...c,
-  uniforms: C.uniforms(C.pose(c.state, c.prev, c.since, c.t, c.amp, c.look)),
+  uniforms: C.uniforms(C.pose(c.state, c.prev, c.since, c.t, c.amp, c.look, c.hist)),
 }));
 // Six decimals: the Kotlin copy runs in 32-bit floats and is checked to
 // within a thousandth, so more digits would only be noise in the diff.

@@ -799,6 +799,16 @@ data class FaceFrame(
      * pose. With [hitchPhase] it is what `CritterPose.pose` blends from.
      */
     val prevState: FaceState = state,
+    /**
+     * The state before [prevState], how long [prevState] had been showing
+     * when it ended (seconds), and [amp] at the moment of the change. Without
+     * them the red panda's melt starts from where the previous state WOULD
+     * have settled, drawn at the NEW loudness - so leaving speaking shut its
+     * mouth in one frame, and a second change inside half a second jumped.
+     */
+    val prevState2: FaceState = prevState,
+    val prevGap: Float = 1e9f,
+    val prevAmp: Float = amp,
 )
 
 /**
@@ -863,6 +873,15 @@ class FaceHost {
     private var prevState: FaceState = FaceState.IDLE
     private var changedAt = -999f
 
+    // What a character face needs to carry on from what was on screen when
+    // the state changed (see FaceFrame.prevState2): the state before the
+    // previous one, how long the previous one had been showing, and the
+    // loudness at the change. `lastDrive` is the loudness of the latest frame.
+    private var prevState2: FaceState = FaceState.IDLE
+    private var prevGap = 1e9f
+    private var prevAmp = 0f
+    private var lastDrive = 0f
+
     private var clockStartedAt = -999f
 
     private var yaw = 0f
@@ -878,6 +897,9 @@ class FaceHost {
 
     fun onStateChange(next: FaceState) {
         if (next == state) return
+        prevState2 = prevState
+        prevGap = t - changedAt
+        prevAmp = lastDrive
         prevState = state
         state = next
         changedAt = t
@@ -1052,6 +1074,7 @@ class FaceHost {
             FaceState.SPEAKING -> max(Spec.SPEAK_FLOOR, voice)
             else -> 0f
         }
+        lastDrive = drive
 
         // The clock overlay closes over twenty seconds, with the first 220 ms
         // sweeping to 12% so the ring is on screen before the tint.
@@ -1097,6 +1120,9 @@ class FaceHost {
             calm = calm,
             prevMotion = Spec.transformFor(prevState).borrow,
             prevState = prevState,
+            prevState2 = prevState2,
+            prevGap = prevGap,
+            prevAmp = prevAmp,
         )
     }
 

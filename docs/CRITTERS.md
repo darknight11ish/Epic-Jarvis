@@ -30,7 +30,7 @@ colours for each state; the owner's own colour choices replace them.*
 
 | Jarvis is... | The panda... |
 |---|---|
-| Idle | Sits holding its orb in its lap and looks slowly round the room. Blinks every few seconds, breathes, swishes its tail. On the desktop it follows the mouse pointer for a few seconds after it moves over the face. |
+| Idle | Sits holding its orb in its lap and looks slowly round the room. Blinks every few seconds, breathes, swishes its tail. In the desktop's Faces window it also turns to follow the mouse pointer for a few seconds after it moves over the face (the widget, HUD and floating face have no pointer, so there it does not). |
 | Listening | Perks both ears up, tilts its head about 15 degrees and leans in. Your voice makes its ears twitch and the orb glow brighter. |
 | Thinking | Lifts the orb up in both paws and gazes into it. The orb glows its brightest. |
 | Speaking | Its mouth opens and closes with Jarvis's voice, and it nods and gestures with one paw. |
@@ -39,8 +39,11 @@ colours for each state; the owner's own colour choices replace them.*
 | Something went wrong (error) | Tilts its head, one ear droops, squints and scratches its head. |
 | Keeping things for later (banked) | Dozing with half-closed eyes. |
 
-A change of state melts from one pose to the next over about half a second,
-so it never jumps. The approval clock, the error shake and the dimming that
+A change of state melts from one pose to the next over about half a second.
+It starts from what was actually on screen: leaving "speaking" the mouth
+closes over that half second rather than at once, and a second change
+arriving mid-melt carries on from the half-finished pose. Three changes
+inside the same half second can still show a small jump. The approval clock, the error shake and the dimming that
 every face gets still happen on top.
 
 **Colour.** The panda keeps its own fur colours in every state. The colour
@@ -130,6 +133,10 @@ Sketchfab). Four reasons:
   it down the same way as any face that runs slow - fewer frames a second,
   no glow - but it does not lower the pixel count for shader faces. If the
   panda makes the phone warm, say so and it can get a lower-resolution mode.
+- **The phone makes about 90 small throwaway objects a frame** for the
+  panda (its pose maths builds fresh number lists). Nucleus makes none. It
+  is not measurable as slowness on its own, but it is more garbage than
+  this app likes; worth tidying if the phone shows stutter with the panda.
 - **Not yet tried on a real phone or a real graphics card.** It has been
   rendered through the phone's own drawing library (Skia, via skia-python)
   and through the desktop's WebGL in a browser without a graphics card, and

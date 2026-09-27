@@ -33,9 +33,12 @@ object RedPanda : Face {
     override val id = "redpanda"
     override val name = "Red Panda"
 
-    // The shell's spin rate, matching the desktop's `st[...].sp`. Only the
-    // orb's slow swirl turns with it: breathing and blinking run on the
-    // clock, so the panda never freezes when a state's spin stops (banked).
+    // The shell's spin rate. This receives the BORROWED movement (approval,
+    // standby and banked arrive as IDLE, error as THINKING), so the desktop's
+    // `st[...].sp` for those four states is set to the borrowed movement's
+    // rate - the orb then swirls at the same pace on both. Only the orb's
+    // swirl turns with it: breathing and blinking run on the clock, so the
+    // panda never freezes when a state's spin stops (banked).
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 1.0f
         FaceState.THINKING -> 1.6f
@@ -59,6 +62,7 @@ object RedPanda : Face {
             since = f.hitchPhase,
             t = f.t,
             amp = f.amp,
+            hist = CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp),
         )
         for ((name, v) in CritterPose.uniforms(pose)) {
             when (v.size) {

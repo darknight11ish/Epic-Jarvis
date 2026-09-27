@@ -42,6 +42,7 @@ class CritterPoseTest {
         for (c in cases) {
             val o = c.jsonObject
             val look = o["look"]!!.jsonObject
+            val hist = o["hist"]?.jsonObject
             val pose = CritterPose.pose(
                 state = state(o["state"]!!.jsonPrimitive.content),
                 prevState = state(o["prev"]!!.jsonPrimitive.content),
@@ -52,6 +53,11 @@ class CritterPoseTest {
                     x = look["x"]?.jsonPrimitive?.float ?: 0f,
                     y = look["y"]?.jsonPrimitive?.float ?: 0f,
                     w = look["w"]?.jsonPrimitive?.float ?: 0f,
+                ),
+                hist = CritterPose.Hist(
+                    prev2 = hist?.get("prev2")?.jsonPrimitive?.content?.let(::state),
+                    gap = hist?.get("gap")?.jsonPrimitive?.float ?: 1e9f,
+                    prevAmp = hist?.get("prevAmp")?.jsonPrimitive?.float ?: Float.NaN,
                 ),
             )
             val got = CritterPose.uniforms(pose)
@@ -88,6 +94,22 @@ class CritterPoseTest {
                 Regex("""uniform\s+\w+\s+$n\s*;""").containsMatchIn(CritterShaders.RED_PANDA),
             )
         }
+    }
+
+    @Test
+    fun `leaving speaking, the mouth closes over the blend instead of at once`() {
+        // The loudness at the change carries the old pose; the new state's
+        // loudness is 0 and used to shut the mouth in one frame.
+        val mouth = { since: Float ->
+            CritterPose.uniforms(
+                CritterPose.pose(
+                    FaceState.IDLE, FaceState.SPEAKING, since, 2f, 0f,
+                    hist = CritterPose.Hist(prevAmp = 0.6f),
+                ),
+            ).getValue("uFace")[3]
+        }
+        assertTrue("the mouth is already shut on the frame of the change", mouth(0f) > 0.7f)
+        assertTrue("the mouth is still open once the blend is over", mouth(1f) == 0f)
     }
 
     @Test
