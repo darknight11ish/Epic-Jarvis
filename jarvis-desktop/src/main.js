@@ -952,10 +952,33 @@ function applyHeaderRoute(route) {
   state.turnRoute = route && typeof route === "object" ? route : null;
   // The facts this answer used (ids only) and the temporary-chat marks.
   answerMemory.route(state.turnRoute);
+  openSettingsFromRoute(state.turnRoute);
   const next = routeFromHeader(route);
   if (!next) return;
   state.routeFromHeader = true;
   applyRoute(next);
+}
+
+/**
+ * "Open <a settings section>" by voice or chat (jarvis_settings_registry.py,
+ * 2026-09-27): `open_settings` on X-Jarvis-Route names the section id
+ * settings.html and settings.js already use ("web-search", "manner", ...).
+ * The SAME mechanism "Show me where" already uses (plain-errors.js's own
+ * button): leave the place under SETTINGS_PLACE_KEY, then ask Rust to open
+ * or focus the Settings window; settings.js's own goToPlace() (generalised
+ * the same day, to any section id, not only "Starting Jarvis for you")
+ * takes it from there. Nothing here changes a setting - this only jumps
+ * the app to it, the owner still makes the change by hand.
+ */
+function openSettingsFromRoute(route) {
+  const place = route && typeof route.open_settings === "string" ? route.open_settings : "";
+  if (!place) return;
+  try {
+    localStorage.setItem(SETTINGS_PLACE_KEY, JSON.stringify({ place, at: Date.now() }));
+  } catch {
+    /* no storage: Settings opens at the top, and the answer's own words say where */
+  }
+  invoke("open_fix_place", { place: "settings" });
 }
 
 /** Paints the three health dots in the card footer. */

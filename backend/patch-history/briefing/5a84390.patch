@@ -104,7 +104,7 @@
                  out = {}
                  if isinstance(sleep_enabled, bool):
                      out = jarvis_sleep.set_enabled(sleep_enabled)
-@@ -2860,6 +2860,14 @@
+@@ -2891,6 +2958,14 @@
          # before. The `finally` still runs: this PC's record of the turn
          # (not for a temporary chat) and the learner, which skips a command
          # like this one (jarvis_intake.owner_turns).
@@ -118,8 +118,8 @@
 +            pass
          try:
              import jarvis_quick
-             # peer/local: settings.patch's "open"/"adjust" a setting by voice
-@@ -2879,8 +2887,13 @@
+             _quick = jarvis_quick.answer_turn(body)
+@@ -2902,8 +2977,13 @@
              if _temporary_chat(body) and route_header.get("memory_side") != "jarvis":
                  route_header["memory_side"] = "none"
                  route_header["temporary"] = True

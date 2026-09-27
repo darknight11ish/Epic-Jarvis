@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
@@ -52,6 +54,28 @@ import com.jarvis.client.ui.theme.LocalChrome
  * capabilities) are deliberately NOT here: the audit's own point is a real
  * Settings screen, not a second Brain.
  */
+
+/**
+ * Every `item(key = ...)` below, by its position in the `LazyColumn` - kept
+ * as one small map rather than computed, so a reordering of the items below
+ * is a visible two-line diff here too, not a silent mismatch. "Open <a
+ * settings section>" (docs/JARVIS-API.md section 58.1) is this map's only
+ * reader.
+ */
+private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
+    "voice" to 0,
+    "security" to 1,
+    "appearance-card" to 2,
+    "manner" to 3,
+    "web-search" to 4,
+    "asks-first" to 5,
+    "reach" to 6,
+    "email-sending" to 7,
+    "folders" to 8,
+    "backup" to 9,
+    "watch-notify" to 10,
+)
+
 @Composable
 fun SettingsScreen(
     link: LinkState,
@@ -82,17 +106,34 @@ fun SettingsScreen(
     overlayGranted: Boolean = false,
     onRequestOverlay: () -> Unit = {},
     onOpenBubbleSettings: () -> Unit = {},
+    /**
+     * "Open <a settings section>" by voice or chat
+     * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
+     * section id `MainActivity` read off `ChatSession.openSettings`, or
+     * null. A new (distinct) value scrolls to that item once; an id this
+     * screen has no row for (the three linked screens above, and every
+     * desktop-only section) is a harmless no-op - the screen still opened,
+     * and the answer already named the place in words.
+     */
+    initialSection: String? = null,
 ) {
     val chrome = LocalChrome.current
     // The same gate every other write on this screen already uses
     // (Manner/WebSearch/AsksFirst/WatchNotify all take it) - rule 4.
     val canAct = link == LinkState.CONNECTED && !stale
+    val listState = rememberLazyListState()
 
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
         TopBar("Settings", onBack)
 
+        LaunchedEffect(initialSection) {
+            val index = initialSection?.let(SETTINGS_ITEM_INDEX::get)
+            if (index != null) listState.animateScrollToItem(index)
+        }
+
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

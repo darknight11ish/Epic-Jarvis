@@ -1469,7 +1469,7 @@ def t_the_patch():
     e = hud.index("            return\n", s) + len("            return\n")
     block = hud[s:e]
     check("the conversation clock is noted before the fast path",
-          block.index("jarvis_backoff.note_conversation()") < block.index("answer_turn(body)"))
+          block.index("jarvis_backoff.note_conversation()") < block.index("answer_turn(body"))
     use_tz("Europe/London")
     w = World(time.time(), name="chat")
     S._SCHED = w.s

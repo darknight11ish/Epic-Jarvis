@@ -197,6 +197,21 @@ class ChatSession(
      */
     val crisis: StateFlow<Boolean> = _crisis.asStateFlow()
 
+    private val _openSettings = MutableStateFlow<String?>(null)
+
+    /**
+     * "Open <a settings section>" by voice or chat
+     * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
+     * section id the answer on screen named, or null. Read off the same
+     * `X-Jarvis-Route` header as [usedIds]/[crisis]
+     * ([Schedule.openSettingsFromRoute]); cleared with the answer, like
+     * them, so a manual reopen of Settings later does not jump anywhere on
+     * its own. Pure navigation - nothing here changes a setting;
+     * MainActivity is the only reader, and hands it on to `SettingsScreen`'s
+     * own `initialSection`.
+     */
+    val openSettings: StateFlow<String?> = _openSettings.asStateFlow()
+
     /**
      * Turns a temporary chat on or off, and starts a new conversation
      * either way ([newConversation]) - so nothing said in one kind of chat
@@ -283,6 +298,7 @@ class ChatSession(
         _answerNote.value = null
         _usedIds.value = emptyList()
         _crisis.value = false
+        _openSettings.value = null
         // A temporary question goes only to a PC that says it can hold one -
         // asked again now, since the PC may have changed since it was turned on.
         val asTemporary = _temporary.value
@@ -440,6 +456,10 @@ class ChatSession(
                         // by every backend yet (see Wellbeing.kt); false
                         // just means an ordinary bubble, as before.
                         _crisis.value = Wellbeing.crisisFromHeader(routeHeader)
+                        // "Open <a settings section>" (jarvis_settings_
+                        // registry.py, docs/JARVIS-API.md section 58.1):
+                        // pure navigation, read the same way.
+                        _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
                     }
                     val temporaryNotes = TemporaryChat.notes(asTemporary, routeHeader)
                     // Decoded as CHARACTERS, not as whatever bytes happened
@@ -695,6 +715,7 @@ class ChatSession(
         _answerNote.value = null
         _usedIds.value = emptyList()
         _crisis.value = false
+        _openSettings.value = null
     }
 
     /**

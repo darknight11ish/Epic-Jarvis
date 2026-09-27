@@ -127,6 +127,22 @@ class ScheduleTest {
         assertEquals("Done - answered on this PC without the AI model.", Schedule.DONE_LINE)
     }
 
+    // "Open <a settings section>" by voice or chat (jarvis_settings_
+    // registry.py, docs/JARVIS-API.md section 58.1) - additive to the same
+    // X-Jarvis-Route the answer above already reads.
+
+    @Test
+    fun openSettingsIsReadOffTheSameHeader() {
+        assertEquals(
+            "web-search",
+            Schedule.openSettingsFromRoute("""{"quick":"settings_open","open_settings":"web-search"}"""),
+        )
+        assertNull(Schedule.openSettingsFromRoute("""{"where":"local","quick":"timer_set"}"""))
+        assertNull(Schedule.openSettingsFromRoute(null))
+        assertNull(Schedule.openSettingsFromRoute("not json"))
+        assertNull(Schedule.openSettingsFromRoute("""{"open_settings":""}"""))
+    }
+
     // The standby schedule (backend jarvis_standby_schedule.py, 2026-09-25):
     // the desktop's coming-up.js says the same, and its tests/coming-up.mjs
     // checks these words are in Schedule.kt.

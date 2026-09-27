@@ -15,6 +15,7 @@ auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e03
 auto-learn.patch	auto-learn/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44+00:00	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
 big-model.patch	big-model/ee05ef0.patch	ee05ef0b3dcca894079a3ccda259a71560e2f8cc	2026-09-24T04:35:14+00:00	Big model: big-model.patch, the install lists, and parity
 bitemporal.patch	bitemporal/688640e.patch	688640efca47502ec38032394fa127eabb03101b	2026-09-15T03:28:09+00:00	bitemporal.patch: the second time axis, and a surface that shows it
+briefing.patch	briefing/5a84390.patch	5a84390453709180a51bef119ff1d4c3e5ec6f4f	2026-09-25T05:39:03+00:00	Morning briefing: new emails' count AND senders, with a setting for the count only
 briefing.patch	briefing/a0305da.patch	a0305dabd58fb35767fc11f2cbc914701eaf2057	2026-09-25T05:06:37+00:00	Merge the morning briefing and the back-off for offers
 briefing.patch	briefing/5350f7f.patch	5350f7f719f299875b3529c2304821dbf9176bce	2026-09-25T04:20:17+00:00	Morning briefing and the back-off for offers (backend)
 chat-history.patch	chat-history/92cbd90.patch	92cbd906388bfa9a2b6b9c7f7377e621ae5bcd30	2026-09-24T17:50:35+00:00	Merge branch 'worktree-agent-a6ef7f4f8bec69b97' into claude/admiring-ritchie-5urg5h
@@ -53,6 +54,7 @@ memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9
 memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51+00:00	Memory: stop the destructive paths, and start the event pump
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49+00:00	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28+00:00	Logseq and Joplin notes that are really filed
+schedule.patch	schedule/a90e8dc.patch	a90e8dc5323269d0ed88a81271d22ad1b6acf97e	2026-09-25T04:14:33+00:00	Standby schedule (backend): standby on a timetable, every model unloaded, warm-up on waking
 schedule.patch	schedule/97885fd.patch	97885fd9027e5f7c6a3d163fd5133cf634a0562a	2026-09-25T02:17:12+00:00	Timers, alarms, reminders, a to-do list and one scheduler (backend)
 second-card.patch	second-card/e1ab659.patch	e1ab6598a8784df14f084fac3150e719e920e78e	2026-09-24T06:52:58+00:00	Merge fix-b3: bug audit 3 fixes
 second-card.patch	second-card/2a25605.patch	2a25605de02b58dfbe278a6043a478ac81ed8819	2026-09-24T06:14:15+00:00	Gate notice words (AP-10): what the second card, wiki and big model do

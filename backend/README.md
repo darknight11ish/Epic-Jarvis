@@ -13543,3 +13543,206 @@ python3 backend/run_suites.py
 - Whether Android gets its own floating face is a separate piece of work,
   not decided here; this backend change does not depend on it and does not
   block it - any client can react to `quick: "open_chat"` the same way.
+
+# "Open" and "adjust" any setting, by voice or chat: `jarvis_settings_registry.py` (2026-09-27)
+
+## The real gap this closes
+
+Every setting lived behind a tap - open Settings, find the section, tap
+the toggle. The owner asked for a second way in, by voice or chat, but was
+explicit about the shape it had to take: "open" a section is pure
+navigation, and "adjust" a setting must call the EXACT SAME function the
+UI toggle already calls, never a new, parallel mutation path. Given the
+real scale here (desktop Settings alone has around 24 top-level sections
+and around ten of them sit behind a single clean existing on/off
+function), the brief also asked for a small registry rather than dozens of
+hand-written phrase matches.
+
+## In plain words
+
+`jarvis_settings_registry.py` (new module, shipped whole - `jarvis_quick.py`,
+already shipped, is its only importer) holds two small tables:
+
+- `SECTIONS` - every settings.html section id/`SettingsScreen.kt` item key,
+  with the plain words the owner might call it.
+- `BOOL_SETTINGS` (six simple on/off settings), plus two narrower tables
+  (`_ASKS_FIRST_TARGETS`, `_TOOL_TARGETS`) for the two settings that need a
+  second, named target - ten adjustable settings in total, two of them
+  (the web search provider, manner) already covered by `jarvis_quick.py`'s
+  own existing grammar and simply registered here too.
+
+`jarvis_quick.py` gained two new matchers, `_settings_open`/
+`_settings_adjust`, called from `_match()` right after "from now on ...".
+"Open X" only fires on an EXACT alias (a leading "the"/"my"/"a"/"an"
+ignored either side) - "open the door" and "show me the money" fall
+straight through to the model, never guessed at. "Turn on/off X" the same:
+a near-miss of a real setting's words ("turn off my calendar") matches
+nothing and goes to the model too - "ask, don't guess".
+
+Every adjustable setting calls straight into the function its own REST
+route already calls (`jarvis_auto_learn.handle_post`,
+`jarvis_asks_first.handle_lights`/`handle_tier`/`handle_tools`,
+`jarvis_search.request_ask_every_time`/`use`, `jarvis_watch_notify.request`,
+`jarvis_briefing.handle_senders`, `jarvis_manner.handle_set`) - a thin
+wrapper in `jarvis_settings_registry.py` per setting, never a re-
+implementation. `loosen_what_asks_first` and `enable_reading_tool`
+(`jarvis_owner_check.PC_ONLY_ACTIONS` - **the authoritative current list
+has three entries: those two and `restore_backup`**) get `peer`/`local`
+threaded all the way down from `jarvis_quick.answer_turn`'s two new
+keyword-only parameters, which `schedule.patch`'s `/api/chat` handler now
+reads off `self.client_address`/`self.connection.getsockname()` before
+calling in - the same two values `owner-check.patch`'s own wrapper already
+reads for `POST /api/approve`. Nothing here invents a laxer or stricter
+rule than `jarvis_owner_check.from_this_pc` already has; it is handed
+exactly what schedule.patch read off the live connection.
+
+`restore_backup` (also `PC_ONLY_ACTIONS`) is deliberately NOT offered as a
+spoken "adjust" - it replaces memory, chat history, settings and notes, and
+a beginner owner should not be one sentence away from that by accident.
+Jarvis's voice, Hardware and models, the second graphics card, the big
+model, backups and Accounts stay "open"-only; `jarvis_settings_registry.py`'s
+own module header lists all of it, and says why, rather than claiming
+coverage the code does not have.
+
+Both apps: no new route (this rides inside the existing `/api/chat`;
+`X-Jarvis-Route` gains one new, additive field, `open_settings`) so
+`tools/check_parity.py` needed no new entry, and stays clean
+(confirmed before and after this change). "Show me where"'s own mechanism
+(`plain-errors.js`'s `SETTINGS_PLACE_KEY`, `main.js`'s `open_fix_place`)
+is reused, generalised from one hardcoded place to any section id;
+`settings.js`'s `goToPlace()` now opens the nearest closed `<details>`
+ancestor and scrolls to ANY left place, not only "Starting Jarvis for
+you". The phone reads the same new header field
+(`net/Schedule.openSettingsFromRoute`), carries it on `ChatSession.
+openSettings`, and `MainActivity` navigates to `Screen.SETTINGS` and hands
+it to `SettingsScreen`'s new `initialSection`, which scrolls its
+`LazyColumn` to the matching item once. `docs/JARVIS-API.md` section 58
+has the whole design; `docs/ARCHITECTURE.md` section 3 has the one-
+paragraph summary ("a second door, never a second gate") and section 8
+has the phone-parity row.
+
+## What changed
+
+- `jarvis_settings_registry.py` - new module (shipped whole, no patch
+  needed for the module itself): `SECTIONS`/`find_section`/`section_by_id`/
+  `sections_for`, `BOOL_SETTINGS`/`find_bool_setting`, `_ASKS_FIRST_TARGETS`/
+  `find_asks_first_target`/`asks_first_targets`/`set_asks_first`,
+  `_TOOL_TARGETS`/`find_tool_target`/`tool_targets`/`set_reading_tool`,
+  `set_background_learning`/`set_learn_sensitive`/`set_lights_without_card`/
+  `set_ask_every_search`/`set_watch_notify`/`set_briefing_senders`/
+  `set_web_search_provider`/`set_manner`, `Outcome`, `_say` (the one place
+  that turns a `handle_*`'s `(code, body)` into plain words, never
+  inventing a sentence the real function did not give).
+- `jarvis_quick.py` (shipped whole already) - `Intent`/`Result` gained
+  `open_settings`; `_settings_open`, `_settings_adjust` and their regexes
+  (`_OPEN_SETTINGS`, `_ADJUST_ONOFF`, `_ASKS_FIRST_STRICTER`/`_LOOSER`,
+  `_TOOL_ON`/`_OFF`); `run()`, `answer()` and `answer_turn()` gained
+  `peer`/`local` keyword-only parameters, threaded straight down to the
+  three new `_run_settings_*` handlers and nowhere else; `route_fields()`
+  gained the additive `open_settings` key.
+- `schedule.patch` - one hunk edited (the `/api/chat` fast-path block):
+  computes `_peer`/`_local` off `self.client_address`/
+  `self.connection.getsockname()` and passes them to
+  `jarvis_quick.answer_turn`. `briefing.patch`'s two hunks over the SAME
+  block (which insert its own conversation-clock note and the
+  outside-text `tools_ran` line) were rewritten to match the new text -
+  rebuilt from a real `_stack.stand_in` intermediate file plus a hand-
+  applied copy of briefing's own intended changes, then re-diffed, never
+  hand-guessed at the new line numbers. `test_schedule.py`
+  `t_no_model_on_a_match` and `test_briefing.py` `t_the_patch` both prove
+  the rebuilt hunks apply, reverse, and behave - real `git apply` against
+  the real patch stack, not a guess.
+- `backend/patch-history/` - regenerated (`python3 tools/build_patch_history.py`)
+  after both patch edits; `--check` is clean.
+- `_where.py`, `scripts/apply-patches.ps1` - `jarvis_settings_registry.py`
+  added to `$SHIPPED`/`SHIPPED`, right after `jarvis_quick.py`.
+- `test_settings_registry.py` - new suite. Proves: `SECTIONS` matches the
+  real `settings.html`/`SettingsScreen.kt` ids (read from the files, not
+  hand-copied); "open" changes nothing and an unknown noun falls through;
+  "adjust" calls the real function (import identity, and a real flip of
+  `jarvis_manner`'s own setting); `loosen_what_asks_first` and
+  `enable_reading_tool` genuinely refuse a simulated phone `peer` and
+  genuinely raise the SAME card from a PC `peer`, Windows Hello included
+  (`jarvis_owner_check.set_verifier` stands in for the real check); lights
+  and background learning still raise their card rather than applying
+  silently, from any device; ambiguous phrasing matches nothing;
+  `is_command()` recognises every new sentence. Sandboxes
+  `JARVIS_FRAMEWORK_TOML`/`OPENJARVIS_CONFIG_DIR`/`JARVIS_CONFIG_DIR` to a
+  temporary copy, the same way `run_suites.py`'s own `private_state()`
+  does - **written down here because, before this sandboxing was added,
+  running this file directly (not through `run_suites.py`) once really did
+  flip a real line in the checked-in `backend/rebuilt/jarvis-framework.toml`;
+  the change was caught by `git status` and reverted before being
+  committed. `run_suites.py` itself was never affected - it already
+  sandboxes every suite this way.**
+- `docs/JARVIS-API.md` - new section 58 ("open"/"adjust" any setting, by
+  voice or chat), with 58.1 (open) and 58.2/58.3 (adjust, and what is not
+  covered).
+- `docs/ARCHITECTURE.md` - one paragraph in section 3 ("A second DOOR to
+  the same gates, never a second gate"); one new row in section 8's "kept
+  off the phone" table for the sections `SettingsScreen.kt` has no
+  `item(key=...)` for.
+- `jarvis-desktop/src/main.js` - `applyHeaderRoute` calls a new
+  `openSettingsFromRoute`, which leaves the place under `plain-errors.js`'s
+  `SETTINGS_PLACE_KEY` and calls the existing `open_fix_place` Tauri
+  command. No Rust change: `plain_errors.rs::open_fix_place` and
+  `windows.rs::show_settings` already do everything needed.
+- `jarvis-desktop/src/settings.js` - `goToPlace()` generalised from one
+  hardcoded id (`START_PLACE`) to any left place: looks the element up by
+  id, opens its nearest `<details>` ancestor if closed, scrolls to it and
+  focuses it (`START_PLACE`'s own extra focus-the-right-button behaviour
+  is unchanged).
+- `jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt` -
+  new `openSettingsFromRoute`, next to `quickFromRouteHeader`.
+- `jarvis-client/app/src/main/java/com/jarvis/client/net/ChatSession.kt` -
+  new `openSettings: StateFlow<String?>`, read and cleared the same way
+  `usedIds`/`crisis` already are.
+- `jarvis-client/app/src/main/java/com/jarvis/client/MainActivity.kt` -
+  collects `chat.openSettings`, a `LaunchedEffect` that calls
+  `nav.go(Screen.SETTINGS)` on a new value, and passes it on as
+  `SettingsScreen`'s new `initialSection`.
+- `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt` -
+  new `initialSection` parameter, a `rememberLazyListState()` the
+  `LazyColumn` now uses, a fixed `SETTINGS_ITEM_INDEX` map (this screen's
+  own `item(key=...)` order, by hand, so a reordering is a visible diff
+  here too) and a `LaunchedEffect(initialSection)` that scrolls to the
+  matching item once. An id with no row (the three linked screens, and
+  every desktop-only section) is a harmless no-op.
+- `jarvis-client/app/src/test/java/com/jarvis/client/ScheduleTest.kt` - a
+  new `openSettingsIsReadOffTheSameHeader` case, the same pattern as
+  `anAnswerMadeWithoutTheModelSaysDone` right above it. **Not run here**:
+  no Android SDK in this container (`CLAUDE.md`); hand-verified against
+  `quickFromRouteHeader`'s own pattern, proven for real only by CI. The
+  `ChatSession.kt`/`MainActivity.kt`/`SettingsScreen.kt` changes have no
+  existing JVM test file to extend (their fields' siblings - `usedIds`,
+  `crisis` - are not unit-tested at that layer either in this codebase;
+  they are hand-verified the same way).
+
+## Test it
+
+    python3 backend/test_settings_registry.py
+    python3 backend/test_schedule.py
+    python3 backend/test_briefing.py
+    python3 backend/run_suites.py
+    python3 tools/build_patch_history.py --check
+    python3 tools/check_parity.py
+
+## Not checked, said plainly
+
+- **Not run on the owner's PC.** Like every fast-path feature before it:
+  tested in the dev container only, against a stand-in Windows Hello
+  (`jarvis_owner_check.set_verifier`) and a sandboxed copy of
+  `jarvis-framework.toml`, never the real thing.
+- **The Kotlin is hand-verified, not compiled here.** No Android SDK in
+  this container (`CLAUDE.md`); proven for real only by CI.
+- **The desktop JS is verified with real Playwright/Chromium in this
+  container** (`plain-errors.mjs`, `asks-first.mjs`, `web-search.mjs`,
+  `briefing.mjs`, `faq.mjs`, `hud.mjs`, `ia.mjs` - all pass), but the full
+  `npm run test:ui` chain (26 files) was not run start-to-finish inside the
+  time this task had; the files most likely to touch `applyHeaderRoute`/
+  `settings.js` were run individually instead.
+- **Coverage, said plainly rather than claimed as complete**: ten
+  adjustable settings, out of roughly 23 mutation functions the brief
+  estimated exist; every top-level section is "open"-able. The exact list
+  is in `jarvis_settings_registry.py`'s own module header and
+  `docs/JARVIS-API.md` section 58.2/58.3.

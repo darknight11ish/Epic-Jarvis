@@ -785,6 +785,15 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "open <a settings section>", and "turn on/off <a setting>" ------------
+    # (jarvis_settings_registry.py, 2026-09-27) - see that module's own header.
+    got = _settings_open(s)
+    if got is not None:
+        return got
+    got = _settings_adjust(s)
+    if got is not None:
+        return got
+
     # --- "what can you do?" (jarvis_sayable.py) --------------------------------------
     if _SAYABLE.fullmatch(s):
         return Intent("sayable_help")
@@ -1616,6 +1625,97 @@ def _from_now_on(s: str) -> Optional[Intent]:
     return Intent("manner_from_now_on", {"manner": None})
 
 
+# --------------------------------------------------------------------------
+#   Any setting, by name (jarvis_settings_registry.py, the owner's decision
+#   of 2026-09-27): "open <a settings section>" is pure navigation; "turn
+#   on/off <a setting>" calls straight into the exact function the matching
+#   toggle in Settings already calls - see that module's own header for
+#   what is and is not covered, and why.
+# --------------------------------------------------------------------------
+
+#: "open web search", "show me the security settings", "go to accounts",
+#: "take me to what asks first" - an exact alias only (jarvis_settings_
+#: registry.find_section): a tail this does not name a section jumps
+#: nowhere and falls through, so "open the door" is still the model's.
+_OPEN_SETTINGS = re.compile(
+    r"(?:open|show(?:\s+me)?|go\s+to|jump\s+to|take\s+me\s+to)\s+(?:the\s+)?(.+?)"
+    r"(?:\s+(?:settings|section|screen|page))?")
+
+
+def _settings_open(s: str) -> Optional[Intent]:
+    m = _OPEN_SETTINGS.fullmatch(s)
+    if not m:
+        return None
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    section = R.find_section(m.group(1))
+    if section is None:
+        return None
+    return Intent("settings_open", {"id": section.id})
+
+
+#: The plain on/off settings (jarvis_settings_registry.BOOL_SETTINGS): "turn
+#: on background learning", "switch off lights without asking", "enable
+#: smartwatch notifications", "disable senders in my briefing".
+_ADJUST_ONOFF = re.compile(
+    r"(?:turn|switch)\s+(on|off)\s+(.+)"
+    r"|(enable)\s+(.+)"
+    r"|(disable)\s+(.+)")
+
+#: "What asks first" (jarvis_asks_first.LOOSE): stricter (ask again) or
+#: looser (stop asking - the PC only, one card plus Windows Hello). An
+#: optional "jarvis reads/accesses/checks/writes" is taken off first, so
+#: "stop asking before jarvis reads my calendar" and "stop asking before my
+#: calendar" both name the same target.
+_ASKS_FIRST_STRICTER = re.compile(
+    r"(?:ask\s+me\s+(?:first\s+)?before\s+|ask\s+first\s+before\s+|make\s+jarvis\s+ask\s+"
+    r"(?:me\s+)?before\s+)(?:jarvis\s+(?:reads?|accesses?|checks?|writes?)\s+)?(.+)")
+_ASKS_FIRST_LOOSER = re.compile(
+    r"stop\s+asking\s+(?:me\s+)?before\s+(?:jarvis\s+(?:reads?|accesses?|checks?|writes?)\s+)?"
+    r"(.+)")
+
+#: Offering a reading tool to the AI model at all (jarvis_asks_first.
+#: TOOLS_SWITCHABLE) - a DIFFERENT thing from the above (see that module's
+#: own header): "let the AI model read my calendar" / "don't let the AI
+#: model read my email".
+_TOOL_ON = re.compile(r"let\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
+_TOOL_OFF = re.compile(
+    r"(?:don'?t\s+let|stop\s+letting)\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
+
+
+def _settings_adjust(s: str) -> Optional[Intent]:
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    m = _TOOL_ON.fullmatch(s) or _TOOL_OFF.fullmatch(s)
+    if m:
+        tool = R.find_tool_target(m.group(1))
+        if tool is not None:
+            return Intent("settings_tool", {"tool": tool, "on": bool(_TOOL_ON.fullmatch(s))})
+    m = _ASKS_FIRST_LOOSER.fullmatch(s) or _ASKS_FIRST_STRICTER.fullmatch(s)
+    if m:
+        action = R.find_asks_first_target(m.group(1))
+        if action is not None:
+            return Intent("settings_asks_first",
+                          {"action": action, "ask": bool(_ASKS_FIRST_STRICTER.fullmatch(s))})
+    m = _ADJUST_ONOFF.fullmatch(s)
+    if m:
+        g = m.groups()
+        if g[0] is not None:            # "turn/switch on|off <name>"
+            on, name = g[0] == "on", g[1]
+        elif g[2] is not None:          # "enable <name>"
+            on, name = True, g[3]
+        else:                           # "disable <name>"
+            on, name = False, g[5]
+        setting = R.find_bool_setting(name)
+        if setting is not None:
+            return Intent("settings_bool", {"key": setting.key, "on": on})
+    return None
+
+
 SEARCH_MISSING = ("Your PC's Jarvis does not have web search yet - run apply-patches.ps1 "
                   "on the PC.")
 
@@ -1884,6 +1984,10 @@ class Result:
     made: list = field(default_factory=list)
     what: str = ""
     nouns: tuple = ()
+    # "open <a settings section>" (jarvis_settings_registry.py, 2026-09-27):
+    # the section id both apps already use for their own settings screen, so
+    # they can jump there. None for every other answer made here.
+    open_settings: Optional[str] = None
 
 
 def _join(items: list) -> str:
@@ -1921,15 +2025,62 @@ def _pick_timer(timers: list, f: dict):
     return pool[0], None
 
 
+SETTINGS_MISSING = ("Your PC's Jarvis does not have the settings registry yet - run "
+                    "apply-patches.ps1 on the PC.")
+
+
+def _run_settings_open(f: dict) -> Result:
+    """"Open <a settings section>": pure navigation, nothing changed. The
+    reply names the section in the owner's own words, so a voice answer
+    that gets cut off still says where Jarvis went."""
+    import jarvis_settings_registry as R
+    section = R.section_by_id(f["id"])
+    name = section.names[0] if section else f["id"]
+    return Result(f"Opening {name} in Settings.", "settings_open", open_settings=f["id"])
+
+
+def _run_settings_bool(f: dict, peer, local) -> Result:
+    import jarvis_settings_registry as R
+    setting = next((b for b in R.BOOL_SETTINGS if b.key == f["key"]), None)
+    if setting is None:
+        return Result(SETTINGS_MISSING, "settings_bool")
+    out = setting.set(f["on"], peer=peer, local=local)
+    return Result(out.said, "settings_bool")
+
+
+def _run_settings_asks_first(f: dict, peer, local) -> Result:
+    import jarvis_settings_registry as R
+    out = R.set_asks_first(f["action"], f["ask"], peer=peer, local=local)
+    return Result(out.said, "settings_asks_first")
+
+
+def _run_settings_tool(f: dict, peer, local) -> Result:
+    import jarvis_settings_registry as R
+    out = R.set_reading_tool(f["tool"], f["on"], peer=peer, local=local)
+    return Result(out.said, "settings_tool")
+
+
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
-        seen: Optional[float] = None, temporary: bool = False) -> Optional[Result]:
+        seen: Optional[float] = None, temporary: bool = False,
+        peer=None, local=None) -> Optional[Result]:
     """Do it. None hands the sentence to the model after all.
     `conversation`: the request's conversation_id ("cancel that" works only
     within one). `seen`: when the owner last talked to Jarvis before this
     turn ("what did I miss?"). `temporary`: a temporary chat, for "from now
-    on ..." (2026-09-27)."""
+    on ..." (2026-09-27). `peer`/`local`: the request's own address, read the
+    same way owner-check.patch's do_POST wrapper reads it - so a setting on
+    jarvis_owner_check.PC_ONLY_ACTIONS can refuse a request that did not
+    truly come from this PC (jarvis_settings_registry.py, 2026-09-27)."""
     import jarvis_schedule as S
     n, f = intent.name, intent.f
+    if n == "settings_open":
+        return _run_settings_open(f)
+    if n == "settings_bool":
+        return _run_settings_bool(f, peer, local)
+    if n == "settings_asks_first":
+        return _run_settings_asks_first(f, peer, local)
+    if n == "settings_tool":
+        return _run_settings_tool(f, peer, local)
     if n == "manner_from_now_on":
         return _run_from_now_on(f, conversation, temporary)
     if n == "bulk":
@@ -2516,11 +2667,13 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
 
 def answer(text, *, sched=None, now: Optional[float] = None,
            conversation: Optional[str] = None, seen: Optional[float] = None,
-           temporary: bool = False) -> Optional[Result]:
+           temporary: bool = False, peer=None, local=None) -> Optional[Result]:
     """Match and act. None: not ours - ask the model. `conversation`: the
     request's conversation_id, so "cancel that" takes back only what was set
     in it; `seen`: when the owner last talked to Jarvis before this turn;
-    `temporary`: a temporary chat (2026-09-27's "from now on ...")."""
+    `temporary`: a temporary chat (2026-09-27's "from now on ..."); `peer`/
+    `local`: the request's own address, for a setting on jarvis_owner_check.
+    PC_ONLY_ACTIONS (jarvis_settings_registry.py, 2026-09-27)."""
     now = time.time() if now is None else now
     intent = match(text, now)
     if intent is None:
@@ -2528,7 +2681,8 @@ def answer(text, *, sched=None, now: Optional[float] = None,
     if sched is None:
         import jarvis_schedule
         sched = jarvis_schedule.get()
-    res = run(intent, sched, now, conversation=conversation, seen=seen, temporary=temporary)
+    res = run(intent, sched, now, conversation=conversation, seen=seen, temporary=temporary,
+             peer=peer, local=local)
     if res is not None:
         try:
             sched.mark_command(text)
@@ -2668,10 +2822,23 @@ def _touch(now: Optional[float]) -> Optional[float]:
         return None
 
 
-def answer_turn(body, *, sched=None, now: Optional[float] = None) -> Optional[Result]:
+def answer_turn(body, *, sched=None, now: Optional[float] = None,
+                peer=None, local=None) -> Optional[Result]:
     """For /api/chat: the fast path's answer to this turn, or None. Every
     chat request counts as the owner being here ("what did I miss?" asks
-    since the one before), whoever's words it carries."""
+    since the one before), whoever's words it carries. `peer`/`local`: the
+    request's own address (schedule.patch's do_POST reads it the same way
+    owner-check.patch's own wrapper does) - passed all the way down so a
+    setting on jarvis_owner_check.PC_ONLY_ACTIONS can tell this PC's own
+    chat from the phone's, exactly as its REST route already does
+    (jarvis_settings_registry.py, 2026-09-27). This function never invents
+    either value: it hands whatever it was given straight to
+    jarvis_owner_check.from_this_pc, unchanged - the SAME function, and the
+    SAME "cannot be placed counts as this PC" rule, every other caller of
+    that function already lives with. schedule.patch always supplies the
+    real address; a caller that omits it (an older test, a script) gets
+    that function's own default, not a stricter or looser one made up
+    here."""
     seen = _touch(now) if isinstance(body, dict) and body.get("messages") else None
     conversation = conversation_of(body)
     # "temporary": true (temporary-chat.patch) - the same one-line check
@@ -2682,7 +2849,7 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None) -> Optional[Re
     text = newest_own_words(body)
     res = None if text is None else answer(text, sched=sched, now=now,
                                            conversation=conversation, seen=seen,
-                                           temporary=temporary)
+                                           temporary=temporary, peer=peer, local=local)
     if res is None and conversation:
         # The model answers this turn: "cancel that" after it is about the
         # model's answer, never about a reminder set before it.
@@ -2722,6 +2889,13 @@ def route_fields(res: Result) -> dict:
            "injected_sensitive": 0}
     if res.private:
         out["gate"] = "private"
+    if res.open_settings:
+        # "open <a settings section>" (jarvis_settings_registry.py,
+        # 2026-09-27): the section id both apps' Settings screens already
+        # use, so either one can jump straight there. Additive only - every
+        # existing reader of X-Jarvis-Route that does not look for this key
+        # is unaffected, exactly like `gate` above.
+        out["open_settings"] = res.open_settings
     return out
 
 
