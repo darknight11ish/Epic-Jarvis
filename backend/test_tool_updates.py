@@ -433,6 +433,29 @@ def t_needs_ask_tier():
           code == 503 and "ask" in out["error"])
 
 
+def t_a_later_never_stops_an_already_approved_check():
+    # Bug audit 2026-09-27, finding #4: the tier was read only before the
+    # FIRST ever yes - once approved() was True, request_check never asked
+    # jarvis-framework.toml again, so a later "never" (the exact thing
+    # "What asks first" tells the owner switches this off) did nothing.
+    fresh()
+    ran = []
+    code, out = TU.request_check({}, gate=lambda a, d, p: Verdict(True, "approved", "ask"),
+                                 tier_of=lambda a: "ask", spawn=run_now,
+                                 run=lambda: ran.append(1) or {})
+    check("first check, tier ask: approved and run", TU.approved() is True and ran == [1])
+    code, out = TU.request_check({}, gate=lambda a, d, p: Verdict(True, "approved"),
+                                 tier_of=lambda a: "never", spawn=run_now,
+                                 run=lambda: ran.append(2) or {})
+    check("already approved, but the tier is now 'never': refused, not started",
+          code == 503 and "never" in out["error"] and ran == [1], out)
+    code, out = TU.request_check({}, gate=lambda a, d, p: Verdict(True, "approved"),
+                                 tier_of=lambda a: "notify", spawn=run_now,
+                                 run=lambda: ran.append(3) or {})
+    check("already approved, tier 'notify' (not 'ask'): also refused",
+          code == 503 and ran == [1], out)
+
+
 def t_a_run_that_fails_after_approval_still_counts_as_the_one_card():
     fresh()
 
@@ -570,6 +593,7 @@ if __name__ == "__main__":
                t_denied_or_timed_out_leaves_it_unapproved,
                t_already_approved_never_calls_the_gate_again,
                t_already_checking_is_a_no_op_not_a_second_run, t_needs_ask_tier,
+               t_a_later_never_stops_an_already_approved_check,
                t_a_run_that_fails_after_approval_still_counts_as_the_one_card,
                t_approved_flag_survives_a_damaged_file, t_install_wraps_the_routes, t_the_patch):
         print(f"\n--- {fn.__name__} ---")

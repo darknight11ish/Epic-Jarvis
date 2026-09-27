@@ -3653,6 +3653,22 @@ def _second_card_lane(feature: str):
         return None
 
 
+def _combined_second_card_lane():
+    """`jarvis_second_card.combined_lane()` - the caller finding #3 of the
+    2026-09-27 bug audit said was missing entirely: the module's own third
+    mode, "One bigger model on both cards", had never been wired to
+    anything that could route a real turn to it. `choose_lane` below is
+    that caller."""
+    try:
+        import jarvis_second_card
+    except Exception:
+        return None
+    try:
+        return jarvis_second_card.combined_lane()
+    except Exception:
+        return None
+
+
 #: The invariants every Jarvis answer is written under - backend/jarvis-
 #: primary.Modelfile's SYSTEM block, word for word (test_agent.py checks
 #: they match). The everyday model has them built in. The second card's
@@ -3694,7 +3710,7 @@ _TEMPLATE_TOKENS = estimate_tokens(LANE_SYSTEM) + 100
 
 class LaneChoice:
     """A turn moved to the second card: where, which model, how much context,
-    and which feature moved it ("long_context" or "vision")."""
+    and which feature moved it ("long_context", "vision" or "combined")."""
 
     def __init__(self, url: str, model: str, context_length: int, feature: str, why: str):
         self.url, self.model, self.context_length = url, model, int(context_length)
@@ -3848,25 +3864,55 @@ def with_picture_text(messages: list, *, keep_picture: bool,
     return msgs, info
 
 
+def _combined_choice(get_combined: Callable[[], object]) -> Optional["LaneChoice"]:
+    """The `LaneChoice` for "One bigger model on both cards", or None - the
+    fallback `choose_lane` reaches for once vision and long_context have
+    both said no. Never raises. `_combined_conflict` (jarvis_second_card.py)
+    already keeps `get_combined()` from returning a lane while any per-card
+    feature (vision, long_context, wiki, browser_control) is genuinely on,
+    so this never competes with either branch above it - by the time
+    combined can answer, those switches are off by construction."""
+    try:
+        lane = get_combined()
+    except Exception:
+        return None
+    if lane is None:
+        return None
+    return LaneChoice(lane.url, lane.model, lane.num_ctx, "combined",
+                      "\"One bigger model on both cards\" is on, and it is running")
+
+
 def choose_lane(messages: list, model: str, *, ollama_url: str,
                 request: Optional[dict] = None, enabled_tools: Optional[set] = None,
                 context_length: Optional[int] = None,
-                lane_for: Optional[Callable[[str], object]] = None) -> Optional[LaneChoice]:
+                lane_for: Optional[Callable[[str], object]] = None,
+                combined_lane_for: Optional[Callable[[], object]] = None
+                ) -> Optional[LaneChoice]:
     """Whether this local turn goes to the second card. None: the main card,
     exactly as before. Never raises.
 
     - A picture in the newest message goes to the "vision" lane when it is
       working. Otherwise nothing changes: the main model gets it as today
-      (and the desktop warns first - vision.rs).
+      (and the desktop warns first - vision.rs). Never "combined" either -
+      its model is a plain text model with no picture ability of its own,
+      so a picture turn either finds the real vision lane or stays home.
     - A conversation the main model would have to TRIM (fit_messages would
       drop earlier turns) goes to the "long_context" lane - but only when
       that lane has MORE room than the main model (T3: with both at 16,384
       the turn moved and was trimmed there exactly as it would have been at
       home, on a different model, for nothing).
+    - Otherwise, when "One bigger model on both cards" (jarvis_second_card.
+      combined_lane) is on and running, EVERY ordinary turn goes there
+      instead of the everyday model - not a situational supplement like the
+      two lanes above, but what that mode's own card promises the owner:
+      "every answer runs on the bigger model". Bug audit 2026-09-27,
+      finding #3: this caller did not exist until now, so saying yes to
+      that card changed no answer at all.
     The switches are asked first, so with them off nothing else is done -
     not even asking Ollama for the main model's context length."""
     try:
         lf = lane_for or _second_card_lane
+        get_combined = combined_lane_for or _combined_second_card_lane
         if newest_turn_has_image(messages):
             lane = lf("vision")
             if lane is None:
@@ -3876,7 +3922,7 @@ def choose_lane(messages: list, model: str, *, ollama_url: str,
                               "picture model can see it")
         lane = lf("long_context")
         if lane is None:
-            return None
+            return _combined_choice(get_combined)
         req = request or {}
         mt = req.get("max_tokens")
         max_tokens = (int(mt) if isinstance(mt, int) and not isinstance(mt, bool) and mt > 0
@@ -3886,9 +3932,11 @@ def choose_lane(messages: list, model: str, *, ollama_url: str,
         n_ctx = context_length or _context_length(ollama_url, model)
         budget = max(512, n_ctx - max_tokens - _TEMPLATE_TOKENS - estimate_tokens(schemas))
         if estimate_tokens(list(messages or [])) <= budget:
-            return None
+            return _combined_choice(get_combined)
         if int(getattr(lane, "num_ctx", 0) or 0) <= int(n_ctx):
-            return None         # no more room there than here: nothing gained
+            # no more room there than here for long_context specifically -
+            # combined may still be a real gain, so it still gets asked
+            return _combined_choice(get_combined)
         return LaneChoice(lane.url, lane.model, lane.num_ctx, "long_context",
                           "the conversation is longer than the main card has room for")
     except Exception:

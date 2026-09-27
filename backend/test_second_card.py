@@ -625,6 +625,35 @@ def t_combined_mode():
               code2 == 409 and "already waiting" in out2["error"])
 
 
+def t_a_feature_card_approved_after_combined_turns_on_is_refused():
+    # Bug audit 2026-09-27, finding #5: _decide (a feature's own approval,
+    # not combined's) re-checked the main switch and this feature's own
+    # "needs" list against state as it is NOW, not as it was when the card
+    # went up - but never re-checked "combined". Approving "combined"
+    # while a feature's card was still waiting used to leave BOTH switches
+    # on, and _wanted/_combined_wanted then refuse each other in
+    # _reconcile/_reconcile_combined, running neither - exactly the state
+    # the 409 "Turn that off first" refusal exists to prevent.
+    with G.World(G.SMI["2080s_2060"]):
+        approve = lambda a, d, p: Verdict(True, "ask", "approved")
+        SC.request_change("master", True, gate=approve)
+        captured = []
+        code, out = SC.request_change("long_context", True, gate=approve,
+                                      spawn=captured.append)
+        check("long_context's own card is raised and left waiting",
+              code == 200 and out["pending"] is True and len(captured) == 1, out)
+        code2, out2 = SC.request_change("combined", True, gate=approve)
+        check("meanwhile, combined is asked for and approved for real",
+              code2 == 200 and SC._read_switches()["combined"] is True, out2)
+        captured[0]()   # long_context's own decision work, run now, on purpose
+        check("long_context's card, decided AFTER combined came on, is refused",
+              SC._read_switches()["features"].get("long_context") is not True,
+              SC._read_switches())
+        sw = SC._read_switches()
+        check("never both on at once", not (sw["combined"] and sw["features"].get("long_context")),
+              sw)
+
+
 def t_combined_capable_arithmetic():
     A = {"role": "primary", "name": "Card A", "uuid": "GPU-aaaa0000-0000-0000-0000-000000000000",
          "total_mb": 8192, "compute_cap": 7.5}
@@ -893,14 +922,16 @@ def t_main_ollama_pin():
 
 # ------------------------------------------------------------- the hooks --
 
-def _turn(messages, *, lane_for=None, enabled=None, context_length=2048, lane_choice="auto"):
+def _turn(messages, *, lane_for=None, combined_lane_for=None, enabled=None,
+          context_length=2048, lane_choice="auto"):
     sent = []
 
     def opener(url, body):
         sent.append((url, body))
         return W.FakeResponse(W.stream([("content", "ok"), ("done", "stop")]))
-    patch = mock.patch.object(AG, "_second_card_lane", lane_for or (lambda f: None))
-    with patch:
+    patches = [mock.patch.object(AG, "_second_card_lane", lane_for or (lambda f: None)),
+              mock.patch.object(AG, "_combined_second_card_lane", combined_lane_for or (lambda: None))]
+    with patches[0], patches[1]:
         AG.run_local_turn(messages, "qwen3:8b", ollama_url="http://127.0.0.1:11434",
                           stream_out=lambda b: None, open_stream=opener,
                           enabled_tools=enabled, context_length=context_length,
@@ -1068,6 +1099,40 @@ def t_hooks_when_on():
     with mock.patch.object(SC, "lane_for", lambda f: None):
         IN.propose(Extract(), [{"role": "user", "content": "x"}], lambda p: "main", store=_NoStore())
     check("jarvis_intake.propose, off: the main model answers", seen == ["main"])
+
+
+def t_combined_is_the_fallback_when_vision_and_long_context_say_no():
+    # Bug audit 2026-09-27, finding #3: combined_lane() had no caller at
+    # all, so saying yes to "One bigger model on both cards" changed no
+    # answer. choose_lane() now asks it once vision and long_context have
+    # both said no - never instead of either, and never for a picture turn
+    # whose own vision lane is unavailable (the combined model cannot see).
+    combined = SC.Lane("http://127.0.0.1:11436", "qwen3:14b", 32768, "combined test")
+    short = [{"role": "user", "content": "hi"}]
+    lc = AG.choose_lane(short, "qwen3:8b", ollama_url="http://x",
+                        lane_for=lambda f: None, combined_lane_for=lambda: combined)
+    check("an ordinary short turn, nothing else available: goes to combined",
+          lc is not None and lc.feature == "combined" and lc.model == "qwen3:14b", repr(lc))
+    sent = _turn(short, combined_lane_for=lambda: combined)
+    check("... and the real request really goes there",
+          sent[0][0] == "http://127.0.0.1:11436/v1/chat/completions"
+          and sent[0][1]["model"] == "qwen3:14b")
+    pic = [{"role": "user", "content": [{"type": "text", "text": "what is this?"},
+                                         {"type": "image_url", "image_url": {"url": "data:,"}}]}]
+    lc = AG.choose_lane(pic, "qwen3:8b", ollama_url="http://x",
+                        lane_for=lambda f: None, combined_lane_for=lambda: combined)
+    check("a picture, no vision lane: stays home - never falls through to combined",
+          lc is None, repr(lc))
+    msgs = _long_history()
+    same = SC.Lane("http://127.0.0.1:11435", "qwen3:14b", 16384, "test")
+    lc = AG.choose_lane(msgs, "jarvis-primary", ollama_url="x", context_length=16384,
+                        lane_for=lambda f: same if f == "long_context" else None,
+                        combined_lane_for=lambda: combined)
+    check("long_context available but no bigger than the main model: falls through to combined",
+          lc is not None and lc.feature == "combined", repr(lc))
+    lc = AG.choose_lane(short, "qwen3:8b", ollama_url="http://x",
+                        lane_for=lambda f: None, combined_lane_for=lambda: None)
+    check("combined off too: the turn really stays on the main card", lc is None, repr(lc))
 
 
 class _NoStore:

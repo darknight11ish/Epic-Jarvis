@@ -392,21 +392,78 @@ def t_a_card_already_waiting_offers_nothing():
 
 
 def t_backoff_holds_it_back_mid_chat():
+    # Bug audit 2026-09-27, finding #1: /api/chat stamps note_conversation()
+    # at the START of the very turn this function checks at the END of, so
+    # the real caller would ALWAYS see "still chatting" here and, before
+    # the fix, never check again. Proves both halves: no card the first
+    # time (unchanged), and that a retry really is scheduled and really
+    # does raise the card once the conversation goes quiet - not just that
+    # nothing crashes.
     with G.World(G.SMI["2080s_2060"]):
         cid = "conv-mid-chat"
         AG.reset_suggest_counts(cid)
         AG.note_struggle(cid, SC.STRUGGLE_THRESHOLD)
-        bo, _clock = fresh_backoff()
+        bo, clock = fresh_backoff()
         bo.note_conversation()
         saved = _bo_context(bo)
         try:
             seen = []
             gate = lambda a, d, p: seen.append((a, d, p)) or Verdict(True, "ask", "approved")
-            SC.maybe_suggest_combined(cid, gate=gate)
+            # `spawn` is asked to start two DIFFERENT background jobs here -
+            # _retry_when_quiet's own wait (named "run", deliberately not
+            # run yet - the point of this test is to run it by hand once
+            # the clock has actually moved) and _request_change_combined's
+            # own card-raising job (named "work", which the real _spawn
+            # would run right away, the same way t_offers_and_the_card_is_
+            # the_real_one relies on for its own, unmocked spawn) - told
+            # apart by name since they are the only two spawned here.
+            spawned = []
+
+            def spawn(fn):
+                (spawned.append(fn) if fn.__name__ == "run" else fn())
+
+            SC.maybe_suggest_combined(cid, gate=gate, spawn=spawn, sleep=lambda s: None)
             check("still within jarvis_backoff's own quiet-after-chat window: no card",
                   not seen, seen)
+            check("a retry was scheduled rather than never trying again",
+                  len(spawned) == 1, spawned)
+            check("SC._RETRY_SCHEDULED remembers this conversation while it waits",
+                  cid in SC._RETRY_SCHEDULED, SC._RETRY_SCHEDULED)
+            clock.t += BO.QUIET_AFTER_CHAT + 1
+            spawned.pop(0)()   # the retry thread's own body, run inline (sleep is a no-op)
+            check("... and once quiet, the retry raises the SAME card for real",
+                  len(seen) == 1, seen)
+            check("the retry cleans up after itself",
+                  cid not in SC._RETRY_SCHEDULED, SC._RETRY_SCHEDULED)
         finally:
             BO._ONE = saved
+            SC._RETRY_SCHEDULED.discard(cid)
+
+
+def t_retry_is_not_scheduled_twice_for_the_same_conversation():
+    # A busy back-and-forth (several turns, each ending in "still chatting")
+    # must not pile up one sleeping thread per turn.
+    with G.World(G.SMI["2080s_2060"]):
+        cid = "conv-busy"
+        AG.reset_suggest_counts(cid)
+        AG.note_struggle(cid, SC.STRUGGLE_THRESHOLD)
+        bo, clock = fresh_backoff()
+        bo.note_conversation()
+        saved = _bo_context(bo)
+        try:
+            gate = lambda a, d, p: Verdict(True, "ask", "approved")
+            spawned = []
+            SC.maybe_suggest_combined(cid, gate=gate, spawn=spawned.append,
+                                      sleep=lambda s: None)
+            SC.maybe_suggest_combined(cid, gate=gate, spawn=spawned.append,
+                                      sleep=lambda s: None)
+            SC.maybe_suggest_combined(cid, gate=gate, spawn=spawned.append,
+                                      sleep=lambda s: None)
+            check("three turns in a row, still only one retry ever scheduled",
+                  len(spawned) == 1, spawned)
+        finally:
+            BO._ONE = saved
+            SC._RETRY_SCHEDULED.discard(cid)
 
 
 def t_never_raises_on_a_bad_conversation_id():
@@ -534,6 +591,15 @@ def t_the_patch():
     check("an older client (no conversation_id) is untouched: the route still ends "
           "the same way, right after the new lines",
           after.index('return self._send(code, out)', cid_at) - cid_at < 700, after[cid_at:cid_at + 700])
+    # Bug audit 2026-09-27, finding #2: this route did not exist in any
+    # patch at all, so both apps' "when to suggest the bigger model"
+    # switches could not work. Checked against the reconstructed file
+    # itself, not just this test's own copy of the intended text.
+    i = after.index('if route == "/api/second-card/suggest":')
+    w = after[i:i + 1800]
+    check("POST /api/second-card/suggest checks origin and token, and hands the body over",
+          "_origin_ok(self)" in w and "_token_ok(self)" in w
+          and "jarvis_second_card.handle_suggest_post(body)" in w, w)
     import _where
     check("no new module to ship: jarvis_agent.py and jarvis_second_card.py are already "
           "in _where.SHIPPED",

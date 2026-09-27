@@ -30,3 +30,37 @@
                       "/api/task/note") or (route.startswith("/api/pending/")
                                             and route.endswith("/amend")):
              # task-control.patch - Pause, Resume, Stop and a note for what
+@@ -2380,6 +2397,33 @@
+             code, out = jarvis_second_card.handle_post(body)
+             return self._send(code, out)
+ 
++        if route == "/api/second-card/suggest":
++            # second-card-suggest.patch - one "when to suggest the bigger
++            # model" switch on or off (jarvis_second_card.SUGGEST_SIGNALS).
++            # NO CARD EITHER WAY: this only changes whether Jarvis OFFERS,
++            # never what it may do without a person's yes - the same
++            # reasoning jarvis_manner.py's humour switch already uses. The
++            # answer is {"ok": true, ...suggest_settings()} or 400 with
++            # {"ok": false, "error": "<a plain sentence>"}. Bug audit
++            # 2026-09-27, finding #2: this route was never wired to
++            # anything, so both apps' switches for it could not work at
++            # all - found before the owner could see it fail.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_second_card
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            code, out = jarvis_second_card.handle_suggest_post(body)
++            return self._send(code, out)
++
+         if route in ("/api/hardware/apply", "/api/hardware/create",
+                      "/api/hardware/measure"):
+             # hardware.patch - the three setups (jarvis_hardware.py).

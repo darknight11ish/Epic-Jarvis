@@ -43,14 +43,16 @@ direction while the other is genuinely on: _combined_capable, and the
 "master and any feature" checks in _request_change_combined and in the
 five features' own request_change path). Real speed is unmeasured until
 the second card is physically installed - the approval card and Settings
-both say so. combined_lane() is lane_for()'s shape for it; nothing yet
-calls it automatically (see docs/JARVIS-API.md's second-card section for
-why that is a deliberate, documented gap, not an oversight).
+both say so. combined_lane() is lane_for()'s shape for it; jarvis_agent.
+choose_lane() calls it as the ordinary-turn fallback once vision and
+long_context have both said no (bug audit 2026-09-27, finding #3 - fixed
+the same day it was found; this file's own words had claimed the gap
+longer than it was actually still open, caught by re-reading the real
+caller list rather than trusting this comment).
 
 SUGGESTING "COMBINED" (2026-09-27, the owner's "Both, with a setting"
-answer to being asked directly). `combined_lane()` still has no automatic
-caller (the gap above is still real - nothing SWITCHES combined mode on by
-itself), but jarvis_agent.py now notices two signs, each per conversation
+answer to being asked directly). jarvis_agent.py notices two signs, each
+per conversation
 and in memory only, and asks THIS module to OFFER the existing card:
 
     struggle    Jarvis visibly having to work around a tool call this turn
@@ -1699,10 +1701,10 @@ def lane_for(feature: str) -> Optional[Lane]:
 
 def combined_lane() -> Optional[Lane]:
     """Where "One bigger model on both cards" runs, or None. lane_for()'s
-    shape, for the third mode: nothing in this backend calls it yet (see
-    the module docstring and docs/JARVIS-API.md's second-card section) - it
-    is here so that whatever does, later, gets the same contract every
-    other lane already has. Never raises."""
+    shape, for the third mode: `jarvis_agent.choose_lane()` calls this as
+    the fallback for an ordinary (non-picture) turn once vision and
+    long_context have both said no - the same contract every other lane
+    already has. Never raises."""
     try:
         sw = _read_switches()
         if not sw.get("combined") or _combined_conflict(sw):
@@ -2366,12 +2368,23 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
                        "you turned it off while the card was waiting", rid)
     if feature != "master":
         # Checked again now, not only when the card went up: the main switch
-        # (or a feature this one needs) may have been turned off meanwhile.
+        # (or a feature this one needs) may have been turned off meanwhile -
+        # and, bug audit 2026-09-27 finding #5, "combined" may have been
+        # turned ON meanwhile (a separate card, approved in between): the
+        # two cannot share both cards, and this was previously checked only
+        # when THIS card was first raised, not again here - so approving
+        # "combined" while a feature's own card was still waiting could
+        # leave both switches on, and _wanted/_combined_wanted would then
+        # each refuse the other, running neither.
         cur = _read_switches()
         if not cur["master"]:
             return _finish(feature, pid, "refused",
                            "the main second-card switch was turned off while the card "
                            "waited", rid)
+        if cur.get("combined"):
+            return _finish(feature, pid, "refused",
+                           "\"One bigger model on both cards\" was turned on while this "
+                           "card waited, and the two cannot share both cards", rid)
         gone = [d for d in _BY_ID[feature]["needs"] if not cur["features"].get(d)]
         if gone:
             return _finish(feature, pid, "refused",
@@ -2610,7 +2623,8 @@ def _suggestion_reason(struggle: int, correction: int) -> Optional[str]:
 
 def maybe_suggest_combined(conversation_id, *, gate: Optional[Callable] = None,
                            tier_of: Optional[Callable[[str], str]] = None,
-                           spawn: Optional[Callable] = None) -> None:
+                           spawn: Optional[Callable] = None,
+                           sleep: Optional[Callable[[float], None]] = None) -> None:
     """Called once, at the end of a chat turn (jarvis_agent.run_local_turn) -
     never mid-answer. Offers "One bigger model on both cards" through the
     SAME approval card the Hardware screen's own switch already raises
@@ -2621,21 +2635,75 @@ def maybe_suggest_combined(conversation_id, *, gate: Optional[Callable] = None,
     (_combined_capable - the same hard gate "combined" itself needs, never
     a separate or looser one); and jarvis_backoff says this offer may be
     made right now. Never switches anything on by itself: the same
-    person's-yes card as always decides that. `gate`/`tier_of`/`spawn`:
-    request_change()'s own injection points, for the tests - the real
-    caller never passes them. Never raises."""
+    person's-yes card as always decides that.
+
+    jarvis_backoff's own "never mid-chat" rule (note_conversation, stamped
+    at the START of this SAME turn by /api/chat) would otherwise refuse
+    every single check this function ever makes, since it always runs at
+    the END of a turn that just stamped "chatting now" - bug audit
+    2026-09-27, finding #1. When that is the ONLY reason held back, one
+    background wait (see _retry_when_quiet) tries this exact same check
+    again once the conversation goes quiet, rather than only ever trying
+    once and never again.
+
+    `gate`/`tier_of`/`spawn`/`sleep`: request_change()'s own injection
+    points, plus the wait itself - for the tests; the real caller never
+    passes them. Never raises."""
     try:
-        _maybe_suggest_combined(conversation_id, gate, tier_of, spawn)
+        _maybe_suggest_combined(conversation_id, gate, tier_of, spawn, sleep)
     except Exception:
         pass
 
 
-def _maybe_suggest_combined(conversation_id, gate=None, tier_of=None, spawn=None) -> None:
+#: Retry threads already waiting for "the owner is still chatting, try again
+#: once quiet" - one per conversation, so a busy back-and-forth turn after
+#: turn does not spawn a pile of sleeping threads that would all wake at
+#: once. See _retry_when_quiet.
+_RETRY_SCHEDULED: set = set()
+_RETRY_LOCK = threading.Lock()
+
+
+def _retry_when_quiet(conversation_id, gate, tier_of, spawn, sleep, bo) -> None:
+    """Bug audit 2026-09-27, finding #1: `/api/chat` stamps "the owner is
+    chatting now" (jarvis_backoff.note_conversation) at the START of the
+    same turn `_maybe_suggest_combined` checks at the END of, so
+    `may_offer`'s conversation gate always said "not now" and nothing ever
+    checked again - the offer could never actually fire outside a turn
+    that happened to take over two minutes to answer. This is that "check
+    again": one background wait for exactly as long as `quiet_for()` still
+    says, then one more real attempt through `_maybe_suggest_combined`
+    itself, so every other gate (the thresholds, `combined`'s own
+    capability check, backoff, a card already pending) is re-checked
+    fresh rather than trusted from before the wait - if the owner is still
+    talking when the wait ends, that call schedules the next wait itself,
+    the same way; if any other gate says no, it stops here, same as an
+    ordinary turn that never had anything to offer."""
+    with _RETRY_LOCK:
+        if conversation_id in _RETRY_SCHEDULED:
+            return
+        _RETRY_SCHEDULED.add(conversation_id)
+
+    def run() -> None:
+        try:
+            wait = bo.quiet_for()
+            if wait > 0:
+                sleep(wait)
+        finally:
+            with _RETRY_LOCK:
+                _RETRY_SCHEDULED.discard(conversation_id)
+        _maybe_suggest_combined(conversation_id, gate, tier_of, spawn, sleep)
+
+    spawn(run)
+
+
+def _maybe_suggest_combined(conversation_id, gate=None, tier_of=None, spawn=None,
+                            sleep=None) -> None:
     if not isinstance(conversation_id, str) or not conversation_id:
         return
     gate = gate or _gate
     tier_of = tier_of or _tier
     spawn = spawn or _spawn
+    sleep = sleep or _sleep
     # Cheapest checks first: most conversations never cross either
     # threshold, and this runs at the end of EVERY turn, so nothing below
     # this line (a config-file read, detect()'s nvidia-smi call) happens
@@ -2667,10 +2735,12 @@ def _maybe_suggest_combined(conversation_id, gate=None, tier_of=None, spawn=None
     fp = jarvis_backoff.fingerprint(SUGGEST_OFFER_KIND)
     bo = jarvis_backoff.get()
     try:
-        may, _why2 = bo.may_offer(fp, kind=SUGGEST_OFFER_KIND)
+        may, why2 = bo.may_offer(fp, kind=SUGGEST_OFFER_KIND)
     except Exception:
         return
     if not may:
+        if why2 == "conversation":
+            _retry_when_quiet(conversation_id, gate, tier_of, spawn, sleep, bo)
         return
     try:
         bo.opened(fp)

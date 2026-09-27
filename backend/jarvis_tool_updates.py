@@ -759,6 +759,18 @@ def request_check(body=None, *, gate: Optional[Callable] = None,
     spawn = spawn or _spawn
     write = write or _set_approved
     run = run or run_check
+    # Bug audit 2026-09-27, finding #4: read first, every time - not only
+    # before the FIRST ever approval. Without this, a later "never" (or
+    # "notify") in jarvis-framework.toml stopped meaning anything the
+    # moment the owner had said yes once: "What asks first" would say the
+    # feature was switched off while this button still reached PyPI,
+    # crates.io and GitHub. The same refusal, in the same words, whether or
+    # not this has ever run before.
+    t = tier_of(ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "error": (
+            f"{ACTION} is tier {t!r} in jarvis-framework.toml; the check "
+            f"needs a person to say yes, so it must be 'ask'")}
     if approved():
         # `view()` (below) calls `checking()`, which takes _C_LOCK itself -
         # never called while THIS function still holds it, or a thread
@@ -779,11 +791,6 @@ def request_check(body=None, *, gate: Optional[Callable] = None,
                 _C_STATE["running"] = False
             return 503, {"ok": False, "error": "could not start the check"}
         return 202, {"ok": True, "checking": True, "view": view(), "message": CHECKING_MESSAGE}
-    t = tier_of(ACTION)
-    if t != "ask":
-        return 503, {"ok": False, "error": (
-            f"{ACTION} is tier {t!r} in jarvis-framework.toml; the first check needs a "
-            f"person to say yes, so it must be 'ask'")}
     with _P_LOCK:
         if _P_STATE["pending"]:
             return 202, {"ok": True, "waiting": True, "view": view(),

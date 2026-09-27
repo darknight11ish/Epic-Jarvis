@@ -56,6 +56,7 @@ note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28+00:00	Logseq and Joplin notes that are really filed
 schedule.patch	schedule/a90e8dc.patch	a90e8dc5323269d0ed88a81271d22ad1b6acf97e	2026-09-25T04:14:33+00:00	Standby schedule (backend): standby on a timetable, every model unloaded, warm-up on waking
 schedule.patch	schedule/97885fd.patch	97885fd9027e5f7c6a3d163fd5133cf634a0562a	2026-09-25T02:17:12+00:00	Timers, alarms, reminders, a to-do list and one scheduler (backend)
+second-card-suggest.patch	second-card-suggest/476be02.patch	476be02a5a254b7f6868f3aef75fc00288e3aa73	2026-09-27T04:50:08+00:00	Suggest the bigger model when the second card could help
 second-card.patch	second-card/e1ab659.patch	e1ab6598a8784df14f084fac3150e719e920e78e	2026-09-24T06:52:58+00:00	Merge fix-b3: bug audit 3 fixes
 second-card.patch	second-card/2a25605.patch	2a25605de02b58dfbe278a6043a478ac81ed8819	2026-09-24T06:14:15+00:00	Gate notice words (AP-10): what the second card, wiki and big model do
 second-card.patch	second-card/15a7f27.patch	15a7f27ebe5d5bb6bfad2f7cdd962f0c0aa1a7d6	2026-09-24T06:11:02+00:00	AP-9: Browser control's card no longer says "Nothing leaves this PC"

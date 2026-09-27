@@ -61,19 +61,26 @@ import com.jarvis.client.ui.theme.LocalChrome
  * is a visible two-line diff here too, not a silent mismatch. "Open <a
  * settings section>" (docs/JARVIS-API.md section 58.1) is this map's only
  * reader.
+ *
+ * Bug audit 2026-09-27: this went stale the moment "floating-avatar" was
+ * inserted at position 3 by a concurrent piece of work - every index from
+ * "manner" down was one item too early, unnoticed because the merge that
+ * combined both pieces of work was a clean auto-merge with no text
+ * conflict here. Fixed by re-reading the real `item(key = ...)` order
+ * below rather than hand-adjusting the old numbers.
  */
 private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "voice" to 0,
     "security" to 1,
     "appearance-card" to 2,
-    "manner" to 3,
-    "web-search" to 4,
-    "asks-first" to 5,
-    "reach" to 6,
-    "email-sending" to 7,
-    "folders" to 8,
-    "backup" to 9,
-    "watch-notify" to 10,
+    "manner" to 4,
+    "web-search" to 5,
+    "asks-first" to 6,
+    "reach" to 7,
+    "email-sending" to 8,
+    "folders" to 9,
+    "backup" to 10,
+    "watch-notify" to 11,
 )
 
 @Composable

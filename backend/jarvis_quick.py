@@ -785,15 +785,6 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
-    # --- "open <a settings section>", and "turn on/off <a setting>" ------------
-    # (jarvis_settings_registry.py, 2026-09-27) - see that module's own header.
-    got = _settings_open(s)
-    if got is not None:
-        return got
-    got = _settings_adjust(s)
-    if got is not None:
-        return got
-
     # --- "what can you do?" (jarvis_sayable.py) --------------------------------------
     if _SAYABLE.fullmatch(s):
         return Intent("sayable_help")
@@ -809,6 +800,23 @@ def _match(text, now: float) -> Optional[Intent]:
     # --- "open a chat" (the floating face, 2026-09-27) --------------------------
     if _OPEN_CHAT.fullmatch(s):
         return Intent("open_chat")
+
+    # --- "open <a settings section>", and "turn on/off <a setting>" ------------
+    # (jarvis_settings_registry.py, 2026-09-27) - see that module's own header.
+    # Checked AFTER the older, more specific fast paths just above (bug audit
+    # 2026-09-27, finding #8): the "reach" section's own aliases ("what
+    # jarvis can reach/access") are word-for-word what _REACH already
+    # matches for a different, established purpose - reading the list
+    # aloud, not opening Settings to it - and checking this block first
+    # made that older phrase silently unreachable. This block still runs
+    # before everything below it, so it wins every case that does not
+    # collide with something that came before it.
+    got = _settings_open(s)
+    if got is not None:
+        return got
+    got = _settings_adjust(s)
+    if got is not None:
+        return got
 
     # --- music and video control on this PC (jarvis_media.py, I91) -------------------
     got = _media(s)

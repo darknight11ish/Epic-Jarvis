@@ -133,6 +133,38 @@ def t_sections_match_the_real_ui():
     check("no alias is claimed by two sections",
           len([n for s in R.SECTIONS for n in s.names])
           == len({n for s in R.SECTIONS for n in s.names}))
+    _check_settings_item_index(kt)
+
+
+def _check_settings_item_index(kt: str):
+    """`SettingsScreen.kt`'s own `SETTINGS_ITEM_INDEX` claims a `LazyColumn`
+    position for each key it lists - checked here against the REAL, current
+    order of `item(key = "...")` calls in the same file, never trusted as
+    still accurate.
+
+    Bug audit 2026-09-27: this map went stale the moment a concurrent piece
+    of work inserted "floating-avatar" at position 3 - every index below it
+    was one item too early, and nothing caught it because the map was never
+    checked against the file's real order, only checked (by the test above)
+    for which keys it lists at all. A silent, plausible-looking wrong
+    number is exactly what a presence-only check misses."""
+    real_order = re.findall(r'item\(key\s*=\s*"([^"]+)"', kt)
+    real_index = {key: i for i, key in enumerate(real_order)}
+    map_block = re.search(r"SETTINGS_ITEM_INDEX[^{(]*\(\s*(.*?)\n\)", kt, re.S)
+    declared = dict(re.findall(r'"([\w-]+)"\s+to\s+(\d+)', map_block.group(1))) if map_block else {}
+    check("SETTINGS_ITEM_INDEX's own map block was found and parsed", bool(declared))
+    # "appearance-card" is the desktop's own id, deliberately aliased to the
+    # phone's own item key "appearance" (docs/JARVIS-API.md section 58.1's
+    # own note on this one intentional name mismatch) - checked against
+    # "appearance" instead of expecting the wire id to appear verbatim.
+    ALIAS = {"appearance-card": "appearance"}
+    wrong = []
+    for key, declared_i in declared.items():
+        real_i = real_index.get(ALIAS.get(key, key))
+        if real_i is None or str(real_i) != declared_i:
+            wrong.append(f"{key}: map says {declared_i}, real position is {real_i}")
+    check("SETTINGS_ITEM_INDEX's positions match the real item(key=...) order",
+          not wrong, wrong)
 
 
 # ======================================================== 2. "open" is pure navigation
@@ -161,6 +193,32 @@ def t_open_is_pure_navigation():
     rf2 = Q.route_fields(r2)
     check("an ordinary quick answer carries no open_settings key at all",
           "open_settings" not in rf2, rf2)
+
+
+def t_reach_wins_over_open_reach_settings():
+    # Bug audit 2026-09-27, finding #8: the "reach" section's own aliases
+    # ("what jarvis can reach/access") are word-for-word what the older,
+    # already-established _REACH grammar already matches for a different
+    # purpose - reading the list aloud (jarvis_reach.py), not opening
+    # Settings. _settings_open used to run first in _match's dispatch
+    # chain, so those exact sentences opened Settings instead and the
+    # older phrase became silently unreachable.
+    for phrase in ("show me what jarvis can reach", "show me what jarvis can access",
+                  "what can jarvis reach", "tell me what jarvis can access"):
+        i = Q.match(phrase)
+        check(f"{phrase!r} still reads the reach list aloud, not Settings",
+              i is not None and i.name == "reach_list", (phrase, i))
+    # Said plainly rather than silently accepted: the "reach" section's
+    # own two declared aliases are BOTH exactly what _REACH now wins
+    # against, so this fix trades "the wrong intent every time" for "no
+    # voice alias opens this one section at all" - still strictly better
+    # (reach_list is the more useful, more specific answer), but a real
+    # gap, not a false "everything still works". A future alias for this
+    # section that does not repeat _REACH's own wording would close it.
+    for phrase in ("show me what jarvis can reach", "show me what jarvis can access"):
+        i = Q.match(phrase)
+        check(f"{phrase!r} no longer opens Settings (traded away on purpose)",
+              i is None or i.name != "settings_open", i)
 
 
 # ======================================================== 3. "adjust" calls the real function
