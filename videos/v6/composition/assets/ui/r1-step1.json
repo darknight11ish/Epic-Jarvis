@@ -1,0 +1,26 @@
+{
+  "image_px": [
+    1500,
+    1101
+  ],
+  "window": {
+    "x": 0.0,
+    "y": 0.0,
+    "w": 1.0,
+    "h": 0.5722
+  },
+  "answer_text": null,
+  "step_line": {
+    "x": 0.038,
+    "y": 0.2588,
+    "w": 0.252,
+    "h": 0.0409
+  },
+  "on_screen": {
+    "status": "ASKING THE MODEL",
+    "answer": "",
+    "sources": null,
+    "prompt": "",
+    "voice": null
+  }
+}

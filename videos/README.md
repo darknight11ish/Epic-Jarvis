@@ -2,6 +2,24 @@
 
 Every version is kept. The newest is at the top. Tap a picture to watch.
 
+## v6 — "Your AI" (26 s, plus a 14 s upright cut)
+
+[![Jarvis launch video v6](v6/jarvis-launch-v6.jpg)](v6/jarvis-launch-v6.mp4)
+
+The AI itself, at work: a real AI model on your own PC (Qwen3 8B by default).
+It looks things up and shows where it read them, flagging any quote it cannot
+find there. It checks it is your voice before it writes down a word, stops when
+you say "stop", lets you swap its brain from your phone, and still asks first.
+A new look, "Glass & Light": Jarvis's face is the only light in a dark room,
+and the real app screens float on glass.
+
+Planned by a team review of v1 to v5 (an AI engineer, a motion director, a
+launch strategist, three everyday viewers, a sound designer and an honesty
+skeptic). `v6/brag-plan.md` has what they found and where each claim is in the
+code.
+
+For a phone held upright: [the 14-second cut](v6/jarvis-launch-v6-vertical.mp4).
+
 ## v5 — "A day with Jarvis" (34 s, plus a 16 s upright cut)
 
 [![Jarvis launch video v5](v5/jarvis-launch-v5.jpg)](v5/jarvis-launch-v5.mp4)
@@ -48,7 +66,8 @@ One idea: Jarvis does nothing, and keeps nothing, until you say so. It asks
 before it acts, and your phone checks it's you. The example is a visible
 browser renewing a library book, only on the one site you approved (built,
 and switched on once a second graphics card is in). It asks before it remembers something about you, and it keeps a history
-of what changed. And when you say "stop", it stops. Every screen is the real
+of what changed. (Out of date since: Jarvis now learns from your own words
+automatically, with Forget and "Erase the words" on every fact.) And when you say "stop", it stops. Every screen is the real
 desktop app, and every spoken line is captioned.
 
 For a phone held upright: [the 15-second cut](v3/jarvis-launch-v3-vertical.mp4).
@@ -62,7 +81,8 @@ and why, and where each claim is in the code.
 [![Jarvis launch video v2](v2/jarvis-launch-v2.jpg)](v2/jarvis-launch-v2.mp4)
 
 How Jarvis learns you over time (it proposes facts, keeps only the ones you
-accept, and remembers what changed), learns your voice, waits while you
+accept, and remembers what changed; out of date since: it now learns from
+your own words automatically), learns your voice, waits while you
 think, and asks before it acts. Then how it scales: one graphics card today,
 ready for a second card and a big model, and next, a design for any 8 GB card
 and up to two cards. Each claim is labelled on screen as **today**, **ready**

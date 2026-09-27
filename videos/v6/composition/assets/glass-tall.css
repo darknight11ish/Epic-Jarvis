@@ -1,0 +1,6 @@
+/* The upright cut: same parts, laid out for a phone held upright. Words stay
+   out of the top 200 px and the bottom 300 px. */
+html, body { width: 1080px; height: 1920px; }
+#backlight { width: 1000px; height: 1000px; margin: -500px 0 0 -500px; }
+.end-line { font-size: 124px; }
+.small { font-size: 34px; }

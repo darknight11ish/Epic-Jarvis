@@ -1,0 +1,14 @@
+Jarvis v6: Your AI. A real AI model on your own PC. Qwen3 8B by default, running on your PC's graphics card.
+
+- It looks things up, and shows where it read them. If it quotes something that is not in what it actually read, it flags the quote.
+- It checks it is your voice before it writes down a single word (after you set up your voice; it cannot tell a recording of you from you).
+- Say "stop" over a reply and it stops talking.
+- Swap its brain from your phone: pick another model you already have, and approve the card. Nothing changes until you do.
+- It still asks first. The approval card shows what it wants to do, and nothing runs until you decide.
+- It learns from your own words only, and every fact has Forget and "Erase the words".
+- Web search sends only your search words out. Your phone connects to your PC only on your own networks.
+- Ready for a second graphics card: longer conversations, pictures, and one bigger model across both cards (off until you add the card and approve).
+
+Made for a Windows PC with an 8 GB NVIDIA graphics card. Android phone app. Free and non-commercial.
+
+The screens in the video are the real desktop app with made-up example data, and the phone screens are drawn with the app's own words. None of this has been run on the maker's own PC yet.
