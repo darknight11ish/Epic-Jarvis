@@ -71,6 +71,15 @@ class VoiceSession(
      */
     private val onCutOff: (String) -> Unit = {},
     /**
+     * "Open a chat" (or a close phrasing, [com.jarvis.client.net.OpenChatPhrase])
+     * while Floating Jarvis is up - brings the real app to the front
+     * (`docs/JARVIS-API.md` section 56). Called in ADDITION to sending the
+     * turn on as usual, never instead of it: this is not a second grammar
+     * that decides what the model sees, only one extra thing the phone does
+     * with words the desktop already transcribed and checked.
+     */
+    private val onOpenChatPhrase: () -> Unit = {},
+    /**
      * Sends a turn and returns the reply, or null if it could not be sent.
      * `onRoute` is called once with the answer's `X-Jarvis-Route` header (or
      * null) before any words; `onStatus` with each `: jarvis-status` word
@@ -813,6 +822,11 @@ class VoiceSession(
         }
 
         setTranscript(turn, text)
+        // "Open a chat" while Floating Jarvis is up: bring the real app to
+        // the front, alongside the ordinary turn below - see the
+        // constructor param's own doc for why this is additive, not a
+        // second fast path.
+        if (com.jarvis.client.net.OpenChatPhrase.matches(text)) onOpenChatPhrase()
         setPhase(turn, Phase.THINKING)
         // Armed once, here, for the whole turn - never inside `play`. A reply
         // is spoken sentence by sentence, so clearing the flag per sentence

@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
+import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Secondary
@@ -75,6 +76,12 @@ fun SettingsScreen(
      * as a destination before there is a desktop to push to.
      */
     onOpenAppearance: (() -> Unit)? = null,
+    /** "Floating Jarvis" - saved on this phone only, so it needs no `canAct` gate. */
+    floatingAvatar: FloatingAvatarMode = FloatingAvatarMode.OFF,
+    onFloatingAvatarChange: (FloatingAvatarMode) -> Unit = {},
+    overlayGranted: Boolean = false,
+    onRequestOverlay: () -> Unit = {},
+    onOpenBubbleSettings: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     // The same gate every other write on this screen already uses
@@ -163,6 +170,16 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            item(key = "floating-avatar") {
+                FloatingAvatarSection(
+                    mode = floatingAvatar,
+                    onModeChange = onFloatingAvatarChange,
+                    overlayGranted = overlayGranted,
+                    onRequestOverlay = onRequestOverlay,
+                    onOpenBubbleSettings = onOpenBubbleSettings,
+                )
             }
 
             // The seven sections moved whole from Brain's old "Settings"

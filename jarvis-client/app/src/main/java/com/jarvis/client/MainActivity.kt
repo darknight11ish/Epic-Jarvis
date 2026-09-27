@@ -41,6 +41,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.data.CheckMethod
 import com.jarvis.client.data.CheckOutcome
+import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.data.LockSession
 import com.jarvis.client.data.Security
 import com.jarvis.client.data.SecurityRules
@@ -64,6 +65,7 @@ import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PowerWatch
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.ApprovalNotifier
+import com.jarvis.client.service.AvatarOverlayService
 import com.jarvis.client.service.EventService
 import com.jarvis.client.service.WakeWordService
 import com.jarvis.client.net.WakeWord
@@ -629,6 +631,25 @@ class MainActivity : FragmentActivity() {
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             } else {
                 window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+
+        // "Floating Jarvis" (data/FloatingAvatar.kt, JARVIS-API §56): the
+        // Overlay path is a foreground service, kept in step with the
+        // setting and the permission itself here, at the top of App() -
+        // like `security` above, rather than nested under Screen.SETTINGS -
+        // because the whole point of an overlay is that it outlives whatever
+        // screen is on top. `tick` is `permissionTick` (read further up):
+        // "draw over other apps" can be revoked in Android's own Settings at
+        // any time, and this is what notices that on return.
+        val floatingAvatar by JarvisRuntime.settings.floatingAvatar.collectAsState()
+        LaunchedEffect(floatingAvatar, tick) {
+            if (floatingAvatar == FloatingAvatarMode.OVERLAY &&
+                Settings.canDrawOverlays(this@MainActivity)
+            ) {
+                AvatarOverlayService.start(this@MainActivity)
+            } else {
+                AvatarOverlayService.stop(this@MainActivity)
             }
         }
 
@@ -1759,6 +1780,13 @@ class MainActivity : FragmentActivity() {
                         } else {
                             null
                         },
+                        floatingAvatar = floatingAvatar,
+                        onFloatingAvatarChange = { JarvisRuntime.settings.setFloatingAvatar(it) },
+                        overlayGranted = remember(tick) {
+                            Settings.canDrawOverlays(this@MainActivity)
+                        },
+                        onRequestOverlay = ::requestOverlayPermission,
+                        onOpenBubbleSettings = ::openBubbleSettings,
                     )
 
                     Screen.APPEARANCE -> AppearanceScreen(
@@ -2377,6 +2405,42 @@ class MainActivity : FragmentActivity() {
     private fun openReleasePage() {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(UpdateCheck.RELEASE_PAGE))) }
             .onFailure { JarvisRuntime.setNotice("No browser on this phone could open the release page.") }
+    }
+
+    /**
+     * "Draw over other apps" for the Overlay path of "Floating Jarvis"
+     * ([FloatingAvatarSection]'s own explanation is shown first, always -
+     * this is only ever called from its button). Android's own screen, with
+     * its own warning about this permission; never granted silently, and
+     * the `LaunchedEffect(floatingAvatar, tick)` above keeps reading the
+     * real answer either way.
+     */
+    private fun requestOverlayPermission() {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName"),
+        )
+        runCatching { startActivity(intent) }.onFailure {
+            runCatching { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)) }
+        }
+    }
+
+    /**
+     * Android's own per-app "Allow bubbles" screen, for the Bubble path of
+     * "Floating Jarvis". This app has no other way to change that switch -
+     * only the owner, in Android's own settings, can.
+     */
+    private fun openBubbleSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_BUBBLE_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        runCatching { startActivity(intent) }.onFailure {
+            runCatching {
+                startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
+                )
+            }
+        }
     }
 
     /**

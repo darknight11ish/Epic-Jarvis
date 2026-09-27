@@ -572,6 +572,24 @@ object JarvisRuntime {
             // Where the owner cut a spoken answer off: sent once, with the
             // next question (typed or spoken), as `interrupted`.
             onCutOff = { said -> chatSession.cutOff.cut(said, android.os.SystemClock.elapsedRealtime()) },
+            // "Open a chat" while Floating Jarvis is up (JARVIS-API §56).
+            // Gated here, not in VoiceSession, on the setting being
+            // anything but OFF: the phrase always still reaches the model
+            // like any other sentence (see the constructor param's own
+            // doc) - this only decides whether it ALSO pops the app to the
+            // front, which nobody who never turned Floating Jarvis on
+            // should see happen out of nowhere.
+            onOpenChatPhrase = {
+                if (clientSettings.floatingAvatar.value != com.jarvis.client.data.FloatingAvatarMode.OFF) {
+                    val intent = android.content.Intent(app, MainActivity::class.java)
+                        .setAction(MainActivity.ACTION_START_VOICE)
+                        .addFlags(
+                            android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                                android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                        )
+                    runCatching { app.startActivity(intent) }
+                }
+            },
         ) { text, onRoute, onStatus, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
