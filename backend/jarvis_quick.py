@@ -797,6 +797,10 @@ def _match(text, now: float) -> Optional[Intent]:
     if _WHO_ARE_YOU.fullmatch(s):
         return Intent("identity_help")
 
+    # --- "open a chat" (the floating face, 2026-09-27) --------------------------
+    if _OPEN_CHAT.fullmatch(s):
+        return Intent("open_chat")
+
     # --- music and video control on this PC (jarvis_media.py, I91) -------------------
     got = _media(s)
     if got is not None:
@@ -1674,6 +1678,26 @@ _WHO_ARE_YOU = re.compile(
 IDENTITY_MISSING = ("Your PC's Jarvis cannot answer that without apply-patches.ps1 - run it "
                     "on the PC.")
 
+#: "Open a chat" and close phrasings (the floating face, 2026-09-27): the
+#: desktop's small always-on-top window that shows only Jarvis's animated
+#: face - no text box, voice only - and this is how it expands into the real
+#: window. Answered here, with no model, for the same reason every other
+#: fixed line in this file is: it must work even while the model is slow,
+#: unloaded or asleep, which is exactly when a hands-free owner most wants
+#: the real window to check on something. `X-Jarvis-Route`'s "quick" field
+#: (route_fields, below) carries this intent's name to the desktop unchanged;
+#: `jarvis-desktop/src-tauri/src/commands.rs`'s `stream_chat` is what acts on
+#: it. Whole sentences only, like everywhere else here: "open a chat about
+#: my day" goes to the model.
+_OPEN_CHAT = re.compile(
+    r"open\s+(?:a|the)\s+chat(?:\s+window)?"
+    r"|show\s+me\s+(?:a|the)\s+chat(?:\s+window)?"
+    r"|show\s+(?:the\s+)?chat(?:\s+window)?"
+    r"|bring\s+up\s+(?:a|the)\s+chat(?:\s+window)?"
+    r"|open\s+(?:the\s+)?jarvis\s+bar"
+    r"|show\s+(?:me\s+)?(?:the\s+)?jarvis\s+bar"
+    r"|bring\s+up\s+(?:the\s+)?jarvis\s+bar")
+
 
 def _run_sayable(intent: Intent) -> Result:
     """"Things you can say" (jarvis_sayable.py), said in one answer for "what
@@ -1939,6 +1963,13 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_sayable(intent)
     if n == "identity_help":
         return _run_identity(intent)
+    if n == "open_chat":
+        # Nothing state-changing happens here - a client reads this reply's
+        # own `quick` field (route_fields, below) and brings its own chat
+        # surface to the front itself. The desktop does that today
+        # (commands.rs, stream_chat, for its floating face); this file does
+        # not know or care which app asked.
+        return Result("Here you go.", n)
     if n.startswith("media_"):
         return _run_media(intent)
     if n.startswith("tellme_"):

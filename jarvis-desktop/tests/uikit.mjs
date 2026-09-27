@@ -441,6 +441,8 @@ export const HOTKEYS = [
     accelerator: "Alt+Shift+W", default: "Alt+Shift+W", registered: true, error: null },
   { id: "stop_everything", label: "Stop everything", hint: "Stops Jarvis talking and anything it is doing on the screen or the phone, at once. Asks nothing first; approves nothing.",
     accelerator: "Alt+Shift+X", default: "Alt+Shift+X", registered: true, error: null },
+  { id: "toggle_floating", label: "Show or hide the floating face", hint: "The small always-on-top window with just Jarvis's face - no chat box. Off by default.",
+    accelerator: "Alt+Shift+F", default: "Alt+Shift+F", registered: true, error: null },
 ];
 
 export const UPDATE_NONE = {

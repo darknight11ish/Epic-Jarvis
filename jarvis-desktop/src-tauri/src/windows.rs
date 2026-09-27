@@ -902,3 +902,241 @@ pub fn widget_is_visible(app: &AppHandle) -> bool {
         .and_then(|w| w.is_visible().ok())
         .unwrap_or(false)
 }
+
+// ---------------------------------------------------------------------------
+// Floating face ("picture-in-picture" mode)
+// ---------------------------------------------------------------------------
+
+/// Label of the minimalist floating face window.
+pub const FLOATING_LABEL: &str = "floating";
+
+/// Fixed size, both directions — the round face never letterboxes inside a
+/// rectangular window.
+///
+/// The Widget's own embedded face is 120 CSS px (widget.css `#face-frame`),
+/// but it sits inside a 320px card whose header and status row already say
+/// what Jarvis is doing; here the face is the ONLY thing on screen, so it
+/// gets more room — 200 is inside the 160–220 range this feature was scoped
+/// to (CLAUDE.md), big enough that the face's own expressions read at a
+/// glance from across a desk, small enough that it does not cover whatever
+/// the owner is doing behind it.
+const FLOATING_SIZE: f64 = 200.0;
+
+/// Geometry and on/off state, persisted between runs — the same shape as
+/// [`WidgetPrefs`] and the same reason: four scalars, written from Rust, so
+/// a plugin would add a dependency and a capability grant to buy nothing.
+///
+/// Unlike `WidgetPrefs`, every field's derived default (`None`, `false`) is
+/// already the one this needs — off, no saved position — so `Default` is
+/// derived rather than written out by hand.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FloatingPrefs {
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    /// Off by default (this app's house style for anything new). Settings,
+    /// the tray and its hotkey all flip this; a restart reopens the window
+    /// only if the owner had turned it on and never turned it off.
+    pub enabled: bool,
+}
+
+/// In-memory copy of [`FloatingPrefs`], flushed to disk by the telemetry
+/// tick — see [`WidgetState`], which this mirrors exactly.
+#[derive(Default)]
+pub struct FloatingState {
+    prefs: Mutex<FloatingPrefs>,
+    dirty: AtomicBool,
+}
+
+impl FloatingState {
+    pub fn snapshot(&self) -> FloatingPrefs {
+        self.prefs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    pub fn update(&self, edit: impl FnOnce(&mut FloatingPrefs)) {
+        let mut prefs = self
+            .prefs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        edit(&mut prefs);
+        self.dirty.store(true, Ordering::Relaxed);
+    }
+
+    pub fn flush(&self, app: &AppHandle) {
+        if !self.dirty.swap(false, Ordering::Relaxed) {
+            return;
+        }
+        let prefs = self.snapshot();
+        if let Err(err) = write_floating_prefs(app, &prefs) {
+            eprintln!("[jarvis] unable to persist floating face prefs: {err}");
+        }
+    }
+}
+
+fn floating_prefs_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("unable to resolve the app config dir: {e}"))?;
+    Ok(dir.join("floating.json"))
+}
+
+fn write_floating_prefs(app: &AppHandle, prefs: &FloatingPrefs) -> Result<(), String> {
+    let path = floating_prefs_path(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("unable to create {}: {e}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(prefs)
+        .map_err(|e| format!("unable to serialize floating face prefs: {e}"))?;
+    std::fs::write(&path, json).map_err(|e| format!("unable to write {}: {e}", path.display()))
+}
+
+/// Loads persisted prefs, falling back to defaults (off, no position) for a
+/// missing or corrupt file — a bad `floating.json` must never stop the app
+/// from starting.
+pub fn load_floating_prefs(app: &AppHandle) -> FloatingPrefs {
+    floating_prefs_path(app)
+        .ok()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|raw| serde_json::from_str::<FloatingPrefs>(&raw).ok())
+        .unwrap_or_default()
+}
+
+/// Opens the floating face — the picture-in-picture-style mode: just
+/// Jarvis's animated face, voice-only, no title bar, no resize handles, no
+/// text box — or brings it forward if it is already open. Built on demand,
+/// like Faces, Settings and the Brain: most sessions never turn this on, so
+/// a hidden webview living for the run of the app would be pure cost.
+///
+/// NOT behind the app lock (contrast [`show_quickbar`], [`show_brain`],
+/// [`show_settings`], [`show_hud`]): it shows nothing the tray icon does
+/// not already show to anyone at the keyboard — which of the states in
+/// `jarvis-visual-spec.json` Jarvis is in — never a word of text, a memory
+/// or a chat. lock.rs's own reasoning for leaving the widget uncovered
+/// ("the widget stays on the desktop... Deny still works from the widget")
+/// applies here even more directly: this window carries strictly less
+/// information than the widget's status row.
+///
+/// The URL is `floating.html` — a small new page, not `faces.html` itself.
+/// It embeds the SAME `faces.html?mode=display&feed=parent` frame the
+/// Widget's tray already runs, driven by postMessage exactly the way
+/// `widget.js`'s `postFace` drives it (`floating.js` mirrors that
+/// function). `faces.html` is deliberately NOT loaded as this window's own
+/// page: its own capability (`capabilities/faces.json`) holds no event or
+/// approval-queue permission at all — "it is the largest body of
+/// third-party-shaped drawing code in the app" — and loading it directly
+/// here would mean either leaving this window's face frozen (no
+/// permission to read live state) or handing that permission to the one
+/// file this app keeps free of it. `floating.html` holds the read-only
+/// permission instead (`capabilities/floating.json`) and hands the frame
+/// only a state id and the appearance document, never the queue itself.
+pub fn show_floating(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(FLOATING_LABEL) {
+        return window
+            .show()
+            .map_err(|e| format!("unable to show the floating face: {e}"));
+    }
+
+    // Built hidden and centred first, then repositioned if a saved spot is
+    // still on screen, then shown — the same order `setup_widget` uses, so
+    // there is never a visible flash-then-jump on a mixed-DPI desktop.
+    let window = tauri::WebviewWindowBuilder::new(
+        app,
+        FLOATING_LABEL,
+        tauri::WebviewUrl::App("floating.html".into()),
+    )
+    .title("Jarvis")
+    .inner_size(FLOATING_SIZE, FLOATING_SIZE)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .decorations(false)
+    .transparent(true)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .shadow(false)
+    // Voice-only, no controls: this window must never take the keyboard,
+    // the way the widget only ever does on an explicit show (see
+    // `toggle_widget`'s own comment) — here it never does, because there is
+    // nothing in it to type into or click a button on.
+    .focused(false)
+    .visible(false)
+    .center()
+    .theme(Some(tauri::Theme::Dark))
+    .build()
+    .map_err(|e| format!("unable to open the floating face: {e}"))?;
+
+    let prefs = load_floating_prefs(app);
+    if let (Some(x), Some(y)) = (prefs.x, prefs.y) {
+        if position_is_visible(&window, x, y) {
+            let _ = window.set_position(PhysicalPosition::new(x, y));
+        }
+    }
+
+    attach_floating_listeners(app, &window);
+
+    window
+        .show()
+        .map_err(|e| format!("unable to show the floating face: {e}"))
+}
+
+/// Tracks dragging (persisted by the telemetry tick, same as the widget) and
+/// turns a close request into a hide — there is no titlebar and so no close
+/// button, but a future script calling `window.close()` must still leave
+/// the process exactly as every other window in this app does.
+fn attach_floating_listeners(app: &AppHandle, window: &WebviewWindow) {
+    let handle = app.clone();
+    window.on_window_event(move |event| match event {
+        WindowEvent::Moved(position) => {
+            handle.state::<FloatingState>().update(|prefs| {
+                prefs.x = Some(position.x as f64);
+                prefs.y = Some(position.y as f64);
+            });
+        }
+        WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            if let Some(floating) = handle.get_webview_window(FLOATING_LABEL) {
+                let _ = floating.hide();
+            }
+            handle
+                .state::<FloatingState>()
+                .update(|prefs| prefs.enabled = false);
+        }
+        _ => {}
+    });
+}
+
+/// Hides the floating face.
+pub fn hide_floating(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window(FLOATING_LABEL)
+        .ok_or_else(|| format!("window `{FLOATING_LABEL}` was not found"))?;
+    window
+        .hide()
+        .map_err(|e| format!("unable to hide the floating face: {e}"))
+}
+
+/// Toggles the floating face and persists the new on/off state. Returns its
+/// new visibility.
+pub fn toggle_floating(app: &AppHandle) -> Result<bool, String> {
+    let visible = floating_is_open(app);
+    if visible {
+        hide_floating(app)?;
+    } else {
+        show_floating(app)?;
+    }
+    app.state::<FloatingState>()
+        .update(|prefs| prefs.enabled = !visible);
+    Ok(!visible)
+}
+
+/// True when the floating face is on screen.
+pub fn floating_is_open(app: &AppHandle) -> bool {
+    app.get_webview_window(FLOATING_LABEL)
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false)
+}

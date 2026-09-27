@@ -545,7 +545,7 @@ await check("CONTROL: only the Brain holds the history commands, and ON is held 
     const perm = `allow-${cmd.replace(/_/g, "-")}`;
     assert.deepEqual(holders(perm), ["brain-history"], `${perm} is held by ${holders(perm)}`);
   }
-  for (const c of ["brain", "faces", "hud", "onboarding", "quickbar", "settings", "widget"]) {
+  for (const c of ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "settings", "widget"]) {
     const json = read(`src-tauri/capabilities/${c}.json`);
     assert.equal(json.includes("\"brain-history\""), c === "brain", `${c} and brain-history`);
   }

@@ -505,7 +505,7 @@ await check("CONTROL: the toast is the fixed words, on ready only; changes held 
     assert.match(read("src-tauri/src/lib.rs"), new RegExp(`brain::briefing::${cmd},`));
   }
   assert.ok(JSON.parse(read("src-tauri/capabilities/brain.json")).permissions.includes("brain-briefing"));
-  for (const other of ["quickbar", "widget", "hud", "settings", "faces", "onboarding"]) {
+  for (const other of ["quickbar", "widget", "hud", "settings", "faces", "floating", "onboarding"]) {
     assert.ok(!read(`src-tauri/capabilities/${other}.json`).includes("brain-briefing"), other);
   }
 });

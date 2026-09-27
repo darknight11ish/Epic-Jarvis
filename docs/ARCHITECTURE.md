@@ -1314,9 +1314,9 @@ are architectural rather than configuration:
 
 ## 8. The clients
 
-**Desktop** (`jarvis-desktop/`): Tauri 2, seven windows (quickbar, widget,
-HUD, Brain, Faces, onboarding, Settings - one capability file each in
-`src-tauri/capabilities/`), per-window ACL capabilities. The Rust commands are the real API — buttons are a courtesy, and
+**Desktop** (`jarvis-desktop/`): Tauri 2, eight windows (quickbar, widget,
+HUD, Brain, Faces, onboarding, Settings, the floating face - one capability
+file each in `src-tauri/capabilities/`), per-window ACL capabilities. The Rust commands are the real API — buttons are a courtesy, and
 any window holding the capability can call them, so a check that lives only in
 the webview is not a check. `decide_approval` consults link staleness in Rust
 for exactly that reason.
@@ -1354,7 +1354,11 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   note to a running task or a card, and `inject_task_note` and
   `amend_approval` refuse the widget in Rust - notes are added in the
   Jarvis bar, which asks Windows Hello first. Stop everything (the hotkey
-  and the tray row) is never behind App lock.
+  and the tray row) is never behind App lock. **The floating face**
+  (2026-09-27) is not covered either, for a shorter reason than the
+  widget's: it shows no approval card at all, ever - not even a title -
+  only which of eight states Jarvis is in, the same information the tray
+  icon already shows to anyone at the keyboard.
 - **Phone:** the whole app - including Home's "Stop everything" button,
   which is behind App lock like the rest of the app (JARVIS-API §28); the
   PC's hotkey and tray row are not. The home-screen widget only ever shows the

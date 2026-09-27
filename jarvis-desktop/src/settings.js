@@ -694,6 +694,36 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) paintShared();
 });
 
+/* Floating face: a small, always-on-top window with just Jarvis's face -
+   no chat box, voice only (2026-09-27). Off by default; read and written
+   through get_floating/set_floating (windows::FloatingState, Rust side). */
+const floatingEnabled = $("floating-enabled");
+
+async function paintFloating() {
+  if (!floatingEnabled || !IS_TAURI) return;
+  try {
+    const prefs = await invoke("get_floating");
+    floatingEnabled.checked = Boolean(prefs && prefs.enabled);
+  } catch (error) {
+    console.error("[settings] could not read the floating face setting:", error);
+  }
+}
+paintFloating();
+
+if (floatingEnabled) {
+  floatingEnabled.addEventListener("change", async () => {
+    const want = floatingEnabled.checked;
+    try {
+      await invoke("set_floating", { enabled: want });
+    } catch (error) {
+      // The checkbox is the only record of intent here - put it back so it
+      // never claims a state the window is not actually in.
+      floatingEnabled.checked = !want;
+      console.error("[settings] could not change the floating face:", error);
+    }
+  });
+}
+
 $("open-faces").addEventListener("click", async () => {
   try {
     await invoke("open_faces");

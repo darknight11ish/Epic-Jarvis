@@ -8272,3 +8272,73 @@ call).
 **No new way out of the PC** (`docs/ARCHITECTURE.md` §4). This only reads
 what a tool ALREADY fetched this turn, by reference; it adds no fetch of
 anything, on either app.
+
+## 56. The floating face, and "open a chat" (added 2026-09-27)
+
+The owner's picture-in-picture idea: a small, always-on-top desktop window
+that shows only Jarvis's animated face - no visible text box, voice only -
+that expands into the real Jarvis bar when the owner says or types "open a
+chat" (or a close phrasing). **No new backend route, and no new patch**:
+the window itself is a Rust/webview feature with nothing on the wire at
+all, and the phrase is answered by `jarvis_quick.py` (already shipped)
+from the existing fast path, the same way it already answers "what can you
+do?" and "who are you?" (§54).
+
+### 56.1 The window: local only, nothing here to document as a route
+
+`jarvis-desktop/src-tauri/src/windows.rs`'s `show_floating`/`hide_floating`/
+`toggle_floating`, a 200×200 borderless always-on-top window at a new page,
+`floating.html` - not `faces.html` itself. That page embeds the SAME
+`faces.html?mode=display&feed=parent` frame the desktop widget's tray
+already runs, driven by postMessage exactly as `widget.js`'s `postFace`
+drives it (`floating.js` mirrors that function): `faces.html` is the
+largest body of third-party-shaped drawing code in the app and is
+deliberately held to zero event or approval-queue permission everywhere
+it already appears (`capabilities/faces.json`); loading it directly as
+this window's own page would have had to grant it those permissions to
+read live state at all. `floating.html`/`capabilities/floating.json` hold
+the (read-only) permission instead. Off by default, turned on from
+Settings → Appearance ("Floating face"), the tray ("Show or hide the
+floating face") or a rebindable hotkey (`Alt+Shift+F` by default,
+Settings → Shortcuts). Two purely local Tauri commands, never HTTP: `get_
+floating` (`{x, y, enabled}`) and `set_floating({enabled})`. Not behind the
+app lock - see `windows.rs`'s own doc comment on `show_floating` for why:
+it shows strictly less than the widget's own status row, which lock.rs
+already leaves uncovered.
+
+### 56.2 "Open a chat" - the fast path, and how it reaches the window
+
+`jarvis_quick.match()`'s `_OPEN_CHAT` pattern catches "open a/the chat
+(window)", "show (me) a/the chat (window)", "bring up a/the chat (window)",
+and the same three shapes for "the Jarvis bar" - whole sentences only, like
+every other fast-path match in this file: "open a chat about my day" goes
+to the model. Answered with a short fixed reply and no state change
+(`Result("Here you go.", "open_chat")`); `route_fields()` puts the intent's
+own name into `X-Jarvis-Route`'s existing `quick` field (§4) unchanged -
+the SAME header every fast-path answer already carries, not a new one.
+
+| What changed | Where |
+|---|---|
+| `X-Jarvis-Route`'s `quick` field may now be `"open_chat"` | `jarvis_quick.route_fields()` - true of every fast-path intent already, `open_chat` is simply a new value |
+
+The desktop reads it in the one place already parsing this header for
+other purposes (`turn_id`, the Local/Cloud badge): `commands.rs`'s
+`stream_chat`, right beside `turn_id_from_route`/`route_line_from_header`.
+`quick == "open_chat"` calls `windows::show_quickbar` (through the app
+lock, like every other way to the bar) and focuses its input - exactly
+what the `toggle_quickbar` hotkey already does on a manual summon. This
+runs whichever window's own JS happened to call `stream_chat`: a voice
+turn heard while the floating face is the only thing open still runs
+through the QUICKBAR page's `main.js` (hidden, never destroyed -
+`hide_quickbar`), so the window this brings forward is the very one
+already driving the call. The floating face itself is left open or closed
+at the owner's own choosing; this brings the bar forward, nothing more.
+
+### 56.3 Not desktop-only by design
+
+`jarvis_quick.py` does not know or care which app asked - any client that
+reads its own `X-Jarvis-Route` header could react to `quick: "open_chat"`
+the same way. The desktop is the only one that does today; an Android
+floating face (if built) is a separate piece of work, not a
+`docs/ARCHITECTURE.md` §8 "one-sided on purpose" decision, since nothing
+here rules it out.

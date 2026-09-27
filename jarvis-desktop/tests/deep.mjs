@@ -415,7 +415,7 @@ await check("CONTROL: only the Brain window may read or ask deep questions, and 
   }
   const deepSet = sets.find((s) => /identifier = "brain-deep"/.test(s));
   assert.doesNotMatch(deepSet, /big-model/, "brain-deep can reach the switches");
-  for (const c of ["brain", "faces", "hud", "onboarding", "quickbar", "settings", "widget"]) {
+  for (const c of ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "settings", "widget"]) {
     const json = read(`src-tauri/capabilities/${c}.json`);
     assert.equal(json.includes("\"brain-deep\""), c === "brain", `${c} and brain-deep`);
   }

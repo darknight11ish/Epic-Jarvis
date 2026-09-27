@@ -503,6 +503,24 @@
           <span class="status" id="face-status" role="status"></span>
         </details>
 
+        <!-- The floating face: a small, always-on-top window with just the
+             face on it - no chat box, voice only. Off by default. Its own
+             toggle, not inside "Face on this computer": that details is
+             about how the SAME face is drawn (quality, speed); this is
+             about whether a second window shows it at all. -->
+        <label class="toggle">
+          <input id="floating-enabled" type="checkbox" />
+          <span>
+            Floating face
+            <span class="toggle-detail" id="floating-detail">
+              A small window, always on top, that shows only Jarvis's face -
+              no text box. Drag it anywhere. Say "open a chat" (or press
+              Alt+Shift+F, or use Shortcuts below to change that) to bring
+              up the real Jarvis bar.
+            </span>
+          </span>
+        </label>
+
         <h3 class="subhead">Shared with your phone</h3>
         <p class="note">
           The face and the state colours — which face Jarvis wears, and the
@@ -738,8 +756,8 @@
           hold each one, so if a shortcut says <em>in use</em>, another
           program took it first — <code>Alt+Space</code> is often taken by
           PowerToys Run or the Copilot app. Pick a different one and press
-          Save shortcuts. The Jarvis bar, the widget and Stop everything are
-          also in the tray menu.
+          Save shortcuts. The Jarvis bar, the widget, the floating face and
+          Stop everything are also in the tray menu.
         </p>
         <p class="note">
           Each shortcut needs Ctrl, Alt, Shift or Win. A single key on its own

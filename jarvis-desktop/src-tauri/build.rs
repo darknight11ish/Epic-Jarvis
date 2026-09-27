@@ -298,6 +298,11 @@ fn main() {
             "set_widget_always_on_top",
             "save_widget_position",
             "get_widget_prefs",
+            // The floating face (Settings -> Appearance): whether it is on,
+            // and turning it on or off. Settings window only - the window
+            // itself has no button to call either from.
+            "get_floating",
+            "set_floating",
             "prefill_quickbar",
             "capture_note",
             // How a filed note ended: waiting for approval, filed, or not.

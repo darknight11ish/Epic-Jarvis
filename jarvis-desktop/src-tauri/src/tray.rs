@@ -15,6 +15,7 @@
 //! ─────────────────────────────
 //! Show or hide Spotlight          Alt+Space
 //! Show or hide the widget         Alt+Shift+W
+//! Show or hide the floating face  Alt+Shift+F
 //! Show the HUD window
 //! Open the Brain
 //! Faces…
@@ -103,6 +104,7 @@ const ID_SHOW_BRAIN: &str = "show-brain";
 const ID_SHOW_FACES: &str = "show-faces";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
+const ID_TOGGLE_FLOATING: &str = "toggle-floating";
 const ID_RECONNECT: &str = "reconnect";
 const ID_SETTINGS: &str = "settings";
 const ID_UPDATE: &str = "update";
@@ -270,6 +272,13 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         accel(app, "toggle_widget").as_deref(),
     )?;
+    let toggle_floating = MenuItem::with_id(
+        app,
+        ID_TOGGLE_FLOATING,
+        "Show or hide the floating face",
+        true,
+        accel(app, "toggle_floating").as_deref(),
+    )?;
     let reconnect = MenuItem::with_id(
         app,
         ID_RECONNECT,
@@ -321,6 +330,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             // owner learns it exists.
             &toggle_spotlight,
             &toggle_widget,
+            &toggle_floating,
             &show_hud,
             &show_brain,
             &show_faces,
@@ -1119,6 +1129,12 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_TOGGLE_WIDGET => {
             if let Err(err) = windows::toggle_widget(app) {
                 eprintln!("[jarvis] tray: widget toggle failed: {err}");
+            }
+        }
+
+        ID_TOGGLE_FLOATING => {
+            if let Err(err) = windows::toggle_floating(app) {
+                eprintln!("[jarvis] tray: floating face toggle failed: {err}");
             }
         }
 

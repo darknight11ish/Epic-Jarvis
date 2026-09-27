@@ -43,7 +43,7 @@ await check("every bindable action is listed", async () => {
   const page = await open();
   const list = await rows(page);
   await page.close();
-  assert.equal(list.length, 6, `${list.length} rows, expected 6`);
+  assert.equal(list.length, 7, `${list.length} rows, expected 7`);
   assert.equal(list[0].name, "Show or hide the Jarvis bar");
   assert.equal(list[0].key, "Alt + Space");
   // "Stop everything" (2026-09-25): listed like the others, so it can be
@@ -66,8 +66,9 @@ await check("Stop everything is in the tray menu too, the same command, never gr
   // And Settings' promise about the tray is true of what it names.
   const html = read("src/settings.html");
   assert.doesNotMatch(html, /Everything here is also in the tray menu/);
-  assert.match(html.replace(/\s+/g, " "), /The Jarvis bar, the widget and Stop everything are also in the tray menu\./);
-  for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything"]) {
+  assert.match(html.replace(/\s+/g, " "),
+    /The Jarvis bar, the widget, the floating face and Stop everything are also in the tray menu\./);
+  for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything", "toggle_floating"]) {
     assert.match(tray, new RegExp(`accel\\(app, "${id}"\\)`), `${id} has no tray row`);
   }
 });

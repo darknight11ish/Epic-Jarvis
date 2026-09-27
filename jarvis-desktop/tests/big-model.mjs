@@ -532,7 +532,7 @@ await check("CONTROL: only the settings window may read or change the big model"
     assert.deepEqual(holders, ["settings-surface"], `${perm} is held by ${holders}`);
   }
   assert.match(read("src-tauri/capabilities/settings.json"), /"settings-surface"/);
-  for (const c of ["brain", "faces", "hud", "onboarding", "quickbar", "widget"]) {
+  for (const c of ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "widget"]) {
     const json = read(`src-tauri/capabilities/${c}.json`);
     assert.ok(!json.includes("settings-surface"), `${c} holds settings-surface`);
     assert.ok(!json.includes("big-model"), `${c} can reach the big model's switches`);
