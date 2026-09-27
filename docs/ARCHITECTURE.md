@@ -1373,7 +1373,17 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   (2026-09-27) is not covered either, for a shorter reason than the
   widget's: it shows no approval card at all, ever - not even a title -
   only which of eight states Jarvis is in, the same information the tray
-  icon already shows to anyone at the keyboard.
+  icon already shows to anyone at the keyboard. **What it holds is wider
+  than what it shows** (bug audit 2026-09-27, desktop-rust finding #4): its
+  `jarvis-link` grant includes `get_pending_approvals`, and
+  `core:event:allow-listen` lets it hear the full `jarvis-event` stream, so
+  the window's own memory carries every waiting card in full - an email's
+  whole text included - the same way the widget's does, for the same
+  reason (both read the one shared link module, `jarvis-link.js`, rather
+  than each keeping a separate connection). Release builds have no
+  developer tools (`Cargo.toml`'s `devtools` feature), so nothing outside
+  this app's own code can read that memory; `capabilities/floating.json`'s
+  description says so.
 - **Phone:** the whole app - including Home's "Stop everything" button,
   which is behind App lock like the rest of the app (JARVIS-API §28); the
   PC's hotkey and tray row are not. The home-screen widget only ever shows the

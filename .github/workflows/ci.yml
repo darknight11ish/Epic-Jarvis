@@ -145,6 +145,12 @@ jobs:
       # other does not has to be a recorded decision (tools/check_parity.py).
       - name: Desktop / phone parity
         run: python tools/check_parity.py
+      # A command registered in lib.rs but missing from build.rs's own ACL
+      # export list has no permission at all, and every window's call to it
+      # is refused at runtime - a compile-time-invisible break that bit two
+      # commands for real (bug audit 2026-09-27, desktop-rust finding #2).
+      - name: Desktop command ACL parity
+        run: python tools/check_command_acl.py
 
   credential-manager:
     # The pairing token lives in Windows Credential Manager (CLAUDE.md rule 3,

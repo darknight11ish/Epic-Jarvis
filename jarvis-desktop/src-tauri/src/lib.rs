@@ -183,6 +183,14 @@ pub mod events {
     /// line ("YouTube can wait."), fetched as SOUND from this PC's backend,
     /// to play. The words never reach any window.
     pub const FOCUS_CALLOUT: &str = "focus-callout";
+    /// Payload: `bool` - the floating face turned on or off. Settings'
+    /// "Floating face" checkbox only ever painted itself once, from
+    /// `get_floating`, on page load; the tray, the hotkey and closing the
+    /// window itself all change the same setting without telling it, so
+    /// with Settings open the box could disagree with the screen until the
+    /// owner clicked it (bug audit 2026-09-27, desktop-rust finding #5).
+    /// Sent to every window from `set_floating` and `toggle_floating`.
+    pub const FLOATING_CHANGED: &str = "floating-changed";
 
     // ---- the fanned-out event stream -----------------------------------
     //
@@ -1291,6 +1299,14 @@ pub fn run() {
             // app alone replays the last few seconds of events, and an alarm
             // that already rang rings again (bug audit 2026-09-26, #4).
             stream::save_resume_now(app);
+            // Widget and floating-face prefs are otherwise flushed only by
+            // the 3 s telemetry tick, so turning the face off (or dragging
+            // either one) right before Quit could be lost - the on-disk file
+            // still says what it said before (bug audit 2026-09-27,
+            // desktop-rust finding #6). Both flushes are cheap no-ops when
+            // nothing changed since the last tick.
+            app.state::<windows::WidgetState>().flush(app);
+            app.state::<windows::FloatingState>().flush(app);
             sidecar::stop_on_exit(app);
         }
 
@@ -1299,6 +1315,8 @@ pub fn run() {
         // taken out of the state by whichever call gets there first.
         tauri::RunEvent::Exit => {
             stream::save_resume_now(app);
+            app.state::<windows::WidgetState>().flush(app);
+            app.state::<windows::FloatingState>().flush(app);
             sidecar::stop_on_exit(app);
         }
 

@@ -585,8 +585,13 @@ pub fn set_theme_follow_system(app: AppHandle, follow: bool) -> Result<ThemePref
 /// Opens the Faces window from a page. Settings has an "Open Faces" button
 /// because the face and the state colours - the part of the look shared
 /// with the phone - were reachable only from the tray menu before.
+///
+/// `async`, not a plain command: `show_faces` builds a window the first
+/// time it runs, and Tauri 2.11.5's own docs say that deadlocks on Windows
+/// inside a plain command, which runs on the WebView2 callback thread
+/// rather than off it (bug audit 2026-09-27, desktop-rust finding #3).
 #[tauri::command]
-pub fn open_faces(app: AppHandle) -> Result<(), String> {
+pub async fn open_faces(app: AppHandle) -> Result<(), String> {
     crate::windows::show_faces(&app)
 }
 
@@ -3061,8 +3066,14 @@ pub fn get_floating(app: AppHandle) -> windows::FloatingPrefs {
 /// nothing Jarvis does, asks or remembers, only how its own state is shown
 /// on screen, so `asks_first.rs`'s list of things that ask first does not
 /// apply here.
+///
+/// `async`, not a plain command: the first time it turns the face on,
+/// `show_floating` builds a window, and Tauri 2.11.5's own docs say that
+/// deadlocks on Windows inside a plain command, which runs on the WebView2
+/// callback thread rather than off it (bug audit 2026-09-27, desktop-rust
+/// finding #3).
 #[tauri::command]
-pub fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String> {
+pub async fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String> {
     if enabled {
         windows::show_floating(&app)?;
     } else if windows::floating_is_open(&app) {
@@ -3073,6 +3084,9 @@ pub fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String> {
     }
     app.state::<windows::FloatingState>()
         .update(|prefs| prefs.enabled = enabled);
+    // So Settings' own checkbox repaints if the tray or the hotkey changes
+    // this while the window is open (bug audit 2026-09-27, finding #5).
+    crate::emit_all(&app, crate::events::FLOATING_CHANGED, enabled);
     Ok(enabled)
 }
 

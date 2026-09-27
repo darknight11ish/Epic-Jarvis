@@ -724,6 +724,16 @@ if (floatingEnabled) {
   });
 }
 
+// The tray, the hotkey and closing the floating window itself all change
+// the same on/off state without going through this checkbox - without this,
+// the box could disagree with the screen until it was clicked once, itself
+// sending the wrong state (bug audit 2026-09-27, desktop-rust finding #5).
+if (IS_TAURI) {
+  TAURI.event.listen("floating-changed", (event) => {
+    if (floatingEnabled) floatingEnabled.checked = Boolean(event.payload);
+  });
+}
+
 $("open-faces").addEventListener("click", async () => {
   try {
     await invoke("open_faces");

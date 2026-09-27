@@ -239,8 +239,13 @@ pub async fn set_humor(app: AppHandle, on: bool) -> Result<serde_json::Value, St
 
 /// The place an error's fix button opens: "settings" or "brain". Nothing
 /// else is accepted.
+///
+/// `async`, not a plain command: both windows are built the first time
+/// they are shown, and a plain command runs on the WebView2 callback
+/// thread, where Tauri 2.11.5's own docs say building a window on Windows
+/// deadlocks (bug audit 2026-09-27, desktop-rust finding #3).
 #[tauri::command]
-pub fn open_fix_place(app: AppHandle, place: String) -> Result<(), String> {
+pub async fn open_fix_place(app: AppHandle, place: String) -> Result<(), String> {
     match place.as_str() {
         "settings" => crate::windows::show_settings(&app),
         "brain" => crate::windows::show_brain(&app),

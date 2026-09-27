@@ -230,6 +230,15 @@ fn search_order() -> Vec<Candidate> {
 /// Runs `program args...`, waits up to [`PROBE_TIMEOUT`], and returns its
 /// combined stdout and stderr. Killed and reported as an error if it does not
 /// finish in time — see the module doc for why that matters here specifically.
+///
+/// Spawned through [`crate::proctree`], not a bare `Command::spawn`: the `py`
+/// launcher execs the real `python.exe` as its OWN child, a grandchild of
+/// this process, so killing only the direct handle (as this used to) can
+/// leave `python.exe` running after a timeout (bug audit 2026-09-27,
+/// desktop-rust "possible, not verified" #4). `proctree` already solves this
+/// for the backend sidecar; probing gets the same fix, and for the same
+/// reason gets it on the `try_wait` error path too, which used to leak the
+/// child outright rather than kill even the one handle it had.
 fn run_and_capture<S: AsRef<OsStr>>(program: S, args: &[String]) -> Result<String, String> {
     use std::io::Read;
 
@@ -239,19 +248,8 @@ fn run_and_capture<S: AsRef<OsStr>>(program: S, args: &[String]) -> Result<Strin
     command.stdin(Stdio::null());
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // Same flag and the same reason `commands.rs`'s GPU probe uses it: a
-        // release build has no console, so without this a child that DOES
-        // have one flashes a window — on a button click, not a background
-        // timer, but still worth suppressing.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
 
-    let mut child = command
-        .spawn()
+    let (mut child, tree) = crate::proctree::spawn(&mut command)
         .map_err(|e| format!("could not run `{program_name}`: {e}"))?;
 
     let deadline = Instant::now() + PROBE_TIMEOUT;
@@ -260,7 +258,7 @@ fn run_and_capture<S: AsRef<OsStr>>(program: S, args: &[String]) -> Result<Strin
             Ok(Some(_status)) => break,
             Ok(None) => {
                 if Instant::now() >= deadline {
-                    let _ = child.kill();
+                    tree.kill();
                     let _ = child.wait();
                     return Err(format!(
                         "`{program_name}` did not answer within {}s",
@@ -269,7 +267,10 @@ fn run_and_capture<S: AsRef<OsStr>>(program: S, args: &[String]) -> Result<Strin
                 }
                 std::thread::sleep(Duration::from_millis(25));
             }
-            Err(e) => return Err(format!("could not check `{program_name}`: {e}")),
+            Err(e) => {
+                tree.kill();
+                return Err(format!("could not check `{program_name}`: {e}"));
+            }
         }
     }
 

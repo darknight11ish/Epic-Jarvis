@@ -302,10 +302,19 @@ pub(crate) fn show_quickbar_unlocked(app: &AppHandle) -> Result<(), String> {
         .get_webview_window(QUICKBAR_LABEL)
         .ok_or_else(|| format!("window `{QUICKBAR_LABEL}` was not found"))?;
 
-    // Collapse back to the input row: a stale tall window would flash the
-    // previous answer for a frame before the frontend resets it.
-    let _ = window.set_size(LogicalSize::new(QUICKBAR_WIDTH, QUICKBAR_BASE_HEIGHT));
-    center_quickbar(&window)?;
+    // Collapse back to the input row and recentre - but only when summoning
+    // it from hidden: a stale tall window would otherwise flash the previous
+    // answer for a frame before the frontend resets it. Skipped when it is
+    // already on screen: "open a chat" (2026-09-27) calls this to bring an
+    // ALREADY-OPEN bar forward mid-stream, and collapsing it here raced the
+    // page's own height tracking (main.js only grows the window during a
+    // stream, never shrinks it, so the answer stayed visibly clipped until
+    // the next height change) and undid a drag the owner had just made (bug
+    // audit 2026-09-27, desktop-rust "possible, not verified" #1).
+    if !window.is_visible().unwrap_or(false) {
+        let _ = window.set_size(LogicalSize::new(QUICKBAR_WIDTH, QUICKBAR_BASE_HEIGHT));
+        center_quickbar(&window)?;
+    }
 
     window
         .show()
@@ -1105,6 +1114,10 @@ fn attach_floating_listeners(app: &AppHandle, window: &WebviewWindow) {
             handle
                 .state::<FloatingState>()
                 .update(|prefs| prefs.enabled = false);
+            // So Settings' own checkbox repaints (bug audit 2026-09-27,
+            // finding #5) - this path turns the face off without going
+            // through `set_floating` or `toggle_floating` at all.
+            crate::emit_all(&handle, crate::events::FLOATING_CHANGED, false);
         }
         _ => {}
     });
@@ -1131,6 +1144,8 @@ pub fn toggle_floating(app: &AppHandle) -> Result<bool, String> {
     }
     app.state::<FloatingState>()
         .update(|prefs| prefs.enabled = !visible);
+    // So Settings' own checkbox repaints (bug audit 2026-09-27, finding #5).
+    crate::emit_all(app, crate::events::FLOATING_CHANGED, !visible);
     Ok(!visible)
 }
 
