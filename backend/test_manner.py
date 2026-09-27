@@ -685,6 +685,136 @@ def t_from_now_on_set_temporary_is_bounded_and_validated():
         M._TEMPORARY.clear()
 
 
+# --------------------------------------------------------------------------
+#   Style rules for every fixed line (I135, 2026-09-27)
+# --------------------------------------------------------------------------
+#
+# This is the "two wordings, same facts" check above (t_the_line_cannot_
+# weaken_a_rule), extended past the manner line to every fixed line this
+# repo has: jarvis_card_words, jarvis_quick, jarvis_sayable, jarvis_reach
+# and jarvis_identity (the "quick answer" family jarvis_quick.py serves
+# from), jarvis_focus, and the shared case files both apps read (the four
+# that reproduce those modules' own words: card-words, focus, sayable and
+# reach - not every *-cases.json file, most of which hold protocol or
+# hardware test data, not prose). docs/ARCHITECTURE.md section 7 writes
+# these rules down, beside the manner paragraph.
+#
+# Never a model judging text: every check below is a fixed rule (a regex,
+# a count), the same "no AI marking its own homework" principle as
+# tools/tool_eval/behaviour_cases.py.
+import ast  # noqa: E402
+
+_STYLE_EMOJI = re.compile(
+    "[\U0001F300-\U0001FAFF\U00002600-\U000027BF\U0001F000-\U0001F2FF←-⇿✀-➿]")
+_STYLE_SORRY = re.compile(r"\bsorry\b", re.I)
+_STYLE_SIR = re.compile(r"\bsir\b", re.I)
+_STYLE_SERVICE = re.compile(r"at your service", re.I)
+_STYLE_DOTTED_JARVIS = re.compile(r"j\.\s*a\.\s*r\.\s*v\.\s*i\.\s*s\.", re.I)
+
+#: The modules this check reads - by name, not by guessing at every string
+#: in the codebase: each is a real module whose UPPER_CASE constants are
+#: fixed lines the owner or the model's own answer can carry verbatim.
+_STYLE_MODULES = ("jarvis_card_words.py", "jarvis_quick.py", "jarvis_focus.py",
+                  "jarvis_sayable.py", "jarvis_reach.py", "jarvis_identity.py")
+
+#: The shared case files both apps read - the desktop's copy; test_*.py
+#: files elsewhere already hold the desktop and phone copies byte-identical,
+#: so checking one says the same about both.
+_STYLE_CASE_FILES = tuple(
+    REPO / "jarvis-desktop" / "tests" / "fixtures" / f"{n}-cases.json"
+    for n in ("card-words", "focus", "sayable", "reach"))
+
+#: "!" is checked only on card text - jarvis_card_words.py, and the one
+#: case file that reproduces it. Everywhere else (an error, a quick
+#: answer, a focus callout) is not itself a card, so this repo's fixed
+#: lines elsewhere are not held to that one.
+_STYLE_CARD_SOURCES = ("jarvis_card_words.py", "card-words-cases.json")
+
+#: Test-input fixtures deliberately built to look odd (gen_card_words_
+#: cases.py's UNKNOWN list: "Weird-Name!!", "café_lights", ...) are actions
+#: being fuzzed, never a line Jarvis itself says - skipped by key, not by
+#: guessing at their odd content.
+_STYLE_SKIP_JSON_KEYS = frozenset({"action", "_comment"})
+
+
+def _style_strings_from_module(path: Path) -> list:
+    """Every string literal inside a module-level UPPER_CASE constant -
+    jarvis_sayable.SENTENCES, jarvis_card_words.TITLES, and the like."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    out = []
+
+    def collect(node):
+        try:
+            val = ast.literal_eval(node)
+        except Exception:
+            return
+        stack = [val]
+        while stack:
+            v = stack.pop()
+            if isinstance(v, str):
+                out.append(v)
+            elif isinstance(v, dict):
+                stack.extend(v.keys())
+                stack.extend(v.values())
+            elif isinstance(v, (list, tuple, set, frozenset)):
+                stack.extend(v)
+    for node in ast.walk(tree):
+        targets = None
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        for t in targets or []:
+            if isinstance(t, ast.Name) and t.id.isupper():
+                collect(node.value)
+    return out
+
+
+def _style_strings_from_json(path: Path) -> list:
+    if not path.is_file():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out = []
+    stack = [data]
+    while stack:
+        v = stack.pop()
+        if isinstance(v, str):
+            out.append(v)
+        elif isinstance(v, dict):
+            for k, vv in v.items():
+                if k in _STYLE_SKIP_JSON_KEYS:
+                    continue
+                out.append(k)
+                stack.append(vv)
+        elif isinstance(v, list):
+            stack.extend(v)
+    return out
+
+
+def t_style_rules_for_every_fixed_line():
+    sources = []
+    for name in _STYLE_MODULES:
+        for s in _style_strings_from_module(BACKEND / name):
+            sources.append((name, s))
+    for path in _STYLE_CASE_FILES:
+        for s in _style_strings_from_json(path):
+            sources.append((path.name, s))
+    check("this check actually read something from every source",
+          len({name for name, _s in sources}) >= len(_STYLE_MODULES),
+          sorted({name for name, _s in sources}))
+    bad_emoji = [(n, s) for n, s in sources if _STYLE_EMOJI.search(s)]
+    check("no emoji in any fixed line", not bad_emoji, bad_emoji[:5])
+    bad_sorry = [(n, s) for n, s in sources if len(_STYLE_SORRY.findall(s)) > 1]
+    check("never more than one \"sorry\" in the same line", not bad_sorry, bad_sorry[:5])
+    bad_film = [(n, s) for n, s in sources
+               if _STYLE_SIR.search(s) or _STYLE_SERVICE.search(s)
+               or _STYLE_DOTTED_JARVIS.search(s)]
+    check("no film phrases (\"sir\", \"at your service\", the dotted J.A.R.V.I.S. spelling)",
+          not bad_film, bad_film[:5])
+    bad_bang = [(n, s) for n, s in sources if n in _STYLE_CARD_SOURCES and "!" in s]
+    check("no \"!\" on a card", not bad_bang, bad_bang[:5])
+
+
 def main():
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

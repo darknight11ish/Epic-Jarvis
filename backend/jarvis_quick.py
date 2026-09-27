@@ -793,6 +793,10 @@ def _match(text, now: float) -> Optional[Intent]:
     if _REACH.fullmatch(s):
         return Intent("reach_list")
 
+    # --- "who are you?" (jarvis_identity.py, feasibility I131) ---------------------
+    if _WHO_ARE_YOU.fullmatch(s):
+        return Intent("identity_help")
+
     # --- music and video control on this PC (jarvis_media.py, I91) -------------------
     got = _media(s)
     if got is not None:
@@ -1646,6 +1650,30 @@ REACH_MISSING = ("Your PC's Jarvis cannot list what it can reach yet - run apply
 SAYABLE_MISSING = ("Your PC's Jarvis cannot list things you can say yet - run "
                    "apply-patches.ps1 on the PC.")
 
+#: "Who are you?" and close phrasings (jarvis_identity.py, feasibility I131,
+#: 2026-09-27): answered fixed, with no model, so the model never
+#: improvises its own nature. Whole sentences only - "who are you calling"
+#: goes to the model, like everything else here.
+_WHO_ARE_YOU = re.compile(
+    r"who\s+(?:are|r)\s+you"
+    r"|what\s+are\s+you"
+    r"|are\s+you\s+(?:an?\s+)?(?:ai|a\s+robot|human|a\s+real\s+person|real|conscious|sentient"
+    r"|alive)"
+    r"|are\s+you\s+(?:the\s+)?jarvis\s+from\s+iron\s+man"
+    r"|are\s+you\s+j\.?\s*a\.?\s*r\.?\s*v\.?\s*i\.?\s*s\.?"
+    r"|do\s+you\s+have\s+feelings"
+    r"|do\s+you\s+(?:love|miss)\s+me"
+    r"|are\s+you\s+(?:my\s+)?(?:girlfriend|boyfriend|(?:best\s+)?friend)"
+    # normalise() reads a leading "will you" as a command lead-in (like
+    # "will you set a timer"), so "will you be my friend" arrives here as
+    # "be my friend" - matched directly rather than with "will you" still on.
+    r"|be\s+my\s+friend"
+    r"|are\s+you\s+lonely"
+    r"|what\s+(?:model|ai|llm)\s+(?:are\s+you(?:\s+running)?|do\s+you\s+use|is\s+this)")
+
+IDENTITY_MISSING = ("Your PC's Jarvis cannot answer that without apply-patches.ps1 - run it "
+                    "on the PC.")
+
 
 def _run_sayable(intent: Intent) -> Result:
     """"Things you can say" (jarvis_sayable.py), said in one answer for "what
@@ -1665,6 +1693,16 @@ def _run_reach(intent: Intent) -> Result:
         return Result(jarvis_reach.sentence(), intent.name)
     except Exception:
         return Result(REACH_MISSING, intent.name)
+
+
+def _run_identity(intent: Intent) -> Result:
+    """"Who are you?" and close phrasings (jarvis_identity.py): fixed text,
+    no model, no romance. Reads no state, changes nothing."""
+    try:
+        import jarvis_identity
+        return Result(jarvis_identity.sentence(), intent.name)
+    except Exception:
+        return Result(IDENTITY_MISSING, intent.name)
 
 
 # --------------------------------------------------------------------------
@@ -1899,6 +1937,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_reach(intent)
     if n == "sayable_help":
         return _run_sayable(intent)
+    if n == "identity_help":
+        return _run_identity(intent)
     if n.startswith("media_"):
         return _run_media(intent)
     if n.startswith("tellme_"):

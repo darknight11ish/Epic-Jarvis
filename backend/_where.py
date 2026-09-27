@@ -186,6 +186,7 @@ SHIPPED = (
     # "Check for tool updates": outdated Python packages, Rust crates and
     # pinned GitHub tools, report only, one card ever (tool-updates.patch)
     "jarvis_tool_updates.py",
+    "jarvis_identity.py",
 )
 
 

@@ -1131,6 +1131,39 @@ def pf_model(live: Live) -> list:
     else:
         rows.append((FAIL, f"{model} gave an answer Jarvis could not read",
                      "Restart Ollama and run this again."))
+    # Is jarvis-primary running TODAY's rules? (I134, 2026-09-27.) keep_rules_first
+    # (jarvis_agent.py) adds LANE_SYSTEM only when something else would come first
+    # in the request - on most turns Ollama answers from the copy baked into the
+    # model itself by `ollama create`. A stale model would then mix an old rules
+    # block (missing the character paragraph, or an earlier wording) with the new
+    # one, on exactly the turns keep_rules_first does not fire. This is a read
+    # (POST /api/show, never /api/generate or /api/chat), so it is checked here,
+    # in the same step that already talks to this one model - not inside
+    # doctor()'s own three read-only calls, which test_selftest_doctor.py holds to
+    # /api/version, /api/tags and /api/ps only.
+    if model and model.split(":")[0] == "jarvis-primary" and _is_loopback(base):
+        try:
+            import jarvis_agent as AG
+            show_post = live.ollama_post
+            body = {"model": model}
+            if show_post is not None:
+                show = show_post(f"{base}/api/show", body)
+            else:
+                req = urllib.request.Request(
+                    f"{base}/api/show", method="POST",
+                    data=json.dumps(body).encode("utf-8"),
+                    headers={"Content-Type": "application/json"})
+                with _no_proxy_open(req, 15) as r:
+                    show = json.loads(r.read().decode("utf-8", "replace"))
+            stored = str((show or {}).get("system") or "") if isinstance(show, dict) else ""
+            if stored and stored != AG.LANE_SYSTEM:
+                rows.append((WARN, f"{model} is running an older copy of Jarvis's rules",
+                             "The rules baked into this model (its SYSTEM block) do not "
+                             "match jarvis-primary.Modelfile any more - probably the "
+                             "character block, or a later wording. Re-run: ollama create "
+                             "jarvis-primary -f backend\\jarvis-primary.Modelfile"))
+        except Exception:
+            pass  # best-effort only: never fail the preflight over this
     return rows
 
 
