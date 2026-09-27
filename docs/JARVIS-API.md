@@ -951,6 +951,25 @@ clip within `awake_seconds` needs no phrase), `awake_seconds`. The returned
 `text` has the phrase removed. A client drops a reply with `wake_heard:
 false` silently. `backend/README.md`, "Voice that works", has the details.
 
+**Two devices, one "hey Jarvis" (since 2026-09-27).** The window `awake`
+opens belongs to the microphone that heard it (`?mic=`, "phone" or
+"desktop"; a clip with no `mic` has a window of its own): a phone clip
+cannot use the desktop's window, or the other way round. And when the phone
+and the desktop both hear the same words, only one is acted on: a
+`wake_word` clip that passed the owner check, from a DIFFERENT microphone,
+that arrived within 1.5 s (`jarvis_speech.SAME_WAKE_SECONDS`) of one already
+acted on (answered, or that opened a window) gets `other_device: true`,
+`text: ""`, `wake_heard: false`, `awake: false`, `ok: true` and `reason:
+"answered on your other device"`. Nothing from it is kept (no chat history,
+no window). Both apps already drop a `wake_heard: false` reply without a
+word, so neither needed a change. Whichever copy is acted on first wins. The
+owner check still runs before speech-to-text on both copies; two clips from
+the SAME microphone are never matched, and nor is the talk button. The route
+has no finer device id than `mic` yet, so two phones (or two older apps
+that send no `mic`) cannot be told apart. The 1.5 s is a first guess, to be
+measured on the owner's two devices. Every reply carries `other_device`
+(false otherwise).
+
 **"Stop" (since 2026-09-24).** Before the spotter, a `wake_word` clip with at
 most 2 s of speech (`STOP_MAX_SECONDS`) is put to the stop-word model
 (`jarvis_wakeword.spot_stop`). If it is "stop" ("stop", "Jarvis, stop"),

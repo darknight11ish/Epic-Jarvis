@@ -14,6 +14,13 @@ number as the last part - `0.2.57` is a build of 0.2.
   files, memory and any other tool still keep the answer on screen, and so
   does Jarvis not being sure which tool ran. Both apps follow one shared
   table of cases, so they cannot drift apart.
+- **Fixed: one "Hey Jarvis" heard by both the phone and the PC.** Both
+  used to answer, so you got two answers - and a timer or "next song" could
+  happen twice. Or, after a plain "Hey Jarvis.", the second device used up
+  the listening moment and your real question was thrown away. Now only the
+  first copy is answered, the other device stays quiet, and each device
+  listens for its own follow-up question. Your voice is still checked
+  before any words are written down.
 - **Fixed: typing the phone's pairing key exactly as the PC shows it.** The
   PC shows the key in groups of four with spaces, to make it easier to read.
   The phone kept those spaces, so the key was refused. The phone now drops
