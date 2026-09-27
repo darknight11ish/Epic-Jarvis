@@ -119,16 +119,19 @@ def t_sections_match_the_real_ui():
           not desktop_missing, desktop_missing)
     phone_missing = [s.id for s in R.SECTIONS if s.app in ("both", "phone")
                      and s.id not in phone_keys and s.id not in desktop_ids]
-    # A phone section may be reached a different way than a plain LazyColumn
-    # item (Security, Appearance and Voice on SettingsScreen.kt are their
-    # own linked screens, not `item(key=...)` rows) - those three are the
-    # only ones this file marks "both" without a literal item() key, and
-    # they DO have their own key-less item(...) blocks just above the
-    # seven moved sections; anything else missing is a real drift.
+    # Bug audit 2026-09-27, finding #2: Security, Voice and Appearance are
+    # ordinary `item(key = ...)` rows on SettingsScreen.kt, same as every
+    # other phone section - the regex above already matches them by their
+    # literal keys ("security", "voice", "appearance"). Only "appearance-card"
+    # needs listing here at all: that is this registry's own section id, kept
+    # different from the phone's literal item key ("appearance") because the
+    # desktop's settings.html uses "appearance-card" for its own <section id>.
+    # "security" and "voice" are named below too, defensively, since they are
+    # never missing to begin with; anything else missing is a real drift.
     ALLOWED_NO_KEY = {"security", "appearance-card", "voice"}
     phone_missing = [i for i in phone_missing if i not in ALLOWED_NO_KEY]
-    check("every 'both'/'phone' section (bar the three linked screens) is a "
-          "real SettingsScreen.kt item key", not phone_missing, phone_missing)
+    check("every 'both'/'phone' section (bar the appearance-card id spelling) "
+          "is a real SettingsScreen.kt item key", not phone_missing, phone_missing)
     check("no id is listed twice", len(R.SECTIONS) == len({s.id for s in R.SECTIONS}))
     check("no alias is claimed by two sections",
           len([n for s in R.SECTIONS for n in s.names])

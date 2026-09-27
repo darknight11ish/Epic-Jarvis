@@ -99,9 +99,9 @@
 +        # like this one (jarvis_intake.owner_turns).
 +        try:
 +            import jarvis_quick
-+            # peer/local: jarvis_settings_registry.py's "open"/"adjust" a setting
-+            # by voice or chat needs these for jarvis_owner_check.PC_ONLY_ACTIONS -
-+            # the same peer/local owner-check.patch's own do_POST wrapper reads.
++            # peer/local: settings.patch's "open"/"adjust" a setting by voice
++            # or chat needs these for jarvis_owner_check.PC_ONLY_ACTIONS - the
++            # same peer/local owner-check.patch's own do_POST wrapper reads.
 +            _peer = (getattr(self, "client_address", None) or ("",))[0]
 +            try:
 +                _local = self.connection.getsockname()[0]

@@ -118,9 +118,12 @@ fun SettingsScreen(
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
      * section id `MainActivity` read off `ChatSession.openSettings`, or
      * null. A new (distinct) value scrolls to that item once; an id this
-     * screen has no row for (the three linked screens above, and every
-     * desktop-only section) is a harmless no-op - the screen still opened,
-     * and the answer already named the place in words.
+     * screen has no row for (any desktop-only section) is a harmless no-op -
+     * the screen still opened, and the answer already named the place in
+     * words. Voice, Security and Appearance (above) are real
+     * `item(key = ...)` rows too, with their own entries in
+     * [SETTINGS_ITEM_INDEX], so an id naming one of them scrolls to it like
+     * any other section - it does not fall into that no-op case.
      */
     initialSection: String? = null,
 ) {
