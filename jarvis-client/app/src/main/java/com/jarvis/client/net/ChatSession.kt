@@ -643,7 +643,7 @@ class ChatSession(
                             },
                             if (cloud && !failed) "Answered by a cloud model, not on your PC." else null,
                             if (secondCard != null && !cloud && !failed) SecondCard.routeNote(secondCard) else null,
-                            if (quick && !failed) Schedule.DONE_LINE else null,
+                            if (quick && !failed) Schedule.DONE_LINE_HERE else null,
                         ).plus(temporaryNotes).joinToString(" ").ifEmpty { null }
                     }
                 }
