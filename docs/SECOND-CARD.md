@@ -52,6 +52,37 @@ waits, and its status line says which model to install. Install it the usual
 way: Brain window, Model, Models (the Install box), or `ollama pull <name>` in a terminal (for example
 `ollama pull qwen3:8b`).
 
+## One bigger model on both cards (a sixth switch, off by default)
+
+The five switches above each run a small model (7-8B). This one is
+different: instead of picking one card for a small model, it uses **both
+cards at once for one bigger model** - `qwen3:14b`, with room for 32,768
+tokens (double the everyday model's room). Off by default, and not
+something the five switches above can share: turning this on needs both
+cards to itself, so it refuses to turn on while any of them is genuinely
+on, and turning any of them on is refused while this is on. Turn one side
+off first.
+
+**Why bother**, if it needs both cards? Because 14B is a noticeably smarter
+model than the 7-8B models everything else in this file uses, and neither
+card alone has room for it at a useful context size - together they do.
+
+**How fast is it?** Slower than either card would be on its own, and here
+is the honest reason why, checked in Ollama's and llama.cpp's own code
+(not guessed): Ollama splits the model between the two cards **by how much
+free memory each one has right now, not by how fast it is**. Your planned
+pair has an RTX 2060 with more memory than the RTX 2080 Super, but the
+2060's memory is the *slower* of the two - so most of the model lands on
+the slower card, and answers come out at roughly its pace. **Real speed has
+not been measured yet**, because the second card is not installed. Once it
+is, the desktop's Hardware screen "Measure" button (or asking Jarvis one
+question and timing it) tells the truth about it.
+
+**Turning it on**: Settings → "Second graphics card" (desktop) or Brain
+(phone), the same place as the five switches, a new "One bigger model on
+both cards" toggle underneath them. It asks with one approval card first
+(`second_card_combined_enable`), the same as any other switch here.
+
 ## What happens when a switch is on
 
 Jarvis starts a **second copy of Ollama** (the program that runs the models)

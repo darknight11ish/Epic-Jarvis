@@ -100,7 +100,7 @@ on a throwaway copy instead.
 | `task-control.patch` | `jarvis_hud.py` | **The Pause, Resume, Stop and note buttons on both apps went nowhere.** Adds the routes they call. Resume raises an approval card; nothing else here approves anything. Needs `jarvis_task_control.py` and the updated `jarvis_agent.py` — see its own section, at the end. |
 | `note-capture.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **`#log`, `#joplin` and the quick note never filed anything** — they asked the model for tools that did not exist. Adds a route that files the owner's own words in Logseq, Joplin or Obsidian (`#obs`, since 2026-09-24) through the gate, says honestly whether it landed, and lists which of the three this PC is set up for. Needs `task-control.patch` (textual) and `jarvis_note_capture.py` — see its own section, at the end. |
 | `power-mode.patch` | `jarvis_hud.py` | **Nothing could change the power mode.** Adds `POST /api/power` (Active / Quiet / Standby) through the gate as `power_manage`. Needs `note-capture.patch` (textual) and `jarvis_power_switch.py` — see its own section, at the end. |
-| `second-card.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The second graphics card, all switched off.** Adds `GET`/`POST /api/second-card` (each ON is one approval card, `second_card_enable`), says in the chat route header when the second card answered, shortens the learner's quiet wait when it runs there, and gives the approval notice true words for the new action. Needs `jarvis_second_card.py` — see its own section, at the end, and `docs/SECOND-CARD.md`. |
+| `second-card.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The second graphics card, all switched off** (2026-09-27: a sixth, "combined" switch too, mutually exclusive with the rest). Adds `GET`/`POST /api/second-card` (each ON is one approval card, `second_card_enable`, `second_card_browser_enable` or `second_card_combined_enable`), says in the chat route header when the second card answered, shortens the learner's quiet wait when it runs there, and gives the approval notice true words for the new actions. Needs `jarvis_second_card.py` — see its own section, at the end, and `docs/SECOND-CARD.md`. |
 | `wiki.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The wiki builder.** Adds `GET /api/wiki` (the documents in your vault's `Jarvis Wiki/Sources` and their state) and `GET`/`POST /api/wiki/ingest` ("Add to wiki": the second card's model proposes pages, then ONE approval card, `wiki_update`, before anything is written), and the approval notice's words for it. After `second-card.patch` (textual). Needs `jarvis_wiki.py` — see its own section, at the end, and `docs/SECOND-CARD.md`, "Wiki builder". |
 | `big-model.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The big model (slow), all switched off.** Adds `GET`/`POST /api/big-model` (three switches; each ON is one approval card, `big_model_enable`), `GET /api/deep` and `POST /api/deep/ask` (deep questions, answered in the background), and the approval notice's words for the new action. Last in the list, after `wiki.patch` (textual). Needs `jarvis_big_model.py` — see its own section, at the end, and `docs/BIG-MODEL.md`. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
@@ -5681,6 +5681,21 @@ code does.
   shape as the wake-word card); a second ON while a card waits is refused;
   OFF is immediate and withdraws a waiting card. A switch whose card has gone
   stays on, reports `active: false` and says why.
+- **A sixth switch, "combined" (2026-09-27, "One bigger model on both
+  cards"), off by default and a sibling of the main switch, not a feature —
+  it does not compose with the five above.** ON is refused (409) while any
+  feature is genuinely on; turning master or a feature on is refused (409)
+  while `combined` is on (`_combined_conflict`). `_combined_capable(det)`
+  checks BOTH cards - the primary one too, unlike the five features above,
+  which only check the second card - against the Turing/size floor
+  (`MIN_COMPUTE`), plus a combined-memory floor, `COMBINED_MIN_TOTAL_MB`
+  (18,432 MiB), that the two cards' `total_mb` must clear together (never
+  applied per card: the primary card, an 8 GB 2080 Super, stays well under
+  the 10 GB single-card floor and that is fine here). Its own approval
+  action, `second_card_combined_enable`, mirrors `second_card_enable`'s
+  shape exactly (`_request_change_combined`/`_decide_combined`, parallel
+  functions to `request_change`/`_decide` rather than branches in them, to
+  keep the well-tested five-feature path untouched).
 - **The second Ollama.** While the main switch and a feature are on:
   `ollama serve` with `OLLAMA_HOST=127.0.0.1:11435` (anything else is refused),
   `CUDA_VISIBLE_DEVICES=<the card's id>`, `CUDA_DEVICE_ORDER=PCI_BUS_ID`,
@@ -5693,8 +5708,30 @@ code does.
   running | failed` with a reason. It is stopped (it and its runners, and
   nothing else) when everything is off and at exit. A port already held by
   an Ollama it did not start is left alone and reported.
+- **A third Ollama, for "combined".** Same `lane_env`, generalised: `uuid`
+  may now be a tuple of ids, comma-joined into `CUDA_VISIBLE_DEVICES` (a
+  single id still works exactly as before - existing callers are
+  untouched), and `spread=True` adds `OLLAMA_SCHED_SPREAD=1` so this one
+  Ollama always uses every card it can see rather than trusting Ollama's
+  own (for `q8_0`, over-counting) VRAM guess. Runs `qwen3:14b` at 32,768
+  (`COMBINED_MODEL`), reusing the same port as the five-feature lane (never
+  at the same time as it, by construction) via a second `_LaneProcess`
+  instance, `_COMBINED_LANE`. Claiming a card (`jarvis_compute.claim_card`,
+  shared with the big model) is now a loop over every id the lane needs,
+  rolling back what it already claimed if a later one is held - so
+  `big_model_holds()` still works unchanged, for either card.
 - **`lane_for(feature)`** returns `Lane(url, model, num_ctx, why)` only when
   everything is ready, else None. It never raises.
+- **`combined_lane()`** is `lane_for`'s exact shape for the sixth switch -
+  `Lane` or `None`, never raises - but nothing in this backend calls it yet:
+  no existing signal means "this conversation needs a bigger model", the
+  way an overflowing context means `long_context` or an image means
+  `vision`. Deliberately left unwired rather than inventing one (see the
+  module docstring and `docs/JARVIS-API.md` §12) - CLAUDE.md's own rule not
+  to switch anything on that depends on the second card until it is
+  installed and measured applies doubly to a brand-new routing heuristic no
+  one asked for. `generate()` (the learner's one-shot call helper) already
+  works with any `Lane`, `combined_lane()`'s included, unchanged.
 
 **The hooks** (all no-ops while `lane_for` is None):
 
@@ -5721,7 +5758,11 @@ code does.
   learner runs on the second card, else `EXTRACT_IDLE` as before).
 - `jarvis_gate.py`: a `_RISK` line for `second_card_enable` — "local" and
   reversible — so the approval notice does not call it an unknown action
-  that might leave the machine.
+  that might leave the machine. A second line, added 2026-09-27, for
+  `second_card_combined_enable` (also "local"), inserted BEFORE
+  `second_card_enable`'s own line rather than after it, so `wiki.patch`'s
+  later hunk (which expects `second_card_enable` to be the last entry
+  before the closing brace) still applies unchanged.
 
 Its context is extraction-wiring's learner loop, note-capture's GET block,
 power-mode's POST block, chat-stream's route-header lines and note-capture's
@@ -5731,9 +5772,13 @@ forwards and backwards (`test_second_card.py`); the owner's own
 
 **Settings.** `[second_card]` (`port`, `keep_alive`, `flash_attention`) and
 `[compute] primary_gpu` in the shipped toml, and `second_card_enable = "ask"`
-under `[autonomy.tiers]`. Your own toml is never edited: `apply-patches.ps1`
-prints the difference. Without the tier line the unknown-action default,
-`ask`, applies, which is correct.
+under `[autonomy.tiers]` — since 2026-09-27, `second_card_combined_enable
+= "ask"` beside it (also listed in `jarvis_card_words.TITLES`,
+`jarvis_asks_first.py`'s `HARD_LIMITS`/`MUST_ASK`/`GROUPS`, and
+`gate-outcome.patch`'s `_NO_RULE_FROM_DENIAL`, the same four places every
+always-`ask` second-card action already had to be in). Your own toml is
+never edited: `apply-patches.ps1` prints the difference. Without the tier
+line the unknown-action default, `ask`, applies, which is correct.
 
 ## Test it
 
@@ -5747,8 +5792,9 @@ $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Deskt
 Runs anywhere, with nvidia-smi's output replayed in its real format (made-up
 values) and Ollama answered by a stand-in on 127.0.0.1; no process is
 started. `jarvis-desktop/tests/fixtures/second-card-cases.json` is the real
-`status()` output in six named cases, for the desktop and phone to build
-against; the test fails if it is stale.
+`status()` output in eight named cases (a seventh, `one_card_reads_words`,
+since 2026-09-26; an eighth, `combined_running`, since 2026-09-27), for the
+desktop and phone to build against; the test fails if it is stale.
 
 # `wiki.patch` and `jarvis_wiki.py` — the wiki builder, on the second card (or the big model)
 

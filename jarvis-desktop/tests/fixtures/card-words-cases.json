@@ -231,6 +231,10 @@
       "title": "Jarvis wants to turn on browser control, which works real web pages"
     },
     {
+      "action": "second_card_combined_enable",
+      "title": "Jarvis wants to run one bigger model across both graphics cards"
+    },
+    {
       "action": "second_card_enable",
       "title": "Jarvis wants to start using the second graphics card"
     },

@@ -1146,6 +1146,22 @@
             <span class="status" id="sc-status" role="status"></span>
           </div>
 
+          <h3 class="subhead">One bigger model on both cards</h3>
+          <p class="note">
+            A different way to use the second card: instead of the switches
+            above, Jarvis can load ONE bigger model, split across BOTH cards
+            at once by Ollama's own scheduler. It cannot run at the same
+            time as anything switched on above - it needs both cards to
+            itself. Ollama splits the model by how much memory is free on
+            each card, not by how fast each card is, so it runs at roughly
+            the slower card's pace. Real speed is not measured yet: the
+            second card is not installed.
+          </p>
+          <div class="sc-switches" id="sc-combined"></div>
+          <div class="row">
+            <span class="status" id="sc-combined-status" role="status"></span>
+          </div>
+
           <h3 class="subhead">The second copy of Ollama</h3>
           <p class="note">
             Ollama is the program that runs the models. While a switch here
