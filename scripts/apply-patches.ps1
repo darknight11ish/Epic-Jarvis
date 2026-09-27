@@ -626,6 +626,18 @@ $PATCHES = @(
     # rest of this feature as ordinary code, needing no patch (they are
     # whole shipped modules, copied in like every other one in this list).
     'second-card-suggest.patch'
+    # The owner's yes for one question, to the cloud lane
+    # jarvis_router.choose() already offers but never uses on its own
+    # (docs/ARCHITECTURE.md "Cloud / API keys", "the owner chose 'ask each
+    # time'"). One line added to the ALREADY-EXISTING choose() call this
+    # repository had never patched before 2026-09-27 - real, verified
+    # against the owner's own file by hand, not a stand-in, because no
+    # earlier patch's hunk touches this call at all (see the patch's own
+    # comment for why that matters). Every privacy gate above it in
+    # choose() still runs first and in the same order; this can only ever
+    # turn an "offer" into an "escalate" for a question that had already
+    # cleared every other gate on its own.
+    'cloud-say-yes.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
