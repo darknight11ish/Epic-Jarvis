@@ -41,6 +41,7 @@ THE ROUTES (voices.patch):
     POST /api/voice/voices/better    {"enabled": true | false}
     POST /api/voice/voices/speed     {"speed": "slower" | "normal" | "faster"}
     POST /api/voice/voices/speaker   {"speaker": "0" .. "10"} - which Kokoro voice
+    POST /api/voice/voices/face      {"enabled": true | false} - voice follows the face
 
 THE PERMISSION MODEL (docs/ARCHITECTURE.md section 3). Creating a voice and
 switching Jarvis to one each raise ONE approval card through jarvis_gate,
@@ -430,6 +431,16 @@ def speaker_view() -> dict:
             note = (f"Set by hand on your PC to voice {value} ([voice] tts_speaker_id in "
                     f"jarvis-framework.toml), which is not one of the named voices below. "
                     f"Choosing one here replaces it.")
+    try:
+        fv = face_voice()
+    except Exception:
+        fv = None
+    if fv is not None:
+        # Otherwise the owner picks a voice here, hears no change, and
+        # reasonably thinks the setting is broken.
+        note = (note + " " if note else "") + (
+            f"While the {fv['name']} face is showing, its own voice speaks instead "
+            f"(\"{FACE_VOICE_TITLE}\" is on); this choice is used with any other face.")
     return {"choice": choice, "value": value, "default": SPEAKER_DEFAULT,
             "title": SPEAKER_TITLE, "detail": SPEAKER_DETAIL, "note": note,
             "choices": [{"id": k, "label": v} for k, v in KOKORO_VOICES]}
@@ -450,6 +461,134 @@ def set_speaker(body) -> tuple:
     return 200, {"ok": True,
                 "message": f"Jarvis's built-in voice is now {SPEAKER_LABEL[choice]}.",
                 "speaker": speaker_view()}
+
+
+# --------------------------------------------------------------------------
+#   The voice follows the face (the owner's choice, 2026-09-27)
+# --------------------------------------------------------------------------
+#
+# With one of the animal faces showing (docs/CRITTERS.md), the BUILT-IN
+# voice becomes that animal's: one of Kokoro's own voices, a pace, and a
+# small rise in pitch. "Cute" is mostly those three things - a higher,
+# smaller-sounding voice - and nothing here is new to download: all three
+# voices are in the Kokoro pack already installed.
+#
+# What wins, in order: a custom voice the owner chose (speak() above, which
+# never reads this); then the face's voice; then the owner's own built-in
+# choice (speaker()). The owner's speaking speed still applies ON TOP of the
+# animal's pace, so "Faster" makes the owl faster too.
+#
+# A switch, ON by default (the owner picked "voice follows the face"), set
+# from either app (POST /api/voice/voices/face), kept in voices/state.json.
+# NO CARD EITHER WAY: like the speed and the built-in voice, it is cosmetic -
+# it never changes what Jarvis does, asks or remembers.
+#
+# The face is read from <config dir>/appearance.json (appearance.patch),
+# the one place both apps store it. A PC without that file (the desktop then
+# says "Saved on this machine") has no face to follow, so the voice stays
+# the owner's built-in choice - status() says so rather than pretending.
+#
+# NOT LISTENED TO. The voices and numbers are picked from Kokoro's published
+# descriptions, not by ear (no Kokoro files where this was written). Change
+# a row here; nothing else needs to know. The pitch is capped at MAX_SEMITONES:
+# much above +3 turns small-and-cute into a chipmunk.
+
+#: face id -> (its name, Kokoro voice, pace, pitch rise in semitones).
+FACE_VOICES = {
+    "redpanda": {"name": "Red Panda", "speaker": "1", "speed": 1.0, "semitones": 2.0},
+    "pygmyowl": {"name": "Pygmy Owl", "speaker": "2", "speed": 0.85, "semitones": 1.0},
+    "seaotter": {"name": "Sea Otter", "speaker": "4", "speed": 1.15, "semitones": 3.0},
+}
+MAX_SEMITONES = 4.0
+FACE_VOICE_DEFAULT = True
+FACE_VOICE_TITLE = "Voice follows the face"
+FACE_VOICE_DETAIL = ("With an animal face showing, Jarvis's built-in voice becomes that "
+                     "animal's: its own voice, pace and a slightly higher pitch. A voice you "
+                     "recorded still wins. It changes nothing else, so it never asks first.")
+
+
+def appearance_face() -> str:
+    """The face both apps show (appearance.json `face`), or "". Never raises."""
+    try:
+        raw = json.loads((_config_dir() / "appearance.json").read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    face = raw.get("face") if isinstance(raw, dict) else None
+    return face if isinstance(face, str) else ""
+
+
+def face_voice_on() -> bool:
+    v = _read_state().get("face_voice")
+    return FACE_VOICE_DEFAULT if v is None else bool(v)
+
+
+def face_voice() -> Optional[dict]:
+    """The animal voice the built-in voice speaks in now - {"face", "name",
+    "speaker", "speed", "semitones"} - or None: the switch is off, or the
+    face showing is not an animal."""
+    if not face_voice_on():
+        return None
+    face = appearance_face()
+    row = FACE_VOICES.get(face)
+    return dict(row, face=face) if row else None
+
+
+def builtin_voice() -> tuple:
+    """(Kokoro voice number, speed, pitch rise in semitones, face id or "")
+    for the built-in voice - THE one place jarvis_speech (tts_speaker,
+    tts_speed, tts_pitch) reads it. Never raises."""
+    try:
+        fv = face_voice()
+    except Exception:
+        fv = None
+    if fv is None:
+        return speaker(), speed(), 0.0, ""
+    pace = min(2.0, max(0.5, float(fv["speed"]) * speed()))
+    semis = min(MAX_SEMITONES, max(0.0, float(fv["semitones"])))
+    return int(fv["speaker"]), pace, semis, fv["face"]
+
+
+def face_voice_view() -> dict:
+    """GET /api/voice/voices `face_voice`: the switch, and the one line both
+    apps show under it saying what is happening now."""
+    on = face_voice_on()
+    face = appearance_face()
+    row = FACE_VOICES.get(face)
+    active = _read_state()["active"]
+    if not on:
+        line = "Off: the built-in voice stays the same whatever the face."
+    elif row is None:
+        line = ("Choose the Red Panda, Pygmy Owl or Sea Otter face to hear its voice."
+                if face else
+                "No face is saved on this PC yet, so there is no animal voice to use.")
+    elif active != BUILTIN:
+        line = (f"The {row['name']} face is showing, but a voice you recorded is chosen, "
+                f"so that voice speaks.")
+    else:
+        line = (f"Speaking as the {row['name']}: "
+                f"{SPEAKER_LABEL[row['speaker']].split(' - ')[-1]}, a little higher.")
+    return {"enabled": on, "default": FACE_VOICE_DEFAULT, "face": face,
+            "speaking": bool(on and row is not None and active == BUILTIN),
+            "name": row["name"] if row else "", "line": line,
+            "title": FACE_VOICE_TITLE, "detail": FACE_VOICE_DETAIL}
+
+
+def set_face_voice(body) -> tuple:
+    """POST /api/voice/voices/face {"enabled": true | false}: at once, no card
+    either way (see above)."""
+    if not isinstance(body, dict) or set(body) != {"enabled"} \
+            or not isinstance(body["enabled"], bool):
+        return 400, {"ok": False, "error": "enabled must be true or false"}
+    on = body["enabled"]
+    err = _write_state(face_voice=on)
+    if err:
+        return 500, {"ok": False, "error": err}
+    _audit("voices.face_voice", {"enabled": on})
+    _publish({"what": "face_voice", "outcome": "on" if on else "off"})
+    return 200, {"ok": True,
+                 "message": ("Jarvis's voice now follows the face." if on else
+                             "Jarvis's voice now stays the same whatever the face."),
+                 "face_voice": face_voice_view()}
 
 
 def _audit(event: str, detail: dict) -> None:
@@ -497,10 +636,11 @@ _STATE_LOCK = threading.RLock()
 
 def _read_state() -> dict:
     """{"active": id, "better_voice": bool, "speed": choice or None,
-    "speaker": choice or None}. Missing or broken is the built-in voice,
-    the better voice off and no speed or built-in-voice choice made - the
-    safe reading."""
-    out = {"active": BUILTIN, "better_voice": False, "speed": None, "speaker": None}
+    "speaker": choice or None, "face_voice": bool or None}. Missing or
+    broken is the built-in voice, the better voice off and no speed,
+    built-in-voice or face-voice choice made - the safe reading."""
+    out = {"active": BUILTIN, "better_voice": False, "speed": None, "speaker": None,
+           "face_voice": None}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -517,6 +657,9 @@ def _read_state() -> dict:
     sk = raw.get("speaker")
     if isinstance(sk, str) and sk in SPEAKER_LABEL:
         out["speaker"] = sk
+    fv = raw.get("face_voice")
+    if isinstance(fv, bool):
+        out["face_voice"] = fv
     return out
 
 
@@ -2036,6 +2179,7 @@ def status() -> dict:
         "better_voice": _better_row(st),
         "speed": speed_view(),
         "speaker": speaker_view(),
+        "face_voice": face_voice_view(),
         "pending": pending,
         "last": last,
         "timings": _timings(),
@@ -2561,7 +2705,8 @@ def _decide_better(pid: str, gate: Callable) -> None:
 
 ROUTES = {"/api/voice/voices/create": create, "/api/voice/voices/active": switch,
           "/api/voice/voices/delete": delete, "/api/voice/voices/better": set_better,
-          "/api/voice/voices/speed": set_speed, "/api/voice/voices/speaker": set_speaker}
+          "/api/voice/voices/speed": set_speed, "/api/voice/voices/speaker": set_speaker,
+          "/api/voice/voices/face": set_face_voice}
 
 
 def handle_post(route: str, body) -> tuple:

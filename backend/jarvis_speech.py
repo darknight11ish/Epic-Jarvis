@@ -1777,16 +1777,72 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     return wav
 
 
+def _voices_mod(voices_module=None):
+    if voices_module is not None:
+        return voices_module
+    try:
+        import jarvis_voices
+        return jarvis_voices
+    except Exception:
+        return None
+
+
+def tts_pitch(voices_module=None) -> float:
+    """How many semitones higher the built-in voice speaks: 0, except while
+    "Voice follows the face" speaks for an animal face (jarvis_voices.
+    builtin_voice()), then that animal's small rise. Never raises."""
+    V = _voices_mod(voices_module)
+    if V is not None and hasattr(V, "builtin_voice"):
+        try:
+            return max(0.0, min(4.0, float(V.builtin_voice()[2])))
+        except Exception:
+            pass
+    return 0.0
+
+
+def pitch_up(samples, semitones: float):
+    """The sound `semitones` higher, by playing it faster: every frequency
+    rises by 2^(semitones/12) and the sound gets shorter by the same factor
+    (which is also what makes a voice sound SMALLER - the cute part). The
+    caller asks Kokoro for slower speech first (kokoro_speak), so the pace
+    comes out as chosen. numpy only, milliseconds. 0, or no numpy, hands the
+    samples back untouched."""
+    if np is None or not semitones or semitones <= 0:
+        return samples
+    x = np.asarray(samples, dtype=np.float32)
+    if len(x) < 2:
+        return x
+    f = 2.0 ** (float(semitones) / 12.0)
+    n = int(len(x) / f)
+    return np.interp(np.arange(n, dtype=np.float64) * f,
+                     np.arange(len(x), dtype=np.float64), x).astype(np.float32)
+
+
+def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0.0):
+    """(samples, sample_rate) from Kokoro in the built-in voice, with the
+    animal pitch rise applied - or None. THE one way the built-in voice is
+    made: the spoken answer (_synthesise) and jarvis_voice_flow's two copies
+    of it (the "One moment." clip and the barge-in reference voice) all come
+    through here, so all three sound the same."""
+    f = 2.0 ** (max(0.0, float(semitones or 0.0)) / 12.0)
+    audio = engine.generate(text, sid=int(sid), speed=float(speed) / f)
+    if audio is None or len(audio.samples) == 0:
+        return None
+    return pitch_up(audio.samples, semitones), audio.sample_rate
+
+
 def tts_speed(voices_module=None) -> float:
     """How fast the built-in voice speaks: the owner's speaking-speed setting
-    (jarvis_voices.speed(), both apps' "How fast Jarvis speaks"), or - with
-    an older jarvis_voices.py, or none - `[voice] tts_speed`, as before."""
-    V = voices_module
-    if V is None:
+    (jarvis_voices.speed(), both apps' "How fast Jarvis speaks") - times the
+    animal's own pace while "Voice follows the face" speaks for an animal
+    face (jarvis_voices.builtin_voice()) - or, with an older
+    jarvis_voices.py, or none, `[voice] tts_speed`, as before."""
+    V = _voices_mod(voices_module)
+    if V is not None and hasattr(V, "builtin_voice"):
         try:
-            import jarvis_voices as V
+            return float(V.builtin_voice()[1])
         except Exception:
-            V = None
+            pass
     if V is not None and hasattr(V, "speed"):
         try:
             return float(V.speed())
@@ -1802,14 +1858,16 @@ def tts_speed(voices_module=None) -> float:
 def tts_speaker(voices_module=None) -> int:
     """Which of Kokoro's own voices the built-in voice uses: the owner's
     voice-choice setting (jarvis_voices.speaker(), both apps' "Jarvis's
-    built-in voice"), or - with an older jarvis_voices.py, or none -
-    `[voice] tts_speaker_id`, as before (ease-of-use audit row 13)."""
-    V = voices_module
-    if V is None:
+    built-in voice") - or the animal's own voice while "Voice follows the
+    face" speaks for an animal face (jarvis_voices.builtin_voice()) - or,
+    with an older jarvis_voices.py, or none, `[voice] tts_speaker_id`, as
+    before (ease-of-use audit row 13)."""
+    V = _voices_mod(voices_module)
+    if V is not None and hasattr(V, "builtin_voice"):
         try:
-            import jarvis_voices as V
+            return int(V.builtin_voice()[0])
         except Exception:
-            V = None
+            pass
     if V is not None and hasattr(V, "speaker"):
         try:
             return int(V.speaker())
@@ -1857,16 +1915,15 @@ def _synthesise(text: str, *, start_better: bool = True) -> tuple:
     if engine is None:
         return None, 0, "none", voice, fallback, note, "no Kokoro voice is installed"
     try:
-        audio = engine.generate(
-            text,
-            sid=tts_speaker(jarvis_voices),
-            speed=tts_speed(jarvis_voices),
-        )
+        # The animal's pitch rise (tts_pitch) is 0 unless "Voice follows the
+        # face" speaks for an animal face.
+        audio = kokoro_speak(engine, text, tts_speaker(jarvis_voices),
+                             tts_speed(jarvis_voices), tts_pitch(jarvis_voices))
     except Exception:
         return None, 0, "none", voice, fallback, note, "Kokoro failed"
-    if audio is None or len(audio.samples) == 0:
+    if audio is None:
         return None, 0, "none", voice, fallback, note, "Kokoro made no sound"
-    return audio.samples, audio.sample_rate, "kokoro", voice, fallback, note, ""
+    return audio[0], audio[1], "kokoro", voice, fallback, note, ""
 
 
 # --------------------------------------------------------------------------
