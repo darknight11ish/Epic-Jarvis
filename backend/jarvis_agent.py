@@ -3446,9 +3446,10 @@ def note_correction(conversation_id, n: int = 1, turn_id=None) -> int:
     correction, no matter how many times it is marked. Without this, the
     one caller that passes a `turn_id` - the wrong-mark button
     (second-card-suggest.patch) - could count one answer twice: marking it
-    wrong, then clearing the mark, then marking it wrong again is a
-    "changed" mark each time (`jarvis_feedback.mark`'s own definition), but
-    is still ONE real correction (bug audit 2026-09-27, finding #9). The
+    wrong, then clearing the mark, then marking it wrong again is reported
+    as "changed" each time by the module that owns marks (this file must
+    not name it - see test_feedback.py), but is still ONE real correction
+    (bug audit 2026-09-27, finding #9). The
     phrase-based signal (`looks_like_correction`, below) has no turn_id to
     give - it is a guess about which past answer the owner's new words are
     reacting to, not a reference to one - so it always counts, same as
