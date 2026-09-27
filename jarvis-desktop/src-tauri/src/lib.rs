@@ -44,6 +44,7 @@ pub mod sse;
 pub mod stream;
 pub mod system_theme;
 pub mod token_store;
+pub mod tool_updates;
 pub mod tray;
 pub mod update;
 pub mod vision;
@@ -849,6 +850,8 @@ pub fn run() {
             backup::backup_now,
             backup::preview_restore,
             backup::restore_backup,
+            tool_updates::get_tool_updates,
+            tool_updates::check_tool_updates,
             plain_errors::get_manner,
             plain_errors::set_manner,
             plain_errors::open_fix_place,

@@ -174,6 +174,9 @@ SHIPPED = (
     # news headlines in the morning briefing: RSS/Atom feed addresses the
     # owner adds, headlines only, one card per feed (news.patch)
     "jarvis_news.py",
+    # "Check for tool updates": outdated Python packages, Rust crates and
+    # pinned GitHub tools, report only, one card ever (tool-updates.patch)
+    "jarvis_tool_updates.py",
 )
 
 

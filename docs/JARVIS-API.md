@@ -7374,3 +7374,110 @@ not enabled, for the same reason: nothing in the Rust side needs it, and
 this is not a `docs/ARCHITECTURE.md` §8 "one-sided" decision at all - both
 apps reach the feature identically, through words, with no Rust or Kotlin
 code calling a route directly.
+
+## 48. Check for tool updates (added 2026-09-27)
+
+The owner's own request, made directly, not from the feasibility backlog:
+"a feature that allows me to run it on request that looks for updates of
+current tools that are integrated into Jarvis already (through GitHub)."
+Desktop only (`docs/ARCHITECTURE.md` §8): checking dependency versions is
+maintenance/developer tooling, the same reason deep config editing and the
+model catalogue stay off the phone (`CLAUDE.md`'s standing rule).
+`backend/jarvis_tool_updates.py`, shipped whole, `tool-updates.patch` adds
+two routes at start-up the same way `news.patch` and `media.patch` do.
+
+**Report only, never an update itself** (the house rule the feasibility
+audit's I92 already wrote down for Windows' own `winget` updates, not built
+yet: "Updating stays a line the owner runs; never 'update all'"). This
+never runs `pip install`, `cargo update`, or anything that changes a file -
+it lists what is outdated and the exact command to run, and stops. It never
+says "vulnerable" or anything about safety - that is
+`tools/check_python_advisories.py`'s different, already-built check; this
+is purely "is it current".
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/tool_updates` | - | **200** `{"available": true, "title", "detail", "button_label", "approved": bool, "waiting": bool, "checking": bool, "last": {"outcome", "why", "at", "message"} \| null, "report": Report \| null}` |
+| `POST /api/tool_updates/check` | `{}` | **202** `{"ok": true, "waiting": true, "view", "message"}` - the FIRST run ever: one approval card is up, nothing checked yet; **202** `{"ok": true, "checking": true, "view", "message"}` - every later run: the check has started in the background (this can take a few minutes - see 48.1) and `GET /api/tool_updates` is where the finished report shows up; **409** a card is already waiting; **503** `check_tool_updates` is not tier `ask`, or the check could not be started (`error`) |
+
+`Report` = `{"checked_at", "summary", "total_checked", "total_outdated", "total_unreachable", "groups": [{"ecosystem": "Python packages" \| "Rust crates" \| "GitHub tools", "available": bool, "why", "items": [{"name", "current", "latest", "outdated": bool, "command": str \| null, "note": str \| null}], "unreachable": [{"name", "current", "why"}]}]}`.
+
+### 48.1 One approval card, ever - then never again; never blocks on the check itself
+
+This is a new named way out of the PC (`docs/ARCHITECTURE.md` §4): it calls
+PyPI, crates.io and, if a real GitHub-hosted tool is ever added to the
+registry (see 48.3), GitHub's API. What leaves, ever: a package or crate's
+NAME and the version it is PINNED to - never a file path, a folder name, or
+anything about the owner. The owner decided: ask with a card the first time
+this is ever run; the card is decided by `jarvis_gate.check` like any
+other, and only "approved" writes `tool_updates.json` in the Jarvis
+settings folder (`{"approved": true, "changed": epoch}`) - a damaged or
+missing file reads as not-yet-approved (fails closed), never as approved.
+Every later press of the button, from either this run or a restarted
+backend, skips the card entirely and just runs the check. There is no
+"turn this back off" - unlike "What asks first"'s loosening, this is a
+one-way, one-time consent, so there is nothing to loosen or tighten and no
+withdraw-a-waiting-card race to guard.
+
+A real check asks crates.io once per Rust crate NAME in `Cargo.lock` (576
+of them in this project alone today) plus PyPI once per Python package,
+one request at a time - on a slow connection that can genuinely take a few
+minutes. So `POST /api/tool_updates/check` never waits for it: it starts
+the check on its own background thread and answers 202 at once, whether or
+not a card was needed, and the settings page polls `GET /api/tool_updates`
+until `waiting` and `checking` are both false and a fresh `report` has
+arrived - the same "start it, poll for it" shape `hardware-panel.js`
+already uses for measuring the graphics cards.
+
+### 48.2 What is checked, and against what
+
+1. **Python packages** - `backend/requirements.lock` (copied beside
+   `jarvis_hud.py` by `apply-patches.ps1` for this purpose) names every
+   pinned package. The version compared is the one really installed in
+   this Python process (`importlib.metadata.version`, standard library) -
+   not merely the lock file's own pin, because `apply-patches.ps1` installs
+   from `requirements.txt` (`>=`), not the hash-locked file, so the two can
+   already disagree; the lock is only where the LIST of names comes from.
+   Compared against PyPI's own `https://pypi.org/pypi/<name>/json`
+   `info.version`. Outdated: `py -3 -m pip install --upgrade <name>`.
+2. **Rust crates** - `jarvis-desktop/src-tauri/Cargo.lock` (copied beside
+   `jarvis_hud.py` as `rust-crates.lock`, NOT `Cargo.toml` - the lock has
+   the exact resolved versions actually built). Every `[[package]]` entry
+   whose source is the crates.io registry, checked against
+   `https://crates.io/api/v1/crates/<name>`'s `max_stable_version`. Two
+   different pinned versions of the same crate name (a legitimate
+   transitive-dependency situation) are both reported, each against the
+   crate's one real latest version, and crates.io is asked once per crate
+   NAME regardless of how many pinned versions exist. Outdated: `cargo
+   update -p <name>` in `jarvis-desktop/src-tauri`.
+3. **GitHub-hosted tools, hand-installed, pinned to a fixed release** -
+   `GITHUB_TOOLS` in `jarvis_tool_updates.py`, checked against `GET
+   https://api.github.com/repos/<owner>/<repo>/releases/latest`
+   (unauthenticated, 60 an hour; a 403/429 becomes one plain line in
+   `unreachable`, never a crash).
+
+### 48.3 The GitHub tools list is empty today, and says so
+
+The brief's own two candidates were checked against this project's real
+docs before including anything, and neither fits: **Everything (`es.exe`,
+voidtools)** is not actually integrated into Jarvis at all (`backend/README.md`
+and this document, §35.6, both say so plainly - it is feasibility idea I39,
+queued, not built); **colibri** (`JustVugg/colibri`) is integrated, but
+`docs/BIG-MODEL.md` tells the owner to install "the newest release" every
+time, by design, so there is no pinned version to compare against.
+**livekit-wakeword**, pinned to a commit rather than a release, was also
+checked and left out: GitHub's "latest release" says nothing honest about
+whether a commit pin is behind. `GET /api/tool_updates`'s Rust-crates-style
+`why` field says this plainly for the GitHub group
+(`jarvis_tool_updates.GITHUB_TOOLS_NOTE`) rather than showing an empty list
+with no explanation. A maintainer adds a real one as one
+`GithubTool(name, "owner/repo", pinned, where)` entry; nothing else in the
+module changes.
+
+### 48.4 Why desktop only
+
+Checking dependency versions is developer/maintenance tooling, not
+something the owner does from their phone - the same reasoning that keeps
+the model catalogue and deep config editing off the phone (`CLAUDE.md`).
+`docs/ARCHITECTURE.md` §8 has the row. `tools/check_parity.py` classifies
+both routes `deliberate`.

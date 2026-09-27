@@ -1,0 +1,23 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2506,6 +2506,20 @@
+     except Exception as exc:
+         print(f"  news       NOT ON ({type(exc).__name__}) - News feeds are off")
+         print("             until jarvis_news.py is back: run apply-patches.ps1 again")
++    # tool-updates.patch (the owner's request, made directly: "a feature
++    # that allows me to run it on request that looks for updates of
++    # current tools that are integrated into Jarvis already"): GET
++    # /api/tool_updates (the report, read-only) and POST
++    # /api/tool_updates/check (ONE approval card, ever - then never again).
++    # Wrapped round Handler here, before anything listens, like news
++    # above; the rules are all in jarvis_tool_updates.py.
++    try:
++        import jarvis_tool_updates
++        print(jarvis_tool_updates.install(Handler, origin_ok=_origin_ok,
++                                          token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  tool-updates NOT ON ({type(exc).__name__}) - Check for tool updates is off")
++        print("             until jarvis_tool_updates.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

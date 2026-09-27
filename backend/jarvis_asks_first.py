@@ -163,6 +163,13 @@ NOTE_ALWAYS = "Always asks. This cannot be changed from an app."
 NOTE_FILE = "Only your settings file (jarvis-framework.toml) changes this one."
 NOTE_WIKI = ("Always asks: the wiki is written only on your yes (security audit), so it "
              "cannot be loosened - a looser line would switch \"Add to wiki\" off.")
+#: "Check for tool updates" (2026-09-27, the owner's own request): a card
+#: only the very first time it is ever run, never again after that - unlike
+#: everything else in MUST_ASK, which really does ask every time.
+SAYS_ONCE = "Asks the first time only, then never again"
+NOTE_TOOL_UPDATES = ("Checking is read-only - it only reports, never installs anything. It "
+                     "asks once, the first time you ever press the button; after that one "
+                     "yes it never asks again, and this cannot be changed from an app.")
 NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell me when\", "
              "which cannot stop to ask.")
 NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
@@ -242,7 +249,7 @@ HARD_LIMITS = frozenset({
     "better_voice_enable", "download_model", "switch_model", "models_create",
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
-    "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup",
+    "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -256,7 +263,7 @@ MUST_ASK = frozenset({
     "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
-    "restore_backup",
+    "restore_backup", "check_tool_updates",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -288,7 +295,7 @@ GROUPS = (
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
         "memory_manage", "user_profile_manage", "custom_voice", "better_voice_enable",
         "watch_notifications_enable", "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION,
-        "restore_backup"]),
+        "restore_backup", "check_tool_updates"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
 )
 
@@ -434,7 +441,14 @@ def _row(action: str, *, here: bool) -> dict:
     if action in MUST_ASK:
         if tier in ("auto", "notify"):
             row["says"] = SAYS_REFUSED
-        row["note"] = NOTE_WIKI if action == "wiki_update" else NOTE_ALWAYS
+        elif tier == "ask" and action == "check_tool_updates":
+            row["says"] = SAYS_ONCE
+        if action == "wiki_update":
+            row["note"] = NOTE_WIKI
+        elif action == "check_tool_updates":
+            row["note"] = NOTE_TOOL_UPDATES
+        else:
+            row["note"] = NOTE_ALWAYS
         return row
     if action in LOOSE:
         if tier != "never":
