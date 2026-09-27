@@ -676,7 +676,7 @@ await check("CONTROL: the route line passes second_card on, and nothing more", a
   const list = /for key in \[([\s\S]*?)\]/.exec(fn);
   assert.ok(list, "no `for key in [...]` string list in route_line_from_header");
   const keys = [...list[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings"]);
+  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings", "offer"]);
 });
 
 await browser.close();

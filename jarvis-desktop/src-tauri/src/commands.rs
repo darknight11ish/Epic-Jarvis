@@ -1692,9 +1692,14 @@ pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, Str
 /// nothing kept. It is sent only to a PC whose `/api/version` says it has
 /// one; otherwise nothing is sent and the answer is [`TEMPORARY_UNAVAILABLE`].
 ///
-/// Eight arguments, one over clippy's line: each is a field main.js already
+/// `cloud_yes: true` (the owner's yes to "Try the cloud model" for THIS one
+/// question - jarvis_router.choose()'s gate "offer", docs/JARVIS-API.md,
+/// "`offer` in `X-Jarvis-Route`"; backend/cloud-say-yes.patch): never sent
+/// as `false`, the same rule `temporary` already follows.
+///
+/// Nine arguments, two over clippy's line: each is a field main.js already
 /// names at the top level of the call (the tests read them there), and
-/// folding three into a struct would change that call's shape for nothing.
+/// folding some into a struct would change that call's shape for nothing.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn stream_chat(
@@ -1705,12 +1710,14 @@ pub async fn stream_chat(
     conversation_id: Option<String>,
     device: Option<String>,
     temporary: Option<bool>,
+    cloud_yes: Option<bool>,
     on_event: Channel<String>,
 ) -> Result<(), String> {
     let cancel = app.state::<ChatState>().begin();
     let base = jarvis_base(&app);
     let headers = jarvis_headers(&app)?;
     let temporary = temporary == Some(true);
+    let cloud_yes = cloud_yes == Some(true);
     // A temporary chat is sent only to a PC that says it has one - an older
     // PC would ignore the flag and use, learn from and keep the chat. Asked
     // before every temporary question, not once: the backend can be updated
@@ -1742,6 +1749,9 @@ pub async fn stream_chat(
         body.extend(chat_extras(conversation_id.as_deref(), device.as_deref()));
         if temporary {
             body.insert("temporary".into(), serde_json::json!(true));
+        }
+        if cloud_yes {
+            body.insert("cloud_yes".into(), serde_json::json!(true));
         }
     }
 
@@ -1803,6 +1813,8 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
     // line - bug audit 2026-09-27 found both silently dropped here, so
     // neither ever reached the real app despite passing every test that
     // hands the page a route line directly instead of through this filter.
+    // `offer` (main.js's "Try the cloud model" feature) joined the same way,
+    // caught before it shipped rather than after (Opus 5.5 re-check style).
     for key in [
         "lane",
         "where",
@@ -1810,6 +1822,7 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
         "second_card",
         "quick",
         "open_settings",
+        "offer",
     ] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(

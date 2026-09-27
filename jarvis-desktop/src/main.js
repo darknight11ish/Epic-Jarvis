@@ -249,6 +249,9 @@ const dom = {
   answerSources: $("answer-sources"),
   answerSourcesLine: $("answer-sources-line"),
   answerSourcesList: $("answer-sources-list"),
+  answerCloudOffer: $("answer-cloud-offer"),
+  cloudOfferTry: $("cloud-offer-try"),
+  cloudOfferDismiss: $("cloud-offer-dismiss"),
   approvalOptionsWhy: $("approval-options-why"),
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
@@ -497,6 +500,10 @@ const state = {
    *  turn finishes so a later turn can label it in the scrollback strip. */
   lastPrompt: "",
   lastAsked: "typed",
+  /** "A cloud model could give this one a second look." (jarvis_router
+   *  gate "offer"): the lane name it would use, or null when this answer
+   *  carries no offer. Cleared on every new turn and once acted on. */
+  cloudOffer: null,
   /** The previous turn's `{ prompt, buffer }`, once a new one starts — one
    *  level of scrollback, shown folded in the card until dismissed. */
   previousAnswer: null,
@@ -953,6 +960,7 @@ function applyHeaderRoute(route) {
   // The facts this answer used (ids only) and the temporary-chat marks.
   answerMemory.route(state.turnRoute);
   openSettingsFromRoute(state.turnRoute);
+  cloudOfferFromRoute(state.turnRoute);
   const next = routeFromHeader(route);
   if (!next) return;
   state.routeFromHeader = true;
@@ -979,6 +987,22 @@ function openSettingsFromRoute(route) {
     /* no storage: Settings opens at the top, and the answer's own words say where */
   }
   invoke("open_fix_place", { place: "settings" });
+}
+
+/**
+ * "A cloud model could give this one a second look." (jarvis_router
+ * gate "offer", docs/JARVIS-API.md "`offer` in `X-Jarvis-Route`"): every
+ * gate that would refuse escalation outright - private, tainted, a
+ * picture, no lane, no budget - already ran before this ever appears, so
+ * accepting it only ever turns an offer this question already earned on
+ * its own merits into an escalation. Never a standing choice: cleared on
+ * every new turn (see send()) and the moment the owner acts on it.
+ */
+function cloudOfferFromRoute(route) {
+  state.cloudOffer =
+    route && route.gate === "offer" && typeof route.offer === "string" && route.offer
+      ? route.offer
+      : null;
 }
 
 /** Paints the three health dots in the card footer. */
@@ -2579,7 +2603,7 @@ async function fileFromBar(target, text) {
  * (JARVIS-API.md section 18). Anything else is sent as no tag, which the PC
  * treats as not the owner's own words.
  */
-async function send(promptText, provenance = "typed") {
+async function send(promptText, provenance = "typed", cloudYes = false) {
   const message = promptText.trim();
   if (!message) return;
   // A note prefix files the rest instead of asking anything - see fileFromBar.
@@ -2639,6 +2663,10 @@ async function send(promptText, provenance = "typed") {
   state.turnId = null;
   state.turnMark = "none";
   paintAnswerMark();
+  // A new question starts with no cloud offer until the route header (if
+  // any) says otherwise - the last answer's offer does not carry over.
+  state.cloudOffer = null;
+  paintCloudOffer();
   spokenUpTo = 0;
   // "Stop" silences one turn, not every turn after it: a new question is
   // allowed to be answered out loud again. Cleared only past the guard
@@ -2753,6 +2781,10 @@ async function send(promptText, provenance = "typed") {
     // A temporary chat (section 18.1): no memory used, nothing learned,
     // nothing kept. stream_chat sends it only to a PC that has one.
     temporary: temporaryChat.on,
+    // The owner's yes to "Try the cloud model" for THIS one question
+    // (backend/cloud-say-yes.patch). stream_chat forwards it only when
+    // true, the same rule it already follows for `temporary`.
+    cloudYes,
   };
   // What this answer used, and what the PC said about a temporary one,
   // start from nothing (answer-memory.js).
@@ -2834,6 +2866,32 @@ async function sendMark(mark) {
 if (dom.markRight) dom.markRight.addEventListener("click", () => sendMark("right"));
 if (dom.markWrong) dom.markWrong.addEventListener("click", () => sendMark("wrong"));
 
+/** Shows or hides "A cloud model could give this one a second look." */
+function paintCloudOffer() {
+  if (!dom.answerCloudOffer) return;
+  const show = Boolean(state.cloudOffer) && state.phase === "done";
+  dom.answerCloudOffer.hidden = !show;
+}
+
+/** "Try the cloud model": the owner's yes for this one question only -
+ *  resends the same words that earned the offer, with `cloud_yes: true`. */
+function tryCloudModel() {
+  const again = state.lastPrompt;
+  const asked = state.lastAsked || "typed";
+  state.cloudOffer = null;
+  paintCloudOffer();
+  if (again) send(again, asked, true);
+}
+
+/** "Not now": the offer was seen and declined, for this answer only. */
+function dismissCloudOffer() {
+  state.cloudOffer = null;
+  paintCloudOffer();
+}
+
+if (dom.cloudOfferTry) dom.cloudOfferTry.addEventListener("click", tryCloudModel);
+if (dom.cloudOfferDismiss) dom.cloudOfferDismiss.addEventListener("click", dismissCloudOffer);
+
 function finishStream(phase, statusText) {
   state.abort = null;
   state.inFlight = null;
@@ -2886,6 +2944,9 @@ function finishStream(phase, statusText) {
   // "Used 2 memories" on an answer that came back, and whether a temporary
   // one was confirmed (answer-memory.js).
   answerMemory.finish(phase !== "error");
+  // "A cloud model could give this one a second look." - shown only once
+  // the answer is really done, and only when this one earned an offer.
+  paintCloudOffer();
 
   // Once, at the end. The answer element carries no live region any more —
   // announcing a growing buffer per repaint is what left a screen reader

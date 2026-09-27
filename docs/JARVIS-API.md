@@ -568,13 +568,17 @@ and `inject_memory` is false. The same happens, with a sentence of its own,
 when `OLLAMA_URL` is not this PC. Apps show the error as they show any
 other; nothing new to handle.
 
-**`offer` in `X-Jarvis-Route`** (the router, 2026-09-24): a cloud lane that
-could have answered this turn, named but NOT used - gate `"offer"`, `where`
-`"local"`. The router sends a turn to a cloud lane only when the owner said
-yes for that one question (`jarvis_router.choose(owner_said_yes=True)`), and
-never for a turn a privacy gate kept local; those carry no `offer` at all.
-No app sends that yes yet - asking is built with "model advice" - so today
-no answer goes to a cloud lane on its own. Apps that do not know `offer`
+**`offer` in `X-Jarvis-Route`** (the router, 2026-09-24; the "yes" button,
+2026-09-27): a cloud lane that could have answered this turn, named but NOT
+used - gate `"offer"`, `where` `"local"`. The router sends a turn to a
+cloud lane only when the owner said yes for that one question
+(`jarvis_router.choose(owner_said_yes=True)`), and never for a turn a
+privacy gate kept local; those carry no `offer` at all. Both apps show
+"Try the cloud model" under an answer whose route carries `gate: "offer"`
+and a non-empty `offer`, right beside "Not now" - one tap, one question,
+never a standing choice (§18.1, `cloud_yes`; `backend/cloud-say-yes.patch`).
+Pressing it resends the exact same question with `cloud_yes: true`; nothing
+else from the conversation goes with it. Apps that do not know `offer`
 read the turn as local, which it is.
 
 **`second_card` in `X-Jarvis-Route`** (`second-card.patch`, 2026-09-24): on a
@@ -2914,6 +2918,17 @@ On the request:
   the mode is on, and never `false`. Taken off with the other three before
   any model sees the request. Sent only to a PC whose `/api/version`
   reports `capabilities.temporary_chat`.
+- `cloud_yes` (2026-09-27, `backend/cloud-say-yes.patch`): the owner's yes
+  to "Try the cloud model" for THIS one question - the app's answer to a
+  `gate: "offer"` route on the answer just before it (§4, "`offer` in
+  `X-Jarvis-Route`"). Only JSON `true` counts, and both apps send it only
+  when the owner actually pressed the button, never `false`; it is passed
+  into `jarvis_router.choose(owner_said_yes=...)`, so it can only ever turn
+  THIS question's own gate 6 from "offer" into "escalate" - every earlier
+  gate (private, tainted, a picture, no lane, no budget) already ran on
+  this question's own merits before the offer was ever made. A PC without
+  the patch sees nothing different: `cloud_yes` is simply an unused key on
+  its request body.
 
 On each `role: "user"` message:
 

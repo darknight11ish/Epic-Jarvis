@@ -487,6 +487,37 @@ here rather than patched blind:
   without the owner's go-ahead given how carefully this project already
   treats crisis handling.
 
+Built 2026-09-27, the owner's "yes, build it now" - the router's cloud-offer
+gate (`jarvis_router.choose()`'s `owner_said_yes`, live since 2026-09-24) had
+no way for either app to actually say yes:
+
+- **"Try the cloud model", one tap, one question, never a standing choice.**
+  An answer whose route says `gate: "offer"` (a cloud lane that could answer
+  this, named but not used) now shows that button beside "Not now" in both
+  apps' chat screens, in the same fixed wording word for word
+  (`jarvis-desktop/src/index.html`/`main.js`, the phone's
+  `net/CloudOffer.kt`/`HomeScreen.kt`). Pressing it resends the exact same
+  question with `cloud_yes: true` (`backend/cloud-say-yes.patch`,
+  `docs/JARVIS-API.md` §18.1) - nothing else from the conversation goes with
+  it, and every gate that would have refused escalation outright (private,
+  tainted, a picture, no lane, no budget) already ran on this question's own
+  merits before the offer was ever made. "Not now" just dismisses it.
+- **Left off the desktop's separate widget on purpose**, not by oversight:
+  `widget.html`/`widget.js` never render a chat answer's own text or route
+  at all today, so there is nothing on that screen for an offer to attach
+  to (`docs/ARCHITECTURE.md` §8, "One-sided on purpose").
+- Verified: `backend/test_cloud_say_yes.py` (new), the phone's
+  `net/CloudOfferTest.kt` (new), the desktop's `tests/cloud-offer.mjs` (new)
+  - and, since the router call site had never been touched by any patch
+  before, the backend patch was written and checked against the owner's own
+  real `jarvis_hud.py` lines rather than guessed, per "Do not claim more
+  than the evidence supports" above.
+- **Antigravity / Google-account cloud access** (the same request that
+  prompted this): researched, not built - the owner chose "not sure yet,
+  research it properly first" for its role (a second cloud lane beside
+  this one, or a replacement for API-key cloud access). Still an open
+  decision for the owner, not a "later" already committed to.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
